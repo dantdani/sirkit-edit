@@ -51,6 +51,8 @@ unchanged since B11.3).
 
 ## Versioning — capsule v3 / context v2 remain correct
 
+> [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): true for B11.7's own stage; the capsule is `sirkit.agent-replay-capsule.v4` since B21-F, a v3 document refused explicitly, and the context stays `sirkit.agent-replay-context.v2` - `artifacts/ai-control-plane-b21/evaluation-matrix.md` section 2]
+
 **No bump.** This is an in-process handling/type-guard correction. What a
 conforming serialized document looks like did not change: non-JSON primitives
 cannot exist in a serialized document at all, `isCapturedRecord` is a runtime

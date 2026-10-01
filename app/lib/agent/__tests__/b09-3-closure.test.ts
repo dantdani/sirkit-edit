@@ -159,7 +159,7 @@ describe("B09.3 §B — the registered resource path is the ONLY read path (R3)"
     expect(outcome.sourceRevisionDigest).toBe(assembly.context.canonicalRevisionDigest);
   });
 
-  it("the static exposed registry remains the exact static set (ELEVEN distinct ids since B14)", () => {
+  it("the static exposed registry remains the exact intentional agent-exposed set (ELEVEN distinct ids since B14 when written; the set has since grown by reviewed moves, B20-A4 among them, and the assertion counts the set itself)", () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): the B20 closeout's wording (8a5637f) for the ELEVEN title it missed; assertions unchanged
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
     expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B14: + replacement; B15.3: + pcb.propose-bounded-edit
   });

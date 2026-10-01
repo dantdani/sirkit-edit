@@ -49,8 +49,9 @@ const ALL_TESTS = ["app", "lib", "components"].flatMap((root) => {
   }
 });
 const selected = (filters: readonly string[]): string[] => ALL_TESTS.filter((file) => filters.some((filter) => file.includes(filter)));
-/** [B20 A0] The chapters whose every suite must be admitted to a CI job (OD-59); a suite belongs to a chapter by its file-name prefix. */
-const CHAPTERS = ["b19-", "b20-"] as const;
+/** [B20 A0] The chapters whose every suite must be admitted to a CI job (OD-59); a suite belongs to a chapter by its file-name prefix.
+ *  [B21 A] b21- admitted (OD-124). */
+const CHAPTERS = ["b19-", "b20-", "b21-"] as const;
 const chapterFiles = (chapter: (typeof CHAPTERS)[number]): string[] => ALL_TESTS.filter((file) => file.includes(`/${chapter}`));
 
 /**
@@ -204,6 +205,24 @@ describe("[B19-E E2 review] CI job scope", () => {
     const promptToGerber = selected(filters);
     expect(promptToGerber).toEqual(expect.arrayContaining([...explicit, ...byDirectory]));
     expect([...explicit, ...byDirectory].filter(startsPostgres)).toEqual([]);
+  });
+
+  it("[B21 A] every B21 suite is selected by exactly ONE filter of prompt-to-gerber (OD-124): the orchestration suites by the app/lib/agent/orchestration/__tests__ directory filter, with no explicit entry under that directory (the redundancy rule below would refuse it), each B21 route suite by its own explicit entry; none starts PGlite", () => { // [B21 closeout, 2026-09-29] retitled: the B21 route suites (since B21-B) ride explicit entries, not the directory filter; the assertions are unchanged
+    const filters = jobFilters("prompt-to-gerber");
+    expect(filters).toContain("app/lib/agent/orchestration/__tests__");
+    expect(filters.filter((filter) => filter.startsWith("app/lib/agent/orchestration/__tests__/"))).toEqual([]);
+    expect(CHAPTERS).toContain("b21-");
+    const b21 = chapterFiles("b21-");
+    expect(b21).toEqual(expect.arrayContaining([
+      "app/lib/agent/orchestration/__tests__/b21-a-contracts.test.ts",
+      "app/lib/agent/orchestration/__tests__/b21-a-store.test.ts",
+      "app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts",
+      "app/lib/agent/orchestration/__tests__/b21-a-page.test.ts",
+    ]));
+    for (const file of b21) expect(filters.filter((filter) => file.includes(filter)), file).toHaveLength(1);
+    expect(b21.filter(startsPostgres)).toEqual([]);
+    // no B21 suite under app/lib/engineering/__tests__: benchmark-core would run it a second time on every PR
+    expect(b21.filter((file) => file.startsWith("app/lib/engineering/__tests__/"))).toEqual([]);
   });
 
   it("no explicit test file in prompt-to-gerber is already selected by one of its directory filters", () => {

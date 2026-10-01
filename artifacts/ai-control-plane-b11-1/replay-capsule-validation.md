@@ -10,7 +10,7 @@
 > scan ran on the SERIALIZED form, so credential-shaped JSON nested inside a
 > string was hidden by quote escaping (B11.2 R3). `scanOpaqueFixture` is
 > retired; the capsule schema became `sirkit.agent-replay-capsule.v2` with a
-> versioned `context` (and is now v3 / context v2 after B11.3 made the board
+> versioned `context` (and is now v3 / context v2 after B11.3 made the board [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): B11.3's statement; the capsule is `sirkit.agent-replay-capsule.v4` since B21-F, a v3 document refused explicitly, and the context stays `sirkit.agent-replay-context.v2` - `artifacts/ai-control-plane-b21/evaluation-matrix.md` section 2]
 > key-exact at every depth). See
 > [../ai-control-plane-b11-2/replay-context-schema.md](../ai-control-plane-b11-2/replay-context-schema.md)
 > and [../ai-control-plane-b11-2/recursive-redaction-results.md](../ai-control-plane-b11-2/recursive-redaction-results.md).

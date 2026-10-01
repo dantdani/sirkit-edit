@@ -118,7 +118,14 @@ describe("[B19-D I5e row 31] vendor-data code is outside the model-facing import
   // JSON-RPC id reader; every other `app/lib/mcp` module (the transport, the authorization client, the negotiation, the listing,
   // the tool call, the normalizer, the agent port) is forbidden outside the one MCP runtime boundary below. The task's rule
   // (`server-registry.ts` and `rollout.ts` only) would have flagged the two B20-B2 server modules the wrapper already imported.
-  const FORBIDDEN = [/^app\/lib\/acquisition\/(?!source-registry\.ts$)/, /^app\/lib\/distributors\/(?!types\.ts$|lifecycle-sql\.ts$|shared\.ts$)/, /^app\/lib\/mcp\/(?!server-registry\.ts$|rollout\.ts$|server\/inbound-limits\.ts$|server\/protocol\.ts$)/];
+  // [B21 E1] REVIEWED AMENDMENT (pin move): + the admission meters, `app/lib/acquisition/admission-control.ts` exactly. The specialists'
+  // llm-provider breaker (OD-115) IS those meters (the `AdmissionKey` union extended), and the chat route's provider layer reaches them
+  // through `app/lib/agent/orchestration/provider-policy.ts`. The module is policy, not vendor data: in-process counts, windows and
+  // breakers keyed by a source, an MCP server or an LLM provider - it fetches, caches, stores and quarantines no vendor data and its
+  // only runtime import is the source registry allowed above. It is still walked (a forbidden import behind it is still found), and
+  // b21-e1-provider-policy case 6 pins that its runtime imports stay exactly `./source-registry` and that provider-policy.ts is its one
+  // runtime importer in the chat closure. Every other acquisition module stays forbidden.
+  const FORBIDDEN = [/^app\/lib\/acquisition\/(?!source-registry\.ts$|admission-control\.ts$)/, /^app\/lib\/distributors\/(?!types\.ts$|lifecycle-sql\.ts$|shared\.ts$)/, /^app\/lib\/mcp\/(?!server-registry\.ts$|rollout\.ts$|server\/inbound-limits\.ts$|server\/protocol\.ts$)/];
 
   function resolveImport(from: string, spec: string): string | null {
     let base: string;

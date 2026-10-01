@@ -83,7 +83,7 @@ export class AnthropicProvider implements LLMProvider {
 
   constructor(
     client?: AnthropicClient,
-    private readonly model = process.env.SIRKIT_ANTHROPIC_MODEL ?? "claude-opus-4-7",
+    private readonly model = configuredAnthropicModel(),
   ) {
     this.client = client;
   }
@@ -102,7 +102,7 @@ export class AnthropicProvider implements LLMProvider {
   }
 
   private params(request: LLMRequest) {
-    const supportsTemperature = /^claude-3-|^claude-(?:sonnet|opus)-4-[0-5]/.test(this.model);
+    const supportsTemperature = ANTHROPIC_TEMPERATURE_MODEL_FAMILY.test(this.model);
     return {
       model: this.model,
       max_tokens: request.maxTokens ?? 4096,
@@ -183,3 +183,7 @@ export class AnthropicProvider implements LLMProvider {
     }
   }
 }
+
+// [B21 E1] the default model and the temperature family, named once (anthropic-config.ts), on their own line at the end (an import is
+// hoisted): no line cited in this file moves
+import { ANTHROPIC_TEMPERATURE_MODEL_FAMILY, configuredAnthropicModel } from "./anthropic-config";

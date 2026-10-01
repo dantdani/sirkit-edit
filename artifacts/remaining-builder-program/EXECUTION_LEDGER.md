@@ -2601,3 +2601,1126 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Report lines: `MCP-EXPOSED TOOLS: 9 (reads only; every proposal withheld, OD-82 / OD-87)`; `MCP STATUS: client behind
   SIRKIT_MCP_ENABLED (off) with an empty registry; server read-only over POST /api/mcp; connectors refused; proposals
   deferred`.
+
+### B20 — merged (2026-09-24 local; lead)
+
+- PR #10 (`chapter/b20-mcp-adapter` -> `main`) merged normally as `6fd5a7b` at 19:10 UTC after all four checks passed on `96a0314`
+  (benchmark-core, database-delivery, prompt-to-gerber, page-browser-e2e 16m47s; benchmark-nightly skipped). No auto-merge, no
+  force-push. Local `main` fast-forwarded; `chapter/b21-specialist-orchestration` created from `6fd5a7b` and pushed.
+
+### B21 — chapter start and discovery (2026-09-24 local; read-only workflow + lead; this commit)
+
+- Read-only discovery over the tree at `96a0314` (= `6fd5a7b`, empty diff): six parallel readers (the single-agent loop and its
+  runtime; the provider adapters and the live provider documentation; trace, replay and durability; sealed artifacts, identities and
+  deterministic verification; tools, roles and least privilege; tests, CI, the chat UI and standing obligations) returned 214 facts,
+  59 gap candidates, 75 reuse rows and 55 questions, every claim with a file:line; one synthesizer re-read every defect-bearing fact
+  in the code, resolved nineteen reader disagreements and unknowns (section 0) and wrote the draft; the lead spot-checked eleven
+  load-bearing claims, corrected one citation path and resolved one unknown (section 9). Nothing was executed; no process started;
+  no repository file written by the readers.
+- What exists: one single-agent loop with a closed 14-event protocol, one frozen budget for every message, cancellation that is
+  first-class and resume that does not exist (a retry is a new run), a run-local in-memory trace sink whose digest is discarded,
+  provider choice from the request body with SDK-internal retries and no Sirkit breaker, structured output only as a forced tool
+  call, one reviewed 33-tool exposure with no per-role subset, four artifact families with four scope shapes and no proposal-to-proposal
+  comparator, and a pre-existing model-judged `Promise.all` fan-out at `POST /api/schematic/build-multi` outside the loop.
+- Defects D21-1..31 (17 high): no orchestration contracts (D21-1) or evidence shape (D21-2); no persisted run record (D21-3); no
+  resume (D21-4); no complexity router (D21-5); no caps on agents / parallelism / tokens / cost (D21-6); no per-role tool subset (D21-7);
+  nothing distinguishes coordinator from specialist (D21-8); no comparator (D21-10); provider/model identity closed and uneven (D21-11);
+  no breaker (D21-18); no per-role provider policy (D21-19); the structured-output mechanism contradicted by the live Anthropic pages
+  for the newest models (D21-20, BLOCKED-LIVE-QUALIFICATION); every DAG vocabulary closed and pinned (D21-22); the fixtures cannot
+  express the B21-F scenarios (D21-23, D21-24); no model-in-loop opt-in (D21-25); CI admission (D21-26); the standing "single-agent"
+  statements and tripwires (D21-27).
+- Provider documentation re-read live on 2026-09-24 (section 1.2, RECORDED with URLs and dates): the runbook's hosts redirect
+  (`developers.openai.com`, `platform.claude.com`, `code.claude.com` for the Agent SDK); OpenAI structured outputs via `text.format`,
+  `parallel_tool_calls`, background mode with its 10-minute retention under `store: false`, the Agents SDK; Anthropic strict tool use
+  and `output_config` structured outputs listed for opus-5-5 / opus-5 / sonnet-5 / haiku-4-5 (not the code's default `claude-opus-4-7`),
+  forced `any`/`tool` documented as a 400 on Claude Opus 5.5 / Fable 5.1 / Mythos 5.1, stop reasons, streaming, batches. No page
+  changes OD-90/OD-91's premises.
+- Owner decisions drafted OD-106..OD-133 with safe defaults (section 6); the lead's reconciliation sets the DAG wall-time default to
+  300 s (OD-107) and accepts the rest as drafted; OD-83..86 and OD-88 stay reserved. Plan (section 7): A contracts + durable record +
+  CI + LB-9; B router + no-provider path + sequential scheduler; C roles + least privilege + no-elevation proof; D merge and
+  disagreement; E provider routing, breakers, degraded modes, the trace block; F evaluations; closeout. Simple commands stay on the
+  existing path throughout; no new exposed tool; no new route; census 165/162/3/0.
+- Records: `artifacts/ai-control-plane-b21/{discovery.md, provider-reference-notes.md, README.md}`; `PROGRAM_STATE.json` -> B21
+  (base `6fd5a7b`, last green `96a0314`); draft PR #11 opened after this commit so every increment gets CI. Gates for this commit:
+  documents only — no suite, generator or production file changed.
+
+### B21-A — canonical orchestration contracts, the durable record, the import gate, CI admission, LB-9 (2026-09-24 local, reviewed and corrected 2026-09-26; increment workflow + lead; this commit)
+
+- Test-first: the adopted contracts suite (12 cases, written before any module existed) and the three new suites (store 12, import gates
+  5, page 6) plus the `[B21 A]` guard case all failed on the first run (`a-failing-first.log`: the four orchestration suites at import —
+  `Cannot find module '../contracts'` / `'../tripwires'`; the two b21 guard cases on the absent filter: `expected [ …(194) ] to include
+  'app/lib/agent/orchestration/__tests__'`), then green with the code; the adopted suite's reviewable parts moved as recorded on
+  `orchestration-contracts.md` §7 (the scrubbed spelling scan, `secret_shaped_text`, the vocabulary pins).
+- Review (2026-09-26): nine confirmed findings fixed test-first (`a-fix-failing-first.log`: contracts 5/14, store 9/15, page 5/6 failed
+  on the first implementation; then `a-fix-green.log`) — the three sealed families refused by their own authorization-binding name (the
+  sealers' declared names exempt from the name check, values scanned, the four REAL sealed artifacts wrapped verbatim in case 13), the
+  wrapped interior unscanned (walked in full), credential-shaped ids accepted (scanned), a validation request binding any of the 33
+  (closed to five verifiers), a non-injective idempotency key across runs (per-run replay partition), a read throwing an internal code
+  (`AGENT_ORCHESTRATION_SCOPE_INVALID`), a stored request or result bound to no run or request (bound; `requestDigest`), a hostile append
+  envelope throwing (captured whole), and tamper/replay/bound assertions that did not isolate their guards (breakage probes,
+  `a-fix-probe-*.log`, sources restored by hash). Two claims corrected: tool calls are NOT persisted (D21-3 closed in part; B21-E's trace
+  record carries them) and no runtime binds the store in A — a stated DEVIATION from the task's fixture-runtime binding, deferred to
+  B21-B pending the lead's decision. Two fail-closed costs recorded (OD-131: the diagnostic pattern set, every format character). Final
+  counts: contracts 14, store 15, gates 5, page 6 (40 `it(` blocks) + the guard's 7 `it(` blocks (10 runtime tests).
+- Code: `app/lib/agent/orchestration/contracts.ts` (the two schemas, nine roles, the 29-refusal vocabulary, capture-first validation,
+  whole-body and artifact digests, the key-name denylist and the value scan over texts, ids and wrapped interiors, the declared names,
+  the structural tool gate over the 33 and the never-exposed patterns, the verifier set, A4L semantics), `store.ts`
+  (`agent.orchestration-run.v1`: CAS, `orchestration:<runId>:<taskId>:<attempt>:<kind>` in a per-run partition, five record kinds, six
+  decisions, request/result binding, digest-verified loads, the scope sentence, no outbox, injected repository, unavailable default),
+  `tripwires.ts` (data), `__tests__/_sealed-artifacts.ts` (the four real artifacts). No route, descriptor, UI or generator input changed;
+  census 165/162/3/0; the B04/B20/B17-A artifacts byte-identical.
+- Gates re-run one job at a time (the lead re-runs them): the four A suites and the guard; `app/lib/agent/__tests__` (b09-*, b11-*,
+  b18-*, b20-a4-*); the five engineering suites (b04-tool-registry, b17-f-agent-exposure, b18-c-exposure-lift,
+  b18-c-never-execution-sweep, b18-c-fixture-agent); the three MCP gates (b20-b1-mcp-exposure, b20-b2-import-gates,
+  b20-d3-authority-import-gates); the durable-workflow tests; tsc; eslint on every new and changed file — figures in the report.
+- Finding D21-32 (low, INFERRED then CONFIRMED by the gate's probe): `app/lib/db/schema.ts` imports `EMBEDDING_DIMENSIONS` from
+  `app/lib/embeddings.ts`, which imports the OpenAI SDK, so `getDurableWorkflowRepository()` carries the SDK in its production closure;
+  every gated module must take the repository by injection (the autonomy store carries the same closure ungated). Follow-up (not A):
+  move `EMBEDDING_DIMENSIONS` to a dependency-free module.
+- Records: `orchestration-contracts.md`; OD-106..OD-111, OD-118, OD-124, OD-128, OD-131; LB-9; D21-1, D21-2, D21-26 closed, D21-3 closed
+  in part; D21-25, D21-28, D21-29 recorded; D21-32 opened. Live: every B21 behaviour with a real model BLOCKED-LIVE-QUALIFICATION (LB-9).
+- Lead follow-ups on the check's residuals (2026-09-26; the checker confirmed 22 of the 26 fixes, left 4 as recorded decisions and raised
+  6 new low issues): (1) the store's append envelope is no longer captured whole with the document inside it - the envelope is read
+  through its own data-property descriptors, its scalar fields captured under a 4 KiB bound, a plan / decision / dissent record captured
+  whole, a request / result record judged by kind and own keys (symbols and foreign prototypes refused) with the document taken by
+  identity and never re-captured (so a snapshot that validated at the contracts' bounds can always be appended, and no append pays a
+  1 MB deep copy), and a throw anywhere while judging (a stateful or throwing Proxy trap, a revoked Proxy) is the closed
+  `invalid_record` (store case 10: two Proxy envelopes, a symbol key, a foreign prototype); (2) the wrapped-artifact key rule is now by
+  position - the capsule's ten keys refuse at every level except `state` below the top level, and a declared authorization-binding name
+  is exempt only at the top level or directly inside a declared parent (contracts case 14: the nine other capsule keys refused at two
+  depths, a declared name under an operation or an impact record refused, the four real sealed artifacts still validate in case 13);
+  (3) the write-path throw is stated rather than hidden - a `result` append verifies the run's chain to bind its request and throws
+  `AGENT_ORCHESTRATION_RECORD_MISMATCH` on a tampered store before anything is written (store case 5 asserts it for every tampering);
+  (4) page case 4's tautological "runtime tests today" assertion replaced by a real one (only the guard carries one `it.each(CHAPTERS)`;
+  ten runtime tests today); (5) the sealer-prose cost recorded: the value scan reaches a wrapped artifact's `provenance.instruction`,
+  `provenance.note` and `intent`, so a real proposal built from a benign `NAME=value` instruction is refused whole - kept as the same
+  fail-closed default (OD-131, page section 2). Both code changes proven revert-sensitive by hash-verified mutation (`a-lead-probe.log`:
+  the old capsule rule fails exactly case 14, a rethrowing judge fails exactly case 10; sources restored, SHA-256 equal). The four
+  items the fixer deliberately kept stand as recorded: the diagnostic-grade secret patterns and the `\p{Cf}` rule over-refuse benign
+  prose (OD-131, fail closed), and the fixture-runtime binding is DEFERRED to B21-B's `app/api/chat/orchestration-runtime.ts` (the
+  lead's decision on coverage-4: the record has no reader in A, and a binder inside the gated prefix would carry the OpenAI SDK, D21-32).
+- Lead gates (2026-09-26, one job at a time): the four A suites, the CI guard and b20-b1 6 files / 72 cases (contracts 14, store 15, import gates 5, page 6, guard 10 runtime tests, b20-b1 22); the agent tripwires and pins (b09-*, b11-*, b18-b/c/d, b20-a4-*) 16 files / 254 - no orchestration identifier in the nine scanned files, the provider literal untouched; b04-tool-registry, b17-f-agent-exposure, b18-c-exposure-lift, b18-c-fixture-agent, b20-b2-import-gates, b20-d3-authority-import-gates and app/lib/durable-workflow 8 files / 87 (+1 file / 2 cases skipped by tenant-scope's own pre-existing gate); tsc 0; eslint clean on the ten new and changed TS files; no generator input changed (no descriptor, route or UI), so no generator was re-run and every generated artifact is byte-identical; census 165/162/3/0.
+
+### B21-B — the task-complexity router, the no-provider path, the bounded sequential scheduler, the store binding (2026-09-26 local; increment workflow + adversarial review + lead; this commit)
+
+- Test-first: the four B suites (router 6, scheduler 10, route 7, page 6) and A's extended gate all failed before the code
+  (`b-failing-first.log`: the suites at import — `Cannot find module '../router'` / `'@/app/api/chat/orchestration-runtime'`; the
+  gate's cases 1, 3 and 5 on the absent modules); the flag-off streams were RECORDED from HEAD `4b6d0e2` before the route changed
+  (`b-record-head.log`: digests `eng1-656c2588b836c043`, `eng1-07aaf2589736c9f7`, `eng1-bf8822508f100b13`, `eng1-9fbc41d4ee249877`) and
+  pinned as literals; then green with the code (`b-impl-1.log`). The adversarial review confirmed 28 findings (regressions 1-7, 9-11;
+  security 1-8; coverage 1-10; tests 1-6); every one was fixed test-first — the strengthened and added cases (router 7, scheduler 14,
+  route 15, page 7) ran against the pre-fix code first (`b-fix-failing-first.log`: 23 of 48 failing), then green (`b-fix-green-1.log`,
+  `b-fix-green-2.log`), the four test-strength findings proven by deliberate source breakages restored by hash (`b-fix-mutation.log`,
+  `b-fix-gate-mutation.log`, `b-fix-dburl-proof.log`, `b-fix-dburl-proof-2.log`).
+- Proof order (discovery §9) honoured: the router suite and the route suite show a Tier 0/1 command, a 3D/view request and a Tier 3
+  name each produce today's single-agent run shape or a refusal with no provider call, and the flag-off route is byte-identical to
+  HEAD, before route case 4 runs specialists in a chat.
+- Code: `app/lib/agent/orchestration/router.ts` (the rule table, the five facts, the nine Tier 3 families with the sort-ask
+  narrowing, the four DAG shapes with their role lists, the composer's `REPLACE_PART` imported, the geometry exclusion, the layout
+  nouns narrowed), `app/lib/agent/orchestration/scheduler.ts` (the caps incl. `coordinatorTurns` and `maxRefusalLinesPerAttempt`, the
+  read-only registry view, `withdrawAuthority` / `deriveSpecialistContext`, the read-only gateway wrapper, the metered adapter, the
+  request per task equal to the advertised reads, results before the next task, resume with the scope/revision check and `stale`
+  dissent, the per-task deadline, cancellation, the retry rule, the DAG timer, the token ceiling over both coordinator turns and every
+  attempt, uncommitted results escalated, store details redacted, refused specialist calls as bounded warning lines; the loop by
+  injection), `app/api/chat/orchestration-runtime.ts` (the store binding A deferred, the router and scheduler seams, the flag, the
+  refused run, the DAG driver: the held terminal, the specialist gateway built bare, the stand-down rules incl. no further call after a
+  provider outage and reason-only warnings, the read-only follow-up turn via `followUpDeps`, warning dedupe, the terminal as the run's
+  totals, the envelope with provenance, correlation, the summaries-only fallback and the sanitizer),
+  `app/api/chat/route.ts` (one import, the plan before the adapter, the three-way call site), `app/lib/project/composer-routing.ts`
+  (`REPLACE_PART` exported) and `app/lib/agent/adapters.ts` (`MAX_OUTPUT_TOKENS` exported) — one line each, no behaviour change — the
+  workflow's one explicit entry, A's gate extended in place (entries 5; the loop probe pinned as an invariant; the runtime file's
+  closure). No route, descriptor, UI or generator input changed; census 165/162/3/0; the B04/B20/B17-A artifacts byte-identical.
+- Findings: D21-33 (low): the loop's closure reaches `app/lib/pcb/fab/presets` through the read bindings, so the scheduler takes the
+  loop by injection (measured by the gate's probe). Decision for the owner: the six-specialist full-circuit list versus the cap of four
+  (OD-107). Deviation recorded: OD-108 (the results enter the follow-up turn as its user message, bounded by the read-only follow-up
+  turn, the header, the provenance note and the sanitizer — no content judgement in B, since OD-81's matcher sits behind the B19-D
+  closure gate; B21-E's strict result tool closes it). Deferred and
+  stated: the Tier 0 read-by-grammar answer (OD-110), the route-level resume and the `userMessageDigest` ledger (D21-4 closed at the
+  scheduler only; B21-E with B21-C), proposal-producing specialists (B21-C/D), the breaker and `maxRetries: 0` (B21-E, OD-115), the
+  strict result tool (B21-E).
+- Gates re-run one job at a time (the lead re-runs them): the four B suites and A's five; `app/api/chat/__tests__` in full;
+  `app/lib/agent/__tests__` (b09-*, b11-*, b18-*, b20-a4-*); the engineering exposure / tier suites (b04-tool-registry,
+  b17-f-agent-exposure, b18-a-permission-tiers, b18-c-*); the MCP gates (b20-b1, b20-b2, b20-d3); the chat closure ratchets
+  (b18-b-import-gates, b16-0-24 confinement, b20-b2-route-tree); the CI guard; tsc; eslint on every new and changed file — figures in
+  the report.
+- Records: `task-complexity-router.md`; OD-106 (tripwire), OD-107, OD-110, OD-122 as applied, OD-108 as a recorded deviation; D21-5,
+  D21-6 closed, D21-17's wall-time clause closed, D21-4 closed in part (at the scheduler), A's deviation closed, D21-33 found. Live:
+  every B21 behaviour with a real model BLOCKED-LIVE-QUALIFICATION (LB-9).
+- Lead follow-ups on the check's residuals (2026-09-26; the checker confirmed 27 of the 28 fixes, left regressions-11 partial and raised
+  3 new low issues): (1) a follow-up coordinator turn that fails after recording steps no longer under-reports the run on the stream
+  - the follow-up's recorder meters every step it records, and the stand-down terminal is the first turn's `run_completed` rewritten
+  to the run's totals (route case 15: five adapter starts, one `run_completed`, the stand-down warning naming `provider_network`, the
+  stream's steps equal to the trace's); (2) the follow-up turn's toolset warnings are no longer recorded twice on the TRACE (its recorder
+  skips the first turn's lines; route cases 4 and 15 assert the trace's warnings are unique) and the orchestration's own status and
+  refusal lines take at most `ORCHESTRATION_TRACE_LINES_MAX` (12) of the trace's 32 warning slots, every line still streamed and a
+  stand-down reason always recorded; (3) a stale dissent is keyed by the RESUMING attempt, not by the committed result's, so a second
+  resume under a third scope records its own dissent instead of replaying the first under an identical idempotency key (scheduler case
+  13 extended with a third resume: dissents at attempts 1 and 2, results at 0, 1, 2); (4) A's gate no longer pins how many forbidden
+  members the loop's closure reaches (regressions-11's partial fix): every caught line for the loop probe must run through
+  `app/lib/agent/loop.ts` by a family, and the chain as measured today stays on the page (D21-33). The page's citation lines for the
+  three new modules were re-pinned after the edits (13 rows; page case 7 pins them current). Both code fixes proven revert-sensitive by
+  hash-verified mutation (`b-lead-probe.log`: the old dissent key fails exactly scheduler case 13, an unmetered/unfiltered follow-up
+  recorder fails exactly route cases 4 and 15; sources restored, SHA-256 equal).
+- Lead decisions: the OD-108 deviation stands as recorded (results enter the read-only follow-up turn as its user message; B21-E's
+  strict result tool closes it); the six-specialist full-circuit list versus the cap of four is left to the owner under OD-107 (the
+  safe default refuses, never runs five); the two one-line exports in `composer-routing.ts` and `adapters.ts` are accepted (data only,
+  no behaviour change; the request-shape pins hold).
+- Lead gates (2026-09-26, one job at a time): every B21 suite (A's four, B's four), the route suite and the CI guard 9 files / 94 cases (router 7, scheduler 14, route 16, B page 7, A gate 5 + contracts 14 + store 15 + A page 6, guard 10 runtime tests); `app/api/chat/__tests__` in full 15 files / 94 (the flag-off route byte-identical to HEAD, every pre-existing chat suite green); the agent tripwires and pins (b09-*, b11-*, b18-b/c/d, b20-a4-*) 16 files / 254; b04-tool-registry, b17-f-agent-exposure, b18-a-permission-tiers, b18-c-exposure-lift, b18-c-fixture-agent, b20-b1-mcp-exposure, b20-b2-import-gates, b20-d3-authority-import-gates, b18-d-composer-routing and the B19-D closure gate 9 files / 110; tsc 0; eslint clean on the eleven new and changed TS files; no generator input changed (no descriptor, route or UI - the flag is an environment variable), every generated artifact byte-identical; census 165/162/3/0.
+
+### B21-C — the nine roles, least-privilege tool subsets per role, the no-elevation proof (2026-09-26 local; increment workflow + review fix round + lead; this commit)
+
+- Test-first: the adopted `b21-c-role-tools.test.ts` failed at import (`c-failing-first-adopted.log`); the buildRunToolset digests were
+  RECORDED from HEAD `0396c9e` with a temporary probe before `loop.ts` changed (`c-record-head.log`); every new and changed suite then ran
+  against the unchanged code (`c-failing-first.log`: three C suites at import, 17 cases failing — no-elevation 1-5, router 3 and 8, gate
+  1, 3, 5, 6, scheduler 2, route 4, 11, 12b, 15, 16); then green with the code (`c-green.log`: 13 files, 119 tests).
+- Adversarial review: 15 findings confirmed (3 medium: the full-circuit rule recruiting four paid specialists for ordinary edits, the
+  sourcing specialist's real condition and fixtures production never produces, the scheduler's wrapper list unproven; 12 low). Fixed
+  test-first (`fix/failing-first.log`: 16 cases failing across 6 files before the code; `fix/impl-1.log`: 61 tests green after it);
+  the six test-strength findings proven by deliberate breakages of the source, each caught and restored by sha256
+  (`fix/breakage-*.log`). The fixes: the full-circuit grammar (a new circuit named from words; the layout variant's own ask); a role
+  with no tools not run but kept in the plan with a `role_has_no_tools` dissent carried to the outcome and the follow-up envelope; task
+  ids from the plan's roles only (a same-scope resume no longer refused `plan_mismatch` by this run's resources); loop.ts's line 20
+  back to HEAD's and the exposure import on its own line at the end; `approvedRunAllowlist` exported; fixtures holding what the route's
+  loader produces for U1's binding; route case 17 (all three specialists with the authority loaded); B's page and route case 4's
+  title re-stated; C's own pins added to the D21-9 rule.
+- Code: `app/lib/agent/orchestration/role-tools.ts` (OD-120 as data with a reason per id, the checker, the report);
+  `app/lib/agent/loop.ts` (the optional `allowedToolIds` after every gate with A4L semantics and `allowlist_invalid`; the deps field;
+  edits on existing lines only, line 20 as at HEAD, helpers and one import appended, so no B20 citation moved);
+  `app/lib/agent/orchestration/scheduler.ts` (the per-role effective set, the not-run task with its dissent, stable task ids, the
+  field-by-field `deriveSpecialistContext`, the claim check and `role_context_elevated` in the wrapper, the role's list in the loop,
+  the request and the wrapper); `app/lib/agent/orchestration/router.ts` (the full-circuit trim, its grammar and the layout variant).
+  No route, descriptor, channel, exclusion reason, UI or generator input changed; census 165/162/3/0; the B04/B20/B17-A artifacts
+  byte-identical.
+- Suites: `b21-c-role-tools` 5, `b21-c-least-privilege` 10, `b21-c-no-elevation` 5, `b21-c-page` 7; router cases 8 and 9, gate case
+  6, B page case 8, route cases 16 and 17 added; pin moves with their reasons in the router (case 3), scheduler (the rig's authority;
+  cases 2, 3, 4, 8, 14), gate (cases 1, 3, 5) and route (cases 4, 11, 12b, 15) suites; A's and B's page rows and B's citations re-pinned.
+- Gates re-run one job at a time (the lead re-runs them): the B21 suites, the route suite and the CI guard 13 files / 127 tests; `app/api/chat/__tests__` 15 / 96; `app/lib/agent/__tests__` b09-*, b11-*, b18-*, b20-a4-* 26 / 308; the exposure, tier and discovery pins, the MCP gates and the chat closure ratchets 32 / 282; `app/lib/mcp/__tests__` 26 / 642; tsc 0; eslint clean on every new and changed file; no generator input changed.
+- Records: `specialist-roles.md`; OD-107 resolved; OD-109, OD-120, OD-121 as applied; OD-123; D21-7 and D21-8 closed; D21-9 and D21-31
+  recorded. Consequence recorded (OD-120): the sourcing specialist runs only when a schematic component's durable binding loads; without
+  one its task records the missing evidence. Live: every B21 behaviour with a real model BLOCKED-LIVE-QUALIFICATION (LB-9).
+- Lead follow-ups on the check's residuals (2026-09-26; the checker confirmed all 15 fixes and raised 2 new low issues): (1) the
+  full-circuit grammar accepted a circuit-kind word ANYWHERE in the object, so "Generate a schematic symbol for U1.", "Create a sensor
+  footprint.", "Create a timer part." and "Make a counter-clockwise turn of U1." still recruited four specialists - the circuit kind
+  must now HEAD the object, optionally followed only by a container noun (board, module, design, project, kit, system, unit, stage,
+  section, block), so "Build me a 5V buck converter board." stays a full circuit (router case 9 pins both directions; a first, strictly
+  head-noun version refused that phrasing in router cases 3 and 8 and was widened by the container nouns); (2) the stale-then-no-tools
+  dissent offset had no test - least-privilege case 8 part C resumes a committed run under a moved revision without the authority and
+  proves both records land (`stale` at the resuming attempt, `escalated` / `role_has_no_tools` one past it). Both proven revert-sensitive
+  by hash-verified mutation (`c-lead-probe.log`: the any-position grammar fails exactly router case 9, a missing offset fails exactly
+  least-privilege case 8; sources restored, SHA-256 equal). The C page states both corrections. Records hygiene: B's section-10 bullet
+  had leaked into D21-33's paragraph in `discovery.md` through the records script's clause boundary; removed, and the script fixed.
+- Lead gates (2026-09-26, one job at a time): every B21 suite (A 4, B 4, C 4 suites plus the extended router and gate cases), the route suite and the CI guard 13 files / 127 cases; `app/api/chat/__tests__` in full 15 files / 96; `app/lib/agent/__tests__` in full 36 files / 415; the exposure, tier and discovery pins (b04-tool-registry, b17-f-agent-exposure, b18-a-permission-tiers, b18-c-exposure-lift, b18-c-fixture-agent, b18-c-never-execution-sweep, b20-a4-observation-descriptor, b20-b1-mcp-exposure, b20-b3-mcp-subset-move, b20-c1-three-way-parity), the MCP gates (b20-b2, b20-d3), b18-d-composer-routing and the B19-D closure gate 12 files / 143; `app/lib/mcp/__tests__` in full (every B20 page citation) 26 files / 642 - no cited line moved; tsc 0; eslint clean on every new and changed TS file; no descriptor, discovery channel, exclusion reason, route, UI or generator input changed, the B04/B01 artifacts byte-identical; census 165/162/3/0.
+
+### B21-D — merge and disagreement: the deterministic merge layer (2026-09-26 local; increment workflow + lead; this commit)
+
+- Test-first: the four D suites and gate case 7 were written first, with the pin moves of the A and B suites; all ran against the
+  unchanged code (`d-failing-first.log`: 8 files - the four D suites at import, 11 moved cases on their assertions); then the module
+  (`d-impl-1.log`: the merge suites 15/17 - case 11 failed on the unchanged scheduler, which is what moved the scheduler line; case 12
+  on its fixture); then green with the wiring (`d-impl-2.log`: 6 files, 61 tests).
+- Adversarial review fix pass: 30 confirmed findings (regressions-1..4, four security, eleven coverage, eleven tests) fixed test-first -
+  the reproducing cases first against the unchanged code (`f3-failing-first.log`: 27 of 55 red, each on its finding's assertion;
+  `f11` for the persisted evidence), then the fix (`f4-fix-1.log`: 55/55); every test-strength case proven by a deliberate breakage of
+  the fixed source and a hash-verified restore (`f6`..`f10`). What changed: the envelope bounded by five stages; the canonical and
+  connectivity verifiers never invent a pass; base-state verification is evidence only and a layout candidate's own board is checked by
+  the compiler's rules; the merge binds each artifact's keys, lifetime and principal and claims no provenance; one provider = one
+  source, a replay's provenance unrecorded; verdicts under content keys, the latest standing, a stale or expired verdict regenerated on
+  resume; the reviewer's frame shows the readiness citation, a qualification-authority reference never satisfies OD-129; standings
+  ignore a specialist's `reviewed` and read extraction; one change carried twice is no conflict; the schematic-PCB endpoint join; a
+  part review request per non-exact target; the verifications persisted in the verdict; B's envelope marked superseded.
+- Code: `app/lib/agent/orchestration/merge.ts` (the families' verifiers against the pinned scope, the merge's binding of each artifact,
+  the PCB recompile, the injected layout verifier, the candidate board check and OD-133's scope wrap, the identity intersection and
+  ConflictClass, the exact-authority rule with review requests, the readiness reference rule, the five verifiers as deterministic_verifier
+  evidence, B19's labels, sources, persistence before hand-on under content keys, bounded lines, a digest over the view);
+  `app/api/chat/orchestration-runtime.ts` (the merge between the scheduler and the envelope, its stand-down, the staged merged envelope,
+  the injected verifier - appended; B's envelope's doc lines in place, no cited line moved); `app/lib/agent/orchestration/scheduler.ts`
+  (the re-run after a stale dissent at the next attempt, the regenerate signal, the reviewer's citation rule - in place and appended, no
+  cited line moved); the workflow's one explicit entry for the route suite. No route, descriptor, UI or generator input changed; census
+  165/162/3/0.
+- Pin moves with their reasons: B's route cases 4, 12b, 15, 17 (the merge's decisions; revisions 6 -> 8, 7 -> 10; case 4 the content
+  keys), B's page case 8, B's scheduler case 13 (the re-run attempt), A's gate cases 1, 3, 5 (seven modules) and 7 (the layout apply's
+  pure builders); A's, B's and C's pages carry the gate's count, B's page its restated revisions, case 13's attempts and re-pinned
+  C48/C49, B's and C's pages the superseded envelope.
+- Findings: D21-34 (low) - the layout candidate's own `base` carries no scope (OD-133's follow-up); D21-35 (low) - the layout family's
+  module reaches the executor through the commit gateway, so the merge takes `verifyLayoutCandidate` by injection (gate case 7's probe);
+  D21-36 (low) - B's `specialistResultsEnvelope` has no production caller and is pinned by B's route case 12 and C's least-privilege
+  case 8.
+- Gates re-run one job at a time (the lead re-runs them): the D suites and every B21 suite; `app/api/chat/__tests__` in full;
+  `app/lib/agent/__tests__` (b09-*, b11-*, b18-*, b20-a4-*); the engineering exposure / tier / verifier suites; the MCP gates and
+  `app/lib/mcp/__tests__`; the CI guard; tsc; eslint on every new and changed file - figures in the report.
+- Records: `merge-and-disagreement.md`; OD-114, OD-129, OD-130, OD-132, OD-133 as applied, OD-120's addendum; D21-10 (as a capability),
+  D21-11 (envelope), D21-12 (dissent records), D21-13, D21-15 (the reviewer role), D21-16, D21-17 (stale clause, request-time
+  snapshot) closed; D21-14 recorded; D21-34, D21-35, D21-36 found. Live: every B21 behaviour with a real model
+  BLOCKED-LIVE-QUALIFICATION (LB-9).
+- Lead follow-ups on the check's residuals (2026-09-26; the checker confirmed all 30 fixes and raised 3 new low issues, all latent until
+  specialists carry artifacts or a route-level resume exists): (1) the layout candidate's DRC regression check compared error ids, which
+  hash the measured value, so partial routing progress (an incompleteNet whose remaining count fell) or a persisting clearance violation
+  with another gap read as NEW - violations are now compared by `drcViolationIdentity` (kind, items, objects, layer), incompleteNet is
+  judged by the per-net pad-group count (more groups = a lost connection; fewer = progress); (2) an escalation's persisted reason names
+  its claims but its subject digest did not, so a re-judgement whose claims changed collided with the old record (`store_conflict`) -
+  `escalationSubjectDigest` now carries the claims; (3) OD-114's "the latest verdict stands" failed when a verdict returned to an earlier
+  value (A, B, A: the returning A matched the first A's key and was skipped) - a verdict identical to the LATEST writes nothing, and one
+  that differs is keyed against the verdict it supersedes (`mergeVerdictTaskId`'s `previous`), so the returning A is recorded and is the
+  latest. Merge case 9 restated (a superseded verdict is never written over: the new verdict lands under a chained key, the old record
+  untouched), case 9b added (A, B, A and a replay that writes nothing), case 9c added (the two identities, and the merge keys through
+  them - read as text). Each fix proven revert-sensitive by mutation (`d-lead-probe-*.log`: an identity that includes the id fails case
+  9c, a subject without claims fails case 9c, an unchained verdict key fails cases 9 and 9b; the source restored from its backup,
+  SHA-256 equal). The full-board partial-routing scenario is proven at the function level only (stated on the page). A vacuous
+  assertion drafted during the fix (it accepted either outcome) was removed before the gates. The D page's citation lines re-pinned (22
+  rows) and its merge-suite count updated.
+- Lead gates (2026-09-26, one job at a time): every B21 suite with both route suites and the CI guard 17 files / 175 tests; `app/api/chat/__tests__` in full 16 / 103; `app/lib/agent/__tests__` in full 36 / 415; the engineering pins (b04, b13, b15, b17-e, b17-f, b18-a, b18-c) with the MCP gates and ratchets 10 / 115; `app/lib/mcp/__tests__` in full 26 / 642 (every B20 page citation holds, so D moved no cited line); tsc clean; eslint clean. All passed.
+
+### B21-D2 — specialists propose through their existing tools; provenance is the gateway's own seal (2026-09-26 local; increment workflow + lead; this commit)
+
+- Test-first: the five D2 suites and the moved cases were written first and ran against the unchanged code (`d2-failing-first.log`: 11
+  files, 34 of 103 failing, each on its own assertion or the missing export, except approval cases 1 and 2, which first stopped in their
+  setup because the reauthorizing POST lacked the `origin` header CSRF requires; with it, rechecked against HEAD's four modules, both
+  fail on their own assertions (`d2-failing-first-approval-recheck.log`); the flag-off byte-identity pin passing before and after by
+  design); then the code (`d2-impl-1.log`: 94/96 - two provenance cases merged at the B21-D fixture's frozen clock, before a live seal's
+  `createdAt`, which the merge's lifetime rule refuses; the suite now merges at the run's clock); then green (`d2-impl-2.log`).
+- Adversarial review: 17 confirmed findings (4 medium, 13 low after verification) fixed test-first (`d2fix/f1-failing-first.log`: 14 of
+  60 failing on their own assertions against the unfixed code; the test-strength findings proven by a deliberate breakage of the source,
+  each failing, the source restored and verified by hash) - the specialists offered no proposal once the coordinator's turn holds an
+  artifact (OD-122's `proposal_exists` clause, `artifactHeld`), the approval decision over the scheduler's outcome too (`incomplete`),
+  the frame by the run's effective set, the presentation always on the trace with the artifact's kind, id and digest, the envelope
+  header no longer "read-only", one proposal per run stated as the loop enforces it, and the page's scenario 17, D21-14 and D21-37
+  statements.
+- Code: `role-tools.ts` (the live and dormant proposals as data, `roleProposalToolIds`; six reasons in place), `scheduler.ts` (the
+  role's 'read + reviewed proposals' view, the effective set and the wrapper admitting a live proposal of the role's list, the proposing
+  context `specialistContextFor`, the seal collector and `attachSealedArtifacts` with `proposal_not_sealed_in_run`, the sealed digests on
+  every outcome and replay, the frame, objective and result rule by the run's effective set, `artifactHeld`; in place and appended, no
+  cited line moved), `merge.ts` (the merge's second check `proposal-not-sealed-in-run`, `provenance: sealed-in-run` on every action,
+  the accepted verdict's text, the approval decision with `incomplete` and `unjudgedProposers`; in place and appended),
+  `orchestration-runtime.ts` (the coordinator's first-turn artifacts handed to the scheduler, the presentation of the one accepted
+  action as the run's own family event with its always-recorded line, the envelope's approval block and header; in place and
+  appended); the workflow's one explicit entry for the route suite. No route, descriptor, UI, request key or generator input changed;
+  census 165/162/3/0.
+- Pin moves with their reasons: D's merge fixture relays test seals as the runs' own seal events; D's merge case 17 (provenance
+  established); D's route cases 2..5 relay, case 3 asserts the one presented `proposal_ready`; B's route case 4 (a proposing role's live
+  proposal; then its proposing opening line) and C's least-privilege case 1 and no-elevation case 4 (a proposing role's live proposal,
+  context and view); the A..D pages noted; C's role table and D's own-code table moved with their data.
+- Findings: D21-37, medium (a specialist cannot seal a component replacement: its sealer needs the pin-facts reads only the
+  coordinator's gateway holds - the D2 stop condition, recorded, the replacement dormant as an owner option; OD-130's part review not
+  reachable at the route; scenario 17's replacement DAG holds one proposing specialist, so it produces no structural disagreement).
+- Gates re-run one job at a time (the lead re-runs them): every B21 suite and the CI guard; `app/api/chat/__tests__` in full;
+  `app/lib/agent/__tests__` in full; the proposal families' and approval paths' suites; the exposure / tier / discovery pins;
+  `app/lib/mcp/__tests__` in full; tsc; eslint on every new and changed file - figures in the report.
+- Records: `specialist-proposals.md`; OD-109, OD-120, OD-122 amended; D21-10's production half closed; D21-14's addendum; D21-37 found.
+  Live: every B21 behaviour with a real model BLOCKED-LIVE-QUALIFICATION (LB-9).
+- Lead follow-ups on the check's residuals (2026-09-26; the checker confirmed all 17 fixes fixed and revert-sensitive and raised 2 new
+  low issues): (1) the scheduler's two request-write failure paths - the request record itself, and a malformed request's dissent -
+  left a task that never ran in neither `tasks` nor `notStarted`, so `unjudgedProposers` missed a proposing peer that never ran and the
+  other specialist's one accepted edit could be presented beside it; both paths now record the task as not started (in place,
+  line-neutral). Approval case 10 added (a store conflict and an unavailable store on the schematic specialist's request write): it
+  failed first on `notStarted` against the unfixed scheduler (`d2-lead-case10-red.log`, "expected [] to deeply equal
+  ['task-2-schematic']") and passes with the fix together with B's scheduler suite (`d2-lead-case10-green.log`, 24/24); the
+  malformed-request path takes the same line and has no case of its own (the scheduler builds every request itself, so no suite can
+  make it invalid without a crafted validator). (2) The presentation line's "ALWAYS recorded on the run's trace" claim now states the
+  trace recorder's own 32-warning bound (`TRACE_BOUNDS.maxWarnings`, shared with the coordinator's warnings; a full trace carries
+  `trace_event_capacity_reached`, never silently short), which `always` does not bypass - in the runtime's comment (in place) and in the
+  page's four statements. The page's approval-suite count (10) and new-case total (43) updated. A comment the lead first wrote inline
+  in the D2 fixture swallowed the rest of its line (nine cases failed on `buildToolset is not a function`); it became a block comment
+  before any gate ran.
+- Lead decision on D21-37 (discovery section 10, B21-D2): the published pin-facts reads are read-only catalog facts, not a port; B21-D3
+  (task: the replacement live for the `schematic` role through the runtime's composition root, `schematic` added to the
+  `component-replacement` DAG, scenario 17's disagreement structural and deterministically resolved or escalated) runs before B21-E.
+- Lead gates (2026-09-26, one job at a time): every B21 suite with the three B21 route suites and the CI guard 22 files / 218 tests; `app/api/chat/__tests__` in full 17 / 110; `app/lib/agent/__tests__` in full 36 / 415; the proposal families and their approval paths 27 / 367; the exposure / tier / discovery pins 25 / 224; the import gates, chat closure ratchets and route census (165) 8 / 86; `app/lib/mcp/__tests__` in full 26 / 642 (every B20 page citation holds); tsc clean; eslint clean on every new and changed TypeScript file. All passed.
+
+### B21-D3 — the replacement live for specialists; scenario 17's disagreement structural and deterministically resolved (2026-09-26 local; increment workflow + lead; this commit)
+
+- Test-first: the five D3 suites and the moved cases ran against HEAD's four production modules restored byte for byte
+  (`d3/ff-1-failing-first.log`: 11 files, 49 of 98 failing, each on its own assertion or the missing export; the reader's closure, the
+  flag-off byte identity and a read-only role's refusal passing before and after by design); then the code; then green.
+- Code: `orchestration-runtime.ts` (the specialist gateway built over `specialistGatewayOptions(request.signal)` - the route's source and
+  `loadRunReplacementPinFacts` under `DEFAULT_PIN_FACTS_DEADLINE_MS`, nothing else; line 260 in place, the function appended),
+  `role-tools.ts` (the replacement moved from the dormant list to the live one, its row reason - in place), `scheduler.ts` (its sealer's
+  fact, the head mark - in place), `router.ts` (the replacement DAG with the schematic specialist; the strict replacement grammar - lines 101
+  and 177 in place, the grammar appended); the workflow's one explicit entry for the route suite. No route, descriptor, UI, request key or generator
+  input changed; census 165/162/3/0.
+- Scenario 17 through the real runtime and the production POST: one party cannot seal (the circuit specialist's delete refused
+  `pins-unavailable` by the agent path's Tier 1 compiler - an empty pin map for every agent proposal, so the same with no peer - never
+  reaching the merge; the replacement accepted by its family's checks, the merge's binding, the exact-authority rule and
+  `sealed-in-run`, presented and approved through the replacement family's existing path with the run's principal); both seal (both
+  verified, `conflict:same_field`, one escalation citing the exact authority - two sealed parties always escalate); OD-130's part review
+  rendered at the route's envelope through the scheduler seam and CONFIRMED-unreachable from a production POST (a fresh run id per POST,
+  no resume); an absent pin-facts source blocking the coordinator's and the specialist's replacement alike.
+- Review round (2026-09-26, eleven confirmed findings, test-first: `d3fix/ff-1-failing-first.log`, 7 of 41 failing over the D3 tree):
+  the kind-swap grammar sent value changes, purposes, negations and questions to the four-specialist DAG (regressions-1, security-1,
+  coverage-1, tests-1 - `router.ts` head-anchored with the object check appended; replacement-roles case 7, B's router case 7 moved,
+  tests-6); three A..D2 statements D3 made untrue got dated notes in their own blocks (regressions-3, security-2, coverage-6 - page case
+  9); the page's resolution, part-review and order claims restated (coverage-2, coverage-3, coverage-5, tests-2, tests-3 - page cases
+  4, 7 and 10; control cases scenario17 7 and 8 and route case 7). Breakages, each restored and verified by hash: the first-with
+  lookahead removed from `router.ts` fails replacement-roles case 7; a pin map given to the agent gateway's Tier 1 compile makes the
+  delete seal and fails scenario17 cases 1, 2 and 7; a fixed run id in `route.ts` fails route case 7.
+- Pin moves with their reasons: B's scheduler (eleven cases), router (cases 3, 6 and, in the review round, 7) and route (cases 4, 11,
+  12b, 15, 16, 17) suites, C's least-privilege cases 1, 8 and 9, D's route cases 2 to 5, D2's proposing-roles cases 1, 3, 4 and 8 and
+  provenance case 6; stale titles kept for the closeout; the A..D2 pages noted; B's C46 and C's C33 re-pinned.
+- Findings: D21-38, low (the composer routes the runbook's scenario-17 sentence to the schematic editor; an MPN-only swap stays single).
+  RECORDED: a `contradicted` loser beside a presented winner does not exist under OD-122's order - two sealed parties always escalate and
+  a party that cannot seal never reaches the merge (an open OD-122 question); OD-130's part review fires only for a seal the authority
+  moved away from (a resume), which a production POST never performs until B21-E.
+- Gates re-run one job at a time (the lead re-runs them): every B21 suite and the CI guard; `app/api/chat/__tests__` in full;
+  `app/lib/agent/__tests__` in full; the replacement family's and the other proposal families' suites and approval paths; the exposure /
+  tier / discovery pins; the import gates, closure ratchets and census; `app/lib/mcp/__tests__` in full; tsc; eslint - figures in the
+  report.
+- Records: `specialist-replacement.md`; OD-107, OD-109, OD-120 amended; D21-37 closed; D21-16's route half recorded (the envelope
+  capability CONFIRMED, CONFIRMED-unreachable from a production POST, open for B21-E); D21-10's addendum; D21-38 found. Live: every
+  B21 behaviour with a real model BLOCKED-LIVE-QUALIFICATION (LB-9).
+- The run was interrupted after the review round (the previous session ended while the fixer started); every changed file predated the
+  fixer's start, so the tree was the implementer's output, and the workflow was resumed from its run record (the implementer, the four
+  reviews and their verifications replayed from cache; the fixer and the checker ran live). The checker confirmed all 13 fixes fixed and
+  revert-sensitive and raised one new low issue: the fixed grammar still sent an exchange of two existing parts, an attribute edit and a
+  question to the four-specialist DAG ("Please swap U1 with the regulator.", "Please swap the pins of U1 with the driver.", "Please
+  replace the value of U1 with timer.", "Replace U1 with a timer? Would that work?").
+- Lead follow-up 1 (2026-09-26): replacement-roles case 8 (twelve phrasings single, six to the DAG) failed first on the fixed grammar
+  (`d3-lead-case8-red.log`, "Please swap the pins of U1 with the driver.: expected dag to equal single"), then the grammar took an
+  indefinite object only, an attribute check on the replaced span and a question check (`d3-lead-case8-green.log`).
+- Lead follow-up 2 - an adversarial phrasing sweep (a workflow of three probing agents, each routing its own phrasings through the REAL
+  router via a probe script under the job lock; `probe/fd.out.json`, `fs.out.json`, `rb.out.json`): 165 false DAG routes remained -
+  follow-up questions and retractions after a comma or full stop, exchanges of existing parts ("with an adjacent op-amp"), attribute,
+  documentation and value edits carrying a purpose phrase, and, through the UNANCHORED composer pairing the router had used since B21-B,
+  prohibitions and "why" questions ("Don't swap parts without asking me first.", "Why did you swap the chip?"). The lead replaced the
+  exclusion-based grammar with ONE strict positive grammar anchored at both ends (`partKindSwap`: three whole-message request shapes,
+  a short tail at most, the replaced part named by designators, MPN-like tokens, kinds or part words, the new part by "a" / "an" / "the
+  approved", at most four modifiers that never point at an existing part, an active kind or a part word that the imported composer
+  pairing must agree with); line 101 and line 177 changed in place, the grammar appended, no cited line moved except the D3 page's own
+  C34 (re-pinned by anchor). Replacement-roles case 9 pins the sweep's corpus (`_d3-router-corpus.ts`: 165 false DAG phrasings not the
+  replacement DAG, 75 genuine requests the DAG); it failed against HEAD's router on "Do not replace any parts." (`d3-lead-case9-red.log`,
+  the router restored by SHA-256), and the sweep's own outputs are its failing-first evidence against the pre-lead grammar. Moved pins,
+  each with its reason: replacement-roles case 7's three recorded limits (now genuine DAG requests) and B's router case 7's source pin.
+  The D3 page's phrasing section, table, OD-107 text, README row, PROGRAM_STATE text, D21-38 clause and C10 / C11 / C34 rows restated;
+  B's page carries a dated note. Rounds 2 to 4 rebuilt the grammar each time (each round's outputs are the failing-first evidence of the
+  next grammar, `probe/*.out.json`): round 2 (306 more - open modifiers and tails) closed the vocabularies; round 3 (166 - an open MPN
+  token, values tied to the wrong kind, same-part swaps, "?!") tied values to their kinds and made the rule read the RAW message's
+  trailing punctuation (line 177 passes `userMessage`, in place); round 4 (180 - MPN-shaped net, laminate, OS and suffix names,
+  unit-less values, passive designators, opinion questions, vacuous swaps) removed every open token: the new part carries no MPN or
+  number, an MPN names only the replaced part from a listed vendor prefix, the replaced designator is an active component's, "would
+  you" is an opinion, "substitute X for Y" in its one correct direction, a bare kind for a bare kind is nothing new. The corpus pins
+  804 false DAG phrasings, 121 genuine requests and 10 RECORDED semantic residues (a listed word in another sense). Pin moves: case 8's
+  "Replace U1 with a timer?" (now a question), case 9 retitled while new, a scenario-17 variant's new part renamed from "a low-power
+  TLC555 timer" to "a low-power CMOS timer" (an MPN in the new part stays single by design), B's case 7 source pins. Round 5, the
+  verification round with every finding classified structural or semantic: 83 structural findings from five root causes - "would you" after another polite word, a vacuous "a timer chip", a BARE prefixed code (a solder alloy, a laminate, an instrument, a standard) or a plural as the replaced part (an MPN is now always anchored by a kind or a designator), a part-number suffix read as a unit (values carry plausible magnitudes), VR as a designator (dropped) - all fixed, and eleven semantic ones recorded (`RECORDED_SEMANTIC`, now twenty); the corpus pins 885 false DAG phrasings, 160 genuine requests and 20 recorded semantic residues; case 7's two bare "the NE555" phrasings moved to single with the reason beside them. A sixth round runs after this commit; anything it finds lands as its own change.
+- Lead decisions: D21-38 (the composer's own routing of the scenario-17 sentence) is assigned to B21-E2 (the strict grammar moves into
+  the composer module as one exported predicate beside `REPLACE_PART`); OD-122's open question (a verifier-contradicted loser withholds
+  a verified winner's presentation) keeps its conservative default and goes to the B21 closeout.
+- Lead gates (2026-09-27, one job at a time): every B21 suite with the four B21 route suites and the CI guard 27 files / 256 tests; `app/api/chat/__tests__` in full 18 / 117; `app/lib/agent/__tests__` in full 36 / 415; the replacement family and the other proposal families with their approval and reauthorization paths 34 / 513; the exposure / tier / discovery pins 25 / 224; the import gates, chat closure ratchets and route census (165) 8 / 86; `app/lib/mcp/__tests__` in full 26 / 642 (every B20 page citation holds); tsc clean; eslint clean on every new and changed TypeScript file. All passed.
+
+### B21-E1 — provider routing and failure behaviour: the provider layer (2026-09-27 local; increment workflow + lead; this commit)
+
+- Test-first: the seven E1 suites ran against the base with only the tests present (`e1-failing-first.log`: five on the missing
+  modules, the route's cases 2 and 3 and both retry-card cases on their assertions; route case 1 green by design); the moved suites
+  with their B-era doubles against the E1 code (`e1-moved-failing-first.log`: 98 of 277 failing); then green.
+- Code: `provider-policy.ts` (the role table, the closed env schema, qualification against the rule objects, the fallback rule over
+  both renderers, the meters' port and the admitted adapter, the route decision), `result-tool.ts` (the strict declaration, the
+  specialist's wrapper capturing the one call and the stop, the arguments parse through A, the stop reasons), `scheduler.ts` (per
+  attempt: the coordinator's pause, the route, the chain, the stop and the captured call; no retry against a paused provider; another
+  provider's outage stops only its task; `parseSpecialistResult` removed), `orchestration-runtime.ts` (the providers handed on, the
+  follow-up pause, `productionSpecialistProviders`), `route.ts` (line 520), `adapters.ts` (the stop per step, the retries per adapter,
+  `agentAdapterForRole`), `contracts.ts` (`stop?`, `STEP_STOPS`), `admission-control.ts` (the `llm-provider` kind and meters),
+  `run-consumer.ts` and `ai-preferences.ts` (no Retry for quota or an open breaker on either path of the card, the Switch's new run
+  kept), `page.tsx` (the card's Retry reads the flag, in place), the family rules named once in `openai-config.ts` and the new
+  `anthropic-config.ts`; the workflow's one explicit entry. No route, descriptor, UI control, request key or generator input changed;
+  census 165/162/3/0.
+- Fix round (the adversarial review's 21 confirmed findings, test-first: `fix-red-1.log` 18 of 48 failing, `fix-red-ambient-env.log` 24
+  of 39; green `fix-green-1.log` 82 of 82, `fix-green-ambient-env.log` 42 of 42; five test-strength findings proven by source mutations
+  restored by sha256): the Switch re-sends after a no-credits failure (the closure dispatched with `retryOffered: false`) and the JSON
+  path withholds Retry too; a routed specialist's seals name its provider; `provider_paused` for the coordinator's provider paused by
+  the meters, a window pause mid-run escalating only its task; tickets and breaker generations (no stale outcome moves the breaker, an
+  abandoned trial is not counted); the follow-up turn metered; a key named twice refuses the role map; the merge's source rule re-worded
+  (OD-132's provider-and-model keying re-deferred); the migrated route suites pin the role env; B's C30 re-pinned, D3's C36 re-anchored,
+  the provider notes re-pointed.
+- Pin moves with their reasons: A's gate cases 1, 3 and 5; the scripted doubles through the result tool (the role, merge and D2
+  fixtures, B's scheduler double, D's case 22 double, the four route mocks with `agentAdapterForRole` and the meters reset); B's scheduler
+  case 9 and D2's provenance case 9; B20-A0's key case 1 (an added assertion); B19-D's closure gate (the meters' exemption); B07.5's
+  JSON-path pin (the fix round); B09.2's recovery case 2 moved in the first round and restored to its base text by the fix round; the
+  B..D3 pages' 75 rows into the scheduler and the runtime re-pinned, B's C14, C16, C24, C52 and D2's C17 re-anchored, B's C30 re-pinned
+  and D3's C36 re-anchored, dated notes on B, D and D2.
+- Findings: D21-39 (low: the coordinator's first turn is not gated by the breaker - a request while its provider is paused still makes
+  that one call; for B21-E2), D21-40 (low: the scripted fixture agent answers no specialist through the result tool - with orchestration
+  on under the fixture runtime every specialist would be `malformed`; for B21-F's per-role scripts). RECORDED: OD-108's deviation
+  stands (the result tool is the specialist's channel; the follow-up turn's input is unchanged).
+- Gates re-run one job at a time (the lead re-runs them): every B21 suite and the route suites with the CI guard; `app/api/chat/__tests__`
+  in full; `app/lib/agent/__tests__` in full; `app/lib/llm/__tests__`; `app/lib/acquisition/__tests__`; `app/lib/mcp` and
+  `app/api/mcp/__tests__`; the exposure / tier suites; the B17-A inventory and the B18-D UI gates; tsc; eslint - figures in the report.
+- Records: `provider-routing-and-failure.md` (E1 sections); `provider-reference-notes.md` (the installed packages' facts, 2026-09-27);
+  OD-115, OD-116, OD-117, OD-119 applied; D21-18, D21-19, D21-20 (as policy), D21-21 closed; D21-39, D21-40 found. Live: every B21
+  behaviour with a real model BLOCKED-LIVE-QUALIFICATION (LB-9).
+- Lead follow-up on the check's residual (2026-09-27; the checker confirmed all 23 fixes fixed and 22 revert-sensitive - the migrated
+  route suites' ambient-env stub is hygiene, not a behaviour a revert would expose - and raised one new low issue): a rate-limit opening
+  moved the breaker generation, so an `insufficient_quota` answer from a call admitted before it was dropped as stale and a provider that
+  is out of credits stayed paused for the rate-limit minute only, its half-open trial then making another paid-path call. A no-credits
+  answer is a fact about the account: it now still opens the long window from an earlier generation, never shortens a longer opening, and
+  never undoes an operator reset that came after its call's admission (`recordStaleNoCredits` appended; the stale-ticket line and the two
+  reset lines changed in place; no cited line above them moved - the highest outside citation into `admission-control.ts` is line 294).
+  Breaker case 14 failed first on the unfixed breaker (`e1-lead-case14-red.log`: the pause still named the rate-limit minute), passes
+  with the fix together with every acquisition suite (`e1-lead-case14-green.log`, 16 files), and fails again with the reset guard removed
+  (`e1-lead-probe-reset-guard.log`; the source restored, SHA-256 equal). The E1 page states the rule in its ticket paragraph and its
+  OD-115 text, C66's anchor moved with its line, the breaker-suite count (14) and the new-case total (56) updated.
+- Lead gates (2026-09-27, one job at a time): every B21 suite with the five B21 route suites and the CI guard 35 files / 312 tests; `app/api/chat/__tests__`, `app/lib/llm/__tests__` and `app/lib/acquisition/__tests__` in full 42 files / 355 tests (2 skipped: the opt-in live contract suite); `app/lib/agent/__tests__` with the engineering exposure / tier suites, the B17-A control inventory and the B18-D UI gates 63 / 646; the proposal families and their approval paths 34 / 513; the import gates, chat closure ratchets, route census (165) and route matrices 10 / 104; `app/lib/mcp/__tests__` and `app/api/mcp/__tests__` 33 / 737 (every B20 page citation holds); tsc clean; eslint clean on every changed TypeScript file - `app/page.tsx` carries 14 `react-hooks/refs` errors on lines E1 did not touch, the SAME 14 at HEAD a4aba95 (its HEAD text linted through stdin, `e1-lead-eslint-head-page.log`), pre-existing and outside B21 (CI runs no eslint); flagged as a separate task.
+
+### B21-D3 follow-up - the router grammar's sixth sweep round (2026-09-27 local; lead; this commit)
+
+- The sixth round of the lead's adversarial phrasing sweep (three probing agents routing their own phrasings through the real router,
+  every finding classed structural or semantic; run beside B21-E1, read-only, its fixes held until E1 was committed) found 104
+  structural false DAG routes from six root causes and 44 semantic ones. Fixed in `router.ts` (the appended grammar only; no cited line
+  above it moved, the D3 page's C34 re-pinned by anchor): a designator's unit letter a-f only (never "U1s", "k8s", "Y2K"); the
+  appositive's closing comma required; an MPN suffix a voltage variant only ("-3.3", never "NE555-556"); a bare new part of the named
+  part's own kind family, or for a part named without a comparable kind, or a bare part word for any part, names nothing new (while "the
+  4060 timer with a microcontroller" still routes); the acronym IT (upper case in the raw message) never the pronoun; widths, pin counts
+  and timer compatibility bounded and listed, never a zero magnitude, and each kind's nonsense spec words excluded. The regression corpus
+  (`_d3-router-corpus.ts`, rebuilt by `probe/make_corpus.py` from all six rounds' outputs, which are the failing-first evidence) pins
+  1007 false DAG phrasings (none routes), 194 genuine requests (all route) and 46 RECORDED semantic residues (a listed word in another
+  sense - "the ATmega328P oscillator", "an adjustable comparator" - which only part knowledge could tell). Pin moves with their reasons:
+  replacement-roles case 9's counts and its hyphenated-modifier row ("free-running" is now excluded for an oscillator). Gates: every B21
+  suite with the five route suites and the CI guard 35 files / 312 tests; tsc clean; eslint clean on the changed files.
+
+### B21-E2 (1/2) — the additive run events and the status line; the trace block stopped (2026-09-27 local; increment workflow + lead; this commit)
+
+- Test-first: the three E2 suites against the base with only the tests present (`e2-final-failing-first.log`: three files on the missing
+  module); with the new module and the contracts but the wiring at HEAD (`e2-final-failing-first-wiring.log`: 13 of 17 failing on their
+  assertions, 4 green by design); the moved suites against the E2 code with their HEAD helpers (`b21-all-1.log`: 33 of 315 failing); then
+  green.
+- Code: `run-events.ts` (the bounded builders, the one judge, the traced types, the closing event, the withheld key), the contracts (the
+  pinned list, the statuses, the degraded reasons, the closed shapes; the union widened in place), `scheduler.ts` (the plan, a
+  specialist's start with the budget remaining and its outcome, a stale result, a role with no tools, a fallback, the paused coordinator
+  and the held artifact as events, a withheld re-run closed - in place), `orchestration-runtime.ts` (the events streamed and their lines
+  traced as B's warnings were, every stand-down a `degraded` event, the partial result judged against the merge where it ran),
+  `chat-run-view.ts` (the counters and the one status line, appended; an event's run-log line), `page.tsx` (two in-place lines: the
+  run-log row and the status line; no control), the workflow's one explicit entry. No route, descriptor, UI control, request key or
+  generator input changed; census 165/162/3/0; the nine scanned files byte-identical to HEAD.
+- Adversarial review: 13 confirmed findings fixed test-first (`b21/e2fix/`: the new cases red first on the unfixed code, 14 of 39 in
+  `red-1.log`; the pre-fix partial result reproduced by a probe on the swapped-in pre-fix files, restored by sha256; the shell-flag
+  reproduction of route case 4; breakages m1-m5 of the source each failing its strengthened case, restored by sha256): the partial
+  result counting a task once and what the merge withheld, a withheld re-run closed, an unrecorded provenance named as none, an
+  undeclared key's name withheld, the budget remaining, every scheduler and runtime site pinned by its type and reason, the trace cap
+  proven, the older page's loss recorded (OD-126), `chat-run-view.ts` made line-neutral, the flag-off case independent of the shell, the
+  A..E1 pages' dated notes.
+- Stopped: the trace block (OD-112) - the per-task document's run id `<runId>:<taskId>` is refused by the unchanged v1 trace contract
+  (`trace.runId: contains secret-shaped content`: every task id `task-<n>-<role>` matches the diagnostics' unanchored `sk-` key pattern);
+  the implementation, its suite and the probe held in the scratchpad (`b21/e2/trace-block-held/`, sha256 listed), nothing of it in the
+  tree; D21-41 found with the owner's options.
+- Pin moves with their reasons: A's gate cases 1, 3 and 5 (run-events.ts in the entry set, 9 -> 10); the run-log-lines helpers of
+  B's scheduler, C's least privilege, D2's approval, proposing-roles and provenance, D3's scenario 17, E1's breaker and fixtures and the
+  five route suites (B's lines are now the events' messages; the same sentences asserted); a dated pointer on E1's page; dated E2 notes on
+  the B, C and D2 pages.
+- Gates re-run one job at a time (the lead re-runs them): every B21 suite and the six route suites; `app/api/chat/__tests__` in full;
+  `app/lib/agent/__tests__` in full; `app/lib/project/__tests__` with the B17-A inventory; `app/lib/llm/__tests__` and
+  `app/lib/acquisition/__tests__`; `app/lib/mcp` and `app/api/mcp/__tests__`; the exposure / tier suites; tsc; eslint; the B17-A
+  generator with zero drift - figures on the page.
+- Records: `run-events-and-trace.md`; OD-126 and OD-127 applied (OD-126 with the older page's loss as the owner's question); OD-112 open
+  with the stop; D21-22 closed; D21-41 found. Live: every B21 behaviour with a real model BLOCKED-LIVE-QUALIFICATION (LB-9).
+- Lead follow-up on the check's residual (2026-09-27; the checker confirmed 15 of the 17 fixes fixed and revert-sensitive, tests-7 a
+  hermeticity fix a revert exposes only when the shell sets the flag, and security-2 NOT closed): the fix withheld only the literal
+  `result_refused: unknown_key at <path>`, while A refuses a reasoning-shaped key name (`forbidden_key_name`) before an unknown key and
+  reports a key inside an artifact's payload (`invalid_text`) by the same path - both model-chosen names reached the event's reason and
+  line, and the header claimed every other reason was server text. Now a refusal path is kept only when made of the documents' DECLARED
+  key names and array indices (`SPECIALIST_DECLARED_KEYS`, appended to `contracts.ts`; `withoutModelKey` generalized in place plus four
+  lines) and withheld whole otherwise. Run-events case 16 (three hostile paths withheld in the reason and the line, three declared paths
+  kept) failed first on the unknown-key-only rule (`e2-lead-case16-red.log`) and passes with the fix together with A's suites and the E2
+  page (`e2-lead-case16-green.log`); the header and the page restated; the E2 page's twelve `run-events.ts` rows re-pinned by anchor, C57
+  retitled, the suite count (16) and the new-case total (40) updated.
+- Lead decision on D21-41 / OD-112 (discovery section 10, B21-E2): the per-task trace run id `<runId>:<n>-<role>` and a block carrying
+  the task's index and role, never the literal task id - B21-E2 (2/2) applies the held trace block that way before B21-E3.
+- Lead gates (2026-09-27, one job at a time): every B21 suite with the six B21 route suites and the CI guard 39 files / 352 tests; `app/api/chat/__tests__`, `app/lib/llm/__tests__` and `app/lib/acquisition/__tests__` 43 files / 362 tests (2 skipped: the opt-in live contract suite); `app/lib/agent/__tests__` with the engineering exposure / tier suites, the B17-A control inventory and the B18-D UI gates 63 / 646; `app/lib/project/__tests__` and `app/components/chat` in full 39 / 312; the proposal families 34 / 513; the import gates, census (165) and route matrices 10 / 104; `app/lib/mcp` and `app/api/mcp` 33 / 737; tsc clean; eslint clean on every changed file but `app/page.tsx`'s 14 pre-existing `react-hooks/refs` errors, on the same lines as at HEAD (E2 changed page.tsx in place on three other lines).
+
+### B21-E2 (2/2) — the trace block: one trace document per specialist task (2026-09-27 local; increment workflow + lead; this commit)
+
+- Held work: the E2 run-1 trace-block files verified against `held.sha256` (eight OK) and applied adapted to the lead's reading of OD-112.
+- Test-first: the two new suites and the route suite's two new cases against HEAD 41330e6 with only the tests
+  (`e2b-failing-first-tests-only.log`: three files on the missing module); with the module but the store and runtime at HEAD
+  (`e2b-failing-first-module-no-wiring.log`: 7 of 20 failing on the missing wiring, 13 green by design); then green; the moved pins
+  failing first on their old values (`e2b-green-2-with-A-pins.log`, `b21-all-1.log`); the page suite against the page without E2b's
+  sections (`e2b-page-failing-first.log`: 6 of 7).
+- Code: `trace-attribution.ts` (new: the task identity and its round trip, the closed block and its one rule, the validator, the cascade,
+  the durable trace record, the book), `store.ts` (every durable record binds its trace store on its own repository; the constructor in
+  place, the rest appended), `orchestration-runtime.ts` (the book bound, the injected loop wrapped, every document appended before
+  anything is handed on, an unrecorded document one visible line - four lines in place, one the redaction import the review's fix
+  widened, the helpers appended). No route, descriptor,
+  request key, run-event type, UI or generator input changed; census 165/162/3/0; the nine scanned files and `redaction.ts`
+  byte-identical to HEAD.
+- Pin moves with their reasons: A's gate cases 1, 3 and 5 (trace-attribution.ts in the entry set, 10 -> 11); A's store case 12 (its
+  import list + `./trace-attribution`); the E2 page's case 1 (section 3's heading names the stop and the application); the E2 page's
+  route-suite row (7 -> 10).
+- Review (E2b fix): the adversarial review's 13 confirmed findings answered test-first (`b21/e2b-fix/red-1.log`: 5 of 26 failing on
+  their findings; six deliberate breakages each caught and restored by sha256; `green-1.log` 29 of 29): an attempt on another provider
+  opens the task's next document (reachable - the scheduler routes every attempt again) instead of running untraced; every string of a
+  stored document held to the orchestration string rule (a NUL or lone surrogate no longer fails the jsonb commit); the record bound to
+  its scope; a call refused before it ran one closed line on its task's document (D21-12's addendum); the unrecorded line whole on the
+  coordinator's trace (bounded by construction); the zero-step document's verdict and model claims corrected; eight new trace-attribution
+  cases, one route case, one page case.
+- Gates re-run one job at a time after the review's fixes (the lead re-runs them): every B21 suite with the six route suites (41
+  files, 372 of 372); `app/api/chat/__tests__` (130 of 130); `app/lib/agent/__tests__` (415 of 415); `app/lib/project/__tests__` with
+  `app/components/chat` (312 of 312); the B17-A inventory with the exposure and tier suites (130 of 130); `app/lib/llm` and
+  `app/lib/acquisition` (235 of 235, one opt-in live file skipped); `app/lib/mcp` and `app/api/mcp/__tests__` (920 of 920); tsc 0;
+  eslint clean on the 11 changed and new TypeScript files; the B11, B09 and B17-A generators with zero drift - figures on the page.
+- Records: `run-events-and-trace.md` (section 3.1 to 3.7, E2b's rows and citations, these texts); OD-112 applied under the lead's
+  reading; D21-11's trace half, D21-3's calls half and D21-41 closed. Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+- Lead follow-up on the check's residuals (2026-09-27; the checker confirmed all 13 fixes fixed and revert-sensitive and raised three
+  low issues): (1) PRE-EXISTING since B21-A - the specialist documents' text rule (`contracts.ts` `FORBIDDEN_TEXT_CHARACTER`) omitted
+  lone surrogates, so an escaped `\ud800` in a result-tool call passed validation and then failed the orchestration record's jsonb
+  commit; the rule now refuses `\p{Cs}` (in place, line-neutral), A's contracts case 15 (four lone surrogates at the middle and the
+  end, one through `JSON.parse`, and two paired astral characters still accepted) failed first on the unchanged rule
+  (`e2b-lead-surrogate-red.log`) and passes with A's page suite, whose count moved 14 -> 15 with a dated note; (2) the refused-call
+  lines share each document's 32-warning bound with the loop's own warnings (an unknown tool costs two lines), so each refused call is
+  persisted within the bound and past it the document carries `trace_event_capacity_reached` - the page now says so (RECORDED);
+  (3) the page and `cleanTraceText`'s JSDoc restated: the trace's string rule is stricter than the orchestration record's (it also
+  refuses TAB and LF), and a replaced string's length never grows (one `?` per character). Every orchestration suite: 32 files / 321
+  tests.
+- Lead gates (2026-09-27, one job at a time): every B21 suite with the six B21 route suites and the CI guard 42 files / 383 tests; `app/api/chat/__tests__`, `app/lib/llm/__tests__` and `app/lib/acquisition/__tests__` 43 files / 365 tests (2 skipped: the opt-in live contract suite); `app/lib/agent/__tests__` with the engineering exposure / tier suites, the B17-A control inventory and the B18-D UI gates 63 / 646 (the b11 and b20-a4 pins among them); `app/lib/project/__tests__` and `app/components/chat` 39 / 312; the proposal families 34 / 513; the import gates, census (165) and route matrices 10 / 104 - its first run passed every test but exited 1 on a vitest worker RPC timeout ("Timeout calling onTaskUpdate") during the CPU-heavy import scans, re-run alone clean (exit 0); `app/lib/mcp` and `app/api/mcp` 33 / 737; tsc clean; eslint clean on every changed file.
+
+### B21-E3 — the route-level resume and the userMessageDigest ledger (2026-09-27/28 local; increment workflow + lead; this commit)
+
+- Adopted: a previous E3 run was cut off by a power outage (about 09:06) with partial, unreviewed work in the tree; the adopting run
+  verified every changed file against HEAD b4a0ec5 (hashes as found in `e3adopt/start.sha256`), kept most of it, changed what was wrong
+  or missing (one request of a run at a time; the store's load bound to its scope; a transient refusal keeping the page's offer) and
+  finished the page, the cases and the gates.
+- Reviewed: an adversarial review CONFIRMED twenty findings; each fixed test-first (`route-resume.md` section 8, "Review fixes"): the
+  claim after the merge judged, with its own line (regressions-1); a throw settles the start (regressions-2); the trace bound stated
+  (regressions-4); the record's own credential shapes (security-1); a route-level resume bound to the selection, netlist and schematic,
+  the authority deliberately not (security-2); the offer read back after a reload (coverage-1); a replayed seal outliving the approval
+  window (coverage-2); true offer lines (coverage-4); a timed-out write unknown, a void claim (coverage-5); the page's counts (coverage-6);
+  `resume_unusable` for good (coverage-7, tests-5); every record write bounded and injectable, the compare-and-set, the owner first, the
+  load's re-judgement, the moved head, the page's wiring and control scan pinned (tests-1..4, 6, 8..10).
+- Test-first: the adopted run's red against HEAD (`e3adopt/red-1-head.log`: 39 of 48 failing) and its mutations (`red-2-mutated.log`: 6
+  of 30); the review fixes' red against the adopted code (`e3fix/red-1.log`: 22 of 55 failing; `red-2-prefix.log`: 19 of 45 against the
+  adopted production files swapped back in; `red-3`, `red-4`) and eleven mutations each caught (one more proven harmless); then green.
+- Code: `route.ts` (the key beside the closed set, the resume judged after the wrapper, the run id reused, the grant handed over - in
+  place), `orchestration-runtime.ts` (the guard, the replayed first turn, the coordinator's record, the ledger's claim, the follow-up's
+  entry, every request's settled end - in place; the resolution, the record writes, the void claim, the replay and the guard appended),
+  `store.ts` (the resume record and its credential shapes, appended), `scheduler.ts` (a route-level resume's blocker: four lines in place,
+  the rest appended), `merge.ts` (`already_presented`, in place), `chat-run-view.ts` (the offer and its restore, appended), `page.tsx`
+  (ten lines in place, no control), the workflow's one explicit entry. No route, descriptor, run-event type, control or generator input
+  changed; census 165/162/3/0; the nine scanned files and `redaction.ts` byte-identical to HEAD.
+- Pin move with its reason: D2's approval case 6 (`already_presented` appended).
+- Gates re-run one job at a time (the lead re-runs them): every B21 suite with the seven route suites and the CI guard (47 files,
+  438); `app/api/chat`, `app/lib/llm` and `app/lib/acquisition` in full (376 passed, one opt-in live file skipped); `app/lib/agent` with the
+  exposure and tier suites, the B17-A inventory and the B18-D UI gates (646 of 646); `app/lib/project` with `app/components/chat` (312
+  of 312); the proposal families (513 of 513); the import gates and census (104 of 104); `app/lib/mcp` and `app/api/mcp` (737 of 737)
+  and `app/lib/mcp/server` (183 of 183); tsc 0; eslint clean on E3's lines (page.tsx's 14 pre-existing errors elsewhere); the B11, B09
+  and B17-A generators with zero drift - figures on the page.
+- Records: `route-resume.md`; OD-122 applied across resumes; OD-111 and OD-107 amended; D21-4 closed at the route, D21-16's route half
+  and D21-17's live-head half closed. Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+- Lead follow-up on the check (2026-09-28; the checker confirmed 18 of the 20 fixes fixed and revert-sensitive and raised two new low
+  issues and five residuals): (1) the route's end marker for a start claim of unknown outcome was keyed by the ordinal alone - two
+  requests that read one head claim one ordinal, so a loser whose write failed could settle the WINNER's running start and swallow its
+  real end (its `presented` lost, the next resume free to run beside it); every `resume` entry now carries its request's claim id (a
+  digest of a fresh nonce, refused when absent) and `markUnknownClaim` re-reads and settles by compare-and-set only when no start of
+  the ordinal is there or the start there is this claim's (runtime case 19); (2) a replayed seal's approval window was measured when
+  the replay is decided, not at the resumed DAG's deadline - a seal with six minutes left could be presented with less than the 2-minute
+  window after the DAG's remaining wall time; now `Math.max(now, dagDeadline)` (runtime case 20; case 17's in-time contrast moved to
+  three minutes left at the deadline); (3) the PEM shape also matches a PGP private key block (record case 8); (4) the offer and
+  resuming lines say the first answer is replayed unless the record withheld it (offer case 7); (5) route case 8 and the page name the
+  catalog's authority, never the editor selection, as what moved. Each fix reverted alone turned its case red (`e3lead/prove.py`: 5 of
+  5) and was restored by sha256. Recorded on the page (section 7): the offer kept while the record is unreachable, the selection
+  binding's re-pay, the credential denylist, the synchronous-throw window.
+- Lead gates (2026-09-28, one job at a time): every B21 suite with the seven route suites and the CI guard (47 files, 440 of 440); `app/api/chat`, `app/lib/llm` and
+  `app/lib/acquisition` in full (44 files: 376 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the exposure
+  and tier suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with `app/components/chat` (39
+  files, 312 of 312); the proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route
+  matrices (10 files, 104 of 104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server`
+  (19 files, 183 of 183); tsc 0; eslint: `app/page.tsx`'s 14 pre-existing `react-hooks/refs` errors only (none on E3's ten lines),
+  every other changed file clean; the generators with zero drift (B11 19 of 19 cases and 61 of 61 checks; the B09 and B11 outputs, 21
+  files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status unchanged).
+
+### B21-E4 — the composer's kind swap and the coordinator's first turn behind the breaker (2026-09-28 local; increment workflow + lead; this commit)
+
+- Test-first: HEAD fafc90e's router answers (five fact sets), composer routes and grammar code lines recorded from the HEAD modules
+  (`e4/head-probe.json`); the new suites red against HEAD (`e4/ff-1-failing-first.log`: 16 of 19 failing), the moved pins and the route
+  suite red against HEAD's production code (`e4/ff-2-moved-pins-at-head.log`: 5 of 36 failing); then green.
+- Code: `composer-routing.ts` (B21-D3's replacement grammar moved in verbatim as ONE exported predicate beside `REPLACE_PART`, with
+  `POLITE`; rule 5b uses it), `router.ts` (imports the predicate and the prefix on its old import line; two comment pairs in place; the
+  appended grammar removed - every cited line kept), `route.ts` (three lines in place: the first-turn gate before the coordinator's first
+  turn on every plan that is not refused), `orchestration-runtime.ts` (`pausedFirstTurn`, appended), `ai-preferences.ts` (one stale
+  comment in place), the workflow's two explicit entries. No route, descriptor, run-event type, control, request key, reason or
+  generator input changed; census 165/162/3/0; the nine scanned files byte-identical to HEAD.
+- The adversarial review (seven confirmed findings, each answered test-first - `composer-and-first-turn.md` section 4, logs
+  `e4fix/`): a half-open breaker's trial in flight gated every chat request on that provider "until" its own instant - now it never
+  gates a first turn (`halfOpenTrialInFlight`, gate case 6, route case 6); the composer's new path scanned trailing punctuation
+  quadratically on its unbounded text (60 808 to 100 759 ms at 150 000 characters) - the two normalization lines and the predicate's
+  trailing run now start from the run's start (composer case 6, the router's answers unchanged); E2's route case 5 carries E1's
+  exactly-once pins again (proven by two deliberate breakages, the sources restored by hash); the process-wide window, the gate's
+  inertness on a flag-off process and the one-window limit under persistent no-credits RECORDED and pinned (gate case 7, route cases 7
+  and 8; D21-42 opened); the D3 page's stale "the router still imports `REPLACE_PART`" superseded in words.
+- Pin moves with their reasons: B's router case 7, D3's replacement-roles case 5, E1's route case 3, E2's route case 5 (and its
+  exactly-once pins restored), the grammar suite's case 2 (the one line rewritten linear); D3's page C10 and C34 and B's page C35
+  re-pinned; dated E4 notes on the D3, B and E1 pages.
+- Gates after the review fixes, one job at a time (the lead re-runs them): every B21 suite - the orchestration directory, every A..E4 page
+  suite included - with the E4 composer suite and the CI guard (44 files, 402 of 402); `app/api/chat` in full with `app/lib/llm` and
+  `app/lib/acquisition` (45 files, 384 passed, the one opt-in live file's 2 cases skipped as before); `app/lib/agent` with the exposure
+  and tier suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with `app/components/chat` (40
+  files, 318 of 318); the proposal families (34 files, 513 of 513); the import gates and census (10 files, 104 of 104); `app/lib/mcp`
+  and `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0; eslint clean on the 14 changed and
+  new TypeScript files; the B11 (19 of 19 cases, 61 of 61 checks) and B09 generators (their 21 artifact files byte-identical by sha256) and the
+  B17-A generator (628 controls, CSV and summary identical) with zero drift and the tree's status unchanged - figures on the page.
+- Records: `composer-and-first-turn.md`; OD-115 amended; D21-38 and D21-39 closed; D21-42 opened (medium, the owner's OD-115 option);
+  D21-18's first-turn clause narrowed. Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+- Lead follow-up on the check (2026-09-28; the checker confirmed six of the seven fixes fixed and revert-sensitive - security-1 fixed
+  only in part by design: the process-wide window stays, recorded as the owner's question - and raised one new low documentation
+  issue): the page, its README row, ledger paragraph, PROGRAM_STATE checkpoint, D21-38 clause and section-10 line said "every scan on
+  the composer's path is linear", but B18-E's `REPLACE_PART` at rule 5b stays super-linear on a self-pasted run (the page's own
+  section 1 records it); each claim now reads "every scan E4 added" with `REPLACE_PART` recorded, and composer case 6's title says the
+  same. The lead's records tool gained the title-form NEW-defect bullet (D21-42 is written "- **D21-42 — Title.** Requirement: ..."),
+  which it would otherwise have skipped silently. D3's replacement-roles case 5 keeps its stale title for the closeout.
+- Lead gates (2026-09-28, one job at a time): every B21 suite with the eight route suites, the composer suite and the CI guard (52 files, 473 of 473); `app/api/chat`,
+  `app/lib/llm` and `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent`
+  with the exposure and tier suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with
+  `app/components/chat` (40 files, 318 of 318); the proposal families and approval paths (34 files, 513 of 513); the import gates,
+  census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of
+  737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0; eslint clean on every changed and new TypeScript file; the generators
+  with zero drift (B11 19 of 19 cases and 61 of 61 checks; the B09 and B11 outputs, 21 files, byte-identical; B17-A 628 controls, CSV
+  and summary identical; the tree's status unchanged). Logs under `b21/e4lead/gates/`.
+
+### B21-F — the required evaluations (2026-09-28 local; increment workflow + lead; this commit)
+
+- The twelve runbook evaluations (:863-:874) offline in `b21-f-evaluation.test.ts` (16 cases) through the production POST with the flag
+  on: the real adapter classes over in-process fake SDK clients (`_f-fixture-clients.ts`, recording what each call OFFERED) answering from
+  the scripted fixture agent, whose script table gained per-role specialists answering through the strict result tool and a follow-up turn
+  (D21-40 closed); D21-42's first-turn leg of F10 (case 16); the case table rendered into `evaluation-matrix.{csv,json}` and byte-gated.
+- Failing-first: F adds no production code, so each case was broken by one mutation of the mechanism it names and restored byte for byte -
+  seventeen (HEAD's fixture agent, HEAD's v3 capsule, the router's default, the first-turn gate, the structural tool gate, the deadline
+  rule, the ledger's claim, the replay's scope check, OD-122's held artifact, the role routing, the merge's conflict edges, the envelope's
+  evidence, the tool-less dissent, the follow-up's narrowed deps, the first turn's metering, the live flag check, the live bound) - each
+  failed exactly the cases it should (`evaluation-matrix.md` section 1).
+- Capsule v4 (`sirkit.agent-replay-capsule.v4`: per-task step lists at their plan's indexes, one per role, scripted stalls only there, a
+  task-graph runner injected, never replayed as one loop) in neutral words inside the nine B11 files, line count unchanged by the fixes;
+  the `orchestration` category, its seven capsules and the runner (the REAL `runOrchestratedChat`, refusing an unplanned task, recording the
+  router's answer) outside them (`_f-capsules.ts`); `scripts/generate-b21-artifacts.ts` writes the matrix and `replay-trace-pins-b21.json`
+  (byte-identical across two processes); the B11 pins extended, never moved (19 of 19, 61 of 61).
+- Pin moves with their reasons: B11.3 §D (one line: v4, v3 refused) and B11.4 §G (the capsule id v4), E2b's case 8 and the E2 page's
+  section 3.7 (the replay capsule's hash); dated notes on every stale title, comment and B11 page that said v3; the replay capsule's shifted
+  citations re-pinned on `orchestration-contracts.md` (C20), the B20 connector page and the B18 chat page.
+- Model-in-loop record-only (OD-125): one command behind `SIRKIT_LIVE_ORCHESTRATION_EVALUATION=1` with a bound of 40 requests (SDK retries
+  0 on every live adapter), not a test, never run, able to run four DAG shapes only (no scripted fault, no disagreement, no fallback);
+  OpenAI 429 no-credits (2026-09-24), Anthropic UNKNOWN; LB-9 BLOCKED-LIVE-QUALIFICATION.
+- The adversarial review's eighteen confirmed findings fixed test-first (`evaluation-matrix.md` section 6); D21-44 opened (the merge records
+  no evidence gap).
+- The browser spec STOPPED (D21-43 opened): the orchestration flag is process-wide in the one fixture dev server, turning it on for the
+  suite changes B18-E's scenario-8 and scenario-4 browser proofs, and Next 16's dev lock forbids a second server without a `distDir`
+  change; the full browser suite ran once green with F's fixture changes (48 of 48 in 462 s of OD-30's 30 minutes), the 25
+  evidence PNGs restored by blob hash.
+- Gates, one job at a time: every B21 suite with `app/api/chat` in full (69 files, 586 of 586), `app/lib/agent` with the B17-A inventory
+  and the B18-D UI gates (42 files, 467 of 467), `app/lib/mcp` and `app/api/mcp` (33 files, 737 of 737), `app/lib/mcp/server` (19 files,
+  183 of 183), the import gates and census (5 files, 59 of 59), `app/lib/project` with `app/components/chat` (40 files, 318 of 318);
+  tsc 0; eslint clean; the B11, B09, B17-A and B21 generators with zero drift. Census 165/162/3/0.
+- Records: `evaluation-matrix.md`; OD-125 applied; D21-23, D21-24 and D21-40 closed; D21-25 recorded; D21-30 stays open (the browser
+  half) under D21-43; D21-44 opened. Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+- Lead follow-up on the check (2026-09-28; the checker confirmed the eighteen fixes fixed and revert-sensitive and raised two new low
+  documentation issues): F's own new page suite's case 1 was titled "four pages" while asserting ten - retitled now (a new suite, not
+  the closeout's); the page, the capsule runner's header and the live command's header said the live track swaps ONLY the adapters,
+  but an offline replay of a scripted stall (f09) runs under a 2 s per-loop budget and a live run under the production 120 s - stated on
+  each; the page's count of the review's confirmed findings corrected from sixteen to eighteen (it names all eighteen). RECORDED on the
+  page: f09's 2 s per-loop timer also bounds its non-stalled scripted loops (milliseconds each), so only a two-second scheduling pause on a
+  loaded runner could move its pinned digest.
+- Records: F's page case 8 pinned D21-43 and D21-44 as ABSENT from discovery.md, which fails on every tree after the lead applies
+  the records (the post-records run showed it red); the case now accepts a new defect absent before the records and inserted ONCE after,
+  under the title the page states (51 files, 539 of 539 green after the records; tsc 0; eslint clean).
+- Lead decisions: D21-43 -> B21-F2 (a second, flag-on Playwright config run after the existing suite, one dev server at a time; no
+  production or `next.config.ts` change); D21-44 -> B21-F3 (option (a): the merge records the evidence gap, as the runbook line says).
+- Lead gates (2026-09-28, one job at a time): every B21 suite with the eight route suites and the CI guard (55 files, 508 of 508); `app/api/chat`, `app/lib/llm` and
+  `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the exposure
+  and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with
+  `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); the
+  proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of
+  104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183 -
+  the nine-file pin); tsc 0; eslint clean on every changed and new TypeScript file; the generators with zero drift (B11 19 of 19
+  cases and 61 of 61 checks; the B09, B11 and B21 outputs, 24 files, byte-identical; B17-A 628 controls, CSV and summary identical; the
+  tree's status unchanged). Logs under `b21/flead/gates/`.
+
+### B21-F2 — the browser spec on its own flag-on Playwright config (2026-09-28 local; increment workflow + lead; this commit)
+
+- D21-43 as the lead decided it: `playwright.orchestration.config.ts` runs the base config's fixture web server - imported, its whole
+  environment spread and its command derived from the base's with only the port moved (a base command without its port flag refuses to
+  load) - plus `SIRKIT_ORCHESTRATION_ENABLED=1` and `SIRKIT_ORCHESTRATION_ROLE_MODELS` routing the circuit specialist to anthropic (F6's
+  two parties on two providers, as case 6 routes them; set explicitly against a developer's `.env.local`) on its own port (3101),
+  `reuseExistingServer: false`, its own `testDir` (`./e2e-orchestration`) and report/output folders (git-ignored), workers 1, retries 0,
+  the base's per-test timeout; the two configs run one after the other (locally through the lead's lock script; in CI one extra
+  `page-browser-e2e` step after `pnpm exec playwright test`, the upload carrying both report folders). No production file,
+  `playwright.config.ts`, `e2e/`, `next.config.ts` or B18-E evidence changed.
+- `e2e-orchestration/specialist-orchestration.spec.ts` (namespace `b21f2000`, the fixture journey's bootstrap, the case table's sentences,
+  evidence under `artifacts/ai-control-plane-b21/evidence/`, what the page received read from the intercepted body and a pull-through
+  stream observer that keeps Stop's cancellation): F4 PROVEN (one coordinator turn for a 3D request, the router live - D21-30's browser
+  half); F6 in part (each role's provider, the E2 status line; presented once where a verifier decides; the escalation line counting two
+  sources and nothing presented where both parties seal - the principal's approval and the escalation's exact-authority citation stay
+  offline, case 6); F12 in part (E3's offer after a Stop during F9's scripted stall, the resume under the same run id, the first answer
+  replayed, the stalled specialist started again until its own deadline, one follow-up, nothing presented; the rejected presentation and
+  `already_presented` stay offline - the scripted follow-up never fails - and are D21-45).
+- Failing-first: five red runs, the spec restored by sha256 after each mutation - a flag-off server (tests 1 and 3), a DAG sentence for
+  the 3D request, an unscripted disagreement sentence, a different second message.
+- The adversarial review's six confirmed findings, fixed test-first (`b21/f2fix/`): F6's browser cell said PROVEN while the browser ran
+  one provider and cancelled the review (security-1, coverage-1, tests-01) - the config routes the circuit specialist to anthropic, test 2
+  asserts every role's provider and `2 source(s)` (red first against the blank override), F6 is PROVEN IN PART with its own class naming
+  what stays offline (page case 12, red first); F12's browser remainder untracked once D21-43 closed (coverage-2) - D21-45 opened (page case
+  14, red first); test 3 pinned the resumed specialist only by status and attempt (tests-02) - it asserts the resumed `specialist_started`
+  and the `deadline` reason (a scheduler mutation closing the unfinished task unrun kept F2's test 3 green and turns the strengthened one
+  red; `scheduler.ts` restored, sha256 and blob hash equal to HEAD's); the config re-templated the base command (tests-05) - it derives it
+  (page case 13 loads both configs: a change to the base command reaches the orchestration server; red first).
+- Budget (OD-30): the existing suite 48 of 48 in 769 s of wall time and the orchestration config 3 of 3 in 182 s, one after the
+  other: 951 s, about 15.9 of OD-30's 30 minutes (about 14.1 minutes of headroom, above the five-minute split rule); the
+  25 evidence PNGs the existing suite rewrote restored from HEAD by blob hash (F2's first measurement: 807 s and 180 s).
+- Pins moved (reviewed, reasons beside them): `b21-f-page.test.ts` case 2's browser-cell mapping (BLOCKED -> the delivered classes) and
+  case 10's role-override line (`""` -> the circuit specialist on anthropic) and F6 mapping (PROVEN -> PROVEN IN PART); the matrix's F4,
+  F6 and F12 browser cells (`_f-cases.ts`, in place, its line count unchanged so C19-C21 hold; the generator re-run, only those three cells
+  moved and `replay-trace-pins-b21.json` byte-identical); the page's C49 anchor (`- run: pnpm exec playwright test`: F2's step line
+  contains the old anchor) and C83-C86 and C92 re-pinned; cases 10 to 14 added.
+- Findings (RECORDED): the lead's `pw.sh` stops any process whose command line matches `playwright`, including a shell handed `-c
+  playwright.orchestration.config.ts` (the first run killed its own caller before printing the wall time); the runs source `pw.sh`
+  unchanged from a wrapper that assembles the config name at run time. DevTools does not keep a long streamed response body, so the spec
+  reads the stream in the page.
+- Gates, one heavy job at a time through the lock runner (`b21/f2fix/gates/`): every B21 suite with the eight route suites, the E4 composer suite and the CI guard (55 files, 513 of 513 - every A..F page suite
+  included, the F page's 14 cases); `app/api/chat` and `app/lib/acquisition` in full (37 files: 359 passed, the opt-in live file's 2
+  skipped as before); `app/lib/agent` with the exposure and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63
+  files, 646 of 646); `app/lib/project` with `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E
+  scenario suite (16 files, 108 of 108); the import gates, census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0,
+  no route added); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0;
+  eslint clean on the four changed and new TypeScript files; the generators with zero drift beyond the three browser cells (B11 19 of 19
+  cases and 61 of 61 checks; the B09, B11 and B21 outputs, 24 files, byte-identical on the gate's re-run; B17-A 628 controls, CSV and
+  summary identical; the tree's status unchanged); the browser: the existing suite 48 of 48 and the orchestration config 3 of 3 one
+  after the other, after the fixes (769 s + 182 s).
+- Records: `evaluation-matrix.md` section 4 (DELIVERED); D21-30's browser half and D21-43 closed; D21-40's browser clause met; D21-45
+  opened (low). Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+- Lead follow-up on the check (2026-09-28; the checker confirmed the six fixes fixed and revert-sensitive and raised one new low
+  issue): the orchestration config derived its port flag from `new URL(base.url).port`, which is EMPTY for a default port - with
+  `SIRKIT_E2E_PORT=80` the guard passed on "--port " and the command became "--port 310180"; the guard now takes the default port
+  (80 / 443) when the URL omits it and matches the flag with a digit boundary (never a prefix of a longer port); page case 13 gained the
+  default-port assertions (red on the old guard, green after; the config restored by sha256), and C99 re-anchored.
+- Records: the lead's records tool read a new title-form defect only when its bold title shared a line with its body; D21-45's
+  title ends its line, so the tool skipped it silently - the lead inserted it into discovery.md by hand from the page's text (the same
+  form the tool writes) and fixed the tool.
+- Lead decision: D21-45 -> option (a) - a scripted follow-up failure in the fixture agent's script table and a browser test that
+  presents a proposal, stands down and resumes (B21-F2b, after B21-F3), because the runbook asks for browser tests of "human rejection
+  and resume".
+- Lead gates (2026-09-28, one job at a time): every B21 suite with the eight route suites and the CI guard (55 files, 513 of 513); `app/api/chat`, `app/lib/llm` and
+  `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the exposure
+  and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with
+  `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); the
+  proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of
+  104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183);
+  tsc 0; eslint clean on every changed and new TypeScript file; the generators with zero drift (B11 19 of 19 cases and 61 of 61
+  checks; the B09, B11 and B21 outputs, 24 files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status
+  unchanged); then the orchestration config once after the port-guard fix (3 of 3, 3.1 min; the page's background schematic review
+  answered `missing_credentials` before any request - the fixture server holds no key). Logs under `b21/f2lead/gates/`.
+
+### B21-F3 — the merge records the evidence gap (2026-09-28 local; increment workflow + lead; this commit)
+
+- D21-44 as the lead decided it (option (a)): the merge RECORDS the gap - an ACCEPTED result of the evidence-gathering role
+  (`EVIDENCE_GATHERING_ROLES` = `component-sourcing-evidence` alone: its result IS evidence; every other role's result is a claim or a
+  sealed proposal its family verifies, the critic's evidence is the merge's own verification and the readiness reviewer keeps its
+  stricter `readiness-claim-unreferenced`) whose `evidence` list is empty gains ONE closed finding, `evidence-missing` (the last row of
+  `MERGE_OWN_CODES`, decision `accepted`, claim `evidence`, no action, no id), applied once every other finding is known, so the verdict
+  stays accepted; its `decision` record's reason names it (`merge accepted with evidence-missing (no evidence cited): ...`, a withheld
+  reason included) under OD-114's content key, chained, the latest standing; the follow-up's envelope marks the entry `evidenceGap: "no
+  evidence cited"` (every stage; the counts stage counts it) and its header gains one closed sentence; nothing invented;
+  record-and-envelope only; the approval decision unchanged. Code: `merge.ts` (six lines in place, the rule appended),
+  `orchestration-runtime.ts` (six lines in place, the marker, count and sentence appended); no line any page cites moved, so no citation
+  was re-pinned (the D page gains rows C77-C86).
+- What the human sees: the record and the marker are deterministic; whether the coordinator's answer names the gap is model judgment -
+  UNPROVEN offline (the scripted follow-up's answer omits it, F3 case 8) - and a stood-down follow-up (`follow_up_paused`,
+  `follow_up_failed`) shows it nowhere but the record. RECORDED residual for the lead: a deterministic human-facing line for the gap (in
+  a vocabulary the E2 page allows) - not F3's, whose task allowed record-and-envelope only.
+- Adoption: the first F3 implementer run was cut off when the lead's session ended (2026-09-28, about 09:06) with its work unreviewed in
+  the tree and no report; the relaunched run adopted it as the sole writer, reviewed every change against HEAD (in scope, line-neutral
+  above every cited line, no reserved or B11-scanned file touched) and kept it: the rule, the record, the marker and the page section as
+  written; it strengthened the suite (case 3: a scheduler resume replays the result, judged the same way, the next resume still replays;
+  case 9: these reserved texts) and F's case 7 (its closing check made non-vacuous: an envelope must exist); nothing dropped.
+- Failing-first: with HEAD's `merge.ts` and runtime put back (`git diff` empty for both) all eleven F3 cases red and F's case 7 red on
+  its moved assertion; both files restored byte for byte, verified by sha256 (`b21/f3/adopt/` for the first nine, `b21/f3/fix/` on the
+  final suite). Nine mutations of the F3 code, each restored by hash, each red where section 4 says.
+- The adversarial review (six findings, five distinct, all low), each answered test-first (`b21/f3/fix/`): `regressions-2` and
+  `coverage-4`, D's withheld-reason fallback dropped the gap (a key-shaped reported model id makes the text rule refuse the reason):
+  case 10 red, the fallback now keeps the closed clause (in place), green; `coverage-1`, the page and the D21-44 clause stated the
+  answer's content as a guarantee: reworded (model judgment, UNPROVEN offline, the residual above), the page case's wording check red
+  first; `coverage-3`, D21-46's digest consequence misstated: reworded after a three-pass probe, the wording check red first;
+  `tests-01`, case 4 now renders the no-gap run through all five stages (a count written unconditionally is red); `tests-02`, case 11
+  adds malformed, expired and contradicted evidence-free results (the guard widened, and the gap applied before the conflicts, each red).
+- Pins moved (reviewed, reasons beside them): `b21-f-evaluation.test.ts` case 7 (from "accepted, no gap recorded" to "the merge records
+  the gap"); the F7 row and RECORDED note on `evaluation-matrix.md` (dated); the F7 cell (`_f-cases.ts` in place, the B21 generator
+  re-run: `evaluation-matrix.csv` and `.json` moved in that cell only, `replay-trace-pins-b21.json` byte-identical); the D page's own-code
+  table (page case 7 reads it as `MERGE_OWN_CODES`). No other suite enumerates `MERGE_OWN_CODES`; no pinned B21-D digest moved.
+- Findings: D21-46 (new, low) - after a replayed verdict is CHAINED, every later merge pass that finds the same verdict (and writes
+  nothing) reports the unchained content key in its `records`, a key the store does not hold; every later pass that writes nothing
+  agrees with the others, so its view digest differs from the chaining pass's (pre-existing D code; probes through the real scheduler
+  and merge, not kept; not fixed in F3).
+- Gates, one heavy job at a time through the lock runner, re-run in full on the final tree after the review's fixes
+  (`b21/f3/fix/gates/`): every B21 suite with the eight route suites, the E4 composer suite and the CI guard (56 files, 524 of 524 -
+  every A..F page suite and the F3 suite's eleven cases included); `app/api/chat`, `app/lib/llm` and `app/lib/acquisition` in full (45
+  files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` in full with the exposure and tier suites, the B11
+  suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with `app/components/chat` (40 files, 318
+  of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); the proposal families and approval paths (34
+  files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0, no route added);
+  `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0; eslint clean on the
+  five changed and new TypeScript files; the generators with zero drift beyond the F7 cell (B11 19 of 19 cases and 61 of 61 checks; the
+  B09, B11 and B21 outputs, 24 files, byte-identical on the gate's re-run - against HEAD only `evaluation-matrix.csv` and `.json` moved,
+  in the F7 cell; B17-A 628 controls, CSV and summary identical; the tree's status and every changed file unchanged during the gates).
+  No browser run: F3 changes nothing the page renders (the marker and the sentence reach only the model-bound envelope).
+- Records: `merge-and-disagreement.md` section 4 (the F3 section) and this section; D21-44 closed; D21-46 found; OD-114's addendum; the
+  human-facing residual RECORDED. Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+- Lead follow-up on the check (2026-09-28; the checker confirmed the six fixes fixed and revert-sensitive and raised one new nit):
+  case 11's title claimed the envelope of a non-accepted evidence-free result carries "no count", but the case rendered only the full
+  stage, which never has a count; the envelope's stage helpers moved from case 4 to the suite's module scope (case 4 unchanged) and case 11
+  now also renders each view through the counts stage and asserts no `evidenceGaps` key - red under a mutation counting every evidence-free
+  sourcing task (`b21/f3lead/red-count.log`: case 11 failed on "malformed: another principal (counts)"), green after; the runtime
+  restored by sha256.
+- Lead decision: D21-46 (pre-existing since B21-D, found by F3's review) -> fixed in its own reviewed increment B21-D4 before B21-F2b.
+- Lead gates (2026-09-28, one job at a time): every B21 suite with the eight route suites and the CI guard (56 files, 524 of 524); `app/api/chat`, `app/lib/llm` and
+  `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the exposure
+  and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with
+  `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); the
+  proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of
+  104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183);
+  tsc 0; eslint clean on every changed and new TypeScript file; the generators with zero drift (B11 19 of 19 cases and 61 of 61
+  checks; the B09, B11 and B21 outputs, 24 files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status
+  unchanged). Logs under `b21/f3lead/gates/`.
+
+### B21-D4 — the merge's view names the records the store holds (2026-09-28 local; increment workflow + lead; this commit)
+
+- D21-46 (low; found by B21-F3's review, pre-existing since B21-D): after a task attempt's verdict was CHAINED (a replayed result's
+  provenance, an expiry, a verdict returning A, B, A), every later merge pass that found the same verdict wrote nothing but named, in
+  the view's `records`, the verdict's UNCHAINED content key - one the store does not hold (after A, B, A the first A's, held but not
+  the latest) - so `records` was not the store's records and the view digest the follow-up envelope's head carries was not the
+  chaining pass's. The fix, in place on the persistence loop's skip line (`merge.ts`, C87): such a pass puts the latest record's key,
+  kind and record in its planned entry before it moves on, as a replay of an existing key already did. Nothing written changes;
+  OD-114's shape, `mergeVerdictTaskId`, `sameVerdict` and `latestVerdictOf` untouched; no verdict, approval outcome, run event, stream
+  line or route changed; no line any page cites moved.
+- Test-first: `b21-d4-merge-records.test.ts` (4 cases: an expiry chained, then two passes that write nothing; the unchained case
+  unchanged beside a chained sibling; A, B, A; a scheduler resume through the real scheduler and merge, with the follow-up envelope's
+  head) ran red against HEAD's merge - all four on their key assertions (`b21/d4/d4-failing-first.log`), and all four on their digest
+  assertions through a digest-only copy of the suite, not kept (`b21/d4/d4-failing-first-digests-probe.log`); green after the fix.
+- Pins: none moved - no suite pins a merge view digest across a chained verdict and a later pass that writes nothing (merge case 10,
+  verification case 4 and F3 case 3 compare unchained passes; F3 case 3's pass after its chaining resume reads the reason and the
+  revision only); the B21 replay pins and the evaluation matrix unmoved. The D page gains cases 8 and 9, section 5's dated note and
+  subsection, citation row C87 and these texts; its own suite row moved 7 -> 9 (case 9 is the review's).
+- Review: the adversarial review's two confirmed findings (both low, both in these reserved texts; no code, record, digest or pin
+  affected) fixed test-first through D page case 9, red first on both (`b21/d4/fix/d4fix-failing-first.log`): `coverage-1` - the
+  PROGRAM_STATE `nextAction` below was built from F3's reserved draft, not from the nextAction the lead applied; it is now the applied
+  one with only its leading B21-D4 clause removed, word for word (the D21-36 retirement, the tripwire, the four validation artifacts, a
+  normal merge and each owner question by number kept; the evidence gap's "lead's decision" clause not brought back); `coverage-2` - the
+  section-10 line had no Section 7 clause; it now records `Section 7, B21-D: amended`.
+- Gates, one heavy job at a time through the lock runner, re-run in full on the final tree after the review's fixes
+  (`b21/d4/fix/gates/`): every B21 suite with the eight route suites, the E4 composer suite and the CI guard (57 files, 530 of 530 -
+  the D4 suite's four cases and the D page's nine included); `app/api/chat`, `app/lib/llm` and `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as
+  before); `app/lib/agent` in full with the exposure and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63
+  files, 646 of 646); `app/lib/project` with `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E
+  scenario suite (16 files, 108 of 108); the proposal families and approval paths (34 files, 513 of 513); the import gates, census
+  ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0, no route added); `app/lib/mcp` with `app/api/mcp` (33 files,
+  737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0; eslint clean on the three changed and new TypeScript files; the
+  generators with zero drift (B11 19 of 19 cases and 61 of 61 checks; the B09, B11 and B21 outputs, 24 files, byte-identical - the B21
+  replay pins and the evaluation matrix included; B17-A 628 controls, CSV and summary identical; the tree's status and every changed
+  file unchanged during the gates). No browser run: D4 changes nothing the page renders.
+- Records: `merge-and-disagreement.md` section 5 (the D4 subsection) and these texts; D21-46 closed. Live: BLOCKED-LIVE-QUALIFICATION
+  (LB-9) - no model is called.
+- Lead review (2026-09-28): three of the four review lenses found nothing and the coverage lens two low documentation findings (the
+  reserved nextAction drafted from F3's reserved text rather than the state the lead applied; the section-10 line without its Section 7
+  clause), both fixed and confirmed by the check with no new issue; the lead re-ran every gate; the README row placed after B21-F3 as the
+  reserved text states (the records tool places a sub-increment after its base letter's rows).
+- Lead gates (2026-09-28, one job at a time): every B21 suite with the eight route suites and the CI guard (57 files, 530 of 530); `app/api/chat`, `app/lib/llm` and
+  `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the exposure
+  and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with
+  `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); the
+  proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of
+  104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183);
+  tsc 0; eslint clean on every changed and new TypeScript file; the generators with zero drift (the B09, B11 and B21 outputs, 24
+  files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status unchanged). Logs under `b21/d4lead/gates/`.
+
+### B21-F2b — the browser half of human rejection and resume (2026-09-28/29 local; increment workflow + lead; this commit)
+
+- D21-45 as the lead decided it (option (a)): the scripted fixture agent's script table (`app/lib/agent/fixture-agent-adapter.ts`,
+  behind `SIRKIT_FIXTURE_AGENT=scripted`, no new adapter class, the constructor tripwire still at `adapters.ts`) gains ONE sentence,
+  "Replace U1 with a lower-power timer for the LED circuit." (`B21_F_SENTENCES.rejectResumeBrowser`; a genuine replacement request of
+  the router's corpus - the replacement DAG, "ask" from the composer) playing case 12's script (the schematic specialist seals U1's
+  exact replacement), and ONE scripted follow-up failure (`FIXTURE_FOLLOW_UP_FAILURES`): its coordinator follow-up turn fails with an
+  overloaded provider (HTTP 529, an `LLMProviderError` - case 12's vocabulary, `provider_overloaded`) only while the merged envelope says
+  that request presented the run's artifact, so the run stands down after presenting and a resume's follow-up turn (its envelope
+  `already_presented`) answers. The entry added on the F12 line and the start hook's follow-up branch changed in place, the failure
+  appended: no cited line moved; no other script's answer changed.
+- `e2e-orchestration/specialist-orchestration.spec.ts` test 4 (the spec's namespace, no new control): the sentence from the composer;
+  one plan, the four specialists accepted, ONE `proposal_ready` and ONE presented line, then ONE `degraded` `follow_up_failed`
+  (`provider_overloaded`) and one terminal; the human rejects the replacement through the review's own "Cancel — change nothing" (one new discard
+  line, no applied line); the page shows the stand-down line, the status line (literal counters: 4 scheduled, 4 finished, one degraded
+  notice) and E3's offer; the same message resumes under the same run id - the resuming line, the first answer and the four specialists
+  replayed, nothing presented again (the run log's `already_presented` line), one follow-up answer, one new status line (4 and 4), one
+  terminal; ONE presentation in all, no second review or offer, no applied line - every line an earlier test also renders counted
+  before and after (the adversarial review's fix). Evidence `f12-presented-rejected-stood-down.png`,
+  `f12-resume-nothing-presented-again.png`.
+- Offline: `b21-f2b-follow-up-failure.test.ts` (2 cases): the failure scoped to ONE sentence and ONE approval outcome over every script
+  and every outcome, on either provider; the sentence through the production POST (the fake SDK clients faulting nothing): presented
+  once (the page's consumer receives the sealed proposal; nothing applied - the human's rejection is the browser's, spec test 4), stood
+  down, resumed with nothing presented again and one follow-up, a second resume `resume_completed`, case 12's sentence unchanged.
+- Failing-first: four red browser runs of test 4 alone (`b21/f2b/ff-*.log`) - HEAD's fixture agent (nothing presented), the entry
+  without the failure (no stand-down: D21-45's gap), the failure made unconditional (the resume stood down again) and OD-122's ledger
+  forgetting its claim (a second presentation SEEN; `orchestration-runtime.ts` restored from HEAD, sha256 and blob hash equal); the
+  offline suite red against HEAD's fixture agent and under the unconditional failure; every mutated source restored by sha256.
+- The adversarial review (six confirmed findings on three defects), fixed test-first (`b21/f2bfix/`): page case 16's `nextAction`
+  check follows b21-d-page case 9's rule (compare only while the B21-F2b clause stands; a later state passes) - page case 17, red first
+  on a later state; test 4 counts every line an earlier test on the shared page also renders (the chat's own lines, the toast excluded),
+  expects one new discard line and no applied line, and states its status lines as literal counters - F2b's test 4 PASSED under four
+  mutations of `app/page.tsx` and `chat-run-view.ts` at once (no discard line, an applied line, the reducer ignoring a degraded notice,
+  no resumed status line), the strengthened test 4 fails under each alone, both files restored (sha256 and blob hash equal to HEAD's),
+  page case 19 pins it; the offline suite's case 2 claims no rejection it does not drive - page case 18.
+- Pins moved (reviewed, reasons beside them): `b21-f-page.test.ts` case 10's spec test count (3 -> 4) and F12 mapping (PROVEN IN
+  PART -> PROVEN), the F12 browser label added; the matrix's F12 browser cell (`_f-cases.ts`, in place, its line count unchanged so
+  C19-C21 hold; the generator re-run: only that cell moved, `replay-trace-pins-b21.json` byte-identical); page cases 15 and 16 added,
+  and 17 to 19 for the adversarial review's fixes (case 16's `nextAction` check moved onto their shared rule); section 6's counts (the
+  spec 3 -> 4, the page suite 14 -> 19, the new suite 2); citation rows C105-C129 (C115-C119 re-pinned by the review's fixes). Case 10's title ("the
+  spec's three tests") kept for the closeout's retitling (section 7's list).
+- Budget (OD-30), after the review's fixes: the existing suite 48 of 48 in 253 s of wall time and the orchestration config 4 of 4
+  in 149 s, one after the other: 402 s, about 6.7 minutes of OD-30's 30 minutes (about 23.3 minutes of headroom, above the
+  five-minute split rule; before the fixes 412 s, 263 + 149); the 30 tracked evidence PNGs the runs rewrote restored from HEAD by blob
+  hash (the existing suite's 25 and F2's five).
+- Gates after the review's fixes, one heavy job at a time through the lock runner (`b21/f2bfix/gates/`): every B21 suite with the eight route suites, the E4
+  composer suite and the CI guard (58 files, 537 of 537 - every A..F page suite included, the F page's 19 cases and the F2b suite's 2);
+  `app/api/chat` and `app/lib/acquisition` in full (37 files: 359 passed, the opt-in live file's 2 skipped as before); `app/lib/agent`
+  with the exposure and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project`
+  with `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); the
+  import gates, census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0, no route added); `app/lib/mcp` with
+  `app/api/mcp` (33 files, 737 of 737 - the B20 pages' citations) and `app/lib/mcp/server` (19 files, 183 of 183 - the b20-b2 nine-file
+  pin); tsc 0; eslint clean on the five changed and new TypeScript files; the generators with zero drift (B11 19 of 19 cases and 61 of 61
+  checks; the B09, B11 and B21 outputs, 24 files, byte-identical on the re-run - `evaluation-matrix.csv` and `.json` byte-identical to
+  B21-F2b's, against HEAD only F12's browser cell, and `replay-trace-pins-b21.json` byte-identical to HEAD's; B17-A 628 controls, CSV and
+  summary identical); the tree's status and every changed file unchanged during the gates.
+- Records: `evaluation-matrix.md` (dated [B21 F2b] notes on the head, section 0, section 1's class note and F12 row, section 2's list
+  and the failure, section 4's test 4, failing-first and budget, section 5, section 6, the section-7 stale-title list and these texts,
+  section 8's rows); D21-45 closed. Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+- Lead review (2026-09-29): the review's six confirmed findings fixed and checked (no new issue); two findings refuted as defects OF THE
+  DIFF (security-1, coverage-1) name a real product-level gap the lead records as D21-47 (low): the review's Cancel is page-side only, so a
+  resume of the same message cannot know the human rejected the presented action, and the resumed line and envelope call it "accepted ...
+  listed for the human, who decides" - nothing is applied or presented twice (OD-122's ledger); options for a later increment recorded.
+- Lead gates (2026-09-29, one job at a time): every B21 suite with the eight route suites and the CI guard (58 files, 537 of 537); `app/api/chat`, `app/lib/llm` and
+  `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the exposure
+  and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with
+  `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); the
+  proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of
+  104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183);
+  tsc 0; eslint clean on every changed and new TypeScript file; the generators with zero drift (the B09, B11 and B21 outputs, 24
+  files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status unchanged); then the orchestration config once
+  on the final spec (4 of 4, 2.4 min; F2's five evidence PNGs it rewrote restored from HEAD by blob hash). Logs under `b21/f2blead/gates/`.
+
+### B21 closeout (1/2) — the standing single-agent statements superseded, the stale titles retitled, D21-36 retired, the tripwire (2026-09-29 local; increment workflow + lead; this commit)
+
+- The standing single-agent statements are superseded IN PLACE with dated notes (D21-27; OD-113 applied as its default): 16 production
+  lines in 11 files (the notes add or remove no line); `route.ts:14` stands un-noted; 13 test-file notes; 53 page notes in 17 pages; ONE
+  dated README note for the 73 B07.5..B16 stop-condition lines, which stay as written (`closeout-statements.md` section 2).
+- 36 stale titles retitled in 23 suites, assertions and `it(` counts unchanged - the run's 35 and the lead's one
+  (`b19-e-ci-job-scope.test.ts`'s "[B21 A] the B21 suites ride ONE directory filter", stale since B21-B's route suites took explicit
+  entries; now "every B21 suite is selected by exactly ONE filter", added to the tripwire's retired titles, red on revert).
+- D21-36 retired: B's `specialistResultsEnvelope` and `ENVELOPE_HEADER`, one tombstone line; B's route case 12 kept as the retirement's
+  tripwire; its assertions moved to D's route case 6 (the over-budget bound, the `summaries` stage with each kept summary, the redaction,
+  the directive as data, the sources) and B's route case 4; ONE assertion retired - two models of one provider as `sameSource:false`, which
+  contradicts the one-provider-one-source rule since B21-D `21ae845`. 117 citation rows re-pinned by -20 and 3 re-anchored to the
+  tombstone across 10 pages. The 34 B21 exports with no production caller RECORDED, none retired (`closeout-statements.md` section 3.2).
+- The tripwire `b21-closeout-statements.test.ts` (10 cases), failing first at `d8680ea`: no production source states the old claim
+  uncorrected outside a six-entry allow-list and three wrapped statements; every production, test and page note stays; a note claiming the
+  trace records a line states the recorder's shared 32-warning bound.
+- The adversarial review: 11 findings, 9 confirmed and fixed test-first (two trace notes state the 32-warning bound; the `route.ts:3` note
+  states one sealed proposal per specialist RUN; the page's sections 2 and 3.2; D's route case 6 pins the `summaries` stage; every note
+  count pinned; the next-line allowance limited to three wrapped statements); the check's two low page-wording residuals fixed by the lead
+  (the README and discovery now point to the page, as it says; "no line added or removed" narrowed to the notes). D21-48 opened (low).
+- Lead gates (2026-09-29, one job at a time): every B21 suite with the eight route suites and the CI guard (59 files, 547 of 547); `app/api/chat`, `app/lib/llm` and `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the exposure and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); every changed or new test file of every chapter with `app/lib/auth` (67 files, 800 passed, 9 opt-in live skipped); the proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0; eslint: `app/page.tsx`'s 14 pre-existing `react-hooks/refs` errors only (none on its noted line 4760), every other changed file clean; the generators with zero drift (the B09, B11 and B21 outputs, 24 files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status unchanged). Logs under `b21/c1lead/gates/`.
+- No behaviour change, no verdict (commit 2/2).
+
+### B21 closeout (2/2) — the four validation artifacts, the final validation run, the verdict (2026-09-29/30 local; increment workflow + adversarial review + lead; this commit)
+
+- The four artifacts in `artifacts/ai-control-plane-b21/`: `changed-files.md` (every path since `6fd5a7b` - 160: 114 added, 46
+  modified, 0 deleted - grouped by area with the first commit that touched it, each checked against `git log -- <path>`; the 22
+  first-parent commits), `test-and-validation-report.md` (59 suites / 541 cases as `it(` blocks - 58 vitest suites / 537, each equal to
+  what the final run executed, and the orchestration browser spec / 4; which cases read the real clock, two of them passing by a margin;
+  the final validation run at HEAD with every number; CI on every B21 commit; each increment's gate lines as this ledger records them),
+  `unknowns-and-owner-decisions.md` (OD-106..OD-133 all recorded with their state and 21 amendments, the owner's open questions named;
+  D21-1..48 with their closing increment - 32 closed, D21-3, D21-12 and D21-20 in part, 8 RECORDED, 2 follow-ups outside B21, 3 open:
+  D21-42 (medium), D21-47 and D21-48 (low); discovery section 8's unknowns with their state - 6 resolved, 5 and 7 moot, 1 to 4 standing;
+  LB-1..LB-9) and `final-verdict.md` (PARTIAL: a bounded DAG of zero-authority specialists behind the off-by-default
+  `SIRKIT_ORCHESTRATION_ENABLED`, every runbook evaluation proven offline through the real runtime and three in the browser (F4, F12; F6
+  in part); nothing qualified live (LB-9 - and credits alone would not qualify disagreement or fallback: the record-only command runs 4
+  of the 12 cases on one provider; that needs a two-provider live capsule); the caps, roles, the no-model Tier 0 read (and the Tier 3
+  head-verb rule's false refusals), the breaker's arming (D21-42), the browser coverage, the tracing and a replayed result's provenance met
+  in part; scenario 17's disagreement never resolved to a winner; the propose routes' strict schemas unchecked; D21-42, D21-47, D21-48
+  open). The first three drafted by the lead's read-only generator and corrected by hand (its clause parser missed "CLOSED at the route
+  by", "CLOSED AS POLICY by", "CLOSED by the B21 closeout (1/2)", D21-3's finishing clause, D21-12's open remainder, UNKNOWN 6's
+  resolution and the closeout (1/2)'s OD-108 amendment); the verdict is the lead's draft, filled and checked - its judgement unchanged.
+  Factual details corrected in the draft: the specialists are zero-authority, not read-only, since D2; with the flag off the chat
+  route's stream is byte-identical, while two page-side changes reach flag-off users (E4's composer and E1's withheld Retry); three of
+  the twelve evaluations are proven in the browser, not all twelve; an escalation cites the exact authority for a part conflict, not
+  for every conflict; D21-15 and D21-16 are closed with prose residues, not recorded; the documentation UNKNOWNs include the Anthropic
+  Agent SDK pages; A's gate refuses what a result's structure carries (`tool_request_not_permitted`, `unknown_key`,
+  `secret_shaped_text`), not "a release, approval or directive" - a directive written in prose passes as the specialist's own
+  unverified claim and reaches the read-only follow-up turn as its user message (OD-108) inside the data-only envelope (F11);
+  "verifiers outrank consensus" qualified (no verifier picks a winner between two sealed parties: scenario 17); "simple work on one
+  direct coordinator turn" qualified (OD-110's recorded Tier 3 head-verb cost); "the record-only command has never run" completed
+  (credits alone would not qualify the live behaviours). Open items the draft omitted, added: the browser coverage, D21-12 and D21-3 in
+  part (the coordinator's trace in B11's run-local sink), D21-17's and D21-4's residuals, OD-108's standing deviation, scenario 17's
+  RECORDED deviation (`gateway.ts:330`'s empty-pin-map compile pre-empts the circuit specialist's delete; a sealed edit escalates), a
+  replayed result's missing provider and model (OD-132; runbook :843), D21-20 in part (the propose routes' `strict: true` schemas with
+  `maxLength` and a forced tool choice, unchanged and unchecked - UNKNOWN 2's offline half not run), the recorded defects (D21-33 and
+  D21-35 RECORDED, as their clauses close them) and two follow-ups outside B21 (D21-32, D21-34).
+- The adversarial review of the closeout (eleven findings, nine distinct - security-1 and coverage-3 one issue, security-2 and
+  coverage-6 another; all in the documents, low after verification but coverage-4, medium) fixed test-first through a transient probe
+  (`b21/c2fix/r3/c2fix-doc-probe.test.ts`, 13 cases - one per finding, the defect counts, and the lead's texts complete with the
+  standalone PR description equal to section 4 - copied into the tree only for its runs through the lock runner and deleted, never
+  committed; with `C2FIX_DOCS` set it reads the five documents from that folder). Red first: 13 of 13 against the documents as first
+  reviewed and 11 of 13 against the documents as the review verified them, both rebuilt byte-exact by sha256
+  (`b21/c2fix/r3/rebuild_prefix.py`; `probe-red0.clean.log`, `probe-red.clean.log` - cases 1 and 2 hold on the second set because an
+  earlier attempt had already corrected the verdict's item 1, and the lead's texts they also read are the corrected ones; the lead
+  texts' own red state is that attempt's run, 13 of 13, `b21/c2fix/r2/probe-red.clean.log`); green after the fixes, 13 of 13. Two
+  defects found while fixing: the report's real-clock list missed `b21-e3-resume-runtime` cases 17 and 20 (injected clocks minutes
+  ahead of a seal stamped from the real clock - about a minute of margin; now listed, and every other real-clock read classified), and
+  the interrupted earlier attempt had left this paragraph's post-fix gate line a placeholder (filled below; the probe's case 13 now
+  refuses any placeholder in the lead's texts and the documents). Beyond the verdict: the report no longer says "the fixture server
+  holds no provider key" - no provider was called because the fixture router answers `missing_credentials` whether or not a key is
+  configured and the scripted fixture agent serves every chat and specialist turn; whether a key was present is UNKNOWN (the server's
+  environment spreads the shell's; `next dev` loaded `.env.local`; no environment file read) - and it no longer calls every suite
+  deterministic: it names the cases that read the real clock, and `b21-b-scheduler` case 7 passes by about 100 ms of real time (a start
+  read from the real clock before the rig's async setup, against `minTaskMs`) - RECORDED follow-up: inject `deps.now` in that case (a
+  test change for a later increment).
+- The final validation run at HEAD `6cff540` (2026-09-29, `b21/c2/gates/`, one heavy job at a time through the lock scripts, the tree
+  clean before and after): every B21 suite with the eight route suites, the E4 composer suite and the CI guard (59 files, 547 of 547);
+  `app/api/chat`, `app/lib/llm` and `app/lib/acquisition` in full (45 files: 384 passed, `b19-e-live-contract`'s 2 skipped); `app/lib/agent`
+  with the exposure and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project`
+  with `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); every
+  changed or new test file of every chapter with `app/lib/auth` (67 files, 800 passed, `b16-1b-live-qualification`'s 9 skipped); the
+  proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of 104;
+  census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183) - 4 340
+  passed, 11 opt-in live skipped, no failure; tsc 0; eslint over the 113 TypeScript files B21 changed since `main`: 112 clean, `app/page.tsx`
+  the 14 pre-existing react-hooks errors (13 `react-hooks/refs`, 1 `react-hooks/set-state-in-effect`), the same 14 on the same lines and
+  source as `main`'s `page.tsx` linted through stdin; the generators with zero drift (B11 19 of 19 cases and 61 of 61 checks; the B09,
+  B11 and B21 outputs, 24 files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status unchanged); then the
+  full existing browser suite 48 of 48 in 288 s and the orchestration config 4 of 4 in 153 s, one after the other: 441 s, about 7.3
+  minutes of OD-30's 30 minutes; the 32 tracked evidence PNGs the runs rewrote (the existing suite's 25 under the B17 and B18 evidence
+  folders, the orchestration config's 7 under B21's) restored from HEAD by blob hash, `git status` clean. Logs under `b21/c2/gates/`.
+- With the four artifacts and the README row in place, after the review's fixes (documents only; `b21/c2fix/r3/gates/`, 2026-09-30
+  22:41 to 22:52, one heavy job at a time through the lock scripts, the gates in the final run's order): the ten vitest gates green with
+  the final run's numbers - 59 files / 547; 45 / 384 passed and 2 skipped; 63 / 646; 40 / 318; 16 / 108; 67 / 800 passed and 9 skipped;
+  34 / 513; 10 / 104 (census 165/162/3/0); 33 / 737; 19 / 183 - 4 340 passed, 11 opt-in live skipped, no failure; tsc 0; eslint once over
+  the same 113 TypeScript files (none changed in the working tree): 112 clean, `app/page.tsx` the same 14 pre-existing errors (13
+  `react-hooks/refs`, 1 `react-hooks/set-state-in-effect`) at the same positions as the final run; the four generators with zero drift
+  (B11 19 of 19 cases and 61 of 61 checks; the B09, B11 and B21 outputs, 24 files, byte-identical by sha256; B17-A 628 controls, CSV and
+  summary identical); no tracked file changed but the README, the five documents unchanged during the gates, the tree's status at the
+  end equal to its start. No browser run: no page, spec, source or generator input changed. An interrupted earlier attempt's run of
+  this chain (`b21/c2fix/r2/gates/`) stalled in gate 3: 49 of its 63 files passed, then no output for 29 minutes until that attempt
+  was stopped (exit 1, no failing test reported, 14 files never reported); gate 3 then passed twice here, 63 of 63 files and 646 of 646
+  tests each (61.5 s and 63.8 s) - the stall was not reproduced and its cause is UNKNOWN.
+- CI (read-only, `gh run list`): all 22 B21 commits ran both workflows; `b3d168b` (B21-B) and `e19033f` (B21-E2 (1/2)) failed in
+  prompt-to-gerber and were fixed by the next commit (`0396c9e`, `41330e6`); every other run green, `6cff540` included
+  (deterministic-manufacturing `36534663137` - its page-browser-e2e job, both Playwright configs, 17 min 48 s - and benchmark-quality
+  `36534662961`).
+- README: the validation row (written by this increment). PROGRAM_STATE: B21 complete on the branch pending PR #11's green CI and a normal
+  merge; next B22.
+- Report lines: `MULTI-AGENT STATUS: bounded zero-authority specialist DAG behind SIRKIT_ORCHESTRATION_ENABLED (off); simple and 3D work
+  one coordinator turn, a Tier 3 head verb refused with no model (OD-110); the twelve B21-F evaluations proven offline through the real
+  runtime (fake SDK clients and the scripted fixture agent, named as such), three of them also in the browser on a flag-on fixture
+  server (F4, F12; F6 in part); live disagreement / fallback / quota / timeout BLOCKED-LIVE-QUALIFICATION under LB-9 (the model-in-loop
+  command record-only, never run: 4 of the 12 cases on one provider, no scripted fault reproduced, no disagreement or fallback it can
+  produce)`; `ROUTE RATCHET: 165 = 162 canonical + 3 factories + 0 raw (unchanged)`.
+- Documents only: no production, test, generator or page file changed in this commit.
+- Lead follow-up on the check (2026-09-30; the check confirmed the eleven fixes and raised two new low issues): the report's real-clock
+  bullet named resume case 20 as margin-bound - only case 17's in-time contrast is (case 20 and case 17's late leg only grow more
+  certain as time passes); the bullet, the README row and these texts now say two cases pass by a real-time margin (`b21-b-scheduler`
+  case 7, about 100 ms; `b21-e3-resume-runtime` case 17's contrast, about a minute); and the section-10 text no longer says the verdict
+  names the closed defects' RECORDED residuals - `unknowns-and-owner-decisions.md` lists them, the verdict names those that bear on the
+  pass criteria. The closeout (2/2) run itself was cut twice by the lead's session ending (once at its fix stage) and resumed under the
+  same run id from its cached stages.
+- Record corrections the closeout's review named (this ledger is append-only, so they are stated here): B21-F2's lead-gate line says
+  "the fixture server holds no key" - that was not measured; what holds is that no provider was called (under the fixture runtime the
+  LLM router answers `missing_credentials` before any request and the scripted fixture agent serves every turn;
+  `test-and-validation-report.md` section 2). OD-123's default ("both proposals dormant while specialists read only") is dated since
+  B21-D2/D3 - amended in OWNER_DECISIONS.md; LB-9's "suite" is ONE record-only command, not a test (OD-125) - noted in its row;
+  discovery.md section 7's closeout bullet scoped "D21-1..31" while the numbering runs to D21-48 - the section-10 block records it; the
+  B21-D3 title's "deterministically resolved" stands as written in the ledger heading, the README row and the D3 page, and the verdict
+  states the deviation (scenario 17's disagreement is escalated, never resolved to a winner).

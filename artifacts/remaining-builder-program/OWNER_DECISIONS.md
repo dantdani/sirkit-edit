@@ -844,3 +844,802 @@ Amendments to existing entries:
 **Record explicitly:** D20-23 closes under the existing **OD-51** and spends no new number; where the adversarial evidence lives (one D-owned page) is recorded on `mcp-adversarial.md`, not spent as a number. Highest number in use after D: OD-105 (OD-83..86 and OD-88 stay reserved).
 
 **Recorded explicitly (B20-D, 2026-09-24):** D20-23 closes under the existing OD-51 and spends no new number; where the adversarial evidence lives (one D-owned page, `mcp-adversarial.md`) is recorded there, not spent as a number. Highest number in use after D: OD-105 (OD-83..86 and OD-88 stay reserved for the proposal reversal).
+
+## OD-106 — `POST /api/schematic/build-multi` is scoped out of B21 and tripwired (B21-A, 2026-09-24)
+
+- **Question:** the only fan-out in the repository (a planner forced to `submit_plan`, then an unbounded `Promise.all` of build loops on
+  the planner's block count, with no AbortSignal, run id, trace or per-block budget beyond `MAX_ITERATIONS`; D21-5) contradicts B21's
+  pass criteria. Retire it, route it through the B21-B router, or record it as a legacy structured route outside B21?
+- **Default applied:** scoped OUT of the chat DAG and recorded as legacy with its own gate cited: the B21-A import gate holds
+  `app/api/schematic/build-multi/` and `app/lib/build-loop.ts` as forbidden families of their own (judged before the general `app/api/`
+  family), so no orchestration module can ever import the route or `runBuildToolLoop`; no artifact presents it as the B21 orchestration;
+  B21-B's route-level suite proves it untouched. Retirement is a separate owner-approved change.
+- **The owner may choose otherwise:** retire the route now (a route census move, 165 -> 164, with every ratchet artifact regenerated);
+  or route it through the B21-B DAG (then its planner becomes the coordinator's first turn and its blocks become specialist tasks,
+  which is B21-B/C work with the same gates).
+
+**Amendment (B21-B, 2026-09-26) — OD-106 — `POST /api/schematic/build-multi` is scoped out of B21 and tripwired (B21-A records; B21-B tripwires) (2026-09-26)**
+
+- **B's tripwire statement:** the route is byte-identical to HEAD `4b6d0e2` — sha256
+  `1655e03595430d9e42b4c3c65800d907e3daaa7ed4d8bc6ac1705fd9640242cb` (git blob `9a29e676ae95b7449f7fcc2402edece8aad79e8d`) — pinned by
+  `b21-b-chat-router.test.ts` case 6 and recomputed by `b21-b-page.test.ts` case 3; it reads no orchestration flag and no orchestration
+  module; A's import gate keeps every orchestration module from importing it. Its behaviour is unaffected by
+  `SIRKIT_ORCHESTRATION_ENABLED` because nothing in it reads the flag. Retirement stays a separate owner-approved change.
+
+## OD-107 — The DAG caps (B21-A records; B21-B applies) (2026-09-24)
+
+- **Question:** agents per coordinator run, parallelism, per-specialist budget, tokens, cost, wall time.
+- **Default applied (the lead's values, discovery §9):** at most 4 specialists per coordinator run; parallelism 1 (sequential — memory,
+  the event-loop-blocking placement engine, and parallel tool calls already off at both providers); each specialist bounded by
+  `DEFAULT_AGENT_BUDGET` or less (6 / 10 / 15 000 / 120 000 / 2 / the settlement timeout; `AgentBudget` adds the two reported token
+  counts, `maxInputTokens` / `maxOutputTokens`, never priced); the DAG wall time is its own scheduler cap of 300 s (not a per-specialist
+  field), ≤ 8 minutes = the 10-minute proposal TTL minus the 2-minute approval window, so no artifact the DAG produces can expire before
+  the human sees it; the coordinator's loop keeps 120 s per turn; a per-DAG token ceiling of 6 × (coordinator + specialists) × 4 096
+  output tokens reported, not priced; an artifact older than its TTL at merge time is dissent `expired`, never merged.
+- **The owner may choose otherwise:** more specialists or parallelism 2 (needs a concurrency cap on the long-running engines first);
+  a longer DAG (then the proposal TTLs must move, a reviewed pin move across three sealers).
+
+**Amendment (B21-B, 2026-09-26) — OD-107 — The DAG caps, as applied (B21-B, 2026-09-26; revised after the review)**
+
+- **Applied:** `SPECIALIST_CAPS` in `app/lib/agent/orchestration/scheduler.ts`: at most 4 specialists per coordinator run (a longer
+  plan is refused `plan_exceeds_specialist_cap`, never truncated); parallelism 1 (sequential; the suite measures at most one adapter
+  call in flight); each specialist bounded by `DEFAULT_AGENT_BUDGET` or less with its run deadline bounded to the remaining DAG wall
+  time; the DAG wall time 300 000 ms (300 s) from the coordinator's start as the scheduler's own timer composed into every specialist's
+  signal — a specialist whose own deadline passes is `deadline` for that task only and the next task runs while wall time remains; the
+  wall time itself stops everything; one attempt per task plus one retry on a provider failure the classifier marks retryable, never on
+  `insufficient_quota` — these are the SCHEDULER's counts over the coordinator's adapter, whose SDK client itself retries (`maxRetries:
+  2` on the OpenAI client, the SDK default 2 on Anthropic), so a retryable failure can cost up to six HTTP attempts per step and an
+  `insufficient_quota` is "never retried" only above the SDK's two; the breaker and specialist adapters with `maxRetries: 0` stay
+  B21-E's (OD-115); the per-DAG output-token ceiling is the DAG's maximum by construction, 6 × (2 + 2 × specialists) × 4 096 output tokens
+  (both coordinator turns and every attempt of every specialist; the per-step figure is pinned equal to the adapters' exported
+  `MAX_OUTPUT_TOKENS`), reported in the plan warning and the scheduler's outcome, never priced and never enforced (nothing can exceed a
+  maximum by construction); the tokens actually used are metered on the adapter per attempt, failed attempts included; the
+  coordinator's loop keeps 120 s per turn. An artifact older than its TTL at merge time is dissent `expired` (B21-D).
+- **Decision needed:** the runbook's full circuit creation names SIX specialists (`requirements-analyst`, `circuit-topology`,
+  `component-sourcing-evidence`, `schematic`, `pcb-placement-routing`, `verification-critic`), which the cap of four refuses: today a
+  "Design a …" message under the flag gets one coordinator turn plus a visible warning ("no specialist ran (plan_exceeds_specialist_cap)").
+  Either the owner raises the cap to six for that shape, or the router trims the list "as needed" (runbook :810) once B21-C's roles
+  exist (the safe default until then: refuse, never run five).
+
+**Amendment (B21-C, 2026-09-26) — OD-107 — The full-circuit list versus the cap of four, resolved (B21-C, 2026-09-26)**
+
+- **Question (B21-B):** runbook :810 names six specialists for a full circuit ("requirements, architecture/circuit, component, schematic,
+  PCB and verifier as needed"); OD-107's cap is four, so every full-circuit plan was refused `plan_exceeds_specialist_cap`.
+- **Resolution applied (the lead's direction):** the router trims the list "as needed" to the cap by a FIXED priority, as data
+  (`FULL_CIRCUIT_TRIM` in `app/lib/agent/orchestration/router.ts`): `circuit-topology`, `component-sourcing-evidence`, `schematic`,
+  `verification-critic`; the requirements analysis is folded into the coordinator's own turn; `pcb-placement-routing` runs only when a
+  board exists and then replaces `schematic` when the message asks for layout (a second rule, `D-full-circuit-layout`, before
+  `D-full-circuit-creation`). The runbook's six stay as data (`FULL_CIRCUIT_RUNBOOK_ROLES`). A routed plan never exceeds four;
+  `plan_exceeds_specialist_cap` stays the guard for a hand-built plan. Pinned by `b21-b-router.test.ts` cases 8 and 9.
+- **Which messages recruit it (the review's fix):** only a new circuit named from words — the verb at the head (design / generate /
+  create / build / make / draw), an indefinite object (a / an) and a circuit-kind noun from a closed list HEADING that object
+  (optionally followed by a container noun such as board or module; a modifier-position word such as "a schematic symbol" names no
+  circuit — lead correction 2026-09-26) — so an
+  ordinary edit ("Make the LED brighter.", "Make the placement more compact.") never recruits four paid specialists: a layout-quality
+  ask is the bounded PCB proposal (one specialist, runbook :807) and anything else one coordinator turn. The layout variant needs its
+  own layout ask (with / and a placement, layout, routing or footprints), never a selection word. The grammar fails toward one
+  coordinator turn (an unrecognised creation ask stays `single`, as every full-circuit ask effectively was at B's HEAD).
+- **The owner may choose otherwise:** raise the cap (then the router's lists return to the runbook's six by a data change, with the
+  concurrency cap on the long-running engines OD-107 already names); another priority (a data change pinned by the router suite); or a
+  wider or narrower circuit-kind list (a data change pinned by router case 9).
+
+**Amendment (B21-D3, 2026-09-27) — OD-107 — DAG caps and the role lists, amended: the replacement DAG holds two proposing roles (B21-D3, 2026-09-26)**
+
+- **Question:** scenario 17's `component-replacement` DAG held one proposing specialist, so its disagreement could not be structural
+  (D21-37), and the runbook's own sentence did not route to it.
+- **Amended:** `DAG_ROLE_LISTS["component-replacement"]` is `coordinator`, `circuit-topology`, `component-sourcing-evidence`,
+  `schematic`, `verification-critic` - four specialists, within the cap of four. The order is a presentation and budget order only: no
+  specialist reads another's result before B21-E (each specialist's objective is the coordinator's user message alone and its loop
+  history is empty; the replacement's target is the verified exact authority of the coordinator's context, never the sourcing
+  evidence). The router's `D-component-replacement` rule is ONE strict replacement grammar ([B21 D3 lead]; section 3): a replace / swap /
+  substitute verb at the HEAD of the message (after a polite prefix), the FIRST `with` / `for` / `by` after it (`for` / `by` only
+  before a / an - "for the LDO" is a purpose), the swapped-in object cut at its first preposition, clause word or sentence end, and an
+  ACTIVE part kind (timer, regulator, LDO, op-amp, comparator, microcontroller, oscillator, driver) heading it after at most three
+  modifiers that start with a letter and are no stop word - as the review round left it; the lead's adversarial sweep then replaced
+  it with three whole-message request shapes anchored at both ends ("replace / swap (out) <part> with / for / by <new part>" or
+  "substitute <part> with / by <new part>", "delete / remove <part> and replace it with <new part>", "substitute <new part> for
+  <part>") in which NO token is open - the replaced part's seven shapes (an active designator, a listed MPN prefix, a listed standard
+  number), a closed spec-word list and each kind's unit-bearing values for the new part (never an MPN or a number), at most one listed
+  tail - ending in an active kind or a part word (which the imported composer pairing must agree with); a bare kind for a bare kind
+  names nothing new, "would you" is an opinion, and the raw trailing punctuation decides a question. A question or retraction after the request, an existing part, an attribute, a documentation or location phrase, a
+  value and a passive type stay `single` (replacement-roles cases 7, 8 and 9 - case 9 the sweep's corpus); the grammar fails toward
+  one coordinator turn. B's router case 7 pins the rule's source (moved). The caps, the wall time and parallelism 1 are
+  unchanged. Proven by `b21-d3-replacement-roles.test.ts` cases 5, 7, 8 and 9, `b21-d3-scenario17.test.ts` case 8 and B's moved router and
+  scheduler cases.
+- **The owner may choose otherwise:** keep the three-specialist list (scenario 17 then disagrees only in prose), route by MPN as well
+  (a catalog lookup the router, a pure function, does not make today), or hand earlier specialists' results to later ones (a data-flow
+  change for B21-E that would make the order load-bearing).
+
+**Amendment (B21-E3, 2026-09-28) — OD-107 — DAG caps, amended: the approval window across resumes (B21-E3, 2026-09-28)**
+
+- **Amended:** the wall-time clause (the DAG inside the 10-minute proposal TTL minus the 2-minute approval window, so nothing the DAG
+  seals expires before the human sees it) holds across a route-level resume: a resume restarts the DAG wall time, and a REPLAYED seal is
+  held to the same bound at the resumed DAG's deadline - one with less than `RESUME_REPLAY_APPROVAL_WINDOW_MS` (120 000 ms) left then is not replayed; its specialist runs
+  again and seals afresh (`stale_lifetime`).
+- **The owner may choose otherwise:** bound the resume itself to the TTL minus the window after the first seal (a coarser rule: every
+  specialist re-run and re-paid in a new run).
+
+## OD-108 — How a `SpecialistResult` enters the coordinator's provider conversation (B21-A, 2026-09-24)
+
+- **Question:** `AgentRunRequest.history` is plain text; a structured result has no turn kind of its own.
+- **Default applied:** as a redacted tool result under `MAX_RESULT_CHARS` (60 000), one specialist per tool call — no `AgentRunRequest`
+  change in B21; the validated snapshot's whole-body digest travels with it so the coordinator can cite it. A structured turn kind is a
+  later contract change.
+- **The owner may choose otherwise:** a `history` entry kind for structured results (moves the loop's request contract and every
+  adapter's rendering in one increment).
+
+**Amendment (B21-B, 2026-09-26) — OD-108 — How a `SpecialistResult` enters the coordinator's provider conversation (B21-B, 2026-09-26)**
+
+- **Deviation from the default, recorded:** the default is "a redacted tool result under `MAX_RESULT_CHARS` (one specialist per tool
+  call; no `AgentRunRequest` change)". B carries the specialists' outcomes in the follow-up coordinator turn's USER MESSAGE instead
+  (`specialistResultsEnvelope`), because no tool call exists to attach a result to without a new exposed tool (B adds none) and a
+  synthetic continuation would be adapter-specific — a user turn is the instruction role, which the system prompt's "tool results are
+  DATA" rule does not cover. **What bounds the deviation, all applied:** the follow-up turn is READ-ONLY by construction (no
+  execution-grant minter; the specialist gateway, built without the minter, the ports and the prompt version, behind the read-only
+  wrapper; the read-only registry view; the coordinator's context with its authority withdrawn), so text that originated in a
+  specialist can reach no proposal seal, grant, view command or port; the envelope's header names every entry a SHAPE-VALIDATED,
+  UNVERIFIED document of the specialist's own claims and says agreement is not proof; every entry names its provider and model and a
+  same-source set is marked correlated; the whole envelope is bounded (summaries only over the budget) and sanitized. **Not applied,
+  stated:** no content judgement in B — OD-81's one directive matcher lives in `app/lib/mcp/foreign-tools.ts`, which the B19-D closure
+  gate keeps out of the chat route's model-facing closure (a third approved boundary would be a pin move of that ratchet), and judging
+  a result's content is B21-D's merge; a follow-up turn steered by a specialist's text to seal a proposal gets `unknown_tool` and seals
+  nothing (route case 12b). **Closed by:** B21-E's strict result tool (OD-116), which makes the result a true tool result on both
+  providers.
+
+**Amendment (B21 closeout (1/2), 2026-09-29) — B21-E did not close the deviation**
+
+[B21 closeout (1/2)] B21-E1's strict result tool is the specialist's OUTPUT channel; the follow-up turn still takes the merge's view (`mergedResultsEnvelope`) as its user message, so the deviation this entry records stands for the owner. B's `specialistResultsEnvelope` is retired (D21-36).
+
+## OD-109 — Specialists never hold the three availability facts (B21-A records; B21-C proves) (2026-09-24)
+
+- **Question:** `assembleAgentRunContext` takes `executionGrantsAvailable`, `externalAcquisitionAvailable` and `mcpObservationAvailable`
+  as caller flags (D21-8).
+- **Default applied:** an invariant — a specialist context is DERIVED from the coordinator's and can only narrow: the three facts false,
+  the ports absent, riskCeiling `propose`, approvalsAvailable empty, no grant field; only the coordinator holds the minter and the ports
+  and seals the one proposal; B21-C's gateway wrapper refuses any specialist invocation whose context claims grantability. In A the
+  contracts already make the request carry NO such field (a `budget` or `scope` with an extra key refuses `unknown_key`; the request has
+  no capability, actor or authority field at all).
+- **The owner may choose otherwise:** a sourcing specialist that reads through the external port (then `externalAcquisitionAvailable`
+  becomes a per-role fact under OD-120's table, still never a grant).
+
+**Amendment (B21-C, 2026-09-26) — OD-109 — Specialists never hold the three availability facts, as applied (B21-C, 2026-09-26)**
+
+- **Question:** `assembleAgentRunContext` takes `executionGrantsAvailable`, `externalAcquisitionAvailable` and `mcpObservationAvailable`
+  as caller flags, and `verifyAgentContextIntegrity` accepts any grant fields that agree with them (D21-8).
+- **Applied:** `deriveSpecialistContext` builds a specialist's context FIELD BY FIELD from a closed list (never by spreading the
+  coordinator's): the three facts denied, no grant field, `riskCeiling` `propose`, `approvalsAvailable` empty, no external authority, no
+  head mark, no PCB basis, no view, the agent channel; the coordinator's context is read, never written. The specialist gateway wrapper
+  refuses `role_context_elevated`, BEFORE anything reaches the underlying gateway, any context that claims grantability or a port in any
+  of eight ways (`SPECIALIST_CONTEXT_CLAIMS`: the minter's availability, grantable capabilities, a grant lineage, a risk ceiling above
+  `propose`, an approval tier, a grantable capability held by the actor, the external port fact, the MCP port fact — each port claim by
+  its flag or by its discovery authority alone); a context that throws while read claims everything. The scheduler builds every
+  specialist's loop deps with a closed key set and no `executionGrants` key, and constructs no gateway: the composition root's one bare
+  specialist gateway (no minter, no port, no prompt version) is under every wrapper — pinned by identity through the production POST.
+  The never-execution sweep re-run through the specialist gateway for all nine roles, with a real minter under it, mints nothing, and
+  nested delegation passed as the arguments of a permitted read is handed on verbatim and refused by the read's own schema.
+  `verifyAgentContextIntegrity` is unchanged. Proven by `b21-c-no-elevation.test.ts` (5 cases) and `b21-b-chat-router.test.ts` case 16.
+- **The owner may choose otherwise:** a sourcing specialist that reads through the external port (then the port fact and the external
+  authority become a per-role fact for that role, the claim check admits them for it alone, and the three external reads in its OD-120
+  row stop being dormant — still never a grant).
+
+**Amendment (B21-D2, 2026-09-26) — OD-109 — Specialists never hold the three availability facts; a proposing role holds its sealer's fact, amended (B21-D2, 2026-09-26)**
+
+- **Question:** B21-C derived every specialist context with no head mark and no PCB basis, so no specialist could seal a proposal.
+- **Amended:** `deriveSpecialistContext` is unchanged; a specialist runs over `specialistContextFor(context, role)`, which for a
+  proposing role only adds EXACTLY the fact its live proposal's sealer needs from the coordinator's VERIFIED context
+  (`SEALER_CONTEXT_FACTS`: the schematic head mark - with the discovery lineage it anchors - for the Tier 1 edit, the PCB proposal basis
+  for the bounded edit) and nothing for a read-only role; a coordinator without the fact gives none. The three availability facts stay
+  false, no grant field, no port, no view, risk ceiling `propose`, no approval tier; the context passes `verifyAgentContextIntegrity`,
+  claims none of the eight elevations, and each claim added to it is refused `role_context_elevated` before the gateway. The specialist
+  gateway is still the bare one (no minter, no port, no prompt version). Proven by `b21-d2-proposing-roles.test.ts` cases 5 and 6.
+- **The owner may choose otherwise:** give the specialist gateway the server's published pin-facts reads (then the replacement proposal
+  can seal for the schematic role - a composition-root injection like the ports, which D2 declined as a stop condition).
+
+**Amendment (B21-D3, 2026-09-27) — OD-109 — Specialists never hold the three availability facts; the specialist gateway holds the published pin-facts reads, amended (B21-D3, 2026-09-26)**
+
+- **Question:** the replacement's sealer needs the server's published pin-facts reads, which only the coordinator's gateway received
+  (D21-37).
+- **Amended:** the runtime (`orchestration-runtime.ts`, the specialists' composition root) builds the specialist gateway with ONE option
+  - the route's own source and reader (`loadRunReplacementPinFacts` under the request's signal and `DEFAULT_PIN_FACTS_DEADLINE_MS`):
+  bounded, read-only facts of the part catalog, never a port, a minter, a prompt version or an executor; with no configured source, no
+  option at all (the seal blocks `current-pin-authority-unavailable`, as the coordinator's). The three availability facts stay false; the
+  eight elevation claims stay refused. The reader's closure reaches nothing the coordinator's read does not already use. Proven by
+  `b21-d3-pin-facts.test.ts`.
+- **The owner may choose otherwise:** withdraw the option (the replacement goes dormant again for specialists - one line in the
+  runtime and the live list).
+
+## OD-110 — The deterministic no-provider path (B21-A records; B21-B builds) (2026-09-24)
+
+- **Question:** commands that need no model.
+- **Default applied:** a server-side classifier in the chat route BEFORE any adapter: a Tier 3 family name is refused with no provider
+  call; a request whose only need is a Tier 0 read named by grammar is answered from the read binding; everything else takes the existing
+  single-agent path unchanged. No production no-model adapter; the fixture agent stays non-production.
+- **The owner may choose otherwise:** answer every message through a model (today's behaviour; simple work would still be one turn).
+
+**Amendment (B21-B, 2026-09-26) — OD-110 — The deterministic no-provider path, as applied (B21-B, 2026-09-26; revised after the review)**
+
+- **Applied:** a server-side classifier in the chat route BEFORE any adapter (`planChatRun` → `routeTaskComplexity`), under
+  `SIRKIT_ORCHESTRATION_ENABLED` exactly `"1"` (default off: every message `single`, the route byte-identical to HEAD): a Tier 3 family
+  name at the head of the message is refused with no provider call (`run_started`, one warning, `run_completed` with the fixed sentence
+  and zero steps; the adapter never invoked; a completed trace with no step); a direct Tier 0/1 command, a 3D/view request, a plain
+  question and everything the runbook does not name take the existing single-agent path unchanged; the four complex shapes become a
+  DAG. The replacement rule is the composer's own `REPLACE_PART` pairing, imported (a value change never recruits specialists); the
+  layout rule needs a layout noun and no longer "improve" (a BOM tidy or a label touch-up stays direct); the full-circuit rule excludes
+  geometry, annotation and size asks. No production no-model adapter; the fixture agent stays non-production. **Not applied from the
+  draft:** "a request whose only need is a Tier 0 read named by grammar is answered from the read binding" — no read is answered
+  without a model in B (a read-only no-model answer needs a grammar per read and a rendering, which no B21 increment plans);
+  recorded, not built.
+- **Recorded cost (narrowed after the review):** the Tier 3 rules are head-verb rules; "order <things> by <attribute>" is now a sort,
+  not a purchase (the owner may revert that narrowing by a rule edit pinned by the router suite); any other head verb used in another
+  sense ("ship the schematic to my inbox") is still refused without a model. The refusal is a shortcut, never the safety boundary: no
+  Tier 3 tool is agent-exposed.
+
+## OD-111 — The durable orchestration record (B21-A, 2026-09-24; corrected 2026-09-26)
+
+- **Question:** persist orchestration runs (reversing B11's deferral in part): where, what, how long, who reads, audited?
+- **Default applied:** one durable-workflow aggregate `agent.orchestration-run.v1` scoped by tenant/project/branch, keyed by the
+  coordinator run id, holding only structured, digest-bound, redacted records — plan, validated request, validated result, decision,
+  dissent; bounded summaries; no reasoning text, no provider state, no credential (refused by name and by value at validation, at every
+  level of a wrapped artifact included); a stored request bound to the run and task it is appended under and a stored result to the request
+  it answers (`requestDigest`); every write a compare-and-set commit under `orchestration:<runId>:<taskId>:<attempt>:<kind>` (the runbook's
+  attempt key with the record kind, one segment per record kind, since an attempt writes its request, its result and a decision) in a
+  replay partition PER RUN (the scope key carries the run id: an id may carry `:`, so the key text alone is not injective across runs); a
+  replay returns the committed result and writes nothing; every load digest-verified (`revision` the head, `history` the whole chain); a
+  malformed scope on a read throws `AGENT_ORCHESTRATION_SCOPE_INVALID`; NO outbox topic (no handler exists; D21-28); `history` the audit
+  read. **tool calls are NOT persisted** by A (the runbook's list :801 names them): their carrier is B21-E's per-task trace record on the
+  trace attribution (OD-112); D21-3 is therefore closed in part. The repository is injected and bound by the composition root (D21-32: the
+  durable runtime's production path reaches the OpenAI SDK, which the gate forbids); unbound or without a database the store is
+  UNAVAILABLE and every caller fails closed. **no runtime binds the store in A** — a stated deviation from the task's fixture-runtime
+  binding, deferred to B21-B's `app/api/chat/orchestration-runtime.ts` (the lead may instead have the binder added outside the gated
+  prefix now). **Who reads it:** in B21 the record is server-internal — the scheduler (B21-B) and the merge (B21-D) read it through the
+  store; no route and no MCP read tool exposes it (the chapter adds no route; the census stays 165/162/3/0); member access with
+  `read_project` is a follow-up outside B21 (a route is a census move, an MCP or agent read tool a pin move per D21-9). Retention: an
+  explicit setting defaulting to the grant retention, which today means "kept until an owner-decided purge exists" (nothing in the
+  substrate purges); purge and access audit deferred and stated.
+- **The owner may choose otherwise:** no persistence (then resume after a provider outage re-runs specialists and re-pays them, D21-4);
+  a shorter retention with a purge job (then the outbox needs a handled topic, or a scheduled purge outside it); an access audit now; a
+  sixth record kind `call` persisted by the scheduler (then B21-B carries it, with its own idempotency segment per call).
+
+**Amendment (B21-E3, 2026-09-28) — OD-111 — The durable orchestration record, amended: the resume record (B21-E3, 2026-09-27)**
+
+- **Amended:** a sibling aggregate `agent.orchestration-resume.v1` on the same repository and scope as `agent.orchestration-run.v1`,
+  one per coordinator run, holding the resume binding (owner, message, provider and plan as digests), the coordinator's first-turn FINAL
+  TEXT - provider text, persisted so a resume replays it instead of paying for the turn again: bounded to 60 000 characters, encoded
+  exactly, withheld (null, a closed reason, its digest kept) when over the bound or credential-shaped - the redaction authority's shared
+  rule plus the record's own shapes (a PEM private key, an AWS key id, a GitHub or Slack token, a JWT, a URL with a password, a lower-case
+  `*_secret=` / `*_token=` / `password=` pair; every quantifier bounded); never reasoning, never provider state - the one-artifact claim
+  per message with its request's ordinal, the follow-up's answer digest, and each request's start and end (with whether it presented);
+  every write a compare-and-set commit, idempotent by its entry's key, no outbox topic; every load verified. Retention and access audit
+  stay deferred (RECORDED), as for the run's record.
+- **Open for the owner:** a retention bound for this record - it is the one orchestration record that holds model text whole; PROPOSED
+  default: no longer than the run record's retention once one is set, and the answer purged once the run is finished (`follow-up`
+  recorded). RECORDED: the shared redaction rule the rest of the orchestration record relies on (a specialist request's objective, a
+  result's text) does not know the record's own shapes; widening it is a cross-cutting change outside E3.
+- **The owner may choose otherwise:** replay no text (only the digest) - a resume would then replay a closed placeholder and the
+  follow-up turn would answer without the first answer; or a retention shorter than the run record's.
+
+## OD-118 — The official documentation hosts for execution-time re-checks (B21-A, 2026-09-24)
+
+- **Question:** the hosts the runbook and the task name (`platform.openai.com/docs`, `docs.anthropic.com`) redirect or answer 403 (D21-29).
+- **Default applied:** `developers.openai.com/api/docs`, `platform.claude.com/docs`, and for the Anthropic Agent SDK `code.claude.com`
+  (not fetched) are the hosts of record; every provider fact B21 implements against is in `provider-reference-notes.md` with its URL and
+  date; a page that answers 403 or redirects to an unrecorded host stays UNKNOWN until an increment fetches it and records the date. A
+  re-read nothing in this increment (no provider feature is touched).
+- **The owner may choose otherwise:** pin a documentation snapshot in the repository (then the "re-check at execution time" obligation
+  needs a dated refresh rule).
+
+## OD-124 — CI admission for the B21 suites (B21-A, 2026-09-24)
+
+- **Question:** the job-scope guard covered `b19-` / `b20-` only and no directory filter covered `app/lib/agent/__tests__` (D21-26).
+- **Default applied:** the guard's `CHAPTERS` extended to `b19-`, `b20-`, `b21-`; ONE directory filter `app/lib/agent/orchestration/__tests__`
+  in the `prompt-to-gerber` job (explicit files under it refused as redundant by the existing rule); suites elsewhere (route, page,
+  engineering) by explicit entry, never under `app/lib/engineering/__tests__` (benchmark-core would run them twice); PGlite-backed suites
+  (none planned) to `database-delivery`; `b11-trace-replay-evaluation` admitted explicitly only if B21 adds cases to it, otherwise a new
+  `b21-f-evaluation` suite carries them. A later chapter extends `CHAPTERS` without touching B21's page or suites (they pin membership).
+- **The owner may choose otherwise:** one explicit entry per suite (the B19/B20 pattern for scattered suites; more rows to maintain).
+
+## OD-128 — `LIVE_BLOCKERS.md` LB-9 (B21-A, 2026-09-24)
+
+- **Question:** no row names real specialist disagreement, provider fallback or quota failure with live models (D21-25).
+- **Default applied:** LB-9 added at B21-A, in the register's table format, as the row below; unblocked as LB-2; every B21 live behaviour
+  (disagreement, fallback, quota, timeout, the structured-output and forced-tool rules on the models the live pages name) is recorded
+  under it and never converted into a claim; the model-in-loop track is record-only until credits exist (OD-125, OD-102: no permanently
+  skipped block).
+- **The owner may choose otherwise:** supply provider credits with a spend limit (LB-2), which unblocks LB-7 and LB-9 together.
+
+## OD-131 — Provider text persisted inside a `SpecialistResult` (B21-A, 2026-09-24; corrected 2026-09-26)
+
+- **Question:** what a specialist's own words may be, once they are persisted for replay and audit.
+- **Default applied:** `summary` bounded (4 000 characters) and structured; assumptions, risks and questions are closed typed records with
+  bounded (1 000-character) texts; no rationale transcript; no key named in the capsule denylist (`state`, `response`, `request`, `body`,
+  `headers`, `client`, `sdk`, `openai`, `anthropic`, `token`) nor any reasoning-, thinking-, continuation- or chain-of-thought-shaped key
+  nor any credential-shaped key, at any level the types name; inside a wrapped sealed artifact, a reasoning- or credential-shaped key at ANY
+  level and a capsule key at its top level (below it the artifact is the sealer's; a real certificate carries `state`), the sealers' three
+  declared authorization-binding names (`authorization`, `authorizationBinding`, `authorizationSchema`) exempt from the name check only;
+  AND no credential-shaped VALUE in any text, any id or any string of a wrapped artifact (`secret_shaped_text`), no control or format
+  character anywhere (`invalid_text`) — because the record is persisted (OD-111) and may ride in a capsule, a secret must never enter it.
+  The two value rules are DELIBERATE fail-closed defaults with a recorded availability cost: they reach the sealers' own prose fields inside a wrapped artifact (`provenance.instruction`, `provenance.note`, a PCB proposal's `intent`), so a real proposal built from a benign instruction that carries such a phrase or character is refused whole with the specialist's result (lead, 2026-09-26); the secret scan is the shared diagnostic
+  pattern set with the `sk-` prefixes token-anchored, so a `NAME=value` dump (`R1_VALUE=10k-ohm-0603`, `DRC_PRESET=default-preset-v2`) or
+  a `secret:` / `password:` prefix in benign engineering prose refuses the whole result (never redacted, as every other stored identity
+  field in the codebase refuses); the character rule refuses every `\p{Cf}` character, a soft hyphen (U+00AD, copied datasheet text) or a
+  zero-width joiner included. Under B21-D such a result becomes dissent `malformed`.
+- **The owner may choose otherwise:** allow a longer summary (a bound move, one constant and one pin); allow a free-text rationale field
+  (refused here by default: it is the chain-of-thought storage the runbook forbids); redact instead of refuse for the diagnostic-grade
+  patterns and strip format characters instead of refusing (then the persisted text differs from what the model said, and the page
+  records which substrings were removed).
+
+## OD-122 — The artifact ledger scope for "must not duplicate committed work", as applied (B21-B, 2026-09-26; revised after the review)
+
+- **Applied:** in B a specialist never seals a proposal or mints a grant: its gateway is BUILT by the composition root without the
+  execution-grant minter, without the external and MCP ports and without the prompt version (a granted execution through it is
+  `execution_unavailable`, an external or MCP read `authority_unavailable` — structural, proven by counting the request's gateway
+  constructions), wrapped read-only (`role_not_permitted_tool` for every non-read invocation); its context is derived with the three
+  availability facts false, no head mark, no PCB basis and no view; its registry is a read-only view, so nothing outside the persisted
+  `allowedToolIds` is ever advertised. **One side-effecting artifact per user message holds in B because the follow-up coordinator turn
+  is READ-ONLY:** only the coordinator's first turn can seal the one proposal or mint the one grant; the follow-up turn runs without
+  the minter, over the read-only registry and the read-only gateway wrapper, with its authority withdrawn. Committed specialist work is
+  never duplicated by a resumed SCHEDULER: every result is persisted before the next task starts and a scheduler resumed for the same
+  coordinator run and scope replays it instead of re-running it (a moved revision re-runs it as `stale`). **Not applied in B, stated:**
+  the chat route mints a fresh run id per POST and carries no prior run id, so the human's Retry after an outage is a new run whose
+  specialists run again — the `userMessageDigest`-keyed cross-run ledger and the route-level resume are B21-E's (with B21-C's per-role
+  subsets); specialists producing proposal artifacts the coordinator merges are B21-C/D's.
+
+**Amendment (B21-D2, 2026-09-26) — OD-122 — The artifact ledger scope for "must not duplicate committed work", amended (B21-D2, 2026-09-26)**
+
+- **Question:** with specialists able to seal proposals, which artifact does the human review?
+- **Amended:** one side-effecting artifact per user message. A specialist's sealed proposal is inert (Tier 2, human approval) and is
+  NEVER shown for approval directly. After the merge: when the coordinator's first turn sealed nothing (no proposal, layout candidate
+  or grant) and EXACTLY ONE action is accepted across the DAG with no escalation, part review request, contradicted result or unjudged
+  competitor (`incomplete`: a task's attempt sealed an artifact no merged task judged - its result refused, or its run failed after the
+  seal - or a planned proposing specialist never started), the runtime emits it as the run's own `proposal_ready` /
+  `pcb_proposal_ready` / `layout_candidate_ready` (the family's own event, the shape the coordinator's seal emits, under the
+  coordinator's run id) so the human reviews and approves it through the product's existing path; in every other case NOTHING is
+  emitted for approval and the follow-up turn lists the accepted actions and escalations as data, says why nothing was presented and
+  that the human decides. The one line saying which (presented, with the artifact's kind, id and digest, or withheld and why) is
+  ALWAYS recorded on the run's trace, past the 12-line orchestration cap, within the trace recorder's own 32-warning bound (`TRACE_BOUNDS.maxWarnings`, shared with the coordinator's warnings; a full trace is marked `trace_event_capacity_reached`, never silently short). Deterministic (`specialistApprovalDecision`, over the merged view
+  AND the scheduler's outcome), never by count or majority: two accepted actions, even two equal edits, present nothing. The accepted
+  default's clause "specialists get `proposal_exists` on every attempt once the coordinator holds an artifact" is APPLIED: once the
+  coordinator's own first turn emitted any of its four artifact events, the runtime tells the scheduler (`artifactHeld`) and no
+  specialist is offered a proposal at all (each runs over the plain derivation, B's read-only frame, one line on the stream) - the
+  stricter equivalent of `proposal_exists` (never offered rather than refused at the call), so a coordinator proposal and a specialist
+  proposal on the same component never both exist in a run the route starts (a scheduler-level replay of an earlier committed result
+  keeps its own seal - INFERRED; the route never replays). Proven approvable through the Tier 1 and PCB apply boundaries with the run's
+  principal reauthorized by the real apply-authorization route (`b21-d2-approval.test.ts` cases 1 and 2; route case 3); the clause by
+  approval case 8 (each of the four events through the real runtime) and route case 4; `incomplete` by approval case 7 and route case 7;
+  the trace line by route case 6. The route-level resume and the `userMessageDigest` cross-run ledger stay B21-E's.
+- **The owner may choose otherwise:** present several accepted actions for the human to pick one (a UI change), or never present a
+  specialist's artifact (every accepted action listed as data only - the B21-D behaviour); or let the specialists seal beside the
+  coordinator's artifact and hand that artifact to the merge as an escalation party (a coordinator-vs-specialist conflict then escalates
+  instead of never arising).
+
+**Amendment (B21-E3, 2026-09-28) — OD-122 — The artifact ledger scope, the ledger across resumes as applied (B21-E3, 2026-09-27)**
+
+- **Question:** with a route-level resume, how is "one side-effecting artifact per user message" kept across the requests of one run?
+- **Applied:** keyed by `userMessageDigest` on the run's resume record `agent.orchestration-resume.v1` (beside the run's own record, the
+  same repository): (1) the coordinator's first-turn artifact events are recorded with its turn, and a resume hands them to the scheduler
+  (`artifactHeld`), so no specialist is offered a proposal and the decision is `coordinator_sealed` - the artifact itself is never
+  re-emitted; (2) when the merge's rule would present one specialist action, the runtime claims `orchestration-resume:<runId>:artifact:
+  <userMessageDigest>` first (with the claiming request's ordinal), once the merge's verdicts stand: a claim that reads back as a replay
+  withholds it as `already_presented` (appended last to the approval outcomes, decided in `presented`'s place only) unless it is VOID -
+  every request since the claiming one recorded an end that presented nothing (a claim that timed out but landed) - and a claim that
+  cannot be written stands the run down with its own line before anything is presented. A specialist proposal is never presented twice
+  for one message in one run. The resume itself: the chat body's optional `resumeRunId` (admitted beside `ALLOWED_BODY_KEYS` under the
+  orchestration flag only), authorized after the wrapper's checks by the record's owner (principal and scope, decided first), message,
+  provider and plan, with nine closed refusals (`resume_unavailable` for now, `resume_unusable` for good); the run id reused; the first
+  turn replayed from the record; the scheduler replaying what was committed against the LIVE head the resuming request carries - bound
+  also to its schematic, selection and netlist, with seals that outlive the approval window; the follow-up turn once; one request of a run
+  at a time (a compare-and-set start, a settled end - also on a throw - before the terminal, a 10-minute lease). The D2 amendment's
+  INFERRED clause (a replayed result keeps its seal) is now CONFIRMED: the ledger decides.
+- **Scope, stated:** per run and message - a message sent again without `resumeRunId` is a new run with its own ledger; at most once to
+  the human - a stream cut between the claim and the event, or a presenting request whose end is not recorded, loses that presentation
+  for the run; after a moved head the first artifact stays the message's one (stale against the new head, its apply refused by its
+  family's currency check).
+- **The owner may choose otherwise:** a ledger across runs keyed by the message digest alone within a window (as B18's retry guard does
+  for grants - it would refuse a deliberate re-ask of the same words); or at-least-once presentation - a resume re-emits exactly the
+  claimed artifact (the claim holds its kind, task, attempt, index and digest) when it is still accepted; or present again when the
+  presented artifact is stale against the live head; or a shorter lease than 10 minutes (it bounds how long a crashed request holds its
+  run).
+
+## OD-120 — Which of the 33 exposed tools each role may be offered, as applied (B21-C, 2026-09-26)
+
+- **Question:** the per-role least-privilege subsets (runbook :829; D21-7).
+- **Applied:** the discovery's proposal with NO deviation, as data with a reason per id (`ROLE_TOOL_REASONS` /
+  `INTENTIONAL_ROLE_TOOL_IDS` in `app/lib/agent/orchestration/role-tools.ts`, rendered on `specialist-roles.md` section 1): the
+  coordinator's row IS the exposure list (the same array; never passed as an allowlist); `requirements-analyst` board-inspect,
+  canonical-revision-inspect, history-inspect, schematic.inspect; `circuit-topology` schematic.inspect, propose-tier1-edit,
+  selection.inspect, connectivity-verify; `component-sourcing-evidence` component-authority.inspect, mcp.observation-read,
+  parts.evidence-read, parts.external-search; `schematic` schematic.inspect, propose-component-replacement, propose-tier1-edit;
+  `pcb-placement-routing` board-inspect, mechanical-inspect, propose-bounded-edit, via-inspect, placement.propose, routing.propose;
+  `verification-critic` revision-inspect, via-inspect, connectivity-verify, drc-run; `manufacturing-readiness-reviewer`
+  readiness-inspect, connectivity-verify, drc-run; `cost-latency-router` none. No row holds a granted execution, a view control or a
+  never-exposed / Tier 3 id; a proposal only in a proposing role's row; `roleExposureReport` reports drift by role, id and reason. A row
+  is a CEILING: ten row entries (nine distinct ids) are DORMANT in B21-C (the six proposal entries — specialists read only; the three
+  external reads — OD-109; the history read — no captured view in a specialist context), each saying so in its reason.
+- **Consequence, stated exactly (the review's fix):** under OD-109 the sourcing specialist's only effective read is
+  component-authority.inspect, so it runs only when at least one schematic component has a durable binding that loads within the
+  route loader's 5 s deadline; without a durable source (the local build), for a project with no binding (every new design), on a
+  failed load or past the deadline the loader settles null and the role has no tools. A role with no tools is not run, but its task
+  stays in the plan and records the missing evidence as dissent `escalated` (`role_has_no_tools`), which the scheduler's outcome and
+  the follow-up turn's envelope carry — so runbook :809's component specialist and B21-F's "missing component evidence" case run no
+  sourcing model when no binding exists, and the missing evidence is recorded and shown, never invented. The cost/latency policy role
+  is never run until B21-E gives it a policy input.
+- **The owner may choose otherwise:** cut every row to what C can offer (the dormant ids removed; B21-D and an OD-109 change would then
+  re-add them by a reviewed row change); widen a row (a reviewed change of `role-tools.ts` and its page, never of the exposure list) —
+  for instance a read that lets the sourcing specialist run and report the missing binding itself (a new or re-scoped read descriptor:
+  the D21-9 pin move); or accept the recorded dissent as the missing-evidence answer (the default applied).
+
+**Amendment (B21-D, 2026-09-26) — OD-120 — addendum (B21-D, 2026-09-26)**
+
+- **Decided in D:** the ten dormant row entries stay dormant (no role is offered a proposal tool); the merge judges every proposed
+  action by its FAMILY's verifiers whatever role carried it (the artifact, never the messenger) - a verification critic's sound Tier 1
+  edit is accepted like the circuit specialist's (merge case 12) - and binds it itself to its family's keys, its lifetime and this run's
+  principal, because the families' digests are checksums, not signatures; who produced an artifact is never claimed. **The owner may
+  choose otherwise:** a role-row ceiling in the merge (only a role whose row names the family's proposal tool may carry its action) - a
+  one-rule change pinned by a merge case.
+
+**Amendment (B21-D2, 2026-09-26) — OD-120 — Which of the 33 exposed tools each role may be offered, amended (B21-D2, 2026-09-26)**
+
+- **Question:** B21-C kept OD-120's proposal entries dormant (specialists read only); D left them so.
+- **Amended:** the proposing roles are offered their row's LIVE, non-long-running proposals and nothing more
+  (`SPECIALIST_PROPOSAL_TOOL_IDS`): the Tier 1 edit for `circuit-topology` and `schematic`, the bounded PCB edit for
+  `pcb-placement-routing`; the view is "read + the role's reviewed proposals" (`specialistToolRegistry`) and the wrapper's refusal
+  (`role_not_permitted_tool`) still covers everything outside the row. Dormant for specialists, each with its reason
+  (`DORMANT_SPECIALIST_PROPOSALS`): `sirkit.placement.propose` and `sirkit.routing.propose` (long-running: the placement engine blocks
+  the event loop 44-104 s per run; FreeRouting up to 180 s) and `sirkit.schematic.propose-component-replacement` (its sealer needs the
+  pin-facts reads only the coordinator's gateway holds - the D2 stop condition, D21-37). Still never a granted execution, a view-session
+  control, a Tier 3 id or a never-exposed id. The merge still judges every action by its family, but only a role offered a proposal
+  tool can carry one (only its run's own seal reaches the merge). Proven by `b21-d2-proposing-roles.test.ts` and
+  `b21-d2-provenance.test.ts`.
+- **The owner may choose otherwise:** make the layout proposals live for the PCB specialist (with a concurrency cap on the engines,
+  OD-107); wire the pin-facts reads into the specialist gateway (OD-109's option) so the replacement is live; or cut the dormant entries
+  from the rows.
+
+**Amendment (B21-D3, 2026-09-27) — OD-120 — Which of the 33 exposed tools each role may be offered, amended: the replacement is live for the schematic role (B21-D3, 2026-09-26)**
+
+- **Question:** D2 kept `sirkit.schematic.propose-component-replacement` dormant for specialists (its sealer's pin-facts reads).
+- **Amended:** it is in `SPECIALIST_PROPOSAL_TOOL_IDS`; only the `schematic` row lists it, so it is live for that role alone; its
+  sealer's context fact is the head mark (`SEALER_CONTEXT_FACTS`); the long-running placement and routing proposals stay dormant with
+  their reasons; the wrapper's `role_not_permitted_tool` still covers everything outside the row. Proven by
+  `b21-d3-replacement-roles.test.ts` and `b21-d3-scenario17.test.ts`.
+- **The owner may choose otherwise:** make the replacement live for the circuit specialist too (a row change), or keep it dormant.
+
+## OD-121 — How the role allowlist is enforced, as applied (B21-C, 2026-09-26)
+
+- **Question:** a new `DiscoveryContext` field, a new channel value, or a post-discovery intersection.
+- **Applied:** the post-discovery intersection. `buildRunToolset` gains an OPTIONAL `allowedToolIds`, applied AFTER every existing gate
+  (it only narrows; a tool a gate withheld stays withheld); A4L semantics (`approvedRunAllowlist`) — at most 32 ids, strictly ascending,
+  every id exposed and never a never-exposed pattern — and a list that is anything else approves NOTHING: an empty toolset with one
+  warning naming `allowlist_invalid`. The loop reads it from `AgentLoopDeps.allowedToolIds`; absent (every coordinator run) the toolset
+  is byte-identical to HEAD (four digests recorded before the change). The scheduler passes each role's effective set — its row
+  intersected with the reads the derived context admits — to the loop, the request and the gateway wrapper (`role_not_permitted_tool`
+  outside it, proven on the wrapper the scheduler itself builds). A role whose set is empty is not run (`role_has_no_tools`): the plan
+  and its task ids come from the plan's roles alone, the task records a dissent, and a same-scope resume never depends on this run's
+  resources. The context digest, `DISCOVERY_CHANNELS` and the 22 exclusion reasons are untouched.
+- **The owner may choose otherwise:** a discovery-level role field (moves every context digest and the b04 / b17-f / b18-c / b20-b1
+  pins in one reviewed move).
+
+## OD-123 — `schematic.set-property` / `schematic.move-rotate` in `EXECUTION_FAMILIES` (B21-C, 2026-09-26)
+
+- **Question:** the closed eight-family list declares two schematic Tier 1 families that nothing can route to (D21-31).
+- **Default applied:** recorded as reserved and unchanged (the B18-B pin fixes the list); no schematic descriptor is a granted
+  execution; the `schematic` role receives the two sealed Tier 2 proposals and `schematic.inspect` only (OD-15), both proposals dormant
+  while specialists read only.
+- **The owner may choose otherwise:** remove the two families (a reviewed pin move of `b18-b-execution-grant.test.ts`), or open
+  schematic execution (reverses OD-15; its own chapter).
+
+**Amendment (B21 closeout (2/2), 2026-09-30) — the dormant proposals, dated**
+
+[B21 closeout (2/2)] "Both proposals dormant while specialists read only" is superseded for the replacement: since B21-D2/D3 specialists propose through their own gateways and the component replacement is live for the schematic role (OD-120 amended); the two schematic Tier 1 families stay reserved and unchanged, and no schematic descriptor is a granted execution.
+
+## OD-114 — Merge decisions and dissent as closed records, as applied (B21-D, 2026-09-26)
+
+- **Question:** should merge-layer rejections of specialist results (and pre-invocation refusals) become traced events with a closed
+  vocabulary?
+- **Applied (the record half):** every merge verdict is a PERSISTED record of the orchestration run with the closed decision
+  vocabulary (`accepted`, `stale`, `contradicted`, `expired`, `malformed`, `escalated`): per judged result and merge pass one record -
+  `decision` for `accepted`, `dissent` otherwise - under a CONTENT key naming the task attempt it judges (`<taskId>.merge-<16 hex of the
+  verdict>`, the judged attempt), with a bounded reason of closed codes and ids (the provider and the model it reported, every
+  verification the result asked for with its outcome and output digest, the recomputed readiness report) and the result's digest as its
+  subject; per unresolved conflict and per part review request one `decision` `escalated` under `merge-<16 hex>`; all written before
+  anything reaches the follow-up turn. The same verdict replays; a CHANGED verdict on the same result (a later pass: an artifact
+  expired, a new conflict partner) is appended as its own record and the LATEST verdict of a task attempt stands - the record is
+  append-only and a key is never written over; a resume re-runs a result whose latest verdict is `stale` or `expired`. The TRACED
+  `specialist_result` outcome class (and the trace block that carries it) stays B21-E's (OD-112); the single-agent path's untraced
+  `tool_refused` (OD-17 D6) is unchanged.
+- **The owner may choose otherwise:** a separate record kind per merge verdict with a verdict sequence (a store schema move), or the
+  traced form first.
+
+**Amendment (B21-F3, 2026-09-28) — OD-114 — addendum (B21-F3, 2026-09-28)**
+
+- [B21 F3, 2026-09-28] Addendum (no shape change): an ACCEPTED verdict may carry ONE non-rejecting closed code, `evidence-missing`
+  (D21-44, the lead's option (a)) - an accepted result of the evidence-gathering role (`component-sourcing-evidence`) that cites no
+  evidence is recorded as `merge accepted with evidence-missing (no evidence cited): ...` in its task attempt's one `decision` record,
+  under the same content key (`<taskId>.merge-<16 hex>`), chained to the verdict it supersedes, the latest standing; when the text rule
+  withholds the reason, D's fallback keeps the clause (`merge accepted with evidence-missing (no evidence cited): findings withheld from
+  the record; result <digest>`). No record kind, key shape or decision value changed; a verdict written before B21-F3 for the same
+  result (no gap) is superseded by a chained record, still `accepted`; a resume still replays an accepted result
+  (`merge-and-disagreement.md` section 4, the F3 section).
+
+## OD-129 — The only accepted readiness evidence kind, as applied (B21-D, 2026-09-26)
+
+- **Question:** what carries a readiness claim (D21-15)?
+- **Applied:** a reference to a ReadinessReport `{ reportId, designRevision, manufacturingProfileId, freshness }` - an
+  `EvidenceReference` of kind `readiness-report` with the report's `reportId` and the digest of the report as the readiness read returns
+  it (`readinessReference` in `merge.ts`, the read's `pinned.reportDigest`); never free text. The merge RECOMPUTES the report from the
+  verified board with the run's presets and accepts a reference only when it names that current report (another reportId, or a report
+  whose freshness is not current, is `stale`; the right id with another digest is `malformed`); the manufacturing-readiness reviewer is
+  SHOWN that form in its frame, its report is always recomputed, and its result carrying no readiness reference is refused `malformed`
+  (`readiness-claim-unreferenced`) - structurally, without judging prose. A qualification-authority reference cannot be checked by the
+  merge, so it is `stale` (`qualification-authority-unverified`) wherever it appears and never satisfies the rule. Another role's
+  readiness prose is not detected (no prose is judged); it stays that specialist's unverified claim.
+- **The owner may choose otherwise:** a structured readiness field in the result contract (a contracts schema move), or a verifier of
+  the qualification authority in the merge (then a verified digest may satisfy the rule).
+
+## OD-130 — A candidate part is evidence, never a replacement target, as applied (B21-D, 2026-09-26)
+
+- **Question:** may the sourcing specialist propose a candidate part that is not the exact authority (D21-16)?
+- **Applied:** no. Only the server-owned exact authority (a `verified-exact` component authority with its complete `exactAuthority`,
+  the assembler's rule) may be a replacement target: a sealed replacement naming another target is `contradicted`
+  (`part-not-exact-authority`) and writes a PART REVIEW request record for the human (`merge-<16 hex>`: the instance, the candidate part,
+  the exact authority, the `request_atomic_review` path) with its own line and envelope entry; with no verified-exact authority loaded
+  the target is `stale` (`part-authority-unverified`). Two part claims that disagree are also an identity conflict - every party
+  `contradicted`, ONE escalation that cites the exact authority and names the review path. A part named only in prose is not detected.
+  The exact target remains the only replacement target (OD-23).
+- **The owner may choose otherwise:** an evidence-only candidate-part kind in the result contract that the envelope lists for review
+  (a contracts schema move), or letting the human pick between candidates in a later UI increment.
+
+## OD-132 — Provider and model per result live in the envelope, never in the sealed schemas, as applied (B21-D, 2026-09-26)
+
+- **Question:** provider, model and run id in the sealed artifact schemas (v3 -> v4 / v2 -> v3; drop the constant `agent-tool-loop`)?
+- **Applied:** the sealed schemas are unchanged (the PCB proposal keeps its constant `model: "agent-tool-loop"`, C53). Every judged
+  result carries the provider it was dispatched through and the model that provider REPORTED, in the merge's view, the follow-up
+  envelope and its persisted verdict reason. The source is the PROVIDER: the scheduler runs every specialist through this run's one
+  adapter per provider (OD-117's one configured model per provider), and a reported model is provider-controlled text - recorded, never
+  counted as independence. A replayed result's provider and model are not in the record, so its source is
+  `(replayed: provenance not recorded)` and it counts with every other source. Nothing secret is recorded (closed codes, ids and model
+  tokens only; an unrecognizable model string is recorded as `(unrecognized)`). The trace block that records them per step stays
+  B21-E's (OD-112), which will key sources by the provider and model its per-role table dispatches with (OD-117).
+- **The owner may choose otherwise:** version the sealed schemas to carry provenance (three sealers, their verifiers and every pinned
+  artifact move together), or persist provider and model with each result record (a store schema move) so a replay keeps them.
+
+**Amendment (B21-E1, 2026-09-27) — OD-132 — amendment (B21-E1, 2026-09-27): one bullet appended to the existing OD-132 entry**
+
+- **Amended by B21-E1:** since B21-E1 every specialist runs on its own adapter and a role may run on a routed model of its provider, so
+  "one adapter per provider" no longer holds; the source rule stands, re-worded: one provider is ONE source whatever model or adapter
+  its specialists ran on. "B21-E ... will key sources by the provider and model" is RE-DEFERRED (to the owner, with B21-F's
+  evaluations): E1 keeps the provider as the key - conservative, it never presents two models of one vendor as independent sources. The
+  trace block is B21-E2's (OD-112).
+
+## OD-133 — Scope on the layout candidate, as applied (B21-D, 2026-09-26)
+
+- **Question:** the layout candidate carries no tenant/project/branch/lineage scope (D21-13).
+- **Applied:** wrapped, with no artifact schema change: every action of a judged result is bound to the `RevisionBoundProjectScope` of
+  the request that result answered (read from the orchestration record); a request that is missing or whose scope is not the
+  coordinator's pinned scope makes the action `stale` (`request-missing` / `scope-mismatch`, merge case 13), and an accepted layout
+  candidate reaches the envelope WITH that scope. The candidate's own `base` (`{ revision, generation?, historyHead? }`) is unchanged
+  because the editor's hooks share it - recorded as the follow-up defect D21-34.
+- **The owner may choose otherwise:** a v2 layout candidate carrying its own scope (the editor hooks, the verifier and the candidate
+  suites move together).
+
+## OD-115 — Provider spend controls for the DAG, as applied (B21-E1, 2026-09-27)
+
+- **Question:** what stops a paid retry storm against a provider that is out (D21-18)?
+- **Applied:** the admission key gains the `llm-provider` kind (`{ provider, model? }`, a reviewed extension of B20-A0's union) with
+  the process's meters: a minute window per provider and per model, the agent held to its 25% share (OD-40) - 60 calls a minute for the
+  whole process, shared by every user and concurrent request - and a breaker per provider that opens AT ONCE on `insufficient_quota`
+  for an hour (`quotaOpenMs` 3 600 000) unless an operator resets it (`resetLlmProviderBreaker`; a restart resets it too), at once on a
+  rate limit for a minute, and after three consecutive transient failures for a minute, with one half-open trial after the window.
+  Every admitted call carries a ticket (the breaker generation it was admitted under, whether it is the trial): an outcome under an
+  earlier generation never moves the breaker (a late success cannot close an opening) - except a no-credits answer, a fact about the
+  account, which still opens the long window unless an operator reset came after its call's admission ([B21 E1 lead]) - only the
+  trial's own outcome settles the trial,
+  and an abandoned trial (its run's signal aborted first) is not counted - the breaker stays half-open, never re-armed for an hour by a
+  call nobody finished. Every specialist call is admitted and recorded; the pause is consulted before every specialist attempt (the
+  coordinator's provider paused: no specialist call, the DAG stops `provider_paused` visibly, never claiming a failure); a call the
+  meters refuse mid-run escalates its task, and stops the DAG `provider_paused` only on the coordinator's open breaker (a window pause is
+  no outage); before the follow-up coordinator turn (paused: no call, the first answer stands), whose calls are metered as a person's;
+  a retry is never made against a paused provider; the per-DAG attempt ceiling stays B's (2 per task, 4 tasks). Specialist adapters are
+  built with `maxRetries: 0` (`agentAdapterForRole`) inside OD-45's `{ apiKey, maxRetries, timeout }`; the coordinator keeps its SDK
+  retries (OpenAI 2, Anthropic the SDK default 2). The recovery card - on both of its paths, the chat run's settlement and the JSON 503
+  body - withholds Retry for `provider_insufficient_quota` / `insufficient_quota` and `provider_breaker_open` (`retryOffered: false`,
+  its Retry disabled) while its "Use <other> instead" still sends the message again on the other provider. The chat closure's B19-D gate
+  exempts `admission-control.ts` exactly (policy, not vendor data). Proven by `b21-e1-provider-breaker.test.ts`,
+  `b21-e1-retry-card.test.ts`, `b21-e1-chat-provider.test.ts`.
+- **Not applied (recorded):** the coordinator's own first turn is not metered or gated (D21-39, for B21-E2); the coordinator's SDK
+  retries (its first and follow-up turns) re-send a step invisibly to the meters (the follow-up is metered as one admitted call per
+  step); the meters are per process; the agent share has no per-tenant or per-run sub-ceiling (a window pause escalates only the task
+  it refuses).
+- **The owner may choose otherwise:** other window sizes or open durations; a durable shared meter across instances; gating the
+  coordinator's first turn (a route change); a per-tenant or per-run sub-ceiling of the agent share; `maxRetries: 0` for the coordinator
+  too, with Sirkit-owned metered retries.
+
+**Amendment (B21-E4, 2026-09-28) — OD-115 — Provider spend controls for the DAG, amended: the coordinator's first turn behind the breaker (B21-E4, 2026-09-28)**
+
+- **Question:** B21-E1 applied OD-115 to every specialist call and the follow-up turn and recorded the coordinator's own first turn as
+  "not applied" (D21-39): a request made while the coordinator's provider was paused still made that one call.
+- **Applied:** the chat route consults the SAME pause before the coordinator's first turn - `currentLlmProviderPause` through
+  `PROCESS_LLM_PROVIDER_ADMISSION`, the `interactive` purpose (the whole process-wide window), the coordinator's provider with no model
+  key (as the follow-up turn) - on the flag-off single path and on both flag-on paths. Paused: NO call - `run_started`, then ONE
+  `run_failed` `provider_breaker_open` carrying the meters' own pause sentence, the card showing its Switch without Retry (E1's
+  `providerRetryOffered` rule), nothing planned, run or written to the orchestration record. A Tier 3 ask is refused before the gate (no
+  call either way). A resumed request's first turn is replayed from the record and never gated: its specialists and its follow-up turn
+  consult the breaker, and their stand-down settles its claimed start. Not paused: the route is unchanged (the flag-off stream
+  byte-identical to HEAD's). A half-open breaker whose one trial call is in flight is NOT a pause for the first turn (the adversarial
+  review, regressions-1): the first turn takes no trial and settles none, so it goes, as it does before the trial is taken.
+- **Not applied (recorded):** the first turn is gated, not metered - the gate only reads the meters, and the first turn's own outcome
+  never reaches the breaker: a coordinator's 429 opens nothing. Hence (D21-42): the gate never fires on a flag-off process (no call there
+  is metered, so no provider is ever paused); on a flag-on process the breaker opens only on a specialist's or a follow-up turn's answer,
+  so a no-credits account whose first turns fail first never opens it, and once opened for no credits it holds at most ONE window when no
+  metered call follows (every first turn after the hour goes and fails; the half-open trial waits for a metered call). The coordinator's
+  SDK retries stay inside its adapter. A window pause answers the same no-Retry code as an open breaker, its sentence naming the window.
+  The window and the breaker are PROCESS-WIDE by provider (no principal or tenant in the meters): one principal's metered calls - 60
+  specialist calls at most, the rest follow-up turns - can use up the provider's minute, and one tenant's no-credits answer or three
+  transient failures of any principal's specialist calls open the breaker; either now stands down every tenant's first turn on that
+  provider (a window pause until the minute ends), with no Retry and the Switch kept.
+- **Evidence:** `composer-and-first-turn.md` section 2 and section 4's "The review's findings (E4)"; `b21-e4-first-turn.test.ts` (7
+  cases: 6 the trial in flight, 7 the recorded limits), `b21-e4-chat-first-turn.test.ts` (8 cases: 6 the trial in flight through the
+  POST, 7 and 8 a no-credits account on a flag-off process and on a flag-on DAG); E1's route case 3 and E2's route case 5 moved with
+  their reasons (E2's exactly-once pins restored).
+- **Owner options:** record the first turn's no-credits and rate-limit answers to the breaker without reserving the window (closes
+  D21-42: the flag-off path and a no-credits account would then open and re-open it - and one tenant's transient billing answer would
+  pause every tenant's chat on that provider for the long window, the trade the owner decides); bound the window per principal before it
+  may gate other principals' first turns, or answer a window pause with its own reason, whose Retry is offered once the minute has passed
+  (a move of OD-40's shares or of E1's closed `PROVIDER_FAILURES_WITHOUT_RETRY` list).
+
+## OD-116 — The structured-output mechanism for `SpecialistResult`, as applied (B21-E1, 2026-09-27)
+
+- **Question:** how does a specialist return its `SpecialistResult` (D21-20)?
+- **Applied:** ONE strict function tool, `sirkit_specialist_result` - a per-run synthetic declaration, never an exposed tool - whose
+  schema is the result's content keys through `toStrictSchema` inside the wire subset, identical on both providers, advertised beside
+  the role's tools with the adapters' own `tool_choice: auto` (never `required` / `any`); its ONE call is captured by the specialist's
+  wrapper and its arguments validated server-side by A's `validateSpecialistResult` (the server writes the schema id and attaches the
+  run's own seals); a turn without the call is `malformed` (`result_tool_not_called`) - the B-era final-text parse is removed; no
+  `text.format` / `output_config` key (each a reviewed OD-90 pin move E does not make); thinking is never enabled. Proven by
+  `b21-e1-result-tool.test.ts`.
+- **The owner may choose otherwise:** `output_config.format` / `text.format` structured outputs (an OD-90 key-set move per adapter, and
+  per the dated page not documented for `claude-opus-4-7`).
+
+## OD-117 — The per-role provider/model table and its default, as applied (B21-E1, 2026-09-27)
+
+- **Question:** which provider and model does each role run on (D21-19)?
+- **Applied:** `ROLE_PROVIDER_POLICY` is data and every role inherits the coordinator's provider and that provider's one configured model
+  (today's behaviour); overrides come only from the server env `SIRKIT_ORCHESTRATION_ROLE_MODELS` under a closed schema (at most 8 roles,
+  2 048 characters, exactly `provider` / `model` per role), and a refused map approves nothing (`provider_policy_invalid` for every
+  specialist, visibly); never from the request body. A model outside its provider's pinned family rules (read from `openai-config.ts` /
+  `anthropic-config.ts`, where the providers apply them) and not the configured model is refused `model_unqualified` for the role until
+  qualified live (LB-9); a key named twice in the map (however spelled) refuses it too. A provider that is OUT (its breaker open) falls
+  back to the other only when the role's tools and the result tool render identically on both and the other provider is not paused
+  (`provider_unavailable` otherwise; a window pause never falls back); with two providers that other provider is the coordinator's, so
+  only an env-routed role ever falls back; the coordinator never switches provider. Every outcome records its route (provider, model,
+  source, SDK retries 0, a fallback's origin), and a specialist's run carries the provider it runs on, so what it seals names that
+  provider. Proven by `b21-e1-provider-policy.test.ts`, `b21-e1-fallback.test.ts`, `b21-e1-provider-breaker.test.ts` case 6,
+  `b21-e1-chat-provider.test.ts` case 2.
+- **The owner may choose otherwise:** a committed table instead of the env, qualifying a model live (its family rule extended), or
+  letting a policy refusal fall back to inherit.
+
+## OD-119 — OpenAI background mode / Anthropic Message Batches for specialist work, as applied (B21-E1, 2026-09-27)
+
+- **Question:** background mode or batches for interactive specialist work?
+- **Applied:** never: background mode keeps response data about 10 minutes even under `store: false`, and batches are asynchronous up
+  to 24 h (the dated notes). No request carries `background`, and no adapter touches a batch surface - pinned by
+  `b21-e1-result-tool.test.ts` case 2 (the pinned key sets; the fake clients' batch, file and beta surfaces throw when touched).
+- **The owner may choose otherwise:** batches for an opt-in offline evaluation at half price (B21-F), never interactive.
+
+## OD-126 — The chat protocol for orchestration events, as applied (B21-E2, 2026-09-27)
+
+- **Question:** how does a DAG run report its plan, its specialists, its partial result and its degraded modes on the chat stream
+  (D21-22)?
+- **Applied:** five events under protocol v1 - `plan`, `specialist_started`, `specialist_finished`, `partial_result`, `degraded` -
+  PINNED as `ORCHESTRATION_RUN_EVENT_TYPES` in the agent contracts beside the other run events, each a CLOSED shape (task id, role,
+  provider, model, attempt, status or reason, the budget remaining on a start, a bounded message) built by `run-events.ts` and judged by
+  one rule; emitted by the scheduler and the runtime IN PLACE of B21-B's warning lines for the plan, a specialist's status and the
+  degraded and stand-down facts, each carrying B's own sentence as its `message` (a specialist's refused tool call, a merge line and an
+  approval line stay warnings); a re-run the scheduler promised (`runsAgain`) and then withheld is closed by one final
+  `specialist_finished`; a replayed or stale result names no provider (its provenance is unrecorded); the partial result counts each
+  planned task once and, once the merge judged them, counts a result the merge withheld as not usable (`mergeWithheld`); a reason never
+  repeats an undeclared key's model-chosen name. The coordinator's trace records the lines it recorded at HEAD, plus a withheld re-run's
+  closing line (`specialist_started` and `partial_result` are stream-only); the closed union widened in place; protocol version 1, one
+  run_started and one terminal, the flag-off stream byte-identical; an older reducer ignores the five. NOT harmless for an OLDER v1 page:
+  a tab still running the pre-E2 bundle against this server renders the refusal, merge and approval warnings but loses the plan, status
+  and stand-down lines it rendered at HEAD (they arrive as types its `default` drops), so degraded mode is silent there and protocol
+  version 1 cannot tell it (RECORDED; `b21-e2-run-view.test.ts` case 6 names the lines lost; the page and the route ship together and
+  the DAG is behind the off-by-default flag, so it needs a version skew with the flag on). Proven by `b21-e2-run-events.test.ts`,
+  `b21-e2-chat-events.test.ts`, `b21-e2-run-view.test.ts`.
+- **The owner may choose otherwise:** the warning beside the event (B's warning line emitted too, the E2 page skipping a warning equal to
+  a message it rendered - an older page keeps every line it showed; the coordinator's trace unchanged); or a protocol v2 with typed
+  events only (the page composes the line; an older client refuses the version instead of dropping lines); or the specialist's started
+  line on the coordinator's trace (it would consume the 12-line orchestration budget).
+
+## OD-127 — UI placement of orchestration status, as applied (B21-E2, 2026-09-27)
+
+- **Question:** where does the page show the DAG's status?
+- **Applied:** run-log lines (each event's own sentence, through the existing run-log step) plus ONE additive status line built by
+  `projectRunView` from pure counters (scheduled; finished, by a task's FINAL outcome - a withheld retry counted once by its closing
+  event, a stale result never run again not finished; the degraded notices; the partial result) and written once, before the notes, when
+  the run ends; null for every run with no orchestration event. The run view's additive code is appended to `chat-run-view.ts` (no line
+  the discovery cites moves). No control: two in-place page lines, no JSX, no handler; the B17-A inventory regenerated with zero drift
+  (628 controls), no B18-D wire, nothing under `app/components/chat`. Proven by `b21-e2-run-view.test.ts`, the route suite's cases 3 and
+  7, the B17-A and B18-D gates.
+- **The owner may choose otherwise:** a specialist panel with per-specialist stop or reject (a B17-A rule, a regenerated inventory and a
+  B18-D gate); a status line that updates while the run streams.
+
+## OD-112 — Per-specialist provider/model and task identity on the trace: NOT applied - stopped (B21-E2, 2026-09-27)
+
+- **Question (as drafted):** widen the trace's provider vocabulary, or an optional closed `orchestration` block in a new module with one
+  trace document per specialist task (run id `<runId>:<taskId>`, linked by `parentRunId`)?
+- **Stopped:** the default cannot be accepted by the UNCHANGED v1 trace contract: every task id `task-<n>-<role>` matches the redaction
+  authority's unanchored OpenAI-key pattern that the trace validator applies to every string, so a per-task document with that run id is
+  `trace_validation_failure` and reaches no sink (D21-41; the probe through the real recorder and validator). The run's stop condition
+  ("if the trace block cannot be accepted without editing one of the nine scanned files") applied; the implementation is held in the
+  scratchpad, none of it in the tree.
+- **The owner decides one of:** (A) anchor the diagnostics' `sk-` key prefix at a token start in `redaction.ts` (the B19-D model-bound
+  form): the nine files untouched, the held implementation applies as written, and the coordinator trace's task ids stop reading
+  `ta[redacted]` - but it narrows a shared secret check (a key embedded after a letter would no longer be flagged in diagnostics);
+  (B) the per-task trace run id `<runId>:<n>-<role>` (the task id without its `task-` prefix) with the block carrying the exact task id:
+  no rule narrowed, OD-112's wording amended, the held code's run-id rule adjusted; (C) a task-id grammar without `task-`: every B21
+  record key, suite and page moves - not recommended; (D) editing the scanned validator: refused by D21-27 / OD-113.
+- **Recommended by E2:** (B) for E2's next run - the smallest change and no rule narrowed; (A) if the owner also wants the coordinator's
+  trace lines legible.
+
+**Amendment (B21-E2 (2/2), 2026-09-27) — OD-112 — Per-specialist provider/model and task identity on the trace, as applied (B21-E2 2/2, 2026-09-27)**
+
+- **Question (as drafted):** widen the trace's provider vocabulary (breaking the b20-a4 / b20-b2 literal pins and OD-72/OD-80), or an
+  optional closed `orchestration` block in a new module outside the nine scanned files, with one trace document per specialist task?
+- **Applied (the default, under the lead's reading of discovery section 10, "B21-E2, run 1 of 2"):** the block, in the new module
+  `app/lib/agent/orchestration/trace-attribution.ts`, with ONE trace document per specialist task. The document's run id is
+  `<runId>:<n>-<role>` - the coordinator's run id, a colon, the task's index and role - and its `parentRunId` the coordinator's run id;
+  the block is `{ taskIndex, role, providerId, modelId, parentRunId, decision? }`: the task's INDEX (1..32, the plan record's bound) and
+  role, never the literal task id `task-<n>-<role>`, which the v1 validator reads as an OpenAI key (D21-41); the task id is
+  reconstructed from index and role (`specialistTaskId`, its inverse `specialistTaskIdentity`; every scheduler task id round-trips).
+  Pattern-bound and denylist-checked by ONE rule the validator and the cascade share (the B20-A4 `external` precedent's shape); the block
+  rides beside the events of an unchanged v1 trace (the v1 contract refuses it inside an event); the schema stays v1 and the
+  coordinator's trace keeps its closed provider literal; the 256-event cap is per document; a retry's attempts on one provider are one
+  document with one terminal and an attempt on another provider opens the task's next document; the specialist's tool calls - and a
+  closed line per call refused before it ran - persist on its own durable trace record `agent.orchestration-trace.v1` beside the
+  orchestration run's aggregate on the same repository, bound to its scope (OD-111's carrier, D21-3's calls). No rule is narrowed: the
+  redaction authority's diagnostic patterns and the nine scanned files are byte-identical to HEAD (OD-113); every string of a stored
+  document is held to the orchestration string rule (a hostile character a `?`). No string of a per-task document holds the literal
+  task id (proven over the whole finalized document of real specialist runs); a document that cannot be recorded is one visible warning
+  line, whole on the coordinator's trace. A document with no step carries no verdict and names no model (none was reported). Proven by
+  `b21-e2b-trace-attribution.test.ts`, `b21-e2b-task-identity.test.ts` and `b21-e2-chat-events.test.ts` cases 8 to 10 (the adversarial
+  review's 13 findings answered test-first, section 5).
+- **The owner may choose otherwise:** (A) anchor the diagnostics' `sk-` key prefix in `redaction.ts` - the coordinator trace's task ids
+  would read legibly instead of `ta[redacted]`, at the cost of narrowing a shared secret check (the per-task documents need none of it);
+  (C) a task-id grammar without `task-` - every B21 record key, suite and page moves, not recommended; (D) editing the scanned validator -
+  refused by D21-27 / OD-113. The lead's reading of (B) stands until the owner says otherwise.
+
+## OD-125 — The model-in-loop track, as applied (B21-F, 2026-09-28)
+
+- **Question:** how B21-F evaluates the orchestration with live models while OpenAI answers `429 no credits` and Anthropic's credit state
+  is unrecorded (D21-25).
+- **Default applied:** record-only until credits exist. The offline suites are structured so the four task-graph cases (`f05`, `f09`,
+  `f10`, `f11`) run live by swapping the adapters (and, for `f09`, the run budget: 2 s offline, 120 s live): `runOrchestrationCase(entry, { live })` over the `orchestration`
+  capsules, run by ONE command, `scripts/run-b21-live-orchestration-evaluation.ts`, behind `SIRKIT_LIVE_ORCHESTRATION_EVALUATION=1` (exactly
+  "1"; anything else exits 2 before any adapter is built), with a spend bound of 40 provider REQUESTS - every live adapter, the
+  coordinator's too, built with SDK retries 0, so a counted call is one request (163840 output tokens at most) - recording the closed
+  vocabulary only (never a model's text, a prompt, a credential or an env value) and asserting nothing about a model's answer. What it can
+  evaluate is narrow and stated per row (the matrix's model-in-loop column): it runs every turn on ONE provider from a live model, so it
+  never reproduces a capsule's scripted fault (the stall, the 429 and the hostile results run as their DAG shapes only) and it can produce
+  no provider disagreement and no provider fallback - LB-9's disagreement and fallback stay BLOCKED-LIVE-QUALIFICATION whatever a live run
+  records; eight of the twelve runbook cases have no live path. It is NOT a test: no permanently skipped block is committed (OD-102); no
+  suite, script or CI job runs it. The implementer never ran it. LB-9 stays BLOCKED-LIVE-QUALIFICATION.
+- **Evidence:** `evaluation-matrix.md` section 3; `b21-f-replay-capsule.test.ts` cases 7 (the refusal, no adapter built), 8 (the request
+  bound) and 9 (the column).
+- **The owner may choose otherwise:** supply credits with a spend limit and have the lead run the command once (LB-2 / LB-9) - it records
+  the four DAG shapes, not disagreement or fallback; build a two-provider live capsule for disagreement and fallback (a component-authority
+  catalog in the replay context, per-role routing kept live - a harness change); a flag-gated live block in a suite (a permanently skipped
+  test on every CI run, which OD-102 declined); or a live run under Anthropic's Message Batches at half price (OD-119 declined batches for
+  interactive work; an offline evaluation could use them).
+
+## OD-113 — The B11/B20 tripwires and titles ("carry no MCP or multi-agent identifier"), as applied (B21 closeout (1/2), 2026-09-29)
+
+- **Question:** keep the B11/B20 tripwires and their titles verbatim (orchestration lives elsewhere) or re-scope them?
+- **Default applied:** kept verbatim - the B11/B20 tripwire cases, their three "carry no MCP or multi-agent identifier" titles and the pinned
+  `provider: "openai" | "anthropic";` are unchanged; orchestration lives under `app/lib/agent/orchestration/`, outside the nine scanned
+  files. The closeout retitled the two "ELEVEN" titles (`b09-2-closure.test.ts:74`, `b09-3-closure.test.ts:162`) and 34 other stale titles
+  (assertions unchanged), superseded the standing single-agent statements in place with dated notes, and added the tripwire
+  `b21-closeout-statements.test.ts` (the D20-30 pattern) that no file outside its allow-list states the old claim uncorrected.
+- **Evidence:** `closeout-statements.md`; `b21-closeout-statements.test.ts`; `b20-b2-import-gates.test.ts` case 3 and `b21-a-import-gates`
+  unchanged.
+- **The owner may choose otherwise:** re-scope the B11/B20 tripwires to name orchestration explicitly (a reviewed pin move of two chapters'
+  suites).

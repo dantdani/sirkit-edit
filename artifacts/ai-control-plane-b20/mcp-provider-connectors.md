@@ -133,7 +133,7 @@ The policy module enforces nothing and has no production caller. What makes the 
   shape faults and failed `provider_unknown` instead of `provider_unrequested_output`:
   `app/lib/agent/provider-output-guard.ts:24-33` (`PROVIDER_OUTPUT_TYPE_MAX_CHARS`).
   Items are judged in order and the FIRST unhandled item decides the kind. `thinking` and `redacted_thinking` are opaque
-  continuation content the code base already refuses to persist: `app/lib/agent/replay-capsule.ts:125` (`redacted_thinking`).
+  continuation content the code base already refuses to persist: `app/lib/agent/replay-capsule.ts:151` (`redacted_thinking`) ([B21 F, 2026-09-28] re-pinned from line 125: the capsule v4 grew the file above it).
   B09 names `thinking` as preserved: `artifacts/ai-control-plane-b09/provider-continuation-matrix.md:8` (`thinking/tool_use blocks preserved verbatim`).
 - **The response side — the adapters.** Each adapter reads its list ONCE and judges it before reading any other field of
   the response, then uses only that local for tool calls and for the continuation:

@@ -74,6 +74,8 @@ full table unchanged since B11.3).
 
 ## Versioning — capsule v3 / context v2 remain correct
 
+> [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): true for B11.6's own stage; the capsule is `sirkit.agent-replay-capsule.v4` since B21-F, a v3 document refused explicitly, and the context stays `sirkit.agent-replay-context.v2` - `artifacts/ai-control-plane-b21/evaluation-matrix.md` section 2]
+
 **No bump.** This is a handling/ownership correction: what a conforming
 serialized document looks like did not change. Projection results gained a
 discriminated envelope, but a projection result is an in-process value, not a

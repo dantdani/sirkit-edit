@@ -1,20 +1,21 @@
 {
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
-  "currentChapter": "B20",
-  "currentCheckpoint": "B20 complete on chapter/b20-mcp-adapter (A0-A5, A4L, B1-B4, C1-C3, D1-D3, D20-30, the four validation artifacts, verdict PARTIAL); PR #10 to be undrafted and merged after green CI",
+  "currentChapter": "B21",
+  "currentCheckpoint": "B21 complete on chapter/b21-specialist-orchestration: A, B, C, D, D2, D3, D4, E1, E2 (1/2, 2/2), E3, E4, F, F2, F2b, F3 and the closeout (1/2, 2/2) committed; the four validation artifacts (160 paths / 22 commits since 6fd5a7b; 59 suites / 541 cases; OD-106..OD-133; D21-1..48 - 32 closed, D21-3, D21-12 and D21-20 in part, 8 RECORDED, 2 follow-ups outside B21, 3 open (D21-42, D21-47, D21-48)); the final validation run at 6cff540 green (4340 vitest passed, 11 opt-in live skipped; tsc 0; eslint clean but page.tsx's 14 pre-existing react-hooks errors; 24 generated files byte-identical; the existing browser suite 48 of 48 and the orchestration config 4 of 4, 441 s); verdict PARTIAL (live qualification BLOCKED under LB-9 - disagreement and fallback need a two-provider live capsule, not credits alone; the caps, roles, no-model Tier 0 read, breaker arming, browser coverage, tracing and replayed-result provenance in part; scenario 17's disagreement escalated, never resolved to a winner); PR #11 to be undrafted and merged normally after green CI",
   "status": "in_progress",
-  "baseSha": "102dd27",
-  "branch": "chapter/b20-mcp-adapter",
-  "lastGreenSha": "4f3dd30",
-  "pullRequest": "PR #10 (chapter/b20-mcp-adapter -> main): undrafted at the closeout; merge only after green CI, never auto-merge",
+  "baseSha": "6fd5a7b",
+  "branch": "chapter/b21-specialist-orchestration",
+  "lastGreenSha": "6cff540",
+  "pullRequest": "PR #11 (chapter/b21-specialist-orchestration -> main): undrafted at the closeout; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
-    "bundled FreeRouting runtime is local-only; CI replays committed recordings"
+    "bundled FreeRouting runtime is local-only; CI replays committed recordings",
+    "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)"
   ],
-  "nextAction": "Undraft PR #10 with a truthful description, wait for green CI, merge normally (no auto-merge); then B21 on a new chapter branch from main.",
-  "updatedAt": "2026-09-24T14:50:43-04:00",
-  "previousChapter": "B19 merged normally into main as 102dd27 (PR #9) after green CI on 3296753"
+  "nextAction": "Undraft PR #11 with the closeout's description, wait for green CI on commit 2/2, merge normally (no auto-merge); then B22 (sandboxed engineering computation and simulation) on a new chapter branch from main, starting with its discovery. Carried to the owner: OD-108, OD-110 (the no-model Tier 0 read; the Tier 3 head-verb rule's false refusals), OD-111, OD-112 (option A), OD-115 (D21-42), OD-120, OD-122, OD-125 (credits; a two-provider live capsule), OD-126, OD-132 (provider and model per result, kept on replay) and D21-47's options. Later test/check work (no owner decision): inject deps.now in b21-b-scheduler case 7; UNKNOWN 2's offline check of the propose-route schemas through validateWireSubset.",
+  "updatedAt": "2026-09-29T01:21:56-04:00",
+  "previousChapter": "B20 merged normally into main as 6fd5a7b (PR #10, 2026-09-24) after green CI on 96a0314; verdict PARTIAL (inert proposals over MCP deferred, OD-87)"
 }
