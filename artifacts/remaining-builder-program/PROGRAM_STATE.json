@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B22",
-  "currentCheckpoint": "B22-A2 committed on chapter/b22-sandboxed-computation: the immutable runtime profile contract and registry (no profile validated), the connective process census (three classification rows corrected), the isolation verdict (production BLOCKED, LB-10); next B22-A3 (the diagnostic-only local runner)",
+  "currentCheckpoint": "B22-A3 committed on chapter/b22-sandboxed-computation: the diagnostic-only local runner (one ngspice spawner, pinned by install digest, -n and the exact environment, per-run directories, bounded output, tree kill, one cap shared by tenant with interactive requests past the share); the opt-in live suite 5 of 5 on the pinned install; next B22-B (named computations)",
   "status": "in_progress",
   "baseSha": "d0d2ec8",
   "branch": "chapter/b22-sandboxed-computation",
-  "lastGreenSha": "50fe156",
+  "lastGreenSha": "c037627",
   "pullRequest": "draft PR (chapter/b22-sandboxed-computation -> main) opened after the discovery commit; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
@@ -16,7 +16,7 @@
     "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)",
     "authoritative sandboxed simulation on a qualified OCI platform: BLOCKED-LIVE-QUALIFICATION (LB-10)"
   ],
-  "nextAction": "B22-A3 (task scratchpad/b22/task-A3.md; the lead's probes p23-p26 feed it), then B, C, D, closeout; then B23 (discovery draft ready) and B24 (discovery draft ready). Carried to the owner: OD-134, OD-135, OD-146, OD-147, OD-148, OD-150..OD-154 and the B21 items.",
-  "updatedAt": "2026-10-01T11:00:00-04:00",
+  "nextAction": "B22-B (task scratchpad/b22/task-B.md), then C, D, closeout; then B23 and B24 (discovery drafts ready). The owner must set SIRKIT_NGSPICE_INSTALL_ROOT and SIRKIT_NGSPICE_INSTALL_SHA256 in .env.local for local simulation (every ngspice path fails closed until then). Carried to the owner: OD-134..OD-136, OD-145..OD-148, OD-150..OD-157 and the B21 items.",
+  "updatedAt": "2026-10-01T16:45:00-04:00",
   "previousChapter": "B21 merged normally into main as e109d76 (PR #11, 2026-10-01) after green CI on b11ef18; verdict PARTIAL (live qualification BLOCKED under LB-9). SEC-1 (corrective security branch fix/spice-deck-injection; D22-3 and D22-5's ngspice half) merged normally as d0d2ec8 (PR #12) after green CI on 0d38504"
 }

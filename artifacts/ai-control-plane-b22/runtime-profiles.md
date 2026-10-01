@@ -35,7 +35,7 @@ registry validates every profile at construction (`runtimeProfileViolations`); a
 | `validationState` | CD-10: `diagnostic_only` (local) or `unvalidated` (OCI); never `validated` here | `validated` only with qualification evidence, a pinned digest and, on a container profile, a pinned host client |
 | `deterministicDigest` | CD-10: the profile's SHA-256 over the canonical JSON of every other field (`sirkit.runtime-profile.v1`) | recomputed and equal |
 | `profileId` | the registry id | one of the four ids |
-| `revision` | the profile revision (1) | closed key |
+| `revision` | the profile revision (1; `ngspice-local-diagnostic` is 2 since B22-A3: `-n` in both argv templates, the runner's seed note, no legacy spawn) | closed key |
 | `executionBackendKind` | CD-10's backend vocabulary: `local_subprocess_diagnostic` or `container` | a local profile claims no OS limit, mount, network or kill |
 | `authoritativeEligible` | whether a profile could ever back an authoritative run | true only for a validated, network-deny container profile; false for all four |
 | `executable` | identity: install tree or OCI image, program, platform, relative path, the install-root and digest server settings, the algorithm, `digestMembers` (the install root's entries the digest covers, or null for the whole tree), the expected digest (pinned or unpinned, with a reason) | closed keys; the expected digest's shape; members only on an install tree, plain names, distinct, non-empty and covering the executable's first path segment |
@@ -49,7 +49,7 @@ registry validates every profile at construction (`runtimeProfileViolations`); a
 | `outputDirectory` | the per-run writable directory, and what enforces it | closed keys; no `os` on a local profile; on a container profile an `os` claim needs `--read-only`, the working directory on a bounded tmpfs and every tmpfs noexec, nosuid, nodev and sized |
 | `network` | `none`, and what enforces it | closed keys; no `os` on a local profile; on a container profile an `os` claim needs `--network none` |
 | `environment` | the EXACT child environment: literals or server-named placeholders | LC_ALL=C, TZ=UTC, no HOME, USERPROFILE, HOMEDRIVE or HOMEPATH in any case, no secret-shaped key, no expansion |
-| `environmentInheritance` | `none`: nothing is inherited from the server environment | must be `none` |
+| `environmentInheritance` | `none`: nothing is inherited from the server environment - [B22-A3 review, 2026-10-01] meaning the map the runner passes; on win32 Node (libuv `required_vars`) still copies the server's `HOMEDRIVE`, `HOMEPATH`, `LOGONSERVER`, `SYSTEMDRIVE`, `USERDOMAIN`, `USERNAME`, `USERPROFILE` and `WINDIR` into a child whose map lacks them; the diagnostic runner records those names on every run (`hostAddedEnvironment`, OD-156) | must be `none` |
 | `limits` | `cpuSeconds`, `memoryMiB`, `processes`, `fileBytes`, `readBackBytes`, `outputBytes`, `wallClockMs`, `waveformPoints`, each `{ enforcedBy, value, unit, how }` | `enforcedBy` in `os`/`runner`/`none`; a positive integer value exactly when enforced; the right unit; a reason; on a container profile each `os` claim needs the flag carrying that value, and a claim no flag delivers is refused |
 | `determinism` | locale, time zone, seed and threads: the value, what pins it and a note | closed keys |
 | `kill` | scope (process tree or container), how, terminal only after exit observed or `kill_unconfirmed`, enforced by | closed keys; on a container profile scope `container`, `--rm`, `--name {containerName}` and the kill argv |
@@ -83,7 +83,7 @@ that root too, so a whole-root digest could never stay pinned across a re-run of
 `runtime.ts:59-69` and `:98-101`).
 
 **How the owner pins an install (for B22-A3).** Compute the digest of the install root with this function, with the profile's
-`digestMembers` when it names any (B22-A3 may add a script under `scripts/` that prints it for a given directory), and set the
+`digestMembers` when it names any ([B22-A3] `scripts/print-install-tree-digest.ts <root> [--members a,b]` prints it), and set the
 profile's digest setting to the 64 hex characters; set the install-root setting to the directory. For the local ngspice that root is
 the `Spice64` folder (the discovery records its path), whole: the digest covers `bin/` (the executables and `libomp140.x86_64.dll`),
 `share/ngspice/scripts/spinit` and the code-model libraries. For FreeRouting it is `vendor/freerouting/runtime`, members only.
@@ -123,16 +123,21 @@ the child (a timer, a bounded collector, a bounded reader, a per-run directory);
   from the folder name and the bundled manual; the lead's SEC-1 probes ran it, `ngspice_con -b`, KLU, and printed no version line).
   Provenance: the owner's Windows build; ngspice's download page states no checksum or signature (discovery 1.2, RECORDED). SEC-1's
   final deck screen is cut to this build's probed behaviour, so pinning this build is what makes that screen's ground hold (D22-2).
-- Argv: `run` = `-b {deckFile}`; `version` = `-v` (the worker's probe). Working directory `{runDir}`.
+- Argv: `run` = `-b {deckFile}`; `version` = `-v` (the worker's probe). Working directory `{runDir}`. [B22-A3, 2026-10-01] Revision 2:
+  `run` = `-b -n {deckFile}`, `version` = `-n -v` - no `.spiceinit` is read (the lead's probe p23: one in the run directory runs
+  without `-n` and does not with it); `{deckFile}` is `deck.cir`, relative to the run directory the runner creates.
 - Environment (exact): `LC_ALL=C`, `TZ=UTC`, `PATH={installBinDir}`, `SystemRoot={systemRoot}`, `TEMP={runDir}`, `TMP={runDir}`.
   INFERRED adequacy: the bundled DLLs sit beside the executable and the system DLLs come from the system directory, so PATH need not
   hold more; B22-A3's opt-in live suite is the check. Without HOME and USERPROFILE, ngspice finds no home `.spiceinit` (INFERRED from
-  the man page, discovery 1.2); the cwd is a server-created directory holding only server files.
+  the man page, discovery 1.2) - [B22-A3 review, 2026-10-01] but on win32 Node adds the server's USERPROFILE, HOMEDRIVE and HOMEPATH
+  to the child (libuv), so `-n` (p23) alone keeps a home `.spiceinit` from running; the cwd is a server-created directory holding
+  only server files.
 - Input `{runDir}` read-only by policy, enforced by none (a local process can write there); output `{runDir}` per run, enforced by
   the runner (mkdtemp, removed in finally) - the same directory, so the input's read-only access is a rule nothing holds (RECORDED,
   [B22-A2 review] coverage-2; the same holds for kicad-cli and FreeRouting); network `none`, enforced by none (the deck screens prevent UNC and include paths).
 - Determinism: locale `C` and time zone `UTC` by the environment (on Windows the C runtime reads the OS settings: INFERRED, discovery
-  9.5 item 22); seed `1` by `.options seed=1` through the compiler's option lines (no screen change, discovery 9.4), emitted by the
+  9.5 item 22; [B22-A3] the lead's probes p25-p26 CONFIRM that the binary starts, an `.op` deck simulates and spinit still loads under
+  exactly this environment); seed `1` by `.options seed=1` through the compiler's option lines (no screen change, discovery 9.4), emitted by the
   runner that executes the profile - no deck sets a seed today and the installed spinit leaves `rndseed` commented out (`spinit:5`), so
   the legacy default is UNKNOWN; threads `8`, pinned by the install digest: the installed `spinit:14` sets `num_threads=8` (RECORDED,
   discovery 9.5 item 11) and another value is another digest; whether this build runs OpenMP threads is INFERRED.
@@ -140,6 +145,12 @@ the child (a timer, a bounded collector, a bounded reader, a per-run directory);
   after exit observed or `kill_unconfirmed`, by the runner.
 - Parser `ngspice-ascii-raw/1` (`app/lib/spice/waveforms.ts`, wired; drops non-finite tokens, D22-10); validator
   `cd10-waveform-artifact/1` (`app/lib/model-simulation/waveform.ts`, not wired: B22-C). Qualification evidence: none.
+- [B22-A3, 2026-10-01] Superseded: no legacy spawn is left (`legacySpawn` is null). The worker, `/api/simulate` and the smoke test run
+  ngspice only through the diagnostic runner, which executes this profile (`diagnostic-runner.md`); the seed line is the runner's
+  (`seedDiagnosticDeck`, immediately before every run deck's final `.end`; the lead's probe p24 CONFIRMS `.options seed=1` is accepted).
+  [B22-A3 review, 2026-10-01] regressions-4: a deck that sets its own `seed` or `rndseed` option (a Studio solver profile's custom
+  option, a custom directive) is refused, closed, so the profile's line is the only seed option a run carries and the provenance
+  records it. The record below is A2's, kept as read then.
 - Legacy spawn (CONFIRMED by reading; `b22-a2-runtime-profile` case 13 pins the allowlist to all three sources): the worker, `/api/simulate`
   and the smoke test; `NGSPICE_BIN` or PATH; argv `-b <absolute deck path>` and `-v`; the host allowlist `PATH`, `Path`, `PATHEXT`,
   `SystemRoot`, `WINDIR`, `TEMP`, `TMP`, `HOME`, `USERPROFILE`, `LD_LIBRARY_PATH` plus `NODE_ENV`; 120 s / 10 s / 10 s / 2 s; direct-child
@@ -152,7 +163,7 @@ the child (a timer, a bounded collector, a bounded reader, a per-run directory);
 | limit `memoryMiB` | none | - | no job object (OD-145) |
 | limit `processes` | none | - | no job object; the deck screens refuse every construct that runs a command - prevention, not a limit |
 | limit `fileBytes` | none | - | no OS file-size limit; the runner reads none over `readBackBytes` |
-| limit `readBackBytes` | runner | 104857600 | a bounded reader refuses a raw file over the bound unread (the worker's 100 MiB; today read whole, D22-8) |
+| limit `readBackBytes` | runner | 104857600 | the diagnostic runner's bounded reader refuses a raw file over the bound unread (B22-A3; was read whole, D22-8) |
 | limit `outputBytes` | runner | 65536 | stdout and stderr each held and returned within `DIAGNOSTIC_OUTPUT_MAX_BYTES` (B22-A1) |
 | limit `wallClockMs` | runner | 120000 | the runner's timer kills the process tree (the worker's 120 s) |
 | limit `waveformPoints` | runner | 5000000 | the run fails past the bound (the worker's bound) |
@@ -290,10 +301,12 @@ placeholder (a caller slot) and any `$`, `%`, backtick or stray brace (an expans
 ## 6. Recorded, not claimed
 
 - No runner executes a profile yet; every **runner** above is today's legacy code where the legacy spawn already does it (output
-  bounds, timers) and a contract for B22-A3 otherwise (tree kill, bounded raw read, exact environment, digest check).
+  bounds, timers) and a contract for B22-A3 otherwise (tree kill, bounded raw read, exact environment, digest check). [B22-A3,
+  2026-10-01] Superseded for ngspice: the diagnostic runner executes `ngspice-local-diagnostic` (its **runner** rows are its code,
+  CONFIRMED at the fake seams by `b22-a3-diagnostic-runner`); kicad-cli and FreeRouting keep their legacy spawns.
 - The contract environments of kicad-cli and FreeRouting are UNKNOWN in adequacy; no runner adopts them before a live oracle.
 - The OCI profile is a design: every **os** on it is BLOCKED-LIVE-QUALIFICATION (LB-10); its output transport is UNKNOWN.
-- The seed option and the thread pin are contracts; whether ngspice honours `-n` (B22-A3 adds it) and its default seed are UNKNOWN
+- The seed option and the thread pin are contracts; whether ngspice honours `-n` (B22-A3 adds it; [B22-A3] CONFIRMED by the lead's probe p23) and its default seed are UNKNOWN
   (discovery 8 item 4).
 
 ## 7. The B22-A2 record: test-first, breakages, pin moves, gates

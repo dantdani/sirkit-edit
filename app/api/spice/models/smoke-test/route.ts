@@ -1,20 +1,18 @@
-import { spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { diagnoseNgspiceLog } from "@/app/lib/spice/diagnostics";
 import { createId, nowIso } from "@/app/lib/spice/identity";
 import { assertModelSafeForExecution } from "@/app/lib/spice/models";
 import { assertCompiledDeckSafe, assertDeckText, emittedModelText } from "@/app/lib/spice/netlist";
-import { NGSPICE_EXECUTABLE } from "@/app/lib/spice/server/worker";
 import type { ModelAsset } from "@/app/lib/spice/types";
 import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { boundDiagnosticText } from "@/app/lib/computation/output-bounds"; // [B22-A1] D22-4: the returned ngspice output is bounded
+import { diagnosticProvenance, runDiagnosticNgspice, seedDiagnosticDeck } from "@/app/lib/computation/diagnostic-runner"; // [B22-A3] OD-136: the only ngspice spawner
 export const runtime = "nodejs";
 
 /** [B16.0.2 §A/§D] a single model asset travels in the body. */
 const MAX_BODY_BYTES = 2_000_000;
 const BODY_DEADLINE_MS = 15_000;
+/** [B22-A3] The smoke run's wall clock (10 s, as before), within the diagnostic runner's profile bound. */
+const SMOKE_TIMEOUT_MS = 10_000;
 
 function fixture(model: ModelAsset): string {
   const content = emittedModelText(model); // [B22-A1] D22-4: the run deck's model text, the text the model screen reads
@@ -54,57 +52,49 @@ function fixture(model: ModelAsset): string {
   ].join("\n");
 }
 
-async function execute(path: string, cwd: string): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(NGSPICE_EXECUTABLE, ["-b", path], { cwd, env: safeEnvironment(), windowsHide: true, stdio: ["ignore", "pipe", "pipe"] }); // [SEC-1] D22-5
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-    child.stdout?.on("data", (data: Buffer) => { stdout = (stdout + data.toString()).slice(-100_000); });
-    child.stderr?.on("data", (data: Buffer) => { stderr = (stderr + data.toString()).slice(-100_000); });
-    child.on("error", reject);
-    const timer = setTimeout(() => { timedOut = true; child.kill(); }, 10_000);
-    child.on("close", (code) => { clearTimeout(timer); resolve({ code, stdout, stderr, timedOut }); });
-  });
-}
-
 // [B16.0.2 §A] ngspice is an external process: authenticated membership +
 // engineering role + CSRF BEFORE the body is read or any process spawns.
 // [B16.0.23] canonical wrapper — that ordering now lives in
 // `authenticatedJsonRoute` (2 MB / 15 s bounded read); every refusal returns
 // before `spawn`. The executable, args, cwd, timeout, and output ceilings
 // stay server-owned; a smoke-test PASS is evidence only ("smoke-tested"),
-// never model approval or certification.
+// never model approval or certification. [B22-A3] The process belongs to the
+// diagnostic runner (OD-136); this route starts none. [B22-A3 review]
+// security-2: the request's abort reaches the runner only through the declared
+// `exposeAbortSignal` input (a client that leaves withdraws its queued run or
+// stops its process).
 export const POST = authenticatedJsonRoute<{ model?: ModelAsset }>(
-  { maxBytes: MAX_BODY_BYTES, deadlineMs: BODY_DEADLINE_MS },
-  async ({ body }) => {
+  { maxBytes: MAX_BODY_BYTES, deadlineMs: BODY_DEADLINE_MS, exposeAbortSignal: true },
+  async ({ context, body, signal }) => {
   if (!body.model || typeof body.model !== "object") return Response.json({ ok: false, error: "model is required" }, { status: 400 });
   const model = structuredClone(body.model);
-  let directory: string | null = null;
   try {
     assertModelSafeForExecution(model);
     const deck = screenedSmokeDeck(model); // [SEC-1] before any file or process
-    directory = await mkdtemp(join(tmpdir(), "sirkit-model-smoke-"));
-    const path = join(directory, "smoke.cir");
-    await writeFile(path, deck, "utf8");
-    const result = await execute(path, directory);
+    // [B22-A3] OD-136: the diagnostic runner writes the deck into its own per-run directory (removed on every path) and runs the
+    // pinned ngspice with the profile's argv and exact environment; a refusal (an unpinned install, the runner's cap or an expired
+    // wait, a run directory that could not be prepared) is a closed 422. [B22-A3 review] security-2, regressions-1: the request
+    // shares the cap as its tenant, waits for a slot at most its 10 s wall clock (the runner's default) and is withdrawn on abort.
+    const run = await runDiagnosticNgspice({ operation: "run", deck, readRaw: false, wallClockMs: SMOKE_TIMEOUT_MS, signal, holder: context.tenantId, interactive: true });
+    if (run.outcome === "spawn_failed") throw new Error("ngspice could not be started from the pinned install");
+    const result = { code: run.exitCode, stdout: run.stdout, stderr: run.stderr, timedOut: run.outcome !== "exited" };
     const log = `${result.stderr}\n${result.stdout}`;
     const passed = result.code === 0 && !result.timedOut && !/error|fatal|unknown subckt|singular matrix/i.test(log);
+    // [B22-A3 review] coverage-1: a stopped run says why - the wall clock, a cancel, or a kill whose exit was not observed
+    const stopped = run.outcome === "cancelled" ? "Smoke test cancelled." : run.outcome === "kill_unconfirmed" ? "Smoke test stopped (kill_unconfirmed): the ngspice process exit was not observed within the bounded wait." : "Smoke test timed out.";
     const check = {
       id: createId("modelcheck"),
       kind: "smoke" as const,
       status: passed ? "pass" as const : "fail" as const,
-      message: passed ? "Minimal isolated ngspice fixture completed." : result.timedOut ? "Smoke test timed out." : `Smoke test exited with code ${String(result.code)}.`,
+      message: passed ? "Minimal isolated ngspice fixture completed." : result.timedOut ? stopped : `Smoke test exited with code ${String(result.code)}.`,
       checkedAt: nowIso(),
     };
     model.validationChecks = [...model.validationChecks.filter((candidate) => candidate.kind !== "smoke"), check];
     if (passed && ["unverified", "syntax-checked"].includes(model.validationStatus)) model.validationStatus = "smoke-tested";
     model.updatedAt = nowIso();
-    return Response.json({ ok: passed, model, check, stdout: boundDiagnosticText(result.stdout), stderr: boundDiagnosticText(result.stderr), diagnostics: passed ? [] : diagnoseNgspiceLog(log) }, { status: passed ? 200 : 422 }); // [B22-A1] D22-4: bounded, the tail kept, the marker first
+    return Response.json({ ok: passed, model, check, stdout: boundDiagnosticText(result.stdout), stderr: boundDiagnosticText(result.stderr), diagnostics: passed ? [] : diagnoseNgspiceLog(log), runner: diagnosticProvenance(run) }, { status: passed ? 200 : 422 }); // [B22-A1] D22-4: bounded, the tail kept, the marker first; [B22-A3] the runner's labels and provenance
   } catch (error) {
     return Response.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 422 });
-  } finally {
-    if (directory) await rm(directory, { recursive: true, force: true }).catch(() => {});
   }
   });
 
@@ -116,13 +106,5 @@ export const POST = authenticatedJsonRoute<{ model?: ModelAsset }>(
  */
 function screenedSmokeDeck(model: ModelAsset): string {
   if (model.subcircuitName !== undefined) assertDeckText(model.subcircuitName, "the subcircuit name");
-  return assertCompiledDeckSafe(fixture(model).replace(/\r\n/g, "\n"), { controlBlock: false, executed: true });
-}
-
-/** [SEC-1] D22-5: the worker's exact allowlist (as /api/simulate), never the whole inherited server environment. */
-function safeEnvironment(): NodeJS.ProcessEnv {
-  const allowed = ["PATH", "Path", "PATHEXT", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE", "LD_LIBRARY_PATH"];
-  const env: NodeJS.ProcessEnv = { NODE_ENV: process.env.NODE_ENV ?? "production" };
-  for (const key of allowed) if (process.env[key] !== undefined) env[key] = process.env[key];
-  return env;
+  return assertCompiledDeckSafe(seedDiagnosticDeck(fixture(model).replace(/\r\n/g, "\n")), { controlBlock: false, executed: true }); // [B22-A3] the profile's seed option, screened with the deck
 }

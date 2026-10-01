@@ -44,3 +44,12 @@
 | invalid UTF-8 artifact | lossy replacement-char decode → parse | deterministic 500 refusal |
 | artifact ≤ 20 MB valid | parsed | parsed (unchanged) |
 | missing artifact | 500 no-output-file | 500 no-output-file (unchanged) |
+
+## [SUPERSEDED IN PART - B22-A3, 2026-10-01]
+
+`readBoundedRawFile` no longer lives in `app/api/simulate/route.ts`: B22-A3 lifted it into the diagnostic runner
+(`app/lib/computation/diagnostic-runner.ts`), over B22-A1's `readBoundedFile`, and the route re-exports it for the B16.0.24.1
+suite. The runner reads `result.raw` back with it after a zero exit, bounded by the caller's tighter limit (`/api/simulate`'s
+20 MB, the Studio worker's 100 MiB), and removes the run directory in `finally`; the properties above (file handle, advisory
+size, at most the bound read, explicit over-limit refusal, fatal UTF-8 decode, settle-once) hold there and are pinned by
+`b16-0-24-1-security-correction` and `b22-a3-diagnostic-runner` case 5.

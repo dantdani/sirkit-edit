@@ -22,37 +22,32 @@
  * TRUTHFULNESS (§H): a successful process exit is an EXECUTED simulation result
  * only — never physical validation, engineering approval, design readiness,
  * safety certification, or manufacturing release.
+ *
+ * [B22-A3, 2026-10-01] Superseded in part: this route starts no process. ngspice
+ * runs only through the diagnostic runner (`app/lib/computation/diagnostic-runner.ts`,
+ * OD-136): the pinned install (never NGSPICE_BIN or PATH), the profile's argv with
+ * `-n` and its exact environment map (no HOME/USERPROFILE in it; on win32 Node adds the server's USERPROFILE and seven other libuv-required variables, recorded per run - B22-A3 lead), a per-run directory the runner
+ * creates and removes, its bounded raw read, its tree kill and its global cap. The
+ * runner is diagnostic only (`diagnostic_only`, `environment_dependent`) and no
+ * isolation boundary; the wording above that says otherwise is the B22 closeout's to
+ * supersede (D22-14).
  */
-import { spawn } from "node:child_process";
-import { mkdtemp, open, rm, writeFile, type FileHandle } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { SchematicState } from "@/lib/schematic-types";
 import { schematicToSpice, type SpiceAnalysis } from "@/app/lib/netlist";
 import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
+import { DiagnosticRunnerError, diagnosticProvenance, runDiagnosticNgspice, seedDiagnosticDeck, type DiagnosticRunRecord } from "@/app/lib/computation/diagnostic-runner";
 
 /** [B16.0.2 §A/§D] a whole SchematicState travels in the body. */
 const MAX_BODY_BYTES = 8_000_000;
 const BODY_DEADLINE_MS = 30_000;
 
-/** Server-owned execution limits (never caller-influenced). */
+/** Server-owned execution limits (never caller-influenced), each within the diagnostic runner's profile bound. [B22-A3] The
+ *  stdout/stderr bound is the runner's (A1's 64 KiB per channel); the former 1 MB route constant is gone. */
 const PROCESS_TIMEOUT_MS = 10_000;
-const MAX_OUTPUT_BYTES = 1_000_000;
 const MAX_RAW_BYTES = 20_000_000;
 const MAX_PARSE_TOKENS = 5_000_000;
 const MAX_PARSE_POINTS = 2_000_000;
 const MAX_PARSE_VARIABLES = 10_000;
-
-const NGSPICE_EXECUTABLE = process.env.NGSPICE_BIN?.trim() || (process.platform === "win32" ? "ngspice_con" : "ngspice");
-
-/** A MINIMAL allowlisted environment — the exact worker allowlist. Never the
- *  full inherited server environment. */
-function safeEnvironment(): NodeJS.ProcessEnv {
-  const allowed = ["PATH", "Path", "PATHEXT", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE", "LD_LIBRARY_PATH"];
-  const env: NodeJS.ProcessEnv = { NODE_ENV: process.env.NODE_ENV ?? "production" };
-  for (const key of allowed) if (process.env[key] !== undefined) env[key] = process.env[key];
-  return env;
-}
 
 /**
  * PRIMARY injection defense — reject caller-supplied schematic fields that could
@@ -202,79 +197,9 @@ function parseAsciiRaw(raw: string): SimResult {
 
 // ─── Bounded raw-file reader ──────────────────────────────────────────────────
 
-export type BoundedRawRead =
-  | { ok: true; text: string }
-  | { ok: false; reason: "over-limit" | "invalid-utf8" | "unreadable" };
-
-/**
- * [B16.0.24.1 §1] a TRULY bounded read of the server-owned simulator output.
- * The file is opened through a handle; the declared size is an ADVISORY
- * fast-fail only — storage is allocated in fixed 64 KiB chunks proportional to
- * the ACTUAL bytes read (never the declared size), so an enormous declared
- * size cannot cause a proportional allocation, and a stat/read race (a file
- * that grows after stat) is caught by the actual-read cap. At most
- * `maxBytes` + 1 bytes are ever consumed; crossing the ceiling refuses
- * EXPLICITLY (partial oversized output is never returned, so parsing can
- * never begin on it). Invalid UTF-8 fails deterministically (fatal decode —
- * never a lossy replacement-character parse). The handle is closed in every
- * path; a close failure never masks the read outcome.
- */
-export async function readBoundedRawFile(path: string, maxBytes: number): Promise<BoundedRawRead> {
-  let handle: FileHandle | null = null;
-  try {
-    handle = await open(path, "r");
-    // Advisory fast-fail: a hugely-declared artifact is refused without a
-    // single content read (and without any size-proportional allocation).
-    const declared = (await handle.stat()).size;
-    if (declared > maxBytes) return { ok: false, reason: "over-limit" };
-    const chunkSize = 65_536;
-    const chunk = Buffer.alloc(chunkSize);
-    const pieces: Buffer[] = [];
-    let total = 0;
-    for (;;) {
-      const { bytesRead } = await handle.read(chunk, 0, chunkSize, null);
-      if (bytesRead === 0) break;
-      total += bytesRead;
-      // The REAL bound: actual bytes, immune to the stat/growth race.
-      if (total > maxBytes) return { ok: false, reason: "over-limit" };
-      pieces.push(Buffer.from(chunk.subarray(0, bytesRead)));
-    }
-    let text: string;
-    try {
-      text = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(pieces, total));
-    } catch {
-      return { ok: false, reason: "invalid-utf8" };
-    }
-    return { ok: true, text };
-  } catch {
-    return { ok: false, reason: "unreadable" };
-  } finally {
-    if (handle) await handle.close().catch(() => {});
-  }
-}
-
-// ─── Runner ───────────────────────────────────────────────────────────────────
-
-interface ProcessResult { code: number | null; stdout: string; stderr: string; timedOut: boolean; }
-
-function runNgspice(netlistPath: string, cwd: string, signal: AbortSignal): Promise<ProcessResult> {
-  return new Promise<ProcessResult>((resolve, reject) => {
-    // shell:false (explicit); server-owned exe + fixed argv; isolated cwd;
-    // minimal env; no network reachable through the deck's directives.
-    const child = spawn(NGSPICE_EXECUTABLE, ["-b", netlistPath], { stdio: ["ignore", "pipe", "pipe"], cwd, env: safeEnvironment(), windowsHide: true, shell: false });
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-    const onAbort = () => { timedOut = false; child.kill(); };
-    if (signal.aborted) child.kill();
-    else signal.addEventListener("abort", onAbort, { once: true });
-    child.stdout?.on("data", (d: Buffer) => { stdout = (stdout + d.toString()).slice(-MAX_OUTPUT_BYTES); });
-    child.stderr?.on("data", (d: Buffer) => { stderr = (stderr + d.toString()).slice(-MAX_OUTPUT_BYTES); });
-    child.on("error", (err: NodeJS.ErrnoException) => { reject(err.code === "ENOENT" ? new Error("ngspice executable not found on PATH") : err); });
-    const timer = setTimeout(() => { timedOut = true; child.kill(); }, PROCESS_TIMEOUT_MS);
-    child.on("close", (code) => { clearTimeout(timer); signal.removeEventListener("abort", onAbort); resolve({ code, stdout, stderr, timedOut }); });
-  });
-}
+/** [B16.0.24.1 §1] the TRULY bounded raw read, [B22-A3] lifted into the diagnostic runner (which reads `result.raw` back with it);
+ *  re-exported here for the B16.0.24.1 suite that pins it. */
+export { readBoundedRawFile, type BoundedRawRead } from "@/app/lib/computation/diagnostic-runner";
 
 // [B16.0.24 §G] canonical authenticated wrapper — authorization + CSRF + the
 // bounded 8 MB / 30 s object read happen BEFORE this callback; the request
@@ -282,7 +207,7 @@ function runNgspice(netlistPath: string, cwd: string, signal: AbortSignal): Prom
 // input.
 export const POST = authenticatedJsonRoute<{ state?: SchematicState; analysis?: SpiceAnalysis }>(
   { maxBytes: MAX_BODY_BYTES, deadlineMs: BODY_DEADLINE_MS, exposeAbortSignal: true },
-  async ({ body, signal }) => {
+  async ({ context, body, signal }) => {
   const { state, analysis } = body;
 
   // Semantic validation — BEFORE any temp file or process work.
@@ -301,80 +226,85 @@ export const POST = authenticatedJsonRoute<{ state?: SchematicState; analysis?: 
     return Response.json({ error: "Schematic must have at least one ground component or GND label" }, { status: 400 });
   }
 
-  // Generate the netlist (server-owned RELATIVE raw filename) and screen it for
-  // injected control/include/shell directives BEFORE spawning anything.
+  // Generate the netlist (server-owned RELATIVE raw filename), add the profile's seed option and screen the
+  // deck that will run for injected control/include/shell directives BEFORE anything runs.
   let netlist: string;
   let nodeMap: Record<string, string>;
   let pinNodes: Record<string, string>;
   try {
     assertSchematicFieldsSafe(state, analysis);
     ({ netlist, nodeMap, pinNodes } = schematicToSpice(state, { analysis, rawOutputPath: "result.raw" }));
+    netlist = seedDiagnosticDeck(netlist); // [B22-A3] D22-11: the profile's seed option; the screen reads the deck that runs
     assertNetlistSafe(netlist);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return Response.json({ error: `Netlist generation failed: ${msg}` }, { status: 400 });
   }
 
-  // Per-request server-created isolated temp directory; server-owned filenames.
-  let directory: string | null = null;
+  // [B22-A3] OD-136: the diagnostic runner writes the deck into its own per-run directory, runs the pinned ngspice with the
+  // profile's argv and exact environment, reads `result.raw` back bounded (MAX_RAW_BYTES) and removes the directory on every path.
+  // [B22-A3 review] security-2, regressions-1: the request shares the runner's cap as its tenant and waits for a slot at most its
+  // own wall clock (the runner's default), so a queued request is answered within 10 s of waiting plus 10 s of running.
+  let run: DiagnosticRunRecord;
   try {
-    directory = await mkdtemp(join(tmpdir(), "sirkit-simulate-"));
-    const netlistPath = join(directory, "netlist.cir");
-    const rawPath = join(directory, "result.raw");
-    await writeFile(netlistPath, netlist, "utf8");
+    run = await runDiagnosticNgspice({ operation: "run", deck: netlist, readRaw: true, wallClockMs: PROCESS_TIMEOUT_MS, readBackBytes: MAX_RAW_BYTES, signal: signal ?? undefined, holder: context.tenantId, interactive: true });
+  } catch (e) {
+    // a closed refusal before any process (an unpinned or mismatched install, the runner's cap or an expired wait, a run directory
+    // that could not be prepared): the setting or the errno is named, never a value or a path
+    if (e instanceof DiagnosticRunnerError) return Response.json({ error: e.message }, { status: 503 });
+    throw e;
+  }
+  if (run.outcome === "spawn_failed") {
+    return Response.json({ error: "ngspice could not be started from the pinned install" }, { status: 500 });
+  }
+  if (run.outcome === "timeout") {
+    return Response.json({ error: "Simulation timed out" }, { status: 504 });
+  }
+  if (run.outcome === "kill_unconfirmed") {
+    // [B22-A3 review] coverage-1: the cause is kept - an abort whose exit was not confirmed is a cancel, never "timed out"
+    if (run.killReason === "cancelled") return Response.json({ ok: false, error: "Simulation cancelled; the ngspice process exit was not confirmed (kill_unconfirmed)" }, { status: 500 });
+    return Response.json({ error: "Simulation timed out; the ngspice process exit was not confirmed (kill_unconfirmed)" }, { status: 504 });
+  }
+  if (run.outcome === "cancelled") {
+    return Response.json({ ok: false, error: "Simulation cancelled" }, { status: 500 });
+  }
+  if (run.exitCode !== 0) {
+    return Response.json({ ok: false, error: run.stderr.slice(-3000) || run.stdout.slice(-3000) || `NGSpice exited with code ${String(run.exitCode)}` }, { status: 500 });
+  }
 
-    let result: ProcessResult;
-    try {
-      result = await runNgspice(netlistPath, directory, signal ?? new AbortController().signal);
-    } catch (e) {
-      if (e instanceof Error && e.message === "ngspice executable not found on PATH") {
-        return Response.json({ error: "ngspice executable not found on PATH" }, { status: 500 });
-      }
-      throw e;
+  // [B16.0.24.1 §1] TRULY bounded read (the runner's): at most MAX_RAW_BYTES actual bytes,
+  // chunked storage (never allocated from the declared size), explicit
+  // over-limit refusal — partial oversized output is NEVER parsed.
+  if (run.raw.state !== "read") {
+    if (run.raw.state === "over-limit") {
+      return Response.json({ ok: false, error: "Simulation output exceeded the bounded size limit" }, { status: 500 });
     }
-    if (result.timedOut) {
-      return Response.json({ error: "Simulation timed out" }, { status: 504 });
-    }
-    if (result.code !== 0) {
-      return Response.json({ ok: false, error: result.stderr.slice(-3000) || result.stdout.slice(-3000) || `NGSpice exited with code ${String(result.code)}` }, { status: 500 });
-    }
-
-    // [B16.0.24.1 §1] TRULY bounded read: at most MAX_RAW_BYTES actual bytes,
-    // chunked storage (never allocated from the declared size), explicit
-    // over-limit refusal — partial oversized output is NEVER parsed.
-    const rawRead = await readBoundedRawFile(rawPath, MAX_RAW_BYTES);
-    if (!rawRead.ok) {
-      if (rawRead.reason === "over-limit") {
-        return Response.json({ ok: false, error: "Simulation output exceeded the bounded size limit" }, { status: 500 });
-      }
-      if (rawRead.reason === "invalid-utf8") {
-        return Response.json({ ok: false, error: "Could not parse simulation output" }, { status: 500 });
-      }
-      return Response.json({ error: "NGSpice produced no output file" }, { status: 500 });
-    }
-    const rawText = rawRead.text;
-
-    let parsed: SimResult;
-    try {
-      parsed = parseAsciiRaw(rawText);
-    } catch {
+    if (run.raw.state === "invalid-utf8") {
       return Response.json({ ok: false, error: "Could not parse simulation output" }, { status: 500 });
     }
-    if (parsed.variables.length === 0 || parsed.points.length === 0) {
-      return Response.json({ ok: false, error: "Simulation produced no data points. Check the netlist and analysis settings." }, { status: 500 });
-    }
-
-    return Response.json({
-      ok:           true,
-      analysis:     parsed.analysis,
-      analysisType: analysis?.type ?? "tran",
-      variables:    parsed.variables,
-      points:       parsed.points,
-      netlist,
-      nodeMap,
-      pinNodes,
-    });
-  } finally {
-    if (directory) await rm(directory, { recursive: true, force: true }).catch(() => {});
+    return Response.json({ error: "NGSpice produced no output file" }, { status: 500 });
   }
+  const rawText = run.raw.text;
+
+  let parsed: SimResult;
+  try {
+    parsed = parseAsciiRaw(rawText);
+  } catch {
+    return Response.json({ ok: false, error: "Could not parse simulation output" }, { status: 500 });
+  }
+  if (parsed.variables.length === 0 || parsed.points.length === 0) {
+    return Response.json({ ok: false, error: "Simulation produced no data points. Check the netlist and analysis settings." }, { status: 500 });
+  }
+
+  return Response.json({
+    ok:           true,
+    analysis:     parsed.analysis,
+    analysisType: analysis?.type ?? "tran",
+    variables:    parsed.variables,
+    points:       parsed.points,
+    netlist,
+    nodeMap,
+    pinNodes,
+    runner:       diagnosticProvenance(run), // [B22-A3] diagnostic_only, environment_dependent, the profile and the observed install digest
+  });
   });

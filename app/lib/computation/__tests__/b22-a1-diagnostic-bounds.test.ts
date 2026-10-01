@@ -34,7 +34,7 @@ vi.mock("node:child_process", async (orig) => {
       let closed = false;
       const close = (code: number | null) => { if (!closed) { closed = true; child.emit("close", code); } };
       child.kill = () => { queueMicrotask(() => close(null)); };
-      if (args[0] === "-v") {
+      if (args.includes("-v")) { // [B22-A3] reviewed pin move: the probe argv is -n -v (was -v alone, args[0])
         queueMicrotask(() => { child.stdout.emit("data", Buffer.from("ngspice-46 : Circuit level simulation program\n")); close(0); });
         return child;
       }
@@ -57,6 +57,22 @@ vi.mock("node:fs/promises", async (orig) => ({
     if (fsState.raw === null) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
     return fsState.raw;
   },
+  // [B22-A3] reviewed pin move: the runner reads result.raw back through the bounded reader (a file handle), never readFile (D22-8)
+  open: async () => {
+    if (fsState.raw === null) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    const bytes = Buffer.from(fsState.raw, "utf8");
+    let offset = 0;
+    return {
+      stat: async () => ({ size: bytes.length }),
+      read: async (buffer: Buffer, at: number, length: number) => {
+        const slice = bytes.subarray(offset, Math.min(offset + length, bytes.length));
+        slice.copy(buffer, at);
+        offset += slice.length;
+        return { bytesRead: slice.length, buffer };
+      },
+      close: async () => {},
+    };
+  },
   mkdir: async () => undefined,
   mkdtemp: async (prefix: string) => `${prefix}fake`,
   rm: async () => {},
@@ -74,6 +90,10 @@ import { __resetJobStoreForTests, getRun } from "@/app/lib/spice/server/job-stor
 import JSZip from "jszip";
 import type { RunEvent, RunRecord } from "@/app/lib/spice/types";
 import { dividerSchematic } from "@/app/lib/spice/__tests__/fixtures";
+import { pinFakeNgspiceForSuite } from "./_pinned-ngspice";
+
+// [B22-A3] reviewed pin move: ngspice runs only through the diagnostic runner, which refuses an unpinned install (OD-135)
+pinFakeNgspiceForSuite();
 
 /** The bounds this increment fixes (pinned against the module in the first case). */
 const CHANNEL_MAX_BYTES = 65_536;

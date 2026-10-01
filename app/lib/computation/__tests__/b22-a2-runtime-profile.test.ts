@@ -134,7 +134,7 @@ const OCI_RUN = [
 ];
 const KICAD_DRILL = ["pcb", "export", "drill", "{boardFile}", "--output", "{drillDir}", "--format", "excellon", "--excellon-units", "{excellonUnits}", "--excellon-zeros-format", "decimal", "--drill-origin", "absolute"];
 const PINNED: Record<string, { argv: Record<string, string[]>; environment: Record<string, string> }> = {
-  "ngspice-local-diagnostic": { argv: { run: ["-b", "{deckFile}"], version: ["-v"] }, environment: LOCAL_ENV },
+  "ngspice-local-diagnostic": { argv: { run: ["-b", "-n", "{deckFile}"], version: ["-n", "-v"] }, environment: LOCAL_ENV }, // [B22-A3, 2026-10-01] reviewed pin move: -n in both templates (no .spiceinit is read; the lead's probe p23), revision 2
   "ngspice-oci": { argv: { run: OCI_RUN, kill: ["kill", "--signal", "KILL", "{containerName}"] }, environment: { LC_ALL: "C", TZ: "UTC", PATH: "/usr/bin:/bin" } },
   "kicad-cli-local-diagnostic": {
     argv: { "export-gerbers": ["pcb", "export", "gerbers", "{boardFile}", "--output", "{gerberDir}", "--layers", "{layerList}"], "export-drill": KICAD_DRILL, "export-drill-separate-th": [...KICAD_DRILL, "--excellon-separate-th"] },
@@ -550,13 +550,13 @@ describe("[B22-A2] what a profile binds", () => {
 
   it("13. the legacy records are what the code does today: the ngspice allowlist of all three spawners, kicad-cli's allowlist, FreeRouting's allowlist and argv as B22-A1 left them; the FreeRouting contract argv is A1's argv with server placeholders", async () => {
     const local = runtimeProfile("ngspice-local-diagnostic", settingsOf({}));
-    const allowlistLine = /const allowed = (\[[^\]]*\]);/;
-    for (const site of ["app/lib/spice/server/worker.ts", "app/api/simulate/route.ts", "app/api/spice/models/smoke-test/route.ts"]) {
-      expect(local.legacySpawn!.sites, site).toContain(site);
-      expect(JSON.parse(read(site).match(allowlistLine)![1]!), site).toEqual(local.legacySpawn!.environment.keys);
+    const allowlistLine = /const allowed = (\[[^\]]*\]);/; // [B22-A3, 2026-10-01] reviewed pin move (OD-136): the three ngspice sites keep no allowlist and spawn nothing -
+    for (const site of ["app/lib/spice/server/worker.ts", "app/api/simulate/route.ts", "app/api/spice/models/smoke-test/route.ts"]) { // they execute this profile through the diagnostic runner,
+      expect(read(site), site).toContain("@/app/lib/computation/diagnostic-runner"); // so the profile records no legacy spawn (was: each site's allowlist equal to the record's keys)
+      expect(read(site).match(allowlistLine), site).toBeNull();
     }
-    expect(local.legacySpawn!.environment.plus).toEqual(["NODE_ENV"]);
-    expect(local.argvTemplates).toEqual({ run: ["-b", "{deckFile}"], version: ["-v"] });
+    expect(local.legacySpawn).toBeNull(); expect(local.revision).toBe(2);
+    expect(local.argvTemplates).toEqual({ run: ["-b", "-n", "{deckFile}"], version: ["-n", "-v"] });
     const kicad = runtimeProfile("kicad-cli-local-diagnostic", settingsOf({}));
     const { KICAD_CLI_ENV_KEYS } = await import("@/app/lib/pcb/fab/kicad-cli-runner");
     expect(kicad.legacySpawn!.environment.keys).toEqual([...KICAD_CLI_ENV_KEYS]);

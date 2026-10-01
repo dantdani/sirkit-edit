@@ -24,7 +24,7 @@ const workerState = vi.hoisted(() => ({
   honorAbort: true,
 }));
 vi.mock("@/app/lib/spice/server/worker", () => ({
-  NGSPICE_EXECUTABLE: "ngspice-stub",
+  NGSPICE_EXECUTABLE: "ngspice-stub", // [B22-A3] no longer read: the smoke test runs ngspice through the diagnostic runner
   executeRunPoint: async (input: { signal: AbortSignal }) => {
     return await new Promise<Record<string, unknown>>((resolve) => {
       workerState.resolvers.push(resolve);
@@ -69,6 +69,7 @@ import { importModelText } from "@/app/lib/spice/models";
 import { sha256 } from "@/app/lib/spice/server/manifest";
 import { dividerSchematic } from "@/app/lib/spice/__tests__/fixtures";
 import { LLMProviderError } from "@/app/lib/llm/errors";
+import { pinFakeNgspiceForSuite } from "@/app/lib/computation/__tests__/_pinned-ngspice";
 
 import { POST as aiPost } from "../spice/ai/route";
 import { POST as compilePost } from "../spice/compile/route";
@@ -133,6 +134,8 @@ afterEach(() => {
   workerState.honorAbort = true;
 });
 beforeEach(() => { __resetJobStoreForTests(); });
+// [B22-A3] reviewed pin move: the smoke test's ngspice runs through the diagnostic runner, which refuses an unpinned install (OD-135)
+const pinnedInstall = pinFakeNgspiceForSuite();
 
 // ── Exact policy rows ────────────────────────────────────────────────────────
 describe("B16.0.23 §A — exact policy rows for the thirteen methods", () => {
@@ -353,9 +356,9 @@ describe("B16.0.23 §D — model import and smoke testing", () => {
     expect(body.check.status).toBe("pass");
     expect(body.model.validationStatus).toBe("smoke-tested"); // NEVER "trusted"/"curve-validated"
     expect(spawnState.calls.length).toBe(1);
-    expect(spawnState.calls[0]!.cmd).toBe("ngspice-stub"); // server-owned executable
+    expect(spawnState.calls[0]!.cmd).toBe(pinnedInstall().executable); // server-owned executable - [B22-A3] reviewed pin move: the pinned install's (was the worker's NGSPICE_EXECUTABLE stub)
     expect(spawnState.calls[0]!.args[0]).toBe("-b"); // server-owned args; caller injects nothing
-    expect(spawnState.calls[0]!.args.length).toBe(2);
+    expect(spawnState.calls[0]!.args).toEqual(["-b", "-n", "deck.cir"]); // [B22-A3] reviewed pin move: the profile's argv, -n and the runner's deck name (was two elements: -b and the deck path)
   });
   it("smoke-test pass does NOT upgrade an already-governed status; failure returns the rich 422 evidence envelope", async () => {
     authed("editor");

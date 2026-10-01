@@ -8,12 +8,12 @@
  * and `validationState`. It extends - never loosens - CD-10's `SimulationExecutionEnvironment`, so a profile is usable wherever
  * CD-10 takes an environment.
  *
- * A2 only DEFINES the contract: no runner reads a profile yet (B22-A3 executes `ngspice-local-diagnostic`), nothing here starts
- * a process, and no profile is `validated` or authoritative-eligible - production simulation authority stays BLOCKED (the CD-10
- * 501; `executeAuthoritativeSimulation` throws). On `ngspice-oci`, `enforcedBy: "os"` names the DESIGNED mechanism of an
+ * A2 only DEFINES the contract: nothing here starts a process, and no profile is `validated` or authoritative-eligible - production
+ * simulation authority stays BLOCKED (the CD-10 501; `executeAuthoritativeSimulation` throws). [B22-A3] The diagnostic runner
+ * (`diagnostic-runner.ts`) EXECUTES `ngspice-local-diagnostic`: the only ngspice spawner, it reads this profile for every run. On `ngspice-oci`, `enforcedBy: "os"` names the DESIGNED mechanism of an
  * unqualified container profile (BLOCKED-LIVE-QUALIFICATION, LB-10), never evidence, and the validator ties each such claim to the
  * docker flag that would deliver it. `legacySpawn` records, as read, what each live spawn site does today (SEC-1 and B22-A1 left
- * them so) and how it deviates from the profile. [B22-A2 review] A container profile also binds `hostClient`, the host program
+ * them so) and how it deviates from the profile; null where no site departs from it ([B22-A3] ngspice: the runner executes it). [B22-A2 review] A container profile also binds `hostClient`, the host program
  * that runs its argv (the docker CLI), by server settings like the executable.
  */
 import { createHash } from "node:crypto";
@@ -314,8 +314,9 @@ const LOCAL_ENVIRONMENT = { LC_ALL: "C", TZ: "UTC", PATH: "{installBinDir}", Sys
 const NGSPICE_PARSER: OutputCheck = { id: "ngspice-ascii-raw/1", module: "app/lib/spice/waveforms.ts", wired: true, note: "parseNgspiceAsciiRaw; it drops non-finite tokens (D22-10, B22-C)" };
 const NGSPICE_VALIDATOR: OutputCheck = { id: "cd10-waveform-artifact/1", module: "app/lib/model-simulation/waveform.ts", wired: false, note: "createWaveformArtifact refuses a non-finite value and a non-increasing axis; no live path uses it yet (D22-10, B22-C)" };
 const NGSPICE_SEED: DeterminismSetting = { value: "1", pinnedBy: "deck-option", note: "pinned by `.options seed=1` through the compiler's option lines (discovery 9.4: no screen change), emitted by the runner that executes this profile; no deck sets a seed today and the installed spinit leaves rndseed commented out (spinit:5), so the legacy default is UNKNOWN" };
+/** [B22-A3] The local profile's seed, as the diagnostic runner executes it. */
+const NGSPICE_LOCAL_SEED: DeterminismSetting = { value: "1", pinnedBy: "deck-option", note: "pinned by `.options seed=1`, the line the diagnostic runner requires immediately before every run deck's final .end (seedDiagnosticDeck, B22-A3; no screen change, discovery 9.4); the installed spinit leaves rndseed commented out (spinit:5); [B22-A3 review] a deck that sets its own seed or rndseed option is refused (seedDiagnosticDeck and the runner), so this line is the only seed option a run carries" };
 const NGSPICE_LICENCE = "modified BSD overall; LGPL-2 for KLU, numparam and tclspice; GPL-2+ for some XSPICE and build files; CC-BY-SA-4.0 for parts of the documentation (discovery 1.2, RECORDED)";
-const NGSPICE_LEGACY_ENV = ["PATH", "Path", "PATHEXT", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE", "LD_LIBRARY_PATH"];
 const LOCAL_DEVIATIONS: readonly LegacyDeviation[] = ["executable-from-path-or-env", "no-digest-check", "host-environment-allowlist", "home-and-userprofile-passed", "no-locale-or-timezone", "direct-child-kill"];
 
 type ProfileBody = Omit<RuntimeProfile, "environmentId" | "environmentVariablesAllowlist" | "localeAndTimeZone" | "floatingPointAndThreadSettings" | "resourceLimits" | "executableOrImageDigest" | "deterministicDigest">;
@@ -323,7 +324,7 @@ type ProfileBody = Omit<RuntimeProfile, "environmentId" | "environmentVariablesA
 function ngspiceLocal(read: ServerSettingReader): ProfileBody {
   return {
     profileId: "ngspice-local-diagnostic",
-    revision: 1,
+    revision: 2, // [B22-A3] revision 2: -n in both argv templates, the runner's seed note, no legacy spawn left (an immutable profile changes only by revision)
     providerRevisionId: diagnosticNgspiceProvider().deterministicDigest,
     simulatorVersion: "ngspice-46",
     operatingSystemAndArchitecture: "win32-x64",
@@ -338,7 +339,7 @@ function ngspiceLocal(read: ServerSettingReader): ProfileBody {
     version: { value: "46", basis: "the install folder name and its bundled manual (INFERRED); the lead's SEC-1 probes ran this build (ngspice_con -b, KLU) and printed no version line; the runner's -v records the observed one" },
     provenance: { origin: "the owner's local Windows build of ngspice-46 (Spice64; the discovery records its path); ngspice's download page states no checksum or signature (discovery 1.2)", integrity: "none recorded: once the owner pins it, the install-tree digest in the server setting is the identity, and a mismatch refuses the run (OD-135)", licence: NGSPICE_LICENCE },
     formats: { input: ["ngspice-deck"], output: ["ngspice-ascii-raw", "text-log", "version-text"] },
-    argvTemplates: { run: ["-b", "{deckFile}"], version: ["-v"] },
+    argvTemplates: { run: ["-b", "-n", "{deckFile}"], version: ["-n", "-v"] }, // [B22-A3] -n: no .spiceinit is read (the lead's probe p23)
     workingDirectory: "{runDir}",
     inputMount: { path: "{runDir}", access: "read-only", scope: "per-run", enforcedBy: "none", how: "the server writes the deck into the per-run directory; a local process can still write there (no OS mount), so read-only is the runner's rule, never enforced" },
     outputDirectory: { path: "{runDir}", access: "read-write", scope: "per-run", enforcedBy: "runner", how: "one mkdtemp directory per run under the runner's one root, removed in finally; the process can still write wherever its user can (no OS isolation)" },
@@ -350,27 +351,17 @@ function ngspiceLocal(read: ServerSettingReader): ProfileBody {
       memoryMiB: unenforced("MiB", NO_JOB_OBJECT),
       processes: unenforced("count", `${NO_JOB_OBJECT}; the deck screens refuse every construct that runs a command (SEC-1, B22-A1): prevention, not a limit`),
       fileBytes: unenforced("bytes", "no OS file-size limit: the process may write files of any size into its directory; the runner reads none over readBackBytes"),
-      readBackBytes: enforced("runner", 100 * 1024 * 1024, "bytes", "a bounded reader refuses a raw file over the bound unread; the legacy worker reads it whole, then checks its size (worker limits, D22-8)"),
+      readBackBytes: enforced("runner", 100 * 1024 * 1024, "bytes", "the diagnostic runner reads the raw file through the bounded reader and refuses one over the bound unread (B22-A3, D22-8)"),
       outputBytes: enforced("runner", DIAGNOSTIC_OUTPUT_MAX_BYTES, "bytes", "each of stdout and stderr is held and returned within DIAGNOSTIC_OUTPUT_MAX_BYTES (B22-A1)"),
       wallClockMs: enforced("runner", 120_000, "ms", "the runner's timer kills the process tree at the bound (the worker's 120 s; OD-145)"),
       waveformPoints: enforced("runner", 5_000_000, "points", "the run fails when the parsed raw file holds more points (the worker's bound)"),
     },
-    determinism: { locale: LOCALE, timeZone: TIME_ZONE, seed: NGSPICE_SEED, threads: { value: "8", pinnedBy: "install-digest", note: "the installed spinit sets num_threads=8 (spinit:14, RECORDED); the install-tree digest covers spinit, so another value is another digest; whether this build runs OpenMP threads is INFERRED (libomp140 is bundled)" } },
+    determinism: { locale: LOCALE, timeZone: TIME_ZONE, seed: NGSPICE_LOCAL_SEED, threads: { value: "8", pinnedBy: "install-digest", note: "the installed spinit sets num_threads=8 (spinit:14, RECORDED); the install-tree digest covers spinit, so another value is another digest; whether this build runs OpenMP threads is INFERRED (libomp140 is bundled)" } },
     kill: { ...LOCAL_TREE_KILL },
     parser: NGSPICE_PARSER,
     validator: NGSPICE_VALIDATOR,
     qualificationEvidenceRefs: [],
-    legacySpawn: {
-      sites: ["app/lib/spice/server/worker.ts", "app/api/simulate/route.ts", "app/api/spice/models/smoke-test/route.ts"],
-      executableFrom: "NGSPICE_BIN, else ngspice_con (win32) or ngspice on PATH; never digest-checked",
-      argv: { run: ["-b", "<absolute deck path>"], version: ["-v"] },
-      environment: { mode: "host-allowlist", keys: NGSPICE_LEGACY_ENV, plus: ["NODE_ENV"] },
-      wallClock: "120 s (worker), 10 s (/api/simulate and the smoke test), 2 s (the worker's -v probe)",
-      outputBound: "returned and recorded stdout and stderr within 64 KiB each (B22-A1, the worker and the smoke test; /api/simulate keeps 1 MB); the worker holds up to 100 MiB and reads the raw file whole (D22-8)",
-      kill: "child.kill() with the default signal: the direct child only (D22-9)",
-      cwd: "a per-run directory under the OS temp directory, never removed (worker); a removed mkdtemp directory (/api/simulate, the smoke test); the server's cwd (the -v probe)",
-      deviations: [...LOCAL_DEVIATIONS, "terminal-before-exit", "unbounded-raw-read", "run-directory-not-removed"],
-    },
+    legacySpawn: null, // [B22-A3] the worker, /api/simulate and the smoke test execute this profile through the diagnostic runner: no site departs from it
   };
 }
 

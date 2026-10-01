@@ -49,6 +49,10 @@ vi.mock("@/app/lib/netlist", async (orig) => {
 
 import { injectAuthorizedPrincipal, resetInjectedIdentity } from "@/app/lib/auth/test-support";
 import { POST as simulatePost } from "../route";
+import { pinFakeNgspiceForSuite } from "@/app/lib/computation/__tests__/_pinned-ngspice";
+
+// [B22-A3] reviewed pin move: /api/simulate runs ngspice through the diagnostic runner, which refuses an unpinned install (OD-135)
+pinFakeNgspiceForSuite();
 
 const SEL = { "x-sirkit-tenant-id": "local", "x-sirkit-project-id": "local", "x-sirkit-branch-id": "local" };
 const NEWLINE = String.fromCharCode(10);

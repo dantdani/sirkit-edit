@@ -48,7 +48,8 @@ vi.mock("node:fs/promises", async (orig) => ({
   rm: async () => {},
 }));
 /** The model screen can be switched off for the defence-in-depth cases: the final deck screen's own refusals stay pinned
- *  behind it (SEC-1's tests-1 breakage, `executed: false` at smoke-test/route.ts:119, is still caught here). */
+ *  behind it (SEC-1's tests-1 breakage, `executed: false` in the smoke test's `screenedSmokeDeck` - smoke-test/route.ts:102 since
+ *  B22-A3, was :119 - is still caught here). */
 const screenSwitch = vi.hoisted(() => ({ off: false }));
 vi.mock("@/app/lib/spice/models", async (orig) => {
   const actual = await orig() as typeof import("@/app/lib/spice/models");
@@ -71,6 +72,10 @@ import { estimateRunPlan } from "@/app/lib/spice/run-plan";
 import { __resetJobStoreForTests, getRun, getRuns } from "@/app/lib/spice/server/job-store";
 import type { ModelAsset, NetlistBundle, RunRecord, SimulationPartSnapshot, SimulationProject } from "@/app/lib/spice/types";
 import { dividerSchematic } from "@/app/lib/spice/__tests__/fixtures";
+import { pinFakeNgspiceForSuite } from "./_pinned-ngspice";
+
+// [B22-A3] reviewed pin move: ngspice runs only through the diagnostic runner, which refuses an unpinned install (OD-135)
+pinFakeNgspiceForSuite();
 
 const C = (...codes: number[]): string => String.fromCharCode(...codes);
 const NL = C(10);
@@ -177,7 +182,7 @@ async function routeOutcome(project: SimulationProject) {
     closedError: closed(body.error),
     jobs: getRuns(SCOPE).length,
     runs: runs.map((run) => run?.status),
-    decksWritten: fsState.writes.filter((write) => write.path.endsWith("executed.cir")).length,
+    decksWritten: fsState.writes.filter((write) => write.path.endsWith("deck.cir")).length, // [B22-A3] reviewed pin move: the runner writes deck.cir (was the worker's executed.cir)
     ngspiceRuns: ngspiceRuns(),
   };
 }
@@ -236,7 +241,7 @@ describe("[B22-A1] the model screen reads exactly the text the deck emits (D22-4
     expect(compileWith(project).executed).toContain(emitted(model0(project)));
     const outcome = await smokeOutcome(withText(`${SUBCKT}${NL}`, "   "));
     expect(outcome.status, "the smoke deck emits the same text (it used ??, so a blank transformedContent emitted no model)").toBe(200);
-    expect(fsState.writes.find((write) => write.path.endsWith("smoke.cir"))?.content).toContain(SUBCKT);
+    expect(fsState.writes.find((write) => write.path.endsWith("deck.cir"))?.content).toContain(SUBCKT); // [B22-A3] reviewed pin move: the runner writes deck.cir (was smoke.cir)
   });
 });
 

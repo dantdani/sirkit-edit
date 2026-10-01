@@ -559,6 +559,12 @@ without HOME/USERPROFILE). Sources: S1-G3, S2-G2, S5-G4, S6-G5, S7-G3.
 - **The ngspice half closed by SEC-1** (`d0d2ec8`): the smoke test and the worker's `-v` probe pass the worker's explicit allowlist, pinned equal across the three ngspice spawners and to the literal list. Open: kicad-cli's inherited environment (B22-A1, OD-148) and HOME and USERPROFILE in the ngspice allowlist (B22-A3's profile environment).
 - [B22 lead, 2026-10-01] Re-verification (section 9): The ngspice half is closed by SEC-1, re-verified on `1ff9d81`: the smoke test (`smoke-test/route.ts:59`, was `:58`, helper `:123-128`) and the worker's `-v` probe (`worker.ts:60`) pass the worker's explicit allowlist, which is pinned literally, equal across the three ngspice spawners and checked with canary keys (`sec-1-deck-injection.test.ts:743-747, :781-789, :879-885, :925-933`); still open are kicad-cli, which now alone inherits the whole server environment (`kicad-cli-runner.ts:50-53`, OD-148), HOME and USERPROFILE in every ngspice allowlist (`worker.ts:82`, `simulate/route.ts:51`, `smoke-test/route.ts:124`, now pinned by the SEC-1 suite, so B22-A3's removal is a reviewed pin move), no spawn passing `-n`, and the B16.0.23 gate (`:83-94`) and boundary record (`:22-30`), which neither pin nor list env.
 - D22-5: **kicad-cli's half closed by B22-A1**: kicad-cli spawns with an explicit environment allowlist and `windowsHide`, pinned literally and checked with canary keys at the fake seam; the list's adequacy is INFERRED (kicad-cli never run; the opt-in oracle is the live check). With SEC-1's ngspice half, no spawn inherits the whole server environment. Open: HOME and USERPROFILE in the ngspice allowlist, no `-n` on any spawn, and the B16.0.23 gate and boundary record that neither pin nor list env (B22-A3).
+- **D22-5:** **The profile-environment half closed by B22-A3**, with a recorded remainder.
+  - The ngspice child gets exactly the profile's map: `LC_ALL=C`, `TZ=UTC`, `PATH=<install>/bin`, `SystemRoot`, `TEMP`/`TMP` = the run directory, with no HOME or USERPROFILE in it. Pinned at the runner by `b22-a3-diagnostic-runner` case 2, the B16.0.23 gate, and SEC-1's `:744` and `:925-933` (moved to "one runner").
+  - `-n` is on both argv templates (lead probe p23).
+  - **Reopened for eight names (OD-156):** on win32, Node (libuv) adds the server's HOMEDRIVE, HOMEPATH, LOGONSERVER, SYSTEMDRIVE, USERDOMAIN, USERNAME, USERPROFILE and WINDIR. They are recorded per run (`hostAddedEnvironment`), not removed. `-n` alone keeps a home `.spiceinit` from running.
+  - 9.5 item 16 applied: the `-v` probe runs in its own run directory with `-n`.
+  - [B22-A3 lead] The lead's live run (opt-in `b22-a3-runner-live`, the pinned install) CONFIRMED that ngspice's own `echo $USERPROFILE` expands to the server's value under the runner's spawn (case 5) - the OD-156 remainder is real, and `-n` is what keeps a home `.spiceinit` from running (p23).
 
 **D22-6 - The CD-10 execute and readiness routes trust a provider, environment and lowering manifest taken from the request body.**
 Requirement: B22-C "input project/model digests are current" (`:928`) and the exact simulator pinned (`:926`); global `:138`. Finding:
@@ -596,6 +602,13 @@ no spawn sets a CPU, memory, process or file-size limit. Severity medium. **CONF
 FreeRouting, OD-148), B22-A3 (the runner's bounded read, per-run directory, cleanup, no host path in records). Sources: S1-G8, S2-G6,
 S2-G12, S4-G9, S5-G5.
 - D22-8: **In part closed by B22-A1** (OD-148): kicad-cli's and FreeRouting's accumulated output is held to twice the bound in bytes and returned bounded with a marker, FreeRouting's stderr keeping its own share; FreeRouting's `.ses` and kicad-cli's gerber and drill files are read through a bounded reader that refuses an over-bound file unread with a closed error; the SPICE reproducibility bundle carries the record's bounded logs and says so. Open (B22-A3): the worker's and the bundle route's whole reads of `result.raw`, the per-run directories never removed and their host path in records, FreeRouting's shared cwd and uuid files in `tmpdir()` (`runner.ts:129-130, :161`), the run directory's whole logs, and no CPU, memory, process or file-size limit on any spawn (the processes may still write files of any size).
+- **D22-8:** **The runner half closed by B22-A3**.
+  - The worker's and the bundle route's whole reads of `result.raw` are gone. The runner reads it back through the bounded reader, refusing an over-bound file unread.
+  - The per-run `mkdtemp` directory under `<os temp>/sirkit-ngspice-runs` is removed on every path.
+  - `artifactId` is an opaque `diagrun_<uuid>`.
+  - The run directory and install root are redacted on the stream (across pipe reads and the output cut). The runner's own fs failures name the errno only. No host path appears in a record or response (cases 5, 9, 11, 13).
+  - 9.5 item 19 applied.
+  - **Open:** no file-size or other OS limit; a link at the runner root (B22-D item 4); FreeRouting's shared cwd (B22-B/D). The raw file is kept only as its digest (`rawOutput`).
 
 **D22-9 - Kill is direct-child only, cancellation is reported before the process exits, and concurrency is unbounded across batches.**
 Requirement: B22-A cancellation/kill semantics (`:902`); B22-D child processes, signal races, orphan processes, fork bombs. Finding: ngspice
@@ -609,6 +622,16 @@ medium. **CONFIRMED** (code), **INFERRED** (orphan survival). Closes: B22-A3 (tr
 `kill_unconfirmed`, a global cap), B22-D (signal-race and orphan cases); OD-145. Sources: S1-G10, S2-G7, S4-G11, S4-G12, S7-G4.
 
 - [B22 lead, 2026-10-01] Re-verification (section 9): Re-verified on `1ff9d81`: SEC-1 changed no kill, cancel or concurrency code and only moved `smoke-test/route.ts:65` -> `:66` and `:77-78` -> `:78-79`, and `job-store.ts:110-119` -> `:113-122` and `:219` -> `:223`; its refusal of injected control blocks and `*#` lines removes the deck route to an ngspice `shell` grandchild (INFERRED), but tree kill, terminal-only-after-exit and a global cap stay open for B22-A3, and the further direct-child kills at `worker.ts:74` and `simulate/route.ts:269` and the before-exit resolutions at `runner.ts:166, :171` and `kicad-cli-runner.ts:57` belong to the same gap.
+- **D22-9:** **The ngspice half closed by B22-A3**.
+  - Tree kill via a fixed-argv `taskkill /PID <pid> /T /F` on win32 and a process-group kill on POSIX, on the wall clock and on abort.
+  - Terminal only after `close`, or as `kill_unconfirmed` with its cause. Never "cancelled" while the process may live, at all three entry points (cases 6, 8, 12, 13).
+  - The kill sites at `worker.ts:74` and `simulate/route.ts:269` are replaced (9.5 item 20).
+  - One global cap, shared by tenant, every wait bounded (OD-155). The smoke test now wires its abort.
+  - **Recorded:**
+    - Descendant reach of `/T` stays INFERRED; live case 4 shows only the direct child's close.
+    - The Studio record is still marked cancelled at the request (B22-C).
+    - The before-exit resolutions at `runner.ts:166, :171` and `kicad-cli-runner.ts:57` stay with B22-B/D (not the same two lines).
+  - [B22-A3 lead] The live run's case 4 stopped a real 18.7 s transient at its 1.5 s wall clock (closed after 1804 ms, nothing left running); its first deck never simulated (batch mode needs an output line - probe p27), so it now runs the transient from a control block (p29). An interactive request (`/api/simulate`, the smoke test) takes a free slot past its tenant's running share, so a tenant's own Studio plan no longer refuses its Simulate while a slot is idle (the check's new medium issue; red, then green).
 
 **D22-10 - The live raw parsers lose values silently and disagree with each other.** Requirement: B22-C output units and tolerances
 validated (`:930`), no fabricated results (`:931`); B22-D NaN/Inf, malformed output, parser differentials. Finding: the worker parser drops
@@ -631,6 +654,12 @@ S7 facts.
   - The ngspice profiles pin the seed by `.options seed=1` and the threads by the install digest. The installed `spinit:14` num_threads=8 and `:5` rndseed commented out are recorded (9.5 item 11).
   - 9.5 item 22's `.spiceinit` and locale points are recorded: HOME/USERPROFILE are dropped from the contract, `-n` is B22-A3's, and the Windows locale effect is INFERRED.
   - Runtime: B22-A3.
+- **D22-11:** **Runtime closed by B22-A3**.
+  - `LC_ALL=C` and `TZ=UTC` are in the child's map (on Windows the C runtime reads OS settings: INFERRED).
+  - `.options seed=1` sits immediately before every run deck's final `.end` (p24), and a deck that sets its own seed is refused. The provenance records the seed.
+  - Threads stay pinned by the install digest (`spinit:14`).
+  - Every result is labelled `environment_dependent`.
+  - 9.5 item 22 applied (`-n`, no HOME/USERPROFILE in the map; the win32 additions recorded under D22-5).
 
 **D22-12 - No server-held, durable, digest-bound simulation evidence exists, and the records call the in-memory runs durable.**
 Requirement: B22-C results are evidence (`:933`); pass `:942` "import only validated artifacts"; global `:139-140`. Finding: section 2.5:
@@ -1319,3 +1348,8 @@ The "high" severity still holds, through kicad-cli.
 - [B22-A1, 2026-10-01] B22-A1 closed what SEC-1 left of D22-4 (the model screen, its differential, client dependencies, XSPICE file parameters and program- or library-loading code models over joined cards, the bounded return channels), kicad-cli's half of D22-5, D22-8's output caps for kicad-cli and FreeRouting (OD-148) and OD-150's approval half, and admitted `b22-` to CI (OD-146); D22-7 was observed at the fake seam (B22-C); the shared deck validator is left to B22-A3.
 - [B22-A2, 2026-10-01] B22-A2 defined the immutable runtime profile contract and registry (D22-2 contract, D22-11 contract; OD-135, OD-148) – with a closed docker-argv grammar tying each designed OCI `os` claim to its flag and a bound host docker CLI – closed D22-18 with a connective process census and three corrected classification rows, recorded the isolation verdict (D22-1; OD-134) and LB-10 (D22-23; OD-147), and pinned the stub and the 501; D22-24 was A1's.
 - [B22-A2, 2026-10-01] Discovery correction (for 9.5 item 28 and section 10): "qualify reaches FreeRouting only outside fixture mode (`production-router.ts:23-24`)" is wrong. Fixture mode with `SIRKIT_FIXTURE_ROUTER` `record` or `live` also starts it (`production-router.ts:39` → `fixture-runtime/router.ts:54-60`). Fixture mode is honoured only in non-production local development (`fixture-runtime/mode.ts:18-21`).
+- [B22-A3, 2026-10-01] B22-A3 delivered the diagnostic-only local runner: one ngspice spawner executing the `ngspice-local-diagnostic` profile, pinned by install digest, bounded, tree-killed, terminal only after exit or `kill_unconfirmed`, under one cap shared by tenant with bounded waits (OD-135, OD-136, OD-145, OD-155). It closed D22-5's profile-environment half (Node's eight win32 additions recorded, OD-156), D22-8's runner half, D22-9's ngspice half, and D22-11's runtime. Production authority stays BLOCKED.
+- [B22-A3, 2026-10-01] **Discovery lines moved by this pass (not reserved-file edits, for the lead's re-verification):**
+  - The D22-4 closure clause cites `job-store.ts:95`; that line is now `:96`.
+  - The terminal guards are at `:150` and `:154` (were `:148` and `:152`).
+  - The preflight refusal is at `:352` (was `:350`).

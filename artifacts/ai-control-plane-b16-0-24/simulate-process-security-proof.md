@@ -55,3 +55,17 @@ bound that did not hold: the full file was buffered before truncation.
 Corrected in B16.0.24.1 to a truly bounded handle/chunked reader with an
 explicit over-limit refusal — see
 `artifacts/ai-control-plane-b16-0-24-1/bounded-file-read-proof.md`.
+
+## [SUPERSEDED IN PART - B22-A3, 2026-10-01]
+
+`/api/simulate` starts no process any more: ngspice runs only through the diagnostic runner
+(`app/lib/computation/diagnostic-runner.ts`, OD-136), so the bullets above that name the route's own process are history.
+The executable is the install pinned by `SIRKIT_NGSPICE_INSTALL_ROOT` and `SIRKIT_NGSPICE_INSTALL_SHA256` (never
+`NGSPICE_EXECUTABLE`, `NGSPICE_BIN` or PATH; refused unless its install-tree digest matches); the argument vector is the
+profile's `-b -n deck.cir` in a per-run `mkdtemp` directory under `<os temp>/sirkit-ngspice-runs` (not `["-b", netlistPath]`
+under `sirkit-simulate-`); the environment passed is exactly `LC_ALL=C`, `TZ=UTC`, the install's `bin` as PATH, `SystemRoot`,
+`TEMP`/`TMP` (not `safeEnvironment()`; no HOME or USERPROFILE in it, while on win32 Node adds eight host variables, recorded
+per run); an abort or the wall clock ends the tree with `taskkill /PID <pid> /T /F` (not `child.kill()`), terminal only after
+the close or as `kill_unconfirmed`; an executable that cannot start is 500 "ngspice could not be started from the pinned
+install" (not "not found on PATH"), and a refusal before any process is 503. The runner is diagnostic only and no isolation
+boundary: `artifacts/ai-control-plane-b22/diagnostic-runner.md`.

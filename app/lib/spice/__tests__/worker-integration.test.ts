@@ -43,7 +43,7 @@ describe.runIf(LIVE)("isolated ngspice worker", () => {
     expect(result.status).toBe("completed");
     expect(result.manifest?.netlistChecksum).toMatch(/^[a-f0-9]{64}$/);
     expect(result.waveforms?.some((waveform) => waveform.name.toLowerCase() === "v(vin)")).toBe(true);
-    expect(result.artifactId).toContain("sirkit-spice");
+    expect(result.artifactId).toMatch(/^diagrun_[0-9a-f-]{36}$/); // [B22-A3] reviewed pin move: the diagnostic runner's opaque run id, never a host path (was the artifact directory under sirkit-spice, D22-8); this opt-in suite also needs SIRKIT_NGSPICE_INSTALL_ROOT and SIRKIT_NGSPICE_INSTALL_SHA256
     expect(events).toContain("post-processing");
   }, 30_000);
 

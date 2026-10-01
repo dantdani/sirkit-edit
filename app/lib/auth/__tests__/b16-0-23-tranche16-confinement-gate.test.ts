@@ -82,15 +82,15 @@ describe("B16.0.23 §J — public trio is stateless compute only", () => {
 
 describe("B16.0.23 §J — execution boundary (models/smoke-test + worker + store)", () => {
   it("smoke-test: validation dominates execution; the spawn is shell-less, windows-hidden, and server-owned", () => {
-    const src = raw("app/api/spice/models/smoke-test/route.ts");
+    const src = raw("app/api/spice/models/smoke-test/route.ts"); const runner = raw("app/lib/computation/diagnostic-runner.ts"); // [B22-A3] reviewed pin move: the spawn now lives in the ONE ngspice spawner (OD-136), re-pinned there
     const safety = src.indexOf("assertModelSafeForExecution(model)");
-    const execution = src.indexOf("await execute(path, directory)");
+    const execution = src.indexOf("await runDiagnosticNgspice("); // [B22-A3] the runner's call (was `await execute(path, directory)`)
     expect(safety).toBeGreaterThan(0);
     expect(execution).toBeGreaterThan(safety);
-    expect(src).toMatch(/spawn\(NGSPICE_EXECUTABLE, \["-b", path\]/); // server-owned exe + args, caller injects nothing
-    expect(src).toMatch(/windowsHide: true/);
+    expect(runner).toMatch(/spawn\(input\.executable, \[\.\.\.input\.argv\], \{ cwd: input\.cwd, env: \{ \.\.\.input\.env \}, windowsHide: true, shell: false, /); // server-owned exe + the profile's argv, caller injects nothing; [B22-A3] the env pinned too (D22-5)
+    expect(runner).toContain("Object.entries(profile.environment)"); expect(src).not.toMatch(/child_process|\bspawn\(/); // [B22-A3] the env is the profile's exact map; the route spawns nothing
     expect(src).not.toMatch(/shell\s*:\s*true/);
-    expect(raw("app/lib/spice/server/worker.ts")).not.toMatch(/shell\s*:\s*true/);
+    expect(raw("app/lib/spice/server/worker.ts")).not.toMatch(/shell\s*:\s*true/); expect(runner).not.toMatch(/shell\s*:\s*true/);
   });
   it("the job store refuses late terminal overwrites (both settle paths guarded)", () => {
     const src = raw("app/lib/spice/server/job-store.ts");

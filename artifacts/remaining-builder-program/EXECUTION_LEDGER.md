@@ -3899,3 +3899,86 @@ Pages: `artifacts/ai-control-plane-b22/`.
   directory RUNS without `-n` and does not with `-n` (CONFIRMED); p24 `.options seed=1` is accepted with no error; p25 the profile's
   exact environment (PATH = the bin directory, `SystemRoot`, `TEMP`/`TMP` = the run directory, `LC_ALL=C`, `TZ=UTC`, no
   HOME/USERPROFILE) starts the binary and simulates; p26 under it `spinit` loads (`num_threads` = 8).
+
+### B22-A3 - the diagnostic-only local runner: one ngspice spawner, pinned, bounded, killable, never authoritative (2026-10-01 local; increment workflow + review fix + lead; this commit)
+
+**Test-first** on `chapter/b22-sandboxed-computation` from `c037627`.
+- **Baseline before any edit:**
+  - A (computation, spice, simulate, CI guard): 18 files, 476 passed.
+  - B (`app/api/__tests__`): 1,058 passed, 1 failed — `b16-0-identity-header-gate` timed out on the clean tree.
+  - C (auth gates): 159 passed.
+  - D (MCP and import gates): 220 passed.
+  - E (B21 orchestration): 460 passed.
+- **Red:** with the runner absent, the runner suite could not load and single-spawner failed 4 of 4. With the runner restored and its callers unmodified, 7 failed / 11 passed.
+- **Green, then breakages:** 10 deliberate breakages (MA–MJ) were each caught and restored by hash.
+
+**The adversarial review** confirmed 22 findings, all fixed test-first.
+- The strengthened suite ran 12 failed / 2 passed on the reviewed tree. A temporary probe suite reproduced each defect in isolation: 9 of 9 red, then deleted.
+- Green after the fixes.
+- 17 deliberate breakages of the fixed source (N1–N17) were each caught and restored by hash.
+
+**RUNNER (OD-135, OD-136, OD-145; D22-5, D22-8, D22-9, D22-11):**
+- The only ngspice spawner. It executes the A2 profile `ngspice-local-diagnostic` (revision 2): the pinned install, digest-checked before every spawn; argv `-b -n deck.cir` and `-n -v`; exactly the profile's environment map.
+- On win32, Node's eight added variables are recorded per run (OD-156).
+- A per-run `mkdtemp` directory, removed on every path. Stdout and stderr are redacted on the stream and held within A1's bound. The raw file is read back bounded.
+- A tree kill on the wall clock and on abort; terminal only after `close`, or as `kill_unconfirmed` with its cause.
+- One cap, shared by tenant, with every wait bounded (OD-155).
+- A deck with its own seed is refused. The runner's own fs failures are closed. No host path appears in any record or response.
+
+**Entry points:** the worker, `/api/simulate` and the smoke test call the runner and start no process; the smoke test now passes its request's abort. The bundle reads no file, and the manifest carries the raw file's digest (`rawOutput`).
+
+**Reviewed pin moves:**
+- `APP_SPAWNERS` moved once.
+- SEC-1's environment-allowlist pins (`:744`, `:925-933`) moved, line-neutral.
+- The B16.0.23 and B16.0.24 confinement gates and the tranche-parity fakes now pin at the runner.
+- A1's citation table moved twice, each row marked.
+- A2's profile test (`-n`, no legacy spawn), the census rows and the threat-model cells were updated.
+
+**Gates:**
+- A: 25 files, 610 passed, 8 skipped.
+- B: 1,053 passed; the identity gate alone 6 passed.
+- C: 16 files, 183 passed.
+- D: 22 files, 220 passed.
+- E: 49 files, 460 passed.
+- Repeats: 291 ×3.
+- tsc and eslint clean.
+- Four generators: zero drift; census 165 / 162 / 3 / 0.
+
+**RECORDED:**
+- A first breakage pass resolved `bash` to the WSL launcher; the VM ran 13:44:43 to under 13:47:28, nothing of this work ran in it, and the pass was rerun with Git Bash.
+- One test run was interrupted by host Modern Standby (14:00–14:09); the rerun was green.
+
+**Not changed:** the CD-10 routes, the 501, the throwing stub, dependencies, routes, and the census.
+
+**Open:**
+- No OS limit (OD-145).
+- Node's win32 additions (OD-156).
+- Descendant reach of `taskkill /T` (INFERRED).
+- The Studio record's cancel-before-exit, D22-7 and D22-10 (B22-C).
+- A link at the runner root, or a raw file that is a link (B22-D).
+- FreeRouting and kicad-cli kills (B22-B/D).
+
+Pages: `artifacts/ai-control-plane-b22/diagnostic-runner.md`.
+- Lead close (2026-10-01): the check of the review fixes raised four new issues. (1) Medium, fixed: the tenant share counted
+  every request, so on a single-tenant install a running Studio plan (three points) made the user's own `/api/simulate` or smoke test
+  wait out its 10 s and fail BUSY while the fourth slot sat idle - red first (case 10), then a request marked `interactive` (the two
+  routes a person waits on, each bounded by its own wall clock) takes a free slot under the global cap past its tenant's running
+  share; Studio points and the `-v` probe keep the share (case 13 pins who is interactive). (2) Low, recorded for B22-C: one tenant
+  can exceed its 32-entry queue share with several large plans, so later points fail BUSY at once (the job store has no per-scope
+  limit). (3) Low, fixed in place: `/api/simulate`'s header said the child gets an exact environment with no USERPROFILE (Node adds it
+  on win32), and the runner and page said taskkill gets eight host variables (it gets ten: its map passes only SystemRoot). (4) Low,
+  fixed: the fixture-confinement check read only the first argument of each write call, so an unconfined copy or link destination
+  passed - red first with two synthetic lines, then every path argument is read. A1's citation C42 re-pinned (+5). The lead ran the
+  opt-in live suite once with the install pinned (`SIRKIT_NGSPICE_INSTALL_ROOT` the Spice64 folder, `SIRKIT_NGSPICE_INSTALL_SHA256`
+  c6e4e1603d315ed3a7cf46eab5edae97ddcf6abeb37c82aa63f162b8f3361ab1 from `scripts/print-install-tree-digest.ts`: 778 files, 49,046,261
+  bytes): 4 of 5 at first - case 4's deck never simulated (batch mode with a transient and no output line runs nothing, probe p27) -
+  then 5 of 5 with the transient run from a control block (p29: about 18.7 s alone; the runner stopped it at its 1.5 s wall clock,
+  closed after 1804 ms, no ngspice or taskkill left). Measured: full digest 404-446 ms, first check 674-737 ms, cached check 55-89 ms.
+  Case 5 CONFIRMED that ngspice's `echo $USERPROFILE` expands to the server's value (OD-156). The owner's local `.env.local` was not
+  changed: until the owner sets the two settings, every ngspice path fails closed. Lead gates on the final tree: A (computation, SPICE, simulate, guard,
+  confinement, process gate) 24 files 523 passed 8 skipped; `app/api/__tests__` 26 files 1,053 passed and the identity-header gate
+  alone 6 passed; `app/lib/auth/__tests__` 41 files 479 passed 9 skipped; MCP server and import gates 23 files - 21 passed, and
+  `b14-4-ast-import-gates` case 1 and `b20-b4-process-gate` case 1 TIMED OUT (60 s / 120 s) with vitest's "Timeout calling
+  onTaskUpdate" in a 1,408 s run after the 41-file auth run; re-run together both passed (27 of 27) with one onTaskUpdate error (exit 1),
+  and each alone passed with exit 0 (22 and 5 tests, about 54 s each) - recorded, not dismissed: their single synchronous AST cases
+  block the worker's RPC under load; orchestration and record readers 55 files 540 passed; tsc 0; eslint 0; four generators no drift.

@@ -113,6 +113,10 @@ import { POST as signinPost } from "../auth/signin/route";
 import { POST as signoutPost } from "../auth/signout/route";
 import { POST as chatPost, MAX_CHAT_REQUEST_BYTES } from "../chat/route";
 import { POST as simulatePost } from "../simulate/route";
+import { pinFakeNgspiceForSuite } from "@/app/lib/computation/__tests__/_pinned-ngspice";
+
+// [B22-A3] reviewed pin move: /api/simulate runs ngspice through the diagnostic runner, which refuses an unpinned install (OD-135)
+pinFakeNgspiceForSuite();
 
 const SIGNIN_ENV_KEYS = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY"] as const;
 async function payload(res: Response): Promise<Record<string, unknown>> { return (await res.json()) as Record<string, unknown>; }

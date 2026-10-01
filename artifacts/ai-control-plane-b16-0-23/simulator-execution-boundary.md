@@ -43,3 +43,17 @@ Proven (pins + source gates; no live simulator in any test):
 Authoritative run execution is NOT expanded, enabled, or re-implemented in
 this migration. The existing in-process worker/pool and its server-owned
 limits are preserved exactly; no new runner was introduced. **CONFIRMED.**
+
+## [B22-A3, 2026-10-01] Superseded in part
+
+The spawn quoted above is gone: neither the smoke test nor the worker starts a process. Every ngspice process is started by the
+diagnostic runner (`app/lib/computation/diagnostic-runner.ts`, OD-136), which executes the B22-A2 profile
+`ngspice-local-diagnostic`: the executable is the install the server settings pin (`SIRKIT_NGSPICE_INSTALL_ROOT`,
+`SIRKIT_NGSPICE_INSTALL_SHA256`; `NGSPICE_BIN` and PATH choose nothing), refused unless its install-tree digest matches; argv from
+the profile's templates (`-b -n deck.cir`, `-n -v`); the ENVIRONMENT is server-owned too - exactly `LC_ALL=C`, `TZ=UTC`, the
+install's `bin` as PATH, `SystemRoot`, and the per-run directory as `TEMP`/`TMP` passed, no other key (this record listed no
+environment; the B16.0.23 gate now pins it, at the runner) - [B22-A3 review, 2026-10-01] and on win32 Node (libuv) adds the
+server's `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `USERNAME`, `USERDOMAIN`, `LOGONSERVER`, `SYSTEMDRIVE` and `WINDIR` to the child,
+recorded per run (`hostAddedEnvironment`), so the child's environment is that map plus those eight; cwd a per-run `mkdtemp` directory the runner removes on every path; the
+wall clock the profile's or the caller's tighter one (smoke 10 s, worker 120 s); a tree kill; outputs within A1's bound. The runner
+is diagnostic only and no isolation boundary (`artifacts/ai-control-plane-b22/diagnostic-runner.md`).

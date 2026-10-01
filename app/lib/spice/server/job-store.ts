@@ -88,6 +88,7 @@ function emit(runId: string): void {
 function addEvent(runId: string, event: Omit<RunEvent, "sequence" | "timestamp">): void {
   const job = state.jobs.get(runId);
   if (!job) return;
+  if (TERMINAL.has(job.record.status) && !TERMINAL.has(event.status)) return; // [B22-A3 review] security-3: a terminal record is never reopened by a later progress event
   const timestamp = nowIso();
   job.record.status = event.status;
   job.record.progress = event.progress;
@@ -138,6 +139,7 @@ async function executeQueuedRun(
       runPoint: job.runPoint,
       parts,
       signal: job.abort.signal,
+      holder: job.scope.tenantId, // [B22-A3 review] security-2: the run's tenant shares the diagnostic runner's cap
       onEvent: (event) => addEvent(runId, event),
     });
     // [B16.0.23 §E/§F] a TERMINAL record is authoritative: a late worker

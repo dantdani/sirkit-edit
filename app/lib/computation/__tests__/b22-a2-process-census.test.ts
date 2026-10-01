@@ -32,11 +32,11 @@ const THREAT_MODEL = "artifacts/ai-control-plane-b22/threat-model.md";
 const production = collectProductionFiles(ROOT);
 /** The b20-b4 process gate's module set: a process, a thread, string-compiled code or a loader that can reach them. */
 const PROCESS_MODULE = /^(?:node:)?(?:child_process|worker_threads|cluster|vm|module)(?:\/|$)/;
-/** The executable each spawner starts, as the classification names it. A spawner missing here fails case 1 (a reviewed move). */
+/** The executable each spawner starts, as the classification names it. A spawner missing here fails case 1 (a reviewed move). [B22-A3,
+ *  2026-10-01] Reviewed move (OD-136): the three ngspice sites became one spawner, the diagnostic runner; its own tree kill (taskkill
+ *  on win32) ends ngspice and is no engineering executable, so the column still names ngspice. */
 const EXECUTABLE_OF: Readonly<Record<string, string>> = {
-  "app/api/simulate/route.ts": "ngspice",
-  "app/api/spice/models/smoke-test/route.ts": "ngspice",
-  "app/lib/spice/server/worker.ts": "ngspice",
+  "app/lib/computation/diagnostic-runner.ts": "ngspice",
   "app/lib/pcb/autoroute/runner.ts": "freerouting (java)",
   "app/lib/pcb/fab/kicad-cli-runner.ts": "kicad-cli",
 };
@@ -51,7 +51,7 @@ interface Exemption { via: string; calls: readonly string[]; reason: string }
  */
 const NON_STARTING: Readonly<Record<string, Exemption>> = {
   "/api/spice/runs/[id]": { via: JOB_STORE, calls: ["getRun", "cancelRun"], reason: "GET reads a run record; DELETE stops a live run through cancelRun, which aborts the run's signal so the worker kills its child: it stops a process and never starts one" },
-  "/api/spice/runs/[id]/bundle": { via: JOB_STORE, calls: ["getRun"], reason: "reads a run record and zips its bounded logs and files; starts nothing" },
+  "/api/spice/runs/[id]/bundle": { via: JOB_STORE, calls: ["getRun"], reason: "reads a run record and zips what it carries (bounded logs, the parsed results; no file is read since B22-A3); starts nothing" },
   "/api/spice/runs/[id]/events": { via: JOB_STORE, calls: ["getRun", "subscribeRun"], reason: "streams a run record's events; starts nothing" },
   "/api/spice/runs/[id]/waveforms": { via: JOB_STORE, calls: ["getRun"], reason: "slices a run record's waveforms; starts nothing" },
 };
@@ -294,7 +294,7 @@ function csvExternalProcess(): Map<string, Set<string>> {
 const CENSUS = census(production, routeEntries);
 
 describe("[B22-A2] the process census (D22-18)", () => {
-  it("1. the spawners are derived from the source: the production files under app/ that reference a process module at run time are exactly the five the census labels, each naming child_process", { timeout: 120_000 }, () => {
+  it("1. the spawners are derived from the source: the production files under app/ that reference a process module at run time are exactly the ones the census labels, each naming child_process", { timeout: 120_000 }, () => {
     expect(spawnersOf(production)).toEqual(Object.keys(EXECUTABLE_OF).sort());
     for (const spawner of Object.keys(EXECUTABLE_OF)) expect(production.get(spawner), spawner).toMatch(/\bspawn\(/);
     // the census covers every route file, and the route files are exactly the policy table's paths (165 rows over these paths)
@@ -330,7 +330,7 @@ describe("[B22-A2] the process census (D22-18)", () => {
     for (const [path, exemption] of Object.entries(NON_STARTING)) {
       const row = byPath.get(path);
       expect(row, path).toBeDefined();
-      expect(row!.reached, path).toEqual(["app/lib/spice/server/worker.ts"]);
+      expect(row!.reached, path).toEqual(["app/lib/computation/diagnostic-runner.ts"]); // [B22-A3] reviewed pin move: through the job store and the worker, the one ngspice spawner (was the worker)
       expect(row!.exempt, path).toBe(true);
       expect(exemption.reason.length, path).toBeGreaterThan(20);
       expect(exemptionViolations(production, row!.file, exemption), path).toEqual([]);
@@ -391,8 +391,8 @@ describe("[B22-A2] the process census (D22-18)", () => {
     const route = "app/api/spice/runs/[id]/route.ts";
     const exemption = NON_STARTING["/api/spice/runs/[id]"]!;
     const entry = [{ path: "/api/spice/runs/[id]", file: route }];
-    const WORKER = "app/lib/spice/server/worker.ts";
-    expect(census(production, entry)[0]).toMatchObject({ reached: [WORKER], exempt: true, label: "" });
+    const WORKER = "app/lib/spice/server/worker.ts"; const RUNNER = "app/lib/computation/diagnostic-runner.ts"; // [B22-A3] reviewed pin move: the spawner reached is the runner, through the worker
+    expect(census(production, entry)[0]).toMatchObject({ reached: [RUNNER], exempt: true, label: "" });
     const mutated = (file: string, from: string, to: string): Map<string, string> => {
       const source = production.get(file)!;
       expect(source.split(from).length, `${file}: ${from}`).toBe(2);
@@ -400,7 +400,7 @@ describe("[B22-A2] the process census (D22-18)", () => {
     };
     const dropsExemption = (files: Map<string, string>, reason: string): void => {
       expect(exemptionViolations(files, route, exemption), reason).toContain(reason);
-      expect(census(files, entry)[0], reason).toMatchObject({ reached: [WORKER], exempt: false, label: "ngspice" });
+      expect(census(files, entry)[0], reason).toMatchObject({ reached: [RUNNER], exempt: false, label: "ngspice" });
     };
     // (a) the route itself imports and calls startRunPlan
     const starting = new Map(production).set(route, `${production.get(route)!}\nimport { startRunPlan } from "@/app/lib/spice/server/job-store";\nexport const PUT = () => startRunPlan({} as never);\n`);
@@ -424,7 +424,7 @@ describe("[B22-A2] the process census (D22-18)", () => {
     // (e) the route reaches the worker around the job store
     const around = new Map(production).set(route, `${production.get(route)!}\nimport { executeRunPoint } from "@/app/lib/spice/server/worker";\nexport const PATCH = executeRunPoint;\n`);
     expect([...closureOf(around, route, new Set([JOB_STORE])).keys()]).toContain(WORKER);
-    dropsExemption(around, `AROUND_THE_GATEWAY:${WORKER}`);
+    dropsExemption(around, `AROUND_THE_GATEWAY:${RUNNER}`); // the worker imports the runner: reaching the worker around the job store reaches the spawner
     // (f) a namespace import of the job store names no binding the check could read
     const opaque = mutated(scope, 'import type { RunScope } from "@/app/lib/spice/server/job-store";', 'import type { RunScope } from "@/app/lib/spice/server/job-store";\nimport * as store from "@/app/lib/spice/server/job-store";\nexport const peek = () => store;');
     dropsExemption(opaque, `OPAQUE_GATEWAY_USE:${scope}:namespace-import`);

@@ -1737,3 +1737,80 @@ Amendments to existing entries:
   - [Review fixes] The input mount is typed and validated read-only.
   - [Review fixes] The digest stats files as bigint, because Windows file ids exceed 2^53.
 - Owner confirmation pending.
+
+## OD-135 — which ngspice build each profile pins, as applied (B22-A3, 2026-10-01)
+
+- **Question:** how is the local ngspice identified before it runs?
+- **Default applied:**
+  - The diagnostic runner (`app/lib/computation/diagnostic-runner.ts`) starts only `<SIRKIT_NGSPICE_INSTALL_ROOT>/bin/ngspice_con.exe`.
+  - Before every spawn it refuses, closed, an install whose `sirkit-install-tree-sha256/1` digest differs from `SIRKIT_NGSPICE_INSTALL_SHA256` (`NGSPICE_DIAGNOSTIC_DIGEST_MISMATCH`).
+  - An unpinned or malformed digest setting is refused (`NGSPICE_DIAGNOSTIC_UNPINNED`, naming the setting). An unset or relative root is refused (`NGSPICE_DIAGNOSTIC_INSTALL_ROOT_UNSET`).
+  - `NGSPICE_BIN` and PATH no longer choose the binary.
+  - The digest is cached per process behind a stat fingerprint. Measured on a synthetic 778-file, 52 MB tree: full digest 469 ms; first check 620 ms; cached check 67–78 ms. Concurrent early checks share one check in flight.
+  - The owner pins by running `tsx scripts/print-install-tree-digest.ts <Spice64 folder>` and setting both settings in `.env.local`.
+  - Until then every ngspice path fails closed: `/api/simulate` 503, smoke test 422, Studio run failed.
+- **Evidence:** `artifacts/ai-control-plane-b22/diagnostic-runner.md` section 2; `b22-a3-diagnostic-runner` cases 2, 3, 4, 13.
+- **The owner may choose otherwise:** a different local build (re-pin the digest). Owner confirmation pending.
+
+## OD-136 — the three legacy ngspice entry points, as applied (B22-A3, 2026-10-01)
+
+- **Question:** how do `/api/simulate`, the Studio worker and the smoke test reach ngspice?
+- **Default applied:**
+  - All three call the one diagnostic runner and import no `child_process`. The worker's `-v` probe is `-n -v` through the runner.
+  - `APP_SPAWNERS` moved once, by review, to the diagnostic runner, FreeRouting's runner and kicad-cli's runner.
+  - Every result is labelled `diagnostic_only` and `environment_dependent`, with the profile id, the observed install digest, the seed and the host-added variable names. Nothing is called a sandbox or authoritative; none of the three is retired.
+  - The reproducibility bundle reads no file. The raw file is not kept, but its SHA-256 and size are in the manifest (`rawOutput`).
+- **Evidence:** `b22-a3-single-spawner` (4 cases); `b22-a3-diagnostic-runner` case 13; `b20-b4-process-gate`.
+- Owner confirmation pending.
+
+## OD-145 — kill semantics and limits for the diagnostic runner on Windows, as applied (B22-A3, 2026-10-01)
+
+- **Question:** how is a run stopped, and when is it terminal?
+- **Default applied:**
+  - On win32, the runner's own fixed-argv `taskkill /PID <pid> /T /F` (absolute path under SystemRoot, no caller input), then the direct child. On POSIX, SIGKILL to the process group of a detached child.
+  - Applied on the wall clock (profile 120 s, or a caller's tighter bound) and on abort.
+  - A run is terminal only once `close` is observed, or as `kill_unconfirmed` after `DIAGNOSTIC_KILL_CONFIRM_MS` = 5000. The record keeps `killReason` (wall clock or cancel), and a run is never reported cancelled while its process may live.
+  - A `kill_unconfirmed` run keeps its slot, and its directory is removed again, once `close` comes.
+  - No job object, so there is no OS limit on CPU, memory, processes, file size or network (recorded, never claimed).
+  - Whether `/T` reaches a real descendant is INFERRED.
+  - FreeRouting's and kicad-cli's direct-child kills and before-exit resolutions stay with B22-B/D.
+- **Evidence:** `diagnostic-runner.md` section 3; `b22-a3-diagnostic-runner` cases 6, 7, 8, 12, 13.
+- Owner confirmation pending.
+
+## OD-155 — the diagnostic runner's cap: shared by tenant, every wait bounded, as applied (B22-A3, 2026-10-01)
+
+- **Question:** how do requests across batches, tenants and entry points share the ngspice processes?
+- **Default applied:**
+  - One counter per server process: 4 running and 64 waiting at most.
+  - Each request names its server-derived tenant as holder. One tenant runs at most 3 and has at most 32 waiting; one more of that tenant, or any request beyond 64 waiting, is refused `NGSPICE_DIAGNOSTIC_BUSY` at once.
+  - A freed slot goes to the tenant with the fewest running, FIFO within a tenant.
+  - A request waits at most its own wall clock (10 s for `/api/simulate` and the smoke test), then gets BUSY with nothing run. A Studio point waits at most `DIAGNOSTIC_RUNNER_MAX_QUEUE_WAIT_MS` = 2,000,000 ((64/4) x (120 s + 5 s)).
+  - An abort while waiting withdraws the request; the smoke test now passes its request abort.
+  - Trade-offs: a single-tenant install runs 3 Studio points at a time, not 4; [B22-A3 lead] an interactive request (`/api/simulate`, the smoke test) takes the fourth slot past its tenant's share, so a tenant's own plan never refuses its Simulate while a slot is idle. A Studio point refused BUSY fails, and its batch moves on to the next point (the job store's loop is unchanged).
+- **Evidence:** `diagnostic-runner.md` section 4; `b22-a3-diagnostic-runner` cases 1, 4, 10, 13.
+- **The owner may choose otherwise:** different shares, or tenant plus caller kind as the holder (so a tenant's own batch never delays its own smoke test). Owner confirmation pending.
+
+## OD-156 — the win32 child environment: Node's eight additions recorded, not removed, as applied (B22-A3, 2026-10-01)
+
+- **Question:** is the child's environment exactly the profile's map?
+- **Default applied:**
+  - The map passed is exactly `LC_ALL=C`, `TZ=UTC`, `PATH=<install>/bin`, `SystemRoot`, and `TEMP`/`TMP` = the run directory.
+  - On win32, Node (libuv `required_vars`, src/win/process.c) copies the server's value of each required variable the map lacks. The child therefore also gets HOMEDRIVE, HOMEPATH, LOGONSERVER, SYSTEMDRIVE, USERDOMAIN, USERNAME, USERPROFILE and WINDIR. This was CONFIRMED on this host by the review's benign probe, and [B22-A3 lead] the lead's live run CONFIRMED that ngspice's own `echo $USERPROFILE` expands to the server's value under the runner's spawn (live case 5).
+  - Every record and provenance names them (`hostAddedEnvironment`; names only). None is a secret.
+  - `-n` (probe p23) is the single layer keeping a home `.spiceinit` from running.
+  - D22-5's environment half is reopened for these eight.
+- **Evidence:** `diagnostic-runner.md` section 6; `b22-a3-diagnostic-runner` cases 2, 12, 14; live case 5 (the lead's).
+- **The owner may choose otherwise:** a profile revision that gives all eleven an explicit neutral value. That needs A2's validator to admit USERPROFILE, HOMEDRIVE and HOMEPATH keys set to run-directory values, plus the lead's probes of ngspice under them. Owner confirmation pending.
+
+## OD-157 — B22-A3: stated choices beyond its task text, as applied (B22-A3, 2026-10-01)
+
+- **Default applied:**
+  - **Location:** the runner lives in `app/lib/computation/`, beside the profile registry and output bounds. It stays out of the MCP closure and every B11-scanned file.
+  - **Over the cap:** queue, then refuse (OD-155).
+  - **Seed:** a deck that sets its own `seed` or `rndseed` option is refused, never overridden. A Studio plan with such a custom option fails each point; an early 422 at `POST /api/spice/runs` is B22-C's preflight.
+  - **Raw file:** kept only as its SHA-256 and size (`rawOutput`). The vectors themselves, including non-finite values, are a recorded loss next to D22-10.
+  - **Version probe:** cached per observed install digest.
+  - **Fs failures:** the runner's own fs failures are closed (`NGSPICE_DIAGNOSTIC_RUN_DIRECTORY_FAILED`, the errno only).
+  - **Redaction:** on the stream, before the output bound.
+  - **No callback after settling:** once a run has settled no output reaches a caller, and the job store never reopens a terminal record.
+- Owner confirmation pending.

@@ -631,7 +631,12 @@ export interface RunManifest {
   testRevision: number;
   runPlanId: EntityId;
   runPoint: RunPoint;
-  simulator: { name: "ngspice"; version: string; mode: "subprocess" | "shared-library" };
+  /** [B22-A3] `runner`: the diagnostic runner's profile, observed install digest and labels (`diagnostic_only`, `environment_dependent`);
+   *  [B22-A3 review] the effective seed and the variables Node added to the child on win32 (names only). */
+  simulator: { name: "ngspice"; version: string; mode: "subprocess" | "shared-library"; runner?: { profileId: string; installDigest: string | null; labels: string[]; seed: string; hostAddedEnvironment: string[] } };
+  /** [B22-A3 review] regressions-3: the SHA-256 and byte count of ngspice's raw file as the diagnostic runner read it; the file itself
+   *  is not kept (the runner removes each run directory), so a re-run is compared by this digest. */
+  rawOutput?: { sha256: string; bytes: number };
   modelChecksums: Record<string, string>;
   schematicHash: string;
   netlistChecksum: string;
