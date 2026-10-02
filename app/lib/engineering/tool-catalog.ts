@@ -1057,7 +1057,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     timeoutMs: 5_000,
     sourceEvidence: ["app/lib/pcb/dimensions/commands.ts", "app/lib/pcb/dimensions/geometry.ts", "app/components/pcb/hooks/useDimensionTool.ts", "app/components/pcb/inspectors/DimensionInspector.tsx", "app/lib/engineering/operations.ts", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
     versionNotes: "1.2.0 (B18-C I7): bound and agent-exposed as a reviewed granted execution (confirmation-only: no explicit grammar); re-tiered reversible per the runbook's PCB Tier 1 list (OD-13); deterministic add ids; an update never moves the measured points. 1.1.0 (B09.1): reconciled with B08 truth — implemented and active, no tool adapter.",
-  },
+  }, ...COMPUTATION_TOOL_DESCRIPTORS, // [B22-B] the five named computations (OD-139), from computation-tool-descriptors.ts
 ] satisfies readonly ToolDescriptor[]);
 
 let cached: ToolRegistry | null = null;
@@ -1067,3 +1067,6 @@ export function sirkitToolRegistry(): ToolRegistry {
   cached ??= new ToolRegistry(SIRKIT_TOOL_CATALOG);
   return cached;
 }
+
+// [B22-B] the five named computation descriptors, on their own line at the END (imports are hoisted): no line of this catalog moves
+import { COMPUTATION_TOOL_DESCRIPTORS } from "./computation-tool-descriptors";

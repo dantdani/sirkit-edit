@@ -281,7 +281,7 @@ describe("B09.3 §D — catalog and generated runtime truth (R4)", () => {
       // validated working-copy resources — never unconditional, never
       // withheld when the board is genuinely present and valid.
       expect(tool.browserRuntimeAvailability, tool.toolId).toBe("conditional");
-      expect(tool.requiredRuntimeResources, tool.toolId).toContain("canonical-state");
+      if (tool.toolId.startsWith("sirkit.computation.")) expect(tool.requiredRuntimeResources, tool.toolId).toBe("computation-port"); else expect(tool.requiredRuntimeResources, tool.toolId).toContain("canonical-state"); // [B22-B, 2026-10-01] reviewed pin move (OD-139): a named computation read is conditional on the computation port the chat route binds alone (an equation needs no board; a board parse refuses without the run's canonical state)
       expect(tool.bindingResolved, tool.toolId).toBe(true);
     }
     const selection = exposed.find((entry) => entry.toolId === "sirkit.selection.inspect")!;

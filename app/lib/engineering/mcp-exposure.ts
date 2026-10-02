@@ -26,13 +26,13 @@ export { INTENTIONAL_MCP_EXPOSED_TOOL_IDS, MCP_WITHHELD_TOOL_IDS };
 
 /**
  * The closed exclusion reasons, in precedence order (the first that applies is THE reason): the never-lists first, then the
- * agent set, then the classes, side effects and bindings MCP cannot serve, then the reviewed decision. The first ten are the
- * structural rule; `withheld` and `not_mcp_reviewed` apply only to a descriptor the structural rule admits.
+ * agent set, then the classes, side effects and bindings MCP cannot serve, then the reviewed decision. The first eleven are the
+ * structural rule; `withheld` and `not_mcp_reviewed` apply only to a descriptor the structural rule admits. [B22-B] `computation` (OD-139) is a never-list of its own: every `sirkit.computation.*` descriptor and every `bound-computation` binding, exposed or not.
  * `not_read_or_propose`, `side_effects`, `not_servable` and `not_mcp_reviewed` carry no production id ([B20 B3] `withheld` two; [B20 B4] seven).
  */
 export const MCP_EXCLUSION_REASONS = Object.freeze([
   "tier3",
-  "never_exposed",
+  "never_exposed", "computation", // [B22-B] computation
   "not_agent_exposed",
   "granted_execution",
   "view_session",
@@ -49,7 +49,7 @@ export type McpExclusionReason = (typeof MCP_EXCLUSION_REASONS)[number];
 /** The decision that excludes each reason's descriptors (rendered into the exposure page and the manifest review). */
 export const MCP_EXCLUSION_REASON_DECISIONS: Readonly<Record<McpExclusionReason, string>> = Object.freeze({
   tier3: "permission Tier 3 (publish, release, upload, purchase or order, qualification) is never agent-executable (permission-tiers.ts)",
-  never_exposed: "matches NEVER_EXPOSED_TOOL_PATTERNS: manufacturing release, qualification, the canonical replay primitive, never-granted canonical mutations, catalog authority",
+  never_exposed: "matches NEVER_EXPOSED_TOOL_PATTERNS: manufacturing release, qualification, the canonical replay primitive, never-granted canonical mutations, catalog authority", computation: "a named computation (B22-B, OD-139) runs in the server's bounded engine host (a worker thread) or the diagnostic runner (a process), bound to a chat run by its composition root; an MCP call may start neither (b20-b4-process-gate)",
   not_agent_exposed: "outside the reviewed agent set; the MCP set is a subset of it (agent-exposure.ts)",
   granted_execution: "a granted execution needs a server-minted grant for a cookie-session human and the browser's editor session; an MCP principal has neither (D20-2, D20-33)",
   view_session: "a view-session control is executed by an open editor in the user's browser; an MCP principal has none (OD-49, D20-7)",
@@ -129,7 +129,7 @@ function factsOf(descriptor: unknown): ExposureFacts | null {
 function structuralReasonOf(facts: ExposureFacts): McpExclusionReason | null {
   const tier = permissionTierOfDescriptor({ toolId: facts.toolId, operationClass: facts.operationClass as ToolDescriptor["operationClass"], approvalTier: facts.approvalTier as ToolDescriptor["approvalTier"] });
   if (tier === 3) return "tier3";
-  if (NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(facts.toolId))) return "never_exposed";
+  if (NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(facts.toolId))) return "never_exposed"; if (facts.toolId.startsWith("sirkit.computation.") || facts.bindingStatus === "bound-computation") return "computation"; // [B22-B] OD-139
   if (!facts.agentExposed) return "not_agent_exposed";
   if (facts.granted) return "granted_execution";
   if (facts.operationClass === "view-session") return "view_session";

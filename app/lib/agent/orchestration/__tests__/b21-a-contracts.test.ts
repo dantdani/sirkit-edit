@@ -248,7 +248,7 @@ describe("[B21 A] the canonical orchestration contracts", () => {
       expect(NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(toolId)), toolId).toBe(true);
       expect(EXPOSED).not.toContain(toolId);
     }
-    expect(EXPOSED).toHaveLength(33);
+    expect(EXPOSED).toHaveLength(36); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads
     for (const toolId of EXPOSED) {
       expect(NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(toolId)), toolId).toBe(false);
       expect(validateSpecialistResult(validResult({ requiredTools: [{ toolId, version: "1.0.0", reason: "needed" }] })).ok, toolId).toBe(true);
@@ -284,7 +284,7 @@ describe("[B21 A] the canonical orchestration contracts", () => {
     ]) {
       refused(validateSpecialistRequest(validRequest({ allowedToolIds: list })), "allowed_tool_ids_invalid", "$.allowedToolIds");
     }
-    expect(EXPOSED.length).toBe(33);
+    expect(EXPOSED.length).toBe(36); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads
     const missing = validRequest();
     delete (missing as { allowedToolIds?: unknown }).allowedToolIds;
     refused(validateSpecialistRequest(missing), "missing_key", "$.allowedToolIds");

@@ -7,7 +7,7 @@
  * keeps the ports from every specialist, the history read while a specialist holds no captured view (the live proposals: below).
  *
  * The coordinator's row IS the exposure list itself (the same frozen array, never a copy): the existing single-agent set,
- * unchanged. It is never handed to buildRunToolset as an allowlist (33 ids, over the A4L bound of 32): the coordinator's run
+ * unchanged. It is never handed to buildRunToolset as an allowlist (the whole agent set, over the A4L bound of 32): the coordinator's run
  * carries none. Every specialist row is sorted, duplicate-free, within the bound, and holds no mutation, no view-session
  * control, no never-exposed or Tier 3 id, and a proposal only in a proposing role's row; the cost/latency policy role holds
  * no tool at all. Nothing here reads a registry at load, names a module that changes project state, or holds authority.
@@ -90,7 +90,7 @@ export const ROLE_TOOL_REASONS: Readonly<Record<ToolHoldingRole | "cost-latency-
 
 /** The two rows that are not a list of reasons: the coordinator's (the exposure list itself) and the cost/latency policy role's (none). */
 export const ROLE_NOTES: Readonly<Record<"coordinator" | "cost-latency-router", string>> = Object.freeze({
-  coordinator: "The existing single-agent set, unchanged: this row IS INTENTIONAL_AGENT_EXPOSED_TOOL_IDS (the same frozen array, its reasons in agent-exposure.ts), never passed as an allowlist (33 ids, over the A4L bound).",
+  coordinator: "The existing single-agent set, unchanged: this row IS INTENTIONAL_AGENT_EXPOSED_TOOL_IDS (the same frozen array, its reasons in agent-exposure.ts), never passed as an allowlist (the whole agent set, over the A4L bound).",
   "cost-latency-router": "A policy role over the plan's caps and provider choice: it reads no project state, so it holds no tool, and a plan that names it does not run it (role_has_no_tools: its task records the dissent) until B21-E gives it a policy input.", // [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): B21-E (E1..E4) gave it none - E1's role table gives it inherit/inherit and it still holds no tool; the text stays verbatim, as specialist-roles.md quotes it for its row, b21-c-role-tools case 4]
 });
 

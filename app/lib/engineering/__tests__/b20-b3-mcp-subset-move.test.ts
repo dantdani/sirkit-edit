@@ -29,7 +29,7 @@ const descriptor = (toolId: string): ToolDescriptor => registry.get(toolId)!;
  * where the board is absent, a reason checked first).
  */
 const A4_ADDITION = "sirkit.mcp.observation-read";
-const baseRegistry = new ToolRegistry(SIRKIT_TOOL_CATALOG.filter((item) => item.toolId !== A4_ADDITION));
+const B22B_ADDITIONS = ["sirkit.computation.analytical-equation", "sirkit.computation.artifact-compare", "sirkit.computation.artifact-parse", "sirkit.computation.circuit-analysis", "sirkit.computation.layout-experiment"]; const baseRegistry = new ToolRegistry(SIRKIT_TOOL_CATALOG.filter((item) => item.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(item.toolId))); // [B22-B, 2026-10-01] reviewed pin move: the base also leaves out B22-B's five named computations, so B3's base pins stand
 const NEWLINE = String.fromCharCode(10);
 const read = (path: string): string => readFileSync(resolve(process.cwd(), path), "utf8").replaceAll(`${String.fromCharCode(13)}${NEWLINE}`, NEWLINE);
 
@@ -123,7 +123,7 @@ describe("[B20 B3] F — the reviewed MCP subset move", () => {
       expect(item.versionNotes?.endsWith(WIDENED_NOTE), id).toBe(true);
     }
     expect(baseRegistry.list()).toHaveLength(BASE.count);
-    expect(registry.list().map((item) => item.toolId).filter((id) => !baseRegistry.get(id))).toEqual([A4_ADDITION]); // [B20 A4]
+    expect(registry.list().map((item) => item.toolId).filter((id) => !baseRegistry.get(id))).toEqual([...B22B_ADDITIONS, A4_ADDITION].sort()); // [B20 A4]; [B22-B, 2026-10-01] reviewed pin move (OD-139): + the five named computations, left out of the base like A4's addition
     expect(engineeringDigest(Object.fromEntries(baseRegistry.list().map((item) => [`${item.toolId}@${item.version}`, engineeringDigest(strip(item))])))).toBe(BASE.strippedAll);
     expect(engineeringDigest(Object.fromEntries(baseRegistry.list().filter((item) => !WIDENED.includes(item.toolId)).map((item) => [`${item.toolId}@${item.version}`, engineeringDigest(item)])))).toBe(BASE.untouchedFull);
     // pcb.revision-inspect and readiness-inspect already declared it; the withheld reads keep their own authority
@@ -133,15 +133,15 @@ describe("[B20 B3] F — the reviewed MCP subset move", () => {
 
   it("5. the agent set is still B3's 32 without A4's one addition (33 with it) and assistant-agent discovery under the B04 contexts is byte-equal to the base pins", () => {
     // [B20 A4] pin move: 32 + the external tool read (33); B3's 32 are unchanged
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => id !== A4_ADDITION)).toHaveLength(32);
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(33);
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => id !== A4_ADDITION && !B22B_ADDITIONS.includes(id))).toHaveLength(32);
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(36); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads
     const actual = Object.fromEntries(Object.entries(AGENT_CONTEXTS).map(([name, overrides]) => [name, identityOf(discoverTools(baseRegistry, editorContext(overrides)))]));
     expect(actual).toEqual(BASE.discovery);
     for (const overrides of Object.values(AGENT_CONTEXTS)) {
       const base = discoverTools(baseRegistry, editorContext(overrides));
       const now = discoverTools(registry, editorContext(overrides));
       expect(now.included).toEqual(base.included);
-      expect(now.excluded.filter((entry) => entry.toolId !== A4_ADDITION)).toEqual(base.excluded);
+      expect(now.excluded.filter((entry) => entry.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(entry.toolId))).toEqual(base.excluded); expect(B22B_ADDITIONS.every((id) => now.excluded.some((entry) => entry.toolId === id) && !now.included.some((item) => item.toolId === id))).toBe(true); // [B22-B] no context here carries the computation-engine authority: each computation is excluded, never included
       // no context here carries the external-mcp-observation authority; agentNoBoard also lacks the board, a reason checked first
       const expected = overrides.projectState !== undefined && !overrides.projectState.includes("board-present") ? "project_state_missing" : "authority_missing";
       expect(now.excluded.filter((entry) => entry.toolId === A4_ADDITION).map((entry) => entry.reason)).toEqual([expected]);

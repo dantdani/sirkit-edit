@@ -51,7 +51,7 @@ describe("B17-A — control inventory gates", () => {
     // Records that run as EFFECTS of other operations have a real handler but no control of their own.
     // [B20 A4] reviewed pin move: + mcp.external-tool-read, the chat assistant's external tool read — reached only as the agent tool
     // sirkit.mcp.observation-read inside POST /api/chat (ai.chat-qa's route); it has no control and no route of its own by design
-    const EFFECT_DRIVEN: Record<string, string> = { "project.autosave": "runs after every committed operation (app/lib/project/autosave.ts); no control by design", "mcp.external-tool-read": "runs only as the chat agent's tool inside POST /api/chat (ai.chat-qa); no control or route of its own by design" };
+    const EFFECT_DRIVEN: Record<string, string> = { "project.autosave": "runs after every committed operation (app/lib/project/autosave.ts); no control by design", "mcp.external-tool-read": "runs only as the chat agent's tool inside POST /api/chat (ai.chat-qa); no control or route of its own by design", "computation.named-read": "runs only as the chat agent's three named computation reads inside POST /api/chat (ai.chat-qa), behind the server's opt-in computation fact; no control or route of its own by design" }; // [B22-B, 2026-10-01] reviewed pin move: + computation.named-read (OD-139)
     const handlerless = ACTION_COVERAGE_REGISTRY
       .filter((record) => record.status === "implemented" && !reached.has(record.id) && !routed.has(record.id) && !(record.id in EFFECT_DRIVEN))
       .map((record) => `${record.id}: implemented but no control and no route reaches it`);

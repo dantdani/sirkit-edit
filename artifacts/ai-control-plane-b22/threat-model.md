@@ -64,12 +64,12 @@ The routes that start an engineering executable, the roles that reach them and w
 | `POST /api/spice/models/smoke-test` | EDITORS | ngspice | one model's text (the model screen and the final deck screen) |
 | `POST /api/pcb/autoroute` | EDITORS | FreeRouting (java) | a board (written as DSN) and a pass budget (`maxPasses`, bounded) |
 | `POST /api/pcb/qualify` | `pcb_editor`, `project_admin` | FreeRouting (java), except in fixture replay (fixture mode with `SIRKIT_FIXTURE_ROUTER` `record` or `live` starts it) | the qualification request; the board is server-held |
-| `POST /api/chat` | EDITORS (body-scope server actor) | FreeRouting (java), through `sirkit.routing.propose` | the conversation; the model chooses the tool (agent-exposed) |
+| `POST /api/chat` | EDITORS (body-scope server actor) | FreeRouting (java), through `sirkit.routing.propose`; [B22-B] a worker thread of the bounded engine host (no process), through the three named computation reads | the conversation; the model chooses the tool (agent-exposed); a computation's closed input (bounded numbers, closed enums, server-held digests) |
 | `POST /api/pcb/export/gerbers` | REVIEW_EDITORS | kicad-cli | a board, a fab preset id (a closed server table), a board name (sanitized) |
 
 **The census.** `b22-a2-process-census` derives, from the source, which routes reach a spawner (the five files under `app/` that
 reference a process module, [B22-A3, 2026-10-01] now three - the diagnostic runner, the one ngspice spawner, FreeRouting's runner and
-kicad-cli's runner, the runner's own `taskkill` being its tree kill, not an engineering executable; the runtime import closure,
+kicad-cli's runner, the runner's own `taskkill` being its tree kill, not an engineering executable; [B22-B review, 2026-10-02] five: the three spawners and the two thread starters, the bounded engine host and its worker entry - reviewed `THREAD_STARTERS`, a worker thread of the server process, never an external process; the runtime import closure,
 walked with the MCP gates' edges) and compares it with the
 `external_process` column of `artifacts/ai-control-plane-b16-0-2/route-data-and-resource-classification.csv`. A route that reaches a
 spawner is taken to start it unless a reviewed exemption shows, by call reachability, that it cannot. B22-A2 corrected the three rows
@@ -79,7 +79,7 @@ closure reaches a spawner (case 7 checks this table):
 
 | route | reaches | external_process |
 |---|---|---|
-| `/api/chat` | `app/lib/pcb/autoroute/runner.ts` | `freerouting (java)` |
+| `/api/chat` | `app/lib/computation/engine-host.ts`, `app/lib/pcb/autoroute/runner.ts` | `freerouting (java)` |
 | `/api/pcb/autoroute` | `app/lib/pcb/autoroute/runner.ts` | `freerouting (java)` |
 | `/api/pcb/export/gerbers` | `app/lib/pcb/fab/kicad-cli-runner.ts` | `kicad-cli` |
 | `/api/pcb/qualify` | `app/lib/pcb/autoroute/runner.ts` | `freerouting (java)` |
@@ -93,6 +93,11 @@ closure reaches a spawner (case 7 checks this table):
 
 [B22-A3, 2026-10-01] The ngspice rows name the diagnostic runner (OD-136): `/api/simulate` and the smoke test call it directly,
 `/api/spice/runs` and its four record routes reach it through the job store and the worker, which start no process of their own.
+[B22-B, 2026-10-01] `/api/chat` also reaches `app/lib/computation/engine-host.ts`, the bounded engine host behind the three named
+computation reads (OD-139, OD-140; bound to a run only with `SIRKIT_NAMED_COMPUTATIONS=1`, OD-158): it and its worker entry
+`engine-worker.mjs` reference `worker_threads` and start a worker THREAD of the server process for Sirkit's closed engines, never an
+external process, so they are reviewed thread starters in the census (`THREAD_STARTERS`) with no `external_process` label, and the
+chat row's column stays `freerouting (java)` (`named-computations.md`).
 
 - The four `/api/spice/runs/[id]*` routes import the job store and through it the worker, but call only `getRun`, `cancelRun` and
   `subscribeRun`; inside the job store only `startRunPlan` reaches `executeRunPoint` (case 4: reachability over every top-level
@@ -125,7 +130,7 @@ code, around the child), **server code** (a screen or check before any process e
 | T7 | a run that never ends, or leaves children behind | event loop, host | member, vendor model | wall-clock timers in every spawner; [B22-A3] ngspice: a tree kill, terminal only after the child's close or as `kill_unconfirmed`, one global cap shared by tenant with every wait for a slot bounded (OD-145, OD-155); FreeRouting and kicad-cli keep a direct-child kill and resolve before exit (D22-9; B22-B/D) | runner (timers; [B22-A3] ngspice: the tree kill, terminal after close or `kill_unconfirmed`, one global cap); none (FreeRouting's and kicad-cli's descendants; the Studio record is still marked cancelled at the request, B22-C) | `b16-0-23-tranche-parity` (terminal guard); B22-A3's runner suite (tree kill) |
 | T8 | CPU, memory or process count without limit (a fork-like deck, a runaway engine) | host, event loop | member, vendor model | none on this Windows host (no job object, OD-145); the deck screens refuse every spawning construct; the OCI profile's cgroup limits are designed and unqualified, each `os` claim refused unless its flag carries the claimed value | none (local); os only in the unqualified OCI design | `b22-a2-runtime-profile` cases 9 (no OS claim by a local profile), 16 (each OCI claim and its flag) |
 | T9 | a replaced or tampered executable runs (for the OCI design also the docker CLI on the host that runs its argv) | everything the server user can reach | replaced binary on PATH | before B22-A3 none (PATH and variables chose the binary; D22-2), and still none for kicad-cli and FreeRouting; [B22-A3] ngspice: the pinned install, refused before every spawn unless its digest matches (OD-135); the contract: the install-tree digest from a named server setting, refused on mismatch or when unpinned (B22-A2 defines it; B22-A3 enforces it for ngspice); FreeRouting's digest names its JAR and JRE because setup rewrites a manifest beside them; a container profile's `hostClient` binds the docker CLI by `SIRKIT_OCI_CLI_PATH` and a file digest in `SIRKIT_OCI_CLI_SHA256` (never PATH; unpinned; its context and configuration UNKNOWN until B22-A4), and `validated` needs it pinned | [B22-A3] runner (ngspice: an unpinned or mismatched install is refused before every spawn); none (kicad-cli, FreeRouting); B22-A4 (the docker CLI) | `b22-a2-runtime-profile` cases 4, 5, 10, 15, 18 |
-| T10 | a synchronous engine blocks the event loop | event loop | anonymous (the placement preview), member | none for in-process engines (B20 F1, D22-17; B22-B's bounded host) | none | none - B22-B |
+| T10 | a synchronous engine blocks the event loop | event loop | anonymous (the placement preview), member | none for in-process engines (B20 F1, D22-17; B22-B's bounded host); [B22-B review, 2026-10-02] the three named computation reads run off the request's thread in the bounded engine host's worker threads, stopped hard at their budget (`terminate()`, terminal only once the exit is observed or as `confirmed: false`), at most 2 per server process and 1 per tenant (OD-140, `named-computations.md`); the placement preview (F1) is unchanged - the placement engine has no worker entry | none (F1); [B22-B review] runner - the engine host, around its worker thread (the named computations) | none - B22-B (F1); [B22-B review] `b22-b-bounded-host` (the named computations) |
 | T11 | a diagnostic run is presented as authoritative or validated; a request self-declares a validated profile | evidence truth | member, model output | the 501 and the throwing stub; no B22-A2 profile is `validated` or authoritative-eligible; the execute and readiness routes still trust body profiles (D22-6, latent behind the 501; B22-C) | server code | `b22-a2-blocked-runner`, `b16-0-20-simulation-confinement-gate`, `b16-0-20-tranche-parity`, `b22-a2-runtime-profile` case 8 |
 | T12 | a completed run keeps no result, or results are mislabelled by the parsers | evidence truth | none needed (a defect) | D22-7 (observed at the fake seam by B22-A1) and D22-10 stay with B22-C | none | none - B22-C |
 | T13 | the census of process-starting routes drifts from the code | evidence truth (the classification) | none needed (drift) | the connective census test; the corrected rows | server code (a CI test) | `b22-a2-process-census` |
@@ -141,7 +146,7 @@ code, around the child), **server code** (a screen or check before any process e
   still open there: the Studio record's cancel-before-exit (job store, B22-C), no OS limit of any kind (no job object, OD-145), a link at
   the runner root or a raw file that is a link (B22-D item 4). [B22-A3 review, 2026-10-01] The smoke test now passes its request's
   abort to the runner; Node's eight win32 additions to the child's environment are recorded, not removed (OD-156).
-- **B22-B**: no named computation exists; in-process engines cannot be stopped (T10).
+- **B22-B**: [B22-B review, 2026-10-02] done for the named computations - the closed catalog of five kinds, the three reads in the bounded engine host (a worker thread stopped hard at its budget) and the two process-backed kinds dormant behind a human approval no route offers yet (`named-computations.md`; OD-139, OD-140, OD-159). Still open: the placement preview (F1, T10: the placement engine has no worker entry), no isolation boundary for a worker (a thread of the server process: its file system, network, CPU and external memory are the server's), no OS limit, and the opt-in (OD-158).
 - **B22-C**: the body-trusted CD-10 routes (D22-6), the dropped completed result (D22-7), the parsers (D22-10), evidence identity and
   wording (D22-12..14, D22-21).
 - **B22-D**: no adversarial case runs against a real or contained process (D22-20).

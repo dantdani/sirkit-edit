@@ -40,6 +40,14 @@ const EXECUTABLE_OF: Readonly<Record<string, string>> = {
   "app/lib/pcb/autoroute/runner.ts": "freerouting (java)",
   "app/lib/pcb/fab/kicad-cli-runner.ts": "kicad-cli",
 };
+/** [B22-B, 2026-10-01] Reviewed move (OD-140): the bounded engine host and its one worker entry reference worker_threads - they start
+ *  a worker THREAD of the server process for Sirkit's closed in-process engines, never an external process, so they carry no
+ *  `external_process` label. The census still lists every route that reaches one (case 7, threat-model.md); b22-b-no-generic-exec pins
+ *  that the host constructs its one Worker from its closed entry table and that the entry loads and compiles nothing. */
+const THREAD_STARTERS: Readonly<Record<string, string>> = {
+  "app/lib/computation/engine-host.ts": "the bounded engine host: a worker_threads Worker per named computation, terminated at its budget",
+  "app/lib/computation/engine-worker.mjs": "the engine host's one worker entry: runs inside the worker thread, imports worker_threads only",
+};
 const JOB_STORE = "app/lib/spice/server/job-store.ts";
 /** The job store's call into the worker that runs ngspice. */
 const JOB_STORE_SPAWN_CALL = "executeRunPoint";
@@ -252,7 +260,7 @@ function census(files: FileMap, routes: ReadonlyArray<{ path: string; file: stri
     // [B22-A2 review] tests-1: a path's exemption holds only while its check passes; otherwise the route is taken to start the spawner
     const exemption = NON_STARTING[path];
     const exempt = reached.length > 0 && exemption !== undefined && exemptionViolations(files, file, exemption, spawners).length === 0;
-    const label = exempt ? "" : [...new Set(reached.map((spawner) => EXECUTABLE_OF[spawner] ?? `unlabelled spawner ${spawner}`))].sort().join(" + ");
+    const label = exempt ? "" : [...new Set(reached.filter((spawner) => THREAD_STARTERS[spawner] === undefined).map((spawner) => EXECUTABLE_OF[spawner] ?? `unlabelled spawner ${spawner}`))].sort().join(" + "); // [B22-B] a thread starter is no external process
     return { path, file, reached, label, exempt };
   });
 }
@@ -295,8 +303,15 @@ const CENSUS = census(production, routeEntries);
 
 describe("[B22-A2] the process census (D22-18)", () => {
   it("1. the spawners are derived from the source: the production files under app/ that reference a process module at run time are exactly the ones the census labels, each naming child_process", { timeout: 120_000 }, () => {
-    expect(spawnersOf(production)).toEqual(Object.keys(EXECUTABLE_OF).sort());
+    expect(spawnersOf(production)).toEqual([...Object.keys(EXECUTABLE_OF), ...Object.keys(THREAD_STARTERS)].sort()); // [B22-B] + the two thread starters (OD-140)
     for (const spawner of Object.keys(EXECUTABLE_OF)) expect(production.get(spawner), spawner).toMatch(/\bspawn\(/);
+    // [B22-B] a thread starter starts no process: no child_process, no spawn, exec or fork call; the host is the one Worker constructor
+    for (const starter of Object.keys(THREAD_STARTERS)) {
+      expect(production.get(starter), starter).not.toMatch(/child_process|\bspawn\(|\bexecFile\(|\bexec\(|\bfork\(/);
+      expect(moduleReferences(starter, production.get(starter)!).filter((reference) => PROCESS_MODULE.test(reference.specifier)).map((reference) => reference.specifier), starter).toEqual(["node:worker_threads"]);
+      expect(THREAD_STARTERS[starter]!.length, starter).toBeGreaterThan(20);
+    }
+    expect(production.get("app/lib/computation/engine-host.ts")).toMatch(/new Worker\(entry, options\)/);
     // the census covers every route file, and the route files are exactly the policy table's paths (165 rows over these paths)
     expect(routeEntries.map((entry) => entry.path).sort()).toEqual([...new Set(routeResourceClassification().map((row) => row.path))].sort());
     expect(routeResourceClassification().length).toBe(165);
@@ -352,7 +367,7 @@ describe("[B22-A2] the process census (D22-18)", () => {
 
   it("5. D22-18's three rows: /api/chat and /api/pcb/qualify carry freerouting (java); /api/pcb/release reaches no spawner and carries none; qualify spawns outside fixture mode and inside it in the fixture router's record and live modes (only replay starts nothing), and the page and the classification say so", () => {
     const byPath = new Map(CENSUS.map((row) => [row.path, row]));
-    expect(byPath.get("/api/chat")).toMatchObject({ label: "freerouting (java)", exempt: false });
+    expect(byPath.get("/api/chat")).toMatchObject({ label: "freerouting (java)", exempt: false, reached: ["app/lib/computation/engine-host.ts", "app/lib/pcb/autoroute/runner.ts"] }); // [B22-B] the chat route also reaches the engine host (the named computation reads): a thread, so the label stays FreeRouting's
     expect(byPath.get("/api/pcb/qualify")).toMatchObject({ label: "freerouting (java)", exempt: false });
     expect(byPath.get("/api/pcb/release")).toMatchObject({ label: "", reached: [] });
     expect(byPath.get("/api/pcb/export/gerbers")).toMatchObject({ label: "kicad-cli" });
@@ -438,7 +453,7 @@ describe("[B22-A2] the process census (D22-18)", () => {
     const spawner = new Map(production);
     spawner.set("app/lib/computation/b22-probe-spawner.ts", 'import { execFile } from "node:child_process";\nexport const run = execFile;\n');
     expect(spawnersOf(spawner)).toContain("app/lib/computation/b22-probe-spawner.ts");
-    expect(spawnersOf(spawner).filter((path) => EXECUTABLE_OF[path] === undefined)).toEqual(["app/lib/computation/b22-probe-spawner.ts"]);
+    expect(spawnersOf(spawner).filter((path) => EXECUTABLE_OF[path] === undefined && THREAD_STARTERS[path] === undefined)).toEqual(["app/lib/computation/b22-probe-spawner.ts"]); // [B22-B] the reviewed thread starters aside
   });
 
   it("7. threat-model.md's census table names every route that reaches a spawner, with the census label or its reviewed exemption", () => {

@@ -61,7 +61,7 @@ export const INTENTIONAL_AGENT_EXPOSED_TOOL_IDS: readonly string[] = Object.free
   "sirkit.view.pcb3d",                            // B17-F — 3D camera / focus / scene layers (view-session)
   "sirkit.view.read-state",                       // B17-F — read-only view state of every open editor
   "sirkit.view.reveal-finding",                   // B17-F — reveal a DRC/routing finding (view-session)
-].sort());
+  "sirkit.computation.analytical-equation", "sirkit.computation.artifact-compare", "sirkit.computation.artifact-parse"].sort()); // B22-B — three Tier 0 named computations (OD-139), run in the bounded engine host (a worker thread stopped hard at its budget) behind the server's computation fact, evidence never authority, withheld from MCP, dormant for specialists: analytical-equation, an approved closed-form microcase of the unreviewed analytical reference provider from bounded numbers; artifact-compare, the quantities of two results this run holds, named by digest; artifact-parse, a closed parser over one bounded server-held artifact named by digest (the run's canonical board or a held result), never a path or a URL
 
 /** [B18-C review U1] defined in `granted-execution-families.ts` (a runtime key on every lift); re-exported for the gates. */
 export { NEVER_EXPOSED_TOOL_PATTERNS };

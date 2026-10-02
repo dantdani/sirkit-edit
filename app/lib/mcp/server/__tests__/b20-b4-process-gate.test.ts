@@ -36,9 +36,9 @@ const ROUTES = [ENDPOINT, "app/api/mcp/token/route.ts", "app/.well-known/oauth-p
 const PROCESS_MODULE = /^(?:node:)?(?:child_process|worker_threads|cluster|vm|module)(?:\/|$)/;
 /** The app's process spawners: the non-test files under app/ that name child_process and call spawn( on 4299067. [B22-A3, 2026-10-01]
  *  Reviewed move, once (OD-136): /api/simulate, the SPICE smoke test and the SPICE worker start no process any more - the ONE
- *  ngspice spawner is the diagnostic runner (b22-a3-single-spawner pins it); FreeRouting's and kicad-cli's runners are unchanged. */
+ *  ngspice spawner is the diagnostic runner (b22-a3-single-spawner pins it); FreeRouting's and kicad-cli's runners are unchanged. [B22-B, 2026-10-01] Reviewed move, once (OD-140): + the bounded engine host and its one worker entry, the only thread starters (worker_threads; b22-b-no-generic-exec pins them); case 2 keeps both out of the MCP closure. */
 const APP_SPAWNERS = [
-  "app/lib/computation/diagnostic-runner.ts",
+  "app/lib/computation/diagnostic-runner.ts", "app/lib/computation/engine-host.ts", "app/lib/computation/engine-worker.mjs",
   "app/lib/pcb/autoroute/runner.ts",
   "app/lib/pcb/fab/kicad-cli-runner.ts",
 ];
@@ -206,10 +206,10 @@ function processReached(files: FileMap, entries: readonly string[]): string[] {
 }
 
 describe("[B20 B4] the MCP routes reach no process or thread module (F4)", () => {
-  it("1. the production tree's process and thread importers under app/ are exactly the spawners (since B22-A3: the diagnostic runner, the one ngspice spawner; the autoroute runner; the kicad-cli runner); each names child_process", { timeout: 120_000 }, () => {
+  it("1. the production tree's process and thread importers under app/ are exactly the spawners (since B22-A3: the diagnostic runner, the one ngspice spawner; the autoroute runner; the kicad-cli runner; since B22-B: the bounded engine host and its worker entry); each names child_process, or worker_threads for the engine host's two", { timeout: 120_000 }, () => {
     const importers = processImporters(production);
     expect(importers.filter((path) => path.startsWith("app/"))).toEqual(APP_SPAWNERS);
-    for (const spawner of APP_SPAWNERS) expect(processModulesOf(spawner, production.get(spawner)!).some((specifier) => specifier.endsWith("child_process")), spawner).toBe(true);
+    for (const spawner of APP_SPAWNERS) expect(processModulesOf(spawner, production.get(spawner)!).some((specifier) => specifier.endsWith(/\/engine-(?:host|worker)\./.test(spawner) ? "worker_threads" : "child_process")), spawner).toBe(true); // [B22-B] the engine host's two name worker_threads
     // the scripts that spawn are importers too (never reachable from a route, and gated the same way)
     expect(importers.filter((path) => path.startsWith("scripts/")).length).toBeGreaterThan(0);
   });

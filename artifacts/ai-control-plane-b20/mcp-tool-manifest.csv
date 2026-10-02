@@ -1,5 +1,10 @@
 tool_id,version,operation_class,permission_tier,binding,exposed,exclusion_reason,read_only_hint,idempotent_hint,output_schema
 sirkit.component-authority.inspect,1.0.0,read,0,bound-read,yes,,true,true,declared
+sirkit.computation.analytical-equation,1.0.0,read,0,bound-computation,no,computation,,,
+sirkit.computation.artifact-compare,1.0.0,read,0,bound-computation,no,computation,,,
+sirkit.computation.artifact-parse,1.0.0,read,0,bound-computation,no,computation,,,
+sirkit.computation.circuit-analysis,1.0.0,propose,2,unbound,no,computation,,,
+sirkit.computation.layout-experiment,1.0.0,propose,2,unbound,no,computation,,,
 sirkit.manufacturing.readiness-inspect,1.0.0,read,0,bound-read,yes,,true,true,declared
 sirkit.manufacturing.release,1.0.0,release,3,unbound,no,tier3,,,
 sirkit.mcp.observation-read,1.0.0,read,0,bound-external-read,no,external_read,,,

@@ -1814,3 +1814,55 @@ Amendments to existing entries:
   - **Redaction:** on the stream, before the output bound.
   - **No callback after settling:** once a run has settled no output reaches a caller, and the job store never reopens a terminal record.
 - Owner confirmation pending.
+
+## OD-139 — the named computation catalog, as applied (B22-B, 2026-10-01; review 2026-10-02)
+- **Question:** which operations, which class, and how are they exposed?
+- **Default applied:**
+  - Exactly the runbook's five kinds, in its order, none spelling spice, simulate, exec, process, shell, `file.`, order, ship or qualif: `circuit-analysis` (:912), `analytical-equation` (:913), `artifact-parse` (:914), `layout-experiment` (:915), `artifact-compare` (:916).
+  - Each kind has a closed input schema, a profile id (process-backed kinds), an output validator id and a budget. The catalog is deep-frozen and validated at load.
+  - The three process-free kinds are Tier 0 reads on `bound-computation` with the `computation-engine` authority. Their port is injected at the chat root, on the assistant-agent channel only.
+  - The two process-backed kinds are propose-class, unbound, never exposed or callable. They are inert sealed requests a human approves, consumed once by the server's executors, and their evidence is labelled `diagnostic_only` and `environment_dependent`.
+  - All five are MCP-withheld (reason `computation`) and dormant for specialists.
+  - Ratchets: 42 -> 47, 33 -> 36, 9, 24 -> 27.
+- **Evidence:** `named-computations.md` sections 1-3 and 5; `b22-b-catalog`, `b22-b-exposure`, `b22-b-approval`, `b22-b-chat-runtime`.
+- Owner confirmation pending.
+
+## OD-140 — the bounded engine host and the experiment profile; F1, as applied (B22-B, 2026-10-01; review 2026-10-02)
+- **Question:** how are in-process computations bounded and stopped?
+- **Default applied:**
+  - One `worker_threads` host per server process. Workers start from its closed entry table only, with `env: {}`, `execArgv: []` and `resourceLimits` from the budget.
+  - A hard `terminate()` at the budget and on abort. A run is terminal once the exit is observed, or `confirmed: false` after 5 s with the slot held until the exit. The first outcome wins. Output must be plain JSON within the byte budget.
+  - At most 2 workers, at most 1 per tenant (the server-derived holder). One more is refused `ENGINE_HOST_BUSY`; there is no queue.
+  - The host refuses closed (`ENGINE_HEAP_LIMIT_OVERRIDDEN`) while the server carries any V8 heap-size flag: `--max-old-space-size[-percentage]`, `--max-semi-space-size`, `--max-heap-size`, with NODE_OPTIONS read with quotes removed.
+  - Experiment profile `engine-host:placement-experiment/1` (60 s, 512 MiB). It has no worker entry, so it is refused `ENGINE_UNAVAILABLE`.
+  - A reviewed `APP_SPAWNERS` move keeps the host out of the MCP closure.
+  - F1 stays a separate queued fix.
+  - The host is not an isolation boundary.
+- **Evidence:** `named-computations.md` section 4; `b22-b-bounded-host` cases 1-9, `b22-b-exposure` case 9, `b20-b4-process-gate`, `b22-a2-process-census`.
+- **[B22-B lead]** One worker per tenant means the members of one tenant (a single-tenant install: every member) wait for each other - a second computation is refused `ENGINE_HOST_BUSY` at once; kept as the fail-closed fairness choice (the check's new low issue).
+- **The owner may choose otherwise:** other caps; a bounded fair queue (as OD-155); a share that admits the second slot while no other tenant runs; or F1 on the host once placement has a worker entry. Owner confirmation pending.
+
+## OD-149 — model-generated scripts, as applied (B22-B, 2026-10-01)
+- **Default applied:** not allowed.
+  - No kind, schema or validator accepts code or a script, and no free string exists.
+  - Forbidden field names are checked structurally.
+  - The worker entry loads and compiles nothing.
+- **Evidence:** `b22-b-catalog` cases 2 and 5; `b22-b-no-generic-exec` cases 3 and 4.
+- Owner confirmation pending.
+
+## OD-158 — B22-B: the opt-in and its other stated choices, as applied (B22-B, 2026-10-01; review 2026-10-02)
+- **Default applied:**
+  - **Opt-in:** the chat port is bound only with `SIRKIT_NAMED_COMPUTATIONS=1` (default off), because how `next build` serves `engine-worker.mjs` is UNKNOWN.
+    - [review] It is also bound only where no V8 heap-size flag is set. Under `next dev` that means also setting `NEXT_DISABLE_MEM_OVERRIDE=1`.
+    - The host's own refusals reach the model as `engine_unavailable`.
+  - **[review] No queue at the host.**
+  - **[review] No ninth specialist claim (`computationAvailable`).** Adding one would change OD-109's eight-claim vocabulary and four B21 suites. A revert of `withdrawAuthority` still fails closed, because the follow-up gateway has no port; it is pinned by `b22-b-exposure` case 4.
+  - **Result store:** results are held per request port (32 per run, 128 runs).
+- **The owner may choose otherwise:** enable by default after a `next build` qualification; add the claim as a reviewed B21 pin move; add a queue. Owner confirmation pending.
+
+## OD-159 — a human approval surface for process-backed computation requests (proposed, B22-B, 2026-10-01)
+- **Proposed:**
+  - An authenticated route: a reviewed census move 165 -> 166+, with CSRF; approvers are `pcb_editor`, `reviewer` or `project_admin` in the same scope, approving the exact digest.
+  - Persistence with the evidence aggregate (OD-141).
+  - Until then both descriptors stay dormant and the store is an in-memory contract.
+- Owner decision needed.

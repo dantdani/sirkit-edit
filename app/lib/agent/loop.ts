@@ -244,7 +244,7 @@ export function buildRunToolset(registry: ToolRegistry, context: AgentRunContext
           return false;
         }
         return true;
-      }
+      } if (descriptor.binding.status === "bound-computation") return computationReadAvailable(descriptor, context, warn); // [B22-B] a named computation read: its own binding and the server's computation fact
       const resolution = resolveReadBinding(descriptor);
       if (resolution.state !== "resolved") {
         warn(`Tool ${descriptor.toolId} unavailable: no resolved read binding.`);
@@ -821,3 +821,22 @@ function narrowToRunAllowlist<T extends { toolId: string }>(descriptors: T[], al
 // [B21 C] the allowlist's ids, on their own line at the END (an import is hoisted): the B20 pages cite this file by line, and a
 // line-anchored import gate (the B19-D chat-closure walker) sees an import only where a line starts with it
 import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, NEVER_EXPOSED_TOOL_PATTERNS } from "../engineering/agent-exposure";
+
+// [B22-B] the computation read binding and the descriptor type, on their own lines at the END (imports are hoisted), as B21 C's import
+// above: no cited line moves, and a line-anchored import gate still sees each import where its line starts
+import { resolveComputationBinding } from "./computation-reads";
+import type { ToolDescriptor } from "../engineering/tool-registry";
+
+/** [B22-B] A named computation read is advertised only when its allowlisted binding resolves and the server bound the computation
+ *  port to this run (the computation fact); it has no B05 read binding and needs no canonical state (a parse refuses an absent board). */
+function computationReadAvailable(descriptor: ToolDescriptor, context: AgentRunContext, warn: (message: string) => void): boolean {
+  if (resolveComputationBinding(descriptor).state !== "resolved") {
+    warn(`Tool ${descriptor.toolId} unavailable: no resolved computation binding.`);
+    return false;
+  }
+  if (context.computationAvailable !== true) {
+    warn(`Tool ${descriptor.toolId} unavailable: no computation engine is bound to this run.`);
+    return false;
+  }
+  return true;
+}

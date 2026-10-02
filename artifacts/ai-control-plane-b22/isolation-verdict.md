@@ -93,3 +93,5 @@ command was run for this increment.
 It does not say the diagnostic local runs are isolated, contained or safe against a construct the screens miss; it does not say the OCI
 design works (nothing ran); it does not rate the readers' or the lead's probes beyond what they printed. The word "sandbox" appears here
 only in quotations - the runbook, the CD-10 code's own literals and the LB-10 row's title - never for anything that runs.
+
+[B22-B review, 2026-10-02] coverage-4: B22-B's named computations change nothing above. The three reads (`named-computations.md`) run in a worker thread of the server process - the bounded engine host bounds their time and JavaScript heap, and it is no isolation boundary (the worker shares the server's file system, network, CPU and external memory); the two process-backed kinds are inert requests a human approves, and the circuit analysis among them runs on the diagnostic runner, never authoritative. Production simulation authority stays BLOCKED: the 501 and the throwing stub are unchanged.

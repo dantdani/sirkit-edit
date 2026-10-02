@@ -3982,3 +3982,77 @@ Pages: `artifacts/ai-control-plane-b22/diagnostic-runner.md`.
   onTaskUpdate" in a 1,408 s run after the 41-file auth run; re-run together both passed (27 of 27) with one onTaskUpdate error (exit 1),
   and each alone passed with exit 0 (22 and 5 tests, about 54 s each) - recorded, not dismissed: their single synchronous AST cases
   block the worker's RPC under load; orchestration and record readers 55 files 540 passed; tsc 0; eslint 0; four generators no drift.
+
+### B22-B - named computations, never generic execution (2026-10-01/02 local; increment workflow + adoption run + review fix + lead; this commit)
+
+**Test-first** on `chapter/b22-sandboxed-computation` from `e483838`.
+- **First run:** cut off by a session end before its final gate round. Its records are RECORDED from its logs.
+  - Baseline: A 487, B 1,107, C 414 + 1 pre-existing failure (`b11-5` case 12), D 460, E 825, F 288, G 268.
+- **Adoption run:**
+  - The tree matched the lead's snapshot byte for byte.
+  - Red was re-established on the HEAD sources: the suites could not load, then 8 failed / 23 passed of 31.
+  - It finished the unfinished work: the census, the B04/B17-F/B18-C/B20 pins, the B09/B11/B21 replay pins, and `route.ts` back to 562 lines.
+  - It found and closed the heap-size-flag defect.
+  - 17 deliberate breakages were caught.
+- **Adversarial review:** 18 findings CONFIRMED (one medium after verification, the rest low). All fixed test-first by a third run:
+  - The strengthened suites ran 6 failed / 36 passed of 42 on the reviewed tree, then 42 green.
+  - 28 deliberate breakages (M18–M45) were each caught and restored by hash.
+
+**CATALOG (OD-139, OD-149):**
+- The runbook's five kinds under `sirkit.computation.*`.
+- Closed inputs, checked structurally; typed output validators that refuse whole.
+- No script or code input exists.
+
+**EXPOSURE:**
+- A new `bound-computation` status and `computation-engine` authority.
+- The three reads are Tier 0, injected at the chat root behind the server's fact. They are opt-in (`SIRKIT_NAMED_COMPUTATIONS=1`) and withheld under any V8 heap-size flag (review regressions-1; `next dev` sets one unless `NEXT_DISABLE_MEM_OVERRIDE=1`).
+- The two process-backed kinds are inert sealed requests a human approves:
+  - consumed once, by the server's executors only;
+  - the SPICE analysis is seeded, screened by SEC-1 and run on the A3 runner, and its result is diagnostic evidence;
+  - the experiment is refused, since it has no worker entry.
+- All five are MCP-withheld (reason `computation`) and dormant for specialists.
+- Ratchets: 42 -> 47, 33 -> 36, 9, 24 -> 27.
+
+**HOST (OD-140):**
+- `worker_threads`, closed entry table, empty environment, no execArgv, heap `resourceLimits`.
+- `terminate()` at the budget; terminal only after the exit or as `confirmed: false`.
+- 2 workers per process and 1 per tenant (review security-2).
+- Refused under the whole V8 heap-flag family (review security-1).
+
+**Reviewed pin moves:**
+- `APP_SPAWNERS` once; the B22-A2 `THREAD_STARTERS`.
+- The B20/B21/B17-F/B18-C/B04/B09 exposure pins.
+- The B11/B21 replay pins, regenerated.
+
+**Gates (final):**
+- A: 24 files, 529 passed.
+- B: 1,107 passed.
+- C: 414 passed + the pre-existing `b11-5` case 12.
+- D: 460 passed. E: 825 passed. F: 288 passed. G: 375 passed.
+- tsc and eslint (57 files) clean.
+- The generators: zero drift on the final tree.
+
+**Not changed:** the CD-10 routes, the 501, `executeAuthoritativeSimulation`, routes (165 / 162 / 3 / 0), the B11-scanned files, dependencies.
+
+**Open:**
+- Placement has no worker entry (F1 open; OD-87's other two paths open).
+- No approval route (OD-159).
+- `next build` serving of `engine-worker.mjs` is UNKNOWN.
+- No isolation boundary for a worker thread.
+- No queue at the host.
+- No ninth specialist claim (OD-158).
+- The live circuit analysis belongs to the A3 opt-in suite.
+- Lead close (2026-10-02): (1) B11.5's case 12 ("NO test anywhere writes under app/, lib/, scripts/ or artifacts/") had failed since
+  B22-A1: A1's, A2's and A3's suites write temporary fixtures, and neither CI (no job runs a B11 suite - D24 records it for B24-B) nor
+  the A1-A3 lead gates (which did not run `app/lib/agent/__tests__`) caught it. Fixed: justifications for `b22-a1-tool-output-bounds`
+  and `b22-a2-runtime-profile` on the B19-E precedent (every write-primitive line rooted at the suite's `mkdtemp(tmpdir())` root or the
+  admission lapses; a breakage - an unrooted write appended to A1's suite - made it fail, restored by hash), and A3's suite assembles
+  its two counterexample write lines at run time (the offending literals were the lead's own A3 addition). The lead gates now include
+  `app/lib/agent/__tests__`. (2) The check's new low issue (one engine worker per tenant, so a tenant's members wait for each other):
+  kept as the fail-closed fairness choice, recorded on OD-140. (3) B22-B's implementer saw `b22-a3-diagnostic-runner` case 10 time out
+  waiting for the probe to start in 3 of 8 runs on its adopted tree and 1 of 8 on HEAD sources; the lead could not reproduce it in 11
+  runs (8 alone, 3 with the computation and SPICE folders), then it recurred in the lead's own gate chain; instrumented and looped, it
+  reproduced on the ninth loaded run: the probe HAD started and resolved - the fake `-v` closes at once, its slot freed and A's first
+  waiter spawned before the loaded 2 ms poll saw the call count at exactly five (six calls recorded). A test bug, not a runner bug: the
+  two waits after an instantly-closing process now wait for at least five and six calls (the order is still pinned by the next two
+  assertions); three loaded set-A runs green after the fix.

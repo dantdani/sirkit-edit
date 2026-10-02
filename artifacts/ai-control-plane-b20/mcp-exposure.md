@@ -21,7 +21,8 @@ A tool is exposed only when BOTH hold: the structural rule (section 3) admits it
 lists it — `INTENTIONAL_MCP_EXPOSED_TOOL_IDS` (`app/lib/engineering/mcp-exposure-review.ts:14` (`export const INTENTIONAL_MCP_EXPOSED_TOOL_IDS`)),
 one reason comment per id — and does not withhold it (`MCP_WITHHELD_TOOL_IDS`: empty at B1, two reads since B3, and the
 five proposals since B4). The exposure
-(the structural rule and the reviewed decision together) admits exactly these 9 from the production registry of 42 descriptors;
+(the structural rule and the reviewed decision together) admits exactly these 9 from the production registry of 47 descriptors ([B22-B, 2026-10-01] 42 until B22-B added the five named
+computations, OD-139, all excluded as `computation`);
 the structural rule alone admits seven more, the withheld tools of section 2. `mcpExposureReport` (`app/lib/engineering/mcp-exposure.ts:197` (`export function mcpExposureReport(`))
 compares the two in both directions: an admitted id that is neither listed nor withheld is `unexpected` (never exposed, and
 drift until reviewed), a listed id that is not exposed is `missing`, any id outside the reviewed agent set is
@@ -48,16 +49,17 @@ or the b17-f id tripwire (`process|exec|shell|database|db.|file.|replace-state|i
 a read with no approval tier is Tier 0, a proposal is Tier 2 by construction (an inert sealed artifact a human approves;
 [B20 B4] none is exposed).
 
-## 2. The 33 excluded descriptors, by closed reason — CONFIRMED
+## 2. The 38 excluded descriptors, by closed reason — CONFIRMED
 
 `MCP_EXCLUSION_REASONS` (`app/lib/engineering/mcp-exposure.ts:33` (`export const MCP_EXCLUSION_REASONS`)) is closed and
-ordered by precedence: the first reason that applies is THE reason, so every descriptor carries exactly one. The first ten
-are the structural rule; the last two are the reviewed decision over a descriptor the rule admits.
+ordered by precedence: the first reason that applies is THE reason, so every descriptor carries exactly one. The first eleven
+([B22-B, 2026-10-01] ten until `computation` joined, OD-139) are the structural rule; the last two are the reviewed decision over a descriptor the rule admits.
 
 | reason | registry ids that carry it | the decision that excludes them |
 |---|---|---|
 | `tier3` | `sirkit.manufacturing.release` | permission Tier 3 (publish, release, upload, purchase or order, qualification) is never agent-executable (`app/lib/engineering/permission-tiers.ts:36` (`export const TIER3_FAMILY_PATTERN`)) |
 | `never_exposed` | `sirkit.pcb.create-via`, `sirkit.pcb.delete-item`, `sirkit.pcb.edit-track`, `sirkit.pcb.undo-redo-canonical`, `sirkit.pcb.zone-edit` | the never-exposed patterns: never-granted canonical mutations, the canonical replay primitive, release, qualification, catalog authority |
+| `computation` | `sirkit.computation.analytical-equation`, `sirkit.computation.artifact-compare`, `sirkit.computation.artifact-parse`, `sirkit.computation.circuit-analysis`, `sirkit.computation.layout-experiment` | [B22-B, 2026-10-01] OD-139: a named computation runs in the server's bounded engine host (a worker thread) or the diagnostic runner (a process), bound to a chat run by its composition root; an MCP call may start neither (`b20-b4-process-gate`) - every `sirkit.computation.*` descriptor and every `bound-computation` binding, exposed to the agent or not (`artifacts/ai-control-plane-b22/named-computations.md`) |
 | `not_agent_exposed` | `sirkit.parts.search`, `sirkit.pcb.repair-plan`, `sirkit.schematic.add-component` | outside the reviewed agent set; the MCP set is a subset of it |
 | `granted_execution` | `sirkit.pcb.arrange`, `sirkit.pcb.dimension`, `sirkit.pcb.move-footprint`, `sirkit.pcb.rotate-side-footprint`, `sirkit.pcb.silkscreen-text`, `sirkit.pcb.undo-redo-granted` | D20-2, D20-33: a grant is minted for a cookie-session human and tendered by the browser's editor session; an MCP principal has neither, so every granted execution and every grant-only tool is excluded by type |
 | `view_session` | `sirkit.selection.control`, `sirkit.view.canvas-navigation`, `sirkit.view.layers`, `sirkit.view.measure`, `sirkit.view.pcb3d`, `sirkit.view.reveal-finding` | OD-49 (D20-7): a view-session command is executed by an open editor in the user's browser, which an MCP principal does not have |
@@ -72,7 +74,8 @@ are the structural rule; the last two are the reviewed decision over a descripto
 `tier3` and `never_exposed` precede `not_agent_exposed`, so a descriptor outside the agent set still names the stronger
 reason (`sirkit.manufacturing.release` is Tier 3 and matches `\.release$`; the page and the manifest say `tier3`).
 The agent set (`app/lib/engineering/agent-exposure.ts:30` (`export const INTENTIONAL_AGENT_EXPOSED_TOOL_IDS`)) holds:
-33 ids = the 9 above + 6 granted executions + 3 external reads + 6 view-session controls + 2 open-editor reads + 7 withheld tools.
+36 ids = the 9 above + 6 granted executions + 3 external reads + 6 view-session controls + 2 open-editor reads + 7 withheld tools
++ 3 named computation reads ([B22-B, 2026-10-01] OD-139: 33 until B22-B; the three reads are excluded as `computation`).
 B3 and B4 may REMOVE an id they cannot serve safely, as a reviewed ratchet move of `app/lib/engineering/mcp-exposure-review.ts`:
 the id moves from `INTENTIONAL_MCP_EXPOSED_TOOL_IDS` to `MCP_WITHHELD_TOOL_IDS`
 (`app/lib/engineering/mcp-exposure-review.ts:32` (`export const MCP_WITHHELD_TOOL_IDS`)) with its reason, and the pins of

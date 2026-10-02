@@ -90,7 +90,7 @@ describe("[B21 C] the per-role tool allowlist", () => {
     expect(PROPOSING_ROLES).toEqual(["coordinator", "circuit-topology", "schematic", "pcb-placement-routing"]);
     expect(INTENTIONAL_ROLE_TOOL_IDS["cost-latency-router"]).toEqual([]);
     expect(INTENTIONAL_ROLE_TOOL_IDS.coordinator).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS);
-    expect(INTENTIONAL_ROLE_TOOL_IDS.coordinator).toHaveLength(33);
+    expect(INTENTIONAL_ROLE_TOOL_IDS.coordinator).toHaveLength(36); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads (the row IS the exposure list)
     expect(roleAllowedToolIds("coordinator")).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS);
     expect(roleAllowedToolIds("not-a-role")).toEqual([]);
     expect(Object.isFrozen(roleAllowedToolIds("not-a-role"))).toBe(true);

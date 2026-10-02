@@ -75,7 +75,7 @@ holds). The proposing roles (OD-120) are `coordinator`, `circuit-topology`, `sch
 
 | role | runbook | tool | class | reason |
 |---|---|---|---|---|
-| `coordinator` | `:819` | the exposure list itself | — | The existing single-agent set, unchanged: this row IS INTENTIONAL_AGENT_EXPOSED_TOOL_IDS (the same frozen array, its reasons in agent-exposure.ts), never passed as an allowlist (33 ids, over the A4L bound). |
+| `coordinator` | `:819` | the exposure list itself | — | The existing single-agent set, unchanged: this row IS INTENTIONAL_AGENT_EXPOSED_TOOL_IDS (the same frozen array, its reasons in agent-exposure.ts), never passed as an allowlist (the whole agent set, over the A4L bound). |
 | `requirements-analyst` | `:820` | `sirkit.pcb.board-inspect` | read | The board as it stands (outline, footprints, nets): the physical facts a stated requirement must respect. |
 | `requirements-analyst` | `:820` | `sirkit.project.canonical-revision-inspect` | read | The verified revision the requirements are written against, so every requirement names the state it read. |
 | `requirements-analyst` | `:820` | `sirkit.project.history-inspect` | read | What the user already changed, so intent is read from the project's own timeline. Dormant in B21-C: the timeline rides the captured view, which a specialist context never holds. |
@@ -108,12 +108,12 @@ holds). The proposing roles (OD-120) are `coordinator`, `circuit-topology`, `sch
 
 > [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): the `cost-latency-router` row's "until B21-E gives it a policy input" is `ROLE_NOTES`' own text (`role-tools.ts`, pinned equal to this cell), kept verbatim: B21-E (E1..E4) gave the role no policy input - E1's role table routes it inherit/inherit and it still holds no tool, so a plan naming it still records `role_has_no_tools`, a `degraded` event since B21-E2]
 
-The checker's closed vocabulary (C6), in the order a violation list is written: `not_exposed` (an id outside the 33 or a descriptor not
+The checker's closed vocabulary (C6), in the order a violation list is written: `not_exposed` (an id outside the 33 [B22-B review, 2026-10-02: 36] or a descriptor not
 agent-exposed), `granted_execution` (a `mutate` descriptor in a specialist row), `view_control` (a `view-session` descriptor in a
 specialist row), `never_exposed_pattern` (a never-exposed pattern, a Tier 3 family name, or a class the exposure rule never admits),
 `proposal_for_non_proposing_role`, `unsorted_or_duplicate` and `over_bound` (a row over the A4L bound of 32 ids admits NOTHING, C7).
 The coordinator's row holds the single-agent set, so a granted execution and a view control are its own there; it is never passed
-as an allowlist (33 ids, over the bound) — the coordinator's run carries none.
+as an allowlist (33 ids, over the bound; [B22-B, 2026-10-01] 36 since the three named computation reads joined the agent set, and the row's note now states no count) — the coordinator's run carries none.
 
 ## 2. The intersection in `buildRunToolset` (OD-121) and a role with no tools
 
@@ -125,11 +125,11 @@ as an allowlist (33 ids, over the bound) — the coordinator's run carries none.
   untouched: the list is not a discovery input.
 - **A4L semantics** (the MCP `agentTools` rule, C31): at most 32 ids (`RUN_ALLOWLIST_MAX_IDS`, C11, equal to the contracts' bound C35),
   strictly ascending (sorted, duplicate-free), every id in the reviewed exposure list and matching no never-exposed pattern. Anything
-  else — over the bound, unsorted, duplicated, a registry id outside the 33, an invented id, a never-exposed id, a non-string, a
+  else — over the bound, unsorted, duplicated, a registry id outside the 33 [B22-B review, 2026-10-02: 36], an invented id, a never-exposed id, a non-string, a
   non-array, a list that throws while it is read — approves NOTHING: an empty toolset and exactly one warning naming `allowlist_invalid`
   (C10; least-privilege case 3). An empty list is valid and approves nothing without that warning. The judgement is
-  `approvedRunAllowlist` (C38): a list of EXACTLY 32 sorted, exposed ids is approved and the 33 are not (the bound is live), and the
-  never-exposed pattern clause refuses an id even when an exposure list names it — defense in depth, since no id of the reviewed 33
+  `approvedRunAllowlist` (C38): a list of EXACTLY 32 sorted, exposed ids is approved and the 33 are not [B22-B review, 2026-10-02: 36] (the bound is live), and the
+  never-exposed pattern clause refuses an id even when an exposure list names it — defense in depth, since no id of the reviewed 33 [B22-B review, 2026-10-02: 36]
   matches a pattern today and the membership test refuses every other id first (least-privilege case 7).
 - **Without the input** the toolset is byte-identical to HEAD: the declarations and warnings of the coordinator's run and of the
   read-only specialist view, over a board-only and a schematic-plus-board context, equal the four digests RECORDED from HEAD `0396c9e`

@@ -272,7 +272,7 @@ describe("[B21 C] least privilege per role", () => {
   it("7. [B21 C fix] the A4L bound and the never-exposed clause are both live (review): a sorted, exposed list of EXACTLY 32 ids is approved and then narrowed by the gates (no `allowlist_invalid`), the 33 approve nothing; the never-exposed patterns refuse an id even when the exposure list names it - defense in depth, since no id of the reviewed 33 matches a pattern today", async () => {
     const exposed = [...INTENTIONAL_AGENT_EXPOSED_TOOL_IDS];
     expect(exposed).toEqual([...exposed].sort());
-    expect(exposed).toHaveLength(RUN_ALLOWLIST_MAX_IDS + 1);
+    expect(exposed).toHaveLength(RUN_ALLOWLIST_MAX_IDS + 4); expect(approvedRunAllowlist(exposed.slice(0, RUN_ALLOWLIST_MAX_IDS + 1))).toBeNull(); // [B22-B, 2026-10-01] reviewed pin move (OD-139): the exposure list is 36 since the three named computation reads joined it (was the bound + 1); any 33 of it still approve nothing
     const thirtyTwo = exposed.slice(0, RUN_ALLOWLIST_MAX_IDS);
     expect(approvedRunAllowlist(thirtyTwo)).toEqual(new Set(thirtyTwo));
     expect(approvedRunAllowlist(exposed)).toBeNull();

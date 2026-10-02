@@ -44,11 +44,11 @@ function callsOf(path: string, name: string): string[][] {
 }
 
 describe("[B22-A3] one ngspice spawner (OD-136)", () => {
-  it("1. among the SPICE files only the diagnostic runner references a process module, and it names child_process", { timeout: 120_000 }, () => {
+  it("1. among the SPICE files only the diagnostic runner references a process module, and it names child_process (since B22-B the bounded engine host and its worker entry reference worker_threads, and no other module)", { timeout: 120_000 }, () => {
     const spice = [...production.keys()].filter((path) => SPICE_TREES.some((tree) => path.startsWith(tree))).sort();
     expect(spice.length).toBeGreaterThan(30); // [B22-A3] 34 on c037627 (the red run found the first bound, 40, wrong: a test bug, fixed before any production edit)
     for (const entry of ENTRY_POINTS) expect(spice, entry).toContain(entry);
-    expect(spice.filter((path) => processModules(path).length > 0)).toEqual([RUNNER]);
+    expect(spice.filter((path) => processModules(path).length > 0)).toEqual(["app/lib/computation/diagnostic-runner.ts", "app/lib/computation/engine-host.ts", "app/lib/computation/engine-worker.mjs"]); expect(spice.filter((path) => processModules(path).some((specifier) => specifier.endsWith("child_process")))).toEqual([RUNNER]); // [B22-B, 2026-10-01] reviewed move (OD-140): the engine host's two thread starters join the tree; the ngspice spawner is still the runner alone
     expect(processModules(RUNNER)).toEqual(["node:child_process"]);
   });
 

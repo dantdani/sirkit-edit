@@ -54,7 +54,7 @@ const BASE = { registryDigest: "eng1-4aacd63c7e0a6193", descriptors: "eng1-f1d7f
  * difference - the same reading `b20-b3-mcp-subset-move` takes.
  */
 const A4_ADDITION = "sirkit.mcp.observation-read";
-const baseRegistry = new ToolRegistry(SIRKIT_TOOL_CATALOG.filter((item) => item.toolId !== A4_ADDITION));
+const B22B_ADDITIONS = ["sirkit.computation.analytical-equation", "sirkit.computation.artifact-compare", "sirkit.computation.artifact-parse", "sirkit.computation.circuit-analysis", "sirkit.computation.layout-experiment"]; const baseRegistry = new ToolRegistry(SIRKIT_TOOL_CATALOG.filter((item) => item.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(item.toolId))); // [B22-B, 2026-10-01] reviewed pin move: the base is the registry without A4's and B22-B's additions, so its digests stay the base-4299067 pins
 const STORED: MembershipRole[] = ["viewer", "commenter", "editor", "reviewer", "admin"];
 const META = Object.freeze({ "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} });
 
@@ -140,13 +140,13 @@ describe("[B20 B4] no proposal over MCP: the withholding move, listed means serv
     expect(engineeringDigest(baseRegistry.list().map((item) => [item.toolId, item.version, engineeringDigest(item)]))).toBe(BASE.descriptors);
     expect(baseRegistry.list()).toHaveLength(BASE.count);
     // the addition is the ONLY difference: one descriptor more, and it is A4's, which no MCP list names
-    expect(registry.list()).toHaveLength(BASE.count + 1);
-    expect(registry.list().map((item) => item.toolId).filter((id) => !baseRegistry.list().some((item) => item.toolId === id))).toEqual([A4_ADDITION]);
+    expect(registry.list()).toHaveLength(BASE.count + 1 + B22B_ADDITIONS.length); // [B22-B] + the five named computations (OD-139)
+    expect(registry.list().map((item) => item.toolId).filter((id) => !baseRegistry.list().some((item) => item.toolId === id))).toEqual([...B22B_ADDITIONS, A4_ADDITION].sort());
     expect([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS, ...WITHHELD]).not.toContain(A4_ADDITION);
     // [B20 merge] pin move: the A track's A4 adds one agent-exposed descriptor (sirkit.mcp.observation-read), so the
     // registry is 42 and the agent set 33; the MCP subset is unchanged at 9 (B4 withheld every proposal)
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(33);
-    expect(engineeringDigest([...INTENTIONAL_AGENT_EXPOSED_TOOL_IDS].filter((id) => id !== A4_ADDITION))).toBe(BASE.agentSet);
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(36); // [B22-B, 2026-10-01] pin move: + the three named computation reads (OD-139), which no MCP list names
+    expect(engineeringDigest([...INTENTIONAL_AGENT_EXPOSED_TOOL_IDS].filter((id) => id !== A4_ADDITION && !B22B_ADDITIONS.includes(id)))).toBe(BASE.agentSet);
     const admitted = mcpExposureReport(registry).admitted;
     for (const id of PROPOSALS) {
       const item = descriptor(id);

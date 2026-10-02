@@ -277,7 +277,7 @@ afterEach(() => {
 });
 
 describe("[B20 D2] the never-reachable sweep", () => {
-  it("E1. the partition is exact and DERIVED: every descriptor carries exactly one state — exposed, withheld, or structurally excluded with exactly one of the twelve reasons; the two reviewed lists are disjoint; and the four reasons the code documents as empty carry zero ids", () => {
+  it("E1. the partition is exact and DERIVED: every descriptor carries exactly one state — exposed, withheld, or structurally excluded with exactly one of the thirteen reasons ([B22-B] + computation); the two reviewed lists are disjoint; and the four reasons the code documents as empty carry zero ids", () => {
     const { descriptors, report } = population();
     expect(descriptors.length).toBeGreaterThan(0);
     expect(new Set(descriptors).size).toBe(descriptors.length); // one version per id in the production registry
@@ -459,7 +459,7 @@ describe("[B20 D2] the never-reachable sweep", () => {
     // derived from the landed classification; the four documented-empty reasons are E1's and are not iterated here
     const groups = MCP_EXCLUSION_REASONS.map((reason) => ({ reason, ids: report.excludedByReason[reason] })).filter((group) => group.ids.length > 0);
     expect(groups.length).toBeGreaterThan(0);
-    expect(groups.map((group) => group.reason).sort()).toEqual(["external_read", "granted_execution", "never_exposed", "not_agent_exposed", "tier3", "view_session", "view_state_read", "withheld"]);
+    expect(groups.map((group) => group.reason).sort()).toEqual(["computation", "external_read", "granted_execution", "never_exposed", "not_agent_exposed", "tier3", "view_session", "view_state_read", "withheld"]); // [B22-B, 2026-10-01] pin move (OD-139): + the `computation` group (the five named computations), swept like every other group
 
     const bodies = new Set<string>();
     for (const group of groups) {
