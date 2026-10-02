@@ -4056,3 +4056,78 @@ Pages: `artifacts/ai-control-plane-b22/diagnostic-runner.md`.
   waiter spawned before the loaded 2 ms poll saw the call count at exactly five (six calls recorded). A test bug, not a runner bug: the
   two waits after an instantly-closing process now wait for at least five and six calls (the order is still pinned by the next two
   assertions); three loaded set-A runs green after the fix.
+
+### B22-C - simulation authority: evidence, never authority; the 501 kept (2026-10-02 local; implementation + review fix; this commit)
+
+**Test-first** on `chapter/b22-sandboxed-computation` from `b4c7be7`.
+- **Implementation:**
+  - Seven suites were written first and ran 44 failed / 1 passed of 45. The pass was `b22-c-wording` case 5, which pins standing sentences. `b22-c-ai-evidence` was corrected after a test error and re-run red, 4 of 4.
+  - Then 45 green.
+  - Two counterexamples, CONFIRMED at the fake seam:
+    - the worker's own completed event made the record terminal before the result was merged;
+    - a late completed event reopened a cancelled record.
+- **Adversarial review:** 25 findings CONFIRMED (regressions-1 high; regressions-2, regressions-3 and tests-2 medium; the rest low).
+  - The strengthened suites ran 15 failed / 33 passed of 48 on the reviewed tree, then 53 green.
+  - 15 deliberate breakages (M1–M15) were each caught and restored by SHA-256.
+  - Recorded process incident: the breakage driver's bare `bash` resolved to the Windows WSL launcher twice; nothing ran inside it, the VM idled out within about two minutes, and the driver now calls Git Bash by absolute path.
+
+**AUTHORITY (OD-138):**
+- Provider and environment come from the server by id and digest; a differing body copy is refused 409 with a closed code.
+- The binding is pure. The registry is read server-side by the two routes and passed in; with none, every environment is refused (the CD-11 consumer, browser-reachable).
+- A static client-graph gate pins that no `"use client"` graph reaches a node-only module.
+
+**RESULTS (D22-7):**
+- Staged then settled: no reader sees a terminal record before its evidence.
+- A refused evidence document fails the run itself (`EVIDENCE_DOCUMENT_REFUSED`), keeping its validated output for inspection.
+- Empty measurement names are evidence.
+
+**OUTPUT (D22-10):**
+- One validator over `createWaveformArtifact`, eight closed codes including `OUTPUT_EMPTY`.
+- ngspice's closed type list with its units (INFERRED).
+- No artifact on the parse path.
+- A refused output keeps the run's logs and manifest.
+
+**EVIDENCE (D22-12, D22-13; OD-141..OD-143):**
+- `computation.evidence.v1`: silent, scoped, CAS, idempotent, re-verified on load.
+- The snapshot digest binds the scope.
+- No route binds it; the CD-10 tables are not reused; no migration.
+
+**DECK (D22-19 in part):**
+- An independent, unwired validator.
+
+**WORDING / AI (D22-14 UI half, D22-21):**
+- A diagnostic disclosure in the report and studio; caller-supplied labels everywhere.
+
+**Reviewed pin moves:**
+- `b22-a2-blocked-runner` case 4 (409, was 501).
+- `b22-a2-runtime-profile` case 13 (revision 3).
+- B22-A1 page C45-C47 and C44's note.
+- The review moved no committed pin.
+
+**Gates (final):**
+- A 589 (+8 skipped). B 1,117. C 479 (+9 skipped). D 1,107. E 415. F 460. G 825. H 51.
+- tsc and eslint (31 files) clean.
+- 20 generators, zero drift; census 165 / 162 / 3 / 0.
+
+**Not changed:**
+- The 501 text and its pins; `executeAuthoritativeSimulation` (still throws).
+- No profile `validated`; no `unsupportedDomains` entry reachable.
+- No route added; no dependency; no migration.
+
+**Open:**
+- The aggregate's route binding (and with it server-held SPICE AI evidence and the classification relabel).
+- No CD-10 path calls the deck validator.
+- The ngspice type list and repeated time points are UNKNOWN until a live run.
+- `next build` was not run.
+- `foundation.test.ts`'s "diagnostic environments" case now stops at the binding.
+- The unwired CD-10 tables.
+- Lead close (2026-10-02): the check of the review fixes raised one new issue: a run failed with `EVIDENCE_DOCUMENT_REFUSED` keeps
+  its validated scalars for inspection, and the SPICE report and the run comparison read them as verdicts, so a failed run showed PASS.
+  Red first (case 8 extended: a failed run whose scalar names a specification rendered PASS), then `report.ts` reads verdicts only from
+  completed runs (`verdictScalars`, an end-of-file helper; the five call sites edited in place, no line moved); computation and SPICE
+  suites 570 green. Process incident, RECORDED: B22-C's breakage driver called a bare `bash` from Python and Windows resolved it to the
+  WSL launcher (twice, at 02:42:44 and 02:43:08); both calls failed at once (`execvpe(/bin/bash) failed`), nothing ran inside WSL, every
+  mutated source was restored and checked by SHA-256, and `vmmemWSL`/`wslrelay`/`wslhost` were gone by 02:45:09 - the same incident as
+  B22-A3's first breakage pass; the next increments are told to call Git Bash by its absolute path. The studio's wording changed: CI's
+  page-browser-e2e job (the Playwright suite on a compiled editor) is the browser gate, and it also proves the client bundle compiles
+  without the Node-only modules the review found pulled into it (regressions-1, pinned offline by `b22-c-authority` case 8).

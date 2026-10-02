@@ -5,7 +5,7 @@ import { evaluateTestResults } from "../measurements";
 import { assertModelSafeForExecution } from "../models";
 import { assertCompiledDeckSafe, compiledDeckExpectation, compileNgspiceNetlist } from "../netlist";
 import { auditCompiledIr } from "../readiness";
-import { parseNgspiceAsciiRaw } from "../waveforms";
+import { parseNgspiceAsciiRawResult } from "../waveforms";
 import type {
   RunEvent,
   RunManifest,
@@ -98,7 +98,7 @@ export async function executeRunPoint(input: ExecuteRunInput): Promise<Partial<R
   // run id, never a host path (D22-8); nothing is written to disk but the runner's deck, in a directory it removes. [B22-A3 review]
   // regressions-3: the raw file is not kept, so the manifest keeps its SHA-256 and size as the runner read them (a re-run compares)
   const rawOutput = run.raw.state === "read" ? { sha256: sha256(run.raw.text), bytes: Buffer.byteLength(run.raw.text, "utf8") } : undefined;
-  const manifest = createRunManifest({ project: input.project, test, runPlan, runPoint: input.runPoint, analysis, ir: compiled.ir, netlist: netlist.executed, simulatorVersion: version, runner: diagnosticProvenance(run), rawOutput });
+  const manifest = createRunManifest({ project: input.project, test, runPlan, runPoint: input.runPoint, analysis, ir: compiled.ir, netlist: netlist.executed, simulatorVersion: version, runner: { ...diagnosticProvenance(run), profileDigest: run.profileDigest }, rawOutput }); // [B22-C] the evidence names the profile's digest
   const artifactId = run.runId;
   const output = { stdout: boundDiagnosticText(run.stdout), stderr: boundDiagnosticText(run.stderr) }; // [B22-A1] D22-4 (the runner holds both within the same bound)
   if (run.outcome === "spawn_failed") throw new Error("ngspice could not be started from the pinned install");
@@ -134,7 +134,7 @@ export async function executeRunPoint(input: ExecuteRunInput): Promise<Partial<R
       artifactId,
     };
   }
-  const parsed = parseNgspiceAsciiRaw(run.raw.text);
+  const outcome = parseNgspiceAsciiRawResult(run.raw.text); if (!outcome.ok) return { status: "failed", progress: 100, error: outcome.refusal.message, ...output, diagnostics: diagnoseNgspiceLog(`${run.stderr}\n${run.stdout}`, netlist), manifest, netlist, artifactId }; const parsed = outcome.parsed; // [B22-C review] coverage-10: a refused output (D22-10) fails the run like every other failure - its logs, manifest (the raw SHA-256) and netlist kept; one line, so the cited lines below keep their numbers
   const totalPoints = parsed.waveforms.reduce((sum, waveform) => sum + waveform.x.length, 0);
   if (totalPoints > limits.maxWaveformPoints) throw new Error(`Waveform point count ${totalPoints} exceeds ${limits.maxWaveformPoints}`);
   const scalars = evaluateTestResults(input.runId, test.id, test.measurements, test.specifications, parsed.waveforms, { autoSteadyState: analysis.type === "tran", finalCycles: 5 });

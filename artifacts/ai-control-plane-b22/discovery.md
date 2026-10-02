@@ -576,6 +576,14 @@ self-declared validated, digest-bearing, network-deny profile and obtain `author
 (`readiness.ts:11, :20-22`). Latent today: the 501 stands, no client calls these routes (2.1) and nothing persists or consumes the report.
 Severity high (it forbids wiring any runner behind the route). **CONFIRMED** (code), **INFERRED** (consequence). Closes: B22-C (a
 server-owned profile registry resolved by id and digest; body copies must match or are refused); OD-138. Sources: S1-G6, S2-G10, S4-G2.
+- **D22-6:** **Closed by B22-C.**
+  - Execute and readiness resolve the provider from the server's frozen set (the diagnostic ngspice provider and the *unreviewed* analytical reference provider) and the environment from the B22-A2 registry, by id and digest.
+  - A body copy that differs is refused 409 with one of four closed codes: `CD10_PROVIDER_NOT_SERVER_REGISTERED`, `CD10_PROVIDER_BODY_MISMATCH`, `CD10_ENVIRONMENT_NOT_SERVER_REGISTERED`, `CD10_ENVIRONMENT_BODY_MISMATCH`.
+  - The binding lives inside `authorizeSimulationExecution` and `evaluateSimulationReadiness`. It is pure and browser-safe; `simulation-authority-server.ts` reads the registry in the two routes alone, and a caller with no registry refuses every environment.
+  - The CD-11 consumer is browser-reachable and passes none, so a CD-11 handoff stays blocked.
+  - Readiness's other body-taken inputs (problem, registries, denominator, coverage, applicability, campaign; 9.5 item 17) are recorded: no server-held authoritative pair exists, so none can reach `approve_for_CD11`.
+  - The registry holds no `validated` profile, so execute still ends 409/501; the 501 text and its pins are unchanged.
+  - Pinned by `b22-c-authority` cases 1-8. Case 8 is a static client-graph gate; no `next build` was run.
 
 **D22-7 - The SPICE Studio job store very probably drops every completed run's results.** Requirement: B22-C "cancellation and timeout
 produce no fabricated results" (`:931`) and "results are evidence" (`:933`); global `:147`. Finding: section 0: the worker's own
@@ -591,6 +599,13 @@ Source: S4-G3; synthesizer re-read and `git blame`.
 
 - [B22 lead, 2026-10-01] Re-verification (section 9): Re-verified on `1ff9d81` and still open: SEC-1 only shifted job-store lines (`:89` -> `:92`, `:85-94` -> `:88-97`, `:145-146` -> `:148-149`, `:186-202` -> `:190-206`), the worker's completed event (`worker.ts:226`) still makes the record terminal before `Object.assign`, so a completed run keeps the empty initial record with no `finishedAt` while the batch counts it completed, and neither the tranche-parity fake nor SEC-1's new end-to-end suite (whose `readFile` fake fails at the raw read) ever reaches that event, so B22-C keeps this fix under OD-137's default.
 - D22-7: [B22-A1, 2026-10-01] Observed at the fake seam while B22-A1 built its bundle case: a completed run via `POST /api/spice/runs` never finished (`finishedAt` unset) and its bundle answered 409 "Run has no reproducibility artifacts", as section 0 inferred (`worker.ts:226`, `job-store.ts:148`) - CONFIRMED at the fake seam, not with a real ngspice; unchanged (B22-C).
+- **D22-7:** **Closed by B22-C.**
+  - The job store holds the worker's terminal event, stages the result and its evidence, and keeps the record non-terminal until the evidence settles (and is appended, when a store is bound). Only then do the result, the terminal status and the event land together; never over a record a cancel already made terminal.
+  - A completion whose evidence document is refused fails the run itself with `EVIDENCE_DOCUMENT_REFUSED`. The batch counts completed only with evidence. Record, SSE, batch and `stopOnFailure` agree.
+  - The studio consequence is pinned: `events/route.ts` and `SpiceStudio.tsx` stop at the first terminal record.
+  - B22-A1's C44-C47 hold, and the two B16.0.23 guards stand.
+  - Pinned by `b22-c-job-store-terminal` cases 1-10.
+  - [B22-C lead] A run failed with `EVIDENCE_DOCUMENT_REFUSED` keeps its validated output for inspection, but a report cell and a run comparison read verdicts only from a completed run (`report.ts` `verdictScalars`; the check's new issue - red: the report showed the kept 'pass' as PASS for a failed run - then green).
 
 **D22-8 - Output and temporary files are not bounded or isolated.** Requirement: B22-A "isolated writable temporary output", output
 and file limits (`:897, :900`); B22-D huge output; global `:155` unbounded streams. Finding: the worker reads `result.raw` whole
@@ -641,6 +656,13 @@ the run still completes (`waveforms.ts:67`; `worker.ts:221-242`); neither checks
 the two. Only CD-10's `createWaveformArtifact` enforces finite values and a strictly increasing axis (`waveform.ts:6`), and no live path
 uses it. Severity medium. **CONFIRMED** (code), **INFERRED** (misattribution). Closes: B22-C (one validator; non-finite and short output
 refused whole), B22-D (parser-differential case). Sources: S1-G9, S2-G11, S4-G4.
+- **D22-10:** **Closed by B22-C.**
+  - `validateNgspiceAsciiOutput` (validator `cd10-waveform-artifact/1`, built over `createWaveformArtifact`) refuses a non-finite, short, empty, over-limit, misaligned or non-increasing output whole, as well as a unit outside ngspice's closed type list. There are eight closed codes.
+  - Both parsers route through it. The parse path builds no artifact; `waveformArtifactOf` builds one on demand.
+  - A refused output fails the worker's run but keeps its logs, manifest and netlist.
+  - The 9.5 item 21 `Infinity`/`1e999` divergence is a test.
+  - Profiles moved by revision: `ngspice-local-diagnostic` 3, `ngspice-oci` 2.
+  - Pinned by `b22-c-output-validator` cases 1-10. The type list is INFERRED until a live run.
 
 **D22-11 - Locale, timezone, randomness and thread count are uncontrolled.** Requirement: B22-A `:901`; B22-C reproducible or honestly
 marked (`:932`); B22-D locale drift. Finding: no ngspice spawn sets `LC_ALL`, `LANG` or `TZ` (`worker.ts:81-86`; `route.ts:50-55`); the
@@ -669,6 +691,12 @@ stateless; the classification and action registry call the SPICE runs `project-d
 cannot bind its input to a server-held revision (reader 4). Severity medium. **CONFIRMED**. Closes: B22-C (a silent evidence aggregate,
 input bound to a server SHA-256 of the submitted snapshot, labels corrected); OD-140 (bounded host is separate), OD-141, OD-142. Sources:
 S1-G13, S4-G1, S4-G10.
+- **D22-12:** **Closed by B22-C for the aggregate; its binding to a route is recorded open.**
+  - `computation.evidence.v1` (`evidence-store.ts`) is silent: no outbox effect, ever. It is scoped by tenant/project/branch, CAS on the revision, idempotent, and re-verified on load.
+  - Every completed SPICE run carries its digest-bound document on the record (`not_recorded / EVIDENCE_STORE_UNBOUND`).
+  - No route binds a repository (B21-A precedent).
+  - The unwired CD-10 tables are not reused and no migration was added (9.5 item 23).
+  - Pinned by `b22-c-evidence-store` cases 1-8 and `b22-c-job-store-terminal` cases 6, 9 and 10.
 
 **D22-13 - Evidence identities are not collision-resistant, and non-finite numbers have no durable encoding.** Requirement: global
 `:140` evidence hashes; B22-C validated numerical output. Finding: CD-10 artifact and report digests are FNV-1a (`stable.ts:4`;
@@ -676,6 +704,9 @@ S1-G13, S4-G1, S4-G10.
 assertion carries a NaN band (`assertion.ts:7`) that `JSON.stringify` digests as `null`; the durable substrate refuses non-finite numbers
 (`durable-workflow/stable.ts:8`). Severity medium. **CONFIRMED**. Closes: B22-C (SHA-256 envelope over an explicit encoding); OD-143.
 Sources: S4-G5, S4-G6.
+- **D22-13:** **Closed by B22-C.**
+  - Evidence carries SHA-256 over an explicit encoding: finite, nan, ±infinity and absent are closed states.
+  - It records the profile id and digest, the install digest and seed, each model library as `artifact://sha256/<hex>` of the text the deck carries (`emittedModelText`), the SHA-256 of the netlist and the raw file, and the input bound to the server's SHA-256 of `{ scope, project, runPlanId, parts }`, labelled "bound to a submitted snapshot".
 
 **D22-14 - Records and UI call diagnostic subprocess output a sandbox, authoritative or a qualification.** Requirement: B22-A `:906`
 "Do not call a weak subprocess sandbox authoritative."; global `:144`. Finding: `/api/simulate`'s header and the B16.0.24 proof call the
@@ -686,6 +717,10 @@ runner "a confined ngspice sandbox" with "no network", resting on the deck scree
 document from caller-supplied run records with no diagnostic disclosure (`reports/route.ts:7-19`; `report.ts:38-41`). Severity medium.
 **CONFIRMED**. Closes: B22-C (wording and disclosure, pinned) and the closeout (a dated superseding note beside the B16.0.24 records);
 OD-144. Sources: S4-G7, S5-G6, S7-G6; section 0.
+- **D22-14 (the UI half):** **Closed by B22-C.**
+  - One fixed disclosure sentence (`DIAGNOSTIC_SIMULATION_DISCLOSURE`) appears in the SPICE report (JSON and HTML) and the studio's "Diagnostic regression" panel.
+  - `/api/spice/reports` stays public and adds "caller-supplied records, not verified by Sirkit".
+  - The B16.0.24 notes and the `/api/simulate` header remain the closeout's. Pinned by `b22-c-wording`.
 
 **D22-15 - No named computation exists, and the registry has no vocabulary for one.** Requirement: B22-B `:910-916`. Finding: none of
 the 42 descriptors is a pinned SPICE analysis, an approved equation, a bounded parse, a pinned experiment profile or an artifact compare
@@ -764,6 +799,10 @@ nothing re-parses the emitted deck (`lowering.ts:27`); the live decks come from 
 (`app/lib/netlist.ts:84-127, :208`; `app/lib/spice/ir.ts:124-150`, reader 1). Severity medium (the authoritative half stays blocked by
 D22-1 anyway). **CONFIRMED**. Closes: B22-C in part (an independent deck validator and a pinned model mapping for the diagnostic and
 analytical paths); the authoritative corpus stays open (recorded). Sources: S1-G5, S1-G7.
+- **D22-19:** **Closed in part by B22-C.**
+  - `validateLoweredDeck` independently re-parses a CD-10 deck. It checks nodes, components, models, parameters, test elements (exact card), the reference node, includes pinned by `artifact://sha256/<64 hex>`, comment lines (`*#`, `*ng_script`), non-LF breaks and NUL, and the analysis line's shape.
+  - No CD-10 path calls it yet: `lowerNetlistIr` has no production caller and `lowering.ts:14` checks only the prefix. The corpus and authoritative half stay open.
+  - Pinned by `b22-c-deck-validator` cases 1-8.
 
 **D22-20 - No adversarial test touches a real or sandboxed process.** Requirement: B22-D `:938`. Finding: the existing simulation suites
 are source gates and fake-spawn route pins (2.7); none of the 16 B22-D classes runs against a real process; CI installs no ngspice and runs
@@ -778,6 +817,9 @@ validators (`:920`); global `:138`. Finding: `read_results`, `diagnose_failure` 
 `body.runs` with no digest or server lookup, and `propose_design_patch` attaches them (`app/api/spice/ai/route.ts:229-246`). Severity medium.
 **CONFIRMED**. Closes: B22-C (evidence references resolve to server-held evidence records or are labelled caller-supplied); OD-150.
 Source: S4-G8.
+- **D22-21:** **Closed by B22-C as "labelled caller-supplied".**
+  - Every `EvidenceRef` the SPICE AI builds from `body.runs` carries `provenance: "caller-supplied"`: in tool results, proposals, design-patch operations and `aiAuditLog`, whatever a browser proposal claims. The studio labels it the same way.
+  - None resolves to a server-held record until the aggregate is bound. Pinned by `b22-c-ai-evidence`.
 
 **D22-22 - The design the reserved OD-83..86/88 numbers wait for is not in the repository.** Requirement: B22-B (the OD-82/OD-87
 reversal path). Finding: `OWNER_DECISIONS.md:687` points at `task-B4.md` section 8; `git ls-files | grep task-B4` is empty; only the
@@ -1390,3 +1432,4 @@ The "high" severity still holds, through kicad-cli.
   - The terminal guards are at `:150` and `:154` (were `:148` and `:152`).
   - The preflight refusal is at `:352` (was `:350`).
 - [B22-B, 2026-10-01; review 2026-10-02] B22-B delivered the closed named-computation catalog (D22-15; OD-139, OD-149), the reviewed exposure and process-gate moves (D22-16), and the bounded worker-thread engine host (D22-17; OD-140: a hard stop at the budget, 2 workers per process and 1 per tenant, refused under any V8 heap-size flag). It recorded the OD-82/OD-87 precondition with the reversal design copied in and NOT performed (D22-22). The chat port is bound only with SIRKIT_NAMED_COMPUTATIONS=1 on a server with no heap-size flag (OD-158; under next dev also NEXT_DISABLE_MEM_OVERRIDE=1). The process-backed requests stay dormant until a human approval route exists (OD-159). An adversarial review CONFIRMED 18 findings, all fixed test-first. Discovery lines moved: none (tool-registry.ts :63, :98, :282-292, gateway.ts :509-624, loop.ts :233-258 and route.ts :412 keep their anchors).
+- [B22-C, 2026-10-02; review 2026-10-02] B22-C bound CD-10 execute and readiness to the server's provider set and runtime-profile registry by id and digest (D22-6, OD-138; a differing body copy 409 with a closed code; the binding pure and browser-safe, the registry passed in by the two routes; execute still 409/501, the 501 untouched). It made the SPICE job store attach a result and its evidence before publishing the terminal status (D22-7), routed both ngspice raw parsers through one whole-output validator (D22-10), built the silent digest-bound evidence aggregate computation.evidence.v1 with every completed run's document on its record (D22-12, D22-13; no route binds a repository), relabelled the SPICE report and studio as diagnostic (D22-14 UI half), built an unwired independent CD-10 deck validator (D22-19 in part), and labelled SPICE AI evidence caller-supplied (D22-21). An adversarial review CONFIRMED 25 findings (1 high, 3 medium, 21 low), all fixed test-first. Discovery lines moved: none by the review (worker.ts :92/:106/:109/:119/:141 and job-store.ts :101/:164/:372 keep their anchors; B22-A1's C45-C47 moved once, by the implementer).

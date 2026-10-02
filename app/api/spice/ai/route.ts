@@ -12,7 +12,7 @@ import { SPICE_TOOL_SCHEMAS, validateSpiceToolInput } from "./_tools";
 import { createId, nowIso } from "@/app/lib/spice/identity";
 import { createDefaultTest } from "@/app/lib/spice/project";
 import { auditSimulationReadiness } from "@/app/lib/spice/readiness";
-import { compareRunRecords } from "@/app/lib/spice/report";
+import { CALLER_SUPPLIED_EVIDENCE, compareRunRecords } from "@/app/lib/spice/report"; // [B22-C] D22-21: every reference built from body.runs is caller-supplied
 import { estimateRunPlan } from "@/app/lib/spice/run-plan";
 import { searchModels } from "@/app/lib/spice/models";
 import type {
@@ -230,17 +230,17 @@ export const POST = authenticatedJsonRoute<{ instruction?: string; project?: Sim
         const run = runs.find((candidate) => candidate.id === string(raw, "run_id")); if (!run) throw new Error("Run was not found in supplied evidence set");
         const requested = Array.isArray(raw.signals) ? raw.signals.filter((item): item is string => typeof item === "string") : [];
         const waveforms = run.waveforms.filter((waveform) => requested.length === 0 || requested.includes(waveform.name)).slice(0, 20).map((waveform) => ({ name: waveform.name, unit: waveform.unit, points: waveform.y.length, min: Math.min(...waveform.y), max: Math.max(...waveform.y), from: waveform.x[0], to: waveform.x.at(-1) }));
-        for (const scalar of run.scalars) evidence.push({ runId: run.id, testId: run.testId, measurementId: scalar.measurementId, value: scalar.value, unit: scalar.unit });
-        for (const waveform of waveforms) evidence.push({ runId: run.id, testId: run.testId, signal: waveform.name, from: waveform.from, to: waveform.to });
-        toolResult = { run: { id: run.id, label: run.label, status: run.status }, scalars: run.scalars, waveforms };
+        for (const scalar of run.scalars) evidence.push({ runId: run.id, testId: run.testId, measurementId: scalar.measurementId, value: scalar.value, unit: scalar.unit, provenance: CALLER_SUPPLIED_EVIDENCE });
+        for (const waveform of waveforms) evidence.push({ runId: run.id, testId: run.testId, signal: waveform.name, from: waveform.from, to: waveform.to, provenance: CALLER_SUPPLIED_EVIDENCE });
+        toolResult = { provenance: CALLER_SUPPLIED_EVIDENCE, run: { id: run.id, label: run.label, status: run.status }, scalars: run.scalars, waveforms };
       } else if (tool.name === "diagnose_failure") {
         const run = runs.find((candidate) => candidate.id === string(raw, "run_id")); if (!run) throw new Error("Run was not found in supplied evidence set");
-        for (const diagnostic of run.diagnostics) evidence.push({ runId: run.id, testId: run.testId, diagnosticId: diagnostic.id });
-        toolResult = { run: { id: run.id, status: run.status, error: run.error }, diagnostics: run.diagnostics, logTail: `${run.stderr}\n${run.stdout}`.slice(-5000) };
+        for (const diagnostic of run.diagnostics) evidence.push({ runId: run.id, testId: run.testId, diagnosticId: diagnostic.id, provenance: CALLER_SUPPLIED_EVIDENCE });
+        toolResult = { provenance: CALLER_SUPPLIED_EVIDENCE, run:{ id: run.id, status: run.status, error: run.error }, diagnostics: run.diagnostics, logTail: `${run.stderr}\n${run.stdout}`.slice(-5000) };
       } else if (tool.name === "compare_runs") {
         const a = runs.find((candidate) => candidate.id === string(raw, "run_a")); const b = runs.find((candidate) => candidate.id === string(raw, "run_b")); if (!a || !b) throw new Error("Both runs must be supplied");
-        for (const run of [a, b]) for (const scalar of run.scalars) evidence.push({ runId: run.id, testId: run.testId, measurementId: scalar.measurementId, value: scalar.value, unit: scalar.unit });
-        toolResult = compareRunRecords(a, b);
+        for (const run of [a, b]) for (const scalar of run.scalars) evidence.push({ runId: run.id, testId: run.testId, measurementId: scalar.measurementId, value: scalar.value, unit: scalar.unit, provenance: CALLER_SUPPLIED_EVIDENCE });
+        toolResult = { provenance: CALLER_SUPPLIED_EVIDENCE, ...compareRunRecords(a, b) };
       } else if (tool.name === "propose_design_patch") {
         const operation: AiStudioOperation = { op: "propose-design-patch", description: string(raw, "description"), changes: Array.isArray(raw.changes) ? raw.changes : [], evidence: [...evidence] };
         operations.push({ approval: "explicit", operation }); toolResult = { recorded: true, approval: "explicit", evidence_count: evidence.length };

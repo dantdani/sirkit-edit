@@ -22,7 +22,10 @@ engineering executable may produce authoritative simulation evidence. Concretely
   wire:
   "CD-10 authoritative runner is blocked until the sandbox image/executable and environment corpus are independently validated"
   - even for a request body that declares itself a validated, digest-bearing, network-deny environment (that the route trusts such a
-  body is D22-6, latent behind the 501 and B22-C's to close).
+  body is D22-6, latent behind the 501 and B22-C's to close). [B22-C review, 2026-10-02] No longer: such a body is refused 409
+  "authoritative execution denied" with a closed code (`CD10_PROVIDER_NOT_SERVER_REGISTERED` for the self-declared pair) before the
+  501 is reached; the 501 text and its source pins are unchanged and it stays the route's last line (D22-6 closed, OD-138;
+  `b22-a2-blocked-runner` case 4 moved by review, `b22-c-authority`).
 - No B22-A2 runtime profile is `validated` or authoritative-eligible; given to the execute route as the environment, each ends at 409
   "authoritative execution denied", whatever the provider (`b22-a2-blocked-runner` case 5; `b22-a2-runtime-profile` case 8).
 - The local runs that exist (`/api/simulate`, the SPICE Studio worker, the smoke test, FreeRouting, kicad-cli) are diagnostic plain
@@ -85,7 +88,8 @@ command was run for this increment.
    `qualificationEvidenceRefs`. Never a local run here.
 3. **OD-147 / LB-10**: the live-blocker row "authoritative sandboxed simulation on a qualified OCI platform" stays
    BLOCKED-LIVE-QUALIFICATION until that evidence exists and B24-A names the production host.
-4. **B22-C**: even with a qualified profile, execute and readiness must resolve the provider and environment from the server-owned
+4. **B22-C** ([B22-C, 2026-10-02] done for the binding: they now do, by id and digest, and a body copy is refused 409 with a closed
+   code; nothing the server holds is validated, so the 501 still cannot be reached - `simulation-authority.md`): even with a qualified profile, execute and readiness must resolve the provider and environment from the server-owned
    registry (OD-138), never the request body, before the 501 could move; the corpus and the independent deck validator remain (D22-19).
 
 ## 6. What this verdict does not claim

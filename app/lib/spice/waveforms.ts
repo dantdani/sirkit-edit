@@ -1,6 +1,6 @@
 import { createId } from "./identity";
 import type { WaveformSeries } from "./types";
-import { unitForVector } from "./units";
+import { SimulationOutputError, validateNgspiceAsciiOutput, type SimulationOutputOptions } from "@/app/lib/computation/output-validator";
 
 interface RawHeader {
   title: string;
@@ -17,116 +17,35 @@ export interface ParsedRawResult {
   warnings: string[];
 }
 
-function parseHeader(lines: string[]): { header: RawHeader; valuesLine: number } {
-  const header: RawHeader = { title: "", plotName: "Unknown", flags: "real", variableCount: 0, pointCount: 0, variables: [] };
-  let valuesLine = -1;
-  let inVariables = false;
-  for (let index = 0; index < lines.length; index++) {
-    const line = lines[index];
-    if (line.startsWith("Title:")) header.title = line.slice(6).trim();
-    else if (line.startsWith("Plotname:")) header.plotName = line.slice(9).trim();
-    else if (line.startsWith("Flags:")) header.flags = line.slice(6).trim().toLowerCase();
-    else if (line.startsWith("No. Variables:")) header.variableCount = Number.parseInt(line.slice(14).trim(), 10);
-    else if (line.startsWith("No. Points:")) header.pointCount = Number.parseInt(line.slice(11).trim(), 10);
-    else if (line.trim() === "Variables:") inVariables = true;
-    else if (line.trim() === "Values:") {
-      valuesLine = index + 1;
-      break;
-    } else if (inVariables) {
-      const match = line.trim().match(/^(\d+)\s+(\S+)\s+(\S+)/);
-      if (match) header.variables.push({ index: Number.parseInt(match[1], 10), name: match[2], type: match[3] });
-    }
-  }
-  if (valuesLine < 0) throw new Error("ngspice raw file has no Values section");
-  if (header.variableCount <= 0 || header.variables.length === 0) throw new Error("ngspice raw file has no variable declarations");
-  return { header, valuesLine };
-}
-
-function numericTokens(lines: string[], start: number): number[] {
-  const tokens: number[] = [];
-  for (let index = start; index < lines.length; index++) {
-    for (const token of lines[index].trim().split(/[\s,]+/)) {
-      if (token === "") continue;
-      const value = Number(token);
-      if (Number.isFinite(value)) tokens.push(value);
-    }
-  }
-  return tokens;
-}
-
-export function parseNgspiceAsciiRaw(raw: string): ParsedRawResult {
-  const lines = raw.replace(/\r\n?/g, "\n").split("\n");
-  const { header, valuesLine } = parseHeader(lines);
-  const complex = header.flags.includes("complex");
-  const valuesPerVariable = complex ? 2 : 1;
-  const stride = 1 + header.variableCount * valuesPerVariable;
-  const tokens = numericTokens(lines, valuesLine);
-  const availablePoints = Math.floor(tokens.length / stride);
-  const pointCount = header.pointCount > 0 ? Math.min(header.pointCount, availablePoints) : availablePoints;
-  const warnings: string[] = [];
-  if (availablePoints < header.pointCount) warnings.push(`Raw file declared ${header.pointCount} points but only ${availablePoints} complete points were parsed.`);
-  if (pointCount === 0) throw new Error("ngspice raw file contains no complete points");
-
-  const xVariable = header.variables[0];
-  const x: number[] = new Array(pointCount);
-  for (let pointIndex = 0; pointIndex < pointCount; pointIndex++) {
-    const base = pointIndex * stride + 1;
-    x[pointIndex] = tokens[base];
-  }
+/**
+ * [B22-C] D22-10: the worker's parser routes through the one output validator (`app/lib/computation/output-validator.ts`, built
+ * over CD-10's `createWaveformArtifact`). A non-finite value, a short or over-long values section, a misaligned point, a time or
+ * frequency axis that does not strictly increase or a unit it cannot name refuses the file WHOLE (`SimulationOutputError`, a
+ * closed code): this parser no longer drops a token, so no value can shift onto another variable, and `warnings` is always empty.
+ * The legacy shape is kept: the first vector is `x`, a complex vector yields its magnitude (dB) and phase series.
+ */
+export function parseNgspiceAsciiRaw(raw: string, options?: SimulationOutputOptions): ParsedRawResult {
+  const output = validateNgspiceAsciiOutput(raw, options);
+  const header: RawHeader = {
+    title: output.title,
+    plotName: output.plotName || "Unknown",
+    flags: output.flags,
+    variableCount: output.variables.length + 1,
+    pointCount: output.points,
+    variables: [output.axis, ...output.variables].map((vector, index) => ({ index, name: vector.name, type: vector.type })),
+  };
+  const x = [...output.axis.real];
   const waveforms: WaveformSeries[] = [];
-  for (let variableIndex = 1; variableIndex < Math.min(header.variables.length, header.variableCount); variableIndex++) {
-    const variable = header.variables[variableIndex];
-    if (complex) {
-      const real: number[] = new Array(pointCount);
-      const imaginary: number[] = new Array(pointCount);
-      const magnitudeDb: number[] = new Array(pointCount);
-      const phaseDeg: number[] = new Array(pointCount);
-      for (let pointIndex = 0; pointIndex < pointCount; pointIndex++) {
-        const offset = pointIndex * stride + 1 + variableIndex * 2;
-        const re = tokens[offset];
-        const im = tokens[offset + 1];
-        real[pointIndex] = re;
-        imaginary[pointIndex] = im;
-        magnitudeDb[pointIndex] = 20 * Math.log10(Math.max(1e-30, Math.hypot(re, im)));
-        phaseDeg[pointIndex] = Math.atan2(im, re) * 180 / Math.PI;
-      }
-      waveforms.push({
-        id: createId("wave"),
-        name: `${variable.name}.mag`,
-        unit: "dB",
-        xName: xVariable.name,
-        xUnit: unitForVector(xVariable.name),
-        x: [...x],
-        y: magnitudeDb,
-        complex: { real, imaginary, magnitudeDb, phaseDeg },
-        sourceRefs: [],
-      });
-      waveforms.push({
-        id: createId("wave"),
-        name: `${variable.name}.phase`,
-        unit: "°",
-        xName: xVariable.name,
-        xUnit: unitForVector(xVariable.name),
-        x: [...x],
-        y: phaseDeg,
-        complex: { real, imaginary, magnitudeDb, phaseDeg },
-        sourceRefs: [],
-      });
+  for (const variable of output.variables) {
+    if (variable.imaginary) {
+      const real = [...variable.real];
+      const imaginary = [...variable.imaginary];
+      const magnitudeDb = real.map((re, index) => 20 * Math.log10(Math.max(1e-30, Math.hypot(re, imaginary[index]!))));
+      const phaseDeg = real.map((re, index) => Math.atan2(imaginary[index]!, re) * 180 / Math.PI);
+      waveforms.push({ id: createId("wave"), name: `${variable.name}.mag`, unit: "dB", xName: output.axis.name, xUnit: output.axis.unit, x: [...x], y: magnitudeDb, complex: { real, imaginary, magnitudeDb, phaseDeg }, sourceRefs: [] });
+      waveforms.push({ id: createId("wave"), name: `${variable.name}.phase`, unit: "°", xName: output.axis.name, xUnit: output.axis.unit, x: [...x], y: phaseDeg, complex: { real, imaginary, magnitudeDb, phaseDeg }, sourceRefs: [] });
     } else {
-      const y: number[] = new Array(pointCount);
-      for (let pointIndex = 0; pointIndex < pointCount; pointIndex++) {
-        y[pointIndex] = tokens[pointIndex * stride + 1 + variableIndex];
-      }
-      waveforms.push({
-        id: createId("wave"),
-        name: variable.name,
-        unit: unitForVector(variable.name),
-        xName: xVariable.name,
-        xUnit: unitForVector(xVariable.name),
-        x: [...x],
-        y,
-        sourceRefs: [],
-      });
+      waveforms.push({ id: createId("wave"), name: variable.name, unit: variable.unit, xName: output.axis.name, xUnit: output.axis.unit, x: [...x], y: [...variable.real], sourceRefs: [] });
     }
   }
   // Operating-point decks can expose a single independent vector and no
@@ -134,8 +53,8 @@ export function parseNgspiceAsciiRaw(raw: string): ParsedRawResult {
   if (waveforms.length === 0) {
     waveforms.push({
       id: createId("wave"),
-      name: xVariable.name,
-      unit: unitForVector(xVariable.name),
+      name: output.axis.name,
+      unit: output.axis.unit,
       xName: "index",
       xUnit: "",
       x: x.map((_, index) => index),
@@ -143,7 +62,18 @@ export function parseNgspiceAsciiRaw(raw: string): ParsedRawResult {
       sourceRefs: [],
     });
   }
-  return { header, waveforms, warnings };
+  return { header, waveforms, warnings: [] };
+}
+
+/** [B22-C review] coverage-10: the worker's form - the parsed result, or the closed refusal as a value, so a refused output fails
+ *  the run like every other failure (its logs, manifest and netlist kept) instead of throwing past them. */
+export function parseNgspiceAsciiRawResult(raw: string, options?: SimulationOutputOptions): { ok: true; parsed: ParsedRawResult } | { ok: false; refusal: SimulationOutputError } {
+  try {
+    return { ok: true, parsed: parseNgspiceAsciiRaw(raw, options) };
+  } catch (error) {
+    if (error instanceof SimulationOutputError) return { ok: false, refusal: error };
+    throw error;
+  }
 }
 
 export interface DownsampledSeries {

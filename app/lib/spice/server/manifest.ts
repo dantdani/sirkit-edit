@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { stableStringify } from "../identity";
+import { emittedModelText } from "../netlist";
 import type { CanonicalSimulationIr, RunManifest, RunPlan, RunPoint, SimulationAnalysis, SimulationProject, SimulationTest } from "../types";
 
 export function sha256(value: string | Buffer): string {
@@ -31,7 +32,7 @@ export function createRunManifest(input: {
     testRevision: input.test.revision,
     runPlanId: input.runPlan.id,
     runPoint: input.runPoint,
-    modelChecksums: Object.fromEntries(input.ir.models.map((model) => [model.id, sha256(model.transformedContent ?? model.originalContent)])),
+    modelChecksums: Object.fromEntries(input.ir.models.map((model) => [model.id, sha256(emittedModelText(model))])), // [B22-C] the SHA-256 of the model text the deck carries (was `transformedContent ?? originalContent`, D22-4/D22-13)
     schematicHash: design.schematicHash,
     netlistChecksum: sha256(input.netlist),
     analysis: input.analysis,

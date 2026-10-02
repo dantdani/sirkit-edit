@@ -14,7 +14,8 @@ fake `node:child_process` / `node:fs/promises` seams; the opt-in live suite is t
 
 One module, `app/lib/computation/diagnostic-runner.ts`, is the ONLY ngspice spawner (OD-136). `/api/simulate`, the SPICE Studio worker
 (its run and its `-v` probe) and the model smoke test call it and import no `child_process`. It EXECUTES the B22-A2 profile
-`ngspice-local-diagnostic` (revision 2): the install the server settings pin, checked by its install-tree digest before every spawn;
+`ngspice-local-diagnostic` (revision 2; [B22-C review, 2026-10-02] revision 3 since B22-C: the wired output validator, so its
+`environmentId` is `runtime-profile:ngspice-local-diagnostic:3`): the install the server settings pin, checked by its install-tree digest before every spawn;
 argv from the profile's templates with `-n`; EXACTLY the profile's environment as the map it passes (Node adds eight host variables on
 win32, section 6); a per-run `mkdtemp` directory removed on every path; stdout and stderr redacted as they stream and held within A1's
 bound; the raw file read back through the bounded reader lifted from `/api/simulate`; a tree kill on the wall clock and on abort;
@@ -165,8 +166,11 @@ point (the job store's loop, unchanged), so a tenant over its queue share sees p
   artifact directory is gone (D22-8). [B22-A3 review] regressions-3: the raw file is not kept, but the worker records its SHA-256 and
   size as the runner read them in the manifest (`rawOutput`), the README names them, and `docs/spice-studio.md` no longer promises a
   "complete" or "reproducible" bundle. RECORDED loss: the vectors ngspice wrote - including the non-finite values the parser drops
-  (D22-10) - are not in the bundle; `waveforms.json` is the parsed record. Today a completed Studio run's result is dropped before it
-  reaches the record (D22-7, B22-C), so `rawOutput` is visible in a record only once B22-C lands.
+  (D22-10) [B22-C review, 2026-10-02] (the parsers no longer drop them: such an output is refused whole and the run fails with its
+  closed code, keeping its logs, its manifest and `rawOutput`) - are not in the bundle; `waveforms.json` is the parsed record. Today a completed Studio run's result is dropped before it
+  reaches the record (D22-7, B22-C), so `rawOutput` is visible in a record only once B22-C lands. [B22-C, 2026-10-02] It lands: the
+  job store attaches the result before it publishes the terminal status, so a completed record carries its manifest and `rawOutput`
+  (`simulation-authority.md`).
 
 ## 6. Results: labels, provenance, no host path
 
@@ -293,7 +297,8 @@ live suite, no browser spec, no full suite; no real process was started by the w
   prevention plus bounds, not isolation; production authority stays BLOCKED (LB-10).
 - **The Studio record's cancel** (`job-store.ts` `cancelInternal`, pinned by B16.0.23 §E/§F): the record is marked `cancelled` at the
   request; the runner's process ends after (or as `kill_unconfirmed`), and the worker's later result is dropped by the terminal guard.
-  The record-level ordering is B22-C's, with D22-7.
+  The record-level ordering is B22-C's, with D22-7. [B22-C, 2026-10-02] D22-7 is closed (the result is attached before the terminal
+  status is published); the cancel-at-request ordering itself is unchanged and stays recorded (B16.0.23 §E/§F pins it).
 - **Node's win32 environment additions** (section 6; OD-156): the eight variables are recorded, not removed. Whether ngspice's own
   `echo` sees `USERPROFILE` is the live suite's new case 5 (yes/no answers only).
 - **Descendant reach** of `taskkill /T` (section 3): **INFERRED**; no case shows it.
@@ -308,7 +313,7 @@ live suite, no browser spec, no full suite; no real process was started by the w
   custom option fails each point with the closed text rather than at `POST /api/spice/runs` (the run-plan preflight is the job
   store's, B22-C); a deck whose model text carries its own `.end` ends there for ngspice, before the seed line (such a deck is broken
   anyway).
-- **The raw file** is kept only as its digest (section 5); the parsed waveforms drop non-finite values (D22-10, B22-C).
+- **The raw file** is kept only as its digest (section 5); [B22-C, 2026-10-02] the parsed output is now refused whole instead of dropping, through the one output validator; before: the parsed waveforms drop non-finite values (D22-10, B22-C).
 - **Version**: whether `-n -v` prints the version line under the exact environment is the live suite's (case 2); a failed probe
   degrades to a fixed text, as before.
 - **Dev reload**: the counter lives on `globalThis` and survives a module reload; two server processes have two counters.

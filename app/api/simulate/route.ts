@@ -36,6 +36,7 @@ import type { SchematicState } from "@/lib/schematic-types";
 import { schematicToSpice, type SpiceAnalysis } from "@/app/lib/netlist";
 import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { DiagnosticRunnerError, diagnosticProvenance, runDiagnosticNgspice, seedDiagnosticDeck, type DiagnosticRunRecord } from "@/app/lib/computation/diagnostic-runner";
+import { SimulationOutputError, validateNgspiceAsciiOutput } from "@/app/lib/computation/output-validator"; // [B22-C] D22-10
 
 /** [B16.0.2 §A/§D] a whole SchematicState travels in the body. */
 const MAX_BODY_BYTES = 8_000_000;
@@ -108,91 +109,40 @@ interface SimResult {
   points: Record<string, number>[];
 }
 
+/** [B22-C] D22-10: the route's parser routes through the one output validator (built over CD-10's `createWaveformArtifact`), the
+ *  same the Studio worker's uses: a non-finite value (this parser used to keep `Infinity` and drop NaN), a short or over-long values
+ *  section, a misaligned point, a time or frequency axis that does not strictly increase, an unknown unit, or more variables,
+ *  points or tokens than the bounds below (it used to cut them silently) refuses the output whole with a closed code. The response
+ *  shape is unchanged. */
 function parseAsciiRaw(raw: string): SimResult {
-  const lines = raw.split(/\r?\n/);
-  let plotname = "Unknown";
-  let flags    = "real";
-  let numVars  = 0;
-  const variables: string[] = [];
-  let i = 0;
-
-  for (; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.startsWith("Plotname:")) {
-      plotname = line.slice("Plotname:".length).trim().slice(0, 200);
-    } else if (line.startsWith("Flags:")) {
-      flags = line.slice("Flags:".length).trim();
-    } else if (line.startsWith("No. Variables:")) {
-      numVars = Math.min(MAX_PARSE_VARIABLES, Math.max(0, parseInt(line.slice("No. Variables:".length).trim(), 10) || 0));
-    } else if (line.trimEnd() === "Variables:") {
-      i++;
-      for (; i < lines.length; i++) {
-        const vl = lines[i];
-        if (vl.trimEnd() === "Values:") break;
-        const parts = vl.trim().split(/\s+/);
-        if (parts.length >= 2 && variables.length < MAX_PARSE_VARIABLES) variables.push(parts[1]);
-      }
-      break;
-    }
-  }
-
-  for (; i < lines.length; i++) {
-    if (lines[i].trimEnd() === "Values:") { i++; break; }
-  }
-
-  const isComplex  = flags.toLowerCase().includes("complex");
-  const valsPerVar = isComplex ? 2 : 1;
-  const stride     = 1 + numVars * valsPerVar;
-
-  const tokens: number[] = [];
-  for (; i < lines.length; i++) {
-    for (const part of lines[i].split(/[\s,]+/)) {
-      if (part === "") continue;
-      const n = Number(part);
-      if (!isNaN(n)) tokens.push(n);
-      if (tokens.length >= MAX_PARSE_TOKENS) break;
-    }
-    if (tokens.length >= MAX_PARSE_TOKENS) break;
-  }
-
+  const output = validateNgspiceAsciiOutput(raw, { limits: { maxVariables: MAX_PARSE_VARIABLES, maxPoints: MAX_PARSE_POINTS, maxValues: MAX_PARSE_TOKENS } });
+  const vectors = [output.axis, ...output.variables];
   const points: Record<string, number>[] = [];
-  for (let t = 0; t + stride <= tokens.length && points.length < MAX_PARSE_POINTS; t += stride) {
+  for (let index = 0; index < output.points; index++) {
     const point: Record<string, number> = {};
-    for (let k = 0; k < variables.length && k < numVars; k++) {
-      const name   = variables[k];
-      const valIdx = t + 1 + k * valsPerVar;
-      if (isComplex) {
-        const re = tokens[valIdx];
-        const im = tokens[valIdx + 1];
-        if (k === 0 && /freq/i.test(name)) {
-          point[name] = re;
+    vectors.forEach((vector, k) => {
+      if (vector.imaginary) {
+        const re = vector.real[index]!;
+        if (k === 0 && /freq/i.test(vector.name)) {
+          point[vector.name] = re;
         } else {
+          const im = vector.imaginary[index]!;
           const mag    = Math.sqrt(re * re + im * im);
           const magDb  = 20 * Math.log10(mag === 0 ? 1e-30 : mag);
           const phase  = (Math.atan2(im, re) * 180) / Math.PI;
-          point[`${name}.mag`]   = magDb;
-          point[`${name}.phase`] = phase;
+          point[`${vector.name}.mag`]   = magDb;
+          point[`${vector.name}.phase`] = phase;
         }
       } else {
-        point[name] = tokens[valIdx];
+        point[vector.name] = vector.real[index]!;
       }
-    }
+    });
     points.push(point);
   }
-
-  let finalVars: string[];
-  if (isComplex) {
-    finalVars = [];
-    for (let k = 0; k < variables.length; k++) {
-      const name = variables[k];
-      if (k === 0 && /freq/i.test(name)) finalVars.push(name);
-      else finalVars.push(`${name}.mag`, `${name}.phase`);
-    }
-  } else {
-    finalVars = variables;
-  }
-
-  return { analysis: plotname, variables: finalVars, points };
+  const finalVars = output.complex
+    ? vectors.flatMap((vector, k) => (k === 0 && /freq/i.test(vector.name) ? [vector.name] : [`${vector.name}.mag`, `${vector.name}.phase`]))
+    : vectors.map((vector) => vector.name);
+  return { analysis: (output.plotName || "Unknown").slice(0, 200), variables: finalVars, points };
 }
 
 // ─── Bounded raw-file reader ──────────────────────────────────────────────────
@@ -289,11 +239,13 @@ export const POST = authenticatedJsonRoute<{ state?: SchematicState; analysis?: 
   let parsed: SimResult;
   try {
     parsed = parseAsciiRaw(rawText);
-  } catch {
+  } catch (error) {
+    // [B22-C] D22-10: a refused output is answered with its closed code, nothing of it returned; [B22-C review] regressions-5: an
+    // output with no data point keeps the route's actionable guidance (B16.0.24's "no data" answer), now under its own closed code -
+    // the validator returns no output without a vector and a point, so the former empty-table check could no longer fire
+    if (error instanceof SimulationOutputError && error.code === "OUTPUT_EMPTY") return Response.json({ ok: false, error: "Simulation produced no data points. Check the netlist and analysis settings.", code: error.code }, { status: 500 });
+    if (error instanceof SimulationOutputError) return Response.json({ ok: false, error: `Simulation output refused whole: ${error.code}`, code: error.code }, { status: 500 });
     return Response.json({ ok: false, error: "Could not parse simulation output" }, { status: 500 });
-  }
-  if (parsed.variables.length === 0 || parsed.points.length === 0) {
-    return Response.json({ ok: false, error: "Simulation produced no data points. Check the netlist and analysis settings." }, { status: 500 });
   }
 
   return Response.json({

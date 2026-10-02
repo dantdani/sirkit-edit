@@ -1,14 +1,20 @@
 import { providerAuthoritative } from "./provider";
 import { finalizeSimulation, simulationId, unique } from "./stable";
 import { validateCoveragePartition } from "./coverage";
+import { bindSimulationAuthority } from "@/app/lib/computation/simulation-authority";
 import type { ModelApplicabilityResult, SimulationCampaign, SimulationCoverageDenominator, SimulationCoverageMatrix, SimulationExecutionEnvironment, SimulationReadinessReport, SimulationVerificationProblem, SimulatorProviderDefinition, TestbenchRegistrySnapshot, ModelRegistrySnapshot } from "./types";
 
-export function evaluateSimulationReadiness(input: { problem: SimulationVerificationProblem; modelRegistry: ModelRegistrySnapshot; testbenchRegistry: TestbenchRegistrySnapshot; provider: SimulatorProviderDefinition; environment: SimulationExecutionEnvironment; denominator?: SimulationCoverageDenominator; coverage?: SimulationCoverageMatrix; applicabilityResults: ModelApplicabilityResult[]; campaign?: SimulationCampaign; providerDiscrepancyIds?: string[] }): SimulationReadinessReport {
+export function evaluateSimulationReadiness(input: { problem: SimulationVerificationProblem; modelRegistry: ModelRegistrySnapshot; testbenchRegistry: TestbenchRegistrySnapshot; provider: SimulatorProviderDefinition; environment: SimulationExecutionEnvironment; denominator?: SimulationCoverageDenominator; coverage?: SimulationCoverageMatrix; applicabilityResults: ModelApplicabilityResult[]; campaign?: SimulationCampaign; providerDiscrepancyIds?: string[]; /** [B22-C review] the server's environment registry, passed by a server caller; absent (the browser-reachable CD-11 consumer), no environment is the server's */ serverEnvironments?: readonly SimulationExecutionEnvironment[] }): SimulationReadinessReport {
   const gaps: string[] = []; const blocking: string[] = []; const limitations: string[] = [];
   if (input.problem.lifecycleState !== "ready_for_campaign") gaps.push("CD10_PROBLEM_NOT_READY");
   if (input.modelRegistry.deterministicDigest !== input.problem.modelRegistryDigest || input.modelRegistry.lifecycleState !== "approved") gaps.push("CD10_MODEL_REGISTRY_STALE_OR_UNAPPROVED");
   if (input.testbenchRegistry.deterministicDigest !== input.problem.testbenchRegistryDigest || input.testbenchRegistry.lifecycleState !== "approved") gaps.push("CD10_TESTBENCH_REGISTRY_STALE_OR_UNAPPROVED");
-  if (!providerAuthoritative(input.provider, input.environment)) gaps.push("CD10_PROVIDER_ENVIRONMENT_NOT_AUTHORITATIVE");
+  // [B22-C] D22-6, OD-138: the provider and the environment are the server's copies (by id and digest), never the body's; a body
+  // copy that differs is a closed gap (the route answers it 409) and the authority check reads only the server's copies. The
+  // other body-taken inputs stay as sent (recorded): with no server-held authoritative pair none can reach approve_for_CD11.
+  // [B22-C review] regressions-1: the registry is the caller's argument (this module is in the client bundle); none is fail-closed
+  const binding = bindSimulationAuthority({ provider: input.provider, environment: input.environment }, input.serverEnvironments ?? []); gaps.push(...binding.codes);
+  if (!binding.provider || !binding.environment || !providerAuthoritative(binding.provider, binding.environment)) gaps.push("CD10_PROVIDER_ENVIRONMENT_NOT_AUTHORITATIVE");
   if (!input.denominator || !input.denominator.nonVacuous) gaps.push("CD10_DENOMINATOR_MISSING_OR_VACUOUS");
   if (!input.coverage || input.denominator && input.coverage.denominatorDigest !== input.denominator.deterministicDigest || input.coverage && validateCoveragePartition(input.coverage).length) gaps.push("CD10_COVERAGE_MISSING_OR_INVALID");
   if (input.applicabilityResults.length === 0) gaps.push("CD10_MODEL_APPLICABILITY_NOT_EVALUATED");

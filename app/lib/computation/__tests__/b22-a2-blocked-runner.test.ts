@@ -1,9 +1,10 @@
 /**
  * [B22-A2] Production simulation authority stays BLOCKED (runbook B22-A :906, pass :942; OD-134): the CD-10 throwing stub
  * `executeAuthoritativeSimulation` still throws `CD10_AUTHORITATIVE_RUNNER_BLOCKED_NO_VALIDATED_SANDBOX` and nothing outside its
- * module names it; the execute route's 501 text is byte-for-byte unchanged, in the source and on the wire, even for a body that
- * declares itself validated (D22-6, latent until B22-C); every B22-A2 runtime profile ends at 409 there and is never
- * authoritative; `isolation-verdict.md` says so. No process, no network, no model.
+ * module names it; the execute route's 501 text is byte-for-byte unchanged in the source; [B22-C, 2026-10-02] a body that
+ * declares itself validated is now refused 409 with a closed code before it (D22-6 closed, OD-138; case 4 moved by review); every
+ * B22-A2 runtime profile ends at 409 there and is never authoritative; `isolation-verdict.md` says so. No process, no network, no
+ * model.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -82,18 +83,20 @@ describe("[B22-A2] the authoritative runner stays blocked", () => {
     expect(source).not.toMatch(/executeAuthoritativeSimulation|child_process|spawn\(/);
   });
 
-  it("4. a body that declares itself validated, digest-bearing and network-deny still ends at the 501 with that exact text (D22-6: the body is trusted until B22-C; the 501 is the last line)", async () => {
+  it("4. a body that declares itself validated, digest-bearing and network-deny is refused 409 with a closed code, never the 501 ([B22-C, 2026-10-02] reviewed pin move: D22-6 closed - the provider and environment are the server's copies by id and digest (OD-138); was: the body was trusted and reached the 501, which stays the last line)", async () => {
     injectAuthorizedPrincipal({ userId: "u1", tenantId: "local", projectId: "proj-1", role: "editor" });
     const provider = finalizeSimulation<SimulatorProviderDefinition>({ ...diagnosticNgspiceProvider(), providerId: "provider:self-declared", reviewState: "validated", authoritativeEligible: true, deterministicDigest: "" });
     const environment = finalizeSimulation<SimulationExecutionEnvironment>({ environmentId: "environment:self-declared", providerRevisionId: provider.deterministicDigest, executableOrImageDigest: "sha256:self-declared", simulatorVersion: "ngspice-46", operatingSystemAndArchitecture: "win32-x64", dependencyVersions: [], localeAndTimeZone: "LC_ALL=C;TZ=UTC", floatingPointAndThreadSettings: [], environmentVariablesAllowlist: [], resourceLimits: { timeoutMs: 1_000, memoryMiB: 64, outputBytes: 1_000, processCount: 1, waveformPoints: 10 }, networkPolicy: "deny", sandboxPolicyRevisionId: "self-declared", validationState: "validated", deterministicDigest: "" });
     const manifest = { providerRevisionId: provider.deterministicDigest, modelIncludeAndDigestMappings: [], structuralValidationResults: [] };
     const body = { provider, environment, manifest, availableContentDigests: [] };
-    expect(authorizeSimulationExecution({ ...body, manifest: manifest as never, requestedNetwork: false, requestedTimeoutMs: 0, requestedOutputBytes: 0 })).toEqual({ authorized: true, mode: "authoritative", codes: [] });
+    expect(authorizeSimulationExecution({ ...body, manifest: manifest as never, requestedNetwork: false, requestedTimeoutMs: 0, requestedOutputBytes: 0 })).toEqual({ authorized: false, mode: "denied", codes: ["CD10_ENVIRONMENT_NOT_SERVER_REGISTERED", "CD10_PROVIDER_NOT_SERVER_REGISTERED"] });
     const response = await execute(post(body));
-    expect(response.status).toBe(501);
+    expect(response.status).toBe(409);
     const payload = (await response.json()) as Record<string, unknown>;
     expect(payload.ok).toBe(false);
-    expect(payload.error).toBe(BLOCKED_501);
+    expect(payload.error).toBe("authoritative execution denied");
+    expect(payload.code).toBe("CD10_PROVIDER_NOT_SERVER_REGISTERED");
+    expect(JSON.stringify(payload)).not.toContain(BLOCKED_501);
   });
 
   it("5. every B22-A2 runtime profile, as the execute route's environment, ends at 409 and is never authorized authoritative, whatever the provider", async () => {

@@ -1866,3 +1866,53 @@ Amendments to existing entries:
   - Persistence with the evidence aggregate (OD-141).
   - Until then both descriptors stay dormant and the store is an in-memory contract.
 - Owner decision needed.
+
+## OD-138 — the server's provider and environment, as applied (B22-C, 2026-10-02; review 2026-10-02)
+- **Default applied:** a server-owned frozen provider set plus the B22-A2 runtime-profile registry, resolved by id and digest. A differing body copy is refused 409 with a closed code. The registry holds no `validated` profile, so execute still ends 409/501.
+- **Stated choices:**
+  - The server holds the analytical reference provider only unreviewed.
+  - The binding lives inside the two evaluators, so every caller is bound.
+  - The binding module is pure. The registry is the caller's argument, read server-side by the execute and readiness routes; a caller without it refuses every environment.
+  - The browser-reachable CD-11 consumer therefore keeps every handoff blocked, which was already the outcome for every legitimate input.
+  - Readiness's other body-taken inputs are recorded, not bound.
+
+## OD-141 — computation evidence persistence, as applied (B22-C, 2026-10-02; review 2026-10-02)
+- **Default applied:**
+  - One silent aggregate `computation.evidence.v1`, scoped by tenant/project/branch.
+  - It holds validated typed summaries, the profile id and SHA-256 digest, input digests, the raw artifacts' SHA-256, and the labels `diagnostic_only` / `environment_dependent`.
+  - No outbox effect; CAS; idempotent; re-verified on load; raw files not stored.
+- **Stated deviation:** no route binds a repository in B22-C. Every completed run carries its document on its record (`not_recorded`).
+- **Stated choices:**
+  - A completion whose document the closed rules refuse fails the run itself (`EVIDENCE_DOCUMENT_REFUSED`), keeping its validated output, logs and manifest for inspection, never as a completion.
+  - With a store bound, the record stays non-terminal until the append settles.
+  - A cancel during the append leaves the run cancelled and the appended document in the aggregate.
+  - The unwired CD-10 tables are not reused; dropping them is a migration left to the owner.
+
+## OD-142 — what a server-run simulation binds its input to, as applied (B22-C, 2026-10-02; review 2026-10-02)
+- **Default applied:** the server's SHA-256 of the submitted, validated snapshot plus the server-derived scope, `{ scope, project, runPlanId, parts }`, after the run-plan screens. Labelled "bound to a submitted snapshot", never authority.
+- No durable `SchematicState` store; OD-69 not reversed.
+- The review added the scope, which the first delivery omitted.
+
+## OD-143 — digests and the non-finite encoding, as applied (B22-C, 2026-10-02; review 2026-10-02)
+- **Default applied:**
+  - CD-10's FNV digests stay identity keys.
+  - Evidence carries `durableWorkflowDigest` (SHA-256) over an explicit encoding: finite, nan, positive_infinity, negative_infinity and absent are closed states.
+- **Stated choices for the output validator:**
+  - A non-finite value is refused, never encoded into a waveform.
+  - A raw without `No. Points:` is read only when complete.
+  - A time or frequency axis must strictly increase; a DC sweep's swept value is a signal on an index axis.
+  - A unit comes from the vector name or from ngspice's closed type list (INFERRED from its source). The six types ngspice declares without a unit keep `""`; any other type is refused.
+  - An empty output is `OUTPUT_EMPTY`.
+  - The parse path builds no CD-10 artifact.
+  - Empty scalar names are valid evidence.
+
+## OD-144 — legacy wording, the UI half, as applied (B22-C, 2026-10-02)
+- **Default applied:**
+  - One fixed disclosure sentence in the SPICE report (JSON and HTML, "diagnostic simulation report") and in the studio's "Diagnostic regression" panel.
+  - `/api/spice/reports` stays public with "caller-supplied records, not verified by Sirkit".
+- The B16.0.24 dated notes and the `/api/simulate` header remain the closeout's.
+
+## OD-150 — SPICE AI approvals and evidence, the evidence half, as applied (B22-C, 2026-10-02)
+- **Applied as "labelled caller-supplied everywhere":** every evidence reference built from `body.runs` carries `provenance: "caller-supplied"`. This covers tool results, proposals, design-patch operations, `aiAuditLog` (whatever a browser proposal claims) and the studio.
+- Resolving references to server-held records waits for the aggregate's binding.
+- The approval half stays B22-A1's.

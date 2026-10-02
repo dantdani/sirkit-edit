@@ -1,7 +1,11 @@
 import { createId, nowIso } from "./identity";
-import type { RunRecord, SimulationProject, SpiceReport, SpecificationState } from "./types";
+import { CALLER_SUPPLIED_EVIDENCE, CALLER_SUPPLIED_RECORDS_DISCLOSURE, DIAGNOSTIC_SIMULATION_DISCLOSURE, type RunRecord, type SimulationProject, type SpiceReport, type SpecificationState } from "./types";
 
-export function buildSpiceReport(project: SimulationProject, runs: RunRecord[], title = `${project.name} verification report`): SpiceReport {
+export { CALLER_SUPPLIED_EVIDENCE, CALLER_SUPPLIED_RECORDS_DISCLOSURE, DIAGNOSTIC_SIMULATION_DISCLOSURE };
+
+/** [B22-C] D22-14, OD-144: a diagnostic simulation report - never a verification or a qualification - carrying the one fixed
+ *  disclosure sentence, and the caller-supplied disclosure when it is rendered from records a caller sent (`/api/spice/reports`). */
+export function buildSpiceReport(project: SimulationProject, runs: RunRecord[], title = `${project.name} diagnostic simulation report`, options: { callerSupplied?: boolean } = {}): SpiceReport {
   const activeDesign = project.designRevisions.find((revision) => revision.id === project.activeDesignRevisionId);
   const runIds = new Set(runs.map((run) => run.id));
   const specs = project.tests.flatMap((test) => test.specifications.map((specification) => ({ test, specification })));
@@ -31,10 +35,11 @@ export function buildSpiceReport(project: SimulationProject, runs: RunRecord[], 
       specification: specification.name,
       unit: specification.unit,
       cells: runs.map((run) => {
-        const scalar = run.scalars.find((candidate) => candidate.specificationId === specification.id);
+        const scalar = verdictScalars(run).find((candidate) => candidate.specificationId === specification.id); // [B22-C lead] a run that did not complete gives no verdict
         return { runId: run.id, status: scalar?.status ?? "not-evaluated", value: scalar?.value };
       }),
     })),
+    disclosures: [DIAGNOSTIC_SIMULATION_DISCLOSURE, ...(options.callerSupplied ? [CALLER_SUPPLIED_RECORDS_DISCLOSURE] : [])],
     warnings: [
       ...project.modelAssets.filter((model) => model.validationStatus === "unverified" || model.provenance === "ai-approximation").map((model) => `${model.name}: ${model.validationStatus}, provenance ${model.provenance}`),
       ...runs.flatMap((run) => run.diagnostics.filter((diagnostic) => diagnostic.severity !== "info").map((diagnostic) => `${run.label}: ${diagnostic.title}`)),
@@ -70,10 +75,11 @@ export function reportToHtml(report: SpiceReport): string {
 <style>
 body{font:14px/1.45 Inter,system-ui,sans-serif;color:#172033;background:#f5f7fb;margin:0;padding:32px}main{max-width:1200px;margin:auto;background:white;padding:32px;border:1px solid #dce2ec;border-radius:12px}h1{margin:0 0 8px}h2{margin-top:32px;border-bottom:1px solid #e5eaf1;padding-bottom:8px}.meta{color:#5f6b7c}table{border-collapse:collapse;width:100%;overflow:auto}th,td{border:1px solid #dce2ec;padding:8px;text-align:left;vertical-align:top}thead th{background:#f0f3f8}.pass{background:#e9f8ef;color:#146c3b}.fail,.error{background:#fff0f0;color:#9f1d1d}.warning{background:#fff8df;color:#7a5400}.not-evaluated{background:#f2f4f7;color:#667085}code{font-family:ui-monospace,monospace}.warning-list{border-left:4px solid #e0a800;padding-left:16px}small{font-weight:normal;color:#667085}@media print{body{background:white;padding:0}main{border:0}}</style></head>
 <body><main><h1>${escapeHtml(report.title)}</h1><p class="meta">Generated ${escapeHtml(report.generatedAt)} · Project ${escapeHtml(report.projectId)} r${escapeHtml(report.projectRevision)} · Design ${escapeHtml(report.designRevisionId)}</p>
-<h2>Qualification summary</h2><table><thead><tr><th>Specification</th>${matrixHeader}</tr></thead><tbody>${matrixRows || "<tr><td colspan=2>No specifications were evaluated.</td></tr>"}</tbody></table>
+${(report.disclosures ?? []).map((disclosure) => `<p class="disclosure"><strong>${escapeHtml(disclosure)}</strong></p>`).join("")}
+<h2>Diagnostic specification summary</h2><table><thead><tr><th>Specification</th>${matrixHeader}</tr></thead><tbody>${matrixRows || "<tr><td colspan=2>No specifications were evaluated.</td></tr>"}</tbody></table>
 <h2>Tests</h2><table><thead><tr><th>Test</th><th>Analyses</th><th>Runs</th></tr></thead><tbody>${report.testSummary.map((test) => `<tr><td>${escapeHtml(test.name)}</td><td>${escapeHtml(test.analyses.join(", "))}</td><td>${test.runCount}</td></tr>`).join("")}</tbody></table>
 <h2>Model inventory</h2><table><thead><tr><th>Model</th><th>Version</th><th>Status</th><th>Provenance</th><th>Checksum</th></tr></thead><tbody>${report.modelInventory.map((model) => `<tr><td>${escapeHtml(model.name)}</td><td>${escapeHtml(model.version)}</td><td>${escapeHtml(model.status)}</td><td>${escapeHtml(model.provenance)}</td><td><code>${escapeHtml(model.checksum)}</code></td></tr>`).join("")}</tbody></table>
-<h2>Warnings and disclosure</h2><div class="warning-list">${report.warnings.length ? `<ul>${report.warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>` : "<p>No report-level warnings.</p>"}</div>
+<h2>Warnings and disclosure</h2><div class="warning-list"><ul>${(report.disclosures ?? []).map((disclosure) => `<li>${escapeHtml(disclosure)}</li>`).join("")}</ul>${report.warnings.length ? `<ul>${report.warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>` : "<p>No report-level warnings.</p>"}</div>
 <h2>Reproducibility</h2><p>Simulator versions: ${escapeHtml(report.reproducibility.simulatorVersions.join(", ") || "not recorded")}</p><p>Seeds: ${escapeHtml(report.reproducibility.seeds.join(", ") || "none")}</p><p>Manifest IDs: <code>${escapeHtml(report.reproducibility.manifestIds.join(", ") || "none")}</code></p>
 </main></body></html>`;
 }
@@ -92,10 +98,10 @@ export interface RunComparison {
 }
 
 export function compareRunRecords(a: RunRecord, b: RunRecord): RunComparison {
-  const names = new Set([...a.scalars.map((scalar) => scalar.name), ...b.scalars.map((scalar) => scalar.name)]);
+  const names = new Set([...verdictScalars(a).map((scalar) => scalar.name), ...verdictScalars(b).map((scalar) => scalar.name)]);
   const scalarChanges = [...names].map((name) => {
-    const before = a.scalars.find((scalar) => scalar.name === name);
-    const after = b.scalars.find((scalar) => scalar.name === name);
+    const before = verdictScalars(a).find((scalar) => scalar.name === name);
+    const after = verdictScalars(b).find((scalar) => scalar.name === name);
     const delta = before?.value !== undefined && after?.value !== undefined ? after.value - before.value : undefined;
     return {
       name,
@@ -107,7 +113,7 @@ export function compareRunRecords(a: RunRecord, b: RunRecord): RunComparison {
       statusAfter: after?.status ?? "not-evaluated" as SpecificationState,
     };
   });
-  const failures = (run: RunRecord) => run.scalars.filter((scalar) => scalar.status === "fail" || scalar.status === "error").length;
+  const failures = (run: RunRecord) => verdictScalars(run).filter((scalar) => scalar.status === "fail" || scalar.status === "error").length;
   const beforeFailures = failures(a);
   const afterFailures = failures(b);
   const modelA = a.manifest?.modelChecksums ?? {};
@@ -121,4 +127,10 @@ export function compareRunRecords(a: RunRecord, b: RunRecord): RunComparison {
     modelChanges,
     analysisChanged: JSON.stringify(a.manifest?.analysis) !== JSON.stringify(b.manifest?.analysis),
   };
+}
+
+/** [B22-C lead] The scalars a report or a comparison may read as verdicts: a run that did not complete keeps its scalars on the record for
+ *  inspection (a run failed with EVIDENCE_DOCUMENT_REFUSED keeps its validated output), but none of them is a verdict. */
+function verdictScalars(run: RunRecord): RunRecord["scalars"] {
+  return run.status === "completed" ? run.scalars : [];
 }

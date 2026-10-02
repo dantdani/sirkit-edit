@@ -311,8 +311,9 @@ const LOCAL_TREE_KILL = { scope: "process-tree", how: "win32: taskkill /PID <pid
 const LOCALE: DeterminismSetting = { value: "C", pinnedBy: "environment", note: "LC_ALL=C in the exact environment; a POSIX child reads it, while on Windows the C runtime reads the OS settings, so the effect on this host is INFERRED (discovery 9.5 item 22)" };
 const TIME_ZONE: DeterminismSetting = { value: "UTC", pinnedBy: "environment", note: "TZ=UTC in the exact environment; it bounds what a child prints as a date (an ngspice rawfile's Date line, INFERRED)" };
 const LOCAL_ENVIRONMENT = { LC_ALL: "C", TZ: "UTC", PATH: "{installBinDir}", SystemRoot: "{systemRoot}", TEMP: "{runDir}", TMP: "{runDir}" } as const;
-const NGSPICE_PARSER: OutputCheck = { id: "ngspice-ascii-raw/1", module: "app/lib/spice/waveforms.ts", wired: true, note: "parseNgspiceAsciiRaw; it drops non-finite tokens (D22-10, B22-C)" };
-const NGSPICE_VALIDATOR: OutputCheck = { id: "cd10-waveform-artifact/1", module: "app/lib/model-simulation/waveform.ts", wired: false, note: "createWaveformArtifact refuses a non-finite value and a non-increasing axis; no live path uses it yet (D22-10, B22-C)" };
+// [B22-C] D22-10: the parser routes through the wired validator (both ngspice profiles moved by revision for it)
+const NGSPICE_PARSER: OutputCheck = { id: "ngspice-ascii-raw/1", module: "app/lib/spice/waveforms.ts", wired: true, note: "parseNgspiceAsciiRaw, routed through the output validator: it keeps nothing the validator refuses and loses no token (B22-C)" };
+const NGSPICE_VALIDATOR: OutputCheck = { id: "cd10-waveform-artifact/1", module: "app/lib/computation/output-validator.ts", wired: true, note: "validateNgspiceAsciiOutput, built over CD-10's createWaveformArtifact: a non-finite value, a short or over-long output, a misaligned point, a time or frequency axis that does not strictly increase or an unknown unit refuses the output whole; the worker's parser and /api/simulate's route through it (D22-10, B22-C)" };
 const NGSPICE_SEED: DeterminismSetting = { value: "1", pinnedBy: "deck-option", note: "pinned by `.options seed=1` through the compiler's option lines (discovery 9.4: no screen change), emitted by the runner that executes this profile; no deck sets a seed today and the installed spinit leaves rndseed commented out (spinit:5), so the legacy default is UNKNOWN" };
 /** [B22-A3] The local profile's seed, as the diagnostic runner executes it. */
 const NGSPICE_LOCAL_SEED: DeterminismSetting = { value: "1", pinnedBy: "deck-option", note: "pinned by `.options seed=1`, the line the diagnostic runner requires immediately before every run deck's final .end (seedDiagnosticDeck, B22-A3; no screen change, discovery 9.4); the installed spinit leaves rndseed commented out (spinit:5); [B22-A3 review] a deck that sets its own seed or rndseed option is refused (seedDiagnosticDeck and the runner), so this line is the only seed option a run carries" };
@@ -324,7 +325,7 @@ type ProfileBody = Omit<RuntimeProfile, "environmentId" | "environmentVariablesA
 function ngspiceLocal(read: ServerSettingReader): ProfileBody {
   return {
     profileId: "ngspice-local-diagnostic",
-    revision: 2, // [B22-A3] revision 2: -n in both argv templates, the runner's seed note, no legacy spawn left (an immutable profile changes only by revision)
+    revision: 3, // [B22-A3] revision 2: -n in both argv templates, the runner's seed note, no legacy spawn left (an immutable profile changes only by revision); [B22-C] revision 3: the wired output validator
     providerRevisionId: diagnosticNgspiceProvider().deterministicDigest,
     simulatorVersion: "ngspice-46",
     operatingSystemAndArchitecture: "win32-x64",
@@ -369,7 +370,7 @@ function ngspiceOci(read: ServerSettingReader): ProfileBody {
   const environment = { LC_ALL: "C", TZ: "UTC", PATH: "/usr/bin:/bin" } as const;
   return {
     profileId: "ngspice-oci",
-    revision: 1,
+    revision: 2, // [B22-C] revision 2: the wired output validator (it shares the parser and validator bindings)
     providerRevisionId: "unbound",
     simulatorVersion: "ngspice-47",
     operatingSystemAndArchitecture: "linux-x64",

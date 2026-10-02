@@ -555,7 +555,7 @@ describe("[B22-A2] what a profile binds", () => {
       expect(read(site), site).toContain("@/app/lib/computation/diagnostic-runner"); // so the profile records no legacy spawn (was: each site's allowlist equal to the record's keys)
       expect(read(site).match(allowlistLine), site).toBeNull();
     }
-    expect(local.legacySpawn).toBeNull(); expect(local.revision).toBe(2);
+    expect(local.legacySpawn).toBeNull(); expect(local.revision).toBe(3); // [B22-C, 2026-10-02] reviewed pin move: revision 3 binds the wired output validator (D22-10; was 2, A3's argv move)
     expect(local.argvTemplates).toEqual({ run: ["-b", "-n", "{deckFile}"], version: ["-n", "-v"] });
     const kicad = runtimeProfile("kicad-cli-local-diagnostic", settingsOf({}));
     const { KICAD_CLI_ENV_KEYS } = await import("@/app/lib/pcb/fab/kicad-cli-runner");

@@ -35,7 +35,7 @@ registry validates every profile at construction (`runtimeProfileViolations`); a
 | `validationState` | CD-10: `diagnostic_only` (local) or `unvalidated` (OCI); never `validated` here | `validated` only with qualification evidence, a pinned digest and, on a container profile, a pinned host client |
 | `deterministicDigest` | CD-10: the profile's SHA-256 over the canonical JSON of every other field (`sirkit.runtime-profile.v1`) | recomputed and equal |
 | `profileId` | the registry id | one of the four ids |
-| `revision` | the profile revision (1; `ngspice-local-diagnostic` is 2 since B22-A3: `-n` in both argv templates, the runner's seed note, no legacy spawn) | closed key |
+| `revision` | the profile revision (1; `ngspice-local-diagnostic` is 2 since B22-A3: `-n` in both argv templates, the runner's seed note, no legacy spawn; [B22-C review, 2026-10-02] `ngspice-local-diagnostic` is 3 and `ngspice-oci` 2 since B22-C: the wired output validator) | closed key |
 | `executionBackendKind` | CD-10's backend vocabulary: `local_subprocess_diagnostic` or `container` | a local profile claims no OS limit, mount, network or kill |
 | `authoritativeEligible` | whether a profile could ever back an authoritative run | true only for a validated, network-deny container profile; false for all four |
 | `executable` | identity: install tree or OCI image, program, platform, relative path, the install-root and digest server settings, the algorithm, `digestMembers` (the install root's entries the digest covers, or null for the whole tree), the expected digest (pinned or unpinned, with a reason) | closed keys; the expected digest's shape; members only on an install tree, plain names, distinct, non-empty and covering the executable's first path segment |
@@ -145,6 +145,11 @@ the child (a timer, a bounded collector, a bounded reader, a per-run directory);
   after exit observed or `kill_unconfirmed`, by the runner.
 - Parser `ngspice-ascii-raw/1` (`app/lib/spice/waveforms.ts`, wired; drops non-finite tokens, D22-10); validator
   `cd10-waveform-artifact/1` (`app/lib/model-simulation/waveform.ts`, not wired: B22-C). Qualification evidence: none.
+- [B22-C, 2026-10-02] Superseded: the validator is wired. `cd10-waveform-artifact/1` is now `app/lib/computation/output-validator.ts`
+  (`validateNgspiceAsciiOutput`, built over CD-10's `createWaveformArtifact`), and the parser routes through it: a non-finite value, a
+  short or over-long output, a misaligned point, a time or frequency axis that does not strictly increase or an unknown unit refuses
+  the output whole; nothing is dropped (D22-10). Both ngspice profiles moved by revision for it (`ngspice-local-diagnostic` 3,
+  `ngspice-oci` 2; `simulation-authority.md`).
 - [B22-A3, 2026-10-01] Superseded: no legacy spawn is left (`legacySpawn` is null). The worker, `/api/simulate` and the smoke test run
   ngspice only through the diagnostic runner, which executes this profile (`diagnostic-runner.md`); the seed line is the runner's
   (`seedDiagnosticDeck`, immediately before every run deck's final `.end`; the lead's probe p24 CONFIRMS `.options seed=1` is accepted).
