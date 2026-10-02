@@ -172,15 +172,15 @@ export function dagOutputTokenCeiling(specialists: number, maxModelSteps: number
  *  the external authorities withdrawn, no grant field, risk ceiling `propose`, no approval tier - so the gateway's integrity check
  *  still holds. The follow-up coordinator turn runs over this (it keeps the head mark, basis and view: its registry is read-only). */
 export function withdrawAuthority(context: AgentRunContext): AgentRunContext {
-  const { externalAcquisitionAvailable: _external, mcpObservationAvailable: _mcp, ...rest } = context;
+  const { externalAcquisitionAvailable: _external, mcpObservationAvailable: _mcp, computationAvailable: _computation, ...rest } = context; // [B22-B] the computation fact is withdrawn too
   const { grantableCapabilities: _grantable, grantLineageId: _lineage, ...discovery } = context.discovery;
-  void _external; void _mcp; void _grantable; void _lineage;
+  void _external; void _mcp; void _computation; void _grantable; void _lineage;
   return {
     ...rest,
     executionGrantsAvailable: false,
     discovery: {
       ...discovery,
-      availableAuthority: discovery.availableAuthority.filter((authority) => authority !== "external-observation" && authority !== "external-mcp-observation"),
+      availableAuthority: discovery.availableAuthority.filter((authority) => authority !== "external-observation" && authority !== "external-mcp-observation" && authority !== "computation-engine"), // [B22-B] and the computation port's authority
       riskCeiling: "propose",
       approvalsAvailable: [],
     },
@@ -217,7 +217,7 @@ export function deriveSpecialistContext(context: AgentRunContext): AgentRunConte
       currentEditor: discovery.currentEditor,
       selectedKinds: discovery.selectedKinds,
       projectState: discovery.projectState.filter((state) => !state.endsWith("-surface")),
-      availableAuthority: discovery.availableAuthority.filter((authority) => authority !== "external-observation" && authority !== "external-mcp-observation"),
+      availableAuthority: discovery.availableAuthority.filter((authority) => authority !== "external-observation" && authority !== "external-mcp-observation" && authority !== "computation-engine"), // [B22-B] and the computation port's authority
       providerCapabilities: discovery.providerCapabilities,
       riskCeiling: "propose",
       approvalsAvailable: [],

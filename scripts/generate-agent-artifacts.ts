@@ -37,7 +37,7 @@ const EXCLUSION_REASONS: Record<string, string> = {
   "sirkit.pcb.repair-plan": "PCBToolService.planRepairs returns an unsealed plan bound to a live PcbHistory instance; no sealed revision-pinned artifact path exists",
   "sirkit.schematic.add-component": "internal-only structured-route surface (never discoverable to agents)",
   "sirkit.pcb.undo-redo-canonical": "undo/redo exposure is forbidden in B09 (view-session/internal-only)",
-  "sirkit.manufacturing.release": "manufacturing release is categorically blocked from chat (MFG01 server gate only)",
+  "sirkit.manufacturing.release": "manufacturing release is categorically blocked from chat (MFG01 server gate only)", "sirkit.computation.circuit-analysis": "an inert sealed request a human approves (B22-B, OD-139); approving one needs an authenticated route B22-B does not add, so it is registered, never exposed or callable", "sirkit.computation.layout-experiment": "an inert sealed request a human approves (B22-B, OD-139); approving one needs a route B22-B does not add, and the placement engine has no worker entry in this build",
 };
 
 type Descriptor = NonNullable<ReturnType<typeof registry.get>>;
@@ -48,7 +48,7 @@ function requiredRuntimeResources(item: Descriptor): string {
   // [B20 A4] the external tool read needs the verified board and the external tool port the chat route binds
   if (resolveMcpObservationBinding(item).state === "resolved") return "canonical-state;external-tool-port";
   // [B19-E E6] a bound external read needs the verified board and the external acquisition port the chat route binds
-  if (item.binding.status === "bound-external-read") return "canonical-state;external-acquisition-port";
+  if (item.binding.status === "bound-external-read") return "canonical-state;external-acquisition-port"; if (item.binding.status === "bound-computation") return "computation-port"; // [B22-B] a named computation read needs only the computation port the chat route binds
   if (item.operationClass === "read") {
     const binding = ACTIVATED_READ_BINDINGS.find((entry) => entry.toolId === item.toolId);
     return binding ? [...binding.requiredResources].join(";") : "";
@@ -74,7 +74,7 @@ function browserRuntimeAvailability(item: Descriptor): { availability: string; r
       availability: "conditional",
       reason: "BOUND EXTERNAL READ (B19-E E6): requires the editorContext's validated board (canonical-state) AND an external acquisition port bound by /api/chat through app/api/chat/external-acquisition-runtime.ts (a server with its database; withheld in the fixture runtime); labels only while every source's agentDisclosure is unknown (OD-36); exact MPNs only, at most 5 live MPNs per run (OD-40); withheld per run otherwise",
     };
-  }
+  } if (item.binding.status === "bound-computation") return { availability: "conditional", reason: "BOUND COMPUTATION READ (B22-B): requires a computation port bound by /api/chat through app/api/chat/computation-runtime.ts (the server opts in with SIRKIT_NAMED_COMPUTATIONS exactly 1, OD-158; off by default); one closed engine in the bounded engine host, stopped hard at the kind's budget; no board needed (a board parse refuses without the run's canonical state); evidence, never authority; withheld per run otherwise" }; // [B22-B]
   if (item.operationClass === "read") {
     const required = requiredRuntimeResources(item);
     if (required.includes("selection-snapshot")) {
@@ -103,7 +103,7 @@ function browserRuntimeAvailability(item: Descriptor): { availability: string; r
 function reasonFor(item: Descriptor): string {
   if (item.agentExposed) {
     if (resolveMcpObservationBinding(item).state === "resolved") return "STATICALLY EXPOSED: bound external tool read (B20-A4) over the chat route's injected MCP port; per-run availability requires the port and canonical state (see browser_runtime_availability)";
-    if (item.binding.status === "bound-external-read") return "STATICALLY EXPOSED: bound external read (B19-E E6) over the chat route's injected acquisition port; per-run availability requires the port and canonical state (see browser_runtime_availability)";
+    if (item.binding.status === "bound-external-read") return "STATICALLY EXPOSED: bound external read (B19-E E6) over the chat route's injected acquisition port; per-run availability requires the port and canonical state (see browser_runtime_availability)"; if (item.binding.status === "bound-computation") return "STATICALLY EXPOSED: bound computation read (B22-B) over the chat route's injected computation port; per-run availability requires the port (see browser_runtime_availability)";
     if (item.operationClass === "read") return "STATICALLY EXPOSED: activated B05/B05.1 read binding; per-run availability requires every declared runtime resource (see browser_runtime_availability)";
     if (item.operationClass === "mutate") return "STATICALLY EXPOSED: reviewed Tier 1 granted execution (B18-C) — a call mints a server-bound one-shot grant; the user's canonical editor session is the only committer";
     return "STATICALLY EXPOSED: sealed tier-1 proposal binding (proposal-artifact only; apply stays the human-only destructive command); per-run availability requires validated schematic + canonical head mark";
@@ -131,7 +131,7 @@ const rows = registry.list().map((item) => {
     bindingSymbol: item.binding.symbol ?? "",
     discovery: item.discovery,
     staticallyExposed: item.agentExposed,
-    bindingResolved: resolveMcpObservationBinding(item).state === "resolved" ? true : item.binding.status === "bound-external-read" ? resolveExternalReadBinding(item).state === "resolved" : item.operationClass === "read" ? resolveReadBinding(item).state === "resolved" : item.operationClass === "mutate" ? item.agentExposed && item.binding.status === "bound-mutation-editor-session" : item.binding.status === "bound-proposal",
+    bindingResolved: resolveMcpObservationBinding(item).state === "resolved" ? true : item.binding.status === "bound-computation" ? resolveComputationBinding(item).state === "resolved" : item.binding.status === "bound-external-read" ? resolveExternalReadBinding(item).state === "resolved" : item.operationClass === "read" ? resolveReadBinding(item).state === "resolved" : item.operationClass === "mutate" ? item.agentExposed && item.binding.status === "bound-mutation-editor-session" : item.binding.status === "bound-proposal",
     requiredRuntimeResources: requiredRuntimeResources(item),
     browserRuntimeAvailability: runtime.availability,
     requiredProjectState: [...item.requiredProjectState].join(";"),
@@ -166,3 +166,6 @@ writeFileSync(join(outDir, "normalized-loop-replay-fixtures.json"), canonicalJso
 }) + "\n");
 
 console.log(`Wrote B09 agent artifacts for ${exposed.length} statically exposed tools (${registry.list().length} registered) to ${outDir}`);
+
+// [B22-B] the computation read binding, on its own line at the END (imports are hoisted): no line of this generator moves
+import { resolveComputationBinding } from "../app/lib/agent/computation-reads";

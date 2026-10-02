@@ -251,7 +251,7 @@ describe("B15.2.2 §C — the seal import boundary is fixed", () => {
     expect(moduleImportOffenders(injected, SEALER, APPROVED)).toEqual(["app/lib/pcb/proposal/pcb-propose-tool-handler.ts"]);
   });
 
-  it("exposure is exactly 12 with exactly ONE PCB propose tool (B15.3 supersession of the B15.2.2 11-tool pin)", async () => {
+  it("exposure is exactly the intentional agent-exposed set (12 at B15.3, the supersession of the B15.2.2 11-tool pin; the set has since grown by reviewed moves, B22-B's three named computation reads among them, and the assertion counts the set itself) with exactly ONE PCB propose tool", async () => { // [B22 closeout, 2026-10-02] retitled (D22-16): the derived count, 36 since B22-B (OD-139); assertions unchanged
     const { sirkitToolRegistry } = await import("../../../engineering/tool-catalog");
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
     expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);

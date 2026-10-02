@@ -45,7 +45,7 @@ function createWriter(): LineWriter {
   };
 }
 
-function modelText(model: CanonicalSimulationIr["models"][number]): string {
+export function emittedModelText(model: { transformedContent?: string; originalContent: string }): string { // [B22-A1] D22-4: the ONE text a model emits; the model screen and the smoke deck read it too
   return model.transformedContent?.trim() || model.originalContent.trim();
 }
 
@@ -236,7 +236,7 @@ export function compileNgspiceNetlist(
     const source: SourceRef = { kind: "model", id: model.id, label: `${model.name}@${model.version}` };
     const path = options.modelPaths?.[model.id];
     if (path) writer.push(`.include "${path.replace(/\\/g, "/")}"`, source);
-    else if (modelText(model) && !modelText(model).startsWith("* native")) writer.push(modelText(model).split(/\r?\n/), source); // [SEC-1] multi-line by nature: the final screen holds it
+    else if (emittedModelText(model) && !emittedModelText(model).startsWith("* native")) writer.push(emittedModelText(model).split(/\r?\n/), source); // [SEC-1] multi-line by nature: the final screen holds it
   }
   if (ir.models.length > 0) writer.push("");
 
@@ -474,9 +474,9 @@ export function assertCompiledDeckSafe(deck: string, expected: DeckExpectation):
   const ends = lines.flatMap((line, index) => (index > 0 && /^\s*\.endc/i.test(line) ? [index] : []));
   const start = expected.controlBlock && controls.length === 1 ? controls[0]! : -1;
   const own = start >= 0 && ends.length === 1 && ends[0] === start + OWN_CONTROL_BLOCK.length - 1
-    && OWN_CONTROL_BLOCK.every((rule, offset) => (typeof rule === "string" ? lines[start + offset] === rule : rule.test(lines[start + offset] ?? "")));
+    && OWN_CONTROL_BLOCK.every((rule, offset) => (typeof rule === "string" ? lines[start + offset] === rule : rule.test(lines[start + offset] ?? ""))) && plainRelativeFileName((lines[start + OWN_CONTROL_BLOCK.findIndex((rule) => typeof rule !== "string")] ?? "").split(" ")[1] ?? ""); // [B22-D] items 3, 5: the `write` target is a plain relative file inside the run directory (the pattern above admitted `../x`, `/dev/null`, `//./pipe/x`, `NUL`, `CON`; b22-d-adversarial case 1)
   if (expected.controlBlock ? !own : controls.length > 0 || ends.length > 0) throw new SpiceDeckSafetyError("the deck carries a control block the compiler did not write");
-  const includes = new Set(expected.includes ?? []);
+  const includes = new Set(expected.includes ?? []); if (expected.executed && readsXspiceFileOutsideRunDirectory([...first.split("\f").slice(1), ...lines.slice(1)].join("\n"))) throw new SpiceDeckSafetyError("the deck names a file, a program or a library outside the run directory"); // [B22-A1] D22-4, [B22-A1 review] tests-1, coverage-1/2: XSPICE, read over the cards as ngspice joins them across lines and models (the title excepted; its form-feed pieces read as lines, as below)
   lines.forEach((line, index) => {
     if (own && index >= start && index < start + OWN_CONTROL_BLOCK.length) return;
     const pieces = line.includes("\f") ? line.split("\f").slice(index === 0 ? 1 : 0) : [];
@@ -491,3 +491,88 @@ export function assertCompiledDeckSafe(deck: string, expected: DeckExpectation):
 
 /** [SEC-1 review] Test seams: the writer and the `.options` screen, each pinned on its own behind the field screen. */
 export const __deckLayersForTests = { createWriter, optionLines };
+
+// ─── [B22-A1] file reads outside the run directory (closes the rest of D22-4) ──────────────────────────────────────────────
+
+/** [B22-A1] A Windows device name as a path segment (`CON`, `NUL`, `COM1`, `lpt2.txt`, ...): opening one reads a device. */
+const WINDOWS_DEVICE_NAME = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\..*)?$/i;
+
+/**
+ * [B22-A1] A file name model text may name: a plain relative name - letters, digits, `_ . + -`, with `/` or a backslash
+ * between segments - which resolves inside the run's fresh directory. Refused: an absolute, UNC, root-relative, drive (`C:x`)
+ * or home (`~`) path, a `..` segment, a variable (`$x`, `%x%`, `{x}`), a Windows device name, a quote, a space, and any other
+ * character (an NTFS stream's `:` among them).
+ */
+export function plainRelativeFileName(path: string): boolean {
+  return /^[A-Za-z0-9_.+-]+(?:[\\/][A-Za-z0-9_.+-]+)*$/.test(path)
+    && path.split(/[\\/]/).every((segment) => segment !== ".." && !WINDOWS_DEVICE_NAME.test(segment));
+}
+
+/** [B22-A1] An XSPICE file parameter written `name=value` - any case, quoted or not - on any card (the first fix's rule, kept
+ *  for every card; a `.model` card is read token by token below). */
+const XSPICE_FILE_PARAMETER = /(?:^|[^A-Za-z0-9_])(?:input_file|state_file|file)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s)\]]*))/gi;
+
+/**
+ * [B22-A1 review] coverage-1: the code models of the installed ngspice-46 whose parameters name a file, a program or a shared
+ * library - its `lib/ngspice/*.cm` parameter tables, read as strings and never run (spinit loads all seven libraries). A file
+ * parameter may name only a plain relative file, which resolves inside the run's fresh directory: `file` (`filesource` and
+ * `xfer`, analog.cm; `table2d`, `table3d`, table.cm), `input_file` (`d_source`) and `state_file` (`d_state`, digital.cm).
+ * Refused whatever they name: `d_process`, which spawns `process_file` with `process_params`, and `d_cosim`, which loads the
+ * shared library `simulation` with `lib_args` and `sim_args` (digital.cm). spice2poly.cm, xtradev.cm, xtraevt.cm and tlines.cm
+ * carry no such parameter.
+ */
+const XSPICE_FILE_PARAMETERS: ReadonlySet<string> = new Set(["file", "input_file", "state_file"]);
+const XSPICE_REFUSED_WORDS: ReadonlySet<string> = new Set(["d_process", "d_cosim", "process_file", "process_params", "simulation", "lib_args", "sim_args"]);
+/** The refused code models and the program parameter, on any card at all (they name no element, node or directive). */
+const XSPICE_REFUSED_ANYWHERE = /(?:^|[^A-Za-z0-9_])(?:d_process|d_cosim|process_file)(?![A-Za-z0-9_])/i;
+
+/**
+ * [B22-A1 review] tests-1, coverage-2: the cards ngspice reads from `text` (INFERRED from its front end, inpcom.c): a line breaks
+ * at LF (a CR is dropped); every character up to a space that opens a line is skipped; a line then empty or opening with `*`,
+ * `#` or `$` is a comment, which neither ends a card nor continues one; a `+` line continues the card before it, across such
+ * comments. Fail-closed: a `#`/`$` line is also returned as a card of its own (only a `*` line is never read), and so is a `+`
+ * line with no card before it; `formFeedBreaks` also breaks lines at a form feed, as the line screen reads one.
+ */
+export function ngspiceCards(text: string, formFeedBreaks = false): string[] {
+  const cards: string[] = [];
+  let current = -1;
+  for (const raw of text.split(formFeedBreaks ? /\n|\f/ : "\n")) {
+    const line = raw.replace(/\r/g, "");
+    let start = 0;
+    while (start < line.length && (line.charCodeAt(start) <= 0x20 || line.charCodeAt(start) >= 0x80)) start += 1; // [B22-A1 lead] and every non-ASCII character: ngspice skips it too before a `+` (CONFIRMED, the lead's probes p14, p15)
+    const body = line.slice(start);
+    if (body === "" || body.startsWith("*")) continue;
+    if (body.startsWith("#") || body.startsWith("$")) cards.push(body);
+    else if (body.startsWith("+") && current >= 0) cards[current] += ` ${body.slice(1)}`;
+    else if (body.startsWith("+")) cards.push(body);
+    else current = cards.push(body) - 1;
+  }
+  return cards;
+}
+
+/** [B22-A1 review] tests-1: a `.model` card's tokens as XSPICE reads them (INFERRED from ngspice's MIFgettok): whitespace, `=`,
+ *  `(`, `)` and `,` only separate, so a parameter needs no `=`; a `"` string is one token; `[ ] < > ~ %` stand alone. */
+function xspiceTokens(card: string): string[] {
+  return [...card.matchAll(/"([^"]*)"?|([[\]<>~%])|([^\s=(),[\]<>~%]+)/g)].map((match) => match[1] ?? match[2] ?? match[3] ?? "");
+}
+
+/** [B22-A1 review] One card: a refused code model anywhere; a `name=value` file parameter whose value is not a plain relative
+ *  name; and on a `.model` card (prefix-matched, any case), a refused word as any token, or a file parameter token whatever
+ *  follows it unless the next token is a plain relative name (fail-closed: a value spelled exactly `file` at a card's end is
+ *  refused too). */
+function cardReadsOutsideRunDirectory(card: string): boolean {
+  if (XSPICE_REFUSED_ANYWHERE.test(card)) return true;
+  for (const match of card.matchAll(XSPICE_FILE_PARAMETER)) if (!plainRelativeFileName(match[1] ?? match[2] ?? match[3] ?? "")) return true;
+  if (!/^\.model/i.test(card)) return false;
+  const tokens = xspiceTokens(card);
+  return tokens.some((token, index) => XSPICE_REFUSED_WORDS.has(token.toLowerCase())
+    || (XSPICE_FILE_PARAMETERS.has(token.toLowerCase()) && !plainRelativeFileName(tokens[index + 1] ?? "")));
+}
+
+/** [B22-A1] Does `text` name a file outside the run directory in an XSPICE parameter, or a code model that starts a program or
+ *  loads a library? [B22-A1 review] Read over its cards as ngspice joins them - so a `+` line opening with a form feed or a
+ *  control character, a comment line inside a card, and a card continued from one model's text into the next are read whole -
+ *  and once more with form feeds as line breaks (either reading refuses). A `*` comment line names nothing. */
+export function readsXspiceFileOutsideRunDirectory(text: string): boolean {
+  return [false, true].some((formFeedBreaks) => ngspiceCards(text, formFeedBreaks).some(cardReadsOutsideRunDirectory));
+}

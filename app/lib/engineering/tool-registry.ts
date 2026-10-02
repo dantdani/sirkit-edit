@@ -61,7 +61,7 @@ export const TOOL_BINDING_STATUSES = [
   "bound-mutation-editor-session",
   "bound-view-session",
   "bound-external-read", // [B19-E E6] a bounded read of external sourcing observations through the server's injected port
-  "test-double",
+  "bound-computation", "test-double", // [B22-B] bound-computation: a named computation read run in the bounded engine host through the server's injected port (OD-139)
 ] as const;
 export type ToolBindingStatus = (typeof TOOL_BINDING_STATUSES)[number];
 
@@ -95,7 +95,7 @@ export type ToolSelectionKind = (typeof TOOL_SELECTION_KINDS)[number];
 
 /** [B19-E E6] `external-observation`: the server bound an external acquisition port to this chat run (never a body claim).
  *  [B20 A4] `external-mcp-observation`: the server bound the external tool port (approved MCP servers) to this chat run. */
-export const TOOL_AUTHORITY_SOURCES = ["durable-server-board", "local-working-copy", "catalog", "external-observation", "external-mcp-observation", "none"] as const;
+export const TOOL_AUTHORITY_SOURCES = ["durable-server-board", "local-working-copy", "catalog", "external-observation", "external-mcp-observation", "computation-engine", "none"] as const; // [B22-B] computation-engine: the server bound the named computation port (the bounded engine host) to this chat run
 export type ToolAuthoritySource = (typeof TOOL_AUTHORITY_SOURCES)[number];
 
 export type JsonSchema = Record<string, unknown>;
@@ -289,7 +289,7 @@ export function validateToolDescriptor(descriptor: ToolDescriptor, knownCommandI
     err("the external-observation authority belongs to bound-external-read tools only");
   } else if (Array.isArray(descriptor.requiredAuthority) && descriptor.requiredAuthority.includes("external-mcp-observation")) {
     err("the external-mcp-observation authority belongs to bound-external-read tools only"); // [B20 A4]
-  }
+  } for (const issue of computationBindingIssues(descriptor, binding)) err(issue); // [B22-B] the bound-computation rule (OD-139), at the end of this file
   if (descriptor.lifecycle === "deprecated" && !descriptor.deprecation?.reason) err("deprecated tools must carry deprecation metadata");
   if (descriptor.lifecycle === "retired" && descriptor.discovery !== "internal-only") err("retired tools cannot remain discoverable");
   if (descriptor.operationClass === "release" && descriptor.agentExposed) err("release tools can never be agent-exposed");
@@ -481,4 +481,20 @@ export function renderNonCallableCoverageCsv(registry: ToolRegistry): string {
 
 export function renderRegistryJson(value: unknown): string {
   return canonicalJson(value) + "\n";
+}
+
+/** [B22-B] A bound computation is a Tier 0 read over the injected engine port and nothing else (OD-139): read class, no side effect
+ *  beyond the run's derived cache, no approval tier, exactly the computation-engine authority - which is its alone. */
+function computationBindingIssues(descriptor: ToolDescriptor, binding: ToolImplementationBinding): string[] {
+  const issues: string[] = [];
+  const authority = Array.isArray(descriptor.requiredAuthority) ? descriptor.requiredAuthority : [];
+  if (binding.status === "bound-computation") {
+    if (descriptor.operationClass !== "read") issues.push("bound-computation tools are read class only");
+    if (descriptor.sideEffects !== "none" && descriptor.sideEffects !== "derived-cache") issues.push("bound-computation tools have no side effects beyond a derived cache");
+    if (descriptor.approvalTier !== "none") issues.push("bound-computation tools carry no approval tier");
+    if (authority.length !== 1 || authority[0] !== "computation-engine") issues.push("bound-computation tools require exactly the computation-engine authority");
+  } else if (authority.includes("computation-engine")) {
+    issues.push("the computation-engine authority belongs to bound-computation tools only");
+  }
+  return issues;
 }

@@ -85,7 +85,7 @@ import { createSimulationProject } from "../project";
 import { estimateRunPlan } from "../run-plan";
 import { __resetJobStoreForTests, getRun, getRuns, startRunPlan } from "../server/job-store";
 import type { DesignVariable, ModelAsset, NetlistBundle, OverlayElement, RunRecord, SimulationAnalysis, SimulationPartSnapshot, SimulationProject } from "../types";
-import { dividerSchematic } from "./fixtures";
+import { dividerSchematic } from "./fixtures"; import { pinFakeNgspiceForSuite } from "@/app/lib/computation/__tests__/_pinned-ngspice"; import { runtimeProfile } from "@/app/lib/computation/runtime-profile"; // [B22-A3] the runner needs a pinned (fake) install; one line, so the cited positions below hold
 
 const C = (...codes: number[]): string => String.fromCharCode(...codes);
 const NL = C(10);
@@ -93,7 +93,7 @@ const TAB = C(9);
 const FF = C(12);
 const MARK = "sec1-marker";
 const NOW = "2026-09-30T00:00:00.000Z";
-const deckLines = (deck: string) => deck.split(NL);
+const deckLines = (deck: string) => deck.split(NL); pinFakeNgspiceForSuite(); // [B22-A3] reviewed pin move: ngspice runs only through the diagnostic runner, which refuses an unpinned install (OD-135)
 
 // ─── the payloads ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -556,7 +556,7 @@ describe("[SEC-1 review] legitimate inputs the first screen refused compile agai
       const res = await smokePost(post("/api/spice/models/smoke-test", { model }));
       expect(res.status, text).toBe(200);
     }
-    expect(spawnState.calls.filter((call) => call.args[0] === "-b")).toHaveLength(2);
+    expect(spawnState.calls.filter((call) => call.args[0] === "-b")).toHaveLength(2); // [B22-A3] the runner argv is -b -n deck.cir: still -b first
   });
 
   it.each([
@@ -577,15 +577,15 @@ describe("[SEC-1] model text is multi-line by nature: the final deck screen hold
   // [SEC-1 round 3] Only the constructs the probe table shows EXECUTE are pinned refused here (a second control block, a `*#`
   // line, an include/lib the compiler did not write). A bare command-word line is no longer among them — it is a card (see
   // the round-3 describe below), so the command-word array that used to live here moved to the accepted cases.
-  it.each<[string, (model: ModelAsset) => void]>([
-    ["an empty transformedContent over a hostile originalContent (the screen reads one, the deck emits the other)", (model: ModelAsset) => { model.originalContent = hostile([".control", `shell ${MARK}`, ".endc"]); model.transformedContent = ""; }],
-    ["a '*#' line (ngspice runs it as a control command)", (model: ModelAsset) => { model.originalContent = hostile([`*# shell ${MARK}`]); }],
-    ["a relative .include with no recorded dependency", (model: ModelAsset) => { model.originalContent = hostile([`.include ../../${MARK}.lib`]); }],
-    ["a .lib read", (model: ModelAsset) => { model.originalContent = hostile([`.lib /${MARK}.lib tt`]); }],
-  ])("%s: passes the model screen, and the executed deck is refused", (_label, mutate) => {
+  it.each<[string, (model: ModelAsset) => void, "admits" | "refuses"]>([ // [B22-A1, 2026-10-01] reviewed pin move: the model screen now reads exactly the text the deck emits and refuses a file read outside the run directory (D22-4), so it refuses three of these four (was "the existing model screen admits it" for all four); the case's point is unchanged - compileWith never runs the model screen, so the final deck screen refuses each executed deck on its own
+    ["an empty transformedContent over a hostile originalContent (the screen reads one, the deck emits the other)", (model: ModelAsset) => { model.originalContent = hostile([".control", `shell ${MARK}`, ".endc"]); model.transformedContent = ""; }, "refuses"],
+    ["a '*#' line (ngspice runs it as a control command)", (model: ModelAsset) => { model.originalContent = hostile([`*# shell ${MARK}`]); }, "admits"],
+    ["a relative .include with no recorded dependency", (model: ModelAsset) => { model.originalContent = hostile([`.include ../../${MARK}.lib`]); }, "refuses"],
+    ["a .lib read", (model: ModelAsset) => { model.originalContent = hostile([`.lib /${MARK}.lib tt`]); }, "refuses"],
+  ])("%s: the executed deck is refused by the final screen on its own (the model screen %s it)", (_label, mutate, screen) => {
     const project = baseProject();
     mutate(model0(project));
-    expect(() => assertModelSafeForExecution(model0(project)), "the existing model screen admits it").not.toThrow();
+    expect(refusal(() => assertModelSafeForExecution(model0(project))) === "accepted" ? "admits" : "refuses", "the model screen (B22-A1)").toBe(screen);
     const outcome = outcomeOf(() => compileWith(project));
     expect(outcome, outcome).toBe("refused (closed)");
   });
@@ -740,9 +740,9 @@ describe("[SEC-1 review] each defence layer holds on its own (pinned behind the 
 
 const SCOPE = { tenantId: "local", projectId: "proj-sec1", branchId: "main" };
 const SELECTOR = { "x-sirkit-tenant-id": SCOPE.tenantId, "x-sirkit-project-id": SCOPE.projectId, "x-sirkit-branch-id": SCOPE.branchId };
-/** The three spawners' allowlist, as written in their sources ([SEC-1 review]: pinned literally, not only equal). */
-const SPAWN_ALLOWLIST = '["PATH", "Path", "PATHEXT", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE", "LD_LIBRARY_PATH"]';
-const ALLOWED_ENV = ["HOME", "LD_LIBRARY_PATH", "NODE_ENV", "PATH", "PATHEXT", "Path", "SystemRoot", "TEMP", "TMP", "USERPROFILE", "WINDIR"];
+/** [B22-A3, 2026-10-01] Reviewed pin move: the ONE runner's exact environment keys - the profile's map, pinned literally ([SEC-1 review]: literally, not only equal) - was the three spawners' allowlist (HOME and USERPROFILE gone, D22-5; LC_ALL and TZ added, D22-11). */
+const SPAWN_ALLOWLIST = '["LC_ALL", "PATH", "SystemRoot", "TEMP", "TMP", "TZ"]';
+const ALLOWED_ENV = ["LC_ALL", "PATH", "SystemRoot", "TEMP", "TMP", "TZ"];
 /** Variables set in the test process only (fake values; secret-shaped names assembled at runtime, never real ones). */
 const CANARIES = [["SIRKIT", "SEC1", "ENV", "CANARY"], ["SIRKIT", "SEC1", "FAKE", "API", "KEY"], ["SIRKIT", "SEC1", "FAKE", "SERVICE", "ROLE", "KEY"]].map((parts) => parts.join("_"));
 
@@ -763,7 +763,7 @@ async function routeOutcome(project: SimulationProject) {
   const res = await runsPost(post("/api/spice/runs", { project, runPlanId: project.runPlans[0]!.id, parts: [PART] }));
   const body = await res.json() as { error?: string; batch?: { runIds: string[] } };
   const runs = await Promise.all((body.batch?.runIds ?? []).map(settled));
-  const decks = fsState.writes.filter((write) => write.path.endsWith("executed.cir"));
+  const decks = fsState.writes.filter((write) => write.path.endsWith("deck.cir")); // [B22-A3] reviewed pin move: the runner writes the deck as deck.cir in its own run directory (was the worker's executed.cir)
   return {
     status: res.status,
     closedError: closed(body.error),
@@ -782,11 +782,11 @@ describe("[SEC-1] POST /api/spice/runs: a hostile run request is refused with a 
     for (const name of CANARIES) vi.stubEnv(name, "sec1-canary");
     const outcome = await routeOutcome(baseProject());
     expect(outcome, JSON.stringify(outcome)).toMatchObject({ status: 202, jobs: 1, decksWritten: 1, deckFindings: [], ngspiceRuns: 1 });
-    const probe = spawnState.all.find((call) => call.args[0] === "-v");
+    const probe = spawnState.all.find((call) => call.args.includes("-v")); // [B22-A3] reviewed pin move: the probe argv is -n -v (no .spiceinit read)
     const run = spawnState.calls.find((call) => call.args[0] === "-b");
     expect(probe, "the version probe ran").toBeDefined();
     expect(disallowedEnv(probe?.envKeys), "the version probe's environment").toEqual([]);
-    expect(disallowedEnv(run?.envKeys), "the run's environment").toEqual([]);
+    expect(disallowedEnv(run?.envKeys), "the run's environment").toEqual([]); expect([probe?.envKeys, run?.envKeys], "[B22-A3] exactly the profile's keys").toEqual([ALLOWED_ENV, ALLOWED_ENV]);
     for (const name of CANARIES) {
       expect(probe?.envKeys ?? []).not.toContain(name);
       expect(run?.envKeys ?? []).not.toContain(name);
@@ -800,7 +800,7 @@ describe("[SEC-1] POST /api/spice/runs: a hostile run request is refused with a 
     model0(project).originalContent = ["*##########################", ".subckt AMP 1 2", `${FF}* page 2`, "R1 1 2 1k", ".ends AMP"].join(NL);
     const outcome = await routeOutcome(project);
     expect(outcome, JSON.stringify(outcome)).toMatchObject({ status: 202, jobs: 1, decksWritten: 1, ngspiceRuns: 1 });
-    const deck = fsState.writes.find((write) => write.path.endsWith("executed.cir"))?.content ?? "";
+    const deck = fsState.writes.find((write) => write.path.endsWith("deck.cir"))?.content ?? ""; // [B22-A3] reviewed pin move (deck.cir)
     expect(deckLines(deck)).toEqual(expect.arrayContaining([`.param${TAB}RL=1k`, `.options reltol=1e-4${TAB}abstol=1e-12`, "*##########################"]));
   });
 
@@ -812,6 +812,7 @@ describe("[SEC-1] POST /api/spice/runs: a hostile run request is refused with a 
     ["an output expression with a command separator", (p: SimulationProject) => { t0(p).outputs = [{ id: "out-x", label: "X", expression: `v(VIN);shell ${MARK}`, enabled: true }]; }] as const,
     ["a model whose empty transformedContent hides a hostile originalContent", (p: SimulationProject) => { model0(p).originalContent = [SUBCKT, ".control", `shell ${MARK}`, ".endc"].join(NL); model0(p).transformedContent = ""; }] as const,
     ["a model text '*#' command line", (p: SimulationProject) => { model0(p).originalContent = [SUBCKT, `*# shell ${MARK}`].join(NL); }] as const,
+    ["a model with a recorded include dependency, on a plan whose source value carries LF", (p: SimulationProject) => { model0(p).dependencies = ["amp-extra.lib"]; design0(p).schematic.components[0]!.value = block(NL)("5"); }] as const, // [B22-A1, 2026-10-01] reviewed pin move from the 202 cases below, its input unchanged: the model screen judges include dependencies by the model text, never by the client's `dependencies` (D22-4), so it admits this model and the preflight refuses the plan's LF source value - 422 before any job (was 202, the worker's "unresolved include dependency"); a text include is refused 422 (closed) in b22-a1-model-screen
     ["a one-line .control directive", (p: SimulationProject) => { t0(p).analyses[0]!.advancedDirectives = [".control"]; }] as const,
     ["[review] a net label carrying LF (an identity name)", (p: SimulationProject) => { design0(p).schematic.netLabels![0]!.name = block(NL)("VIN"); }] as const,
     // [SEC-1 review] the first run point is clean; the hostile value is on a later one
@@ -834,7 +835,6 @@ describe("[SEC-1] POST /api/spice/runs: a hostile run request is refused with a 
 
   it.each([
     ["a model the existing model screen refuses (a .control line in its text)", (p: SimulationProject) => { model0(p).originalContent = [SUBCKT, ".control", `shell ${MARK}`, ".endc"].join(NL); }, /contains forbidden \.control blocks/],
-    ["a model with a recorded include dependency, on a plan whose source value carries LF", (p: SimulationProject) => { model0(p).dependencies = ["amp-extra.lib"]; design0(p).schematic.components[0]!.value = block(NL)("5"); }, /unresolved include dependency/],
     ["a compile error that is no deck refusal (a directive without its period)", (p: SimulationProject) => { t0(p).analyses[0]!.advancedDirectives = ["save v(VIN)"]; }, /must start with a period/],
   ])("[review] %s: the preflight leaves it to the worker, which fails the run before any deck (202, the run's own message)", async (_label, mutate, message) => {
     const project = baseProject();
@@ -881,7 +881,7 @@ describe("[SEC-1] POST /api/spice/models/smoke-test: the explicit environment an
     const outcome = await smokeOutcome(smokeModel());
     expect(outcome.ngspiceRuns, JSON.stringify(outcome)).toBe(1);
     expect(disallowedEnv(spawnState.calls[0]?.envKeys), "the smoke test's environment").toEqual([]);
-    for (const name of CANARIES) expect(spawnState.calls[0]?.envKeys ?? []).not.toContain(name);
+    for (const name of CANARIES) expect(spawnState.calls[0]?.envKeys ?? []).not.toContain(name); expect(spawnState.calls[0]?.envKeys, "[B22-A3] exactly the profile's keys").toEqual(ALLOWED_ENV);
   });
 
   it.each(FORMS.map((form) => [form.name, form] as const))("a subcircuit name carrying %s is refused 422 (closed) before any file or process", async (_name, form) => {
@@ -901,13 +901,13 @@ describe("[SEC-1] POST /api/spice/models/smoke-test: the explicit environment an
   // [SEC-1 round 3 review] tests-1: the model screen refuses only an ABSOLUTE `.include`/`.inc` and has no `.lib` rule, so the
   // smoke deck's final screen, run as an EXECUTED deck (smoke-test/route.ts), is the only guard against a file read (an included
   // control block RUNS, probe p7b); each request is refused before any file or process.
-  it.each([
+  it.each([ // [B22-A1, 2026-10-01] reviewed pin move: the model screen now refuses both first, closed (D22-4; was "the model screen admits it"); the outcome is unchanged, and the final screen's executed reading (the tests-1 breakage, `executed: false` at smoke-test/route.ts:119) stays pinned in b22-a1-model-screen with the model screen switched off
     ["a relative traversing .include", `.include ../../${MARK}.lib`],
     ["a .lib read", `.lib /${MARK}.lib tt`],
-  ])("[round 3 review] model text with %s (the model screen admits it) is refused 422 (closed) before any file or process", async (_label, line) => {
+  ])("[round 3 review] model text with %s (the model screen refuses it first since B22-A1) is refused 422 (closed) before any file or process", async (_label, line) => {
     const model = smokeModel();
     model.originalContent = [SUBCKT, line].join(NL);
-    expect(() => assertModelSafeForExecution(model), "the existing model screen admits it").not.toThrow();
+    expect(refusal(() => assertModelSafeForExecution(model)), "the model screen (B22-A1)").toBe("refused (closed)");
     const outcome = await smokeOutcome(model);
     expect(outcome, JSON.stringify(outcome)).toEqual({ status: 422, closedError: true, filesWritten: 0, ngspiceRuns: 0 });
   });
@@ -916,20 +916,20 @@ describe("[SEC-1] POST /api/spice/models/smoke-test: the explicit environment an
     const model = importModelText("amp.lib", `${[".subckt AMP 1 2", "R1 1 2 1k", ".ends AMP"].join(C(13, 10))}${C(13, 10)}`).candidate;
     const outcome = await smokeOutcome(model);
     expect(outcome, JSON.stringify(outcome)).toMatchObject({ status: 200, ngspiceRuns: 1 });
-    const written = fsState.writes.find((write) => write.path.endsWith("smoke.cir"))?.content ?? "";
+    const written = fsState.writes.find((write) => write.path.endsWith("deck.cir"))?.content ?? ""; // [B22-A3] reviewed pin move: the runner writes deck.cir (was smoke.cir)
     expect(written.includes(C(13)), "no CR reaches the written deck").toBe(false);
     expect(written).toContain([".subckt AMP 1 2", "R1 1 2 1k", ".ends AMP"].join(NL));
   });
 });
 
-describe("[SEC-1] the three ngspice spawners share one environment allowlist", () => {
-  it("the worker, /api/simulate and the smoke test name the same keys, and [review] exactly these keys", () => {
+describe("[SEC-1; B22-A3 reviewed pin move] the three ngspice spawners became one runner with one exact environment", () => {
+  it("the worker, /api/simulate and the smoke test carry no environment of their own; the runner passes the profile's map, and [review] exactly these keys", () => {
     const allowlist = (path: string) => /const allowed = (\[[^\]]*\]);/.exec(readFileSync(join(process.cwd(), path), "utf8"))?.[1] ?? null;
-    const worker = allowlist("app/lib/spice/server/worker.ts");
-    expect(worker).toBe(SPAWN_ALLOWLIST);
-    expect(allowlist("app/api/simulate/route.ts")).toBe(worker);
-    expect(allowlist("app/api/spice/models/smoke-test/route.ts")).toBe(worker);
-    expect([...JSON.parse(SPAWN_ALLOWLIST) as string[], "NODE_ENV"].sort()).toEqual([...ALLOWED_ENV].sort());
+    for (const path of ["app/lib/spice/server/worker.ts", "app/api/simulate/route.ts", "app/api/spice/models/smoke-test/route.ts"]) expect(allowlist(path), path).toBeNull(); // [B22-A3] OD-136: no spawner left there
+    const keys = Object.keys(runtimeProfile("ngspice-local-diagnostic", () => undefined).environment).sort(); // b22-a3-diagnostic-runner case 2 pins the spawn's env equal to this map
+    expect(JSON.stringify(keys).split('","').join('", "')).toBe(SPAWN_ALLOWLIST);
+    expect(readFileSync(join(process.cwd(), "app/lib/computation/diagnostic-runner.ts"), "utf8")).toContain("Object.entries(profile.environment)");
+    expect([...JSON.parse(SPAWN_ALLOWLIST) as string[]].sort()).toEqual([...ALLOWED_ENV].sort());
   });
 });
 

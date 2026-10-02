@@ -156,7 +156,7 @@ export function discoverTools(registry: ToolRegistry, context: DiscoveryContext)
   const projectState = new Set(context.projectState ?? []);
   // [B19-E E6] the external-observation authority is a per-run chat fact: it never counts on any other channel
   // [B20 A4] nor does the external-mcp-observation authority (the external tool read over approved MCP servers)
-  const authority = new Set((context.availableAuthority ?? []).filter((source) => (source !== "external-observation" && source !== "external-mcp-observation") || context.channel === "assistant-agent"));
+  const authority = new Set((context.availableAuthority ?? []).filter((source) => (source !== "external-observation" && source !== "external-mcp-observation" && source !== "computation-engine") || context.channel === "assistant-agent")); // [B22-B] nor the computation-engine authority (the chat route's engine port)
   const flags = new Set(context.enabledFlags ?? []);
   const requestedCategories = new Set(context.requestedCategories ?? []);
   const approvals = new Set(context.approvalsAvailable ?? []);

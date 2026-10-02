@@ -120,35 +120,35 @@ describe("B16.0.24 §I — simulate process security confinement", () => {
     const src = raw("app/api/simulate/route.ts");
     expect(classifyRouteMethodForm(src, "POST", join(ROOT, "app/api/simulate/route.ts"), ROOT).form).toBe("canonical-wrapper");
     // Within the POST callback, both injection guards precede the runner CALL
-    // (the `spawn` itself lives in the runNgspice helper defined earlier).
+    // ([B22-A3] reviewed pin move: the `spawn` itself lives in the diagnostic runner, OD-136).
     const guardCall = src.indexOf("assertSchematicFieldsSafe(state, analysis)");
     const netlistGuardCall = src.indexOf("assertNetlistSafe(netlist)");
-    const runnerCall = src.indexOf("await runNgspice(netlistPath");
+    const runnerCall = src.indexOf("run = await runDiagnosticNgspice({ operation: \"run\", deck: netlist"); // [B22-A3] (was `await runNgspice(netlistPath`)
     expect(guardCall).toBeGreaterThan(0);
     expect(netlistGuardCall).toBeGreaterThan(guardCall);
     expect(runnerCall).toBeGreaterThan(netlistGuardCall);
   });
   it("the runner is server-owned, shell-less, isolated, env-allowlisted, and cleans up in every path", () => {
-    const src = raw("app/api/simulate/route.ts");
-    expect(src).toMatch(/spawn\(NGSPICE_EXECUTABLE, \["-b", netlistPath\]/); // fixed exe + argv
-    expect(src).toMatch(/shell:\s*false/);
-    expect(src).toMatch(/env:\s*safeEnvironment\(\)/);
-    expect(src).toMatch(/mkdtemp\(join\(tmpdir\(\), "sirkit-simulate-"\)\)/); // per-request isolated dir
+    const src = raw("app/api/simulate/route.ts"); const runner = raw("app/lib/computation/diagnostic-runner.ts"); // [B22-A3] reviewed pin move: the process moved to the ONE ngspice spawner (OD-136), re-pinned there
+    expect(runner).toMatch(/spawn\(input\.executable, \[\.\.\.input\.argv\], /); expect(runner).toContain('argv: filled(profile.argvTemplates[request.operation]!, { "{deckFile}": DIAGNOSTIC_DECK_FILE })'); // fixed exe + argv: the pinned install, the profile's template
+    expect(runner).toMatch(/shell:\s*false/);
+    expect(runner).toMatch(/env:\s*\{ \.\.\.input\.env \}/); expect(runner).toContain("Object.entries(profile.environment)"); // [B22-A3] the profile's exact map (was the safeEnvironment() allowlist)
+    expect(runner).toMatch(/runDir = await mkdtemp\(join\(runnerRoot, "run-"\)\)/); // per-run isolated dir under the runner's one root (was the route's "sirkit-simulate-" mkdtemp)
     expect(src).toMatch(/rawOutputPath:\s*"result\.raw"/); // server-owned relative filename
-    expect(src).toMatch(/finally\s*\{[\s\S]*rm\(directory/); // deterministic cleanup
+    expect(runner).toMatch(/finally\s*\{[\s\S]*rm\(runDir/); expect(src).not.toMatch(/\bspawn\(|child_process/); // deterministic cleanup (the runner's); the route spawns nothing
     expect(src).not.toMatch(/console\.(error|log)\s*\(\s*["'`]\[simulate\]/); // no design-data logging
   });
-  it("caller input cannot reach process configuration: the executable/env/limits are module constants, not body-derived", () => {
+  it("caller input cannot reach process configuration through the route: it names no executable and reads no process.env, its timeout and raw bound are route constants, and no spawn or runner call takes anything from body", () => { // [B22 closeout, 2026-10-02] retitled (D22-16): the route's own checks only - the runner's executable and environment are B22-A3's suites' (OD-135, OD-136); assertions unchanged
     const src = code("app/api/simulate/route.ts");
-    expect(src).toMatch(/const NGSPICE_EXECUTABLE =/);
+    expect(src).not.toMatch(/NGSPICE_EXECUTABLE|process\.env/); // [B22-A3] reviewed pin move: no executable here - the runner takes the pinned install from server settings (was const NGSPICE_EXECUTABLE)
     expect(src).toMatch(/const PROCESS_TIMEOUT_MS =/);
-    expect(src).toMatch(/const MAX_OUTPUT_BYTES =/);
-    expect(src).not.toMatch(/spawn\([^)]*body/); // spawn args never reference body
+    expect(src).toMatch(/const MAX_RAW_BYTES =/); // [B22-A3] reviewed pin move: stdout/stderr are bounded by the runner (A1's 64 KiB); the raw bound stays a route constant (was MAX_OUTPUT_BYTES)
+    expect(src).not.toMatch(/spawn\([^)]*body/); expect(src).not.toMatch(/runDiagnosticNgspice\([^)]*body/); // spawn args never reference body; [B22-A3] nor the runner's
   });
 });
 
 describe("B16.0.24 §I — no new agent tool exposure; sole-adopter of the two closed profiles", () => {
-  it("exactly 12 agent-exposed tools; no auth/chat/simulate route is agent-exposed", () => {
+  it("exactly the intentional agent-exposed set (12 agent-exposed tools when written; the set has since grown by reviewed moves, B22-B's three named computation reads among them, and the assertion counts the set itself); no auth/chat/simulate route is agent-exposed", () => { // [B22 closeout, 2026-10-02] retitled (D22-16): the derived count, 36 since B22-B (OD-139); assertions unchanged
     const exposed = sirkitToolRegistry().list().filter((d) => d.agentExposed);
     expect(exposed.length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     expect(exposed.some((d) => /callback|signin|signout|simulate/i.test(d.toolId))).toBe(false);

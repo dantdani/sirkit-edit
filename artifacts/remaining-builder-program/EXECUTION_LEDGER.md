@@ -3724,3 +3724,553 @@ _(discovery, reproduction and results appended below as they are observed)_
   discovery.md section 7's closeout bullet scoped "D21-1..31" while the numbering runs to D21-48 - the section-10 block records it; the
   B21-D3 title's "deterministically resolved" stands as written in the ledger heading, the README row and the D3 page, and the verdict
   states the deviation (scenario 17's disagreement is escalated, never resolved to a winner).
+
+### B21 — merged (2026-10-01 local; lead)
+
+- PR #11 (`chapter/b21-specialist-orchestration` -> `main`) merged normally as `e109d76` at 03:46 UTC after all four checks passed on
+  `b11ef18` (benchmark-core, database-delivery, prompt-to-gerber, page-browser-e2e 17m56s with both Playwright configs;
+  benchmark-nightly skipped). No auto-merge, no force-push. Verdict PARTIAL (`artifacts/ai-control-plane-b21/final-verdict.md`).
+
+### SEC-1 - the SPICE Studio deck injection (corrective security branch `fix/spice-deck-injection` from main `6fd5a7b`; closes D22-3 and the ngspice half of D22-5) (2026-10-01 local; three rounds of the security increment workflow + lead)
+
+Test-first, three rounds. ROUND 1 (`fe147c9`): `app/lib/spice/__tests__/sec-1-deck-injection.test.ts` ran 227 red / 17 green against
+`6fd5a7b`. Every one of the 79 fields the Studio compiler writes from caller or model data admitted all 12 hostile payloads (LF, CR, CRLF,
+U+0085, U+2028, U+2029, VT, FF, NUL, ESC, DEL, a backtick), 70 as a live second `.control` block with `shell`; output expressions carried
+`;` and `>` onto the compiler's own `write` line; model text reached the deck with a `*#` line or, through the model screen's `??`/`||`
+differential, a whole control block; and through `POST /api/spice/runs` (spawn and files faked) a hostile source value answered 202, the
+deck was written with the injected block and ngspice was spawned; the smoke test and the `-v` probe passed no environment. Fix: one
+single-line screen `assertDeckText` (/api/simulate's B19-D `unsafe()` rule extended to U+0085, the C1 controls, U+2028 and U+2029; a TAB
+passes as SPICE whitespace) applied raw to every field at the IR->deck boundary; output expressions allowlisted; the writer pushing one line
+per string; `assertSafeDirective` one line and closed; the `.options` screen space/tab only; a final deck screen `assertCompiledDeckSafe`
+run in the compiler, before the worker writes `executed.cir` and before the smoke test writes its deck; `startRunPlan` compiling one deck
+per test and analysis and screening each run point, so the route answers 422 before any job; and the smoke test and `-v` probe passing the
+worker's env allowlist, pinned literally across the three ngspice spawners. A round-1 adversarial review confirmed 21 findings, each
+reproduced red or proved by a source breakage, then fixed. Round 1 left one regression: the final screen's command-word rule refused
+legitimate vendor model text whose element cards are named like ngspice command words (a capacitor `Cd`, an inductor `Load`, switches
+`Set`/`Source`, a diode `Define`). ROUND 2 made no code change (a safety stop during its probe step). ROUND 3: the lead ran benign
+ngspice-46 probes (section 1b of the page) establishing that ngspice executes a command ONLY inside a `.control` block (including an
+included one), from a `*#` line, and in an `*ng_script` deck; a command word anywhere else is read as an element card and never runs.
+Grounded on that, round 3 removed the command-word rule (and its `cards` exemption), so vendor element cards compile, preview, smoke-test
+and run again while every executing construct stays refused. Its adversarial review confirmed 15 findings, each reproduced red or proved by
+a source breakage, then fixed: a `.title` line could set a non-banner `*#` title that the line-1 rule refused (now one title rule for line 1
+and every `.title` line, also read as ngspice's prefix match `.titlex`); the `*#`-title refusal round 3 had added was recorded as CONFIRMED
+by probe p3 although no probe put a `*#` line on the title - it is now recorded as INFERRED defence in depth and a stated deviation (a
+project name starting `*#`, which main compiled, is refused; owner decision proposed); the smoke test's executed-deck include/lib refusal,
+the compile preview's `*#` and title refusals and the title's form-feed pieces gained red-on-breakage pins; and the page's stale round-1
+statements, citations and counts were corrected, with page cases that check them. THE LEAD'S CLOSE: the round-3 check found line 1 (the
+title) screened only as written; the lead's probe p10 CONFIRMED that a first line `.title *ng_script` runs the deck as a script (in which,
+with command-word cards accepted, a vendor card line would run), so line 1 is now read through a `.title` prefix too, test-first (two cases
+red, then green); and the lead's probes p11-p13 CONFIRMED that a `*#` title runs nothing, so the `*#`-title refusal is kept as defence in
+depth beyond the ground. Green 268/268 (red 44 on `fe147c9` and 229 on `6fd5a7b`, re-run by the lead after the line-1 `.title` fix); the
+SPICE and importing suites (10 files, 1 skipped opt-in, 348 passed; round 1's broader SPICE-importing set, 8 files, 195 passed), the import
+gates and census (16 files, 194 passed; 165 / 162 / 3 / 0, no route added), tsc, eslint and the three route-source generators with zero
+drift, all on the final tree; CI admits the suite as an explicit prompt-to-gerber entry, pinned by `b19-e-ci-job-scope`. Not changed:
+kicad-cli, FreeRouting, the SPICE AI `"automatic"` pre-selection (its strings are screened at the compiler; OD-150 open), HOME/USERPROFILE
+in the allowlist (B22-A3), the rest of D22-4 (XSPICE file parameters in model text, a recorded residual), routes, authentication, CSRF,
+roles; no dependency. Stated deviations from the task text: a TAB, and in model text a form feed, pass; the `.shell/.cd/...`
+dotted-directive refusal is kept as defence in depth (no legitimate card is a dotted directive; the ground is silent on it); and a
+non-banner `*#` title is refused as defence in depth beyond the ground (p11-p13; section 4). The behaviour the screen is cut to is CONFIRMED
+by the lead's probes; end-to-end exploitation through a real ngspice stays INFERRED (never run). Page:
+`artifacts/ai-control-plane-b22/sec-1-spice-deck-injection.md`.
+- Commits on `fix/spice-deck-injection`: `fe147c9` (round 1), `aafa2a8` (round 3 and the lead's close: line 1 read through a `.title`
+  prefix after the lead's probe p10; probes p11-p13 recorded), `1ff9d81` (main `e109d76` merged in; one conflict in
+  `b19-e-ci-job-scope.test.ts`, both cases kept), `0d38504` (CI on `1ff9d81` failed prompt-to-gerber with two B21 page pins that SEC-1's
+  changes moved - `b21-a-page` case 4, the guard's `it(` count 7 -> 8; `b21-f-page` case 6, three workflow citations +1 - re-pinned in
+  place with dated notes; the orchestration folder 51 files / 739 green). The lead's merged-tree gates had not run the B21 page suites;
+  that is the lesson recorded.
+- PR #12 (`fix/spice-deck-injection` -> `main`) merged normally as `d0d2ec8` at 09:15 UTC after every check passed on `0d38504`. Owner decisions
+  OD-151 (the `*#`-title refusal) and OD-152 (the other stated deviations) recorded with the B22 discovery below.
+
+### B22 — chapter start and discovery (2026-09-30/10-01 local; read-only workflows + lead; this commit)
+
+- Read-only discovery over the tree at `b11ef18` (= `e109d76` after PR #11): seven parallel readers (the simulation code and the
+  blocked runner; every process-execution surface; the tool registry and how a named computation would be exposed; results as
+  evidence, the import path and long-running jobs; the host and deployment platform; prior records, obligations and tests; external
+  references) returned 70 gap candidates, every claim with a file:line or a URL; one synthesizer re-read every defect-bearing fact,
+  resolved the reader disagreements (section 0) and merged the gaps into D22-1..24. Readers 5 and 7 ran read-only host probes
+  (`docker version`, `docker info`, `where ngspice`, `wsl -l -v`): no container engine was reachable.
+- The discovery's D22-3 (high: SPICE Studio deck injection reaching a live second `.control` block) was confirmed by the lead in the
+  code and fixed first on the corrective branch SEC-1 (above), OD-137's alternative. After SEC-1 a second read-only workflow
+  (`b22-discovery-verify`, eight verifiers and a synthesizer) re-read every citation of D22-1..24 on the SEC-1 tree `1ff9d81`: 0
+  refuted, D22-3 closed by SEC-1, D22-4 and D22-5 partly closed, five defects standing with moved citations, sixteen standing
+  unchanged; 27 citations moved, changed or wrong (one wrong: the installed spinit sets `num_threads=8`, not 4). Section 9 records
+  the verdicts, every moved citation, what SEC-1 closed and what stays open, the consequences for the plan and 33 corrections; the
+  false statements are corrected in place with dated markers, the rest is carried to the increment that closes each defect.
+- What exists: a CD-10 authoritative runner that throws behind a 501 (no validated sandbox), and three live legacy ngspice paths
+  (`/api/simulate`, the Studio worker, the smoke test) plus FreeRouting and kicad-cli as plain host child processes with no memory,
+  CPU, process, file or network limit; no container definition, image digest or CI container; ngspice resolved from `NGSPICE_BIN` or
+  PATH with no digest; a Studio job store that very probably drops every completed run's results (D22-7); no named computation and no
+  registry vocabulary for one.
+- Defects D22-1..24: no measurable isolation boundary and none qualifiable on this host (D22-1); no immutable runtime profile (D22-2);
+  deck injection (D22-3, closed by SEC-1); the model screen's file reads and differential (D22-4); inherited environments (D22-5,
+  ngspice half closed by SEC-1); CD-10 routes trust a body-supplied provider, environment and manifest (D22-6); dropped results
+  (D22-7); unbounded output (D22-8); direct-child kill and unbounded concurrency (D22-9); lossy parsers (D22-10); uncontrolled locale,
+  randomness and threads (D22-11); no durable digest-bound evidence (D22-12, D22-13); "sandbox"/"authoritative" wording (D22-14); no
+  named computation (D22-15); pins and titles (D22-16); in-process engines cannot be stopped (D22-17); the process census (D22-18);
+  CD-10 has no execution path (D22-19); no adversarial process test (D22-20); browser-supplied evidence (D22-21); the reserved-OD
+  design not in the repository (D22-22); no live-blocker row (D22-23); CI admission (D22-24).
+- Owner decisions drafted OD-134..OD-150 with safe defaults (section 6), the verdict default being that production authority stays
+  BLOCKED (no qualified OCI boundary on this host; a diagnostic-only runner); OD-137 answered for D22-3 and D22-5's ngspice half by
+  SEC-1; OD-151/OD-152 are SEC-1's; OD-83..86 and OD-88 stay reserved. Plan (section 7, narrowed by section 9.4): A1 the security
+  corrections SEC-1 left (D22-4, kicad-cli's env, output caps, OD-150), A2 threat model, profiles and the isolation verdict, A3 the
+  diagnostic-only local runner, B named computations, C simulation authority, D adversarial tests, closeout.
+- Records: `artifacts/ai-control-plane-b22/{discovery.md, README.md}` (the SEC-1 page is already there); `OWNER_DECISIONS.md` OD-151,
+  OD-152; `PROGRAM_STATE.json` -> B22 (base `d0d2ec8`, last green `0d38504`); draft PR after this commit so every increment gets CI. Gates for
+  this commit: documents only - no suite, generator or production file changed.
+
+### B22-A1 - the security corrections SEC-1 left: the model screen, kicad-cli's environment, output caps, SPICE AI approval levels (2026-10-01 local; increment workflow + lead; this commit)
+
+Test-first on `chapter/b22-sandboxed-computation` from `0432fb8`: six suites under the new `app/lib/computation/__tests__/` ran 64 red / 25 green of 89 on the unmodified tree, then green; a self-review added two cases (91 green). An adversarial review then CONFIRMED 16 findings against that first fix; each was reproduced first - 40 red of 393 across the changed suites and SEC-1's, and nine deliberate breakages of the source caught by strengthened cases, each source restored by hash - then fixed: 134 green. MODEL SCREEN (D22-4): the screen read `transformedContent ?? originalContent` while the deck emits `transformedContent?.trim() || originalContent.trim()`, refused only an absolute or UNC include, had no `.lib` or XSPICE rule and trusted the client's `dependencies`; at the fake spawn seam the smoke test and `POST /api/spice/runs` spawned ngspice for model text naming a host file in an XSPICE `file=`. Now one helper `emittedModelText` feeds the deck, the screen and the smoke deck; the screen refuses, closed, every `.lib` line, an `.include`/`.inc` whose path is not a plain relative name, an include at all (dependencies recomputed from the text), a blank `transformedContent` hiding a refused original, and model text opening with a `+` line; both screens read XSPICE over the cards as ngspice joins them (a `+` after a form feed or a control character, a comment inside a card, a parameter with no `=`, a card continued from one model into the next) and refuse a file parameter naming anything but a plain relative file and every code model of the installed ngspice-46 that starts a program or loads a library (`d_process`, `d_cosim`; the seven `.cm` libraries read as strings, never run); what SEC-1 answered 422 before any job is still 422 before any job. Legitimate vendor text (SEC-1's command-word cards, `.subckt`/`.model`/`.param`/`.func`, relative XSPICE names, on continuation lines too) passes compile, preview, smoke test and runs. CHANNELS (D22-4/D22-8): one constant (64 KiB per channel, a sixty-fourth - 1 KiB, below the 1,500 and 3,000 characters it replaced - for log events and failure messages) bounds the smoke test's returned output and every stdout/stderr, failure message and log event a run record carries, timed-out runs included, the tail kept and a marker first, and the reproducibility bundle's README says its logs are bounded; RECORDED, not closed: a bounded channel still carries what a process prints, and the diagnostic excerpts (about 140,000 characters at most) and a record's event list (about 1 MiB a run) keep their own bounds. KICAD-CLI (D22-5): an explicit environment allowlist (canaries proven absent at the fake seam) and `windowsHide`; its adequacy INFERRED (never run). CAPS (D22-8, OD-148): kicad-cli's and FreeRouting's streams held to twice the bound in bytes, FreeRouting's stderr keeping its own share beside a long stdout; FreeRouting's `.ses` and kicad-cli's gerber and drill files read through a bounded reader refusing a file over 64 MiB unread with a closed error (its read bound, unread refusal and handle pinned with a fake handle). APPROVALS (OD-150, the approval half): every deck-reaching SPICE AI operation and the run request "review", never pre-selected, from one table the route and the studio share; measurements and specifications stay "automatic". CI (OD-146): one directory filter and `b22-` in `CHAPTERS`, no guard `it(` added. Reviewed pin moves: four in `sec-1-deck-injection`, line-neutral against `0432fb8`, its 268 cases kept (SEC-1's empty-`transformedContent` row back in its 422 list); two in `b16-0-23-tranche-parity` (and its raw NUL byte rebuilt at run time); B21's matrix C49/C93/C94 re-pinned +1. Gates: SPICE/simulate/new folder/guard 15 files 442 passed 3 skipped; every suite reading a changed file 26 files 405 passed 2 skipped; import gates and census 20 files 218 passed (165 / 162 / 3 / 0, five spawners); B21 orchestration 49 files 460 passed; tsc and eslint clean; three generators zero drift. Observed at the fake seam: D22-7 (a completed run's record keeps no result; its bundle answers 409) - B22-C. Not changed: the CD-10 routes, the 501, `executeAuthoritativeSimulation`, the ngspice allowlist/argv/kill, the worker's `result.raw` read, `/api/simulate`, routes, authentication, CSRF, roles; no dependency. Open: B22-A3 (HOME/USERPROFILE and `-n`, the raw read, run directories, FreeRouting's cwd, process limits, a live check of the card and token readings), B22-C (OD-150's evidence half, D22-7, the manifest checksum over `transformedContent ?? originalContent`). Page: `artifacts/ai-control-plane-b22/deck-and-secret-corrections.md`.
+- Lead close (2026-10-01): the check of the review's fixes raised two new issues. (1) Medium, fixed: the card reader skipped only
+  code units up to a space before a `+`, while ngspice also joins a line opened by a non-ASCII character - CONFIRMED by the lead's
+  benign probes p14 (e-acute) and p15 (no-break space), with p16/p17 as controls; a split XSPICE `input_file` (`.model src d_source (`
+  then `é+ input_file "/x")`) passed both screens. Three cases red, then `ngspiceCards` skips non-ASCII too (`netlist.ts:542`, in
+  place); 137 green. Probes p18-p22 CONFIRMED that a non-ASCII prefix does not make a `*#`, `.control` or `.include` line run or read,
+  so SEC-1's line screen stands. (2) Low, kept: `d_process`/`d_cosim`/`process_file` refused on any card (a net so named is refused) -
+  fail-closed, recorded in OD-153. Numbering: OD-153..OD-159 are reserved for B22's increments (A1 took OD-153); B23's discovery starts
+  at OD-160. Lead gates on the final tree are listed in the commit message.
+
+### B22-A2 - the threat model, immutable runtime profiles, the process census and the isolation verdict (2026-10-01 local; increment workflow + lead; this commit)
+
+**Test-first** on `chapter/b22-sandboxed-computation` from `50fe156`. A baseline of 20 files / 348 passed came first. Then three suites under `app/lib/computation/__tests__/` and the A1 page ran red before any production edit: 7 failed / 13 passed of 20, with `b22-a2-runtime-profile` unloadable. The census was red on exactly D22-18's three rows. One red case was a test bug (151 route files compared with 165 policy rows), fixed before any production edit. After the module was written, one case was narrowed to code references so a doc comment naming the stub no longer counts. Then 27 green, and five deliberate breakages of the source were each caught, the source restored by hash.
+
+**PROFILES (D22-2 contract, D22-11 contract, OD-135, OD-148):** `runtime-profile.ts` defines a closed, deep-frozen `RuntimeProfile` that extends CD-10's `SimulationExecutionEnvironment`, validated at registry construction. It binds:
+- the executable identity: an install-tree SHA-256 digest from one named server setting, unpinned when absent or malformed, the value never echoed; FreeRouting's covers its JAR and JRE only;
+- for a container profile, the host client that runs its argv;
+- version, provenance and formats;
+- argv templates with server-named placeholders only;
+- a read-only input and a per-run output policy;
+- the network;
+- an exact environment (LC_ALL=C, TZ=UTC, no HOME/USERPROFILE, never inherited);
+- eight limits, each with `enforcedBy` os/runner/none;
+- the seed and threads (spinit's num_threads=8 pinned by the digest; the seed by `.options seed=1`);
+- the kill, parser, validator, qualification evidence and `validationState`;
+- a `legacySpawn` record of today's spawns.
+
+The registry holds `ngspice-local-diagnostic`, `ngspice-oci` (the discovery's flag vector, `unvalidated`, its docker argv read by a closed grammar with each `os` claim tied to its flag), kicad-cli and FreeRouting. None is validated or authoritative-eligible, and local profiles claim no OS limit. An unknown id gets a closed error.
+
+**CENSUS (D22-18):** a connective test derives the routes that reach a spawner from the runtime import closure on the gates' edges. Four exemptions (`/api/spice/runs/[id]*`) are reviewed by reachability over each route's whole closure and the job store's every top-level binding, and the census drops an exemption whose check fails. `/api/chat` and `/api/pcb/qualify` now classify `freerouting (java)`; qualify starts it outside fixture mode and in fixture mode's `record` and `live` router modes. `/api/pcb/release` no longer claims kicad-cli. The CSV was regenerated only by its generator; three rows changed.
+
+**BLOCKED (OD-134):** the stub and the 501 text are pinned byte-for-byte; a body-declared validated profile still ends at 501; every registry profile ends at 409.
+
+**Review fixes** (13 confirmed findings): red first on the unmodified source, 10 failed / 21 passed of 31. Three test bugs in the red tests were fixed before any source edit (a fixture out of scope, `toContain` on an object, a regex for a row format the page never has). Fixes:
+- the OCI env forms refused (`-e`, `--env=`, `--env-file`, a bare name);
+- an option allowlist and the isolation baseline;
+- every `os` claim tied to its flag;
+- the input typed and validated read-only;
+- named digest members for FreeRouting;
+- the FreeRouting legacy record completed (the source-build JAR, `runtime.ts` citations);
+- a re-stat after each file read;
+- the host docker CLI bound;
+- the census exemption checked over the whole closure;
+- qualify's fixture wording corrected.
+
+A real nondeterminism was found and fixed: Windows file ids on this host exceed 2^53, so the digest now stats files as bigint. Then 31 green, and nine breakages of `runtime-profile.ts` and two of the census's source files were each caught and restored by hash.
+
+**Pages:** `threat-model.md`, `runtime-profiles.md` (section 8: the review fixes), `isolation-verdict.md` (the lead's 2026-10-01T09:20:48Z probe RECORDED). LB-10 added (OD-147).
+
+**Reviewed pin moves:**
+- `b22-a1-page` case 6 now lists only `b22-a1-` suites.
+- The three classification rows, edited in place without shifting lines; the qualify comment re-worded in place.
+- `b22-a2-runtime-profile` case 7's env counterexample now sits among the docker options.
+
+**Gates:**
+- A (computation, spice, CD-10, CI guard): 19 files, 482 passed, 3 skipped.
+- B (classification and CSV readers, import gates, census 165 / 162 / 3 / 0, 501 pins, process gate with the five spawners unchanged): 34 files, 448 passed.
+- C (B21 orchestration): 49 files, 460 passed.
+- tsc and eslint clean; four generators zero drift.
+
+**Not changed:** spawns, routes, the CD-10 routes, the 501, the stub, dependencies.
+
+**Open:**
+- B22-A3 executes the ngspice profile.
+- The OCI output transport, the docker CLI's context and configuration, and qualification are B22-A4's.
+- The kicad-cli and FreeRouting contract environments are UNKNOWN in adequacy.
+
+Pages: `artifacts/ai-control-plane-b22/`.
+- Lead close (2026-10-01): the check of the review fixes raised four new lows. (1) The census's exemption check ignored a re-export
+  from another module: a job-store `export { executeRunPoint as resume } from "./worker"` imported by `_scope.ts` kept the exemption -
+  red first, then `exportsReaching` counts every forwarded name as reaching and `export *` refuses the exemption (cases (g), (h)).
+  (2) `os` claims were refused only for the exact local kind: a profile with CD-10's own `sandboxed_process` kind kept them - red
+  first, then every non-container kind is refused an `os` claim (in place, line-neutral). (3) `isolation-verdict.md` section 4 said
+  only the `--env` pairs reach a container; corrected in place (Docker adds `HOSTNAME`/`HOME`, and the CLI may inject configured proxy
+  variables - B22-A4 pins its configuration). (4) The README row's breakage count is sixteen, not fourteen. Computation suites 168
+  green. The lead's benign probes for B22-A3 (ngspice-46, `ngspice_con -b`, ngspice's own `echo` only): p23 a `.spiceinit` in the run
+  directory RUNS without `-n` and does not with `-n` (CONFIRMED); p24 `.options seed=1` is accepted with no error; p25 the profile's
+  exact environment (PATH = the bin directory, `SystemRoot`, `TEMP`/`TMP` = the run directory, `LC_ALL=C`, `TZ=UTC`, no
+  HOME/USERPROFILE) starts the binary and simulates; p26 under it `spinit` loads (`num_threads` = 8).
+
+### B22-A3 - the diagnostic-only local runner: one ngspice spawner, pinned, bounded, killable, never authoritative (2026-10-01 local; increment workflow + review fix + lead; this commit)
+
+**Test-first** on `chapter/b22-sandboxed-computation` from `c037627`.
+- **Baseline before any edit:**
+  - A (computation, spice, simulate, CI guard): 18 files, 476 passed.
+  - B (`app/api/__tests__`): 1,058 passed, 1 failed — `b16-0-identity-header-gate` timed out on the clean tree.
+  - C (auth gates): 159 passed.
+  - D (MCP and import gates): 220 passed.
+  - E (B21 orchestration): 460 passed.
+- **Red:** with the runner absent, the runner suite could not load and single-spawner failed 4 of 4. With the runner restored and its callers unmodified, 7 failed / 11 passed.
+- **Green, then breakages:** 10 deliberate breakages (MA–MJ) were each caught and restored by hash.
+
+**The adversarial review** confirmed 22 findings, all fixed test-first.
+- The strengthened suite ran 12 failed / 2 passed on the reviewed tree. A temporary probe suite reproduced each defect in isolation: 9 of 9 red, then deleted.
+- Green after the fixes.
+- 17 deliberate breakages of the fixed source (N1–N17) were each caught and restored by hash.
+
+**RUNNER (OD-135, OD-136, OD-145; D22-5, D22-8, D22-9, D22-11):**
+- The only ngspice spawner. It executes the A2 profile `ngspice-local-diagnostic` (revision 2): the pinned install, digest-checked before every spawn; argv `-b -n deck.cir` and `-n -v`; exactly the profile's environment map.
+- On win32, Node's eight added variables are recorded per run (OD-156).
+- A per-run `mkdtemp` directory, removed on every path. Stdout and stderr are redacted on the stream and held within A1's bound. The raw file is read back bounded.
+- A tree kill on the wall clock and on abort; terminal only after `close`, or as `kill_unconfirmed` with its cause.
+- One cap, shared by tenant, with every wait bounded (OD-155).
+- A deck with its own seed is refused. The runner's own fs failures are closed. No host path appears in any record or response.
+
+**Entry points:** the worker, `/api/simulate` and the smoke test call the runner and start no process; the smoke test now passes its request's abort. The bundle reads no file, and the manifest carries the raw file's digest (`rawOutput`).
+
+**Reviewed pin moves:**
+- `APP_SPAWNERS` moved once.
+- SEC-1's environment-allowlist pins (`:744`, `:925-933`) moved, line-neutral.
+- The B16.0.23 and B16.0.24 confinement gates and the tranche-parity fakes now pin at the runner.
+- A1's citation table moved twice, each row marked.
+- A2's profile test (`-n`, no legacy spawn), the census rows and the threat-model cells were updated.
+
+**Gates:**
+- A: 25 files, 610 passed, 8 skipped.
+- B: 1,053 passed; the identity gate alone 6 passed.
+- C: 16 files, 183 passed.
+- D: 22 files, 220 passed.
+- E: 49 files, 460 passed.
+- Repeats: 291 ×3.
+- tsc and eslint clean.
+- Four generators: zero drift; census 165 / 162 / 3 / 0.
+
+**RECORDED:**
+- A first breakage pass resolved `bash` to the WSL launcher; the VM ran 13:44:43 to under 13:47:28, nothing of this work ran in it, and the pass was rerun with Git Bash.
+- One test run was interrupted by host Modern Standby (14:00–14:09); the rerun was green.
+
+**Not changed:** the CD-10 routes, the 501, the throwing stub, dependencies, routes, and the census.
+
+**Open:**
+- No OS limit (OD-145).
+- Node's win32 additions (OD-156).
+- Descendant reach of `taskkill /T` (INFERRED).
+- The Studio record's cancel-before-exit, D22-7 and D22-10 (B22-C).
+- A link at the runner root, or a raw file that is a link (B22-D).
+- FreeRouting and kicad-cli kills (B22-B/D).
+
+Pages: `artifacts/ai-control-plane-b22/diagnostic-runner.md`.
+- Lead close (2026-10-01): the check of the review fixes raised four new issues. (1) Medium, fixed: the tenant share counted
+  every request, so on a single-tenant install a running Studio plan (three points) made the user's own `/api/simulate` or smoke test
+  wait out its 10 s and fail BUSY while the fourth slot sat idle - red first (case 10), then a request marked `interactive` (the two
+  routes a person waits on, each bounded by its own wall clock) takes a free slot under the global cap past its tenant's running
+  share; Studio points and the `-v` probe keep the share (case 13 pins who is interactive). (2) Low, recorded for B22-C: one tenant
+  can exceed its 32-entry queue share with several large plans, so later points fail BUSY at once (the job store has no per-scope
+  limit). (3) Low, fixed in place: `/api/simulate`'s header said the child gets an exact environment with no USERPROFILE (Node adds it
+  on win32), and the runner and page said taskkill gets eight host variables (it gets ten: its map passes only SystemRoot). (4) Low,
+  fixed: the fixture-confinement check read only the first argument of each write call, so an unconfined copy or link destination
+  passed - red first with two synthetic lines, then every path argument is read. A1's citation C42 re-pinned (+5). The lead ran the
+  opt-in live suite once with the install pinned (`SIRKIT_NGSPICE_INSTALL_ROOT` the Spice64 folder, `SIRKIT_NGSPICE_INSTALL_SHA256`
+  c6e4e1603d315ed3a7cf46eab5edae97ddcf6abeb37c82aa63f162b8f3361ab1 from `scripts/print-install-tree-digest.ts`: 778 files, 49,046,261
+  bytes): 4 of 5 at first - case 4's deck never simulated (batch mode with a transient and no output line runs nothing, probe p27) -
+  then 5 of 5 with the transient run from a control block (p29: about 18.7 s alone; the runner stopped it at its 1.5 s wall clock,
+  closed after 1804 ms, no ngspice or taskkill left). Measured: full digest 404-446 ms, first check 674-737 ms, cached check 55-89 ms.
+  Case 5 CONFIRMED that ngspice's `echo $USERPROFILE` expands to the server's value (OD-156). The owner's local `.env.local` was not
+  changed: until the owner sets the two settings, every ngspice path fails closed. Lead gates on the final tree: A (computation, SPICE, simulate, guard,
+  confinement, process gate) 24 files 523 passed 8 skipped; `app/api/__tests__` 26 files 1,053 passed and the identity-header gate
+  alone 6 passed; `app/lib/auth/__tests__` 41 files 479 passed 9 skipped; MCP server and import gates 23 files - 21 passed, and
+  `b14-4-ast-import-gates` case 1 and `b20-b4-process-gate` case 1 TIMED OUT (60 s / 120 s) with vitest's "Timeout calling
+  onTaskUpdate" in a 1,408 s run after the 41-file auth run; re-run together both passed (27 of 27) with one onTaskUpdate error (exit 1),
+  and each alone passed with exit 0 (22 and 5 tests, about 54 s each) - recorded, not dismissed: their single synchronous AST cases
+  block the worker's RPC under load; orchestration and record readers 55 files 540 passed; tsc 0; eslint 0; four generators no drift.
+
+### B22-B - named computations, never generic execution (2026-10-01/02 local; increment workflow + adoption run + review fix + lead; this commit)
+
+**Test-first** on `chapter/b22-sandboxed-computation` from `e483838`.
+- **First run:** cut off by a session end before its final gate round. Its records are RECORDED from its logs.
+  - Baseline: A 487, B 1,107, C 414 + 1 pre-existing failure (`b11-5` case 12), D 460, E 825, F 288, G 268.
+- **Adoption run:**
+  - The tree matched the lead's snapshot byte for byte.
+  - Red was re-established on the HEAD sources: the suites could not load, then 8 failed / 23 passed of 31.
+  - It finished the unfinished work: the census, the B04/B17-F/B18-C/B20 pins, the B09/B11/B21 replay pins, and `route.ts` back to 562 lines.
+  - It found and closed the heap-size-flag defect.
+  - 17 deliberate breakages were caught.
+- **Adversarial review:** 18 findings CONFIRMED (one medium after verification, the rest low). All fixed test-first by a third run:
+  - The strengthened suites ran 6 failed / 36 passed of 42 on the reviewed tree, then 42 green.
+  - 28 deliberate breakages (M18–M45) were each caught and restored by hash.
+
+**CATALOG (OD-139, OD-149):**
+- The runbook's five kinds under `sirkit.computation.*`.
+- Closed inputs, checked structurally; typed output validators that refuse whole.
+- No script or code input exists.
+
+**EXPOSURE:**
+- A new `bound-computation` status and `computation-engine` authority.
+- The three reads are Tier 0, injected at the chat root behind the server's fact. They are opt-in (`SIRKIT_NAMED_COMPUTATIONS=1`) and withheld under any V8 heap-size flag (review regressions-1; `next dev` sets one unless `NEXT_DISABLE_MEM_OVERRIDE=1`).
+- The two process-backed kinds are inert sealed requests a human approves:
+  - consumed once, by the server's executors only;
+  - the SPICE analysis is seeded, screened by SEC-1 and run on the A3 runner, and its result is diagnostic evidence;
+  - the experiment is refused, since it has no worker entry.
+- All five are MCP-withheld (reason `computation`) and dormant for specialists.
+- Ratchets: 42 -> 47, 33 -> 36, 9, 24 -> 27.
+
+**HOST (OD-140):**
+- `worker_threads`, closed entry table, empty environment, no execArgv, heap `resourceLimits`.
+- `terminate()` at the budget; terminal only after the exit or as `confirmed: false`.
+- 2 workers per process and 1 per tenant (review security-2).
+- Refused under the whole V8 heap-flag family (review security-1).
+
+**Reviewed pin moves:**
+- `APP_SPAWNERS` once; the B22-A2 `THREAD_STARTERS`.
+- The B20/B21/B17-F/B18-C/B04/B09 exposure pins.
+- The B11/B21 replay pins, regenerated.
+
+**Gates (final):**
+- A: 24 files, 529 passed.
+- B: 1,107 passed.
+- C: 414 passed + the pre-existing `b11-5` case 12.
+- D: 460 passed. E: 825 passed. F: 288 passed. G: 375 passed.
+- tsc and eslint (57 files) clean.
+- The generators: zero drift on the final tree.
+
+**Not changed:** the CD-10 routes, the 501, `executeAuthoritativeSimulation`, routes (165 / 162 / 3 / 0), the B11-scanned files, dependencies.
+
+**Open:**
+- Placement has no worker entry (F1 open; OD-87's other two paths open).
+- No approval route (OD-159).
+- `next build` serving of `engine-worker.mjs` is UNKNOWN.
+- No isolation boundary for a worker thread.
+- No queue at the host.
+- No ninth specialist claim (OD-158).
+- The live circuit analysis belongs to the A3 opt-in suite.
+- Lead close (2026-10-02): (1) B11.5's case 12 ("NO test anywhere writes under app/, lib/, scripts/ or artifacts/") had failed since
+  B22-A1: A1's, A2's and A3's suites write temporary fixtures, and neither CI (no job runs a B11 suite - D24 records it for B24-B) nor
+  the A1-A3 lead gates (which did not run `app/lib/agent/__tests__`) caught it. Fixed: justifications for `b22-a1-tool-output-bounds`
+  and `b22-a2-runtime-profile` on the B19-E precedent (every write-primitive line rooted at the suite's `mkdtemp(tmpdir())` root or the
+  admission lapses; a breakage - an unrooted write appended to A1's suite - made it fail, restored by hash), and A3's suite assembles
+  its two counterexample write lines at run time (the offending literals were the lead's own A3 addition). The lead gates now include
+  `app/lib/agent/__tests__`. (2) The check's new low issue (one engine worker per tenant, so a tenant's members wait for each other):
+  kept as the fail-closed fairness choice, recorded on OD-140. (3) B22-B's implementer saw `b22-a3-diagnostic-runner` case 10 time out
+  waiting for the probe to start in 3 of 8 runs on its adopted tree and 1 of 8 on HEAD sources; the lead could not reproduce it in 11
+  runs (8 alone, 3 with the computation and SPICE folders), then it recurred in the lead's own gate chain; instrumented and looped, it
+  reproduced on the ninth loaded run: the probe HAD started and resolved - the fake `-v` closes at once, its slot freed and A's first
+  waiter spawned before the loaded 2 ms poll saw the call count at exactly five (six calls recorded). A test bug, not a runner bug: the
+  two waits after an instantly-closing process now wait for at least five and six calls (the order is still pinned by the next two
+  assertions); three loaded set-A runs green after the fix.
+
+### B22-C - simulation authority: evidence, never authority; the 501 kept (2026-10-02 local; implementation + review fix; this commit)
+
+**Test-first** on `chapter/b22-sandboxed-computation` from `b4c7be7`.
+- **Implementation:**
+  - Seven suites were written first and ran 44 failed / 1 passed of 45. The pass was `b22-c-wording` case 5, which pins standing sentences. `b22-c-ai-evidence` was corrected after a test error and re-run red, 4 of 4.
+  - Then 45 green.
+  - Two counterexamples, CONFIRMED at the fake seam:
+    - the worker's own completed event made the record terminal before the result was merged;
+    - a late completed event reopened a cancelled record.
+- **Adversarial review:** 25 findings CONFIRMED (regressions-1 high; regressions-2, regressions-3 and tests-2 medium; the rest low).
+  - The strengthened suites ran 15 failed / 33 passed of 48 on the reviewed tree, then 53 green.
+  - 15 deliberate breakages (M1–M15) were each caught and restored by SHA-256.
+  - Recorded process incident: the breakage driver's bare `bash` resolved to the Windows WSL launcher twice; nothing ran inside it, the VM idled out within about two minutes, and the driver now calls Git Bash by absolute path.
+
+**AUTHORITY (OD-138):**
+- Provider and environment come from the server by id and digest; a differing body copy is refused 409 with a closed code.
+- The binding is pure. The registry is read server-side by the two routes and passed in; with none, every environment is refused (the CD-11 consumer, browser-reachable).
+- A static client-graph gate pins that no `"use client"` graph reaches a node-only module.
+
+**RESULTS (D22-7):**
+- Staged then settled: no reader sees a terminal record before its evidence.
+- A refused evidence document fails the run itself (`EVIDENCE_DOCUMENT_REFUSED`), keeping its validated output for inspection.
+- Empty measurement names are evidence.
+
+**OUTPUT (D22-10):**
+- One validator over `createWaveformArtifact`, eight closed codes including `OUTPUT_EMPTY`.
+- ngspice's closed type list with its units (INFERRED).
+- No artifact on the parse path.
+- A refused output keeps the run's logs and manifest.
+
+**EVIDENCE (D22-12, D22-13; OD-141..OD-143):**
+- `computation.evidence.v1`: silent, scoped, CAS, idempotent, re-verified on load.
+- The snapshot digest binds the scope.
+- No route binds it; the CD-10 tables are not reused; no migration.
+
+**DECK (D22-19 in part):**
+- An independent, unwired validator.
+
+**WORDING / AI (D22-14 UI half, D22-21):**
+- A diagnostic disclosure in the report and studio; caller-supplied labels everywhere.
+
+**Reviewed pin moves:**
+- `b22-a2-blocked-runner` case 4 (409, was 501).
+- `b22-a2-runtime-profile` case 13 (revision 3).
+- B22-A1 page C45-C47 and C44's note.
+- The review moved no committed pin.
+
+**Gates (final):**
+- A 589 (+8 skipped). B 1,117. C 479 (+9 skipped). D 1,107. E 415. F 460. G 825. H 51.
+- tsc and eslint (31 files) clean.
+- 20 generators, zero drift; census 165 / 162 / 3 / 0.
+
+**Not changed:**
+- The 501 text and its pins; `executeAuthoritativeSimulation` (still throws).
+- No profile `validated`; no `unsupportedDomains` entry reachable.
+- No route added; no dependency; no migration.
+
+**Open:**
+- The aggregate's route binding (and with it server-held SPICE AI evidence and the classification relabel).
+- No CD-10 path calls the deck validator.
+- The ngspice type list and repeated time points are UNKNOWN until a live run.
+- `next build` was not run.
+- `foundation.test.ts`'s "diagnostic environments" case now stops at the binding.
+- The unwired CD-10 tables.
+- Lead close (2026-10-02): the check of the review fixes raised one new issue: a run failed with `EVIDENCE_DOCUMENT_REFUSED` keeps
+  its validated scalars for inspection, and the SPICE report and the run comparison read them as verdicts, so a failed run showed PASS.
+  Red first (case 8 extended: a failed run whose scalar names a specification rendered PASS), then `report.ts` reads verdicts only from
+  completed runs (`verdictScalars`, an end-of-file helper; the five call sites edited in place, no line moved); computation and SPICE
+  suites 570 green. Process incident, RECORDED: B22-C's breakage driver called a bare `bash` from Python and Windows resolved it to the
+  WSL launcher (twice, at 02:42:44 and 02:43:08); both calls failed at once (`execvpe(/bin/bash) failed`), nothing ran inside WSL, every
+  mutated source was restored and checked by SHA-256, and `vmmemWSL`/`wslrelay`/`wslhost` were gone by 02:45:09 - the same incident as
+  B22-A3's first breakage pass; the next increments are told to call Git Bash by its absolute path. The studio's wording changed: CI's
+  page-browser-e2e job (the Playwright suite on a compiled editor) is the browser gate, and it also proves the client bundle compiles
+  without the Node-only modules the review found pulled into it (regressions-1, pinned offline by `b22-c-authority` case 8).
+
+### B22-D - the adversarial matrix: every runbook :938 class, prevention offline, live on the diagnostic runner, OCI blocked (2026-10-02 local; implementation + review fix; this commit)
+
+**Test-first** on `chapter/b22-sandboxed-computation` from `a269e7a`.
+- **Implementation:**
+  - `b22-d-adversarial` and `b22-d-adversarial-live` were written first. They ran 6 failed / 4 passed of 10:
+    - cases 1, 3, 4, 8, 9 and 10 were red;
+    - cases 2, 5, 6 and 7 pin properties the code already held, and each was proved by a breakage instead;
+    - the live suite was 13 skipped.
+  - Then 10 green.
+  - The red: 17 write targets admitted by the final screen; a link's raw file read; runs made through a planted root link; 23 parser disagreements, made up of:
+    - the strict reader on ten files;
+    - `/api/simulate`'s complex magnitude on five;
+    - the validator reading an overflowing magnitude and two duplicate-header files;
+    - the worker returning an infinity.
+  - 20 deliberate breakages (D1–D10b) were caught, each restored by SHA-256. D6b was not caught at first, so its case was strengthened before it was.
+- **Adversarial review:** 10 findings CONFIRMED, all low after verification (seven defects, three reported twice).
+  - Four counterexamples ran green on the reviewed suite first (CE1–CE3b).
+  - The strengthened suite ran 2 failed / 8 passed of 10 on the reviewed tree, then 10 green.
+  - 18 new breakages (D8f–D8m, D10c–D10l) and 9 re-runs of the implementation's (D3, D3b, D8a–D8e, D10, D10b) were each caught and restored by SHA-256.
+  - Case 3's assertions are now soft. Run against `a269e7a`'s runner, every kind read through at the runner, and so did `/api/simulate` and the worker (observed, no longer inferred).
+
+**GUARDS:**
+- G1: the final screen's `write` target is a plain relative file.
+- G2: the raw file is read only when `lstat` shows a plain file with one name.
+- G3: the runner root is created by the runner, or used only if `lstat` shows a plain directory.
+- G4: one validator for every raw reader. The strict reader keeps its own bounds, now pinned at their edges. A repeated decisive header is refused. A complex magnitude that overflows is non-finite. `/api/simulate` uses `Math.hypot` floored at 1e-30.
+- G5 (review): `#IND` is non-finite.
+
+**LIVE:** 13 cases written by B22-D and run once by the lead (below). A failing case 4, 12 or 14, or a `kill_unconfirmed` in case 1 or 13, reports its class NOT contained; a case 9 or 12 that fails on its measurement or its positive control is NOT MEASURED.
+
+**OCI:** BLOCKED-LIVE-QUALIFICATION under LB-10.
+
+**Reviewed pin and harness moves:**
+- B11.5 case 12: one admission for `b22-d-adversarial-live.test.ts`, with every write line rooted at `scratch` or `runDir`.
+- Three suites' fs fakes now answer `lstat` (`b22-a3-diagnostic-runner`, `b22-a1-diagnostic-bounds`, `b16-0-24-tranche-parity`). Harness only.
+- The B22-A1 page's C42: `diagnostic-runner.ts:654` -> `:692`.
+- The review moved no pin.
+
+**Gates (final):**
+- A 622 (+21 skipped). J 105 (+2 skipped). B 1,107. C 415. D 460. E 825. F 314. F2 22. H 1,059. I 479 (+9 skipped).
+- tsc and eslint (11 files) clean.
+- 7 generators, zero drift; census 165 / 162 / 3 / 0.
+
+**Not changed:**
+- The CD-10 501 and its pins; `executeAuthoritativeSimulation` still throws.
+- Nothing is called a sandbox or authoritative.
+- No route, dependency, migration or CI line (OD-146: the existing `app/lib/computation/__tests__` filter).
+
+**Open:**
+- Your live run.
+- FreeRouting and kicad-cli kill semantics.
+- The fab archive reader's per-entry bound.
+- One deck validator across `/api/simulate` and the Studio.
+- A dated note on the SEC-1 page's description of the `write` line (your choice).
+- The ngspice-46 spellings and attributes that stay UNKNOWN.
+- Lead close (2026-10-02): (1) the check's new issue: `b22-d-adversarial` case 10 read each live deck line by line, but an escaped
+  line break inside one string literal hid a second ngspice line behind an allowed first word - a bypass planted in the live suite
+  (`"echo b22d\nhardcopy b22dplot v(out)"`) passed case 10 (10 of 10), then every deck element must be exactly one line (no control
+  character, U+0085, U+2028 or U+2029) and the bypass failed it; the live suite restored by hash, case 10 green without it. (2) The page's
+  "nineteen of nineteen" breakages corrected to eighteen (the table and the logs), and the D3b re-run claim to what its log shows (the
+  hardlink kind and the Studio worker). (3) The lead ran `b22-d-adversarial-live` once with `SIRKIT_B22_LIVE_RUNNER=1` and the pinned
+  install: 12 of 13 passed; case 4 FAILED - NOT CONTAINED: a hardlink planted as `result.raw` after the deck write and before the spawn was
+  refused by the runner (`not-a-plain-file`, never read) but ngspice wrote through it to the file outside the run directory; planting it
+  needs a process already running as the server's user, outside the threat model's adversaries - recorded as a residual, never a pass.
+  The run CONFIRMED ngspice-46's non-finite spellings `inf` and `-nan(ind)` (every parser refused them), that the canary never printed
+  while `$TZ` expanded, that no ngspice or taskkill survived an abort or a timeout, and that real operating-point, transient and AC files
+  read the same through every parser (`adversarial-matrix.md` section 10). CI was green on `a269e7a` (all four checks; the browser job
+  compiled the editor, confirming B22-C's client-bundle fix).
+
+### B22 closeout (1/2) - the sandbox and authority statements superseded, the stale titles retitled, the unused exports recorded or retired, the tripwire (2026-10-02 local; implementation + review fix; this commit)
+
+**Test-first** on `chapter/b22-sandboxed-computation` from `c9fbbb0`. The scope is the verified sweep (`closeout-scope/`, at `a269e7a`), with each item re-checked by its text at `c9fbbb0`.
+- **Implementation:**
+  - `b22-closeout-statements` was written first. With only the suite added it ran 8 of 8 red, then 8 green (`close1-red-pre-edit`, `close1-green`).
+  - **Dated notes in place:** `[superseded 2026-10-02 by the B22 closeout (<refs>): ...]`, 83 notes in all:
+    - 8 production lines in 6 files;
+    - 15 in 11 test files;
+    - 60 in 28 pages.
+  - No line was added to or removed from any production file or any file a page cites by line. The B16.0.23, B16.0.24 and B16.0.24.1 stop-condition lines are recorded on the page (section 4), following the B21 precedent.
+  - **Retitles:** 20 cases in 15 suites, assertions and `it(` counts unchanged, each with `[B22 closeout, 2026-10-02] retitled (D22-16): ...; assertions unchanged`.
+  - **Exports:** 26 recorded, among them the evidence store, the deck validator, the request store and its executors (OD-141, D22-19, OD-159). 4 retired with tombstones:
+    - the `ArtifactParser` type;
+    - the `options` parameter of `parseNgspiceAsciiRaw` and of `parseNgspiceAsciiRawResult`;
+    - the `read` parameter of `serverSimulationEnvironments`.
+  - The dead `NGSPICE_EXECUTABLE` mock key in `b16-0-2-spice-scope-isolation.test.ts:20` is annotated in place.
+- **Adversarial review:** 12 findings CONFIRMED, all low after verification. Each was fixed test-first:
+  - the strengthened suite ran 5 of 9 red on the delivered tree, then 9 green (`close1fix-red-1`, `close1fix-green-2`);
+  - 7 deliberate breakages were caught, each restored by SHA-256, and an ordinary "exactly 12 pads" comment was not reported (`close1fix-breakage`).
+  - What changed:
+    - the count pattern is anchored to the agent-set wording;
+    - pages are scanned for counts, spawners and "no network" beside ngspice, behind a page allow-list of 18 dated records plus the B15/B16 chapters' "exactly 12", with what each admits pinned (20 and 38);
+    - nine notes reworded in place: the XSPICE card and token readings stay INFERRED and open, osdi is covered by `-n`, `kill_unconfirmed` is not called an exit, and Node's eight win32 variables are named;
+    - FreeRouting's and kicad-cli's direct-child kills, which neither B22-B nor B22-D took, are noted as open in place (`diagnostic-runner.md:326`, threat-model T7; D22-9, OD-145);
+    - the X-5 title was retitled again so it names only what the case reads;
+    - the page's account of what is pinned and of the one page that quotes retired titles was corrected;
+    - each tombstone must be on its own signature line;
+    - new case 9 re-derives the page's note and retitle tables row for row, and inventories every closeout tag in `app/`.
+- **No behaviour change, no assertion weakened, no route** (census 165 = 162 + 3 + 0). Production simulation authority stays BLOCKED; the CD-10 501 and its pin are unchanged. No verdict: that is commit 2/2.
+
+**Gates (final):** A 300 (+18 skipped). B 296 (+3 skipped). C 1,059. D 415. E 460. F 1,107. G 479 (+9 skipped). H 920. I 141. J 22. tsc and eslint (30 files) clean. 17 generators, zero drift.
+
+**Found, not edited (for the lead):**
+- OD-157's last clause still promises an early 422 at `POST /api/spice/runs`. B22-C added none, and this is noted open in place at `diagnostic-runner.md:319`.
+- `output-bounds.ts:11`, `b22-a1-tool-output-bounds.test.ts:6` and `deck-and-secret-corrections.md:204` still cite `route.ts:222-254` for `readBoundedRawFile`. Since B22-A3 that reader is the runner's.
+- The XSPICE card and token readings have no live case in either live suite.
+- Optional steps left to you:
+  - give the dormant request evidence its own schema id (a pin move of `b22-b-approval`);
+  - bind `runtime-profile.ts`'s restated validator id to `SIMULATION_OUTPUT_VALIDATOR.id`;
+  - add `computation` and `computationService` to `b21-d3-pin-facts`' closed list.
+- Lead close (2026-10-02): (1) the check's new issue: the tripwire's 'no network' proximity rule (widened by the review) would also
+  flag the repository's own test-header disclaimer "No network, no model" beside a simulation word - true of the test, not a runner
+  guarantee; red first (a case-1 assertion: the disclaimer matched), then the rule refuses that form by a lookahead while a runner claim
+  still matches; both closeout tripwires (B22's and B21's) green. (2) Of the items the closeout found and left to the lead: the three
+  stale citations of `/api/simulate`'s `route.ts:222-254` as the bounded reader (`output-bounds.ts:11`, `b22-a1-tool-output-bounds.test.ts:6`,
+  `deck-and-secret-corrections.md:204`) carry a dated `[B22 lead]` note in place (the reader has been the runner's since B22-A3); OD-157's
+  promised early 422 at `POST /api/spice/runs` is recorded as not added (a dated addition inside OD-157); the optional steps (a separate
+  schema id for dormant request evidence, binding the restated validator id, two closed-list names in `b21-d3-pin-facts`) are left recorded,
+  not done.
+
+### B22 closeout (2/2) - the four validation artifacts, the final validation run, the verdict (2026-10-02 local; increment workflow + lead; this commit)
+
+- The four artifacts in `artifacts/ai-control-plane-b22/`: `changed-files.md` (every path since `d0d2ec8` - 192: 68 added, 124 modified, 0 deleted; 20,772 insertions, 910 deletions - grouped by area with the first commit that touched it, 192 of 192 checked against `git log --reverse d0d2ec8..HEAD -- <path>`; the 8 first-parent commits; SEC-1's 10 files and 5 commits as PR #12's), `test-and-validation-report.md` (29 suites - 28 B22 and SEC-1's - 291 `it(` blocks, typed `it.each<...>(` tables counted as the A1 page's counter counts them, and 586 tests in the final run, 568 offline and passing, the two opt-in live suites' 18 skipped, each suite's run count CONFIRMED from the run; each suite's fake seam and the three B22-B suites that run real worker threads on real time named; the final validation run with every number; CI on every B22 commit; each increment's gate lines from the ledger and the commit messages), `unknowns-and-owner-decisions.md` (OD-134..OD-159 with their state - OD-137 drafted, not a heading; OD-159 proposed; OD-135 and OD-150 under two headings each; OD-83..86/88 reserved and unspent; D22-1..24: 13 closed, 9 in part (D22-2, -4, -5, -6, -8, -9, -12, -17, -19), 2 RECORDED (D22-1, D22-22); section 8's unknowns with their state - 7 and 8 resolved, 6 moot under OD-145, 1, 2 and 9 standing, 3 to 5 answered in part - and every other UNKNOWN the B22 pages record; LB-1..LB-10) and `final-verdict.md` (PARTIAL: the production simulation runner BLOCKED - no qualified isolation boundary on any platform the program controls, the production host undetermined, LB-10, OD-134; the CD-10 501 text kept and never reached - an AI actor 403, a malformed body 400, every well-formed human request 409; named computations and diagnostic simulation diagnostic-only on runner-enforced limits, no OS limit; live case 4 NOT CONTAINED; the SANDBOX STATUS and ROUTE RATCHET report lines). The first three drafted by the lead's read-only generator and corrected by hand (it credited SEC-1 with part of D22-2 and missed B22-A3's digest check, counted D22-6 and D22-12 closed, credited D22-14 and D22-16 to C and B alone, and read one line of each section-8 item; its D22-4 in part stands, as the closeout (1/2)'s S28 note records it); the verdict is the lead's draft, filled and checked - its judgement unchanged. Factual details corrected in the draft: the execute route keeps its 501 text, but with the real authorization no request reaches it since B22-C (an AI actor 403 and a malformed body 400 before any authorization; a body copy 409 with a closed code; the server's own copies 409, none validated - `b22-c-authority` case 2), and "the 501 and its pins never moved" became "the 501 text and its source pins are unchanged; `b22-a2-blocked-runner` case 4 moved to 409 by a reviewed pin move in B22-C"; the deck screen rests on probes p0-p13 and p14-p22 (p23-p27 and p29 are the runner's; no p28 is recorded); the three process-free named computations run on the worker-thread engine host, not the ngspice runner, and their opt-in needs a server process with no V8 heap-size flag (`NEXT_DISABLE_MEM_OVERRIDE=1` under `next dev`); a run directory is removed in the runner's finally and, after a `kill_unconfirmed`, again once the child's close is observed (not "on every path": a child that never closes can keep its directory and its slot); the install digest is cached behind a stat fingerprint re-taken before every spawn (its recorded limits in `diagnostic-runner.md`); the raw read-back is 100 MiB for a Studio run and the circuit analysis and 20,000,000 bytes for `/api/simulate` (the smoke test reads none), and a Studio run fails over 5,000,000 waveform points; the exact environment map carries OD-156's caveat. Open items the draft omitted, added: D22-12's labels, D22-6's body-taken lowering manifest, D22-4's open shared deck validator and event-list count bound, FreeRouting's and kicad-cli's host allowlists, unchecked digests and shared temporary directory, D22-19's unwired deck validator, the readings that stay INFERRED or UNKNOWN, the Studio's cancel-at-request ordering, OD-155's per-scope limit, OD-157's missing early 422.
+- The final validation run at HEAD `85439e7` (2026-10-02 07:10:46 to 07:29:04, `b22/closeout2/gates/`, the chain of `b22/c-lead-gates.sh` in its order with gate J appended, one heavy job at a time through the lock scripts, the tree clean before and after): A 40 files 631 passed 21 skipped; B 99 files 1,107; C 36 files 415; D 49 files 460; E 45 files 825; F 39 files 357; H 27 files 1,059; F2 1 file 22; G 27 files 375; I 41 files 479 passed 9 skipped; J 131 files 989 passed 4 skipped - 6,719 passed, 34 opt-in skipped, no failure, identical to the closeout (1/2)'s lead chain; the vitest gates 07:10:46 to 07:19:05, the whole chain to 07:19:53; tsc 0; eslint 0 on the 130 files B22 changed since `d0d2ec8` (121 TypeScript, 9 .mjs: `engine-worker.mjs` and eight test fixtures; `git diff --name-only --diff-filter=d d0d2ec8..HEAD | grep -E '\.(ts|tsx|mjs)$'`); all 20 generators with zero drift; census 165/162/3/0; then the full existing browser suite 48 of 48 in 256 s and the orchestration config 4 of 4 in 151 s (Playwright's own summary; `pw.sh`'s exit and wall line not printed, as at B21's closeout - the wrapper recorded `orchestration exit=0`, but `pw.sh` never reached its `exit $CODE`, so that 0 is not Playwright's own code; INFERRED cause: `pw.sh`'s cleanup matches `playwright` in its own shell's arguments when they name `playwright.orchestration.config.ts` - its stale lock directory removed after its holder was checked dead; the wall time from the start stamp to the log's last write), 407 s of OD-30's 30 minutes; the 32 evidence PNGs the runs rewrote (25 under B17/B18, 7 under B21) restored from HEAD by blob hash, 32 of 32.
+- A real engineering process ran in the final run: gate J's `app/lib/pcb/__tests__/autoroute-boundary-integrity.test.ts` (no opt-in guard) ran the real bundled FreeRouting 2.2.4 on Java twice under the agent (CONFIRMED from `J.log`: `RC02_REAL_SIMPLE` 2,859 ms, `RC02_REAL_CROSSING` 2,894 ms), with the java executable resolved from `FREEROUTING_JAVA`, `JAVA_HOME`, the bundled JRE or PATH and never digest-checked (D22-2 open). That breached lead lesson (6) (agents never run java or any real process); the lead's B22-D and closeout (1/2) chains ran `app/lib/pcb` whole too. No provider was called, and no other suite started ngspice, kicad-cli, Java, docker or WSL.
+- Review (2026-10-02): an adversarial review CONFIRMED 18 findings, all in the closeout's documents (regressions-1..3, security-1, security-3, coverage-1..9, tests-1..4; no code, test, generator or other page touched). Fixed test-first with a temporary reproduction suite (14 cases reading the artifacts, the README row, this text and the code or run record that decides each fact; copied into `app/lib/computation/__tests__/` for each run through `run.sh` and removed after, never committed - `scratchpad/b22/closeout2/fix/c2fix-check.test.ts`): 14 of 14 red on the delivered artifacts, each at its artifact assertion, then 14 of 14 green. The fixes: the run-directory statement caveated (three places); the block counts recounted with typed tables (291, not 283; SEC-1 47, A1 63, B22 alone 244); the eslint scope 121 TypeScript and 9 .mjs, its selection quoted whole; the vitest gates' end 07:19:05; gate J's real FreeRouting recorded; the opt-in's heap-flag condition and OD-156's caveat in the PR text; D22-4 and D22-6 counted in part (13 / 9 / 2); the 403 and 400 before the 409, case 4's pin move and `b22-c-authority` case 2 cited; the read-back per caller, the waveform bound, the stat-fingerprint check and the undetermined production host in SANDBOX STATUS; the wrapper's exit 0 explained; three page UNKNOWNs added to the list (numparam, a one-token `.lib`, kicad-cli's version) with the others a grep of every B22 page found (the contract environments' adequacy, the OCI image's values, the model-screen readings); LB-10's "answers 501" named; the fake seams and the three real-worker suites named. After the fixes (2026-10-02 08:09:03 to 08:19:51, `b22/closeout2/fixgates/`): gates A-I re-run with identical counts, and gate J re-run with `--exclude '**/autoroute-boundary-integrity.test.ts'` (129 files passed 1 skipped, 987 passed 4 skipped; no Java started) - 6,717 passed, 34 opt-in skipped, every exit 0; tsc 0; eslint 0 on the same 130 files; all 20 generators with zero drift (the status, the tracked diff and every untracked file's hash unchanged); no browser run repeated (documents only).
+- With the four artifacts and the README row in place: the three suites that scan every page (`b22-closeout-statements`, `b21-closeout-statements`, `b20-b4-withhold-proposals`) 3 files 27 of 27, twice - after the fixes and again after the re-run's record was written (`b22/logs/c2fix-tripwires-1.log`, `-2.log`).
+- CI (read-only): all 8 B22 commits ran both workflows green, every job; `85439e7`: deterministic-manufacturing `36999378260` (prompt-to-gerber 13 min 44 s, database-delivery 1 min 52 s, page-browser-e2e 19 min 56 s with both Playwright configs) and benchmark-quality `36999378264`.
+- README: the validation row (written by this increment). PROGRAM_STATE: B22 complete pending PR #13's green CI and a normal merge; next B23.
+- Report lines: `SANDBOX STATUS: production runner BLOCKED (...)` as in `final-verdict.md`; `ROUTE RATCHET: 165 = 162 canonical + 3 factories + 0 raw (unchanged)`.
+- Record corrections the closeout named (the ledger is append-only, so they are stated here): OD-137 recorded in OWNER_DECISIONS.md as applied (the alternative via SEC-1 `d0d2ec8` for D22-3 and D22-5's ngspice half; the default via B22-A1 and B22-C for the rest), as discovery 9.4 asked; OD-134's sentence that a self-declared validated body "still answers 501" amended (409 since B22-C, OD-138); LB-10's state column ("the execute route answers 501") and its "Unblocks when" (B22-C's registry binding, done) both stale; the discovery's D22-2 gains B22-A3's digest-check clause, D22-4 and D22-6 their in-part addenda; the closeout (1/2)'s ledger line "17 generators" - its lead chain ran all 20.
+- Documents only: no production, test, generator or page file changed in this commit.
+- Lead close (2026-10-02): the check (18 of 18 fixes revert-sensitive) found three new low issues, each fixed by the lead in place:
+  (1) `final-verdict.md` read as if no behavioural test still reaches the 501; `b16-0-20-tranche-parity` still does, with the
+  authorization mocked to authoritative (its 501 assertion unchanged since `d0d2ec8`), and the verdict now says so - with the real
+  authorization no request reaches the 501; (2) the verdict's per-caller wall clock gave the dormant circuit analysis 120 s; it runs with
+  its 10 s budget (`request-executors.ts` passes `kind.budget.wallClockMs`; the runner takes the tighter), now listed with
+  `/api/simulate` and the smoke test; (3) `unknowns-and-owner-decisions.md` lacked one UNKNOWN a page records - whether a real ngspice-46
+  transient's last point lands exactly on `time`, which the circuit analysis's strict reader checks (`named-computations.md` section 5) -
+  now listed, with the vector names it reads marked confirmed by live case 16 (`v(out)`, `i(v1)`). Applied as the closeout listed them:
+  the discovery's dated addenda to D22-2, D22-4, D22-6 and D22-12 and its section 10 block; OD-137's heading (as applied) and OD-134's
+  dated amendment in `OWNER_DECISIONS.md`; LB-10's dated notes in its row. Not done: the optional OD-144 amendment and the optional
+  owner-confirmation lines on the B22-C entries.

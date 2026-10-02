@@ -162,7 +162,7 @@ describe("B16.0.24.1 §1 — bounded simulator raw-file read", () => {
     const src = readFileSync(join(process.cwd(), "app", "api", "simulate", "route.ts"), "utf8");
     expect(src).not.toMatch(/\breadFile\s*\(/);
     expect(src).not.toMatch(/\.slice\(0,\s*MAX_RAW_BYTES\)/);
-    expect(src).toMatch(/readBoundedRawFile\(rawPath, MAX_RAW_BYTES\)/);
+    expect(src).toMatch(/readBackBytes: MAX_RAW_BYTES/); const runner = readFileSync(join(process.cwd(), "app", "lib", "computation", "diagnostic-runner.ts"), "utf8"); expect(runner).toMatch(/readBoundedRawFile\(join\(directory, DIAGNOSTIC_RAW_OUTPUT_FILE\), tighter\(profile\.limits\.readBackBytes\.value!, request\.readBackBytes\)\)/); expect(runner).not.toMatch(/\breadFile\s*\(/); // [B22-A3] reviewed pin move: the diagnostic runner reads result.raw back through this reader, bounded by the route's MAX_RAW_BYTES (was the route's own `readBoundedRawFile(rawPath, MAX_RAW_BYTES)`)
     // the over-limit refusal precedes any parse call in the POST callback
     expect(src.indexOf("Simulation output exceeded the bounded size limit")).toBeLessThan(src.indexOf("parsed = parseAsciiRaw(rawText)"));
   });

@@ -1,7 +1,14 @@
 import type { KicadPin } from "@/app/lib/kicad/types";
 import type { SchematicState } from "@/lib/schematic-types";
+import type { ComputationEvidenceDocument } from "@/app/lib/computation/evidence-store";
 
 export const SPICE_STUDIO_SCHEMA_VERSION = 1 as const;
+/** [B22-C] D22-14, OD-144: the one fixed disclosure sentence the SPICE report and the studio carry. */
+export const DIAGNOSTIC_SIMULATION_DISCLOSURE = "Diagnostic simulation only: these results come from a local ngspice process with no isolation boundary, so they are environment-dependent evidence and never verification, qualification or engineering approval.";
+/** [B22-C] OD-144, D22-21: what a report rendered from, or evidence built on, records a caller sent says about them. */
+export const CALLER_SUPPLIED_RECORDS_DISCLOSURE = "caller-supplied records, not verified by Sirkit";
+/** [B22-C] D22-21, OD-150: the closed label of an evidence reference built from records a caller sent. */
+export const CALLER_SUPPLIED_EVIDENCE = "caller-supplied" as const;
 
 export type EntityId = string;
 export type IsoTimestamp = string;
@@ -631,7 +638,12 @@ export interface RunManifest {
   testRevision: number;
   runPlanId: EntityId;
   runPoint: RunPoint;
-  simulator: { name: "ngspice"; version: string; mode: "subprocess" | "shared-library" };
+  /** [B22-A3] `runner`: the diagnostic runner's profile, observed install digest and labels (`diagnostic_only`, `environment_dependent`);
+   *  [B22-A3 review] the effective seed and the variables Node added to the child on win32 (names only). */
+  simulator: { name: "ngspice"; version: string; mode: "subprocess" | "shared-library"; runner?: { profileId: string; installDigest: string | null; labels: string[]; seed: string; hostAddedEnvironment: string[]; /** [B22-C] the runtime profile's SHA-256 identity as the runner read it */ profileDigest?: string } };
+  /** [B22-A3 review] regressions-3: the SHA-256 and byte count of ngspice's raw file as the diagnostic runner read it; the file itself
+   *  is not kept (the runner removes each run directory), so a re-run is compared by this digest. */
+  rawOutput?: { sha256: string; bytes: number };
   modelChecksums: Record<string, string>;
   schematicHash: string;
   netlistChecksum: string;
@@ -732,10 +744,22 @@ export interface RunRecord {
   createdAt: IsoTimestamp;
   artifactId?: string;
   error?: string;
+  /** [B22-C] D22-7, D22-12: the server-built, digest-bound evidence of a completed run (absent for any other run). */
+  evidence?: RunEvidence;
   /** [B16.0.2 B] the SERVER-DERIVED ownership scope the run is bound to
    *  (trusted request context at start) — `projectId` above is only the
    *  client-asserted SimulationProject id and is never an ownership key. */
   scope?: { tenantId: string; projectId: string; branchId: string };
+}
+
+/** [B22-C] D22-12: a completed run's evidence document (aggregate `computation.evidence.v1`), its digest, and whether the durable
+ *  aggregate holds it (`not_recorded` when no evidence store is bound - B22-C binds none to a route). */
+export interface RunEvidence {
+  aggregateType: "computation.evidence.v1";
+  evidenceId: EntityId;
+  documentDigest: string;
+  document: ComputationEvidenceDocument;
+  durable: { state: "recorded"; revision: number; recordDigest: string } | { state: "not_recorded"; reason: string };
 }
 
 export interface RunBatchRecord {
@@ -757,6 +781,9 @@ export interface RunBatchRecord {
 export interface EvidenceRef {
   runId: EntityId;
   testId: EntityId;
+  /** [B22-C] D22-21: where the referenced record came from - `caller-supplied` (a record the browser sent) unless it resolves to a
+   *  server-held evidence record; nothing resolves to one in B22-C, so every reference is labelled caller-supplied. */
+  provenance?: "caller-supplied" | "server-held";
   cornerId?: EntityId;
   signal?: string;
   measurementId?: EntityId;
@@ -817,5 +844,7 @@ export interface SpiceReport {
   testSummary: Array<{ testId: EntityId; name: string; analyses: string[]; runCount: number }>;
   specificationMatrix: Array<{ specification: string; unit: string; cells: Array<{ runId: EntityId; status: SpecificationState; value?: number }> }>;
   warnings: string[];
+  /** [B22-C] D22-14, OD-144: the fixed diagnostic disclosure, and the caller-supplied one when rendered from a caller's records. */
+  disclosures: string[];
   reproducibility: { simulatorVersions: string[]; seeds: number[]; manifestIds: string[] };
 }

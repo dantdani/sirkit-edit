@@ -7,16 +7,28 @@ variables, and analyses as reversible overlays.
 
 ## Prerequisite
 
-Install ngspice. On Windows the server uses `ngspice_con.exe` by default so it
-does not open the graphical shell. Set `NGSPICE_BIN` in `.env.local` when the
-binary is not on `PATH` or lives in a custom location.
+Install ngspice (the Windows build; the server runs its `bin/ngspice_con.exe`,
+which opens no graphical shell) and pin it ([B22-A3], OD-135): every ngspice run
+goes through the diagnostic runner, which starts only the install named by two
+server settings and refuses, before any process starts, an install whose
+install-tree digest differs. Print the digest of the install folder, then set
+both in `.env.local`:
 
 ```text
-NGSPICE_BIN=C:\Program Files\ngspice\bin\ngspice_con.exe
+tsx scripts/print-install-tree-digest.ts C:/Users/you/Tools/ngspice-46/Spice64
+SIRKIT_NGSPICE_INSTALL_ROOT=C:/Users/you/Tools/ngspice-46/Spice64
+SIRKIT_NGSPICE_INSTALL_SHA256=<the 64 hex characters printed above>
 ```
 
-The editor and compiler remain usable without ngspice; an execution request
-then fails with a structured `engine_missing` diagnostic.
+`NGSPICE_BIN` and `PATH` no longer choose the binary. Every result is
+diagnostic only and environment dependent, and the run is not isolated from the
+server beyond the runner's own bounds (`artifacts/ai-control-plane-b22/diagnostic-runner.md`).
+
+The editor and compiler remain usable without ngspice; until the install is
+pinned, an execution request fails closed before any process starts
+(`NGSPICE_DIAGNOSTIC_UNPINNED` or `NGSPICE_DIAGNOSTIC_INSTALL_ROOT_UNSET`, naming
+the setting to set; `/api/simulate` answers 503, the smoke test 422, a Studio
+run fails).
 
 ## Normal workflow
 
@@ -29,7 +41,11 @@ then fails with a structured `engine_missing` diagnostic.
 5. Follow progress in Runs. Jobs may be cancelled independently and never
    reuse a mutable output directory.
 6. Inspect waveforms, cursors, measurements, diagnostics, and comparisons in
-   Results. Download CSV/JSON, an evidence report, or the complete run bundle.
+   Results. Download CSV/JSON, an evidence report, or the run bundle: the
+   executed netlist, the manifest, the parsed results and the bounded logs.
+   The raw ngspice file is not kept (the runner removes each run directory);
+   its SHA-256 and size are in the manifest's `rawOutput`, so a re-run can be
+   compared byte for byte.
 
 The three netlist views are intentional: **Generated** is source-mapped Sirkit
 output, **Normalized** reflects safe model transforms and unit normalization,
@@ -39,14 +55,16 @@ and **Executed** is the byte-for-byte input recorded in the run manifest.
 
 Every run records project/test/revision IDs, expanded point variables, model
 content hashes, compiler and engine versions, options, random seed, generated
-files, timestamps, status, and artifact hashes. Job workspaces are unique,
-environment variables are restricted, execution and output are bounded, and
-the worker never evaluates arbitrary shell commands.
+files, timestamps, status, and artifact hashes (the raw file's as `rawOutput`).
+Job workspaces are unique and removed after each run, the environment passed
+is an exact map (on Windows Node itself adds eight host variables such as
+`USERPROFILE`, recorded per run), execution and output are bounded, and the
+worker never evaluates arbitrary shell commands.
 
 Imported model text is inspected before it can be assigned. Unsupported or
 unsafe directives are blocked; inferred pins and dialect transforms require
 review. The smoke-test endpoint compiles a tiny deterministic fixture and runs
-the selected model through the same worker used for normal jobs.
+the selected model through the same diagnostic runner used for normal jobs.
 
 ## Headless CI
 
@@ -67,7 +85,8 @@ includes run IDs, manifests, scalars, evaluated specs, and diagnostics.
 - `GET/DELETE /api/spice/runs/:id` — inspect or cancel a batch/job.
 - `GET /api/spice/runs/:id/events` — server-sent lifecycle/progress events.
 - `GET /api/spice/runs/:id/waveforms` — range/downsample signal queries.
-- `GET /api/spice/runs/:id/bundle` — reproducible ZIP evidence bundle.
+- `GET /api/spice/runs/:id/bundle` — ZIP evidence bundle (no raw file; its
+  digest is the manifest's `rawOutput`).
 - `POST /api/spice/models/import` and `/smoke-test` — governed models.
 - `POST /api/spice/reports` — JSON or self-contained HTML evidence report.
 - `POST /api/spice/ai` — typed inspection/proposal tools with evidence refs.

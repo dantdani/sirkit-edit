@@ -131,7 +131,7 @@ describe("[B21 C] least privilege per role", () => {
     for (const [role, tools] of offered) for (const toolId of tools) { expect(registry.get(toolId)!.operationClass === "read" || roleProposalToolIds(role).includes(toolId), `${role}: ${toolId}`).toBe(true); expect(roleAllowedToolIds(role), `${role}: ${toolId}`).toContain(toolId); }
   });
 
-  it("2. the intersection sits AFTER every existing gate and only NARROWS: a listed tool a gate withheld stays withheld (a granted execution for a run without the minter, a view control without a view, a proposal through the read-only view); a subset narrows to exactly its admitted members, as the same declarations the un-narrowed run builds, in the same order; the coordinator's own row (33 ids) is over the A4L bound and approves nothing - so the coordinator never runs under a list", async () => {
+  it("2. the intersection sits AFTER every existing gate and only NARROWS: a listed tool a gate withheld stays withheld (a granted execution for a run without the minter, a view control without a view, a proposal through the read-only view); a subset narrows to exactly its admitted members, as the same declarations the un-narrowed run builds, in the same order; the coordinator's own row (the whole exposure list: 33 ids when written, 36 since B22-B) is over the A4L bound and approves nothing - so the coordinator never runs under a list", async () => { // [B22 closeout, 2026-10-02] retitled (D22-16): 36 since B22-B (OD-139); assertions unchanged
     const grantable = runContext(await composition("proposal_only"));
     const plain = fullContext();
     const list = ["sirkit.pcb.board-inspect", "sirkit.pcb.move-footprint", "sirkit.view.layers"];
@@ -158,17 +158,17 @@ describe("[B21 C] least privilege per role", () => {
     expect(roleAllowedToolIds("coordinator").length).toBeGreaterThan(RUN_ALLOWLIST_MAX_IDS);
   });
 
-  it("3. A4L: a list over the bound, unsorted, duplicated, naming an id outside the 33 (a real registry id and an invented one), a never-exposed id or a non-string, a non-array, and a Proxy that throws each approve NOTHING - an empty toolset with exactly one warning naming `allowlist_invalid`; an empty list is valid and approves nothing without that warning; through the loop, an invalid list offers the model no tool and says so on the stream", async () => {
+  it("3. A4L: a list over the bound, unsorted, duplicated, naming an id outside the exposure list (33 ids when written, 36 since B22-B; a real registry id and an invented one), a never-exposed id or a non-string, a non-array, and a Proxy that throws each approve NOTHING - an empty toolset with exactly one warning naming `allowlist_invalid`; an empty list is valid and approves nothing without that warning; through the loop, an invalid list offers the model no tool and says so on the stream", async () => { // [B22 closeout, 2026-10-02] retitled (D22-16): 36 since B22-B (OD-139); assertions unchanged
     const context = fullContext();
     const hostile = new Proxy(["sirkit.pcb.board-inspect"], { get: (target, key) => { if (key === "length" || key === "0") throw new Error("hostile"); return Reflect.get(target, key); } });
     const invalid: Array<[string, unknown]> = [
       ["over the bound", [...INTENTIONAL_AGENT_EXPOSED_TOOL_IDS]],
       ["unsorted", ["sirkit.validation.drc-run", "sirkit.pcb.board-inspect"]],
       ["duplicated", ["sirkit.pcb.board-inspect", "sirkit.pcb.board-inspect"]],
-      ["a registry id outside the 33", ["sirkit.parts.search"]],
+      ["a registry id outside the 33", ["sirkit.parts.search"]], // [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): the exposure list is 36 since B22-B; the label keeps its words]
       ["an invented id", ["sirkit.pcb.helpful-read"]],
-      // outside the 33, so refused by membership first; the never-exposed pattern clause itself is reached in case 7
-      ["a never-exposed id (outside the 33)", ["sirkit.manufacturing.release"]],
+      // outside the 33, so refused by membership first; the never-exposed pattern clause itself is reached in case 7 [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): the exposure list, 36 since B22-B]
+      ["a never-exposed id (outside the 33)", ["sirkit.manufacturing.release"]], // [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): the exposure list is 36 since B22-B; the label keeps its words]
       ["a non-string", [42]],
       ["a non-array", "sirkit.pcb.board-inspect"],
       ["a null", null],
@@ -269,10 +269,10 @@ describe("[B21 C] least privilege per role", () => {
     }
   });
 
-  it("7. [B21 C fix] the A4L bound and the never-exposed clause are both live (review): a sorted, exposed list of EXACTLY 32 ids is approved and then narrowed by the gates (no `allowlist_invalid`), the 33 approve nothing; the never-exposed patterns refuse an id even when the exposure list names it - defense in depth, since no id of the reviewed 33 matches a pattern today", async () => {
+  it("7. [B21 C fix] the A4L bound and the never-exposed clause are both live (review): a sorted, exposed list of EXACTLY 32 ids is approved and then narrowed by the gates (no `allowlist_invalid`), the first 33 and the whole list (36 since B22-B) approve nothing; the never-exposed patterns refuse an id even when the exposure list names it - defense in depth, since no id of the reviewed list (33 when written; 36 since B22-B) matches a pattern today", async () => { // [B22 closeout, 2026-10-02] retitled (D22-16): 36 since B22-B (OD-139); assertions unchanged
     const exposed = [...INTENTIONAL_AGENT_EXPOSED_TOOL_IDS];
     expect(exposed).toEqual([...exposed].sort());
-    expect(exposed).toHaveLength(RUN_ALLOWLIST_MAX_IDS + 1);
+    expect(exposed).toHaveLength(RUN_ALLOWLIST_MAX_IDS + 4); expect(approvedRunAllowlist(exposed.slice(0, RUN_ALLOWLIST_MAX_IDS + 1))).toBeNull(); // [B22-B, 2026-10-01] reviewed pin move (OD-139): the exposure list is 36 since the three named computation reads joined it (was the bound + 1); any 33 of it still approve nothing
     const thirtyTwo = exposed.slice(0, RUN_ALLOWLIST_MAX_IDS);
     expect(approvedRunAllowlist(thirtyTwo)).toEqual(new Set(thirtyTwo));
     expect(approvedRunAllowlist(exposed)).toBeNull();

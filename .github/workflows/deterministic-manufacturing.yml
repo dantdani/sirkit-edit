@@ -223,6 +223,7 @@ jobs:
           app/lib/pcb/__tests__/b19-d-kicad-emit-injection.test.ts
           app/lib/spice/__tests__/b19-d-report-escaping.test.ts
           app/lib/spice/__tests__/sec-1-deck-injection.test.ts
+          app/lib/computation/__tests__
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts
           app/lib/project/__tests__/b18-e-claimed-nothing.test.ts
           app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts

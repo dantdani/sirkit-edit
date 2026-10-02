@@ -99,7 +99,7 @@ describe("B16.0.20 §J — human-truth and tool gates", () => {
     expect(src).toMatch(/requiresHumanReview: true/);
     expect(code("app/api/model-simulation/propose/route.ts")).not.toMatch(/llmRouter/);
   });
-  it("no simulation route is agent-exposed; tools EXACTLY 12; manufacturing release internal-only", () => {
+  it("no simulation route is agent-exposed; tools EXACTLY the intentional agent-exposed set (12 when written; the set has since grown by reviewed moves, B22-B's three named computation reads among them, and the assertion counts the set itself); manufacturing release internal-only", () => { // [B22 closeout, 2026-10-02] retitled (D22-16): the derived count, 36 since B22-B (OD-139); assertions unchanged
     const registry = sirkitToolRegistry();
     const exposed = registry.list().filter((d) => d.agentExposed);
     expect(exposed.length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);

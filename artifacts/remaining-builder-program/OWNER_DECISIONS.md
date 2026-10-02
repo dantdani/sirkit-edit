@@ -1643,3 +1643,300 @@ Amendments to existing entries:
   unchanged.
 - **The owner may choose otherwise:** re-scope the B11/B20 tripwires to name orchestration explicitly (a reviewed pin move of two chapters'
   suites).
+
+## OD-151 — SEC-1: the SPICE deck screen refuses a non-banner `*#` title, as applied (SEC-1, 2026-10-01)
+
+- **Question:** keep or drop the refusal of a deck whose title - line 1, built as `<project name> — <test name>`, or the text of a
+  `.title` line in a directive or model text - is a `*#` line other than a pure banner (`*#` then only `#`, `=`, `-` and whitespace)?
+- **Default applied:** kept, as fail-closed defence in depth. The lead's probes CONFIRM that ngspice-46 in batch mode does NOT run a
+  `*#` title (p13: a `*#` line as line 1 is printed as the circuit title; p11/p12: a `.title *# ...` line, on line 1 or after it,
+  likewise), so the refusal is stricter than the ground; it would matter only for another ngspice build or mode. Its cost: a project
+  whose name starts `*#` (for example `*#2 buck stage`), which main compiled, is refused with `SPICE_DECK_UNSAFE` in compile, the
+  preview, the runs preflight and the worker.
+- **Evidence:** `artifacts/ai-control-plane-b22/sec-1-spice-deck-injection.md` sections 1b (probes p0-p13), 4 and 7; `netlist.ts`
+  `assertTitleSafe`; the refused-title rows of `sec-1-deck-injection.test.ts`.
+- **The owner may choose otherwise:** drop it, restoring main's behaviour (the probes support this); or keep it (recommended for a
+  corrective security branch: the input is unusual and the error names the rule). Owner confirmation pending.
+
+## OD-152 — SEC-1: the stated deviations from its task text, as applied (SEC-1, 2026-10-01)
+
+- **Question:** the SEC-1 task asked to refuse "every other control character" and the command words outside the control block.
+- **Default applied:** the deck screen admits a TAB in single-line fields (SPICE whitespace, never a line) and, in model text, a form
+  feed (read both as whitespace and as a line break, so neither reading hides a line) and other control characters that are not line
+  breaks, as main did; it keeps the `.shell/.cd/...` dotted-directive refusal as defence in depth though the probes neither require nor
+  contradict it; every line-break form, NUL and a backtick stay refused everywhere, and a command word is accepted only where the
+  probes show it is read as a card (an element named by its first letter, never run).
+- **Evidence:** the SEC-1 page sections 1b, 4 and 8; `sec-1-deck-injection.test.ts`.
+- **The owner may choose otherwise:** refuse a TAB or the other non-line-break controls (refusing whole run plans pasted from
+  tab-formatted netlists), or drop the dotted-directive refusal. Owner confirmation pending.
+
+## OD-146 — CI admission for B22 suites, as applied (B22-A1, 2026-10-01)
+
+- **Question:** how do the B22 suites enter CI?
+- **Default applied:** the first `b22-` suites (`app/lib/computation/__tests__/b22-a1-*.test.ts`, six suites) ride ONE directory filter, `app/lib/computation/__tests__`, in the `prompt-to-gerber` job, and `b22-` joined `CHAPTERS` in `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` in the same change; no `it(` was added to the guard (B21's `b21-a-page` case 4 pin of 8 blocks stands; a run prints 8 + 4 = 12 tests); no `b22-` suite starts PGlite; live suites stay opt-in (`SIRKIT_B22_LIVE_RUNNER=1` when one exists) and never run in CI - A1 has none.
+- **Evidence:** `artifacts/ai-control-plane-b22/deck-and-secret-corrections.md` section 6 (the guard red with `b22-` and no filter, then green); the workflow line `:226`; B21's matrix citations C49/C93/C94 re-pinned +1.
+- **The owner may choose otherwise:** explicit per-suite entries (each then exempt from a directory filter by the guard's redundancy rule). Owner confirmation pending.
+- **[B22-D, 2026-10-02] Applied:** `b22-d-adversarial` and the opt-in `b22-d-adversarial-live` ride the existing `app/lib/computation/__tests__` filter in prompt-to-gerber. No CI line was added; the CI job-scope guard is green.
+
+## OD-148 — kicad-cli and FreeRouting in B22, as applied (B22-A1, 2026-10-01)
+
+- **Question:** what does B22 do about kicad-cli's and FreeRouting's secret inheritance and unbounded output?
+- **Default applied:** kicad-cli spawns with an explicit environment allowlist (`KICAD_CLI_ENV_KEYS`: the search path, the Windows system root and drive, temp directories, the user profile, application-data and home directories, the locale, `LD_LIBRARY_PATH`, the XDG configuration, cache and data directories and `KICAD_CONFIG_HOME`, plus `NODE_ENV` as the FreeRouting precedent) and `windowsHide: true`; both runners hold each output stream to at most twice the one 64 KiB diagnostic bound in memory, counted in bytes, and return it within the bound with a truncation marker, FreeRouting's stderr keeping up to half the bound beside its stdout so an exception survives; the files Sirkit reads back - FreeRouting's `.ses`, kicad-cli's gerber and drill files - go through a bounded reader that refuses a file over 64 MiB unread with a closed error. Their full profiles (digest pins at run time) are B22-A2's, diagnostic-only; their containers are LB-3/LB-10's.
+- **Evidence:** the page sections 3 and 4; `b22-a1-secret-env`, `b22-a1-tool-output-bounds` (with the review's fake-handle and collector cases and their deliberate breakages); the existing runner, bundle and route suites unchanged and green.
+- **Limits recorded:** the allowlist's adequacy is INFERRED (kicad-cli was never run here; the opt-in kicad-cli oracle is the live check); the processes may still write files of any size (no file-size limit on any spawn).
+- **The owner may choose otherwise:** a narrower allowlist after a live oracle run, or different bounds. Owner confirmation pending.
+
+## OD-150 — SPICE AI approvals, the approval half, as applied (B22-A1, 2026-10-01)
+
+- **Question:** which SPICE AI operations may arrive pre-selected?
+- **Default applied:** every operation whose strings reach an ngspice deck (a test's name, overlay elements, variables, analyses, sweeps, corners, model bindings, solver options) and the run request are "review" and never pre-selected - a human selects each before Apply; a measurement and a specification (never written to a deck) stay "automatic"; a design patch stays "explicit". One table (`app/lib/spice/ai-approval.ts`) decides the route's labels and the studio's pre-selection, which also refuses a forged "automatic" on any other kind and a non-automatic level on an automatic kind. The evidence half (D22-21: evidence references resolve to server-held records or carry a "caller-supplied" label) is NOT applied; it stays with B22-C.
+- **Evidence:** the page section 5; `b22-a1-spice-ai-approval`; the reviewed pin move in `b16-0-23-tranche-parity.test.ts:627`.
+- **The owner may choose otherwise:** keep a measurement and a specification "review" too (nothing would then arrive selected). Owner confirmation pending.
+
+## OD-153 — B22-A1: the stated additions to its task text, as applied (B22-A1, 2026-10-01)
+
+- **Question:** the task named the forms the model screen refuses; B22-A1 refuses more, fail-closed.
+- **Default applied:** a one-token `.lib` line is refused (whether ngspice-46 reads its token as a file is UNKNOWN; no executed deck accepted any `.lib` line since SEC-1); a path must be a plain relative name, so a home (`~`) path, a variable, a Windows device name, a space and a quote are refused too (a quoted vendor data file name with a space is the cost); the executed-deck screen also refuses an XSPICE file parameter (an advanced directive can carry the `.model` card the model screen never reads) and reads the whole deck's cards as ngspice joins them, across model boundaries; the code models of the installed ngspice-46 that start a program or load a library (`d_process`, `d_cosim`) are refused whatever they name; a `.model` card is read token by token, so a file parameter must be followed by a plain relative name (a value spelled exactly `file` at a card's end is the cost); model text that opens with a `+` line is refused; every model-screen refusal of text SEC-1's final screen refused is closed, so the runs preflight still answers it 422 before any job, while the screen's own messages stay the worker's (202) as SEC-1 designed; the smoke deck reads the emitted model text; the reproducibility bundle's README states the logs' bound.
+- **[B22-A1 lead]** the code-model refusal reads `d_process`, `d_cosim` and `process_file` on ANY card, so a net, element or output
+  so named is refused too (the check's low issue, kept fail-closed); a `+` line opened by a non-ASCII character is joined to its card
+  as ngspice does (probes p14-p15).
+- **Evidence:** the page sections 0, 1, 2 and 12. Owner confirmation pending.
+
+## OD-134 — the isolation verdict and the production runner, as applied (B22-A2, 2026-10-01)
+
+- **Question:** may any engineering executable produce authoritative simulation evidence in B22?
+- **Default applied:** no. Production simulation authority stays BLOCKED. `executeAuthoritativeSimulation` still throws `CD10_AUTHORITATIVE_RUNNER_BLOCKED_NO_VALIDATED_SANDBOX`, and the CD-10 execute route still answers 501 with its unchanged text, even for a request body that declares itself validated (D22-6 is latent behind the 501; B22-C closes it). No B22-A2 runtime profile is `validated` or authoritative-eligible. The `ngspice-oci` profile is defined and tested offline only: the discovery's flag vector, `unvalidated`, no evidence, its docker argv read by a closed grammar that ties each designed `os` claim to its flag, and the host's docker CLI bound by `hostClient` (unpinned). B22 delivers a diagnostic-only local runner (B22-A3) that is never called authoritative. No docker, podman, runsc or wsl command was run. The lead's 2026-10-01T09:20:48Z probe reached no Docker engine (CLI 29.3.1, context `desktop-linux`, npipe not found); WSL's `docker-desktop`, `kali-linux` and `Ubuntu` were all Stopped; no production host is named (B24-A decides).
+- **Evidence:** `artifacts/ai-control-plane-b22/isolation-verdict.md`; `b22-a2-blocked-runner` (6 cases); `b22-a2-runtime-profile` cases 8, 16 and 18.
+- **The owner may choose otherwise:** supply an OCI engine (a repaired Docker Desktop with a recorded backend, or a Linux host or CI runner) and approve the opt-in B22-A4 qualification there. Production stays BLOCKED even then until B24-A names the production host. Owner confirmation pending.
+- **[B22 closeout (2/2), 2026-10-02] Amended:** this entry's "the CD-10 execute route still answers 501 ... even for a request body that declares itself validated" is stale since B22-C (OD-138): the server resolves the provider and environment, so a self-declared validated body ends 409 with a closed code (`b22-a2-blocked-runner` case 4, moved by a reviewed pin move in B22-C; `b22-c-authority` case 2), an AI actor 403 and a malformed body 400. With the real authorization no request reaches the 501, whose text and source pins are unchanged (`b16-0-20-tranche-parity` still reaches it with the authorization mocked). Production simulation authority stays BLOCKED (LB-10).
+
+## OD-135 — which ngspice build each profile pins, as applied (B22-A2, 2026-10-01)
+
+- **Question:** which ngspice does each runtime profile bind, and how is it identified?
+- **Default applied:** `ngspice-local-diagnostic` binds the owner's local ngspice-46 Windows build (`Spice64`, `bin/ngspice_con.exe`). Its identity is the install-tree digest (`sirkit-install-tree-sha256/1`: SHA-256 over the sorted `[relative path, size, per-file SHA-256]` lines of the whole tree, covering the executables, `libomp140`, `spinit` and the code-model libraries; files are stat'ed exactly, as bigint, and a file changed while hashed is refused). The digest is read only from `SIRKIT_NGSPICE_INSTALL_SHA256`, with the root in `SIRKIT_NGSPICE_INSTALL_ROOT`, and is unpinned until the owner sets it. B22-A3 refuses a mismatch or an unpinned profile before any spawn, and from then on `NGSPICE_BIN` and PATH no longer choose the binary. `ngspice-oci` plans ngspice `47+ds-1` from a dated Debian snapshot on `debian:trixie-slim` pinned by a digest re-resolved before use, read from `SIRKIT_NGSPICE_OCI_IMAGE` (a `<repository>@sha256:<hex>` reference). Its host docker CLI is bound by `SIRKIT_OCI_CLI_PATH` and the file's SHA-256 in `SIRKIT_OCI_CLI_SHA256`; its context and configuration are UNKNOWN until B22-A4. The image is not built, and the licence set is recorded. kicad-cli and FreeRouting carry full diagnostic profiles with their own digest settings (OD-148). FreeRouting's digest covers only `freerouting-2.2.4.jar` and `jdk-25.0.3+9-jre`, because `scripts/setup-freerouting.ps1:93-104` rewrites `sirkit-runtime.json` with the time of the run beside them on every run.
+- **Evidence:** `artifacts/ai-control-plane-b22/runtime-profiles.md`; `b22-a2-runtime-profile` cases 4, 5, 10, 15 and 18 (digest on temporary fixture trees and fs seams only, never the real install).
+- **The owner may choose otherwise:** a different local build, or a distro package instead of the snapshot. Owner confirmation pending.
+
+## OD-147 — live-blocker rows, as applied (B22-A2, 2026-10-01)
+
+- **Question:** how is the blocked authoritative runner recorded?
+- **Default applied:** LB-10, "authoritative sandboxed simulation on a qualified OCI platform", BLOCKED-LIVE-QUALIFICATION. It unblocks when the owner supplies a reachable OCI engine, B22-A4 pins the image and the docker CLI and records qualification evidence in the `ngspice-oci` profile, and B24-A names the production host.
+- **Evidence:** `isolation-verdict.md` sections 3 and 5; the LB-10 row below.
+- Owner confirmation pending.
+
+## OD-154 — B22-A2: stated choices beyond its task text, as applied (B22-A2, 2026-10-01)
+
+- **Default applied:**
+  - Every profile also carries `legacySpawn` (what the live spawn sites do today and their closed deviations), plus a `readBackBytes` limit and a `waveformPoints` limit.
+  - The environment rule also refuses `HOMEDRIVE`/`HOMEPATH` and secret-shaped keys.
+  - The kicad-cli and FreeRouting contract environments drop HOME, USERPROFILE and APPDATA (adequacy UNKNOWN; neither tool was run). kicad-cli gets `KICAD_CONFIG_HOME={runDir}`.
+  - The OCI flag-vector values are designed, unqualified choices: memory 1024m (swap equal), pids 64, `--cpus 1`, `--ulimit cpu=120:120`, `/out` tmpfs 128m, `/tmp` tmpfs 16m, user 65534. How output leaves the tmpfs is left to B22-A4.
+  - The seed is pinned as `.options seed=1`, to be emitted by the runner.
+  - The census treats a route reaching a spawner as starting it, unless one of four reviewed exemptions holds. An exemption is checked over the route's whole closure and the job store's every top-level binding, and the census drops it when the check fails.
+  - [Review fixes] The contract validator reads a container profile's docker argv by a closed grammar. It allows exactly the `run` and `kill` operations and a long-option allowlist up to the one `{image}`. It refuses short flags, every `=` form, `--env-file`, a bare-name `--env`, `--privileged`, `-v`/`--volume` and `--cap-add`. It requires `--cap-drop ALL`, `no-new-privileges`, a non-root numeric user and group, and a positive `--cpus`, and ties every `os` claim to its flag. Any `--mount` must be the read-only input bind, so a writable output bind for B22-A4's transport would be a reviewed grammar change.
+  - [Review fixes] A container profile binds its host client (`hostClient`: `SIRKIT_OCI_CLI_PATH`, `SIRKIT_OCI_CLI_SHA256`), and `validated` needs it pinned.
+  - [Review fixes] Install digests may name root members; only FreeRouting does.
+  - [Review fixes] The input mount is typed and validated read-only.
+  - [Review fixes] The digest stats files as bigint, because Windows file ids exceed 2^53.
+- Owner confirmation pending.
+
+## OD-135 — which ngspice build each profile pins, as applied (B22-A3, 2026-10-01)
+
+- **Question:** how is the local ngspice identified before it runs?
+- **Default applied:**
+  - The diagnostic runner (`app/lib/computation/diagnostic-runner.ts`) starts only `<SIRKIT_NGSPICE_INSTALL_ROOT>/bin/ngspice_con.exe`.
+  - Before every spawn it refuses, closed, an install whose `sirkit-install-tree-sha256/1` digest differs from `SIRKIT_NGSPICE_INSTALL_SHA256` (`NGSPICE_DIAGNOSTIC_DIGEST_MISMATCH`).
+  - An unpinned or malformed digest setting is refused (`NGSPICE_DIAGNOSTIC_UNPINNED`, naming the setting). An unset or relative root is refused (`NGSPICE_DIAGNOSTIC_INSTALL_ROOT_UNSET`).
+  - `NGSPICE_BIN` and PATH no longer choose the binary.
+  - The digest is cached per process behind a stat fingerprint. Measured on a synthetic 778-file, 52 MB tree: full digest 469 ms; first check 620 ms; cached check 67–78 ms. Concurrent early checks share one check in flight.
+  - The owner pins by running `tsx scripts/print-install-tree-digest.ts <Spice64 folder>` and setting both settings in `.env.local`.
+  - Until then every ngspice path fails closed: `/api/simulate` 503, smoke test 422, Studio run failed.
+- **Evidence:** `artifacts/ai-control-plane-b22/diagnostic-runner.md` section 2; `b22-a3-diagnostic-runner` cases 2, 3, 4, 13.
+- **The owner may choose otherwise:** a different local build (re-pin the digest). Owner confirmation pending.
+
+## OD-136 — the three legacy ngspice entry points, as applied (B22-A3, 2026-10-01)
+
+- **Question:** how do `/api/simulate`, the Studio worker and the smoke test reach ngspice?
+- **Default applied:**
+  - All three call the one diagnostic runner and import no `child_process`. The worker's `-v` probe is `-n -v` through the runner.
+  - `APP_SPAWNERS` moved once, by review, to the diagnostic runner, FreeRouting's runner and kicad-cli's runner.
+  - Every result is labelled `diagnostic_only` and `environment_dependent`, with the profile id, the observed install digest, the seed and the host-added variable names. Nothing is called a sandbox or authoritative; none of the three is retired.
+  - The reproducibility bundle reads no file. The raw file is not kept, but its SHA-256 and size are in the manifest (`rawOutput`).
+- **Evidence:** `b22-a3-single-spawner` (4 cases); `b22-a3-diagnostic-runner` case 13; `b20-b4-process-gate`.
+- Owner confirmation pending.
+
+## OD-145 — kill semantics and limits for the diagnostic runner on Windows, as applied (B22-A3, 2026-10-01)
+
+- **Question:** how is a run stopped, and when is it terminal?
+- **Default applied:**
+  - On win32, the runner's own fixed-argv `taskkill /PID <pid> /T /F` (absolute path under SystemRoot, no caller input), then the direct child. On POSIX, SIGKILL to the process group of a detached child.
+  - Applied on the wall clock (profile 120 s, or a caller's tighter bound) and on abort.
+  - A run is terminal only once `close` is observed, or as `kill_unconfirmed` after `DIAGNOSTIC_KILL_CONFIRM_MS` = 5000. The record keeps `killReason` (wall clock or cancel), and a run is never reported cancelled while its process may live.
+  - A `kill_unconfirmed` run keeps its slot, and its directory is removed again, once `close` comes.
+  - No job object, so there is no OS limit on CPU, memory, processes, file size or network (recorded, never claimed).
+  - Whether `/T` reaches a real descendant is INFERRED.
+  - FreeRouting's and kicad-cli's direct-child kills and before-exit resolutions stay with B22-B/D.
+- **Evidence:** `diagnostic-runner.md` section 3; `b22-a3-diagnostic-runner` cases 6, 7, 8, 12, 13.
+- Owner confirmation pending.
+- **[B22-D, 2026-10-02] Recorded:**
+  - With no OS cap, a construct that would fork without end is prevented only by the deck screens.
+  - A loop that never ends is stopped by the wall clock.
+  - A raw file is written at any size, and only its read-back is bounded.
+  - A printing process runs until its wall clock; there is no kill at the output bound.
+  - Live cases 1, 6 and 14 measure these on your run.
+
+## OD-155 — the diagnostic runner's cap: shared by tenant, every wait bounded, as applied (B22-A3, 2026-10-01)
+
+- **Question:** how do requests across batches, tenants and entry points share the ngspice processes?
+- **Default applied:**
+  - One counter per server process: 4 running and 64 waiting at most.
+  - Each request names its server-derived tenant as holder. One tenant runs at most 3 and has at most 32 waiting; one more of that tenant, or any request beyond 64 waiting, is refused `NGSPICE_DIAGNOSTIC_BUSY` at once.
+  - A freed slot goes to the tenant with the fewest running, FIFO within a tenant.
+  - A request waits at most its own wall clock (10 s for `/api/simulate` and the smoke test), then gets BUSY with nothing run. A Studio point waits at most `DIAGNOSTIC_RUNNER_MAX_QUEUE_WAIT_MS` = 2,000,000 ((64/4) x (120 s + 5 s)).
+  - An abort while waiting withdraws the request; the smoke test now passes its request abort.
+  - Trade-offs: a single-tenant install runs 3 Studio points at a time, not 4; [B22-A3 lead] an interactive request (`/api/simulate`, the smoke test) takes the fourth slot past its tenant's share, so a tenant's own plan never refuses its Simulate while a slot is idle. A Studio point refused BUSY fails, and its batch moves on to the next point (the job store's loop is unchanged).
+- **Evidence:** `diagnostic-runner.md` section 4; `b22-a3-diagnostic-runner` cases 1, 4, 10, 13.
+- **The owner may choose otherwise:** different shares, or tenant plus caller kind as the holder (so a tenant's own batch never delays its own smoke test). Owner confirmation pending.
+
+## OD-156 — the win32 child environment: Node's eight additions recorded, not removed, as applied (B22-A3, 2026-10-01)
+
+- **Question:** is the child's environment exactly the profile's map?
+- **Default applied:**
+  - The map passed is exactly `LC_ALL=C`, `TZ=UTC`, `PATH=<install>/bin`, `SystemRoot`, and `TEMP`/`TMP` = the run directory.
+  - On win32, Node (libuv `required_vars`, src/win/process.c) copies the server's value of each required variable the map lacks. The child therefore also gets HOMEDRIVE, HOMEPATH, LOGONSERVER, SYSTEMDRIVE, USERDOMAIN, USERNAME, USERPROFILE and WINDIR. This was CONFIRMED on this host by the review's benign probe, and [B22-A3 lead] the lead's live run CONFIRMED that ngspice's own `echo $USERPROFILE` expands to the server's value under the runner's spawn (live case 5).
+  - Every record and provenance names them (`hostAddedEnvironment`; names only). None is a secret.
+  - `-n` (probe p23) is the single layer keeping a home `.spiceinit` from running.
+  - D22-5's environment half is reopened for these eight.
+- **Evidence:** `diagnostic-runner.md` section 6; `b22-a3-diagnostic-runner` cases 2, 12, 14; live case 5 (the lead's).
+- **The owner may choose otherwise:** a profile revision that gives all eleven an explicit neutral value. That needs A2's validator to admit USERPROFILE, HOMEDRIVE and HOMEPATH keys set to run-directory values, plus the lead's probes of ngspice under them. Owner confirmation pending.
+
+## OD-157 — B22-A3: stated choices beyond its task text, as applied (B22-A3, 2026-10-01)
+
+- **Default applied:**
+  - **Location:** the runner lives in `app/lib/computation/`, beside the profile registry and output bounds. It stays out of the MCP closure and every B11-scanned file.
+  - **Over the cap:** queue, then refuse (OD-155).
+  - **Seed:** a deck that sets its own `seed` or `rndseed` option is refused, never overridden. A Studio plan with such a custom option fails each point; an early 422 at `POST /api/spice/runs` is B22-C's preflight.
+  - **Raw file:** kept only as its SHA-256 and size (`rawOutput`). The vectors themselves, including non-finite values, are a recorded loss next to D22-10.
+  - **Version probe:** cached per observed install digest.
+  - **Fs failures:** the runner's own fs failures are closed (`NGSPICE_DIAGNOSTIC_RUN_DIRECTORY_FAILED`, the errno only).
+  - **Redaction:** on the stream, before the output bound.
+  - **No callback after settling:** once a run has settled no output reaches a caller, and the job store never reopens a terminal record.
+- Owner confirmation pending.
+- **[B22 closeout (1/2) lead, 2026-10-02] Recorded:** the early 422 at `POST /api/spice/runs` for a deck that sets its own seed, which this entry left to B22-C's preflight, was not added: such a plan still fails each point at the runner (closed, nothing run); noted open in place at `diagnostic-runner.md:319`.
+
+## OD-139 — the named computation catalog, as applied (B22-B, 2026-10-01; review 2026-10-02)
+- **Question:** which operations, which class, and how are they exposed?
+- **Default applied:**
+  - Exactly the runbook's five kinds, in its order, none spelling spice, simulate, exec, process, shell, `file.`, order, ship or qualif: `circuit-analysis` (:912), `analytical-equation` (:913), `artifact-parse` (:914), `layout-experiment` (:915), `artifact-compare` (:916).
+  - Each kind has a closed input schema, a profile id (process-backed kinds), an output validator id and a budget. The catalog is deep-frozen and validated at load.
+  - The three process-free kinds are Tier 0 reads on `bound-computation` with the `computation-engine` authority. Their port is injected at the chat root, on the assistant-agent channel only.
+  - The two process-backed kinds are propose-class, unbound, never exposed or callable. They are inert sealed requests a human approves, consumed once by the server's executors, and their evidence is labelled `diagnostic_only` and `environment_dependent`.
+  - All five are MCP-withheld (reason `computation`) and dormant for specialists.
+  - Ratchets: 42 -> 47, 33 -> 36, 9, 24 -> 27.
+- **Evidence:** `named-computations.md` sections 1-3 and 5; `b22-b-catalog`, `b22-b-exposure`, `b22-b-approval`, `b22-b-chat-runtime`.
+- Owner confirmation pending.
+
+## OD-140 — the bounded engine host and the experiment profile; F1, as applied (B22-B, 2026-10-01; review 2026-10-02)
+- **Question:** how are in-process computations bounded and stopped?
+- **Default applied:**
+  - One `worker_threads` host per server process. Workers start from its closed entry table only, with `env: {}`, `execArgv: []` and `resourceLimits` from the budget.
+  - A hard `terminate()` at the budget and on abort. A run is terminal once the exit is observed, or `confirmed: false` after 5 s with the slot held until the exit. The first outcome wins. Output must be plain JSON within the byte budget.
+  - At most 2 workers, at most 1 per tenant (the server-derived holder). One more is refused `ENGINE_HOST_BUSY`; there is no queue.
+  - The host refuses closed (`ENGINE_HEAP_LIMIT_OVERRIDDEN`) while the server carries any V8 heap-size flag: `--max-old-space-size[-percentage]`, `--max-semi-space-size`, `--max-heap-size`, with NODE_OPTIONS read with quotes removed.
+  - Experiment profile `engine-host:placement-experiment/1` (60 s, 512 MiB). It has no worker entry, so it is refused `ENGINE_UNAVAILABLE`.
+  - A reviewed `APP_SPAWNERS` move keeps the host out of the MCP closure.
+  - F1 stays a separate queued fix.
+  - The host is not an isolation boundary.
+- **Evidence:** `named-computations.md` section 4; `b22-b-bounded-host` cases 1-9, `b22-b-exposure` case 9, `b20-b4-process-gate`, `b22-a2-process-census`.
+- **[B22-B lead]** One worker per tenant means the members of one tenant (a single-tenant install: every member) wait for each other - a second computation is refused `ENGINE_HOST_BUSY` at once; kept as the fail-closed fairness choice (the check's new low issue).
+- **The owner may choose otherwise:** other caps; a bounded fair queue (as OD-155); a share that admits the second slot while no other tenant runs; or F1 on the host once placement has a worker entry. Owner confirmation pending.
+
+## OD-149 — model-generated scripts, as applied (B22-B, 2026-10-01)
+- **Default applied:** not allowed.
+  - No kind, schema or validator accepts code or a script, and no free string exists.
+  - Forbidden field names are checked structurally.
+  - The worker entry loads and compiles nothing.
+- **Evidence:** `b22-b-catalog` cases 2 and 5; `b22-b-no-generic-exec` cases 3 and 4.
+- Owner confirmation pending.
+
+## OD-158 — B22-B: the opt-in and its other stated choices, as applied (B22-B, 2026-10-01; review 2026-10-02)
+- **Default applied:**
+  - **Opt-in:** the chat port is bound only with `SIRKIT_NAMED_COMPUTATIONS=1` (default off), because how `next build` serves `engine-worker.mjs` is UNKNOWN.
+    - [review] It is also bound only where no V8 heap-size flag is set. Under `next dev` that means also setting `NEXT_DISABLE_MEM_OVERRIDE=1`.
+    - The host's own refusals reach the model as `engine_unavailable`.
+  - **[review] No queue at the host.**
+  - **[review] No ninth specialist claim (`computationAvailable`).** Adding one would change OD-109's eight-claim vocabulary and four B21 suites. A revert of `withdrawAuthority` still fails closed, because the follow-up gateway has no port; it is pinned by `b22-b-exposure` case 4.
+  - **Result store:** results are held per request port (32 per run, 128 runs).
+- **The owner may choose otherwise:** enable by default after a `next build` qualification; add the claim as a reviewed B21 pin move; add a queue. Owner confirmation pending.
+
+## OD-159 — a human approval surface for process-backed computation requests (proposed, B22-B, 2026-10-01)
+- **Proposed:**
+  - An authenticated route: a reviewed census move 165 -> 166+, with CSRF; approvers are `pcb_editor`, `reviewer` or `project_admin` in the same scope, approving the exact digest.
+  - Persistence with the evidence aggregate (OD-141).
+  - Until then both descriptors stay dormant and the store is an in-memory contract.
+- Owner decision needed.
+
+## OD-138 — the server's provider and environment, as applied (B22-C, 2026-10-02; review 2026-10-02)
+- **Default applied:** a server-owned frozen provider set plus the B22-A2 runtime-profile registry, resolved by id and digest. A differing body copy is refused 409 with a closed code. The registry holds no `validated` profile, so execute still ends 409/501.
+- **Stated choices:**
+  - The server holds the analytical reference provider only unreviewed.
+  - The binding lives inside the two evaluators, so every caller is bound.
+  - The binding module is pure. The registry is the caller's argument, read server-side by the execute and readiness routes; a caller without it refuses every environment.
+  - The browser-reachable CD-11 consumer therefore keeps every handoff blocked, which was already the outcome for every legitimate input.
+  - Readiness's other body-taken inputs are recorded, not bound.
+
+## OD-141 — computation evidence persistence, as applied (B22-C, 2026-10-02; review 2026-10-02)
+- **Default applied:**
+  - One silent aggregate `computation.evidence.v1`, scoped by tenant/project/branch.
+  - It holds validated typed summaries, the profile id and SHA-256 digest, input digests, the raw artifacts' SHA-256, and the labels `diagnostic_only` / `environment_dependent`.
+  - No outbox effect; CAS; idempotent; re-verified on load; raw files not stored.
+- **Stated deviation:** no route binds a repository in B22-C. Every completed run carries its document on its record (`not_recorded`).
+- **Stated choices:**
+  - A completion whose document the closed rules refuse fails the run itself (`EVIDENCE_DOCUMENT_REFUSED`), keeping its validated output, logs and manifest for inspection, never as a completion.
+  - With a store bound, the record stays non-terminal until the append settles.
+  - A cancel during the append leaves the run cancelled and the appended document in the aggregate.
+  - The unwired CD-10 tables are not reused; dropping them is a migration left to the owner.
+
+## OD-142 — what a server-run simulation binds its input to, as applied (B22-C, 2026-10-02; review 2026-10-02)
+- **Default applied:** the server's SHA-256 of the submitted, validated snapshot plus the server-derived scope, `{ scope, project, runPlanId, parts }`, after the run-plan screens. Labelled "bound to a submitted snapshot", never authority.
+- No durable `SchematicState` store; OD-69 not reversed.
+- The review added the scope, which the first delivery omitted.
+
+## OD-143 — digests and the non-finite encoding, as applied (B22-C, 2026-10-02; review 2026-10-02)
+- **Default applied:**
+  - CD-10's FNV digests stay identity keys.
+  - Evidence carries `durableWorkflowDigest` (SHA-256) over an explicit encoding: finite, nan, positive_infinity, negative_infinity and absent are closed states.
+- **Stated choices for the output validator:**
+  - A non-finite value is refused, never encoded into a waveform.
+  - A raw without `No. Points:` is read only when complete.
+  - A time or frequency axis must strictly increase; a DC sweep's swept value is a signal on an index axis.
+  - A unit comes from the vector name or from ngspice's closed type list (INFERRED from its source). The six types ngspice declares without a unit keep `""`; any other type is refused.
+  - An empty output is `OUTPUT_EMPTY`.
+  - The parse path builds no CD-10 artifact.
+  - Empty scalar names are valid evidence.
+- **[B22-D, 2026-10-02; review 2026-10-02] Extended as applied: one validator for every raw reader.**
+  - The circuit-analysis strict reader is `validateNgspiceAsciiOutput` under its own bounds (64 variables, 100,000 points; pinned at their edges by `b22-d-adversarial` case 8).
+  - A repeated `Flags:`, `No. Variables:` or `No. Points:` header is refused `OUTPUT_HEADER_INVALID`; neither copy wins.
+  - A complex value whose magnitude overflows, though both parts are finite, is `OUTPUT_NON_FINITE`.
+  - The MSVC indeterminate (`#IND`) is a NaN: `OUTPUT_NON_FINITE`. It was `OUTPUT_MALFORMED` before the review; the file was refused whole either way.
+  - `/api/simulate` derives a complex magnitude with the worker's formula (`Math.hypot`, floored at 1e-30).
+
+## OD-144 — legacy wording, the UI half, as applied (B22-C, 2026-10-02)
+- **Default applied:**
+  - One fixed disclosure sentence in the SPICE report (JSON and HTML, "diagnostic simulation report") and in the studio's "Diagnostic regression" panel.
+  - `/api/spice/reports` stays public with "caller-supplied records, not verified by Sirkit".
+- The B16.0.24 dated notes and the `/api/simulate` header remain the closeout's.
+
+## OD-150 — SPICE AI approvals and evidence, the evidence half, as applied (B22-C, 2026-10-02)
+- **Applied as "labelled caller-supplied everywhere":** every evidence reference built from `body.runs` carries `provenance: "caller-supplied"`. This covers tool results, proposals, design-patch operations, `aiAuditLog` (whatever a browser proposal claims) and the studio.
+- Resolving references to server-held records waits for the aggregate's binding.
+- The approval half stays B22-A1's.
+
+## OD-137 — where the B22 security and correctness corrections land, as applied (SEC-1 and B22, recorded at the B22 closeout, 2026-10-02)
+
+- **Question:** where do the security and correctness corrections the B22 discovery found land (D22-3, D22-4, D22-5, D22-7, D22-8's output caps)?
+- **Applied, two ways:**
+  - The alternative for D22-3 and D22-5's ngspice half: SEC-1, a corrective security branch from main (runbook `:169`; `fix/spice-deck-injection`, PR #12, merged normally as `d0d2ec8` on 2026-10-01), landed before B22.
+  - The default for the rest, inside B22, each with a pre-edit counterexample at the existing seam: D22-4's remainder, kicad-cli's environment and D22-8's output caps in B22-A1; D22-7 in B22-C.
+- **Evidence:** `artifacts/ai-control-plane-b22/sec-1-spice-deck-injection.md`, `deck-and-secret-corrections.md` and `simulation-authority.md`; the discovery's section 6 row and section 9.4; `unknowns-and-owner-decisions.md`.
+- Recorded at the closeout as discovery section 9.4 asked ([B22 closeout (2/2), 2026-10-02]). Owner confirmation pending.

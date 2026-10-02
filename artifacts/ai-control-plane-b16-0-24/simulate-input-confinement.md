@@ -7,11 +7,11 @@ injection fails closed before spawning.
 
 | surface | how it stays server-owned |
 |---|---|
-| executable | `NGSPICE_EXECUTABLE` module constant |
-| arguments | fixed `["-b", netlistPath]` |
+| executable | `NGSPICE_EXECUTABLE` module constant [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): the install the server settings pin, digest-checked before every run (B22-A3)] |
+| arguments | fixed `["-b", netlistPath]` [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): the profile's -b -n deck.cir (B22-A3)] |
 | shell | `shell: false` (explicit) |
-| working directory | per-request `mkdtemp` isolated dir |
-| environment | `safeEnvironment()` allowlist |
+| working directory | per-request `mkdtemp` isolated dir [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): the diagnostic runner's per-run directory, with no isolation boundary (B22-A3)] |
+| environment | `safeEnvironment()` allowlist [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): the profile's exact map (B22-A3; Node's eight win32 additions recorded, OD-156)] |
 | output paths | server-owned `netlist.cir` / `result.raw` (relative) |
 | include/library paths | screened + never emitted by the serializer |
 | SPICE control directives | input control-char guard + output screen |
@@ -19,7 +19,7 @@ injection fails closed before spawning.
 | network endpoints | no network directive reachable |
 
 Gate: the spawn args never reference `body`; the executable/timeout/output
-constants are module-level, not body-derived.
+constants are module-level, not body-derived. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): the route spawns nothing; the executable, argument vector, directory and environment are the diagnostic runner's from the pinned profile (B22-A3); the timeout and raw bound stay route constants]
 
 ## Injection defenses (two layers, before spawn)
 

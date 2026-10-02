@@ -27,6 +27,6 @@
   `resolve(join(tmpdir(),"sirkit-spice")) + sep` before `readFile`; anything
   outside the server-owned artifact root is skipped. `run.artifactId` is
   server-assigned, never caller-supplied. The zip member names are fixed
-  literals (no caller-controlled filenames). **CONFIRMED**.
+  literals (no caller-controlled filenames). **CONFIRMED**. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): the bundle reads no file: the raw file is kept only as rawOutput's digest, and artifactId is opaque (B22-A3)]
 - Attachment named by the run id (`sirkit-spice-<runId>.zip`), `application/
   zip`, non-zero content-length. Pinned. **CONFIRMED**.

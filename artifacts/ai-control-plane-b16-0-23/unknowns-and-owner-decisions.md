@@ -32,7 +32,7 @@
   surface; consolidating it onto the worker's env allowlist would change the
   unavailable-runtime message and timeout/output caps and is therefore OUT OF
   SCOPE for a pure wrapper migration. Recorded for an owner decision.
-  **INFERRED / owner-visible.**
+  **INFERRED / owner-visible.** [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): no ngspice child inherits the server environment - every one gets the diagnostic runner's exact map (SEC-1, B22-A3; Node's eight win32 additions recorded, OD-156)]
 - **`assertSafeDirective` does not blocklist `.include`/`.lib` names** — the
   compile route emits such directives into netlist TEXT it never executes; the
   execution path's separate `assertModelSafeForExecution` refuses absolute

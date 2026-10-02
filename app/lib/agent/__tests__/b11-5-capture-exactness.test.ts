@@ -425,6 +425,33 @@ describe("B11.5 §D — every B11.4 closure is preserved", () => {
         && !source.split("\n").some((line) =>
           /(?:writeFileSync|mkdirSync|rmSync|appendFileSync|unlinkSync|cpSync|rmdirSync|createWriteStream|symlinkSync)\s*\(/.test(line)
           && !/\b(?:root|symbols)\b/.test(line)),
+      // [B22 lead, 2026-10-02] B22-A1 writes a stand-in JAR and reader files EXCLUSIVELY under its OS temp scratch root
+      // `mkdtempSync(join(tmpdir(), "sirkit-b22a1-tools-"))` (`WORK`, `JAR` and `path` inside it), and its faked FreeRouting writes the
+      // session file at the output path the runner passes (`args[out + 1]`, inside the runner's OS temp directory); EVERY write-primitive
+      // line must be rooted at one of them, or the admission lapses. (Found by the lead: B22-A1 added these writes and its gates did not
+      // run this suite.)
+      "b22-a1-tool-output-bounds.test.ts": (source) =>
+        source.includes('mkdtempSync(join(tmpdir(), "sirkit-b22a1-tools-"))')
+        && !source.split("\n").some((line) =>
+          /(?:writeFileSync|mkdirSync|rmSync|appendFileSync|unlinkSync|cpSync|rmdirSync|createWriteStream|symlinkSync)\s*\(/.test(line)
+          && !/\b(?:WORK|JAR|path)\b|args\[out \+ 1\]/.test(line)),
+      // [B22 lead, 2026-10-02] B22-A2 builds install-tree fixtures EXCLUSIVELY under OS temp scratch roots
+      // `mkdtempSync(join(tmpdir(), "sirkit-b22-a2-tree-"))` (`root`, `full` and `first` inside one, removed through `temporaryRoots`);
+      // EVERY write-primitive line must be rooted at one of them, or the admission lapses.
+      "b22-a2-runtime-profile.test.ts": (source) =>
+        source.includes('mkdtempSync(join(tmpdir(), "sirkit-b22-a2-tree-"))')
+        && !source.split("\n").some((line) =>
+          /(?:writeFileSync|mkdirSync|rmSync|appendFileSync|unlinkSync|cpSync|rmdirSync|createWriteStream|symlinkSync)\s*\(/.test(line)
+          && !/\b(?:root|full|first)\b/.test(line)),
+      // [B22-D, 2026-10-02] the OPT-IN live adversarial suite (skipped unless SIRKIT_B22_LIVE_RUNNER=1) writes EXCLUSIVELY under its OS
+      // temp scratch root `mkdtempSync(join(tmpdir(), "sirkit-b22-d-live-"))` (`scratch`) and plants one hardlink inside the diagnostic
+      // runner's own run directory (`runDir`, under the OS temp directory); EVERY write-primitive line - the link included - must be
+      // rooted at one of them, or the admission lapses.
+      "b22-d-adversarial-live.test.ts": (source) =>
+        source.includes('mkdtempSync(join(tmpdir(), "sirkit-b22-d-live-"))')
+        && !source.split("\n").some((line) =>
+          /(?:writeFileSync|mkdirSync|rmSync|appendFileSync|unlinkSync|cpSync|rmdirSync|createWriteStream|symlinkSync|linkSync)\s*\(/.test(line)
+          && !/\b(?:scratch|runDir)\b/.test(line)),
     };
 
     const offenders: string[] = [];

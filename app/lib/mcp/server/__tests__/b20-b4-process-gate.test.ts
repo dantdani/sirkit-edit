@@ -11,7 +11,7 @@
  *    `_linkedBinding` / `dlopen` of anything; or compiles code from a string (`eval`, the `Function` constructor, also through
  *    `.call`, `.apply` or `.bind`); [B20 B4 lead] a name spelled with an escape (`\u`, `\x`) is read as the name, and a
  *    computed key that statically spells a loader name fails closed;
- * so none of the app's five process spawners is. [B20 B4 review] The third-party packages the closure imports are not walked:
+ * so none of the app's five process spawners is. [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): the gate's list is now three process spawners and two thread starters - the diagnostic runner, FreeRouting's and kicad-cli's runners, the engine host and its worker entry (B22-A3 OD-136, B22-B OD-140); none is reached] [B20 B4 review] The third-party packages the closure imports are not walked:
  * their exact specifiers are pinned to a reviewed list (a new package, or a new subpath of a reviewed one, fails). Not
  * analysed: code inside those packages; a member name computed at run time; `binding`, `eval` or `Function` reached through
  * an alias of `process`, of a global object or of `Function`; and reflection (`Reflect`, property descriptors). J2 forbids
@@ -34,13 +34,13 @@ const ROUTES = [ENDPOINT, "app/api/mcp/token/route.ts", "app/.well-known/oauth-p
 /** The node built-ins that start a process or a thread, or ([B20 B4 review]) compile code from a string (`vm`), or ([B20 B4
  *  lead]) mint a loader that can load any of them (`module`: `createRequire`): a bare or `node:` specifier, or a subpath. */
 const PROCESS_MODULE = /^(?:node:)?(?:child_process|worker_threads|cluster|vm|module)(?:\/|$)/;
-/** The app's process spawners: the non-test files under app/ that name child_process and call spawn( on 4299067. */
+/** The app's process spawners: the non-test files under app/ that name child_process and call spawn( on 4299067. [B22-A3, 2026-10-01]
+ *  Reviewed move, once (OD-136): /api/simulate, the SPICE smoke test and the SPICE worker start no process any more - the ONE
+ *  ngspice spawner is the diagnostic runner (b22-a3-single-spawner pins it); FreeRouting's and kicad-cli's runners are unchanged. [B22-B, 2026-10-01] Reviewed move, once (OD-140): + the bounded engine host and its one worker entry, the only thread starters (worker_threads; b22-b-no-generic-exec pins them); case 2 keeps both out of the MCP closure. */
 const APP_SPAWNERS = [
-  "app/api/simulate/route.ts",
-  "app/api/spice/models/smoke-test/route.ts",
+  "app/lib/computation/diagnostic-runner.ts", "app/lib/computation/engine-host.ts", "app/lib/computation/engine-worker.mjs",
   "app/lib/pcb/autoroute/runner.ts",
   "app/lib/pcb/fab/kicad-cli-runner.ts",
-  "app/lib/spice/server/worker.ts",
 ];
 /**
  * [B20 B4 review] The exact bare specifiers of third-party packages the MCP routes import at run time, reviewed on 4299067:
@@ -206,15 +206,15 @@ function processReached(files: FileMap, entries: readonly string[]): string[] {
 }
 
 describe("[B20 B4] the MCP routes reach no process or thread module (F4)", () => {
-  it("1. the production tree's process and thread importers under app/ are exactly the five spawners (simulate, SPICE smoke test, autoroute runner, kicad-cli runner, SPICE worker); each names child_process", { timeout: 120_000 }, () => {
+  it("1. the production tree's process and thread importers under app/ are exactly the spawners (since B22-A3: the diagnostic runner, the one ngspice spawner; the autoroute runner; the kicad-cli runner; since B22-B: the bounded engine host and its worker entry); each names child_process, or worker_threads for the engine host's two", { timeout: 120_000 }, () => {
     const importers = processImporters(production);
     expect(importers.filter((path) => path.startsWith("app/"))).toEqual(APP_SPAWNERS);
-    for (const spawner of APP_SPAWNERS) expect(processModulesOf(spawner, production.get(spawner)!).some((specifier) => specifier.endsWith("child_process")), spawner).toBe(true);
+    for (const spawner of APP_SPAWNERS) expect(processModulesOf(spawner, production.get(spawner)!).some((specifier) => specifier.endsWith(/\/engine-(?:host|worker)\./.test(spawner) ? "worker_threads" : "child_process")), spawner).toBe(true); // [B22-B] the engine host's two name worker_threads
     // the scripts that spawn are importers too (never reachable from a route, and gated the same way)
     expect(importers.filter((path) => path.startsWith("scripts/")).length).toBeGreaterThan(0);
   });
 
-  it("2. the runtime closure of the three MCP routes holds the served-read pipeline and the token and metadata modules, and reaches no process or thread importer: none of the five spawners, no child_process, worker_threads, cluster or vm, no built-in loaded by name, no internal binding, no string-compiled code and no unreviewed package", { timeout: 120_000 }, () => {
+  it("2. the runtime closure of the three MCP routes holds the served-read pipeline and the token and metadata modules, and reaches no process or thread importer: none of the spawners, no child_process, worker_threads, cluster or vm, no built-in loaded by name, no internal binding, no string-compiled code and no unreviewed package", { timeout: 120_000 }, () => {
     for (const route of ROUTES) expect(production.has(route), route).toBe(true);
     const closure = importClosure(production, ROUTES);
     for (const member of ["app/lib/mcp/server/dispatch.ts", "app/lib/mcp/server/read-call.ts", "app/lib/mcp/server/token-issuance.ts", "app/lib/mcp/server/resource-metadata.ts", "app/lib/engineering/tool-invocation.ts", "app/lib/engineering/durable-read-bundle.ts", "app/lib/auth/route-handlers.ts"]) {

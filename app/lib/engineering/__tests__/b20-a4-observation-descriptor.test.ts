@@ -85,8 +85,8 @@ describe("[B20 A4] 6.5 the external tool read descriptor", () => {
 
   it("3. it is in the reviewed intentional list and the exposure report is clean", () => {
     expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toContain(MCP_OBSERVATION_TOOL_ID);
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(33);
-    expect(agentExposureReport(registry)).toMatchObject({ ok: true, missing: [], unexpected: [], classViolations: [], executionViolations: [], count: 33 });
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(36); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads
+    expect(agentExposureReport(registry)).toMatchObject({ ok: true, missing: [], unexpected: [], classViolations: [], executionViolations: [], count: 36 });
   });
 
   it("4. it matches no never-exposed pattern and no Tier 3 family", () => {

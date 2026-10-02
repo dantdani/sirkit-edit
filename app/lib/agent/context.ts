@@ -183,7 +183,7 @@ export interface AssembleAgentContextInput {
   externalAcquisitionAvailable?: boolean;
   /** [B20 A4] SERVER fact from the composition root: the external tool port (approved MCP servers) is bound to this run. Never a
    *  body field. It becomes the external-mcp-observation authority only alongside a verified canonical state. */
-  mcpObservationAvailable?: boolean;
+  mcpObservationAvailable?: boolean; /** [B22-B] SERVER fact from the composition root: the named computation port is bound to this run. Never a body field. */ computationAvailable?: boolean;
 }
 
 /** [B10] oversized selections are REJECTED (resource withheld), never
@@ -493,7 +493,7 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
   // [B19-E E6] the external read tools need the server's port AND a verified canonical state (reads never run board-less)
   const externalAcquisition = input.externalAcquisitionAvailable === true && canonicalState !== null;
   // [B20 A4] the external tool read needs the server's MCP port AND a verified canonical state; the fact is independent of E6's
-  const mcpObservation = input.mcpObservationAvailable === true && canonicalState !== null;
+  const mcpObservation = input.mcpObservationAvailable === true && canonicalState !== null; const computation = input.computationAvailable === true; // [B22-B] the named computations need only the server's port (an equation needs no board; a parse refuses an absent board itself)
   const discovery: DiscoveryContext = {
     tenantId: input.tenantId,
     projectId: input.projectId,
@@ -521,7 +521,7 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
     // server-owned component-authority resource was loaded and verified.
     // [B19-E E6] external-observation is advertised ONLY with the server's port fact and a verified canonical state.
     // [B20 A4] external-mcp-observation likewise, ONLY with the server's MCP port fact and a verified canonical state.
-    availableAuthority: [...(componentAuthority ? ["local-working-copy", "durable-server-board"] : ["local-working-copy"]), ...(externalAcquisition ? ["external-observation"] : []), ...(mcpObservation ? ["external-mcp-observation"] : [])],
+    availableAuthority: [...(componentAuthority ? ["local-working-copy", "durable-server-board"] : ["local-working-copy"]), ...(externalAcquisition ? ["external-observation"] : []), ...(mcpObservation ? ["external-mcp-observation"] : []), ...(computation ? ["computation-engine"] : [])], // [B22-B] computation-engine ONLY with the server's computation fact
     providerCapabilities: {
       supportsJsonSchema: input.providerSupportsJsonSchema ?? true,
       toolNameMaxLength: 64,
@@ -561,7 +561,7 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
       pcbProposalBasis,
       executionGrantsAvailable: grantable,
       ...(externalAcquisition ? { externalAcquisitionAvailable: true } : {}),
-      ...(mcpObservation ? { mcpObservationAvailable: true } : {}), // [B20 A4]
+      ...(mcpObservation ? { mcpObservationAvailable: true } : {}), ...(computation ? { computationAvailable: true } : {}), // [B20 A4]; [B22-B] the computation fact
       view,
       viewDigest,
       autonomy,

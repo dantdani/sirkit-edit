@@ -90,6 +90,15 @@ function fsImpl(actual: Record<string, unknown>) {
     unlink: async (p: string) => { fsState.unlinks.push(String(p)); },
     mkdtemp: async (p: string) => `${p}fake`,
     rm: async () => {},
+    // [B22-D] reviewed harness move: the diagnostic runner lstats the raw file before its bounded read (a link, a hardlink or a
+    // device is refused unread; b22-d-adversarial case 3), so the raw artifact this seam serves is a plain file; any other path is real
+    lstat: async (p: string, ...rest: unknown[]) => {
+      if (/[\\/]result\.raw$/.test(String(p))) {
+        if (fsState.raw === null) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+        return { isSymbolicLink: () => false, isFile: () => true, isDirectory: () => false, nlink: 1, size: Buffer.byteLength(fsState.raw, "utf8") };
+      }
+      return (actual.lstat as (...values: unknown[]) => Promise<unknown>)(p, ...rest);
+    },
   };
 }
 vi.mock("node:fs/promises", async (orig) => fsImpl(await orig() as Record<string, unknown>));
@@ -113,6 +122,10 @@ import { POST as signinPost } from "../auth/signin/route";
 import { POST as signoutPost } from "../auth/signout/route";
 import { POST as chatPost, MAX_CHAT_REQUEST_BYTES } from "../chat/route";
 import { POST as simulatePost } from "../simulate/route";
+import { pinFakeNgspiceForSuite } from "@/app/lib/computation/__tests__/_pinned-ngspice";
+
+// [B22-A3] reviewed pin move: /api/simulate runs ngspice through the diagnostic runner, which refuses an unpinned install (OD-135)
+pinFakeNgspiceForSuite();
 
 const SIGNIN_ENV_KEYS = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY"] as const;
 async function payload(res: Response): Promise<Record<string, unknown>> { return (await res.json()) as Record<string, unknown>; }

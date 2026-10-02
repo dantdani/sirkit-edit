@@ -51,8 +51,8 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   // ([B19-E E4 review] gates-1: those tables are shared by every tenant; only the configured governance tenant AND project reach them)
   "/api/components/atomic/publication": { durable: "read-write", sensitivity: "project-durable" },
   "/api/assignment-queue": { durable: "read-write", sensitivity: "project-durable" },
-  "/api/pcb/release": { durable: "read-write", sensitivity: "project-durable", expensive: true, externalProcess: "kicad-cli (server-authoritative)" },
-  "/api/pcb/qualify": { durable: "read-write", sensitivity: "project-durable", expensive: true },
+  "/api/pcb/release": { durable: "read-write", sensitivity: "project-durable", expensive: true }, // [B22-A2] D22-18: was "kicad-cli (server-authoritative)"; the release gate writes Gerber/Excellon natively and its closure reaches no spawner (b22-a2-process-census)
+  "/api/pcb/qualify": { durable: "read-write", sensitivity: "project-durable", expensive: true, externalProcess: "freerouting (java)" }, // [B22-A2] D22-18: createAutonomousRouteExecutor runs FreeRouting except in fixture replay (fixture mode with SIRKIT_FIXTURE_ROUTER record or live starts it too)
   // ── SPICE runs (in-process durable job store, scope-bound) ──────────────────
   "/api/spice/runs": { durable: "read-write", sensitivity: "project-durable", externalProcess: "ngspice" },
   "/api/spice/runs/[id]": { durable: "read-write", sensitivity: "project-durable" },
@@ -75,7 +75,7 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   // The grant is not an engineering write: the commit stays in the browser's
   // canonical editor session, so the policy row stays authenticated-propose
   // (authoritativeWrite: false) — recorded as an owner decision in B18-B.
-  "/api/chat": { durable: "read-write", sensitivity: "session-identity" },
+  "/api/chat": { durable: "read-write", sensitivity: "session-identity", externalProcess: "freerouting (java)" }, // [B22-A2] D22-18: the composition root's routing executor (sirkit.routing.propose) runs FreeRouting
   // [B16.0.3 §C] the replacement REAUTHORIZATION exchange READS durable,
   // project-scoped component authority + published pin facts
   // (resolveComponentAuthoritySource / loadRunComponentAuthority /

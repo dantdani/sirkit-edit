@@ -182,7 +182,7 @@ export function verifyAgentContextIntegrity(context: AgentRunContext): string[] 
   if (context.mcpObservationAvailable !== undefined && typeof context.mcpObservationAvailable !== "boolean") issues.push("the external tool fact is malformed");
   if (mcpAdvertised && !mcpFact) issues.push("the external-mcp-observation authority is advertised without the server's external tool fact");
   if (mcpFact && !mcpAdvertised) issues.push("the server's external tool fact is present but the external-mcp-observation authority is not advertised");
-  if ((mcpAdvertised || mcpFact) && context.canonicalState === null) issues.push("the external tool read is claimed without canonical state");
+  if ((mcpAdvertised || mcpFact) && context.canonicalState === null) issues.push("the external tool read is claimed without canonical state"); /* [B22-B] the computation-engine authority and the server's computation fact agree in BOTH directions (the fact needs no canonical state) */ const computationAdvertised = discovery.availableAuthority.includes("computation-engine"); const computationFact = context.computationAvailable === true; if (context.computationAvailable !== undefined && typeof context.computationAvailable !== "boolean") issues.push("the computation fact is malformed"); if (computationAdvertised && !computationFact) issues.push("the computation-engine authority is advertised without the server's computation fact"); if (computationFact && !computationAdvertised) issues.push("the server's computation fact is present but the computation-engine authority is not advertised");
   // [B18-A] the autonomy setting is server-owned and project-scoped: a setting
   // for another project (or a malformed one) fails every invocation closed.
   if (!context.autonomy || context.autonomy.schema !== "sirkit.agent-autonomy-setting.v1" || context.autonomy.tenantId !== context.tenantId || context.autonomy.projectId !== context.projectId) {
@@ -486,7 +486,7 @@ export interface AgentGatewayOptions {
   /** [B20 A4] the server's external tool port (approved MCP servers), wired by the chat route through its one approved runtime
    *  boundary (app/api/chat/mcp-observation-runtime.ts). Absent: the external tool read refuses authority_unavailable. */
   mcpObservation?: McpObservationPort;
-  mcpObservationService?: McpObservationReadService;
+  mcpObservationService?: McpObservationReadService; /** [B22-B] the server's named computation port (the bounded engine host), wired by the chat route through its one approved runtime boundary (app/api/chat/computation-runtime.ts). Absent: every computation read refuses authority_unavailable. */ computation?: ComputationPort; computationService?: ComputationReadService;
 }
 
 export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGatewayOptions): AgentToolInvocationGateway {
@@ -494,7 +494,7 @@ export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGa
   const proposalService = options?.proposalService ?? new ProposalInvocationService(registry, options?.now, options?.replacementPinFacts);
   const layoutService = options?.layoutProposalService ?? new LayoutProposalService(registry, { now: options?.now, routingExecutor: options?.routingExecutor });
   const externalReadService = options?.externalReadService ?? new ExternalReadInvocationService(registry, { ...(options?.externalAcquisition ? { port: options.externalAcquisition } : {}), integrity: verifyAgentContextIntegrity });
-  const mcpObservationService = options?.mcpObservationService ?? new McpObservationReadService(registry, { ...(options?.mcpObservation ? { port: options.mcpObservation } : {}), integrity: verifyAgentContextIntegrity }); // [B20 A4]
+  const mcpObservationService = options?.mcpObservationService ?? new McpObservationReadService(registry, { ...(options?.mcpObservation ? { port: options.mcpObservation } : {}), integrity: verifyAgentContextIntegrity }); const computationService = options?.computationService ?? new ComputationReadService(registry, { ...(options?.computation ? { port: options.computation } : {}), integrity: verifyAgentContextIntegrity }); // [B20 A4]; [B22-B] the named computation reads
   return {
     async invoke(input): Promise<GatewayInvocationOutcome> {
       const descriptor = registry.get(input.toolId, input.version);
@@ -510,7 +510,7 @@ export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGa
       // its per-run operation budget, its disclosure decision and its closed projection live there.
       if (resolveMcpObservationBinding(descriptor).state === "resolved") {
         return mcpObservationService.invoke({ toolId: input.toolId, version: input.version, args: input.args, context: input.context, runId: input.runId, timeoutMs: input.timeoutMs, ...(input.signal ? { signal: input.signal } : {}) });
-      }
+      } if (descriptor.binding.status === "bound-computation") return computationService.invoke({ toolId: input.toolId, version: input.version, args: input.args, context: input.context, runId: input.runId, timeoutMs: input.timeoutMs, ...(input.signal ? { signal: input.signal } : {}) }); // [B22-B] a named computation read travels its own service BEFORE the B05 read service: its port (the bounded engine host), the catalog's closed input and the kind's typed output validator live there
       // [B19-E E6] a bound external read travels its own service BEFORE the B05 read service: it has no canonical-state read
       // binding, and its port, its per-run live budget and its closed projection live there.
       if (descriptor.binding.status === "bound-external-read") {
@@ -625,3 +625,7 @@ export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGa
     },
   };
 }
+
+// [B22-B] the named computation read service, on its own line at the END (imports are hoisted): no cited line of this file moves, and
+// a line-anchored import gate still sees the import where its line starts
+import { ComputationReadService, type ComputationPort } from "./computation-reads";

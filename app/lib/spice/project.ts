@@ -1,7 +1,7 @@
 import type { SchematicState } from "@/lib/schematic-types";
 import { createId, nowIso, stableHash } from "./identity";
 import {
-  SPICE_STUDIO_SCHEMA_VERSION,
+  SPICE_STUDIO_SCHEMA_VERSION, CALLER_SUPPLIED_EVIDENCE,
   type AiStudioOperation,
   type AiStudioProposal,
   type DesignRevision,
@@ -327,7 +327,7 @@ export function applyAiProposal(
         : "automatic",
     status: "applied",
     reason: proposal.rationale,
-    evidence: proposal.evidence,
+    evidence: proposal.evidence.map((ref) => ({ ...ref, provenance: CALLER_SUPPLIED_EVIDENCE })), // [B22-C] D22-21: a browser-held proposal's references are caller-supplied, whatever they claim
     changeSet: proposal.operations.filter((_, index) => approved.has(index)),
   });
   return next;

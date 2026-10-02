@@ -24,7 +24,7 @@ const workerState = vi.hoisted(() => ({
   honorAbort: true,
 }));
 vi.mock("@/app/lib/spice/server/worker", () => ({
-  NGSPICE_EXECUTABLE: "ngspice-stub",
+  NGSPICE_EXECUTABLE: "ngspice-stub", // [B22-A3] no longer read: the smoke test runs ngspice through the diagnostic runner
   executeRunPoint: async (input: { signal: AbortSignal }) => {
     return await new Promise<Record<string, unknown>>((resolve) => {
       workerState.resolvers.push(resolve);
@@ -69,6 +69,7 @@ import { importModelText } from "@/app/lib/spice/models";
 import { sha256 } from "@/app/lib/spice/server/manifest";
 import { dividerSchematic } from "@/app/lib/spice/__tests__/fixtures";
 import { LLMProviderError } from "@/app/lib/llm/errors";
+import { pinFakeNgspiceForSuite } from "@/app/lib/computation/__tests__/_pinned-ngspice";
 
 import { POST as aiPost } from "../spice/ai/route";
 import { POST as compilePost } from "../spice/compile/route";
@@ -133,6 +134,8 @@ afterEach(() => {
   workerState.honorAbort = true;
 });
 beforeEach(() => { __resetJobStoreForTests(); });
+// [B22-A3] reviewed pin move: the smoke test's ngspice runs through the diagnostic runner, which refuses an unpinned install (OD-135)
+const pinnedInstall = pinFakeNgspiceForSuite();
 
 // ── Exact policy rows ────────────────────────────────────────────────────────
 describe("B16.0.23 §A — exact policy rows for the thirteen methods", () => {
@@ -312,7 +315,7 @@ describe("B16.0.23 §D — model import and smoke testing", () => {
     const badExt = await importPost(post("/api/spice/models/import", JSON.stringify({ fileName: "evil.exe", content: "x" })));
     expect(badExt.status).toBe(422);
     expect(String((await payload(badExt)).error)).toContain("Unsupported model file extension");
-    const nul = await importPost(post("/api/spice/models/import", JSON.stringify({ fileName: "m.lib", content: "a b" })));
+    const nul = await importPost(post("/api/spice/models/import", JSON.stringify({ fileName: "m.lib", content: `a${String.fromCharCode(0)}b` }))); // [B22-A1] the same NUL, built at run time (the file held a raw NUL byte, which a staged file may not carry)
     expect(nul.status).toBe(422);
     const content = ".model DGOOD D(IS=1e-14)\n";
     const ok = await importPost(post("/api/spice/models/import", JSON.stringify({ fileName: "m.lib", content })));
@@ -336,8 +339,7 @@ describe("B16.0.23 §D — model import and smoke testing", () => {
   });
   it("smoke-test: unresolved include dependencies fail closed before any spawn", async () => {
     authed("editor");
-    const model = modelBody();
-    (model as { dependencies: unknown[] }).dependencies = [{ fileName: "ext.lib" }];
+    const model = modelBody(".model DTEST D(IS=1e-14)\n.include ext.lib\n"); // [B22-A1, 2026-10-01] reviewed pin move: the model screen recomputes the dependencies from the model text and never takes them from the client (D22-4), so the dependency is now an include in the text (was a client `dependencies` entry the text did not carry, which no longer refuses); the refusal, its message and the zero spawns are unchanged
     const res = await smokePost(post("/api/spice/models/smoke-test", JSON.stringify({ model })));
     expect(res.status).toBe(422);
     expect(String((await payload(res)).error)).toContain("unresolved include dependency");
@@ -354,9 +356,9 @@ describe("B16.0.23 §D — model import and smoke testing", () => {
     expect(body.check.status).toBe("pass");
     expect(body.model.validationStatus).toBe("smoke-tested"); // NEVER "trusted"/"curve-validated"
     expect(spawnState.calls.length).toBe(1);
-    expect(spawnState.calls[0]!.cmd).toBe("ngspice-stub"); // server-owned executable
+    expect(spawnState.calls[0]!.cmd).toBe(pinnedInstall().executable); // server-owned executable - [B22-A3] reviewed pin move: the pinned install's (was the worker's NGSPICE_EXECUTABLE stub)
     expect(spawnState.calls[0]!.args[0]).toBe("-b"); // server-owned args; caller injects nothing
-    expect(spawnState.calls[0]!.args.length).toBe(2);
+    expect(spawnState.calls[0]!.args).toEqual(["-b", "-n", "deck.cir"]); // [B22-A3] reviewed pin move: the profile's argv, -n and the runner's deck name (was two elements: -b and the deck path)
   });
   it("smoke-test pass does NOT upgrade an already-governed status; failure returns the rich 422 evidence envelope", async () => {
     authed("editor");
@@ -625,7 +627,7 @@ describe("B16.0.23 §G — the AI studio provider boundary", () => {
     const res = await aiPost(post("/api/spice/ai", JSON.stringify({ instruction: "run it", project, testId: project.tests[0].id })));
     expect(res.status).toBe(200);
     const proposal = (await payload(res)).proposal as { operations: Array<{ approval: string; operation: { op: string } }> };
-    expect(proposal.operations).toEqual([{ approval: "automatic", operation: { op: "request-run", runPlanId: project.runPlans[0].id } }]);
+    expect(proposal.operations).toEqual([{ approval: "review", operation: { op: "request-run", runPlanId: project.runPlans[0].id } }]); // [B22-A1, 2026-10-01] reviewed pin move (OD-150): the run request is "review" - the studio never pre-selects it, a human selects it before Apply (was "automatic")
     expect(getRuns(SCOPE)).toEqual([]); // proposal-only: nothing was created or run
   });
 });

@@ -360,7 +360,7 @@ describe("truthful classification", () => {
         expect(resolveMcpObservationBinding(descriptor).state, descriptor.toolId).toBe("not_callable"); // [B20 A4]
         expect(resolveReadBinding(descriptor).state, descriptor.toolId).toBe("not_callable");
         expect(descriptor.requiredAuthority, descriptor.toolId).toEqual(["external-observation"]);
-      } else if (descriptor.operationClass === "read") {
+      } else if (descriptor.operationClass === "read" && descriptor.binding.status === "bound-computation") { expect(resolveComputationBinding(descriptor).state, descriptor.toolId).toBe("resolved"); expect(resolveReadBinding(descriptor).state, descriptor.toolId).toBe("not_callable"); expect(resolveExternalReadBinding(descriptor).state, descriptor.toolId).toBe("not_callable"); expect(resolveMcpObservationBinding(descriptor).state, descriptor.toolId).toBe("not_callable"); expect(descriptor.requiredAuthority, descriptor.toolId).toEqual(["computation-engine"]); } else if (descriptor.operationClass === "read") { // [B22-B, 2026-10-01] reviewed pin move (OD-139): a named computation read is backed by ITS OWN allowlist over the chat route's injected computation port (never a B05 binding; still a real binding), on this one line so no cited line moves
         // A registry declaration is NOT executable coverage: the read tool
         // must resolve against the B05 allowlist.
         const resolution = resolveReadBinding(descriptor);
@@ -488,3 +488,6 @@ describe("generated artifacts + B01 consistency", () => {
     expect(coverage.unreferencedMutationCapableCommands).toContain(unmigrated.id);
   });
 });
+
+// [B22-B] the computation read binding, on its own line at the END (imports are hoisted): no cited line of this suite moves
+import { resolveComputationBinding } from "../../agent/computation-reads";

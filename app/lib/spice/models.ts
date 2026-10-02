@@ -7,7 +7,7 @@ import type {
   SimulationAnalysis,
   SimulationPartSnapshot,
 } from "./types";
-
+import { emittedModelText, ngspiceCards, plainRelativeFileName, readsXspiceFileOutsideRunDirectory, SpiceDeckSafetyError } from "./netlist"; // [B22-A1] D22-4
 const ALLOWED_EXTENSIONS = new Set(["lib", "cir", "sp", "spice", "mod", "model", "va", "vams"]);
 
 export function isSupportedModelFile(fileName: string): boolean {
@@ -193,7 +193,7 @@ export function applyApprovedModelTransforms(model: ModelAsset): ModelAsset {
 }
 
 export function assertModelSafeForExecution(model: ModelAsset): void {
-  const content = model.transformedContent ?? model.originalContent;
+  const content = emittedModelText(model); // [B22-A1] D22-4: exactly the text the deck emits (netlist.ts), never `transformedContent ?? originalContent`
   const forbidden = [
     { pattern: /^\s*simulator\s+lang\s*=\s*spectre\b/im, label: "untransformed Spectre language blocks" },
     { pattern: /^\s*\.control\b/im, label: ".control blocks" },
@@ -203,9 +203,11 @@ export function assertModelSafeForExecution(model: ModelAsset): void {
     { pattern: /^\s*\.(?:include|inc)\s+["']?(?:[A-Za-z]:[\\/]|[/\\]{2}|\/)/im, label: "absolute include paths" },
   ];
   const hit = forbidden.find((entry) => entry.pattern.test(content));
-  if (hit) throw new Error(`${model.name} contains forbidden ${hit.label}`);
-  if (model.dependencies.length > 0) {
-    throw new Error(`${model.name} has ${model.dependencies.length} unresolved include dependency file(s); package them before execution`);
+  if (hit) throw hidesOriginal(model) ? new SpiceDeckSafetyError(`a blank transformedContent may not hide model text that carries forbidden ${hit.label}`) : new Error(`${model.name} contains forbidden ${hit.label}`); // [B22-A1 review] regressions-1: closed when a blank transformedContent hides the original (SEC-1's final screen refused that text, 422 before any job); the screen's own message otherwise, as before
+  assertModelFileReadsSafe(content); // [B22-A1] D22-4: the closed refusal of a file read outside the run directory
+  const dependencies = modelIncludeDependencies(content); // [B22-A1] D22-4: recomputed from the screened text, never the client's `model.dependencies`
+  if (dependencies.length > 0) {
+    throw new SpiceDeckSafetyError(`model text has ${dependencies.length} unresolved include dependency file(s); package them before execution`); // [B22-A1 review] regressions-1, coverage-3: closed - the deck would read the file, and SEC-1's final screen refused the include closed, 422 before any job
   }
 }
 
@@ -267,4 +269,53 @@ export function searchModels(
     .filter((entry) => tokens.length === 0 || entry.score >= 10)
     .sort((a, b) => b.score - a.score || a.model.name.localeCompare(b.model.name))
     .map((entry) => entry.model);
+}
+
+// ─── [B22-A1] model text that reads a file (closes the rest of D22-4) ─────────────────────────────────────────────────────
+
+/** [B22-A1] Model text's lines as the deck and ngspice may break them - LF, CRLF, a lone CR and a form feed (the final deck
+ *  screen reads a form feed as a line break too) - so no reading hides a directive. */
+const modelLines = (content: string): string[] => content.split(/\r\n|\r|\n|\f/);
+
+/** [B22-A1] An `.include`/`.inc` line: ngspice reads any line starting `.inc` as one (INFERRED from its front end; the final
+ *  deck screen reads it so too, netlist.ts assertDeckLineSafe). Its path is the next token, quotes removed. */
+const INCLUDE_LINE = /^\s*\.inc\S*(?:\s+(.*))?$/i;
+function includePath(rest: string | undefined): string {
+  const text = (rest ?? "").trim();
+  const quoted = /^(["'])(.*?)\1/.exec(text);
+  return quoted ? quoted[2]! : (text.split(/\s+/)[0] ?? "");
+}
+
+/** [B22-A1] The include dependencies of the screened text - never the client's `model.dependencies`. */
+function modelIncludeDependencies(content: string): string[] {
+  return modelLines(content).flatMap((line) => {
+    const include = INCLUDE_LINE.exec(line);
+    return include ? [includePath(include[1])] : [];
+  });
+}
+
+/**
+ * [B22-A1] D22-4: the model screen's closed refusal (it names the rule, never the text) of model text that reads a file outside
+ * the run's fresh directory - every `.lib` line (a library read with any path, and a one-token `.lib` line: fail-closed, since
+ * whether ngspice-46 reads its token as a file is UNKNOWN and no executed deck has accepted a `.lib` line since SEC-1), an
+ * `.include`/`.inc` whose path is not a plain relative file name, and - read over the cards as ngspice joins them, [B22-A1
+ * review] - an XSPICE file parameter whose value is not one or a code model that starts a program or loads a library; and text
+ * that opens with a `+` line, which the deck would join to the card the model before it ended with. An include is a dependency.
+ */
+function assertModelFileReadsSafe(content: string): void {
+  for (const line of modelLines(content)) {
+    if (/^\s*\.lib/i.test(line)) throw new SpiceDeckSafetyError("model text may not read a library (.lib)");
+    const include = INCLUDE_LINE.exec(line);
+    if (include && !plainRelativeFileName(includePath(include[1]))) throw new SpiceDeckSafetyError("model text may include only a plain relative file name inside the run directory");
+  }
+  if (ngspiceCards(content).some((card) => card.startsWith("+"))) throw new SpiceDeckSafetyError("model text may not open with a '+' continuation line: the deck would join it to the card before it"); // [B22-A1 review] coverage-2
+  if (readsXspiceFileOutsideRunDirectory(content)) { // [B22-A1 review] tests-1, coverage-1: over the cards as ngspice joins them, every code model enumerated (netlist.ts)
+    throw new SpiceDeckSafetyError("an XSPICE parameter in model text may name only a plain relative file inside the run directory, and no code model may start a program or load a library");
+  }
+}
+
+/** [B22-A1 review] regressions-1: a blank `transformedContent`, which the deck passes over to emit the original - where the
+ *  screen's reading before B22-A1 (`transformedContent ?? originalContent`) saw no text at all. */
+function hidesOriginal(model: ModelAsset): boolean {
+  return typeof model.transformedContent === "string" && model.transformedContent.trim() === "";
 }

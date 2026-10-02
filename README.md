@@ -60,7 +60,7 @@ then emits source-mapped ngspice input.
 - Governed model registry with dialect inspection, pin-map review, reversible
   transforms, assignment, and a real ngspice smoke test.
 - Isolated queued jobs with manifests, hashes, progress events, cancellation,
-  bounded logs/artifacts, waveform range queries, and reproducible ZIP bundles.
+  bounded logs/artifacts, waveform range queries, and reproducible ZIP bundles. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): runs are diagnostic local processes with no isolation boundary; a bundle carries the raw file's digest only, and results are environment_dependent]
 - Interactive signal browser with zoom/pan, A/B cursors, scalar measurements,
   diagnostics, run comparison, CSV/JSON export, and report generation.
 - Typed AI tools inspect evidence and propose reviewable project changes; they

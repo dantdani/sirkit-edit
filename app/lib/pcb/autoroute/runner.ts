@@ -1,6 +1,6 @@
 /**
  * Freerouting subprocess runner (PCB Stage 9). Mirrors the NGSpice pattern in
- * app/api/simulate/route.ts: write input to a temp file, spawn the JAR, capture
+ * app/api/simulate/route.ts: write input to a temp file, spawn the JAR, capture [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): /api/simulate starts no process since B22-A3; ngspice runs through the diagnostic runner, whose per-run directory, exact environment and tree kill this runner does not share]
  * stderr, race a kill-timer against `close`, read the output file, clean up in a
  * `finally`. Local CLI only: no Docker, hosted REST, or API key.
  *
@@ -10,10 +10,11 @@
  */
 
 import { spawn } from "child_process";
-import { writeFile, readFile, rm, access } from "fs/promises";
+import { writeFile, rm, access } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { randomUUID } from "crypto";
+import { createDiagnosticCollector, joinDiagnosticTexts, readBoundedFile } from "@/app/lib/computation/output-bounds";
 
 const SAFE_ENV_KEYS = [
   "PATH",
@@ -141,10 +142,11 @@ export async function runFreerouting(input: RunFreeroutingInput): Promise<RunFre
       | { kind: "cancelled"; stderr: string }
       | { kind: "spawn-error"; err: NodeJS.ErrnoException; stderr: string }
     >((resolve) => {
-      let stdout = "";
-      let stderr = "";
+      // [B22-A1] D22-8 (OD-148): each stream is kept to the one diagnostic bound, and the joined diagnostics to it too, stderr keeping its own share ([B22-A1 review] regressions-2)
+      const stdout = createDiagnosticCollector();
+      const stderr = createDiagnosticCollector();
       let settled = false;
-      const diagnostics = (): string => [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+      const diagnostics = (): string => joinDiagnosticTexts(stderr.text().trim(), stdout.text().trim());
       const done = (v: Parameters<typeof resolve>[0]): void => {
         if (settled) return;
         settled = true;
@@ -176,10 +178,10 @@ export async function runFreerouting(input: RunFreeroutingInput): Promise<RunFre
         done({ kind: "spawn-error", err, stderr: diagnostics() });
       });
       child.stdout?.on("data", (d: Buffer) => {
-        stdout += d.toString();
+        stdout.append(d.toString());
       });
       child.stderr?.on("data", (d: Buffer) => {
-        stderr += d.toString();
+        stderr.append(d.toString());
       });
       child.on("close", (code) => {
         clearTimeout(timer);
@@ -201,10 +203,20 @@ export async function runFreerouting(input: RunFreeroutingInput): Promise<RunFre
       return { ok: false, error: "exit-nonzero", stderr: outcome.stderr, elapsedMs: elapsed(), processStatus: "exit-nonzero", outputFileStatus: "not-checked", exitCode: outcome.code };
     }
 
-    let sesText: string;
-    try {
-      sesText = await readFile(outPath, "utf8");
-    } catch {
+    // [B22-A1] D22-8 (OD-148): the .ses is read through the bounded reader; one over the bound is refused unread
+    const read = await readBoundedFile(outPath);
+    if (!read.ok && read.reason === "over-limit") {
+      return {
+        ok: false,
+        error: "io",
+        stderr: "Freerouting's .ses output exceeded the bounded size limit; it was not read",
+        elapsedMs: elapsed(),
+        processStatus: "exit-success",
+        outputFileStatus: "not-checked",
+        exitCode: 0,
+      };
+    }
+    if (!read.ok) {
       return {
         ok: false,
         error: "io",
@@ -215,6 +227,7 @@ export async function runFreerouting(input: RunFreeroutingInput): Promise<RunFre
         exitCode: 0,
       };
     }
+    const sesText = read.bytes.toString("utf8");
     if (!sesText.trim()) {
       return {
         ok: false,

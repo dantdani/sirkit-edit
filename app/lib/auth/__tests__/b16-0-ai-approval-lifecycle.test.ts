@@ -1,7 +1,7 @@
 /**
  * B16.0 — AI/approval invariants and identity lifecycle.
  *
- * The trusted request identity now underpins the agent surface: exactly 12
+ * The trusted request identity now underpins the agent surface: exactly 12 [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): the intentional agent-exposed set - 12 when written, 36 since B22-B]
  * exposed tools, no manufacturing-release tool, the AI cannot claim to be a
  * human via headers or arguments, and identity change / logout / membership
  * revocation revalidate — a revoked member is refused, and the membership
@@ -21,7 +21,7 @@ afterEach(() => resetInjectedIdentity());
 // ─── Exposure invariants (items 31-32) ───────────────────────────────────────
 
 describe("B16.0 — AI exposure invariants are preserved", () => {
-  it("31: agent exposure remains exactly 12", () => {
+  it("31: agent exposure remains exactly the intentional agent-exposed set (12 when written; the set has since grown by reviewed moves, B22-B's three named computation reads among them, and the assertion counts the set itself)", () => { // [B22 closeout, 2026-10-02] retitled (D22-16): the derived count, 36 since B22-B (OD-139); assertions unchanged
     const exposed = sirkitToolRegistry().list().filter((d) => d.agentExposed);
     expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
   });

@@ -19,7 +19,7 @@ The current project cannot enter CD-10. CD-9 is not ready and is itself blocked 
 | `app/lib/spice/ir.ts` | Reconstructs nets from coordinates/labels, merges ground sites, and can install a generic diode model. | Quarantined from CD-10 authority. CD-10 consumes CD-8 semantic net/endpoint IDs only. |
 | `app/lib/spice/models.ts` | Allows inferred positional pin maps and stores raw mutable model text. | Replaced for CD-10 by content-addressed model identities and human-approved exact terminal certificates. |
 | `app/lib/spice/netlist.ts` | Emits provider text and model content without a simulator-neutral semantic audit boundary. | Diagnostic only. CD-10 lowers typed IR and records every component/net/include/reference mapping. |
-| `app/lib/spice/server/worker.ts` | Selects ngspice from mutable environment/PATH and lacks a validated OS/container sandbox and binary digest. | Diagnostic only. CD-10 execution fails closed until a pinned sandbox is independently validated. |
+| `app/lib/spice/server/worker.ts` | Selects ngspice from mutable environment/PATH and lacks a validated OS/container sandbox and binary digest. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): not PATH - the diagnostic runner's digest-pinned install (B22-A3); still no validated sandbox (LB-10)] | Diagnostic only. CD-10 execution fails closed until a pinned sandbox is independently validated. |
 | `app/lib/spice/measurements.ts` | Useful math, but fuzzy signal lookup, implicit windows, and limited numerical uncertainty can overstate evidence. | CD-10 uses exact semantic selectors, explicit windows, raw/lossless artifacts, declared uncertainty, and boundary indeterminacy. |
 | `app/lib/spice/persistence.ts` | Can truncate/replace older authoritative waveforms with metadata because of browser storage limits. | Not accepted by CD-10. Authoritative artifacts remain immutable; display derivations cannot be measured. |
 | `app/api/simulate/route.ts` | Logs netlists and treats successful process/data production as success without CD-10 coverage authority. | Legacy diagnostic endpoint only; not referenced by CD-10 readiness. |
@@ -99,7 +99,7 @@ Controls cover model substitution, filename/subcircuit-name identity confusion, 
 | Model/license/terminal/parameter state | Production registry absent; therefore model applicability, terminal/parameter certificates, and license eligibility are `not_evaluated`. |
 | Process/convergence/measurement/assertion | `not_run` / `not_run` / `not_evaluated` / `not_evaluated`. |
 | Waveform/log/numerical witness | None exists; absence is a blocking coverage fact, not a pass. |
-| Provider state | Local ngspice diagnostic only; mutable PATH/no validated sandbox or binary/image digest. |
+| Provider state | Local ngspice diagnostic only; mutable PATH/no validated sandbox or binary/image digest. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): not PATH - the digest-pinned install (B22-A3); still no validated sandbox or image digest (LB-10)] |
 | Root cause | Missing prerequisite and external/model/provider evidence; confidence 1.0. |
 | Owner and next action | CD-9 owner first: obtain current full-oracle `READY`. CD-10/external next: approve exact registries, validate sandbox/provider corpus and licenses, then run the full denominator and qualified review. |
 | Safe work retained | Contracts, gates, exact binding, IR/lowering, numerical/result separation, coverage/readiness, cache, persistence, APIs, UI, migration, corpus, and tests. |

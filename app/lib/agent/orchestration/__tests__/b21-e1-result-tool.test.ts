@@ -51,8 +51,8 @@ describe("[B21 E1] the strict result tool (OD-116)", () => {
     expect(REGISTRY.list().map((descriptor) => agentProviderName(descriptor.toolId))).not.toContain(SPECIALIST_RESULT_TOOL_NAME);
     expect(REGISTRY.list().map((descriptor) => descriptor.toolId)).not.toContain(SPECIALIST_RESULT_TOOL_ID);
     expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).not.toContain(SPECIALIST_RESULT_TOOL_ID);
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(33);
-    expect(REGISTRY.list()).toHaveLength(42);
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(36); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads
+    expect(REGISTRY.list()).toHaveLength(47); // [B22-B, 2026-10-01] pin move (OD-139): + the five named computation descriptors
     for (const role of SPECIALIST_ROLES.filter((entry) => entry !== "coordinator")) {
       const declaration = specialistResultToolDeclaration(role);
       expect(declaration).toMatchObject({ providerName: SPECIALIST_RESULT_TOOL_NAME, toolId: SPECIALIST_RESULT_TOOL_ID, version: "1.0.0" });

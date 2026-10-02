@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { stableStringify } from "../identity";
+import { emittedModelText } from "../netlist";
 import type { CanonicalSimulationIr, RunManifest, RunPlan, RunPoint, SimulationAnalysis, SimulationProject, SimulationTest } from "../types";
 
 export function sha256(value: string | Buffer): string {
@@ -15,6 +16,10 @@ export function createRunManifest(input: {
   ir: CanonicalSimulationIr;
   netlist: string;
   simulatorVersion: string;
+  /** [B22-A3] The diagnostic runner's provenance: its profile, the observed install digest and the result labels. */
+  runner?: RunManifest["simulator"]["runner"];
+  /** [B22-A3 review] regressions-3: the raw file's SHA-256 and size as the runner read it (the file itself is not kept). */
+  rawOutput?: RunManifest["rawOutput"];
 }): RunManifest {
   const design = input.project.designRevisions.find((candidate) => candidate.id === input.test.baseDesignRevisionId)
     ?? input.project.designRevisions.find((candidate) => candidate.id === input.project.activeDesignRevisionId);
@@ -27,7 +32,7 @@ export function createRunManifest(input: {
     testRevision: input.test.revision,
     runPlanId: input.runPlan.id,
     runPoint: input.runPoint,
-    modelChecksums: Object.fromEntries(input.ir.models.map((model) => [model.id, sha256(model.transformedContent ?? model.originalContent)])),
+    modelChecksums: Object.fromEntries(input.ir.models.map((model) => [model.id, sha256(emittedModelText(model))])), // [B22-C] the SHA-256 of the model text the deck carries (was `transformedContent ?? originalContent`, D22-4/D22-13)
     schematicHash: design.schematicHash,
     netlistChecksum: sha256(input.netlist),
     analysis: input.analysis,
@@ -37,7 +42,8 @@ export function createRunManifest(input: {
   return {
     id: `manifest_${sha256(stableStringify(body)).slice(0, 24)}`,
     ...body,
-    simulator: { name: "ngspice", version: input.simulatorVersion, mode: "subprocess" },
+    simulator: { name: "ngspice", version: input.simulatorVersion, mode: "subprocess", ...(input.runner ? { runner: input.runner } : {}) },
+    ...(input.rawOutput ? { rawOutput: input.rawOutput } : {}),
     createdAt: new Date().toISOString(),
   };
 }

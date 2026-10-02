@@ -2,7 +2,7 @@
 
 `POST /api/simulate` → `authenticatedJsonRoute({ maxBytes: 8_000_000,
 deadlineMs: 30_000, exposeAbortSignal: true })`, hardened into a confined
-ngspice sandbox.
+ngspice sandbox. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): never a sandbox or a confined process. Since B22-A3 the route starts no process, and the diagnostic runner it calls is diagnostic only, with no isolation boundary and no OS limit; production simulation authority stays BLOCKED (LB-10)]
 
 - **Zero process work before authorization + validation**: the wrapper runs
   identity + membership + role + CSRF and the bounded 8 MB / 30 s object read
@@ -27,7 +27,7 @@ ngspice sandbox.
   LD_LIBRARY_PATH + NODE_ENV), never the full inherited server env.
   **CONFIRMED**.
 - **No network**: the deck carries no network directive (screened), and the
-  runner performs no network I/O. **CONFIRMED**.
+  runner performs no network I/O. **CONFIRMED**. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): prevention only - no OS denies the local ngspice process the network (the profile's network limit is enforced by none); only the unqualified OCI design would (LB-10)]
 - **Strict timeout**: a server `PROCESS_TIMEOUT_MS` (10 s) kills the child →
   504. **CONFIRMED**.
 - **Bounded stdout/stderr**: accumulation is `slice(-MAX_OUTPUT_BYTES)`
@@ -55,3 +55,17 @@ bound that did not hold: the full file was buffered before truncation.
 Corrected in B16.0.24.1 to a truly bounded handle/chunked reader with an
 explicit over-limit refusal — see
 `artifacts/ai-control-plane-b16-0-24-1/bounded-file-read-proof.md`.
+
+## [SUPERSEDED IN PART - B22-A3, 2026-10-01]
+
+`/api/simulate` starts no process any more: ngspice runs only through the diagnostic runner
+(`app/lib/computation/diagnostic-runner.ts`, OD-136), so the bullets above that name the route's own process are history.
+The executable is the install pinned by `SIRKIT_NGSPICE_INSTALL_ROOT` and `SIRKIT_NGSPICE_INSTALL_SHA256` (never
+`NGSPICE_EXECUTABLE`, `NGSPICE_BIN` or PATH; refused unless its install-tree digest matches); the argument vector is the
+profile's `-b -n deck.cir` in a per-run `mkdtemp` directory under `<os temp>/sirkit-ngspice-runs` (not `["-b", netlistPath]`
+under `sirkit-simulate-`); the environment passed is exactly `LC_ALL=C`, `TZ=UTC`, the install's `bin` as PATH, `SystemRoot`,
+`TEMP`/`TMP` (not `safeEnvironment()`; no HOME or USERPROFILE in it, while on win32 Node adds eight host variables, recorded
+per run); an abort or the wall clock ends the tree with `taskkill /PID <pid> /T /F` (not `child.kill()`), terminal only after
+the close or as `kill_unconfirmed`; an executable that cannot start is 500 "ngspice could not be started from the pinned
+install" (not "not found on PATH"), and a refusal before any process is 503. The runner is diagnostic only and no isolation
+boundary: `artifacts/ai-control-plane-b22/diagnostic-runner.md`.

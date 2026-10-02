@@ -4,7 +4,7 @@
 
 | bound | value | where |
 |---|---|---|
-| stdout/stderr accumulation | 1 MB (`slice(-MAX_OUTPUT_BYTES)`) | `runNgspice` |
+| stdout/stderr accumulation | 1 MB (`slice(-MAX_OUTPUT_BYTES)`) | `runNgspice` [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): the diagnostic runner's channels, 64 KiB each (B22-A1, B22-A3)] |
 | raw-file read | 20 MB (`slice(0, MAX_RAW_BYTES)`) | after read |
 | parsed numeric tokens | 5,000,000 | `parseAsciiRaw` |
 | parsed points | 2,000,000 | `parseAsciiRaw` |
@@ -19,7 +19,7 @@ no longer echoed in error bodies.
 ## Deterministic cleanup — every path
 
 `finally { if (directory) await rm(directory, { recursive: true, force: true })
-}` runs on:
+}` runs on: [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): the cleanup is the diagnostic runner's finally over its per-run directory (B22-A3)]
 
 - success (result returned),
 - semantic-validation refusal (400) — returns before `directory` is created,
@@ -33,7 +33,7 @@ no longer echoed in error bodies.
 - client abort / disconnect (the runner is killed; the finally still runs).
 
 The per-request isolated directory guarantees no cross-run artifact leakage,
-and `force: true` swallows a missing directory. **CONFIRMED.**
+and `force: true` swallows a missing directory. **CONFIRMED.** [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): a per-run directory only, the diagnostic runner's, with no isolation boundary (B22-A3)]
 
 ---
 

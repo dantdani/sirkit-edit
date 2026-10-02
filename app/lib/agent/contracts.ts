@@ -149,7 +149,7 @@ export interface AgentRunContext {
   externalAcquisitionAvailable?: boolean;
   /** [B20 A4] SERVER fact: the chat route bound the external tool port (approved MCP servers) to this run AND a verified canonical
    *  state exists. Present (true) exactly when the discovery context advertises the external-mcp-observation authority. */
-  mcpObservationAvailable?: boolean;
+  mcpObservationAvailable?: boolean; /** [B22-B] SERVER fact: the chat route bound the named computation port (the bounded engine host) to this run; present (true) exactly when the discovery context advertises the computation-engine authority. */ computationAvailable?: boolean;
 }
 
 /** [B15.3] see `AgentRunContext.pcbProposalBasis`. */

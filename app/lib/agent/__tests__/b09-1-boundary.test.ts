@@ -251,7 +251,7 @@ describe("B09.1 §4 — fail-closed strict wire subset", () => {
     expect(() => toStrictSchema({ type: "object", properties: { x: { oneOf: [{ type: "string" }] } }, required: ["x"] })).toThrow(/STRICT_SCHEMA_UNSUPPORTED/);
   });
 
-  it("all eleven exposed schemas pass the wire subset with strict conversion (nullable optionals, additionalProperties:false, full required)", () => {
+  it("all exposed schemas of the intentional agent-exposed set (eleven when written; the set has since grown by reviewed moves, B22-B's three named computation reads among them, and the assertion counts the set itself) pass the wire subset with strict conversion (nullable optionals, additionalProperties:false, full required)", () => { // [B22 closeout, 2026-10-02] retitled (D22-16): the derived count, 36 since B22-B (OD-139); assertions unchanged
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
     expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B14: + replacement proposal; B15.3: + sirkit.pcb.propose-bounded-edit
     for (const descriptor of exposed) {
