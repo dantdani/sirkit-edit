@@ -1708,6 +1708,7 @@ Amendments to existing entries:
 - **Default applied:** no. Production simulation authority stays BLOCKED. `executeAuthoritativeSimulation` still throws `CD10_AUTHORITATIVE_RUNNER_BLOCKED_NO_VALIDATED_SANDBOX`, and the CD-10 execute route still answers 501 with its unchanged text, even for a request body that declares itself validated (D22-6 is latent behind the 501; B22-C closes it). No B22-A2 runtime profile is `validated` or authoritative-eligible. The `ngspice-oci` profile is defined and tested offline only: the discovery's flag vector, `unvalidated`, no evidence, its docker argv read by a closed grammar that ties each designed `os` claim to its flag, and the host's docker CLI bound by `hostClient` (unpinned). B22 delivers a diagnostic-only local runner (B22-A3) that is never called authoritative. No docker, podman, runsc or wsl command was run. The lead's 2026-10-01T09:20:48Z probe reached no Docker engine (CLI 29.3.1, context `desktop-linux`, npipe not found); WSL's `docker-desktop`, `kali-linux` and `Ubuntu` were all Stopped; no production host is named (B24-A decides).
 - **Evidence:** `artifacts/ai-control-plane-b22/isolation-verdict.md`; `b22-a2-blocked-runner` (6 cases); `b22-a2-runtime-profile` cases 8, 16 and 18.
 - **The owner may choose otherwise:** supply an OCI engine (a repaired Docker Desktop with a recorded backend, or a Linux host or CI runner) and approve the opt-in B22-A4 qualification there. Production stays BLOCKED even then until B24-A names the production host. Owner confirmation pending.
+- **[B22 closeout (2/2), 2026-10-02] Amended:** this entry's "the CD-10 execute route still answers 501 ... even for a request body that declares itself validated" is stale since B22-C (OD-138): the server resolves the provider and environment, so a self-declared validated body ends 409 with a closed code (`b22-a2-blocked-runner` case 4, moved by a reviewed pin move in B22-C; `b22-c-authority` case 2), an AI actor 403 and a malformed body 400. With the real authorization no request reaches the 501, whose text and source pins are unchanged (`b16-0-20-tranche-parity` still reaches it with the authorization mocked). Production simulation authority stays BLOCKED (LB-10).
 
 ## OD-135 — which ngspice build each profile pins, as applied (B22-A2, 2026-10-01)
 
@@ -1930,3 +1931,12 @@ Amendments to existing entries:
 - **Applied as "labelled caller-supplied everywhere":** every evidence reference built from `body.runs` carries `provenance: "caller-supplied"`. This covers tool results, proposals, design-patch operations, `aiAuditLog` (whatever a browser proposal claims) and the studio.
 - Resolving references to server-held records waits for the aggregate's binding.
 - The approval half stays B22-A1's.
+
+## OD-137 — where the B22 security and correctness corrections land, as applied (SEC-1 and B22, recorded at the B22 closeout, 2026-10-02)
+
+- **Question:** where do the security and correctness corrections the B22 discovery found land (D22-3, D22-4, D22-5, D22-7, D22-8's output caps)?
+- **Applied, two ways:**
+  - The alternative for D22-3 and D22-5's ngspice half: SEC-1, a corrective security branch from main (runbook `:169`; `fix/spice-deck-injection`, PR #12, merged normally as `d0d2ec8` on 2026-10-01), landed before B22.
+  - The default for the rest, inside B22, each with a pre-edit counterexample at the existing seam: D22-4's remainder, kicad-cli's environment and D22-8's output caps in B22-A1; D22-7 in B22-C.
+- **Evidence:** `artifacts/ai-control-plane-b22/sec-1-spice-deck-injection.md`, `deck-and-secret-corrections.md` and `simulation-authority.md`; the discovery's section 6 row and section 9.4; `unknowns-and-owner-decisions.md`.
+- Recorded at the closeout as discovery section 9.4 asked ([B22 closeout (2/2), 2026-10-02]). Owner confirmation pending.
