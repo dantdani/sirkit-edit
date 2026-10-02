@@ -4356,3 +4356,47 @@ Pages: `artifacts/ai-control-plane-b22/diagnostic-runner.md`.
 - Records: `artifacts/ai-control-plane-b23/{discovery.md, README.md}`; `PROGRAM_STATE.json` -> B23 (base `43cb1b0`, last green `849a933`);
   draft PR after this commit, so that every increment gets CI. Gates for this commit: documents only. The three page-scanning tripwires
   pass with the discovery page in place.
+
+### B23-A1 - the provider registry with reviewed descriptors (2026-10-02 local; increment workflow + lead; this commit)
+
+Test-first on `chapter/b23-external-manufacturing` from `3806cba`. The two suites under `app/lib/manufacturing-providers/__tests__/` failed to load on the unmodified tree. With `b23-` in `CHAPTERS` and no workflow filter, the CI guard failed 1 of 13. Both then went green at 55 tests.
+
+What landed:
+- A sibling registry (OD-161), 1.0.0, with nine deep-frozen rows carrying the twelve runbook fields.
+- Per-operation tier, channel and state (D23-2), with ordering present-but-disabled in nine operations.
+- 22 validator rules.
+- A byte-gated CSV, `artifacts/ai-control-plane-b23/provider-registry.csv`.
+- Admission per provider and operation, with the off-only switch `SIRKIT_MANUFACTURING_DISABLED_PROVIDERS`. Every transfer and order refuses `provider_not_admitted`.
+- The CD-12 projection.
+- `jlcpcb-2l` mapped (D23-18).
+- CI admission of `b23-` in place (OD-180). The B21 evaluation-matrix C49/C93/C94 and B22 C77 pins were moved in place with dated notes.
+
+Every provider fact is RECORDED from discovery section 1.2 and was not re-read (OD-181).
+
+An adversarial review then CONFIRMED 8 findings, each reproduced first: 9 red of 104 on the unfixed source, plus seven deliberate breakages of the fixed source, each caught and restored by hash. The fixes:
+- The validator holds path endpoints to B19's no-query/no-credentials rule.
+- The CSV renders each operation's endpoint, auth and source (33 columns), and the generator header states what it does not render.
+- Admission refuses a row the validator refuses, never admits an API operation as a hand-off, and delegates only a B19 read.
+- The tests were strengthened: one crafted revision per guarded branch (80), auth and endpoint pins, a CD-12 projection pinned whole, stricter documentation provenance, and a walk that cannot swallow a read error.
+
+104 green. The live blockers LB-11 and LB-12 were added, and LB-5, LB-11 and LB-12 were mirrored into `liveBlockers` (OD-179). No route, tool, UI, egress or fetch; route census 165 / 162 / 3 / 0; the agent-tool counts are unchanged. Lead gates on the final tree are in the commit message.
+- Lead close (2026-10-02):
+  - (1) The check (8 of 8 fixes revert-sensitive) found three new low issues, each fixed test-first by the lead:
+    - admission's structural layer was unreachable after validation, so no test pinned it: it is now `structuralDelegation`, which
+      admission case 11 calls directly (red: no such export; green; reverting either condition fails it);
+    - registry case 5's sibling rule let a quoted word name a page (`https://oshpark.com/developer/checkout` and
+      `https://api-partner.pcbway.com/Help/Api/PCBWayWebPay` were accepted, red): a bare segment now counts only in its sibling's
+      naming family, and the 31 recorded URLs still pass;
+    - the generator header, the column comment and the page listed the API access's reason and the reading's `where` as covered by the
+      byte gate, but neither is rendered: corrected.
+    105 tests green.
+  - (2) `b20-b4-process-gate` exited 1 from vitest's onTaskUpdate RPC timeout even run alone (64 s; every assertion green; the same
+    in the B22 lead's log). Its synchronous cases held the worker past 60 s. Committed separately as `4a988c8`: case 3 yields between
+    probes on the same lines, the gate alone passes 5 of 5 with exit 0, and the four suites that read the file pass.
+    The same timeout then hit `b14-4-ast-import-gates` in A1's lead chain (gate F2, 22 of 22, exit 1, 63.5 s; B22's chain had passed
+    it just under 60 s). Committed separately as `9cb675d`: cases 1 and 16 are async, yield between their whole-tree walks, and have
+    120 s timeouts, all on the same lines. The gate then passed alone (exit 0, twice) and beside B11.5 (40 of 40, exit 0); tsc and
+    eslint on both gate files were 0.
+  - (3) The drafted LB-12 row named the agent-tool counts as 42/33/9/24; it records 47/36/9/27.
+  - (4) Still open (recorded): a path a section-1.2 bullet names passes on any host that bullet names (INFERRED, low); admission
+    validates the row on every call (small cost, INFERRED); `b20-b4-process-gate` case 1 still runs about 34 s synchronously.

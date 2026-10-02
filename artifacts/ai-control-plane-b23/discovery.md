@@ -496,6 +496,7 @@ same keys in `jlcpcb-4l`, `pcbway-standard`, `oshpark-4l`), as four DRC capabili
 CD-12 `ProcurementProviderDescriptor` (`release-engineering/types.ts:35`) and `createProviderDescriptor` (`providers.ts:8`) have no
 caller at all, tests included (`git grep`; the only link is the re-export `app/lib/release-engineering/index.ts:11`); MacroFab and Eurocircuits are named nowhere (reader 7). Severity high. **CONFIRMED**. Closes: B23-A1
 (OD-161, OD-162). Sources: S1-G1, G7-1, S4-G3 (in part).
+- [B23-A1, 2026-10-02] Closed (OD-161, OD-162). app/lib/manufacturing-providers/provider-registry.ts (PROVIDER_REGISTRY_VERSION 1.0.0) holds a reviewed, deep-frozen, validated row for JLCPCB, PCBWay, OSH Park, MacroFab, Eurocircuits and the four B19 distributors (DigiKey, Mouser, Nexar via B19's octopart, LCSC). Every provider fact is RECORDED from section 1.2 (reader 7, 2026-10-01; not re-read in A1, OD-181). CD-12's ProcurementProviderDescriptor gains its first caller through the pure projection cd12-projection.ts, a test caller only; no production caller. CONFIRMED by b23-a-provider-registry (94 tests) and b23-a-provider-admission (11, the lead's case 11 included).
 
 **D23-2 - Neither descriptor shape can express the B23-A fields.** Requirement: B23-A `:958-967`. Finding: `SourceRegistryEntry`
 (`source-registry.ts:102-176`) has no capability-profile mapping; no field for how a provider retains or protects data Sirkit SENDS (its
@@ -508,6 +509,7 @@ method (PCBWay `api-key`, MacroFab `X-MacroFab-API-Key`; a header placement exis
 index lists order operations (section 1.2); the validator makes this structural (an operation host must be in `hosts`, `:625`, and a blocked source may declare no hosts, `:629`), and a disabled source can list operations only as a whole (Mouser `:297`, `:354`), so what cannot be recorded is a per-operation enable state, tier or kind (read, quote, order). The CD-12
 descriptor (`types.ts:35`) lacks the same fields apart from opaque `licenseRef` and `retentionPolicyRef` strings. Severity medium. **CONFIRMED**. Closes: B23-A1 (OD-161, OD-162). Sources: S1-G2, S1-G3
 (the descriptor half), S1-G4 (the descriptor half), S4-G3, G7-2, G7-4.
+- [B23-A1, 2026-10-02] Closed (OD-161, OD-162). Each row carries all twelve runbook :956-967 fields as closed, typed fields (UNKNOWN only as the literal with a reason; 82 records, all rendered). Each operation has its own tier (none < handoff < read_observation < dfm_quote_transfer < ordering), channel (api, deep_link, csv_export, manual_upload) and state (enabled, disabled, blocked), so ordering is recorded present-but-disabled (nine operations, LCSC's order API among them). The auth vocabulary adds a header API key, a query-parameter key, a session token, OAuth2 client credentials, 3-legged authorization-code OAuth and a signed partner request; it is pinned per operation (case 6) and rendered in the byte-gated CSV (operation_auth). Outbound retention/confidentiality, upload/quote limits, webhook, idempotency and order/cancellation policy are fields. CD-12's descriptor stays as it is, produced by projection (no third shape). CONFIRMED.
 
 **D23-3 - The single egress boundary cannot send an upload.** Requirement: B23-B step 4 `:978`; global `:155`. Finding:
 `OutboundRequest` is `{ url; method?: "GET" | "POST"; headers?; body?: string | URLSearchParams; signal? }` (`app/lib/net/outbound-fetch.ts:128-134`):
@@ -648,16 +650,19 @@ mapping `:961`; B23-B "Given a current deterministic release" `:973`. Finding: `
 (`rule-profile.ts:97`) and its evidence expires 2027-09-09 (`:45-48`; refused after, `release/route.ts:116-120`); the other presets feed
 the engineering export, autoroute (`app/api/pcb/autoroute/route.ts:130`), the PCB editor (`PcbEditor.tsx:1383`), agent context (`app/lib/agent/context.ts:604`), the AI snapshot (`app/lib/pcb/ai/snapshot.ts:176`) and the durable read bundle (`durable-read-bundle.ts:399`), but never the deterministic release (`release-gate.ts` imports neither `build-bundle` nor `kicad-cli-runner`), so never a B23 input. A recordable scope limit. Severity low. **CONFIRMED**. Closes: B23-A1
 (records the mapping; other providers `unmapped`). Sources: S2-G9, S1-G2 (in part).
+- [B23-A1, 2026-10-02] The mapping is closed. JLCPCB maps jlcpcb-2l (profile id, version 2, digest mfg-rule-41563ed452ed6c620965a29186a8139d67635ac7d36fee6730b1d75eba4ca9e2, evidence expiry 2027-09-09), a reviewed copy that case 11 recomputes with buildManufacturingRuleProfile. Every other row is unmapped with a reason, and only a manufacturer may map (rule capability). The scope limit itself (only jlcpcb-2l reaches a deterministic release) stands as recorded. CONFIRMED.
 
 **D23-19 - No live-blocker row covers live DFM/quote exchange or an ordering sandbox, and the state file omits LB-5.** Requirement:
 runbook `:99`, `:1070`, `:1119`. Finding: LB-1..LB-9 (`LIVE_BLOCKERS.md:7-15`); LB-5 covers physical work only (`:11`); `PROGRAM_STATE.json`
 `liveBlockers` omits LB-5 (`:12-17`). Severity low. **CONFIRMED**. Closes: B23-A1 (OD-179). Sources: S6-G9, S5 fact.
 - [B23 lead, 2026-10-02] Re-verification (section 9): Re-verified at `849a933`. B22-A2 (`c037627`, OD-147) added LB-10 (authoritative sandboxed simulation on a qualified OCI platform) at `LIVE_BLOCKERS.md:16`, so the register is now LB-1..LB-10 (`:7-16`). It also added a matching fifth `liveBlockers` entry at `PROGRAM_STATE.json:17` (array now `:12-18`). No row covers live DFM/quote exchange or an ordering sandbox. LB-5 (`:11`) is still physical-only and still absent from `liveBlockers`, as are LB-4, LB-6, LB-7 and LB-8. LB-11, LB-12 and OD-160..OD-189 remain unused.
+- [B23-A1, 2026-10-02] Code half closed (OD-179). Every dfm_quote_transfer operation's reason names LB-11 and every ordering operation's names LB-12 (case 7), and admission refuses both tiers. The register rows LB-11/LB-12 and the liveBlockers mirror (LB-5, LB-11, LB-12) are added by the lead in this commit, which closes D23-19.
 
 **D23-20 - CI admits no B23 suite.** Requirement: OD-59/OD-124 practice. Finding: `CHAPTERS = ["b19-", "b20-", "b21-"]`
 (`b19-e-ci-job-scope.test.ts:54`); B22 proposes `b22-` (OD-146); OD-124 says a later chapter extends it (`OWNER_DECISIONS.md:1134-1138`).
 Severity low. **CONFIRMED**. Closes: B23-A1 (OD-180). Sources: S6-G10.
 - [B23 lead, 2026-10-02] Re-verification (section 9): Re-verified at `849a933`. B22-A1 (`50fe156`; OD-146 as applied, `OWNER_DECISIONS.md:1673-1680`) extended `CHAPTERS` to `["b19-", "b20-", "b21-", "b22-"]` (`app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts:54`). It admitted `app/lib/computation/__tests__` to the prompt-to-gerber job (`.github/workflows/deterministic-manufacturing.yml:226`). `b23-` is still absent. The guard requires each listed chapter to have at least one suite (`:152`), so OD-180's admission must land in the same commit as the first `b23-` suite.
+- [B23-A1, 2026-10-02] Closed (OD-180). CHAPTERS was extended in place with "b23-" (app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts:54, with an [B23-A1] note on :53). One directory filter, app/lib/manufacturing-providers/__tests__, was admitted to the prompt-to-gerber job (deterministic-manufacturing.yml:227, after app/lib/computation/__tests__ at :226), in the same change as the first b23- suites. The guard runs 8 + 5 = 13 tests green. Pins moved in place with dated [B23-A1, 2026-10-02] notes: B21 evaluation-matrix C49 331->332, C93 334->335, C94 343->344; B22 deck-and-secret-corrections C77 (the full new CHAPTERS line); orchestration-contracts.md:351's count statement (8 + 5 = 13).
 
 **D23-21 - Four CD-12 throwing stubs are pinned by no test.** Requirement: pass `:1017`. Finding: `approveAsAgent`, `placePurchaseOrder`,
 `sendExternalReviewRequest` (`governance.ts:8-10`) and `writeManufacturingBytesFromLlm` (`agent-tools.ts:8`) throw; the only stub a test
@@ -1339,4 +1344,11 @@ Recorded limits (verifier problems that need no text change):
 
 ## 10. Amendments recorded by the increments
 
-(none yet)
+- [B23-A1, 2026-10-02] B23-A1 landed the sibling provider registry (nine rows, the twelve runbook fields, per-operation tier, channel and state;
+  `artifacts/ai-control-plane-b23/provider-registry.md`), admission (every transfer and order refuses `provider_not_admitted`),
+  the CD-12 projection, the byte-gated CSV and CI admission of `b23-` (D23-1, D23-2, D23-18's mapping, D23-19, D23-20 closed;
+  OD-161, OD-162, OD-179, OD-180 applied; OD-181 its choices). Every provider fact stays RECORDED from section 1.2 (2026-10-01) and
+  was not re-read (OD-181 (a)). LB-11 and LB-12 are in `LIVE_BLOCKERS.md`, and `liveBlockers` mirrors LB-5, LB-11 and LB-12.
+- [B23-A1 lead, 2026-10-02] Before A1's commit the lead also landed `4a988c8`: `b20-b4-process-gate` case 3 yields between probes. Run alone, the suite
+  exited 1 from vitest's onTaskUpdate RPC timeout (64 s, every assertion green); every B23 gate chain runs it. `9cb675d` does the
+  same for `b14-4-ast-import-gates` cases 1 and 16 (63.5 s, exit 1 in A1's chain).

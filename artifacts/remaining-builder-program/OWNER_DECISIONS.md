@@ -1940,3 +1940,75 @@ Amendments to existing entries:
   - The default for the rest, inside B22, each with a pre-edit counterexample at the existing seam: D22-4's remainder, kicad-cli's environment and D22-8's output caps in B22-A1; D22-7 in B22-C.
 - **Evidence:** `artifacts/ai-control-plane-b22/sec-1-spice-deck-injection.md`, `deck-and-secret-corrections.md` and `simulation-authority.md`; the discovery's section 6 row and section 9.4; `unknowns-and-owner-decisions.md`.
 - Recorded at the closeout as discovery section 9.4 asked ([B22 closeout (2/2), 2026-10-02]). Owner confirmation pending.
+
+## OD-161 — where manufacturer and quote providers live, as applied (B23-A1, 2026-10-02)
+
+- **Question:** extend B19's `SOURCE_REGISTRY` or a sibling registry, and what happens to CD-12's `ProcurementProviderDescriptor`?
+- **Default applied:** a sibling registry, `app/lib/manufacturing-providers/provider-registry.ts` (`PROVIDER_REGISTRY_VERSION` 1.0.0),
+  with kinds `manufacturer`, `assembler`, `quote_service` and `distributor`, copying B19's validator rules, among them B19's rule that an
+  operation URL carries no query or credentials (`source-registry.ts:626`), extended to path-form endpoints. The byte-gated CSV
+  (`artifacts/ai-control-plane-b23/provider-registry.csv`, 33 columns) renders every reviewed field, including each operation's endpoint,
+  auth and record source. Prose is not rendered and is reviewed in source, where the registry suite reads it. B19's registry and its two
+  suites are untouched except the `CHAPTERS` line (OD-180). Distributor rows reference their B19 entry by id, with no duplicated hosts or
+  secrets. CD-12's descriptor comes from a pure projection, `toProcurementProviderDescriptor`; there is no third shape.
+- **Evidence:** `provider-registry.md`; `b23-a-provider-registry` (94 tests).
+- Owner confirmation pending.
+
+## OD-162 — the initial provider rows and their tiers, as applied (B23-A1, 2026-10-02)
+
+- **Question:** which rows, and which tier for each operation?
+- **Default applied:**
+  - The tier vocabulary per operation is `none` < `handoff` < `read_observation` < `dfm_quote_transfer` < `ordering`, and `ordering`
+    is never above `disabled`.
+  - The nine rows are as drafted: JLCPCB, PCBWay, OSH Park, MacroFab, Eurocircuits, DigiKey, Mouser, Nexar and LCSC.
+  - Every transfer operation is blocked or disabled (LB-11), and the nine ordering operations are present but disabled (LB-12). OSH Park's
+    checkout is recorded as never called.
+  - Exception: the documentation was not re-read before commit; see OD-181 (a).
+- **Evidence:** `provider-registry.md` section 3; `provider-registry.csv`; `b23-a-provider-registry`, `b23-a-provider-admission`.
+- Owner confirmation pending.
+
+## OD-179 — live-blocker rows, as applied (B23-A1, 2026-10-02)
+
+- **Default applied:** LB-11 ("live DFM/quote exchange with a manufacturer or quote API") and LB-12 ("ordering through a provider
+  sandbox"), both BLOCKED-LIVE-QUALIFICATION, are in `LIVE_BLOCKERS.md`. Each transfer operation's reason names LB-11 and each ordering
+  operation's names LB-12. `PROGRAM_STATE.json` `liveBlockers` mirrors LB-5, LB-11 and LB-12; LB-4, LB-6, LB-7 and LB-8 stay unmirrored
+  (discovery 9.6).
+- Owner confirmation pending.
+
+## OD-180 — CI admission for B23 suites, as applied (B23-A1, 2026-10-02)
+
+- **Default applied:** `CHAPTERS` gains `"b23-"` in place (`app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts:54`). One
+  directory filter, `app/lib/manufacturing-providers/__tests__`, is admitted to the prompt-to-gerber job
+  (`deterministic-manufacturing.yml:227`) in the same commit as the first `b23-` suites. No live suite runs in CI; the opt-in
+  `SIRKIT_B23_LIVE_PROVIDER=1` stays local and owner-approved. Pins moved in place with dated notes: the B21 evaluation matrix C49, C93
+  and C94 (one line down); B22's C77 (the whole new `CHAPTERS` line); the B21 orchestration contracts' count statement (8 + 5 = 13).
+- Owner confirmation pending.
+
+## OD-181 — B23-A1: stated choices beyond its task text, as applied (B23-A1, 2026-10-02)
+
+- **Default applied:**
+  - (a) **The provider documentation was not re-read in A1**, a departure from OD-162's "re-read before commit". Every fact is the
+    discovery's section 1.2 summary of 2026-10-01 (reader 7, RECORDED), and each row records `reReadInA1: false`. No tier rises in B23,
+    so nothing relies on a fresher reading. A person re-reads a provider's own pages before any tier rises.
+  - (b) **The operator switch is `SIRKIT_MANUFACTURING_DISABLED_PROVIDERS`:** a comma list of provider ids or `provider:operation`
+    pairs, case- and space-tolerant, that can only disable. B19's `SIRKIT_ACQUISITION_DISABLED_SOURCES` still governs a delegated read.
+  - (c) **The closed vocabularies:**
+    - channels: `api`, `deep_link`, `csv_export`, `manual_upload`;
+    - API access: `enabled`, `disabled`, `blocked`, `none_found`;
+    - the seven auth schemes of `AUTH_SCHEMES`;
+    - operation sources: `discovery-1.2`, `repository`, `b19-registry`;
+    - a `neverCalled` mark per operation.
+  - (d) **CD-12 kind words:** an assembler projects to `manufacturer`, a quote service to `formal_quote`, a distributor to
+    `authorized_distributor`, and Nexar (B19's aggregated `octopart`) to `approved_aggregator`. These describe the kind only and carry no
+    authorization evidence.
+  - (e) **Row-level choices:**
+    - MacroFab's enabled tier is `none` (Sirkit has no MacroFab hand-off).
+    - OSH Park's unauthenticated import is recorded as a disabled `dfm_quote_transfer`, because it sends the design out.
+    - PCBWay's endpoint paths are INFERRED from the help pages' names.
+  - (f) **Admission:**
+    - It refuses `provider_not_admitted` for any row `validateProviderRegistry` refuses.
+    - It admits a hand-off only when the operation is one structurally: tier `handoff`, a non-`api` channel, auth `none`.
+    - It delegates only an `api` read at `read_observation` recorded from `b19-registry`.
+    - The structural layer is the exported `structuralDelegation`, pinned directly by admission case 11 ([B23-A1 lead, 2026-10-02]).
+  - (g) **Path endpoints** are held to path characters and `{template}` segments, and the validator's message never echoes the target.
+- Owner confirmation pending.

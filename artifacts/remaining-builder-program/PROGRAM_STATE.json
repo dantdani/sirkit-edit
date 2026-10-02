@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B23",
-  "currentCheckpoint": "B23 discovery committed on chapter/b23-external-manufacturing: D23-1..21 (re-verified on the B22-complete tree 849a933: 0 refuted, 9 items changed by B22, 90 corrections applied in place), OD-160..OD-180 drafted with safe defaults (OD-181..OD-189 reserved), LB-11/LB-12 proposed; plan A1, A2, B1, B2, B3, (B4 only with an owner account), C, D, closeout; expected verdict PARTIAL (no provider account: every live exchange BLOCKED-LIVE-QUALIFICATION; ordering visibly disabled; physical evidence defined, none exists)",
+  "currentCheckpoint": "B23-A1 committed on chapter/b23-external-manufacturing: the sibling provider registry (nine rows, the twelve runbook fields, per-operation tier/channel/state, ordering present-but-disabled), admission (every transfer and order refuses provider_not_admitted), the CD-12 projection, the byte-gated CSV, CI admission of b23-; LB-11/LB-12; D23-1, D23-2, D23-18 mapping, D23-19, D23-20 closed",
   "status": "in_progress",
   "baseSha": "43cb1b0",
   "branch": "chapter/b23-external-manufacturing",
-  "lastGreenSha": "849a933",
+  "lastGreenSha": "3806cba",
   "pullRequest": "draft PR (chapter/b23-external-manufacturing -> main) opened after the discovery commit; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
@@ -14,9 +14,12 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings",
     "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)",
-    "authoritative sandboxed simulation on a qualified OCI platform: BLOCKED-LIVE-QUALIFICATION (LB-10)"
+    "authoritative sandboxed simulation on a qualified OCI platform: BLOCKED-LIVE-QUALIFICATION (LB-10)",
+    "physical fabrication, assembly, incoming inspection and functional test: not attempted (LB-5)",
+    "live DFM/quote exchange with a manufacturer or quote API: BLOCKED-LIVE-QUALIFICATION (LB-11)",
+    "ordering through a provider sandbox: BLOCKED-LIVE-QUALIFICATION (LB-12)"
   ],
-  "nextAction": "B23-A1 on chapter/b23-external-manufacturing: the sibling provider registry with reviewed descriptors (D23-1, D23-2, D23-18 mapping), LB-11/LB-12 and the liveBlockers mirror (D23-19, OD-179), CI admission of b23- in place (D23-20, OD-180), test-first; then A2, B1, B2, B3, C, D, closeout. Carried to the owner: OD-160 (provider accounts), OD-159 (B22), the B22 pinning settings and the earlier items.",
-  "updatedAt": "2026-10-02T10:22:24-04:00",
+  "nextAction": "B23-A2 (Tier 3 and the route vocabulary: D23-8, D23-9, D23-12, D23-21; OD-173, OD-174), test-first; then B1, B2, B3, C, D, closeout. Carried to the owner: OD-160 (provider accounts), OD-181, the B22 items.",
+  "updatedAt": "2026-10-02T12:09:03-04:00",
   "previousChapter": "B22 merged normally into main as 43cb1b0 (PR #13, 2026-10-02) after green CI on 849a933; verdict PARTIAL (the production simulation runner BLOCKED under LB-10, OD-134)"
 }
