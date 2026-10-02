@@ -4274,3 +4274,85 @@ Pages: `artifacts/ai-control-plane-b22/diagnostic-runner.md`.
   the discovery's dated addenda to D22-2, D22-4, D22-6 and D22-12 and its section 10 block; OD-137's heading (as applied) and OD-134's
   dated amendment in `OWNER_DECISIONS.md`; LB-10's dated notes in its row. Not done: the optional OD-144 amendment and the optional
   owner-confirmation lines on the B22-C entries.
+
+### B22 — merged (2026-10-02 local; lead)
+
+- PR #13 (`chapter/b22-sandboxed-computation` -> `main`) merged normally as `43cb1b0` at 13:42 UTC after all four checks passed on
+  `849a933` (benchmark-core 3m48s, database-delivery 2m16s, prompt-to-gerber 13m16s, page-browser-e2e 19m50s with both Playwright
+  configs; benchmark-nightly skipped). No auto-merge, no force-push. Verdict PARTIAL (`artifacts/ai-control-plane-b22/final-verdict.md`):
+  the production simulation runner BLOCKED (LB-10, OD-134). The merge tree equals `849a933`.
+
+### B23 — chapter start and discovery (2026-10-01/10-02 local; read-only workflows + lead; this commit)
+
+- Branch `chapter/b23-external-manufacturing` from main `43cb1b0` (runbook `:28`: B22's closeout merged).
+- First commit `e8c7928` (a lead fix, test-only): `b22-closeout-statements` case 3 failed run alone at `43cb1b0` at vitest's 5 s default
+  (5,076 ms without any B23 page, 5,048 ms with the discovery page; CPU load 18%). Its whole-tree scans (cases 1, 2, 3, 6, 8, 9) now take
+  `{ timeout: 60_000 }` on the same lines, as `b20-b4-withhold-proposals` case 5 does. No assertion, title, allow-list or count changed,
+  and `it(` stays 9. The three page-scanning tripwires then passed 27 of 27.
+- Read-only discovery over the tree at `0432fb8` (main `d0d2ec8` plus the B22 discovery commit), run while B22-A1 ran:
+  - seven parallel readers: existing external integrations; the deterministic release B23 would send; outbound data and uploads;
+    procurement, ordering and spend; physical-hardware evidence and the assembled-product claim; prior records and pinning tests;
+    external manufacturer, DFM, quote and distributor APIs;
+  - 59 gap candidates; one synthesizer re-read every defect-bearing fact and merged them into D23-1..21;
+  - reader 7 read the provider documentation through WebFetch/WebSearch on 2026-10-01 (summaries, labelled RECORDED). No reader signed
+    up for, submitted to or scraped any provider, and nothing was sent anywhere.
+- Re-verification on the B22-complete tree `849a933` (`b23-discovery-verify`, eight read-only verifiers and a synthesizer, 2026-10-02):
+  - 36 items (D23-1..21 and sections 0-8); 0 refuted, 25 stand, 9 changed by B22, 1 partly closed by B22 (section 8: items 11 and 12
+    answered), 1 standing with moved citations (D23-19);
+  - 90 text corrections applied in place before the first commit, among them three statements already wrong at `0432fb8` (D23-5's
+    `retrievedAt`, section 2.1's CD-12 caller and live-route citation, D23-18's other preset consumers); dated notes on D23-8, D23-19 and
+    D23-20; section 9 lists every moved citation and what B22 changed that B23 inherits.
+  - Changes since the draft: the agent counts 47/36/9/27 (B22-B); the B21 withdrawal a three-name denylist (`computation-engine`); CI
+    chapters end with `b22-`; LB-10 taken.
+  - The first verification run (`wf_7e1312f7-e65`) was void: the lead's script passed each verifier an array instead of its prompt, and
+    three agents also failed with API errors. The lead fixed the script, added retries and re-ran it as `wf_d2009b1a-1d3`.
+- What exists:
+  - three coded read-only distributor or aggregator integrations: DigiKey and Nexar enabled, Mouser disabled; LCSC blocked;
+  - no manufacturer, assembler, DFM or quote API call, upload, webhook, quote, order or receipt anywhere;
+  - one egress boundary (`outboundFetch`) with no upload body;
+  - the deterministic release, reachable only through `POST /api/pcb/release` (the pinned 555 release
+    `mfg-release-45b3b7efbc85dc3a8ecd233c906384cd`);
+  - four fab presets with "upload this zip" hand-off notes;
+  - an unused CD-12 procurement descriptor and four unpinned throwing stubs;
+  - `manufacturing.assembled-release` kept missing.
+- Defects D23-1..21:
+  - D23-1, D23-2: no reviewed provider descriptor, and neither descriptor shape can express the B23-A fields;
+  - D23-3: the egress boundary cannot send an upload;
+  - D23-4: no outbound idempotency or ambiguous-outcome state;
+  - D23-5: no receipt, quote or staleness store;
+  - D23-6, D23-7: no exact outbound disclosure (the release manifest would leak internal ids) and no per-request approval of a named
+    provider and purpose;
+  - D23-8, D23-9: the Tier 3 floor and the route vocabulary see transfer or spend only by a word;
+  - D23-10, D23-11: ordering absent rather than visibly disabled, and no purchase-authorization contract;
+  - D23-12: the no-order tripwire matches names;
+  - D23-13..D23-15: no physical-evidence definition, latent claim paths, and an assembled-release block pinned only generically;
+  - D23-16: two documents imply a quote-tool acceptance;
+  - D23-17: the reload "current" flag compares by revision only;
+  - D23-18: only `jlcpcb-2l` produces a release;
+  - D23-19: no live-blocker rows;
+  - D23-20: CI admission;
+  - D23-21: unpinned CD-12 stubs.
+  - Severity: high 6, medium 6, low 9.
+- Owner decisions OD-160..OD-180 drafted with safe defaults (section 6):
+  - no provider account assumed (every live exchange BLOCKED-LIVE-QUALIFICATION, LB-11);
+  - a sibling provider registry;
+  - a derived outbound package with no internal ids;
+  - a human `project_admin` preview/commit approval naming provider and purpose;
+  - `UNKNOWN_PENDING_RECONCILIATION`, never retried;
+  - ordering visibly disabled behind seven owner prerequisites (LB-12), and the purchase-authorization contract tested offline only;
+  - physical evidence defined, none recorded (LB-5);
+  - OD-181..OD-189 reserved for the increments.
+  Expected verdict PARTIAL unless the owner supplies a provider account (B23-B4).
+- Plan (section 7):
+  - A1: the provider registry, LB-11/LB-12, CI admission;
+  - A2: the Tier 3 and route vocabulary;
+  - B1: revalidate, disclose, approve;
+  - B2: bounded transfer and receipts;
+  - B3: observations, staleness, no auto-accept;
+  - B4: only with an owner account;
+  - C: ordering visibly disabled with its full contract;
+  - D: physical evidence defined, never fabricated;
+  - the closeout.
+- Records: `artifacts/ai-control-plane-b23/{discovery.md, README.md}`; `PROGRAM_STATE.json` -> B23 (base `43cb1b0`, last green `849a933`);
+  draft PR after this commit, so that every increment gets CI. Gates for this commit: documents only. The three page-scanning tripwires
+  pass with the discovery page in place.
