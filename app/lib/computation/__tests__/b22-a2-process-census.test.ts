@@ -302,7 +302,7 @@ function csvExternalProcess(): Map<string, Set<string>> {
 const CENSUS = census(production, routeEntries);
 
 describe("[B22-A2] the process census (D22-18)", () => {
-  it("1. the spawners are derived from the source: the production files under app/ that reference a process module at run time are exactly the ones the census labels, each naming child_process", { timeout: 120_000 }, () => {
+  it("1. the spawners are derived from the source: the production files under app/ that reference a process module at run time are exactly the ones the census labels - each spawner naming child_process and, since B22-B, the two reviewed thread starters each naming worker_threads only and calling no spawn, exec or fork", { timeout: 120_000 }, () => { // [B22 closeout, 2026-10-02] retitled (D22-16): B22-B's thread starters (OD-140); assertions unchanged
     expect(spawnersOf(production)).toEqual([...Object.keys(EXECUTABLE_OF), ...Object.keys(THREAD_STARTERS)].sort()); // [B22-B] + the two thread starters (OD-140)
     for (const spawner of Object.keys(EXECUTABLE_OF)) expect(production.get(spawner), spawner).toMatch(/\bspawn\(/);
     // [B22-B] a thread starter starts no process: no child_process, no spawn, exec or fork call; the host is the one Worker constructor

@@ -191,7 +191,7 @@ describe("[B20 B1] the MCP exposure subset — reviewed list, structural rule, c
     }
   });
 
-  it("the MCP set is a subset of the agent set; the 24 agent tools it leaves out are the granted executions, the external reads, the open-editor tools and the seven withheld tools", () => {
+  it("the MCP set is a subset of the agent set; the 27 agent tools it leaves out (24 when written, before B22-B's three named computation reads) are the granted executions, the external reads, the open-editor tools, the seven withheld tools and the three computation reads (reason `computation`)", () => { // [B22 closeout, 2026-10-02] retitled (D22-16): 27 since B22-B (OD-139); assertions unchanged
     for (const id of INTENTIONAL_MCP_EXPOSED_TOOL_IDS) expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, id).toContain(id);
     const left = INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => !INTENTIONAL_MCP_EXPOSED_TOOL_IDS.includes(id));
     // [B20 B3] pin move: 16 -> 18 (the two withheld reads); [B20 B4] 18 -> 23 (the five withheld proposals); [B20 A4] 23 -> 24
@@ -501,7 +501,7 @@ describe("[B20 B1] the deny-by-default discovery channel mcp", () => {
   const A4_ADDITION = "sirkit.mcp.observation-read";
   const B22B_ADDITIONS = ["sirkit.computation.analytical-equation", "sirkit.computation.artifact-compare", "sirkit.computation.artifact-parse", "sirkit.computation.circuit-analysis", "sirkit.computation.layout-experiment"]; const B22B_READS = B22B_ADDITIONS.slice(0, 3);
   const baseRegistry = new ToolRegistry(SIRKIT_TOOL_CATALOG.filter((item) => item.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(item.toolId)));
-  it("every existing channel is unchanged: interactive-ui, assistant-agent, automation and api byte-match the pre-B1 pins under three contexts, and A4's one descriptor is the only difference", () => {
+  it("every existing channel is unchanged: interactive-ui, assistant-agent, automation and api byte-match the pre-B1 pins under three contexts, and A4's one descriptor and B22-B's five named computations are the only difference (the three reads offered on assistant-agent only, the two requests on no channel)", () => { // [B22 closeout, 2026-10-02] retitled (D22-16): B22-B's five additions (OD-139); assertions unchanged
     const PINS: Record<string, Record<string, string>> = {
       "interactive-ui": { permissive: "eng1-c15d068f466d4bf6", viewer: "eng1-68f97b000530aadb", schematicEditor: "eng1-3ede31afeec8fb9e" },
       "assistant-agent": { permissive: "eng1-217baeb7a064d922", viewer: "eng1-d154b4c4b1740593", schematicEditor: "eng1-ffe7d7bfe71abd5a" },
@@ -518,7 +518,7 @@ describe("[B20 B1] the deny-by-default discovery channel mcp", () => {
         const result = discoverTools(registry, context);
         actual[channel]![name] = identityOf(base);
         expect(result.excluded.some((entry) => entry.reason === "not_mcp_exposed"), `${channel}/${name}`).toBe(false);
-        // the whole registry differs from the base by that ONE descriptor and nothing else: it is offered on the
+        // the whole registry differs from the base by that ONE descriptor and nothing else [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): and by B22-B's five named computations: the three reads offered on assistant-agent only, the two requests on no channel]: it is offered on the
         // assistant-agent channel (the only channel on which its authority counts) and excluded `authority_missing` on
         // every other, and every other tool's inclusion, exclusion and reason is byte-identical to the base
         expect(result.included.filter((entry) => entry.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(entry.toolId)), `${channel}/${name} included`).toEqual(base.included);

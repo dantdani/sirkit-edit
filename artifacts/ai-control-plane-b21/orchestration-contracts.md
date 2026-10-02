@@ -192,18 +192,18 @@ capsule key below the top level.]
   and asserts that the credential- or reasoning-shaped names found at any level of the four are EXACTLY the declared set — a newly declared
   credential-shaped name or a stale exemption fails there. The sealers' declared names are exempt from the NAME check only; their values are still scanned.
 - **The structural gate (D21-1).** `isPermittedOrchestrationToolId` (C5): an id is permitted only when it is in
-  `INTENTIONAL_AGENT_EXPOSED_TOOL_IDS` (C24, the one reviewed 33-id list) AND matches none of `NEVER_EXPOSED_TOOL_PATTERNS` (C25:
+  `INTENTIONAL_AGENT_EXPOSED_TOOL_IDS` (C24, the one reviewed 33-id list) [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): 36 since B22-B] AND matches none of `NEVER_EXPOSED_TOOL_PATTERNS` (C25:
   `.release`, `qualif`, the canonical replay primitive, the unreviewed canonical mutations, atomic authority, publication review). A
   `ToolRequest` or a `ValidationRequest` naming `sirkit.manufacturing.release`, `sirkit.pcb.qualify`, a never-exposed canonical
-  mutation, an atomic authority command, an id outside the 33 or a malformed id refuses `tool_request_not_permitted` whatever the rest
-  of the document says — a result naming a release never validates, whatever its confidence or evidence. Every one of the 33 is accepted
+  mutation, an atomic authority command, an id outside the 33 [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): the exposure list, 36 since B22-B] or a malformed id refuses `tool_request_not_permitted` whatever the rest
+  of the document says — a result naming a release never validates, whatever its confidence or evidence. Every one of the 33 [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): 36 since B22-B] is accepted
   as a tool request.
 - **The verifier set (review correction).** A validation request is a DETERMINISTIC verification B21-D runs by binding id with no model,
   so `bindingToolId` is closed to `VALIDATION_BINDING_TOOL_IDS` (C44): `sirkit.manufacturing.readiness-inspect`,
   `sirkit.pcb.revision-inspect`, `sirkit.project.canonical-revision-inspect`, `sirkit.validation.connectivity-verify`,
   `sirkit.validation.drc-run` — the two validators, the readiness report and the two revision inspections, every one in the 33. The six
-  granted executions, the six view-session controls, the two external reads and the proposal tools refuse `validation_binding_not_permitted`
-  (case 7 pins every one of the 33 either way). Parity, the canonical validator and the netlist proof have no exposed id today; widening the
+  granted executions, the six view-session controls, the two external reads and the proposal tools [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): and B22-B's three named computation reads] refuse `validation_binding_not_permitted`
+  (case 7 pins every one of the 33 [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): 36 since B22-B] either way). Parity, the canonical validator and the netlist proof have no exposed id today; widening the
   set is a reviewed pin move in B21-D.
 - **`allowedToolIds` (A4L).** Required, sorted (strictly ascending by code unit), duplicate-free, at most 32, every id permitted by the
   same gate; an unsorted, duplicated, over-long, unexposed, never-exposed, non-string or non-array list admits nothing — the WHOLE

@@ -47,4 +47,4 @@ The §A suite ran against the RAW handlers first: 42/44 on the first run, then
   **CONFIRMED**.
 - The smoke-test spawn inherits the full server environment (server-owned,
   not caller-influenced) — see
-  [unknowns-and-owner-decisions.md](unknowns-and-owner-decisions.md).
+  [unknowns-and-owner-decisions.md](unknowns-and-owner-decisions.md). [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): no longer - the diagnostic runner passes the profile's exact map (B22-A3)]

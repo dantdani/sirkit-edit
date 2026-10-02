@@ -24,7 +24,7 @@
 5. **Simulate hardened in place, not blocked** — the isolated-dir /
    env-allowlist / bounded-output / injection-guard hardening is not an
    architectural expansion, so authoritative execution stays available (the
-   §H fail-closed fallback was not needed). **CONFIRMED**.
+   §H fail-closed fallback was not needed). **CONFIRMED**. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): authoritative execution was never available: the legacy path is a diagnostic local process (OD-136), and production simulation authority stays BLOCKED (OD-134, LB-10)]
 6. **`b13-2 23b` mid-flight-abort** is a wall-clock timing sensitivity (fixed
    25 ms window) under parallel load, not a functional regression: it passes in
    isolation (3/3) and on the second full run; the route's abort handling is

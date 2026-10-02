@@ -309,10 +309,10 @@ describe("B15.2 §G — the sealed assembler is closed and verification is total
 // ─── exposure pin (SUPERSEDED by B15.3: 11 → 12) ─────────────────────────────
 // Throughout B15.2 this asserted exactly 11 with NO PCB propose tool. B15.3
 // exposed `sirkit.pcb.propose-bounded-edit` after the validation-policy gate
-// closed; the pin now asserts EXACTLY 12 with exactly that one PCB proposal.
+// closed; the pin now asserts EXACTLY 12 with exactly that one PCB proposal. [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): since B17-F the pin counts the intentional agent-exposed set itself - 36 since B22-B]
 
 describe("B15.2 — exposure pin (B15.3 supersession)", () => {
-  it("the agent registry exposes exactly 12 tools and exactly ONE PCB propose tool", async () => {
+  it("the agent registry exposes exactly the intentional agent-exposed set (12 when written; the set has since grown by reviewed moves, B22-B's three named computation reads among them, and the assertion counts the set itself) and exactly ONE PCB propose tool", async () => { // [B22 closeout, 2026-10-02] retitled (D22-16): the derived count, 36 since B22-B (OD-139); assertions unchanged
     const { sirkitToolRegistry } = await import("../../../engineering/tool-catalog");
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
     expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);

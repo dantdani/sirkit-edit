@@ -307,7 +307,7 @@ compiler-card exemption the coverage-2/tests-1 row names, and moved the rest (se
 9. **Explicit environments (D22-5's ngspice half):** the worker's `-v` probe (`worker.ts:60`) and the smoke test
    (`smoke-test/route.ts:59`, `:122-128`) pass the worker's exact allowlist (`PATH, Path, PATHEXT, SystemRoot, WINDIR, TEMP,
    TMP, HOME, USERPROFILE, LD_LIBRARY_PATH` plus `NODE_ENV`), as /api/simulate does. The suite pins the three allowlists equal
-   and equal to that literal list.
+   and equal to that literal list. [superseded 2026-10-02 by the B22 closeout (D22-5): since B22-A3 one diagnostic runner passes the profile's exact map, and the suite pins that map]
 10. **Test seams** `__deckLayersForTests` (`netlist.ts:493`): the writer and the `.options` screen, so each layer is pinned on
    its own behind the field screen.
 
@@ -363,7 +363,7 @@ compiler-card exemption the coverage-2/tests-1 row names, and moved the rest (se
 - **Kept as they are:** kicad-cli and FreeRouting (B22-A's); the SPICE AI route's `"automatic"` pre-selection of overlay,
   variable and run-request operations (`ai/route.ts:68-72`, `:206`, `:228`; OD-150 in the B22 discovery decides it) - with
   every model-written string now screened at the compiler, the run it starts can no longer reach `shell`; HOME and USERPROFILE
-  in the allowlist (B22-A3's profile environment); the model screen's other D22-4 gaps (`.lib` and traversal for the preview,
+  in the allowlist (B22-A3's profile environment) [superseded 2026-10-02 by the B22 closeout (D22-5): closed by B22-A3 for the map - the exact map holds neither; on win32 Node adds eight server variables to the child, USERPROFILE among them, recorded per run (OD-156)]; the model screen's other D22-4 gaps (`.lib` and traversal for the preview,
   client-supplied `dependencies`, the `??`/`||` differential itself), whose `shell` and `.include`/`.lib` consequences in
   executed decks the final screen now holds; `units.ts` (its passthrough is now always fed a screened value); `/api/simulate`
   (its own B19-D screens; its `unsafe()` copy does not refuse U+0085/U+2028/U+2029, which ngspice does not read as line breaks,
@@ -646,9 +646,9 @@ every surface:
   the subcircuit name and runs the final screen as an executed deck with no control block, so a model-text `.include` or `.lib`
   the model screen admits is refused before any file (pinned). **The SPICE AI route's** "automatic" operations become ordinary
   project fields, all field-screened at the compiler, so a model-steered operation cannot reach an executing construct (OD-150
-  unchanged). **The environment allowlist** is unchanged and pinned equal across the three ngspice spawners.
+  unchanged). **The environment allowlist** is unchanged and pinned equal across the three ngspice spawners. [superseded 2026-10-02 by the B22 closeout (D22-5): one diagnostic runner since B22-A3, passing the profile's exact map]
 - **Residual (unchanged from round 1, recorded for B22-A1):** XSPICE code-model file parameters in model text (`file=`,
-  `input_file=`, `state_file=`) are not screened (an INFERRED host-file read, never a shell or control path).
+  `input_file=`, `state_file=`) are not screened (an INFERRED host-file read, never a shell or control path). [superseded 2026-10-02 by the B22 closeout (D22-4): closed by B22-A1 for the card and token readings the screens implement - they refuse an XSPICE file parameter naming a path outside the run directory; those readings of ngspice's line stitching and tokenizer stay INFERRED until a live probe, and no live suite carries one - still open]
 
 Every construct the probes CONFIRM executes is refused on every surface (compile, the preview, the runs preflight, the worker
 and the smoke test), and the `*#` title (UNKNOWN at round 3; CONFIRMED to run nothing by the lead's p11-p13) is refused too, as defence in depth. No confirmed finding of

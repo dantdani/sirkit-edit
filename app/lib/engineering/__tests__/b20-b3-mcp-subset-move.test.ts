@@ -24,7 +24,7 @@ const descriptor = (toolId: string): ToolDescriptor => registry.get(toolId)!;
 /**
  * [B20 A4] pin move: B20-A4 ADDED one descriptor after this move (sirkit.mcp.observation-read, the agent's external tool read of
  * approved MCP servers; never MCP-exposed). The base pins below state B3's move, so they are compared over the registry WITHOUT
- * that one addition; cases 4 and 5 also pin that the addition is the only difference (one more descriptor, one more agent id,
+ * that one addition; cases 4 and 5 also pin that the addition is the only difference [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): with B22-B's five named computations, left out of the base the same way] (one more descriptor, one more agent id,
  * and under these contexts one more exclusion: `authority_missing` since none carries its authority, or `project_state_missing`
  * where the board is absent, a reason checked first).
  */
@@ -131,7 +131,7 @@ describe("[B20 B3] F — the reviewed MCP subset move", () => {
     expect([...descriptor("sirkit.schematic.inspect").requiredAuthority]).toEqual(["local-working-copy"]);
   });
 
-  it("5. the agent set is still B3's 32 without A4's one addition (33 with it) and assistant-agent discovery under the B04 contexts is byte-equal to the base pins", () => {
+  it("5. the agent set is still B3's 32 without A4's one addition and B22-B's three named computation reads (33 with A4's, 36 with both) and assistant-agent discovery under the B04 contexts is byte-equal to the base pins (B22-B's five descriptors excluded under every context)", () => { // [B22 closeout, 2026-10-02] retitled (D22-16): 36 since B22-B (OD-139); assertions unchanged
     // [B20 A4] pin move: 32 + the external tool read (33); B3's 32 are unchanged
     expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => id !== A4_ADDITION && !B22B_ADDITIONS.includes(id))).toHaveLength(32);
     expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(36); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads

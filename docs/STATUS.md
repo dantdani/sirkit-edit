@@ -45,7 +45,7 @@ The remaining intended steps — picking *real* purchasable parts, generating a 
 **Risks / things to watch**
 
 - **The hard half is unbuilt.** Stages 2, 4, 5, and 6 — real-part sourcing, BOM, board layout/3D, and manufacturing export — are the parts that make output *manufacturable*, and they're greenfield. The schematic→PCB layout problem in particular (auto-placement and auto-routing of a physical board) is a genuinely hard engineering effort, not a quick integration.
-- **NGSpice as a server dependency.** Simulation depends on an external binary being installed and on `PATH`. This complicates deployment (it won't "just work" on a standard serverless host) and is a scaling consideration.
+- **NGSpice as a server dependency.** Simulation depends on an external binary being installed and on `PATH`. This complicates deployment (it won't "just work" on a standard serverless host) and is a scaling consideration. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): not PATH - the digest-pinned install the server settings name (OD-135)]
 - **Idealized vs. real parts.** The current AI only knows abstract components (a "10k resistor"), not orderable parts with part numbers, footprints, and prices. Bridging to real parts (Stage 2) is also the prerequisite for a meaningful BOM (Stage 4) and an accurate PCB footprint (Stage 5) — so these stages are dependent, not independent.
 - **No real persistence or accounts.** Everything lives in the browser; there's no database, user accounts, or server-side project storage yet.
 

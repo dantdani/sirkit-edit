@@ -60,7 +60,7 @@ describe("[B21 C] the per-role tool allowlist", () => {
     for (const role of SPECIALIST_ROLES) expect(Object.isFrozen(INTENTIONAL_ROLE_TOOL_IDS[role]), role).toBe(true);
   });
 
-  it("2. every specialist row is a sorted, duplicate-free subset of the 33 within the A4L bound (32 = the contracts' bound), every id an active exposed descriptor the structural gate permits; no row holds a granted execution, a view control or a never-exposed / Tier 3 id; a proposal only in a proposing role's row; the coordinator's row IS INTENTIONAL_AGENT_EXPOSED_TOOL_IDS (identity, 33 ids); the cost/latency router has none; the table equals OD-120's proposal; every id carries its reason as data; roleAllowedToolIds answers the row and nothing for an unknown role", () => {
+  it("2. every specialist row is a sorted, duplicate-free subset of the exposure list (33 when written; 36 since B22-B) within the A4L bound (32 = the contracts' bound), every id an active exposed descriptor the structural gate permits; no row holds a granted execution, a view control or a never-exposed / Tier 3 id; a proposal only in a proposing role's row; the coordinator's row IS INTENTIONAL_AGENT_EXPOSED_TOOL_IDS (identity, 36 ids since B22-B; 33 when written); the cost/latency router has none; the table equals OD-120's proposal; every id carries its reason as data; roleAllowedToolIds answers the row and nothing for an unknown role", () => { // [B22 closeout, 2026-10-02] retitled (D22-16): 36 since B22-B (OD-139); assertions unchanged
     expect(MAX_ROLE_TOOL_IDS).toBe(32);
     expect(MAX_ROLE_TOOL_IDS).toBe(ORCHESTRATION_BOUNDS.maxAllowedToolIds);
     for (const role of SPECIALISTS) {
@@ -137,7 +137,7 @@ describe("[B21 C] the per-role tool allowlist", () => {
     expect(roleToolViolations("coordinator", move)).toEqual([]);
     expect(roleToolViolations("coordinator", layers)).toEqual([]);
     expect(roleToolViolations("coordinator", release)).toEqual(["not_exposed", "never_exposed_pattern"]);
-    // a crafted descriptor: an exposed-looking id outside the 33, a Tier 3 family name dressed as a read, an unexposed copy of a real read
+    // a crafted descriptor: an exposed-looking id outside the 33, a Tier 3 family name dressed as a read, an unexposed copy of a real read [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): outside the exposure list, 36 since B22-B]
     expect(roleToolViolations("schematic", { toolId: "sirkit.pcb.helpful-read", operationClass: "read", agentExposed: true })).toEqual(["not_exposed"]);
     expect(roleToolViolations("schematic", { toolId: "sirkit.pcb.qualify-read", operationClass: "read", agentExposed: true })).toEqual(["not_exposed", "never_exposed_pattern"]);
     expect(roleToolViolations("schematic", { toolId: "sirkit.pcb.board-inspect", operationClass: "read", agentExposed: false })).toEqual(["not_exposed"]);

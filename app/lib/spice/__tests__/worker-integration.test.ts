@@ -18,7 +18,7 @@ const LIVE = process.env.SPICE_WORKER_LIVE === "1";
 const SCOPE = { tenantId: "local", projectId: "spice-worker-project", branchId: "main" };
 const SELECTOR = { "x-sirkit-tenant-id": SCOPE.tenantId, "x-sirkit-project-id": SCOPE.projectId, "x-sirkit-branch-id": SCOPE.branchId };
 
-describe.runIf(LIVE)("isolated ngspice worker", () => {
+describe.runIf(LIVE)("isolated ngspice worker", () => { // [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): no isolation boundary - the worker's points run on the diagnostic runner, a diagnostic local process (B22-A3)]
   beforeEach(() => { injectAuthorizedPrincipal({ userId: "spice-worker-editor", tenantId: SCOPE.tenantId, projectId: SCOPE.projectId, role: "editor" }); });
   afterEach(() => { resetInjectedIdentity(); });
 
@@ -75,7 +75,7 @@ describe.runIf(LIVE)("isolated ngspice worker", () => {
     expect(waveformBody.waveform.rawPoints).toBeGreaterThan(0);
   }, 15_000);
 
-  it("promotes a parsed model only after an isolated smoke test", async () => {
+  it("promotes a parsed model only after an isolated smoke test", async () => { // [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): not isolated - the smoke run is a diagnostic local process with no isolation boundary (B22-A3)]
     const imported = importModelText("diode.mod", ".model DTEST D(IS=1e-9 N=1.5)\n");
     const response = await smokeModel(new Request("http://localhost/api/spice/models/smoke-test", {
       method: "POST",

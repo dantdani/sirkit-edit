@@ -3,7 +3,7 @@
  * each (kicad-cli-runner.ts:64-69; pcb/autoroute/runner.ts:178-183) is cut to the one diagnostic channel bound with the
  * truncation marker, and the files they write that Sirkit reads back - FreeRouting's .ses (runner.ts:206) and kicad-cli's
  * gerber and drill files (pcb/fab/build-bundle.ts:182, :208) - go through a bounded reader that refuses an over-bound file,
- * unread, with a closed error (the precedent: /api/simulate's readBoundedRawFile, route.ts:222-254).
+ * unread, with a closed error (the precedent: /api/simulate's readBoundedRawFile, route.ts:222-254). [B22 lead, 2026-10-02: since B22-A3 that reader is the diagnostic runner's `readBoundedRawFile`, diagnostic-runner.ts]
  *
  * Test-first: every bound case was run RED on the unmodified tree 0432fb8 (both runners accumulated output without a cap;
  * the .ses and the kicad-cli files were read whole). Normal outputs keep their existing behaviour (the existing suites

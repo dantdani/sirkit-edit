@@ -8,7 +8,7 @@
  * process printed, up to the bound.
  *
  * `readBoundedFile` reads a file kicad-cli or FreeRouting wrote and Sirkit reads back, refusing one over
- * `TOOL_OUTPUT_FILE_MAX_BYTES` unread (the precedent: /api/simulate's `readBoundedRawFile`, route.ts:222-254): the declared size
+ * `TOOL_OUTPUT_FILE_MAX_BYTES` unread (the precedent: /api/simulate's `readBoundedRawFile`, route.ts:222-254) [B22 lead, 2026-10-02: since B22-A3 that reader is the diagnostic runner's `readBoundedRawFile`, diagnostic-runner.ts]: the declared size
  * is an advisory fast-fail, storage grows with the bytes actually read in 64 KiB chunks, and crossing the bound refuses.
  *
  * No process, no network; the reader opens one file handle and closes it in every path.

@@ -14,7 +14,7 @@ this stage.
 - the execute 409 path terminates at the authorization diagnosis;
 - the execute 501 path terminates at the blocked-runner refusal;
 - measure/denominator/readiness/propose are pure computations over the
-  supplied body.
+  supplied body. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): readiness and execute bind the provider and environment to the server's copies by id and digest (B22-C, OD-138)]
 
 ## Test environment
 

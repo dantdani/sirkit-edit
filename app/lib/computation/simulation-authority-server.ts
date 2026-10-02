@@ -5,9 +5,9 @@
  * here, by the CD-10 execute and readiness routes alone, and passed in. Server-only: no client module may import it (pinned by
  * `b22-c-authority` case 8, which walks every "use client" graph).
  */
-import { runtimeProfiles, type RuntimeProfile, type ServerSettingReader } from "./runtime-profile";
+import { runtimeProfiles, type RuntimeProfile } from "./runtime-profile";
 
 /** [B22-C] The environments the server holds: the B22-A2 runtime-profile registry, read with the server's own settings. */
-export function serverSimulationEnvironments(read?: ServerSettingReader): readonly RuntimeProfile[] {
-  return read ? runtimeProfiles(read) : runtimeProfiles();
+export function serverSimulationEnvironments(): readonly RuntimeProfile[] { // [B22 closeout, 2026-10-02] retired: the `read` parameter neither route nor any test passed
+  return runtimeProfiles();
 }

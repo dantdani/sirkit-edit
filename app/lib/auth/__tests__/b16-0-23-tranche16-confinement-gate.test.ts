@@ -131,7 +131,7 @@ describe("B16.0.23 §J — AI provider boundary structure", () => {
 });
 
 describe("B16.0.23 §J — agent exposure and human-truth wording", () => {
-  it("tools remain EXACTLY 12 agent-exposed; no spice route is exposed", () => {
+  it("tools remain EXACTLY the intentional agent-exposed set (12 when written; the set has since grown by reviewed moves, B22-B's three named computation reads among them, and the assertion counts the set itself); no spice route is exposed", () => { // [B22 closeout, 2026-10-02] retitled (D22-16): the derived count, 36 since B22-B (OD-139); assertions unchanged
     const registry = sirkitToolRegistry();
     const exposed = registry.list().filter((descriptor) => descriptor.agentExposed);
     expect(exposed.length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);

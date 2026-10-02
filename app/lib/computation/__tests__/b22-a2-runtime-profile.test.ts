@@ -548,7 +548,7 @@ describe("[B22-A2] what a profile binds", () => {
     }
   });
 
-  it("13. the legacy records are what the code does today: the ngspice allowlist of all three spawners, kicad-cli's allowlist, FreeRouting's allowlist and argv as B22-A1 left them; the FreeRouting contract argv is A1's argv with server placeholders", async () => {
+  it("13. the legacy records are what the code does today: since B22-A3 the three ngspice sites carry no allowlist and the local ngspice profile records no legacy spawn (they execute it through the diagnostic runner); kicad-cli's allowlist, FreeRouting's allowlist and argv as B22-A1 left them; the FreeRouting contract argv is A1's argv with server placeholders", async () => { // [B22 closeout, 2026-10-02] retitled (D22-16): B22-A3's one runner (OD-136); assertions unchanged
     const local = runtimeProfile("ngspice-local-diagnostic", settingsOf({}));
     const allowlistLine = /const allowed = (\[[^\]]*\]);/; // [B22-A3, 2026-10-01] reviewed pin move (OD-136): the three ngspice sites keep no allowlist and spawn nothing -
     for (const site of ["app/lib/spice/server/worker.ts", "app/api/simulate/route.ts", "app/api/spice/models/smoke-test/route.ts"]) { // they execute this profile through the diagnostic runner,

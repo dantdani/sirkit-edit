@@ -175,7 +175,7 @@ gateway refuses them with every port bound). CONFIRMED by `b22-b-approval`.
 The pinned SPICE executor writes the deck from numbers alone, seeds it (`seedDiagnosticDeck`), screens the seeded deck
 (`assertCompiledDeckSafe`, exactly the compiler-style control block), runs it once on `runDiagnosticNgspice` (the tenant as the
 holder, the kind's 10 s wall clock), reads the raw file with a strict reader that refuses a malformed, short or non-finite file whole
-(no dropping, unlike the legacy parsers - D22-10 stays B22-C's for them), and checks the summary with the circuit-waveform validator.
+(no dropping, unlike the legacy parsers - D22-10 stays B22-C's for them) [superseded 2026-10-02 by the B22 closeout (D22-10): the legacy parsers no longer drop either - D22-10 closed by B22-C], and checks the summary with the circuit-waveform validator.
 [B22-D, 2026-10-02] The strict reader is now read by B22-C's one output validator under its own bounds (64 variables, 100,000
 points): its own reading disagreed with the other parsers on ten corpus files ([B22-D review] was "nine"; the red log lists ten),
 ngspice's ` grid=3` attribute among them (`adversarial-matrix.md` G4; `b22-d-adversarial` case 8, which since the review also pins
@@ -362,7 +362,7 @@ census paragraph) and `specialist-roles.md` (four lines), and appended at the en
   - `b20-b3-mcp-subset-move` case 5's title, "the agent set is still B3's 32 without A4's one addition (33 with it)" (its body pins 36);
   - the comments `b21-a-contracts.test.ts:6` ("outside the 33") and `b21-c-role-tools.test.ts:140` ("outside the 33");
   - `orchestration-contracts.md` :195 ("the one reviewed 33-id list") and :198 ("an id outside the 33").
-  `specialist-roles.md`'s four such lines (:111, :128, :131, :132) now carry a dated note (36), in place, with no line moved.
+  `specialist-roles.md`'s four such lines (:111, :128, :131, :132) now carry a dated note (36), in place, with no line moved. [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): each item above is retitled or noted in place by the closeout, its assertions unchanged (closeout-statements.md section 2)]
 
 ## 10. Final runs
 
@@ -433,3 +433,30 @@ fix run on its final tree; the numbers below are that run's (where they differ, 
 - **A pre-existing intermittent failure, not B22-B's**: `b22-a3-diagnostic-runner` case 10 ("timed out waiting for the probe to
   start", after its 2 s wait) failed 3 of 8 runs on the adopted tree and 1 of 8 runs on the HEAD sources (the same case, the same
   message; RECORDED with every log). Root cause not established; B22-B touches neither the runner nor its suite.
+
+## 12. The B22 closeout's export record (2026-10-02)
+
+[B22 closeout, 2026-10-02] The B22-B exports no production source calls, each with why it exists (D22-16's closeout record;
+`closeout-statements.md` section 3, re-derived from the tree by `b22-closeout-statements` case 8). **CONFIRMED** by `git grep` and
+that case on `c9fbbb0` with the closeout's edits:
+
+- `requests.ts` and `request-executors.ts` (`app/lib/computation/`): a **dormant contract**, every export - section 5's inert sealed
+  request (`sealComputationRequest`, `verifySealedComputationRequest`, `ComputationRequestStore`, `computationEvidence`) and the
+  executors an approved request would run (`createComputationRequestExecutors`, `buildCircuitAnalysisDeck`, `readStrictRaw`). No
+  production module imports either, but for `request-executors.ts` importing `requests.ts`; the descriptors and the action registry
+  name them only in text. They are bound only through a reviewed census move with an authenticated approval route (OD-159).
+  `readStrictRaw` stays exported: `b22-d-adversarial` case 8 runs it in the one parser corpus (B22-D item 16), and since B22-D it reads
+  every file through the output validator.
+- `COMPUTATION_EVIDENCE_SCHEMA` in `requests.ts` has the evidence store's name and value (`sirkit.computation-evidence.v1`) for a
+  different closed shape. **RECORDED**: before anything persists a request (OD-159 plans to persist with the aggregate, OD-141) the
+  dormant shape needs its own schema id, or the store's `validateEvidenceDocument` refuses it; renaming it moves `b22-b-approval`'s
+  pin, so it is left as written here.
+- `setComputationPortFactory` and `resetComputationPortFactory` (`app/api/chat/computation-runtime.ts`): **test seams** -
+  `b22-b-chat-runtime`'s port double and its deterministic reset; the module says it is never a production path.
+- `TOOL_AUTHORITY_SOURCES` (`app/lib/engineering/tool-registry.ts`): a **vocabulary** - the authority sources as data beside
+  `ToolAuthoritySource`, read by the registry suites; B22-B added `computation-engine`.
+- `computationService` (an `AgentGatewayOptions` field, `app/lib/agent/gateway.ts`): an **injection seam**, the same kind as its
+  siblings `readService`, `proposalService` and `layoutProposalService`, which no caller sets either; when it is absent the gateway
+  builds its own `ComputationReadService`.
+- `ArtifactParser` (`app/lib/computation/catalog.ts`): **retired** - a type name referenced nowhere, not even by a test; one tombstone
+  comment holds its line, so no line moved.

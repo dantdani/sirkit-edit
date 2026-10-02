@@ -5,7 +5,7 @@ the raw-handler surface to ZERO — GET `/api/auth/callback`, POST
 `/api/auth/signin`, POST `/api/auth/signout`, POST `/api/chat`, POST
 `/api/simulate`. Treated as a security-closure stage: three narrow declarative
 wrapper capabilities were added (all gated sole-adopter), and `/api/simulate`
-was hardened into a confined ngspice sandbox.
+was hardened into a confined ngspice sandbox. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): no sandbox - /api/simulate starts no process, and the diagnostic runner it calls has no isolation boundary (OD-134, OD-136)]
 
 Worked ONLY in `C:\Users\robsa\Desktop\sirkit-edit`. The protected original
 `C:\Users\robsa\sirkit` was NOT touched. Zero Supabase calls, zero provider

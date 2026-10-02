@@ -316,16 +316,16 @@ live suite, no browser spec, no full suite; no real process was started by the w
   output cut; a short-name or differently cased spelling printed by ngspice is not redacted (INFERRED rare).
 - **The seed line**: a deck that sets its own seed is refused at the runner, so a Studio plan whose solver profile carries a `seed=`
   custom option fails each point with the closed text rather than at `POST /api/spice/runs` (the run-plan preflight is the job
-  store's, B22-C); a deck whose model text carries its own `.end` ends there for ngspice, before the seed line (such a deck is broken
+  store's, B22-C); [superseded 2026-10-02 by the B22 closeout (OD-157): B22-C added no run-plan seed preflight - a Studio plan whose solver profile sets seed= or rndseed still fails each point at the runner; recorded open] a deck whose model text carries its own `.end` ends there for ngspice, before the seed line (such a deck is broken
   anyway).
 - **The raw file** is kept only as its digest (section 5); [B22-C, 2026-10-02] the parsed output is now refused whole instead of dropping, through the one output validator; before: the parsed waveforms drop non-finite values (D22-10, B22-C).
 - **Version**: whether `-n -v` prints the version line under the exact environment is the live suite's (case 2); a failed probe
   degrades to a fixed text, as before.
 - **Dev reload**: the counter lives on `globalThis` and survives a module reload; two server processes have two counters.
 - FreeRouting and kicad-cli keep their legacy spawns (direct-child kill, host allowlists, before-exit resolution at `runner.ts:166, :171`
-  and `kicad-cli-runner.ts:57`): B22-B/D; not the same two lines as the ngspice fix, so not done here.
+  and `kicad-cli-runner.ts:57`): B22-B/D [superseded 2026-10-02 by the B22 closeout (D22-9, OD-145): neither B22-B nor B22-D took them - both runners still kill the direct child and resolve before its exit (`adversarial-matrix.md` section 8, finding 2); open]; not the same two lines as the ngspice fix, so not done here.
 - The B16.0.24 "sandbox" sentences in `/api/simulate`'s header stay for the closeout (D22-14); the route's header carries a dated
-  B22-A3 note.
+  B22-A3 note. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): done: the header and the B16.0.24 records carry the closeout's dated notes]
 
 ## 10. Final runs
 
@@ -382,3 +382,21 @@ The adversarial review's confirmed findings, each fixed test-first (section 7):
 | tests-10 | an abort during the pin check: cancelled, nothing spawned | 4 |
 | coverage-5, tests-4 | live case 4 and this page say what it shows (the direct child); descendant reach INFERRED | 14 |
 | coverage-8 | the B16.0.24 proofs, the threat model's cells and the Studio docs corrected | 14 |
+
+## 12. The B22 closeout's export record (2026-10-02)
+
+[B22 closeout, 2026-10-02] The B22-A3 exports no production source calls, each with why it exists (D22-16's closeout record;
+`closeout-statements.md` section 3, re-derived from the tree by `b22-closeout-statements` case 8). **CONFIRMED** by `git grep` and
+that case on `c9fbbb0` with the closeout's edits:
+
+- `__setDiagnosticRunnerHostForTests` and `__resetDiagnosticRunnerCachesForTests`: **test seams** - the runner suites' scripted host
+  and the reset of the cached digest, the check in flight and the version lines between cases; production never replaces the host.
+- `diagnosticRunnerState`: a **test oracle** - the load and digest counts the runner suites assert. Its comment says "for tests and
+  diagnostics"; no diagnostics surface reads it (**RECORDED**).
+- `readBoundedRawFile`, re-exported by `app/api/simulate/route.ts`: a **test seam** for the B16.0.24.1 suite that pins it
+  (`b16-0-24-1-security-correction`); the production read is the runner's own (section 6). Repointing that suite would be a pin move
+  of an older chapter's suite, so the re-export stays.
+- `print-install-tree-digest.ts` (`scripts/`): an **operator tool** - how the owner pins the install (section 2, OD-135); the
+  runner's refusal text points to it; no package script names it, by design.
+- The mock key `b16-0-2-spice-scope-isolation.test.ts` still sets for the worker module's executable export, which B22-A3 removed:
+  dead, kept so the range the discovery cites (`:72-233`) does not move; noted in place on its line.

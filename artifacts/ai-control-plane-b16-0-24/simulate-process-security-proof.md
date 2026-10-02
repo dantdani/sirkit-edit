@@ -2,7 +2,7 @@
 
 `POST /api/simulate` → `authenticatedJsonRoute({ maxBytes: 8_000_000,
 deadlineMs: 30_000, exposeAbortSignal: true })`, hardened into a confined
-ngspice sandbox.
+ngspice sandbox. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): never a sandbox or a confined process. Since B22-A3 the route starts no process, and the diagnostic runner it calls is diagnostic only, with no isolation boundary and no OS limit; production simulation authority stays BLOCKED (LB-10)]
 
 - **Zero process work before authorization + validation**: the wrapper runs
   identity + membership + role + CSRF and the bounded 8 MB / 30 s object read
@@ -27,7 +27,7 @@ ngspice sandbox.
   LD_LIBRARY_PATH + NODE_ENV), never the full inherited server env.
   **CONFIRMED**.
 - **No network**: the deck carries no network directive (screened), and the
-  runner performs no network I/O. **CONFIRMED**.
+  runner performs no network I/O. **CONFIRMED**. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): prevention only - no OS denies the local ngspice process the network (the profile's network limit is enforced by none); only the unqualified OCI design would (LB-10)]
 - **Strict timeout**: a server `PROCESS_TIMEOUT_MS` (10 s) kills the child →
   504. **CONFIRMED**.
 - **Bounded stdout/stderr**: accumulation is `slice(-MAX_OUTPUT_BYTES)`

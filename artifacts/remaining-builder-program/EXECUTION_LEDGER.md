@@ -4200,3 +4200,53 @@ Pages: `artifacts/ai-control-plane-b22/diagnostic-runner.md`.
   while `$TZ` expanded, that no ngspice or taskkill survived an abort or a timeout, and that real operating-point, transient and AC files
   read the same through every parser (`adversarial-matrix.md` section 10). CI was green on `a269e7a` (all four checks; the browser job
   compiled the editor, confirming B22-C's client-bundle fix).
+
+### B22 closeout (1/2) - the sandbox and authority statements superseded, the stale titles retitled, the unused exports recorded or retired, the tripwire (2026-10-02 local; implementation + review fix; this commit)
+
+**Test-first** on `chapter/b22-sandboxed-computation` from `c9fbbb0`. The scope is the verified sweep (`closeout-scope/`, at `a269e7a`), with each item re-checked by its text at `c9fbbb0`.
+- **Implementation:**
+  - `b22-closeout-statements` was written first. With only the suite added it ran 8 of 8 red, then 8 green (`close1-red-pre-edit`, `close1-green`).
+  - **Dated notes in place:** `[superseded 2026-10-02 by the B22 closeout (<refs>): ...]`, 83 notes in all:
+    - 8 production lines in 6 files;
+    - 15 in 11 test files;
+    - 60 in 28 pages.
+  - No line was added to or removed from any production file or any file a page cites by line. The B16.0.23, B16.0.24 and B16.0.24.1 stop-condition lines are recorded on the page (section 4), following the B21 precedent.
+  - **Retitles:** 20 cases in 15 suites, assertions and `it(` counts unchanged, each with `[B22 closeout, 2026-10-02] retitled (D22-16): ...; assertions unchanged`.
+  - **Exports:** 26 recorded, among them the evidence store, the deck validator, the request store and its executors (OD-141, D22-19, OD-159). 4 retired with tombstones:
+    - the `ArtifactParser` type;
+    - the `options` parameter of `parseNgspiceAsciiRaw` and of `parseNgspiceAsciiRawResult`;
+    - the `read` parameter of `serverSimulationEnvironments`.
+  - The dead `NGSPICE_EXECUTABLE` mock key in `b16-0-2-spice-scope-isolation.test.ts:20` is annotated in place.
+- **Adversarial review:** 12 findings CONFIRMED, all low after verification. Each was fixed test-first:
+  - the strengthened suite ran 5 of 9 red on the delivered tree, then 9 green (`close1fix-red-1`, `close1fix-green-2`);
+  - 7 deliberate breakages were caught, each restored by SHA-256, and an ordinary "exactly 12 pads" comment was not reported (`close1fix-breakage`).
+  - What changed:
+    - the count pattern is anchored to the agent-set wording;
+    - pages are scanned for counts, spawners and "no network" beside ngspice, behind a page allow-list of 18 dated records plus the B15/B16 chapters' "exactly 12", with what each admits pinned (20 and 38);
+    - nine notes reworded in place: the XSPICE card and token readings stay INFERRED and open, osdi is covered by `-n`, `kill_unconfirmed` is not called an exit, and Node's eight win32 variables are named;
+    - FreeRouting's and kicad-cli's direct-child kills, which neither B22-B nor B22-D took, are noted as open in place (`diagnostic-runner.md:326`, threat-model T7; D22-9, OD-145);
+    - the X-5 title was retitled again so it names only what the case reads;
+    - the page's account of what is pinned and of the one page that quotes retired titles was corrected;
+    - each tombstone must be on its own signature line;
+    - new case 9 re-derives the page's note and retitle tables row for row, and inventories every closeout tag in `app/`.
+- **No behaviour change, no assertion weakened, no route** (census 165 = 162 + 3 + 0). Production simulation authority stays BLOCKED; the CD-10 501 and its pin are unchanged. No verdict: that is commit 2/2.
+
+**Gates (final):** A 300 (+18 skipped). B 296 (+3 skipped). C 1,059. D 415. E 460. F 1,107. G 479 (+9 skipped). H 920. I 141. J 22. tsc and eslint (30 files) clean. 17 generators, zero drift.
+
+**Found, not edited (for the lead):**
+- OD-157's last clause still promises an early 422 at `POST /api/spice/runs`. B22-C added none, and this is noted open in place at `diagnostic-runner.md:319`.
+- `output-bounds.ts:11`, `b22-a1-tool-output-bounds.test.ts:6` and `deck-and-secret-corrections.md:204` still cite `route.ts:222-254` for `readBoundedRawFile`. Since B22-A3 that reader is the runner's.
+- The XSPICE card and token readings have no live case in either live suite.
+- Optional steps left to you:
+  - give the dormant request evidence its own schema id (a pin move of `b22-b-approval`);
+  - bind `runtime-profile.ts`'s restated validator id to `SIMULATION_OUTPUT_VALIDATOR.id`;
+  - add `computation` and `computationService` to `b21-d3-pin-facts`' closed list.
+- Lead close (2026-10-02): (1) the check's new issue: the tripwire's 'no network' proximity rule (widened by the review) would also
+  flag the repository's own test-header disclaimer "No network, no model" beside a simulation word - true of the test, not a runner
+  guarantee; red first (a case-1 assertion: the disclaimer matched), then the rule refuses that form by a lookahead while a runner claim
+  still matches; both closeout tripwires (B22's and B21's) green. (2) Of the items the closeout found and left to the lead: the three
+  stale citations of `/api/simulate`'s `route.ts:222-254` as the bounded reader (`output-bounds.ts:11`, `b22-a1-tool-output-bounds.test.ts:6`,
+  `deck-and-secret-corrections.md:204`) carry a dated `[B22 lead]` note in place (the reader has been the runner's since B22-A3); OD-157's
+  promised early 422 at `POST /api/spice/runs` is recorded as not added (a dated addition inside OD-157); the optional steps (a separate
+  schema id for dormant request evidence, binding the restated validator id, two closed-list names in `b21-d3-pin-facts`) are left recorded,
+  not done.

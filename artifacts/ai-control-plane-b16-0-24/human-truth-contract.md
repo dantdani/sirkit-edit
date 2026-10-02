@@ -45,4 +45,4 @@ manufacturing-release tool. **CONFIRMED.**
 Authoritative execution was NOT expanded and no new simulator platform was
 built. The existing single-shot runner was hardened in place (bounded, isolated,
 env-allowlisted, shell-less); it was not blocked, because the hardening did not
-require an architectural expansion. **CONFIRMED.**
+require an architectural expansion. **CONFIRMED.** [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): no local execution was ever authoritative, and the route's runner is gone: ngspice runs through the diagnostic runner (OD-136), which is not isolated and never authoritative. 'Not blocked' stays true: OD-136 retired none of the three entry points]

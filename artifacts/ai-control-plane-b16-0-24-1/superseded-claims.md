@@ -18,4 +18,4 @@ Everything else in B16.0.24: the five migrations, the zero-raw/exact-factory
 ratchet, the chat boundary/streaming/tracing proofs, the simulate spawn
 confinement (executable/args/shell/env/cwd/timeout — the env-allowlist claim
 was always about the CHILD process and holds), and all B16.0.1–B16.0.23
-claims.
+claims. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): not the simulate spawn confinement: the route no longer spawns, and the diagnostic runner's process is not confined (no isolation boundary, OD-145) - its environment is the profile's exact map]

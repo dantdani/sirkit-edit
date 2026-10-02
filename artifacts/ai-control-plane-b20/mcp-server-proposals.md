@@ -179,7 +179,7 @@ first-party module is reached that
   `polygon-clipping` and `postgres`.
 
 So none of the app's five process spawners is reached: the simulate route, the SPICE model smoke test, the autoroute runner,
-the kicad-cli runner and the SPICE worker. The tripwire (case 3) catches, with its chain, a probe reached from the endpoint
+the kicad-cli runner and the SPICE worker. [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): the gate's list is now the diagnostic runner, FreeRouting's and kicad-cli's runners and the engine host with its worker entry (B22-A3 OD-136, B22-B OD-140); none is reached] The tripwire (case 3) catches, with its chain, a probe reached from the endpoint
 route that imports a process module directly, by re-export, through a hop, by `require`, by a dynamic import, as `cluster`,
 or by importing an app spawner, and each spelling the review named or implied: `process.getBuiltinModule`,
 `globalThis.process.getBuiltinModule`, `process["getBuiltinModule"]`, a concatenated member name (with a static and with a

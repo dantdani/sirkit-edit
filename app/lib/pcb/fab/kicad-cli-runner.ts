@@ -1,5 +1,5 @@
 // kicad-cli subprocess wrapper (PCB Stage 14). Same conventions as Stage 9's
-// runFreerouting / the NGSpice route: spawn, capture stdio, race a kill-timer,
+// runFreerouting / the NGSpice route: spawn, capture stdio, race a kill-timer, [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): the NGSpice route starts no process since B22-A3; ngspice runs through the diagnostic runner, whose tree kill and exact environment this wrapper does not share]
 // return a discriminated result — never throw for expected failures. A missing
 // binary (spawn ENOENT) surfaces as 'cli-missing' so the API route can turn it
 // into a clean 500 instead of a stack trace.

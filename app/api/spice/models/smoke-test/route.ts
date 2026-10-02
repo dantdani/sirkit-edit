@@ -86,7 +86,7 @@ export const POST = authenticatedJsonRoute<{ model?: ModelAsset }>(
       id: createId("modelcheck"),
       kind: "smoke" as const,
       status: passed ? "pass" as const : "fail" as const,
-      message: passed ? "Minimal isolated ngspice fixture completed." : result.timedOut ? stopped : `Smoke test exited with code ${String(result.code)}.`,
+      message: passed ? "Minimal isolated ngspice fixture completed." : result.timedOut ? stopped : `Smoke test exited with code ${String(result.code)}.`, // [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): not isolated - the smoke run is a diagnostic local process on the diagnostic runner, with no isolation boundary (B22-A3); the stored message is left as written]
       checkedAt: nowIso(),
     };
     model.validationChecks = [...model.validationChecks.filter((candidate) => candidate.kind !== "smoke"), check];

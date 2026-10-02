@@ -17,7 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const workerState: { resolveAll: Array<() => void> } = { resolveAll: [] };
 vi.mock("@/app/lib/spice/server/worker", () => ({
-  NGSPICE_EXECUTABLE: "ngspice-stub",
+  NGSPICE_EXECUTABLE: "ngspice-stub", // [B22 closeout, 2026-10-02] no longer read: worker.ts exports no executable since B22-A3 (OD-135) - a dead mock key, kept so the cited range does not move
   executeRunPoint: async (input: { signal: AbortSignal; onEvent: (event: { status: string; progress: number; message: string }) => void }) => {
     input.onEvent({ status: "running", progress: 10, message: "stubbed" });
     await new Promise<void>((resolve) => {

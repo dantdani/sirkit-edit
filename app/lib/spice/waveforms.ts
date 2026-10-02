@@ -1,6 +1,6 @@
 import { createId } from "./identity";
 import type { WaveformSeries } from "./types";
-import { SimulationOutputError, validateNgspiceAsciiOutput, type SimulationOutputOptions } from "@/app/lib/computation/output-validator";
+import { SimulationOutputError, validateNgspiceAsciiOutput } from "@/app/lib/computation/output-validator";
 
 interface RawHeader {
   title: string;
@@ -24,8 +24,8 @@ export interface ParsedRawResult {
  * closed code): this parser no longer drops a token, so no value can shift onto another variable, and `warnings` is always empty.
  * The legacy shape is kept: the first vector is `x`, a complex vector yields its magnitude (dB) and phase series.
  */
-export function parseNgspiceAsciiRaw(raw: string, options?: SimulationOutputOptions): ParsedRawResult {
-  const output = validateNgspiceAsciiOutput(raw, options);
+export function parseNgspiceAsciiRaw(raw: string): ParsedRawResult { // [B22 closeout, 2026-10-02] retired: the `options` parameter no caller passed (the validator's defaults apply)
+  const output = validateNgspiceAsciiOutput(raw);
   const header: RawHeader = {
     title: output.title,
     plotName: output.plotName || "Unknown",
@@ -67,9 +67,9 @@ export function parseNgspiceAsciiRaw(raw: string, options?: SimulationOutputOpti
 
 /** [B22-C review] coverage-10: the worker's form - the parsed result, or the closed refusal as a value, so a refused output fails
  *  the run like every other failure (its logs, manifest and netlist kept) instead of throwing past them. */
-export function parseNgspiceAsciiRawResult(raw: string, options?: SimulationOutputOptions): { ok: true; parsed: ParsedRawResult } | { ok: false; refusal: SimulationOutputError } {
+export function parseNgspiceAsciiRawResult(raw: string): { ok: true; parsed: ParsedRawResult } | { ok: false; refusal: SimulationOutputError } { // [B22 closeout, 2026-10-02] retired: the `options` parameter no caller passed
   try {
-    return { ok: true, parsed: parseNgspiceAsciiRaw(raw, options) };
+    return { ok: true, parsed: parseNgspiceAsciiRaw(raw) };
   } catch (error) {
     if (error instanceof SimulationOutputError) return { ok: false, refusal: error };
     throw error;

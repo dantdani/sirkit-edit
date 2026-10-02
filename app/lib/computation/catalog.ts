@@ -38,7 +38,7 @@ export type ComputationKindId = (typeof COMPUTATION_KIND_IDS)[number];
 export const ANALYTICAL_MICROCASES = Object.freeze(["resistor-divider", "rc-step", "one-pole-lowpass"] as const);
 export type AnalyticalMicrocase = (typeof ANALYTICAL_MICROCASES)[number];
 export const ARTIFACT_PARSERS = Object.freeze(["board-statistics", "result-fields"] as const);
-export type ArtifactParser = (typeof ARTIFACT_PARSERS)[number];
+// [B22 closeout, 2026-10-02] retired: `ArtifactParser`, a type name referenced nowhere, not even by a test (this line holds its place)
 export const LAYOUT_EXPERIMENTS = Object.freeze(["placement"] as const);
 
 export const COMPUTATION_VALIDATOR_IDS = Object.freeze([

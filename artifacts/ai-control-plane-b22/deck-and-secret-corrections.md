@@ -37,7 +37,7 @@ subprocess a sandbox or authoritative.
 - **Is not:** no new route (the census stays 165 = 162 canonical + 3 factories + 0 raw), tool, control or runtime dependency; no
   change to the CD-10 routes, the 501 or `executeAuthoritativeSimulation`; no change to the ngspice environment allowlist, argv or
   kill semantics (B22-A3; SEC-1's suite still pins the allowlist literally); the worker's own whole read of `result.raw` stays
-  (B22-A3); the evidence half of OD-150 (D22-21) stays (B22-C); `/api/simulate` is unchanged (its own B19-D screens, bounded reader
+  (B22-A3); [superseded 2026-10-02 by the B22 closeout (D22-5, D22-8): since B22-A3 one runner passes the profile's exact map, which SEC-1's suite pins, and the worker's whole raw read is gone] the evidence half of OD-150 (D22-21) stays (B22-C); `/api/simulate` is unchanged (its own B19-D screens, bounded reader
   and output caps); the compile preview keeps a model's `.include`/`.lib` and XSPICE text for the user's own machine (SEC-1's
   decision, section 4 of its page; never executed by the server).
 - **Stated additions beyond the task text (for the lead, section 11):** (a) a one-token `.lib` line is refused too (fail-closed;
@@ -175,7 +175,7 @@ subprocess a sandbox or authoritative.
   excerpts are bounded by their own numbers, not by the one constant - at most five per pattern for 14 patterns, 2,000 characters
   each, about 140,000 characters in all, or a 3,000-character fallback (`diagnostics.ts:122, :136`) - and the smoke test and every
   failed record carry them; a run record's event list has no count bound (`job-store.ts:95`): one log event of at most 1 KiB every
-  120 ms for the 120 s timeout, about 1 MiB a run; `/api/simulate` keeps its own caps (1 MB per stream, 3,000-character errors); the
+  120 ms for the 120 s timeout, about 1 MiB a run; `/api/simulate` keeps its own caps (1 MB per stream, 3,000-character errors) [superseded 2026-10-02 by the B22 closeout (D22-8): since B22-A3 the run directory keeps no whole stdout.log or stderr.log - nothing writes either there, and the runner removes the directory in its finally (after a kill_unconfirmed, again once the child's close is observed) - and /api/simulate's per-stream cap is the runner's 64 KiB; the 3,000-character error cap stands]; the
   SPICE AI `diagnose_failure` tool reads browser-supplied run records (D22-21, B22-C).
 
 ## 3. kicad-cli's explicit environment (D22-5)
@@ -196,12 +196,12 @@ The allowlist: `PATH`, `Path`, `PATHEXT`, `SystemRoot`, `SystemDrive`, `WINDIR`,
 - **INFERRED, not CONFIRMED:** that this list is what kicad-cli needs to find its install, libraries, per-user settings and a temp
   directory (from the FreeRouting precedent and KiCad's documented settings paths). kicad-cli was never run here; the opt-in
   `kicad-cli-oracle` suite (`KICAD_CLI` set) runs the real fab bundle through this runner and is the live check (skipped here).
-  The ngspice allowlist is untouched: HOME and USERPROFILE in it, and `-n` on no spawn, stay with B22-A3.
+  The ngspice allowlist is untouched: HOME and USERPROFILE in it, and `-n` on no spawn, stay with B22-A3. [superseded 2026-10-02 by the B22 closeout (D22-5): closed by B22-A3 - one runner passes the profile's exact map, no HOME or USERPROFILE in it, and every run carries -n (Node's eight win32 additions recorded, OD-156)]
 
 ## 4. Output caps for kicad-cli and FreeRouting (D22-8, OD-148)
 
 - **The bound on a file read back (CONFIRMED, `output-bounds.ts`):** `TOOL_OUTPUT_FILE_MAX_BYTES` = 67108864 (64 MiB) per file.
-  `readBoundedFile` follows `/api/simulate`'s `readBoundedRawFile` (`simulate/route.ts:222-254`): a handle, the declared size as an
+  `readBoundedFile` follows `/api/simulate`'s `readBoundedRawFile` (`simulate/route.ts:222-254`) [B22 lead, 2026-10-02: since B22-A3 that reader is the diagnostic runner's `readBoundedRawFile`, diagnostic-runner.ts]: a handle, the declared size as an
   advisory fast-fail, 64 KiB chunks grown with the bytes actually read, a refusal on crossing the bound (never a partial read), the
   handle closed on every path.
 - **Red (CONFIRMED, `b22-a1-tool-output-bounds`, 7 failed / 3 passed of 10 on `0432fb8`):** kicad-cli kept a 1 MB stdout and stderr
@@ -234,7 +234,7 @@ The allowlist: `PATH`, `Path`, `PATHEXT`, `SystemRoot`, `SystemDrive`, `WINDIR`,
   suites unchanged and green (section 8).
 - **RECORDED, not closed:** the processes can still WRITE files of any size to the temporary directory; Sirkit only refuses to read
   one over the bound (no file-size limit on any spawn, B22-A2/A3; OS isolation, LB-10). FreeRouting's shared `tmpdir()` cwd and its
-  uuid files there (`runner.ts:129-130, :161`) stay with B22-A3.
+  uuid files there (`runner.ts:129-130, :161`) stay with B22-A3. [superseded 2026-10-02 by the B22 closeout (D22-8): B22-A3 changed ngspice only - FreeRouting's shared tmpdir() cwd and uuid files are unchanged and stay open]
 
 ## 5. SPICE AI approval levels (OD-150, the approval half)
 
@@ -387,16 +387,16 @@ review's last source edit; the page suites ran after the page's last edit.
   channels still carry process output up to their bound, the diagnostic excerpts keep their own bounds and a record's event list
   has no count bound (section 2); the XSPICE readings of ngspice's line stitching and tokenizer are INFERRED until a live probe
   (B22-A3's runner) checks them; a `.spiceinit` in the run directory or HOME, and an `osdi` load, are B22-A3's (HOME, `-n`); one
-  shared deck validator across `/api/simulate` and the Studio path is left to OD-136's single diagnostic runner (B22-A3).
+  shared deck validator across `/api/simulate` and the Studio path is left to OD-136's single diagnostic runner (B22-A3). [superseded 2026-10-02 by the B22 closeout (D22-4): closed in part - the model checksum hashes the emitted text (B22-C) and every run passes -n so ngspice skips a .spiceinit and any osdi load in one (B22-A3; its effect INFERRED until a live run); still open: the XSPICE card and token readings (INFERRED until a live probe - neither live suite carries an XSPICE case), one shared deck validator (/api/simulate and the Studio keep their own screens), a count bound on a record's event list, the bounded channels and the excerpts' own bounds, and the preview's .include (by design)]
 - **D22-5:** HOME and USERPROFILE in the ngspice allowlist, no `-n` on any spawn, and the B16.0.23 gate and boundary record that
-  neither pin nor list env - B22-A3; the kicad-cli allowlist's adequacy is **INFERRED** until the opt-in oracle runs.
+  neither pin nor list env - B22-A3; the kicad-cli allowlist's adequacy is **INFERRED** until the opt-in oracle runs. [superseded 2026-10-02 by the B22 closeout (D22-5): the ngspice half closed by B22-A3 - the exact map without HOME or USERPROFILE, -n on every run, the B16.0.23 records noted - except Node's eight win32 additions, which OD-156 records]
 - **D22-7 (B22-C):** observed at the fake seam while building the bundle case (section 2): a completed run's record never receives
-  its result, and its bundle answers `409`. Not changed here.
+  its result, and its bundle answers `409`. Not changed here. [superseded 2026-10-02 by the B22 closeout (D22-7): closed by B22-C - the job store attaches the result and its evidence before it publishes the terminal status]
 - **D22-8:** the worker's whole read of `result.raw` (`worker.ts:205`) and the bundle route's (`spice/runs/[id]/bundle/route.ts:38`),
   the per-run directories never removed and their host path in records, FreeRouting's shared cwd, the run directory's whole logs
   (the bundle carries the record's bounded logs and says so), and no CPU, memory, process or file-size limit on any spawn - B22-A3
-  (and B22-A2's profiles; LB-10 for isolation).
-- **OD-150:** the evidence half (D22-21) - B22-C.
+  (and B22-A2's profiles; LB-10 for isolation). [superseded 2026-10-02 by the B22 closeout (D22-8): the ngspice parts closed by B22-A3 - no whole raw read, per-run directories removed in the runner's finally (after a kill_unconfirmed, again once the child's close is observed), no host path in records; FreeRouting's shared cwd and the absence of any OS CPU, memory, process or file-size limit stay open (OD-145, LB-10)]
+- **OD-150:** the evidence half (D22-21) - B22-C. [superseded 2026-10-02 by the B22 closeout (OD-150): every evidence reference is labelled caller-supplied (B22-C, D22-21); resolving references to server-held records waits for the aggregate's binding]
 - **Kill semantics, concurrency (D22-9), parsers (D22-10) and the rest of D22-1..24** - their increments, unchanged here.
 
 ## 10. Citations

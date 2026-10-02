@@ -1,7 +1,7 @@
 /**
  * B16.0.24 §G/§H — the legacy same-origin single-shot SPICE simulation route,
  * migrated to the canonical authenticated JSON boundary and hardened into a
- * confined ngspice sandbox.
+ * confined ngspice sandbox. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): no sandbox and nothing confined - this route starts no process; ngspice runs only through the diagnostic runner, diagnostic_only and environment_dependent, with no isolation boundary and no OS limit on CPU, memory, processes, files or network (OD-134, OD-145); production simulation authority stays BLOCKED (LB-10)]
  *
  * SECURITY BOUNDARY (§G): `authenticatedJsonRoute` runs identity + LIVE
  * membership + engineering role + same-origin CSRF, then the bounded 8 MB /
@@ -11,7 +11,7 @@
  * vector `["-b", <server temp path>]`, `shell:false`, a per-request
  * server-created isolated temp directory (never a shared cwd), server-owned
  * filenames, a MINIMAL allowlisted environment (never the full inherited server
- * env), no network, a strict timeout, and bounded stdout/stderr/raw-file/parse
+ * env), no network, a strict timeout, and bounded stdout/stderr/raw-file/parse [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): 'no network' was the deck screens' prevention, never a denial - no OS limit stops a local ngspice opening a connection (threat model T5); the executable, argument vector, environment and per-run directory above are the diagnostic runner's (the B22-A3 note below)]
  * sizes. Caller input controls NONE of: executable, arguments, shell, working
  * directory, environment, output paths, include/library paths, control
  * directives, files, or network. The generated netlist is screened for

@@ -7,7 +7,7 @@
 | public + protected classifications proven | **MET** | [authorization-and-scope-proof.md](authorization-and-scope-proof.md); public trio serves anonymous + pure-compute gate |
 | project authority server-derived | **MET** | trusted-scope `startRunPlan`; body project.id display-only; query selector never authority |
 | compiler/import reject injection + traversal | **MET** | [compilation-confinement-proof.md](compilation-confinement-proof.md), [model-import-security-proof.md](model-import-security-proof.md) |
-| execution sandboxed or blocked | **MET** | [simulator-execution-boundary.md](simulator-execution-boundary.md) — shell-less server-owned spawn, no new runner |
+| execution sandboxed or blocked | **MET** | [simulator-execution-boundary.md](simulator-execution-boundary.md) — shell-less server-owned spawn, no new runner [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): not sandboxed - every ngspice process is the diagnostic runner's (B22-A3, OD-136), with no isolation boundary; CD-10 authority alone is blocked (OD-134)] |
 | no caller-controlled process configuration | **MET** | executable/args/env/cwd/timeout/ceilings all server-owned (gate + proof) |
 | AI proposal-only | **MET** | [provider-boundary-proof.md](provider-boundary-proof.md); run_simulation records a proposal, store stays empty |
 | reports/waveforms remain evidence | **MET** | [reports-and-bundles-proof.md](reports-and-bundles-proof.md), [events-and-waveforms-proof.md](events-and-waveforms-proof.md) |

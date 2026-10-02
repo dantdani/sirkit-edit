@@ -50,7 +50,7 @@ const BASE = { registryDigest: "eng1-4aacd63c7e0a6193", descriptors: "eng1-f1d7f
 /**
  * [B20 merge] The A track added ONE descriptor after this move (`sirkit.mcp.observation-read`, A4's agent read of approved
  * external MCP servers; never MCP-exposed, and withheld from the agent unless a row names it, A4L). The base pins above
- * state B4's move, so case 2 compares them over the registry WITHOUT that one addition and pins the addition as the only
+ * state B4's move, so case 2 compares them over the registry WITHOUT that one addition and pins the addition as the only [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): with B22-B's five named computations, left out the same way]
  * difference - the same reading `b20-b3-mcp-subset-move` takes.
  */
 const A4_ADDITION = "sirkit.mcp.observation-read";
@@ -139,7 +139,7 @@ describe("[B20 B4] no proposal over MCP: the withholding move, listed means serv
     expect(baseRegistry.digest()).toBe(BASE.registryDigest);
     expect(engineeringDigest(baseRegistry.list().map((item) => [item.toolId, item.version, engineeringDigest(item)]))).toBe(BASE.descriptors);
     expect(baseRegistry.list()).toHaveLength(BASE.count);
-    // the addition is the ONLY difference: one descriptor more, and it is A4's, which no MCP list names
+    // the addition is the ONLY difference: one descriptor more, and it is A4's, which no MCP list names [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): with B22-B's five named computations too (OD-139), each excluded from MCP with the reason `computation`]
     expect(registry.list()).toHaveLength(BASE.count + 1 + B22B_ADDITIONS.length); // [B22-B] + the five named computations (OD-139)
     expect(registry.list().map((item) => item.toolId).filter((id) => !baseRegistry.list().some((item) => item.toolId === id))).toEqual([...B22B_ADDITIONS, A4_ADDITION].sort());
     expect([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS, ...WITHHELD]).not.toContain(A4_ADDITION);

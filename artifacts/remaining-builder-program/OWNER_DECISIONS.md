@@ -1821,6 +1821,7 @@ Amendments to existing entries:
   - **Redaction:** on the stream, before the output bound.
   - **No callback after settling:** once a run has settled no output reaches a caller, and the job store never reopens a terminal record.
 - Owner confirmation pending.
+- **[B22 closeout (1/2) lead, 2026-10-02] Recorded:** the early 422 at `POST /api/spice/runs` for a deck that sets its own seed, which this entry left to B22-C's preflight, was not added: such a plan still fails each point at the runner (closed, nothing run); noted open in place at `diagnostic-runner.md:319`.
 
 ## OD-139 — the named computation catalog, as applied (B22-B, 2026-10-01; review 2026-10-02)
 - **Question:** which operations, which class, and how are they exposed?

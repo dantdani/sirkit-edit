@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B22",
-  "currentCheckpoint": "B22-D committed on chapter/b22-sandboxed-computation: the adversarial matrix (all 16 runbook :938 classes; P offline with five guards added test-first; L run once by the lead: 12 of 13, case 4 NOT CONTAINED - a planted hardlink redirects ngspice's write; O BLOCKED-LIVE-QUALIFICATION under LB-10); next the B22 closeout (1/2, 2/2)",
+  "currentCheckpoint": "B22 closeout (1/2) committed on chapter/b22-sandboxed-computation: 83 dated notes superseding the sandbox, authority, network, PATH and count statements in place, 20 retitles, 26 exports recorded and 4 retired, the b22-closeout-statements tripwire; next the closeout (2/2): the four artifacts, the final validation run, the verdict (PARTIAL drafted)",
   "status": "in_progress",
   "baseSha": "d0d2ec8",
   "branch": "chapter/b22-sandboxed-computation",
-  "lastGreenSha": "a269e7a",
+  "lastGreenSha": "c9fbbb0",
   "pullRequest": "draft PR (chapter/b22-sandboxed-computation -> main) opened after the discovery commit; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
@@ -16,7 +16,7 @@
     "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)",
     "authoritative sandboxed simulation on a qualified OCI platform: BLOCKED-LIVE-QUALIFICATION (LB-10)"
   ],
-  "nextAction": "The B22 closeout: (1/2) task scratchpad/b22/task-closeout-1.md (dated notes, retitles, unused exports, the tripwire), then (2/2) task-closeout-2.md (the four artifacts, the final validation run, the verdict); PR #13 undraft, green CI, normal merge; then B23 and B24 (discovery drafts ready). Carried to the owner: OD-134..OD-159 and the B21 items.",
-  "updatedAt": "2026-10-02T18:00:00-04:00",
+  "nextAction": "The B22 closeout (2/2) (task scratchpad/b22/task-closeout-2.md; drafts from scratchpad/b22/closeout/generate.py and the lead's final-verdict.draft.md); PR #13 undraft, green CI, normal merge; then B23 and B24 (discovery drafts ready).",
+  "updatedAt": "2026-10-02T22:00:00-04:00",
   "previousChapter": "B21 merged normally into main as e109d76 (PR #11, 2026-10-01) after green CI on b11ef18; verdict PARTIAL (live qualification BLOCKED under LB-9). SEC-1 (corrective security branch fix/spice-deck-injection; D22-3 and D22-5's ngspice half) merged normally as d0d2ec8 (PR #12) after green CI on 0d38504"
 }

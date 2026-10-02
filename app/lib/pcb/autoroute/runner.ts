@@ -1,6 +1,6 @@
 /**
  * Freerouting subprocess runner (PCB Stage 9). Mirrors the NGSpice pattern in
- * app/api/simulate/route.ts: write input to a temp file, spawn the JAR, capture
+ * app/api/simulate/route.ts: write input to a temp file, spawn the JAR, capture [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): /api/simulate starts no process since B22-A3; ngspice runs through the diagnostic runner, whose per-run directory, exact environment and tree kill this runner does not share]
  * stderr, race a kill-timer against `close`, read the output file, clean up in a
  * `finally`. Local CLI only: no Docker, hosted REST, or API key.
  *

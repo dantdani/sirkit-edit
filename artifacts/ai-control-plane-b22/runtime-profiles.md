@@ -7,7 +7,7 @@ documentation; never executed), **RECORDED** (written down from a record, withou
 Branch `chapter/b22-sandboxed-computation`, base `50fe156` (B22-A1), 2026-10-01. The code is `app/lib/computation/runtime-profile.ts`
 (new); the contract is pinned by `app/lib/computation/__tests__/b22-a2-runtime-profile.test.ts`, whose case 14 checks this page's
 field rows and every profile's limit rows against the code. B22-A2 DEFINES the contract and the registry (discovery D22-2 contract,
-D22-11 contract; OD-135, OD-148): no runner reads a profile yet - B22-A3 executes `ngspice-local-diagnostic` - and nothing here
+D22-11 contract; OD-135, OD-148): no runner reads a profile yet [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): the diagnostic runner executes it (B22-A3), and execute and readiness read the registry (B22-C)] - B22-A3 executes `ngspice-local-diagnostic` - and nothing here
 started a process. No profile is `validated`, none is authoritative-eligible, and production simulation authority stays BLOCKED
 (`isolation-verdict.md`).
 
@@ -381,3 +381,10 @@ An adversarial review CONFIRMED thirteen findings; each is fixed here, test-firs
   each exit 0. `tsc --noEmit -p tsconfig.json` exit 0; eslint on the six changed TypeScript files exit 0. The four generators exit 0
   with zero drift (status, diff and every untracked file's hash identical before and after; 165 / 162 / 3 / 0): the classification
   edit is a comment, in place.
+
+## 9. The B22 closeout's export record (2026-10-02)
+
+[B22 closeout, 2026-10-02] `isDeepFrozen` (`app/lib/computation/runtime-profile.ts`) has no production caller: a **test oracle** -
+`b22-a2-runtime-profile`'s check that every built profile is deeply frozen; production freezes with the private `deepFreeze`, and
+the function's own recursion is its only use (D22-16's closeout record; `closeout-statements.md` section 3). **CONFIRMED** by
+`git grep` and `b22-closeout-statements` case 8 on `c9fbbb0` with the closeout's edits.

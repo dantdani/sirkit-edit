@@ -11,7 +11,7 @@
  *    `_linkedBinding` / `dlopen` of anything; or compiles code from a string (`eval`, the `Function` constructor, also through
  *    `.call`, `.apply` or `.bind`); [B20 B4 lead] a name spelled with an escape (`\u`, `\x`) is read as the name, and a
  *    computed key that statically spells a loader name fails closed;
- * so none of the app's five process spawners is. [B20 B4 review] The third-party packages the closure imports are not walked:
+ * so none of the app's five process spawners is. [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): the gate's list is now three process spawners and two thread starters - the diagnostic runner, FreeRouting's and kicad-cli's runners, the engine host and its worker entry (B22-A3 OD-136, B22-B OD-140); none is reached] [B20 B4 review] The third-party packages the closure imports are not walked:
  * their exact specifiers are pinned to a reviewed list (a new package, or a new subpath of a reviewed one, fails). Not
  * analysed: code inside those packages; a member name computed at run time; `binding`, `eval` or `Function` reached through
  * an alias of `process`, of a global object or of `Function`; and reflection (`Reflect`, property descriptors). J2 forbids

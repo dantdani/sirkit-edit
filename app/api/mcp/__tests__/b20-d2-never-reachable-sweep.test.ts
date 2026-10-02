@@ -394,7 +394,7 @@ describe("[B20 D2] the never-reachable sweep", () => {
       }
     }
 
-    // the population, derived: 42 x 5 today, of which the served listing is nine for four roles and seven for the commenter
+    // the population, derived: 42 x 5 today, of which the served listing is nine for four roles and seven for the commenter [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): 47 x 5 since B22-B's five named computations - the count below is derived]
     expect(rows.length).toBe(descriptors.length * STORED_ROLES.length);
     const partitionA = rows.filter((row) => !row.served);
     const partitionB = rows.filter((row) => row.served);

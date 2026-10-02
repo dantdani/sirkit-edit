@@ -209,7 +209,7 @@ Unblocking model-simulation execution needs every clause met by a qualified prof
   sends.
 - Pinned beside them: `/api/simulate`'s truthfulness sentence, the CD-10 page's "Validated sandbox unavailable" and "Current verdict:
   BLOCKED", and the SPICE AI's run note (discovery section 5 found them unpinned). The dated notes beside the B16.0.24 records and the
-  `/api/simulate` header remain the closeout's.
+  `/api/simulate` header remain the closeout's. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): done: each carries the closeout's dated note]
 
 ## 8. SPICE AI evidence (D22-21; OD-150's evidence half)
 
@@ -264,7 +264,7 @@ aggregate is not bound to the route (section 6), so none is labelled `server-hel
   a unit comes from the vector's name or from ngspice's closed type list (INFERRED from its source), the six types ngspice declares
   without a unit keep the empty unit, any other type is refused; an output with no data point is `OUTPUT_EMPTY`; the parse path builds
   no CD-10 artifact (`waveformArtifactOf` builds one on demand).
-- **OD-144**: the UI half applied as its default; the B16.0.24 notes and the `/api/simulate` header are the closeout's.
+- **OD-144**: the UI half applied as its default; the B16.0.24 notes and the `/api/simulate` header are the closeout's. [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): done: each carries the closeout's dated note]
 - **OD-150**: the evidence half applied as "labelled caller-supplied everywhere"; resolving to server-held records waits for the
   aggregate's binding.
 
@@ -318,3 +318,29 @@ and the source restored byte for byte (verified by SHA-256).
 | tests-6 | the append's failure branches never ran | a throwing, a stale and a refusing store | `b22-c-job-store-terminal` case 10 (breakage proved) |
 | tests-7 | `OUTPUT_HEADER_INVALID` and the route's bounds untested | seven header rows; the route's point bound | `b22-c-output-validator` case 10 (breakage proved) |
 | tests-8 | the checks past the binding untested | network, resource and include checks with the server's copies | `b22-c-authority` case 7 (breakage proved) |
+
+## 13. The B22 closeout's export record (2026-10-02)
+
+[B22 closeout, 2026-10-02] The B22-C exports no production source calls, each with why it exists (D22-16's closeout record;
+`closeout-statements.md` section 3, re-derived from the tree by `b22-closeout-statements` case 8). **CONFIRMED** by `git grep` and
+that case on `c9fbbb0` with the closeout's edits:
+
+- `validateLoweredDeck` and `pinnedContentSha256` (`app/lib/computation/deck-validator.ts`): **extension points**, delivered and
+  unbound - the independent CD-10 deck check the authoritative path will need (section 5; D22-19 in part); `b22-c-deck-validator`
+  case 8 pins that no production path calls either. `DECK_VALIDATION_CODES` is its **vocabulary**, the closed codes as data beside
+  `DeckValidationCode`.
+- `createComputationEvidenceStore` and the store half only it reaches - `evidenceAggregateKey`, `evidenceScopeKey`,
+  `ComputationEvidenceIntegrityError`, `COMPUTATION_EVIDENCE_RECORD_SCHEMA` and `EVIDENCE_SCOPE_SUFFIX`
+  (`app/lib/computation/evidence-store.ts`): **extension points**, delivered and unbound - the durable aggregate no route binds yet
+  (section 6, OD-141's stated deviation); the job store's optional `evidenceStore` takes it when the lead binds it. The document half
+  is live through the job store.
+- `waveformArtifactOf` (`app/lib/computation/output-validator.ts`): an **extension point** - it builds the CD-10 waveform artifact on
+  demand, since the parse path builds none (OD-143, section 10).
+- `SIMULATION_OUTPUT_VALIDATOR`: a **documentary constant** - the validator's id as data; `runtime-profile.ts` restates the literal
+  and `b22-c-output-validator` pins the two to the same id. `SIMULATION_OUTPUT_REFUSALS`: the closed refusal **vocabulary** beside
+  `SimulationOutputRefusal`.
+- **Retired**: the `options` parameter of `parseNgspiceAsciiRaw` and `parseNgspiceAsciiRawResult` (`app/lib/spice/waveforms.ts`) -
+  no caller passed it (the worker and every test pass the raw text alone), so the worker parses under the validator's defaults as
+  before; and the `read` parameter of `serverSimulationEnvironments` (`app/lib/computation/simulation-authority-server.ts`) - neither
+  route nor any test passed it. Each edit is in place with a same-line tombstone; no line moved (`waveforms.ts:28` keeps its
+  validator call).
