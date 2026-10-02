@@ -146,8 +146,11 @@ vi.mock("node:fs/promises", async (orig) => {
     rm: async (path: string) => {
       fsState.removed.push(String(path));
     },
-    // [B22-A3 review] tests-10: a hook into the pin check's stat walk (the real lstat answers)
+    // [B22-A3 review] tests-10: a hook into the pin check's stat walk (the real lstat answers); [B22-D] reviewed harness move: the
+    // runner lstats the raw file before its bounded read (b22-d-adversarial case 3), so a raw file this fake holds is a plain file
     lstat: async (...args: unknown[]) => {
+      const raw = fsState.files.get(String(args[0]));
+      if (raw !== undefined) return { isSymbolicLink: () => false, isFile: () => true, isDirectory: () => false, nlink: 1, size: raw.length };
       fsState.onLstat?.();
       return (actual.lstat as (...values: unknown[]) => Promise<unknown>)(...args);
     },

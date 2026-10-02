@@ -144,7 +144,11 @@ Unblocking model-simulation execution needs every clause met by a qualified prof
 - **Recorded consequences**: the type list is INFERRED from ngspice's source (its front end's type table and `guess_type`), not from a
   live run: a type ngspice-46 writes that is not on it is refused, fail-closed, UNKNOWN until a live run; a transient that repeats a
   time point is refused (whether ngspice-46 ever writes one is UNKNOWN until a live run); B22-B's strict circuit-analysis reader stays
-  its own (B22-D item 16).
+  its own (B22-D item 16). [B22-D, 2026-10-02] No longer: the strict reader is read by this validator under its own bounds; the
+  validator also refuses a repeated `Flags:`, `No. Variables:` or `No. Points:` header and a complex value whose magnitude overflows,
+  and `/api/simulate` derives a complex magnitude with the worker's formula (`adversarial-matrix.md` G4; `b22-d-adversarial` case 8).
+  [B22-D review] The MSVC indeterminate `-1.#IND00e+000` is refused `OUTPUT_NON_FINITE` as a NaN (it was `OUTPUT_MALFORMED`;
+  `adversarial-matrix.md` G5).
 
 ## 5. The independent deck validator (D22-19, in part)
 
@@ -275,7 +279,9 @@ aggregate is not bound to the route (section 6), so none is labelled `server-hel
 - The Studio record's cancel-at-request ordering (`cancelInternal`, pinned by B16.0.23 §E/§F) is unchanged.
 - Readiness's and execute's other body-taken inputs and the denominator route's body providers (section 2).
 - The vector types the validator refuses as unknown units, and whether ngspice repeats a time point (section 4): UNKNOWN until a live
-  run; B22-B's strict reader and the validator are not yet run over one corpus (B22-D item 16).
+  run; B22-B's strict reader and the validator are not yet run over one corpus (B22-D item 16). [B22-D, 2026-10-02] They are: one
+  corpus of 39 raw files ([B22-D review] 37 before the review) through all four parsers (`b22-d-adversarial` case 8); the vector types and repeated time points stay UNKNOWN
+  until the lead's live run (`b22-d-adversarial-live` case 16).
 - The unwired CD-10 tables (section 6).
 - [B22-C review] No CD-10 path calls `validateLoweredDeck`; CD-10's own lowering (`lowering.ts:14`) checks only the
   `artifact://sha256/` prefix of a model's storage reference (section 5).

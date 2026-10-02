@@ -76,6 +76,16 @@ vi.mock("node:fs/promises", async (orig) => ({
   mkdir: async () => undefined,
   mkdtemp: async (prefix: string) => `${prefix}fake`,
   rm: async () => {},
+  // [B22-D] reviewed harness move: the runner lstats the raw file before its bounded read (b22-d-adversarial case 3), so the raw file
+  // this fake serves is a plain file (absent when the fake holds none); every other path the real lstat answers
+  lstat: async (path: string, ...rest: unknown[]) => {
+    if (/[\\/]result\.raw$/.test(String(path))) {
+      if (fsState.raw === null) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      return { isSymbolicLink: () => false, isFile: () => true, isDirectory: () => false, nlink: 1, size: Buffer.byteLength(fsState.raw, "utf8") };
+    }
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    return (actual.lstat as (...values: unknown[]) => Promise<unknown>)(path, ...rest);
+  },
 }));
 
 import { injectAuthorizedPrincipal, resetInjectedIdentity } from "@/app/lib/auth/test-support";

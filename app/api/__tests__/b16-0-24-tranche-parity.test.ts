@@ -90,6 +90,15 @@ function fsImpl(actual: Record<string, unknown>) {
     unlink: async (p: string) => { fsState.unlinks.push(String(p)); },
     mkdtemp: async (p: string) => `${p}fake`,
     rm: async () => {},
+    // [B22-D] reviewed harness move: the diagnostic runner lstats the raw file before its bounded read (a link, a hardlink or a
+    // device is refused unread; b22-d-adversarial case 3), so the raw artifact this seam serves is a plain file; any other path is real
+    lstat: async (p: string, ...rest: unknown[]) => {
+      if (/[\\/]result\.raw$/.test(String(p))) {
+        if (fsState.raw === null) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+        return { isSymbolicLink: () => false, isFile: () => true, isDirectory: () => false, nlink: 1, size: Buffer.byteLength(fsState.raw, "utf8") };
+      }
+      return (actual.lstat as (...values: unknown[]) => Promise<unknown>)(p, ...rest);
+    },
   };
 }
 vi.mock("node:fs/promises", async (orig) => fsImpl(await orig() as Record<string, unknown>));

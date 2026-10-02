@@ -443,6 +443,15 @@ describe("B11.5 §D — every B11.4 closure is preserved", () => {
         && !source.split("\n").some((line) =>
           /(?:writeFileSync|mkdirSync|rmSync|appendFileSync|unlinkSync|cpSync|rmdirSync|createWriteStream|symlinkSync)\s*\(/.test(line)
           && !/\b(?:root|full|first)\b/.test(line)),
+      // [B22-D, 2026-10-02] the OPT-IN live adversarial suite (skipped unless SIRKIT_B22_LIVE_RUNNER=1) writes EXCLUSIVELY under its OS
+      // temp scratch root `mkdtempSync(join(tmpdir(), "sirkit-b22-d-live-"))` (`scratch`) and plants one hardlink inside the diagnostic
+      // runner's own run directory (`runDir`, under the OS temp directory); EVERY write-primitive line - the link included - must be
+      // rooted at one of them, or the admission lapses.
+      "b22-d-adversarial-live.test.ts": (source) =>
+        source.includes('mkdtempSync(join(tmpdir(), "sirkit-b22-d-live-"))')
+        && !source.split("\n").some((line) =>
+          /(?:writeFileSync|mkdirSync|rmSync|appendFileSync|unlinkSync|cpSync|rmdirSync|createWriteStream|symlinkSync|linkSync)\s*\(/.test(line)
+          && !/\b(?:scratch|runDir)\b/.test(line)),
     };
 
     const offenders: string[] = [];

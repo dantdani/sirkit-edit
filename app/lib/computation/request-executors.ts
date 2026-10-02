@@ -15,6 +15,7 @@ import { assertCompiledDeckSafe } from "../spice/netlist";
 import { DiagnosticRunnerError, diagnosticProvenance, runDiagnosticNgspice, seedDiagnosticDeck } from "./diagnostic-runner";
 import { computationKind, MICROCASE_QUANTITIES, validateComputationOutput, type AnalyticalMicrocase } from "./catalog";
 import { EngineHostError, defaultEngineHost, type EngineHost } from "./engine-host";
+import { SimulationOutputError, validateNgspiceAsciiOutput, type ValidatedSimulationOutput } from "./output-validator";
 import { computationEvidence, type ComputationEvidence, type ComputationRequestExecutors, type SealedComputationRequest } from "./requests";
 
 const NEWLINE = String.fromCharCode(10);
@@ -48,45 +49,32 @@ export function buildCircuitAnalysisDeck(input: Readonly<Record<string, string |
   return stage === "seeded" ? seedDiagnosticDeck(deck) : deck;
 }
 
-const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
 interface StrictRaw { readonly complex: boolean; readonly names: readonly string[]; readonly points: ReadonlyArray<ReadonlyArray<readonly [number, number]>> }
-/** The strict ngspice ASCII raw reader: the declared variable and point counts must be met exactly, every value a finite number
- *  literal (a complex value `re,im`), every point's index in order. Anything else refuses the file whole (no dropping, D22-10). */
+/** The strict reader's own bounds, narrower than the validator's defaults: at most 64 variables and 100,000 points. */
+const STRICT_RAW_LIMITS = Object.freeze({ maxVariables: 64, maxPoints: 100_000 });
+/** The strict ngspice ASCII raw reader: the declared variable and point counts met exactly (every point complete), every value a
+ *  finite number literal (a complex value `re,im`), every point's index in order. Anything else refuses the file whole (no dropping,
+ *  D22-10).
+ *  [B22-D] item 16 (parser differentials): it is read by the ONE output validator (`validateNgspiceAsciiOutput`, B22-C) under its own
+ *  bounds, so it reads every file exactly as the Studio worker's and `/api/simulate`'s parsers do. Its own reading disagreed with
+ *  theirs (b22-d-adversarial case 8, red first): it refused a variable line carrying ngspice's attributes (` grid=3`, INFERRED from
+ *  ngspice's raw writer), a file without `Flags:` or `No. Points:`, a `00` index and a complex value written `re, im`; it read a
+ *  repeated time point and an undeclared vector type the validator refuses; it kept `-0`; it took the first of two `No. Points:`
+ *  headers where the validator took the last. */
 export function readStrictRaw(text: string): StrictRaw | null {
-  const lines = text.replace(/\r\n?/g, NEWLINE).split(NEWLINE);
-  const header = (label: string): string | null => lines.find((line) => line.startsWith(label))?.slice(label.length).trim() ?? null;
-  const flags = header("Flags:");
-  const variableCount = Number(header("No. Variables:"));
-  const pointCount = Number(header("No. Points:"));
-  if (flags === null || !Number.isInteger(variableCount) || variableCount < 1 || variableCount > 64 || !Number.isInteger(pointCount) || pointCount < 1 || pointCount > 100_000) return null;
-  const complex = /\bcomplex\b/i.test(flags);
-  const start = lines.findIndex((line) => line.trim() === "Variables:");
-  const values = lines.findIndex((line) => line.trim() === "Values:");
-  if (start < 0 || values !== start + variableCount + 1) return null;
-  const names: string[] = [];
-  for (let index = 0; index < variableCount; index += 1) {
-    const match = /^\s*(\d+)\s+(\S+)\s+\S+\s*$/.exec(lines[start + 1 + index]!);
-    if (!match || Number(match[1]) !== index) return null;
-    names.push(match[2]!.toLowerCase());
+  let output: ValidatedSimulationOutput;
+  try {
+    output = validateNgspiceAsciiOutput(text, { limits: STRICT_RAW_LIMITS });
+  } catch (error) {
+    if (error instanceof SimulationOutputError) return null;
+    throw error;
   }
-  const tokens = lines.slice(values + 1).join(" ").trim().split(/\s+/).filter((token) => token !== "");
-  if (tokens.length !== pointCount * (variableCount + 1)) return null;
-  const points: Array<Array<readonly [number, number]>> = [];
-  for (let point = 0; point < pointCount; point += 1) {
-    const base = point * (variableCount + 1);
-    if (tokens[base] !== String(point)) return null;
-    const row: Array<readonly [number, number]> = [];
-    for (let index = 0; index < variableCount; index += 1) {
-      const parts = tokens[base + 1 + index]!.split(",");
-      if (parts.length !== (complex ? 2 : 1) || !parts.every((part) => NUMBER.test(part))) return null;
-      const re = Number(parts[0]);
-      const im = complex ? Number(parts[1]) : 0;
-      if (!Number.isFinite(re) || !Number.isFinite(im)) return null;
-      row.push([re, im] as const);
-    }
-    points.push(row);
-  }
-  return { complex, names, points };
+  const vectors = [output.axis, ...output.variables];
+  return {
+    complex: output.complex,
+    names: vectors.map((vector) => vector.name.toLowerCase()),
+    points: Array.from({ length: output.points }, (_, point) => vectors.map((vector) => [vector.real[point]!, vector.imaginary ? vector.imaginary[point]! : 0] as const)),
+  };
 }
 
 /** The microcase summary of a strict raw file (the quantities the analytical engine names), or null. */

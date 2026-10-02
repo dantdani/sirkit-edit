@@ -127,8 +127,8 @@ function parseAsciiRaw(raw: string): SimResult {
           point[vector.name] = re;
         } else {
           const im = vector.imaginary[index]!;
-          const mag    = Math.sqrt(re * re + im * im);
-          const magDb  = 20 * Math.log10(mag === 0 ? 1e-30 : mag);
+          const mag    = Math.hypot(re, im); // [B22-D] item 16: the worker's formula (waveforms.ts), so both answer one number - `re * re` overflowed past 1e154 and the 1e-30 floor held only at zero
+          const magDb  = 20 * Math.log10(Math.max(1e-30, mag));
           const phase  = (Math.atan2(im, re) * 180) / Math.PI;
           point[`${vector.name}.mag`]   = magDb;
           point[`${vector.name}.phase`] = phase;

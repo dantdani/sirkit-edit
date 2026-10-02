@@ -1676,6 +1676,7 @@ Amendments to existing entries:
 - **Default applied:** the first `b22-` suites (`app/lib/computation/__tests__/b22-a1-*.test.ts`, six suites) ride ONE directory filter, `app/lib/computation/__tests__`, in the `prompt-to-gerber` job, and `b22-` joined `CHAPTERS` in `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` in the same change; no `it(` was added to the guard (B21's `b21-a-page` case 4 pin of 8 blocks stands; a run prints 8 + 4 = 12 tests); no `b22-` suite starts PGlite; live suites stay opt-in (`SIRKIT_B22_LIVE_RUNNER=1` when one exists) and never run in CI - A1 has none.
 - **Evidence:** `artifacts/ai-control-plane-b22/deck-and-secret-corrections.md` section 6 (the guard red with `b22-` and no filter, then green); the workflow line `:226`; B21's matrix citations C49/C93/C94 re-pinned +1.
 - **The owner may choose otherwise:** explicit per-suite entries (each then exempt from a directory filter by the guard's redundancy rule). Owner confirmation pending.
+- **[B22-D, 2026-10-02] Applied:** `b22-d-adversarial` and the opt-in `b22-d-adversarial-live` ride the existing `app/lib/computation/__tests__` filter in prompt-to-gerber. No CI line was added; the CI job-scope guard is green.
 
 ## OD-148 — kicad-cli and FreeRouting in B22, as applied (B22-A1, 2026-10-01)
 
@@ -1776,6 +1777,12 @@ Amendments to existing entries:
   - FreeRouting's and kicad-cli's direct-child kills and before-exit resolutions stay with B22-B/D.
 - **Evidence:** `diagnostic-runner.md` section 3; `b22-a3-diagnostic-runner` cases 6, 7, 8, 12, 13.
 - Owner confirmation pending.
+- **[B22-D, 2026-10-02] Recorded:**
+  - With no OS cap, a construct that would fork without end is prevented only by the deck screens.
+  - A loop that never ends is stopped by the wall clock.
+  - A raw file is written at any size, and only its read-back is bounded.
+  - A printing process runs until its wall clock; there is no kill at the output bound.
+  - Live cases 1, 6 and 14 measure these on your run.
 
 ## OD-155 — the diagnostic runner's cap: shared by tenant, every wait bounded, as applied (B22-A3, 2026-10-01)
 
@@ -1905,6 +1912,12 @@ Amendments to existing entries:
   - An empty output is `OUTPUT_EMPTY`.
   - The parse path builds no CD-10 artifact.
   - Empty scalar names are valid evidence.
+- **[B22-D, 2026-10-02; review 2026-10-02] Extended as applied: one validator for every raw reader.**
+  - The circuit-analysis strict reader is `validateNgspiceAsciiOutput` under its own bounds (64 variables, 100,000 points; pinned at their edges by `b22-d-adversarial` case 8).
+  - A repeated `Flags:`, `No. Variables:` or `No. Points:` header is refused `OUTPUT_HEADER_INVALID`; neither copy wins.
+  - A complex value whose magnitude overflows, though both parts are finite, is `OUTPUT_NON_FINITE`.
+  - The MSVC indeterminate (`#IND`) is a NaN: `OUTPUT_NON_FINITE`. It was `OUTPUT_MALFORMED` before the review; the file was refused whole either way.
+  - `/api/simulate` derives a complex magnitude with the worker's formula (`Math.hypot`, floored at 1e-30).
 
 ## OD-144 — legacy wording, the UI half, as applied (B22-C, 2026-10-02)
 - **Default applied:**

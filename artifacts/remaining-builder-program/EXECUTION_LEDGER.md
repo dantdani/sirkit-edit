@@ -4131,3 +4131,72 @@ Pages: `artifacts/ai-control-plane-b22/diagnostic-runner.md`.
   B22-A3's first breakage pass; the next increments are told to call Git Bash by its absolute path. The studio's wording changed: CI's
   page-browser-e2e job (the Playwright suite on a compiled editor) is the browser gate, and it also proves the client bundle compiles
   without the Node-only modules the review found pulled into it (regressions-1, pinned offline by `b22-c-authority` case 8).
+
+### B22-D - the adversarial matrix: every runbook :938 class, prevention offline, live on the diagnostic runner, OCI blocked (2026-10-02 local; implementation + review fix; this commit)
+
+**Test-first** on `chapter/b22-sandboxed-computation` from `a269e7a`.
+- **Implementation:**
+  - `b22-d-adversarial` and `b22-d-adversarial-live` were written first. They ran 6 failed / 4 passed of 10:
+    - cases 1, 3, 4, 8, 9 and 10 were red;
+    - cases 2, 5, 6 and 7 pin properties the code already held, and each was proved by a breakage instead;
+    - the live suite was 13 skipped.
+  - Then 10 green.
+  - The red: 17 write targets admitted by the final screen; a link's raw file read; runs made through a planted root link; 23 parser disagreements, made up of:
+    - the strict reader on ten files;
+    - `/api/simulate`'s complex magnitude on five;
+    - the validator reading an overflowing magnitude and two duplicate-header files;
+    - the worker returning an infinity.
+  - 20 deliberate breakages (D1–D10b) were caught, each restored by SHA-256. D6b was not caught at first, so its case was strengthened before it was.
+- **Adversarial review:** 10 findings CONFIRMED, all low after verification (seven defects, three reported twice).
+  - Four counterexamples ran green on the reviewed suite first (CE1–CE3b).
+  - The strengthened suite ran 2 failed / 8 passed of 10 on the reviewed tree, then 10 green.
+  - 18 new breakages (D8f–D8m, D10c–D10l) and 9 re-runs of the implementation's (D3, D3b, D8a–D8e, D10, D10b) were each caught and restored by SHA-256.
+  - Case 3's assertions are now soft. Run against `a269e7a`'s runner, every kind read through at the runner, and so did `/api/simulate` and the worker (observed, no longer inferred).
+
+**GUARDS:**
+- G1: the final screen's `write` target is a plain relative file.
+- G2: the raw file is read only when `lstat` shows a plain file with one name.
+- G3: the runner root is created by the runner, or used only if `lstat` shows a plain directory.
+- G4: one validator for every raw reader. The strict reader keeps its own bounds, now pinned at their edges. A repeated decisive header is refused. A complex magnitude that overflows is non-finite. `/api/simulate` uses `Math.hypot` floored at 1e-30.
+- G5 (review): `#IND` is non-finite.
+
+**LIVE:** 13 cases written by B22-D and run once by the lead (below). A failing case 4, 12 or 14, or a `kill_unconfirmed` in case 1 or 13, reports its class NOT contained; a case 9 or 12 that fails on its measurement or its positive control is NOT MEASURED.
+
+**OCI:** BLOCKED-LIVE-QUALIFICATION under LB-10.
+
+**Reviewed pin and harness moves:**
+- B11.5 case 12: one admission for `b22-d-adversarial-live.test.ts`, with every write line rooted at `scratch` or `runDir`.
+- Three suites' fs fakes now answer `lstat` (`b22-a3-diagnostic-runner`, `b22-a1-diagnostic-bounds`, `b16-0-24-tranche-parity`). Harness only.
+- The B22-A1 page's C42: `diagnostic-runner.ts:654` -> `:692`.
+- The review moved no pin.
+
+**Gates (final):**
+- A 622 (+21 skipped). J 105 (+2 skipped). B 1,107. C 415. D 460. E 825. F 314. F2 22. H 1,059. I 479 (+9 skipped).
+- tsc and eslint (11 files) clean.
+- 7 generators, zero drift; census 165 / 162 / 3 / 0.
+
+**Not changed:**
+- The CD-10 501 and its pins; `executeAuthoritativeSimulation` still throws.
+- Nothing is called a sandbox or authoritative.
+- No route, dependency, migration or CI line (OD-146: the existing `app/lib/computation/__tests__` filter).
+
+**Open:**
+- Your live run.
+- FreeRouting and kicad-cli kill semantics.
+- The fab archive reader's per-entry bound.
+- One deck validator across `/api/simulate` and the Studio.
+- A dated note on the SEC-1 page's description of the `write` line (your choice).
+- The ngspice-46 spellings and attributes that stay UNKNOWN.
+- Lead close (2026-10-02): (1) the check's new issue: `b22-d-adversarial` case 10 read each live deck line by line, but an escaped
+  line break inside one string literal hid a second ngspice line behind an allowed first word - a bypass planted in the live suite
+  (`"echo b22d\nhardcopy b22dplot v(out)"`) passed case 10 (10 of 10), then every deck element must be exactly one line (no control
+  character, U+0085, U+2028 or U+2029) and the bypass failed it; the live suite restored by hash, case 10 green without it. (2) The page's
+  "nineteen of nineteen" breakages corrected to eighteen (the table and the logs), and the D3b re-run claim to what its log shows (the
+  hardlink kind and the Studio worker). (3) The lead ran `b22-d-adversarial-live` once with `SIRKIT_B22_LIVE_RUNNER=1` and the pinned
+  install: 12 of 13 passed; case 4 FAILED - NOT CONTAINED: a hardlink planted as `result.raw` after the deck write and before the spawn was
+  refused by the runner (`not-a-plain-file`, never read) but ngspice wrote through it to the file outside the run directory; planting it
+  needs a process already running as the server's user, outside the threat model's adversaries - recorded as a residual, never a pass.
+  The run CONFIRMED ngspice-46's non-finite spellings `inf` and `-nan(ind)` (every parser refused them), that the canary never printed
+  while `$TZ` expanded, that no ngspice or taskkill survived an abort or a timeout, and that real operating-point, transient and AC files
+  read the same through every parser (`adversarial-matrix.md` section 10). CI was green on `a269e7a` (all four checks; the browser job
+  compiled the editor, confirming B22-C's client-bundle fix).

@@ -474,7 +474,7 @@ export function assertCompiledDeckSafe(deck: string, expected: DeckExpectation):
   const ends = lines.flatMap((line, index) => (index > 0 && /^\s*\.endc/i.test(line) ? [index] : []));
   const start = expected.controlBlock && controls.length === 1 ? controls[0]! : -1;
   const own = start >= 0 && ends.length === 1 && ends[0] === start + OWN_CONTROL_BLOCK.length - 1
-    && OWN_CONTROL_BLOCK.every((rule, offset) => (typeof rule === "string" ? lines[start + offset] === rule : rule.test(lines[start + offset] ?? "")));
+    && OWN_CONTROL_BLOCK.every((rule, offset) => (typeof rule === "string" ? lines[start + offset] === rule : rule.test(lines[start + offset] ?? ""))) && plainRelativeFileName((lines[start + OWN_CONTROL_BLOCK.findIndex((rule) => typeof rule !== "string")] ?? "").split(" ")[1] ?? ""); // [B22-D] items 3, 5: the `write` target is a plain relative file inside the run directory (the pattern above admitted `../x`, `/dev/null`, `//./pipe/x`, `NUL`, `CON`; b22-d-adversarial case 1)
   if (expected.controlBlock ? !own : controls.length > 0 || ends.length > 0) throw new SpiceDeckSafetyError("the deck carries a control block the compiler did not write");
   const includes = new Set(expected.includes ?? []); if (expected.executed && readsXspiceFileOutsideRunDirectory([...first.split("\f").slice(1), ...lines.slice(1)].join("\n"))) throw new SpiceDeckSafetyError("the deck names a file, a program or a library outside the run directory"); // [B22-A1] D22-4, [B22-A1 review] tests-1, coverage-1/2: XSPICE, read over the cards as ngspice joins them across lines and models (the title excepted; its form-feed pieces read as lines, as below)
   lines.forEach((line, index) => {

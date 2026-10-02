@@ -176,6 +176,10 @@ The pinned SPICE executor writes the deck from numbers alone, seeds it (`seedDia
 (`assertCompiledDeckSafe`, exactly the compiler-style control block), runs it once on `runDiagnosticNgspice` (the tenant as the
 holder, the kind's 10 s wall clock), reads the raw file with a strict reader that refuses a malformed, short or non-finite file whole
 (no dropping, unlike the legacy parsers - D22-10 stays B22-C's for them), and checks the summary with the circuit-waveform validator.
+[B22-D, 2026-10-02] The strict reader is now read by B22-C's one output validator under its own bounds (64 variables, 100,000
+points): its own reading disagreed with the other parsers on ten corpus files ([B22-D review] was "nine"; the red log lists ten),
+ngspice's ` grid=3` attribute among them (`adversarial-matrix.md` G4; `b22-d-adversarial` case 8, which since the review also pins
+those bounds at their edges).
 CONFIRMED at the runner's module seam only; no ngspice ran. No production surface approves a request yet (no route). **UNKNOWN**
 until a live run (the A3 opt-in suite's ground, the lead's): the vector names a real ngspice-46 writes for `write result.raw v(out)
 i(V1)` (the strict reader looks for `v(out)` and `i(v1)`, lower-cased; a different spelling refuses the evidence `OUTPUT_INVALID`,

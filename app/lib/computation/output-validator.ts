@@ -6,9 +6,11 @@
  * so one dropped token moved every later value onto the wrong variable or point; a short file was only a warning.
  *
  * Here nothing is dropped: the output is refused WHOLE, with one closed code, when
- *  - its header is missing or inconsistent (`OUTPUT_HEADER_INVALID`), or it is binary;
+ *  - its header is missing or inconsistent (`OUTPUT_HEADER_INVALID`), or it is binary; [B22-D] item 16: or it repeats `Flags:`,
+ *    `No. Variables:` or `No. Points:` (before B22-D the strict reader read the first copy and this validator the last);
  *  - a value is no number, a point index is out of order, or it holds more values than it declares (`OUTPUT_MALFORMED`);
- *  - a value is NaN, an infinity or a literal that overflows to one (`OUTPUT_NON_FINITE`);
+ *  - a value is NaN, an infinity or a literal that overflows to one (`OUTPUT_NON_FINITE`); [B22-D] item 9: or a complex value whose
+ *    magnitude overflows though both parts are finite (both parsers derive its magnitude in dB: it would be an infinity);
  *  - it holds fewer values than its declared points need, or ends inside a point (`OUTPUT_SHORT`);
  *  - [B22-C review] regressions-5: it declares or holds no data point at all (`OUTPUT_EMPTY`);
  *  - it exceeds the caller's variable, point or value bound (`OUTPUT_OVER_LIMIT`; the route's former silent truncation);
@@ -150,7 +152,7 @@ function numberOf(token: string): number | SimulationOutputRefusal {
     if (!Number.isFinite(value)) return "OUTPUT_NON_FINITE";
     return value === 0 ? 0 : value;
   }
-  return /nan|inf/i.test(token) ? "OUTPUT_NON_FINITE" : "OUTPUT_MALFORMED";
+  return /nan|inf|#ind/i.test(token) ? "OUTPUT_NON_FINITE" : "OUTPUT_MALFORMED"; // [B22-D review] tests-8: the MSVC indeterminate (`-1.#IND00e+000`) is a NaN
 }
 function unitOf(name: string, type: string): string {
   const named = unitForVector(name);
@@ -190,9 +192,9 @@ export function validateNgspiceAsciiOutput(raw: string, options: SimulationOutpu
     }
     if (line.startsWith("Title:")) title = line.slice("Title:".length).trim();
     else if (line.startsWith("Plotname:")) plotName = line.slice("Plotname:".length).trim();
-    else if (line.startsWith("Flags:")) flags = line.slice("Flags:".length).trim().toLowerCase();
-    else if (line.startsWith("No. Variables:")) declaredVariables = integerHeader(line.slice("No. Variables:".length));
-    else if (line.startsWith("No. Points:")) declaredPoints = integerHeader(line.slice("No. Points:".length));
+    else if (line.startsWith("Flags:")) flags = flags === null ? line.slice("Flags:".length).trim().toLowerCase() : refuse("OUTPUT_HEADER_INVALID"); // [B22-D] item 16: one copy of each header that decides the reading
+    else if (line.startsWith("No. Variables:")) declaredVariables = declaredVariables === null ? integerHeader(line.slice("No. Variables:".length)) : refuse("OUTPUT_HEADER_INVALID");
+    else if (line.startsWith("No. Points:")) declaredPoints = declaredPoints === null ? integerHeader(line.slice("No. Points:".length)) : refuse("OUTPUT_HEADER_INVALID");
     else if (trimmed === "Variables:") inVariables = true;
   }
   if (valuesFrom < 0 || declaredVariables === null || declaredVariables < 1 || declarations.length !== declaredVariables) refuse("OUTPUT_HEADER_INVALID");
@@ -232,6 +234,7 @@ export function validateNgspiceAsciiOutput(raw: string, options: SimulationOutpu
       const slot = offset - 1;
       const variable = complex ? slot >> 1 : slot;
       (imaginary && slot % 2 === 1 ? imaginary : real)[variable]!.push(value);
+      if (imaginary && slot % 2 === 1 && !Number.isFinite(Math.hypot(real[variable]![real[variable]!.length - 1]!, value))) firstValueRefusal = "OUTPUT_NON_FINITE"; // [B22-D] item 9
     }
   }
   let points: number;

@@ -86,7 +86,7 @@ export class DiagnosticRunnerError extends Error {
 export type DiagnosticOutcome = "exited" | "timeout" | "cancelled" | "kill_unconfirmed" | "spawn_failed";
 export type DiagnosticRawRead =
   | { readonly state: "read"; readonly text: string }
-  | { readonly state: "not-requested" | "skipped" | "missing" | "over-limit" | "invalid-utf8" };
+  | { readonly state: "not-requested" | "skipped" | "missing" | "over-limit" | "invalid-utf8" | "not-a-plain-file" };
 
 /** [B22-A3] What one run produced. No absolute host path: the run id is opaque and both host directories are redacted from the output. */
 export interface DiagnosticRunRecord {
@@ -589,6 +589,41 @@ function runDirectoryFailed(error: unknown): DiagnosticRunnerError {
 }
 
 /**
+ * [B22-D] item 4 (D22-8's open link at the runner root): the runner creates its root, or - when one exists already (EEXIST) - runs
+ * only if `lstat`, which never follows a link, shows a plain directory there. A link, a junction (Node's `lstat` reports one as a
+ * link: CONFIRMED by b22-a2-runtime-profile case 5's real junction) or a file at the root is refused before any run directory, so no
+ * pre-planted link moves every run directory elsewhere. A root this call just created needs no check. RECORDED: a process of the
+ * server user can still replace the root between this check and `mkdtemp` (the runner is no boundary against one); with no POSIX
+ * profile, a root another user owns is not checked (`lstat`'s owner and mode would be the POSIX guard).
+ */
+async function ensureRunnerRoot(root: string): Promise<void> {
+  try {
+    await mkdir(root);
+    return;
+  } catch (error) {
+    if ((error as { code?: unknown } | null)?.code !== "EEXIST") throw error;
+  }
+  const stat = await lstat(root);
+  if (stat.isSymbolicLink() || !stat.isDirectory()) throw new DiagnosticRunnerError("NGSPICE_DIAGNOSTIC_RUN_DIRECTORY_FAILED", "the runner root is a link, a junction or not a directory; nothing was run");
+}
+
+/**
+ * [B22-D] items 4, 5: the raw file is read back only when `lstat` shows a plain file with one name - never a link or a junction, a
+ * hardlink (a second name, which may lie outside the run directory), a directory, or a device, FIFO or socket (`not-a-plain-file`,
+ * never opened); absent, or unreadable to `lstat`, it is missing, as before. RECORDED: this check and the bounded read's `open` are
+ * two steps, so a process of the server user could swap the file between them; ngspice has exited by then.
+ */
+async function rawFileKind(path: string): Promise<"plain" | "missing" | "not-a-plain-file"> {
+  let stat: Awaited<ReturnType<typeof lstat>>;
+  try {
+    stat = await lstat(path);
+  } catch {
+    return "missing";
+  }
+  return !stat.isSymbolicLink() && stat.isFile() && stat.nlink === 1 ? "plain" : "not-a-plain-file";
+}
+
+/**
  * [B22-A3] Run the pinned ngspice once (`run`: the screened, seeded deck in a fresh run directory; `version`: the `-v` probe in an
  * empty one). Refusals - an unpinned or mismatched install, an unset root, another platform, a full queue or an expired wait, a
  * deck that is not seeded or sets its own seed, a run directory that cannot be prepared - throw a closed `DiagnosticRunnerError`
@@ -615,11 +650,11 @@ export async function runDiagnosticNgspice(request: DiagnosticRunRequest): Promi
   try {
     const runnerRoot = join(tmpdir(), DIAGNOSTIC_RUNNER_ROOT_NAME);
     try {
-      await mkdir(runnerRoot, { recursive: true });
+      await ensureRunnerRoot(runnerRoot); // [B22-D] item 4: a link, a junction or a file at the root is refused
       runDir = await mkdtemp(join(runnerRoot, "run-"));
       if (request.operation === "run") await writeFile(join(runDir, DIAGNOSTIC_DECK_FILE), request.deck, { encoding: "utf8", flag: "wx" });
     } catch (error) {
-      throw runDirectoryFailed(error);
+      throw error instanceof DiagnosticRunnerError ? error : runDirectoryFailed(error);
     }
     const installDigest = await verifiedInstall(profile, place.root);
     if (request.signal?.aborted) return notRun(installDigest);
@@ -651,8 +686,12 @@ export async function runDiagnosticNgspice(request: DiagnosticRunRequest): Promi
     if (request.operation === "run" && request.readRaw) {
       if (end.outcome !== "exited" || end.exitCode !== 0) raw = { state: "skipped" };
       else {
-        const read = await readBoundedRawFile(join(directory, DIAGNOSTIC_RAW_OUTPUT_FILE), tighter(profile.limits.readBackBytes.value!, request.readBackBytes));
-        raw = read.ok ? { state: "read", text: read.text } : { state: read.reason === "unreadable" ? "missing" : read.reason };
+        const kind = await rawFileKind(join(directory, DIAGNOSTIC_RAW_OUTPUT_FILE)); // [B22-D] items 4, 5: a link, a hardlink or a device is never opened
+        if (kind !== "plain") raw = { state: kind };
+        else {
+          const read = await readBoundedRawFile(join(directory, DIAGNOSTIC_RAW_OUTPUT_FILE), tighter(profile.limits.readBackBytes.value!, request.readBackBytes));
+          raw = read.ok ? { state: "read", text: read.text } : { state: read.reason === "unreadable" ? "missing" : read.reason };
+        }
       }
     }
     return Object.freeze({ ...base, installDigest, outcome: end.outcome, spawned: end.outcome !== "spawn_failed", killReason: end.killReason, exitCode: end.exitCode, stdout: end.stdout, stderr: end.stderr, raw });

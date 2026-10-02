@@ -306,7 +306,12 @@ live suite, no browser spec, no full suite; no real process was started by the w
   its 10 s) and then refuse it BUSY; a refused Studio point fails and the batch moves on (the job store's loop). Two server processes
   have two counters.
 - **Links**: the runner root is created with `mkdir`; a pre-planted link there, or a raw file that is a link, is not refused (B22-D
-  item 4). The run directory itself is `mkdtemp`'s.
+  item 4). The run directory itself is `mkdtemp`'s. [B22-D, 2026-10-02] Closed for both: the runner creates its root or, when one
+  exists, runs only if `lstat` shows a plain directory (a link, a junction or a file is refused `NGSPICE_DIAGNOSTIC_RUN_DIRECTORY_FAILED`),
+  and reads the raw file only when `lstat` shows a plain file with one name (a link, a junction, a hardlink, a directory, a FIFO or a
+  device is `not-a-plain-file`, never opened; `adversarial-matrix.md` G2, G3; `b22-d-adversarial` cases 3, 4). RECORDED: a process of
+  the server user can still swap either between the check and its use, and a link it plants before the spawn redirects ngspice's own
+  write (the lead's live case 4).
 - **Redaction** covers the run directory and the install root as the runner spells them (either slash), across pipe reads and the
   output cut; a short-name or differently cased spelling printed by ngspice is not redacted (INFERRED rare).
 - **The seed line**: a deck that sets its own seed is refused at the runner, so a Studio plan whose solver profile carries a `seed=`
