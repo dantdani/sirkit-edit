@@ -2012,3 +2012,68 @@ Amendments to existing entries:
     - The structural layer is the exported `structuralDelegation`, pinned directly by admission case 11 ([B23-A1 lead, 2026-10-02]).
   - (g) **Path endpoints** are held to path characters and `{template}` segments, and the validator's message never echoes the target.
 - Owner confirmation pending.
+
+## OD-173 — the Tier 3 vocabulary, as applied (B23-A2, 2026-10-02)
+
+- **Question:** how does Tier 3 see a file-sending or spending tool other than by a word in its id?
+- **Default applied:** structural first. A side effect `external-transfer` in `TOOL_SIDE_EFFECTS` and its action-registry equivalent
+  (`ActionCoverageRecord.sideEffects`, `ACTION_SIDE_EFFECTS`) computes Tier 3 whatever the id, class or approval tier, in every tier
+  computation (the MCP structural rule and the served `dev.sirkit/permissionTier` included). The validators refuse an agent-exposed
+  transfer tool and a tool-exposed transfer action; the exposure rule, discovery (never listed for an agent, whatever exposure a
+  registry claims) and the B21 role rows refuse the side effect; both port-bound classes already refuse it. The id floor gains
+  `quote|dfm|submit|checkout|cart|buy|payment` and the whole word `pay` as `TIER3_FLOOR_PATTERN`, after a census proved no tool id (47,
+  B22's five computation ids included) or action id (104) changes tier and no B21 role row changes; `TIER3_FAMILY_PATTERN` stays the
+  router's nine chat families, unchanged. The B21 withdrawal drops every `external-*` authority and `computation-engine` through
+  `isWithdrawnAuthority`; the `MCP_EXCLUSION_REASONS` order is unchanged (a transfer is excluded as `tier3`, first). The chat-closure
+  tripwire also forbids `app/lib/net/outbound-fetch.ts` and the provider directory. A consumed MCP row may not approve an `agentTools`
+  name the floor or a money or data-leaving word matches (`isTier3McpToolName`), and the agent port approves nothing for such a list;
+  the refusal claims no completeness. The router's chat families are unchanged: a quote ask reaches nothing.
+- **Evidence:** `tier3-vocabulary.md` (sections 1-5, 15); `b23-a-tier3-vocabulary` (9 tests), `b23-a-no-order-structural` (6).
+- Owner confirmation pending.
+
+## OD-174 — the route vocabulary and the census, as applied (B23-A2, 2026-10-02)
+
+- **Question:** how does the route table mark an external-transfer or spend route?
+- **Default applied:** `RoutePolicy` gains `externalTransfer` and `spend`, explicit on every row and false on all 165.
+  `routeVocabularyViolations` requires such a row to be human-only (a trusted human session; no automation role), CSRF-checked, never
+  public, never open to any member, a viewer or a commenter, and never on the release vocabulary; no `spend` row may exist in B23. The
+  two-row `releaseOrQualification` pin is unchanged. The B16.0.2 classification gains `outboundEgress` (`none`, `observation-query`,
+  `files`: what leaves through the egress boundary) and `modelEgress` (a model input sent to the LLM provider through its SDK), the two
+  last columns, both derived from the code, with five reviewed public cache-only exemptions and two reviewed public model-egress paths,
+  and gated (`files` exactly with a transfer row; a public row sends no observation query and no files; a public model egress is a
+  reviewed path). No route is added: the census stays 165 / 162 / 3 / 0, and B23-B1's provider exchange route moves it.
+- **Open question for the owner:** `POST /api/parts/search` and `GET /api/pcb/footprints/search` are public and embed the anonymous
+  caller's search text with OpenAI, with `provider_credit` false. A2 records them and changes no route.
+- **Evidence:** `tier3-vocabulary.md` section 6; `b23-a-route-vocabulary` (8 tests); the regenerated
+  `route-data-and-resource-classification.csv` (two appended columns).
+- Owner confirmation pending.
+
+## OD-182 — B23-A2: stated choices beyond its task text, as applied (B23-A2, 2026-10-02)
+
+- **Default applied:**
+  - (a) `outboundEgress` is the closed vocabulary `none | observation-query | files`, per path, derived from the import closure reaching
+    the egress boundary with reviewed cache-only exemptions (the B22-A2 census pattern); `files` is never derived, only declared with a
+    transfer row. `none` means nothing through the boundary. The separate derived boolean `modelEgress` records a model input sent to the
+    LLM provider through its SDK, so a row sends nothing out of Sirkit exactly when it is `none` and not `modelEgress`; a public row with
+    `modelEgress` is a reviewed `PUBLIC_MODEL_EGRESS` path.
+  - (b) The widened id floor is a new constant, `TIER3_FLOOR_PATTERN`, not an edit of `TIER3_FAMILY_PATTERN`
+    (`permission-tiers.ts:36`): `b21-b-router` case 1 pins every stem of the family pattern to a router family, and OD-173 keeps the
+    router's families unchanged.
+  - (c) The specialist-claims check (`scheduler.ts:257-258`) does not follow the prefix withdrawal; a tripwire pins that the authority
+    vocabulary holds exactly the two external authorities it names.
+  - (d) The structural no-order check's port vocabulary (an `order` with a verb; `purchas*`, `checkout`, `payment`, `pay`, `buy`; a `cart`
+    with add, fill or populate) over every declared or called name, with seven reviewed look-alikes (two reached by no route; five
+    reached: `last_time_buy` in three modules, `buyUnits`, `hasExternalOrPurchasingSideEffects`).
+  - (e) The foreign MCP name floor applies at registry validation and in the agent port's allowlist (a list naming a floor tool approves
+    nothing).
+  - (f) The B16.0.1 policy CSV does not render the two booleans in A2 (all false; the gate pins them).
+  - (g) Validator rules refuse an agent-exposed `external-transfer` tool and a tool-exposed `external-transfer` action.
+  - (h) The id floor gains the whole word `pay` (word-bounded; no id moves).
+  - (i) Discovery never lists an `external-transfer` tool on the agent or automation channel, whatever exposure a registry claims.
+  - (j) The consumed-tool name floor adds money and data-leaving words (`pay`, `po`, `procure`, `send`, `transfer`, `share`, `export`,
+    `email` and inflections); `export` stays out of the id floor (Sirkit's own `pcb.export-kicad` would move); the refusal claims no
+    completeness.
+  - (k) `modelEgress` is derived binding by binding (handler exports and import-time calls), not by module reachability, because the DB
+    schema imports the embedding module's constant.
+- **Evidence:** `tier3-vocabulary.md` sections 11 and 15.
+- Owner confirmation pending.

@@ -42,7 +42,7 @@ import { mcpTextReadsAsDirective, type McpAcceptedTool } from "./foreign-tools";
 import { mcpRedactionSubjects, skeletonCarries, type McpTokenProvider, type McpTransportDeps } from "./http-transport";
 import { discoverMcpServer, type McpNegotiatedServer } from "./negotiation";
 import { mcpObservationArgumentsDigest, normalizeMcpToolResult } from "./observation";
-import { admittedMcpServer, MCP_AGENT_TOOLS_MAX, MCP_SERVER_ID_PATTERN, MCP_SERVER_REGISTRY, MCP_SERVER_REGISTRY_VERSION, type McpServerRegistryEntry } from "./server-registry";
+import { admittedMcpServer, isTier3McpToolName, MCP_AGENT_TOOLS_MAX, MCP_SERVER_ID_PATTERN, MCP_SERVER_REGISTRY, MCP_SERVER_REGISTRY_VERSION, type McpServerRegistryEntry } from "./server-registry"; // [B23-A2 review] + the consumed-tool name floor
 import { callMcpTool } from "./tool-call";
 import { listMcpTools, type McpToolListing } from "./tool-discovery";
 
@@ -220,7 +220,7 @@ export function mcpAgentToolAllowlist(row: McpServerRegistryEntry): ReadonlySet<
     const list: unknown = row?.agentTools;
     if (!Array.isArray(list) || list.length > MCP_AGENT_TOOLS_MAX) return names;
     for (const name of list as readonly unknown[]) {
-      if (typeof name === "string" && TOOL_NAME_PATTERN.test(name)) names.add(name);
+      if (typeof name === "string" && TOOL_NAME_PATTERN.test(name)) { if (isTier3McpToolName(name)) { names.clear(); return names; } names.add(name); } // [B23-A2 review] a list naming a Tier 3 tool approves NOTHING, as the validator refuses its row whole (D23-12)
     }
   } catch {
     names.clear();

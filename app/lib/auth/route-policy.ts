@@ -45,7 +45,7 @@ export interface RoutePolicy {
   requiresCsrf: boolean;
   authoritativeWrite: boolean;
   releaseOrQualification: boolean;
-  evidence: string;
+  evidence: string; // [B23-A2] + externalTransfer and spend: merged into this interface at the end of the file (OD-174)
 }
 
 // ── Role sets ────────────────────────────────────────────────────────────────
@@ -60,29 +60,29 @@ const TIER1_EXECUTE: readonly ProjectRole[] = ["pcb_editor", "project_admin"];
 
 // ── Policy constructors (defaults per class) ─────────────────────────────────
 function pub(path: string, methods: readonly string[], evidence: string): RoutePolicy[] {
-  return methods.map((method) => ({ path, method, authClass: "public", identitySource: "none", requiresAuth: false, permittedRoles: [], providerCredit: false, requiresCsrf: false, authoritativeWrite: false, releaseOrQualification: false, evidence }));
+  return methods.map((method) => ({ path, method, authClass: "public", identitySource: "none", requiresAuth: false, permittedRoles: [], providerCredit: false, requiresCsrf: false, authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence }));
 }
 function read(path: string, methods: readonly string[], evidence: string, roles: readonly ProjectRole[] = ALL_MEMBERS): RoutePolicy[] {
-  return methods.map((method) => ({ path, method, authClass: "authenticated-read", identitySource: "trusted-context", requiresAuth: true, permittedRoles: roles, providerCredit: false, requiresCsrf: method !== "GET" && method !== "HEAD", authoritativeWrite: false, releaseOrQualification: false, evidence }));
+  return methods.map((method) => ({ path, method, authClass: "authenticated-read", identitySource: "trusted-context", requiresAuth: true, permittedRoles: roles, providerCredit: false, requiresCsrf: method !== "GET" && method !== "HEAD", authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence }));
 }
 function propose(path: string, methods: readonly string[], evidence: string, opts: { providerCredit?: boolean; roles?: readonly ProjectRole[]; identitySource?: IdentitySource } = {}): RoutePolicy[] {
-  return methods.map((method) => ({ path, method, authClass: "authenticated-propose", identitySource: opts.identitySource ?? "trusted-context", requiresAuth: true, permittedRoles: opts.roles ?? EDITORS, providerCredit: opts.providerCredit ?? false, requiresCsrf: method !== "GET" && method !== "HEAD", authoritativeWrite: false, releaseOrQualification: false, evidence }));
+  return methods.map((method) => ({ path, method, authClass: "authenticated-propose", identitySource: opts.identitySource ?? "trusted-context", requiresAuth: true, permittedRoles: opts.roles ?? EDITORS, providerCredit: opts.providerCredit ?? false, requiresCsrf: method !== "GET" && method !== "HEAD", authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence }));
 }
 function mutate(path: string, methods: readonly string[], evidence: string, opts: { roles?: readonly ProjectRole[]; capability?: EngineeringCapability; identitySource?: IdentitySource } = {}): RoutePolicy[] {
-  return methods.map((method) => ({ path, method, authClass: "authenticated-mutation", identitySource: opts.identitySource ?? "trusted-context", requiresAuth: true, permittedRoles: opts.roles ?? WRITE_EDITORS, ...(opts.capability ? { requiredCapability: opts.capability } : {}), providerCredit: false, requiresCsrf: method !== "GET" && method !== "HEAD", authoritativeWrite: true, releaseOrQualification: false, evidence }));
+  return methods.map((method) => ({ path, method, authClass: "authenticated-mutation", identitySource: opts.identitySource ?? "trusted-context", requiresAuth: true, permittedRoles: opts.roles ?? WRITE_EDITORS, ...(opts.capability ? { requiredCapability: opts.capability } : {}), providerCredit: false, requiresCsrf: method !== "GET" && method !== "HEAD", authoritativeWrite: true, releaseOrQualification: false, externalTransfer: false, spend: false, evidence }));
 }
 function release(path: string, methods: readonly string[], evidence: string, roles: readonly ProjectRole[]): RoutePolicy[] {
-  return methods.map((method) => ({ path, method, authClass: "authenticated-release", identitySource: "trusted-context", requiresAuth: true, permittedRoles: roles, providerCredit: false, requiresCsrf: true, authoritativeWrite: true, releaseOrQualification: true, evidence }));
+  return methods.map((method) => ({ path, method, authClass: "authenticated-release", identitySource: "trusted-context", requiresAuth: true, permittedRoles: roles, providerCredit: false, requiresCsrf: true, authoritativeWrite: true, releaseOrQualification: true, externalTransfer: false, spend: false, evidence }));
 }
 function worker(path: string, methods: readonly string[], evidence: string): RoutePolicy[] {
-  return methods.map((method) => ({ path, method, authClass: "internal-worker", identitySource: "worker-secret", requiresAuth: true, permittedRoles: [], providerCredit: false, requiresCsrf: false, authoritativeWrite: true, releaseOrQualification: false, evidence }));
+  return methods.map((method) => ({ path, method, authClass: "internal-worker", identitySource: "worker-secret", requiresAuth: true, permittedRoles: [], providerCredit: false, requiresCsrf: false, authoritativeWrite: true, releaseOrQualification: false, externalTransfer: false, spend: false, evidence }));
 }
 /** [B20 B2] the one bearer row: no cookie is read, so no same-origin CSRF (the wrapper validates a present Origin itself, OD-44). */
 function mcpBearer(path: string, methods: readonly string[], evidence: string): RoutePolicy[] {
-  return methods.map((method) => ({ path, method, authClass: "authenticated-mcp", identitySource: "mcp-bearer", requiresAuth: true, permittedRoles: ALL_MEMBERS, providerCredit: false, requiresCsrf: false, authoritativeWrite: false, releaseOrQualification: false, evidence }));
+  return methods.map((method) => ({ path, method, authClass: "authenticated-mcp", identitySource: "mcp-bearer", requiresAuth: true, permittedRoles: ALL_MEMBERS, providerCredit: false, requiresCsrf: false, authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence }));
 }
 function bodyScope(path: string, methods: readonly string[], authClass: AuthRouteClass, evidence: string, opts: { providerCredit?: boolean; write?: boolean } = {}): RoutePolicy[] {
-  return methods.map((method) => ({ path, method, authClass, identitySource: "body-scope-server-actor", requiresAuth: true, permittedRoles: EDITORS, providerCredit: opts.providerCredit ?? false, requiresCsrf: method !== "GET" && method !== "HEAD", authoritativeWrite: opts.write ?? false, releaseOrQualification: false, evidence }));
+  return methods.map((method) => ({ path, method, authClass, identitySource: "body-scope-server-actor", requiresAuth: true, permittedRoles: EDITORS, providerCredit: opts.providerCredit ?? false, requiresCsrf: method !== "GET" && method !== "HEAD", authoritativeWrite: opts.write ?? false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence }));
 }
 
 const CDS = "app/api CD-stage route (B16.0.1 migrated to trusted context)";
@@ -119,13 +119,13 @@ const ALL: RoutePolicy[] = [
   {
     path: "/api/auth/signin", method: "POST", authClass: "public", identitySource: "none",
     requiresAuth: false, permittedRoles: [], providerCredit: false, requiresCsrf: true,
-    authoritativeWrite: false, releaseOrQualification: false,
+    authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false,
     evidence: "app/api/auth/signin (credential verification is the authentication; in-route CSRF)",
   },
   {
     path: "/api/auth/signout", method: "POST", authClass: "public", identitySource: "none",
     requiresAuth: false, permittedRoles: [], providerCredit: false, requiresCsrf: true,
-    authoritativeWrite: false, releaseOrQualification: false,
+    authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false,
     evidence: "app/api/auth/signout (clears the caller's own session cookies; in-route CSRF)",
   },
   ...pub("/api/auth/callback", ["GET"], "app/api/auth/callback (PKCE code exchange; safe same-origin redirect)"),
@@ -346,4 +346,49 @@ export function renderExactRoutePolicyCsv(): string {
       String(p.requiresCsrf), String(p.authoritativeWrite), String(p.releaseOrQualification), p.evidence,
     ].map(csvCell).join(","));
   return [header.join(","), ...rows].join("\n") + "\n";
+}
+
+// ── [B23-A2] the route vocabulary for data leaving Sirkit and for spend (OD-174, D23-9) ──────────────────────────────────────
+
+/** [B23-A2] Two booleans every row carries, merged into `RoutePolicy` here so every cited line above stays where it is (OD-174):
+ *  `externalTransfer` - design or part FILES leave Sirkit for a third party through this row (B23-B1's provider exchange; no row
+ *  in A2); `spend` - the row can spend money (an order, a purchase, a payment): no such row may exist in B23, ordering stays
+ *  feature-disabled (runbook :986, OD-171). Both are false on every row; `routeVocabularyViolations` gates them, and the two-row
+ *  `releaseOrQualification` pin (b16-0-1-ci-gates) is not reused for either. */
+export interface RoutePolicy {
+  externalTransfer: boolean;
+  spend: boolean;
+}
+
+/** [B23-A2] The closed reasons a row fails the route vocabulary's gates, in this order. */
+export const ROUTE_VOCABULARY_VIOLATIONS = Object.freeze([
+  "flags_not_explicit", "spend_in_b23", "public", "not_human_session", "no_csrf", "any_member", "viewer_or_commenter", "automation", "release_vocabulary",
+] as const);
+export type RouteVocabularyViolation = (typeof ROUTE_VOCABULARY_VIOLATIONS)[number];
+
+/**
+ * [B23-A2] OD-174's gates, one line per violation (`<METHOD> <path>: <reason>`): every row states both booleans; no row may spend in
+ * B23; a transfer or spend row is human-only - authenticated through a trusted human session (never public, a worker secret, an MCP
+ * bearer or a body-scope server actor), CSRF-checked, open to named roles that are never a viewer, a commenter or automation - and
+ * never rides the release vocabulary. The table carries no such row in B23-A2.
+ */
+export function routeVocabularyViolations(policies: readonly RoutePolicy[] = ALL): string[] {
+  const out: string[] = [];
+  for (const policy of policies) {
+    const found = new Set<RouteVocabularyViolation>();
+    if (typeof policy.externalTransfer !== "boolean" || typeof policy.spend !== "boolean") found.add("flags_not_explicit");
+    if (policy.spend === true) found.add("spend_in_b23");
+    if (policy.externalTransfer === true || policy.spend === true) {
+      const roles: readonly string[] = Array.isArray(policy.permittedRoles) ? policy.permittedRoles : [];
+      if (policy.requiresAuth !== true || policy.authClass === "public" || policy.identitySource === "none") found.add("public");
+      if (policy.identitySource !== "trusted-context") found.add("not_human_session");
+      if (policy.requiresCsrf !== true) found.add("no_csrf");
+      if (roles.length === 0) found.add("any_member");
+      if (roles.includes("viewer") || roles.includes("commenter")) found.add("viewer_or_commenter");
+      if (roles.includes("automation")) found.add("automation");
+      if (policy.releaseOrQualification === true) found.add("release_vocabulary");
+    }
+    for (const reason of ROUTE_VOCABULARY_VIOLATIONS) if (found.has(reason)) out.push(`${policy.method} ${policy.path}: ${reason}`);
+  }
+  return out;
 }

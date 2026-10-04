@@ -4400,3 +4400,71 @@ An adversarial review then CONFIRMED 8 findings, each reproduced first: 9 red of
   - (3) The drafted LB-12 row named the agent-tool counts as 42/33/9/24; it records 47/36/9/27.
   - (4) Still open (recorded): a path a section-1.2 bullet names passes on any host that bullet names (INFERRED, low); admission
     validates the row on every call (small cost, INFERRED); `b20-b4-process-gate` case 1 still runs about 34 s synchronously.
+
+### B23-A2 - Tier 3 and the route vocabulary (2026-10-02 local; increment workflow + review fix + lead; this commit)
+
+Test-first on `chapter/b23-external-manufacturing` from `79fa18b`. The four suites under the provider directory's `__tests__` ran
+14 red / 15 green of 29 on the unmodified tree (the bound read computed Tier 0 and `create-order` was admitted as an MCP agent tool:
+the D23-8 and D23-12 counterexamples; the CD-12 stubs already threw, so D23-21 was a missing pin, shown by a four-stub breakage that
+failed 9 of 9 and was restored by hash).
+
+What landed:
+- `external-transfer` as a tool side effect and its action equivalent, Tier 3 in every tier computation; never exposed, listed for an
+  agent, MCP-listed, in a B21 role row or executed (OD-173).
+- `TIER3_FLOOR_PATTERN` = the nine family stems + `quote|dfm|submit|checkout|cart|buy|payment` + the word `pay`, after a census of 47 tool
+  and 104 action ids (0 matches, 0 tiers moved); `TIER3_FAMILY_PATTERN` stays the router's chat families (OD-182 (b), (h)).
+- The B21 withdrawal by one predicate, `isWithdrawnAuthority`; the claims check unchanged by decision (OD-182 (c)).
+- The chat-closure FORBIDDEN list + the egress module and the provider directory (b19-d:128, reviewed in place).
+- Consumed MCP `agentTools` names matching the floor or a money or data-leaving word refused at registry validation and approving nothing
+  in the agent port (empty registry, OD-48).
+- `RoutePolicy.externalTransfer` and `.spend` with `routeVocabularyViolations`; the classification's derived `outboundEgress` (7
+  observation-query rows over 6 paths, 5 reviewed cache-only exemptions with the pricing gateway's edges pinned, 0 files) and
+  `modelEgress` (23 paths; 2 public, recorded), two appended CSV columns (OD-174, OD-182 (a), (k)).
+- A structural no-order route check over every declared or called name, and the four CD-12 stubs pinned by id over the whole-root walk.
+
+Review round: an adversarial review confirmed 12 findings (`none` documented as "sends nothing" while 22 LLM-prompting routes carried
+it; a top-level-only port scan; the floor without `pay` and an over-claiming refusal; the port still admitting `create-order`; a vacuous
+sweep case; an exemption blind to the gateway's own edges; a CD-12 scan skipping root files). Each was reproduced red first
+(`a2fix-red-1..3`) or by a deliberate source mutation (`a2fix-mut-A..C`, every file restored by SHA-256), then fixed; 32/32.
+
+Pins moved in place with dated notes: b19-d:128 (two entries), b20-b2-mcp-route-policy cases 2-3 (three expected rows + the two false
+booleans), b20-a4-agent-read-port case 14 (the writing-tool fixture `create-order` -> `update-record`), the B16.0.2 CSV (regenerated).
+Every edited file stays line-neutral up to its last cited line.
+
+Gates after the review round: providers + acquisition 350 passed / 2 skipped; engineering 1107/1107; agent + orchestration 875/875;
+mcp + auth 1304 passed / 9 skipped; api + chat 1208/1208; computation + release-engineering 310 passed / 18 skipped; b14-4 alone 22/22;
+21 route-reader files 264 passed / 1 skipped; b21 + b22 closeout statements over the page 19/19; all exit 0. tsc 0, eslint 0 on 20 files;
+8 generators exit 0 with the classification's two columns as the only drift. No route, tool, UI or egress; census 165 / 162 / 3 / 0;
+counts 47 / 36 / 9 / 27.
+- Lead close (2026-10-02):
+  - B23-A2 independent-check round (2026-10-02 local; lead): four low issues from the independent check of the review fixes, each test-first
+    on the uncommitted A2 tree (logs a2low2-*). (1) The connector policy's private agentTools rule disagreed with mcpAgentToolAllowlist for
+    floor names; B20-A5's parity list gained five shapes (red: four disagreements), and provider-connector-policy.ts:156 now applies the
+    registry's isTier3McpToolName (helper at :170, still one runtime import). (2) The no-order scan skipped import bindings, destructured
+    bindings and single-part calls; nine case 3b probes failed, then declaredNames read imports, binding elements, single-part calls, string
+    keys and constructions; no route reaches a new port. (3) The transport census reviewed modules, not primitives; six injected connections
+    (a third-party fetch in db/client.ts, ip-policy.ts or embeddings.ts, a second fetch, a node:net socket, a second postgres client) passed
+    case 8, then each TRANSPORTS entry pinned its primitives and connection sites and a no-connection module holds none. (4) B20-A4 case 17
+    was masked by the floor (a truncate-to-32 mutation passed 18/18); its fixture moved to update-record in place, and the same mutation now
+    fails it; agent-port.ts restored by SHA-256. Recorded, not changed: case 18's array-like shape is masked the same way (B20-A5 parity
+    still catches it). Red 3 failed / 39 passed of 42, then 42/42. Gates: providers + acquisition 350 passed / 2 skipped; mcp 825/825;
+    engineering 1107/1107; agent 415/415; b21 + b22 closeouts + b21-f-page 38/38; tsc 0; eslint 0 on 5 files; B16.0.2 generator exit 0 with
+    zero drift. No case added or removed (32 / 18 / 10); census 165/162/3/0; counts 47/36/9/27; tier3-vocabulary.md section 16.
+  - The A2 review confirmed TWELVE findings (regressions-1, security-2, -4, -5, coverage-1..3, tests-1, -3, -4, -5, -8); the fixer's
+    texts said eleven, corrected in these records.
+  - Case 18's array-like shape, recorded above as masked by the floor, was then fixed by the lead the same way: it names
+    `update-record` (in place, dated note). Under the `Array.from` coercion of `mcpAgentToolAllowlist`, B20-A4 passed 18 of 18 before
+    and fails 1 of 18 after; without the mutation 18 of 18; `agent-port.ts` restored by SHA-256.
+  - The first launch of this round's workflow passed a placeholder instead of the issue list. The lead stopped it, but its agent had
+    already begun editing five files. The relaunched fixer found those edits, copied them aside and restored the A2 baseline by hash
+    before starting (8 of 8 hashes and the diff SHA matched).
+  - CI on `9cb675d` failed `b22-a3-diagnostic-runner` case 13 ("timed out waiting for the abort's tree kill"). It did not reproduce
+    under CPU load (alone 5 of 5, the whole file 4 of 4 beside 28 burners). The lead root-caused it: one forced garbage collection
+    between the spawn and the abort failed it 3 of 3; without the collection it passed; with the test's Request held strongly it
+    passed. The route wrappers handed a handler only `request.signal`, so once the body was read nothing held the Request, and its
+    collection lost the caller's abort. Committed separately as `f0e7bae`: `retainedSignal(request)` at all nine wrapper sites (a
+    WeakMap from signal to Request). Case 13 now forces the collection on every run (red on the old wrappers, green with the fix),
+    and `b23-lead-wrapper-signal-retention` pins the source. In production a lost abort left the run to its wall clock.
+  - A session restart cut A2's first lead chain during the generators, after every vitest set, tsc and eslint had passed. The 21
+    generators were re-run (exit 0, no drift), and the full chain was then re-run on A2 plus `f0e7bae`'s files: every set exit 0,
+    tsc 0, eslint 0, no generator drift.

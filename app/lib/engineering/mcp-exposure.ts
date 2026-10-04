@@ -127,7 +127,7 @@ function factsOf(descriptor: unknown): ExposureFacts | null {
 
 /** The structural rule: the descriptor's own classification only (never a list of MCP ids, never an annotation). */
 function structuralReasonOf(facts: ExposureFacts): McpExclusionReason | null {
-  const tier = permissionTierOfDescriptor({ toolId: facts.toolId, operationClass: facts.operationClass as ToolDescriptor["operationClass"], approvalTier: facts.approvalTier as ToolDescriptor["approvalTier"] });
+  const tier = permissionTierOfDescriptor({ toolId: facts.toolId, operationClass: facts.operationClass as ToolDescriptor["operationClass"], approvalTier: facts.approvalTier as ToolDescriptor["approvalTier"], sideEffects: facts.sideEffects as ToolDescriptor["sideEffects"] }); // [B23-A2] an external transfer is tier3 first (OD-173)
   if (tier === 3) return "tier3";
   if (NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(facts.toolId))) return "never_exposed"; if (facts.toolId.startsWith("sirkit.computation.") || facts.bindingStatus === "bound-computation") return "computation"; // [B22-B] OD-139
   if (!facts.agentExposed) return "not_agent_exposed";

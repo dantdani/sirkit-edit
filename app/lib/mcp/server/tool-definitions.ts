@@ -281,7 +281,7 @@ function renderDefinition(descriptor: unknown, registryDigest: unknown): McpTool
     "dev.sirkit/toolVersion": facts.version,
     "dev.sirkit/registryDigest": registryDigest,
     "dev.sirkit/operationClass": facts.operationClass,
-    "dev.sirkit/permissionTier": permissionTierOfDescriptor({ toolId: facts.toolId, operationClass: facts.operationClass, approvalTier: facts.approvalTier }),
+    "dev.sirkit/permissionTier": permissionTierOfDescriptor({ toolId: facts.toolId, operationClass: facts.operationClass, approvalTier: facts.approvalTier, sideEffects: facts.candidate.sideEffects }), // [B23-A2] the side effect too (OD-173)
   };
   return frozenCopy({
     name: facts.toolId,

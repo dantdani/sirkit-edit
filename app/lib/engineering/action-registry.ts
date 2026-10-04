@@ -64,8 +64,8 @@ export interface ActionCoverageRecord {
   toolExposure: ToolExposure;
   approvalTier: ApprovalTier;
   notes?: string;
+  sideEffects?: ActionSideEffect; // [B23-A2] OD-173: the tool side effect's equivalent - data leaves Sirkit; Tier 3 whatever the id says. No record carries it.
 }
-
 const action = (record: ActionCoverageRecord): ActionCoverageRecord =>
   Object.freeze(record);
 
@@ -387,6 +387,9 @@ export function validateActionCoverageRegistry(
     if (record.kind === "destructive" && record.approvalTier === "none") {
       errors.push(`${record.id}: destructive action requires approval`);
     }
+    // [B23-A2] OD-173: the side effect is a closed vocabulary, and an action that sends data out of Sirkit is never tool-exposed
+    if (record.sideEffects !== undefined && !(ACTION_SIDE_EFFECTS as readonly string[]).includes(record.sideEffects)) errors.push(`${record.id}: unknown side effect (the closed vocabulary is ${ACTION_SIDE_EFFECTS.join(", ")})`);
+    else if (record.sideEffects === "external-transfer" && record.toolExposure !== "none") errors.push(`${record.id}: an external-transfer action is never tool-exposed (Tier 3: data leaves Sirkit, OD-173)`);
   }
   // Route-coverage table integrity: every entry names an existing record,
   // paths are unique, and each entry declares at least one method.
@@ -440,3 +443,9 @@ export function renderActionToolabilityCsv(
   ]);
   return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
 }
+
+/** [B23-A2] The action-registry equivalent of the tool side effect `external-transfer` (OD-173): the action sends design or part data
+ *  out of Sirkit to a third party. A record that carries it is permission Tier 3 whatever its id, kind or approval tier says
+ *  (permission-tiers.ts) and is never tool-exposed (`validateActionCoverageRegistry`). No record carries it in B23-A2. */
+export const ACTION_SIDE_EFFECTS = Object.freeze(["external-transfer"] as const);
+export type ActionSideEffect = (typeof ACTION_SIDE_EFFECTS)[number];

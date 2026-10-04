@@ -23,7 +23,7 @@ export const AGENT_EXPOSABLE_OPERATION_CLASSES = Object.freeze(["read", "propose
  * reviewed granted execution (B18-B grants; `granted-execution-families.ts`). Nothing else is ever exposable.
  */
 export function isAgentExposableDescriptor(descriptor: GrantedExecutionCandidate): boolean {
-  if ((AGENT_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(descriptor.operationClass)) return true;
+  if (descriptor.sideEffects === "external-transfer") return false; if ((AGENT_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(descriptor.operationClass)) return true; // [B23-A2] data leaving Sirkit is Tier 3 and never exposable, whatever its class (OD-173)
   return descriptor.operationClass === "mutate" && grantedExecutionViolations(descriptor).length === 0;
 }
 
