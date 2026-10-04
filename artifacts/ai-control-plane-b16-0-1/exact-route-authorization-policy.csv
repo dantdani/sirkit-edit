@@ -115,6 +115,7 @@ path,method,auth_class,identity_source,requires_auth,permitted_roles,required_ca
 /api/pcb/footprints/resolve,GET,public,none,false,,,false,false,false,false,footprint catalog read
 /api/pcb/footprints/search,GET,public,none,false,,,false,false,false,false,footprint catalog read
 /api/pcb/placement/preview,POST,public,none,false,,,false,false,false,false,stateless compute
+/api/pcb/provider-exchange,POST,authenticated-mutation,trusted-context,true,project_admin,,false,true,false,false,"app/api/pcb/provider-exchange (preview and commit of a named provider's DFM or quote exchange of a ledgered release; human project administrator only; no provider admitted in B23, nothing sent)"
 /api/pcb/qualify,POST,authenticated-release,trusted-context,true,pcb_editor;project_admin,,false,true,true,true,app/api/pcb/qualify
 /api/pcb/release,POST,authenticated-release,trusted-context,true,project_admin,,false,true,true,true,app/api/pcb/release
 /api/pcb/repair/agent,POST,authenticated-propose,body-scope-server-actor,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api provider-credit route (B16.0.1: requires trusted auth + membership)

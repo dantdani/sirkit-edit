@@ -4468,3 +4468,80 @@ counts 47 / 36 / 9 / 27.
   - A session restart cut A2's first lead chain during the generators, after every vitest set, tsc and eslint had passed. The 21
     generators were re-run (exit 0, no drift), and the full chain was then re-run on A2 plus `f0e7bae`'s files: every set exit 0,
     tsc 0, eslint 0, no generator drift.
+
+### B23-B1 - revalidate, disclose, approve: B23-B steps 1-3 (2026-10-03/10-04 local; increment workflow + review fix + lead; this commit)
+
+Test-first on `chapter/b23-external-manufacturing` from `da36d51`. The five new suites failed to load on the unmodified tree
+(`b1-02-red`). The D23-6 counterexample, the release's own manifest carrying `tenantId` and the qualifying actor, is
+`b23-b-outbound-package` case 1. First code 53/58 (four suite expectations corrected), then 58/58; three source mutations failed 17 of
+58 and were restored by hash.
+
+What landed:
+- `revalidateReleaseAuthority` (release/route.ts:145): the route-only checks moved verbatim; the release route calls it (:91) with the
+  same codes, statuses and bodies; its suites are unchanged and green; the pinned 555 identity did not move (D23-7).
+- `buildOutboundPackage`: built only from a ledgered release; eight files byte-identical plus a provider manifest; release-manifest.json
+  and README.txt withheld; outboundPackageDigest stable. The plan lists carried ids and every in-file metadata field (D23-6, OD-163).
+- The provider exchange: a sealed 10-minute plan; commit with id, digest, key and opt-in header, consumed once, steps 1-2 re-run,
+  ending `provider_not_admitted`. Human project_admin only. Stores bounded per project, refusing instead of evicting; keys kept 24 h
+  (OD-164, OD-166, OD-183).
+- `POST /api/pcb/provider-exchange` (externalTransfer true, spend false, outboundEgress files declared); census 166/163/3/0 with every
+  census pin moved in place (OD-174).
+- The provider panel; B17-A classifies its three controls.
+
+Review round: an adversarial review confirmed 17 findings:
+- The plan called projectId and boardId kept while the board's file-safe name carries them in file names and bytes, and it listed no
+  in-file metadata.
+- A process-wide 256-plan store evicted across tenants and forgot a key with its plan.
+- A throw at commit left the plan consumed with no outcome, under an unsupported CONFIRMED label.
+- Test gaps: a vacuous cross-origin case, an untested mounting condition and panel failure paths, a tautological census row, a
+  1-in-16 wrong-digest construction.
+- Documentation: an off-by-one and incomplete citation map, a +1 panel line shift, a stale registry header.
+Each was reproduced red (`b1fix-07-red`: 12 failed / 200 passed of 212) or by a source breakage the first suites missed
+(`b1fix-01..06`), then fixed. Ten breakages of the fixed source each failed the strengthened cases and were restored by SHA-256
+(`b1fix-10`). Result: 74/74 across six suites (`b23-b-page` new).
+
+Pins moved in place with dated notes: b23-a-route-vocabulary TRANSFER_PATHS, EgressRow, census, case 4 (retitled) and case 6
+(line-neutral, 838 lines). ManufacturingWorkflowPanel's import was appended on :19, so the discovery's panel citations hold.
+
+Gates after the review round: providers + page scans + panel + B17-A + CI guard 281/281; pcb + p2g 822 passed / 9 skipped; auth + api +
+computation + orchestration + chat 2447 passed / 27 skipped; engineering + components + acquisition 1393 passed / 3 skipped; agent + mcp
++ project 1534/1534; readers 305/305; all exit 0. tsc 0; eslint 0 on 24 files; 21 generators exit 0 with no drift. Counts 47/36/9/27;
+census 166/163/3/0. UI changed: the lead runs the browser suite. Live exchange BLOCKED-LIVE-QUALIFICATION (LB-11).
+
+Lead round (2026-10-04): the independent check of the review fixes found three low issues, each fixed test-first (`lowfix-01-red`: 4
+failed / 28 passed of 32). low-1: the store backstops counted consumed plans, and 1,024 key records per project let 16 scopes fill the
+key store; two branches of one project at their own bounds refused every other project's preview (approval case 16), and the page
+understated the cross-project effect. The plan backstop now counts open plans only; a consumed plan keeps a tombstone (scope, digest,
+expiry) until it expires; keysPerProject is 256, so filling either backstop takes 64 scopes at their bounds (previews for up to 10
+minutes, commits for up to 24 hours; page sections 4 and 10, OD-183 (d)); cases 16-18 new, case 12's pin moved in place. low-2: section
+8 listed discovery :544 and :997, which cite the runbook, as release-route citations; corrected, and page case 5 checks the "cited at"
+column. low-3: a project id over 74 file-safe characters leaves cut short in the 80-character board name and was listed as kept; the
+package now carries the kept prefix (form file-safe-prefix), shown by outbound case 10 on the 555 release built for an 86-character id;
+the request selector admits ids up to 128 characters, and whether a deployment uses one is UNKNOWN. Four source breakages each failed the
+new cases and were restored by SHA-256 (`lowfix-03`). Gates: readers 263/263 before and 268/268 after; app/api/pcb + app/lib/pcb/fab 157
+passed / 5 skipped; tripwires + auth + engineering 1593 passed / 9 skipped; page scans 43/43; all exit 0; tsc 0; eslint 0 on 5 files;
+21 generators exit 0 with no drift. Six B23-B1 suites 79. Census 166/163/3/0. No UI change in this round.
+- Lead close (2026-10-04):
+  - (1) A record correction: B1's implementer found that `app/lib/pcb/__tests__/autonomous-layout-qualification.test.ts` and
+    `manufacturing-release-gate.test.ts` call `createAutonomousGoldenRealRouter`, the production FreeRouting executor, which starts Java
+    whenever the bundled runtime resolves. The lead's gate J in the A1, A2 and A2-with-`f0e7bae` chains ran the first of them: its RC03
+    "real no-edit placement-to-routing qualification" printed three golden runs each time (CONFIRMED from `a1-lead-J.log` and
+    `a2r-lead-J.log`). The ledger texts of A1 and A2, and `f0e7bae`'s message, named only `autoroute-boundary-integrity` as excluded.
+    From B1 on, gate J excludes all three suites (CI replays recordings, never the real router).
+  - (2) UI: both browser suites under the lock: the default config 48 of 48 (4.9 min) and the orchestration config 4 of 4 (2.5 min).
+    The wrapper's own exit 0 is now printed: `scratchpad/b23/pw2.sh` spares its own shell in the cleanup, which matched any command line
+    naming the orchestration config. The 32 evidence PNGs the runs rewrite (5 under B17, 20 under B18, 7 under B21) were restored from
+    HEAD and checked by blob hash, 32 of 32.
+  - (3) Lead gates on the final tree (`b23/lead-gates.sh b1`): every set exit 0. M 48 files, 646 passed, 2 skipped; A 632 passed, 21
+    skipped; J 127 files, 977 passed, 4 skipped (three Java-capable suites excluded); B engineering 1,107; C agent 415; D orchestration
+    460; E mcp 825; F 357; H app/api 1,059; F2 b14-4 alone 22; G 375; I auth 479 passed, 9 skipped. tsc 0; eslint 0; all 21 generators
+    with no drift.
+  - (4) Left as recorded: `provider-registry.ts:16` ("no route reads this registry yet") has been stale since B1, and is corrected with
+    the next reviewed registry revision, which bumps `PROVIDER_REGISTRY_VERSION`. `tier3-vocabulary.md`'s statement that case 4 derives
+    both values carries a dated note on its own line.
+  - (5) After the records, `b23-b-page` case 5 failed. It resolves the citation map's "cited at" discovery lines by number, and the
+    lead's two B1 closure clauses had shifted the discovery by two lines. The map numbers the discovery as at `da36d51`, so case 5 now
+    drops each dated single-line clause inserted from B23-B1 on (`- [B23-B…`, `- [B23-C…`, `- [B23-D…`, `- [B23 closeout…`) before
+    resolving. The edit is on the same line, with a dated note. The first edit carried a raw backspace byte from a heredoc escape; it
+    was found by the control-byte scan and replaced with `\b`. The page tripwires, readers and the provider folder then passed 276 of
+    276; eslint on the file 0.

@@ -85,42 +85,12 @@ export const POST = authenticatedJsonRoute({ maxBytes: PCB_SYNC_API_MAX_BYTES, d
   const ledger = new DurableManufacturingReleaseLedger(workflow);
   const authorityScope = { tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId, designId, boardId };
   try {
-    const stored = await store.getHead(authorityScope);
-    if (!stored) return manufacturingRefusal("MFG_AUTHORITY_NOT_FOUND", { correlationId });
-    // [B16.1C §F / B16-A F6] the administrator confirmed a SPECIFIC authority
-    // in the browser. The confirmation is a SERVER invariant: both pins are
-    // mandatory and type-checked (an integer revision and the record digest);
-    // if the authority moved on between the confirmation and this request the
-    // release is refused rather than packaging something never reviewed.
-    const expectedRevision = body.expectedAuthorityRevision, expectedDigest = body.expectedAuthorityDigest;
-    if (!Number.isSafeInteger(expectedRevision) || (expectedRevision as number) < 1 || typeof expectedDigest !== "string" || expectedDigest.length === 0) {
-      return manufacturingRefusal("MFG_AUTHORITY_CONFIRMATION_REQUIRED", { correlationId, extra: { authorityRevision: stored.revision, authorityDigest: stored.recordDigest } });
-    }
-    if (expectedRevision !== stored.revision || expectedDigest !== stored.recordDigest) {
-      return manufacturingRefusal("MFG_AUTHORITY_CONFIRMATION_MISMATCH", { correlationId, extra: { authorityRevision: stored.revision, authorityDigest: stored.recordDigest } });
-    }
-    // The authority must describe the board's CURRENT durable revision.
-    const head = await stage3Repository.getBoardHead({ tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId, boardId });
-    // [B16-C.1] an old revision's release can never become current again: releases run only on the current board of a lineage.
-    const lineageStore = new DurableBoardLineageStore(getDurableWorkflowRepository());
-    const lineage = await lineageStore.describe({ tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId }, boardId);
-    if (lineage.state === "superseded") return manufacturingRefusal("MFG_BOARD_SUPERSEDED", { correlationId, extra: { supersededBy: lineage.supersededBy?.boardId ?? null, currentBoardId: (await lineageStore.resolveCurrent({ tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId }, boardId)).currentBoardId } });
-    if (!head) return manufacturingRefusal("MFG_AUTHORITATIVE_BOARD_NOT_FOUND", { correlationId });
-    if (head.record.revision !== stored.authority.boardRevision || authoritativeBoardDigest(head.record.board) !== stored.authority.boardDigest) {
-      return manufacturingRefusal("MFG_AUTHORITY_STALE", { correlationId, extra: { authorityBoardRevision: stored.authority.boardRevision, currentBoardRevision: head.record.revision } });
-    }
-    // Release-time expiration of the fabrication-profile evidence.
-    // [B16-C.4] a pre-split (v1) profile is refused distinctly; the v2 evidence carries its own expiry.
-    const storedProfile = stored.authority.manufacturingRuleProfile as { schemaVersion?: string; evidence?: ManufacturingRuleProfile["evidence"] };
-    if (storedProfile.schemaVersion !== MANUFACTURING_RULE_PROFILE_SCHEMA) return manufacturingRefusal("MFG_RULE_PROFILE_SCHEMA_RETIRED", { correlationId });
-    const evidenceStatus = ruleProfileEvidenceStatus(storedProfile.evidence, new Date().toISOString());
-    if (evidenceStatus === "expired") return manufacturingRefusal("MFG_RULE_PROFILE_EXPIRED", { correlationId });
-    if (evidenceStatus !== "ok") return manufacturingRefusal("MFG_RULE_PROFILE_STALE_AT_RELEASE", { correlationId });
-    const retrievedAt = Date.parse(`${storedProfile.evidence!.retrievedAt}T00:00:00.000Z`);
-    if (Date.now() - retrievedAt > RELEASE_PROFILE_EVIDENCE_MAX_AGE_MS) return manufacturingRefusal("MFG_RULE_PROFILE_STALE_AT_RELEASE", { correlationId });
-    // The locator pins the exact board identity the release must match; the
-    // loader re-reads durable storage and refuses anything that drifted.
-    const locator: ManufacturingReleaseLocator = { ...authorityScope, expectedBoardRevision: stored.authority.boardRevision, expectedBoardDigest: stored.authority.boardDigest };
+    // [B23-B1] D23-7: the route-only checks (pins, current head, lineage, release-instant expiry, 366-day age) are one exported
+    // function, `revalidateReleaseAuthority` below, which the provider exchange re-runs at preview and at commit. Same order, codes,
+    // statuses and bodies as before; nothing else in this handler moved.
+    const revalidated = await revalidateReleaseAuthority({ store, scope, designId, boardId, expectedAuthorityRevision: body.expectedAuthorityRevision, expectedAuthorityDigest: body.expectedAuthorityDigest, correlationId });
+    if (!revalidated.ok) return revalidated.response;
+    const { stored, locator } = revalidated;
     const artifact = await releaseManufacturingPackage({ locator, loadAuthority: store.loader(locator) });
     const filename = releaseFilename(boardId, artifact.releaseId);
     const recorded = await ledger.record(authorityScope, {
@@ -157,3 +127,68 @@ export const POST = authenticatedJsonRoute({ maxBytes: PCB_SYNC_API_MAX_BYTES, d
     return boundedManufacturingFailure(error, "release", correlationId);
   }
 });
+
+/** [B23-B1] What `revalidateReleaseAuthority` answers: the stored head and the locator the release gate re-checks, or the refusal. */
+export type ReleaseAuthorityRevalidation =
+  | { ok: true; stored: NonNullable<Awaited<ReturnType<DurableManufacturingAuthorityStore["getHead"]>>>; locator: ManufacturingReleaseLocator }
+  | { ok: false; response: Response };
+
+/**
+ * [B23-B1] Step 1 of B23-B, "revalidate authority immediately before upload" (runbook :975, D23-7): the release route's route-only
+ * checks, moved here verbatim from the handler so the release route and the provider exchange (`/api/pcb/provider-exchange`, at
+ * preview and again at commit) run the same code. In order: the stored authority head exists; the administrator's pins are present,
+ * typed and equal to it; the board is the current one of its lineage and has a durable head; that head is the authority's board
+ * revision AND digest; the rule profile is v2, unexpired and not older than 366 days at this instant. The release gate re-checks
+ * scope, board identity, profile schema and `sourceDate`-relative expiry itself (`release-gate.ts`). A refusal is the release
+ * route's own bounded envelope; a thrown durable error propagates to the caller's bounded failure. It reads; it writes nothing.
+ */
+export async function revalidateReleaseAuthority(input: {
+  store: DurableManufacturingAuthorityStore;
+  scope: { tenantId: string; projectId: string; branchId: string };
+  designId: string;
+  boardId: string;
+  expectedAuthorityRevision: unknown;
+  expectedAuthorityDigest: unknown;
+  correlationId: string;
+}): Promise<ReleaseAuthorityRevalidation> {
+  const { store, scope, designId, boardId, correlationId } = input;
+  const refuse = (response: Response): ReleaseAuthorityRevalidation => ({ ok: false, response });
+  const authorityScope = { tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId, designId, boardId };
+  const stored = await store.getHead(authorityScope);
+  if (!stored) return refuse(manufacturingRefusal("MFG_AUTHORITY_NOT_FOUND", { correlationId }));
+  // [B16.1C §F / B16-A F6] the administrator confirmed a SPECIFIC authority
+  // in the browser. The confirmation is a SERVER invariant: both pins are
+  // mandatory and type-checked (an integer revision and the record digest);
+  // if the authority moved on between the confirmation and this request the
+  // release is refused rather than packaging something never reviewed.
+  const expectedRevision = input.expectedAuthorityRevision, expectedDigest = input.expectedAuthorityDigest;
+  if (!Number.isSafeInteger(expectedRevision) || (expectedRevision as number) < 1 || typeof expectedDigest !== "string" || expectedDigest.length === 0) {
+    return refuse(manufacturingRefusal("MFG_AUTHORITY_CONFIRMATION_REQUIRED", { correlationId, extra: { authorityRevision: stored.revision, authorityDigest: stored.recordDigest } }));
+  }
+  if (expectedRevision !== stored.revision || expectedDigest !== stored.recordDigest) {
+    return refuse(manufacturingRefusal("MFG_AUTHORITY_CONFIRMATION_MISMATCH", { correlationId, extra: { authorityRevision: stored.revision, authorityDigest: stored.recordDigest } }));
+  }
+  // The authority must describe the board's CURRENT durable revision.
+  const head = await stage3Repository.getBoardHead({ tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId, boardId });
+  // [B16-C.1] an old revision's release can never become current again: releases run only on the current board of a lineage.
+  const lineageStore = new DurableBoardLineageStore(getDurableWorkflowRepository());
+  const lineage = await lineageStore.describe({ tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId }, boardId);
+  if (lineage.state === "superseded") return refuse(manufacturingRefusal("MFG_BOARD_SUPERSEDED", { correlationId, extra: { supersededBy: lineage.supersededBy?.boardId ?? null, currentBoardId: (await lineageStore.resolveCurrent({ tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId }, boardId)).currentBoardId } }));
+  if (!head) return refuse(manufacturingRefusal("MFG_AUTHORITATIVE_BOARD_NOT_FOUND", { correlationId }));
+  if (head.record.revision !== stored.authority.boardRevision || authoritativeBoardDigest(head.record.board) !== stored.authority.boardDigest) {
+    return refuse(manufacturingRefusal("MFG_AUTHORITY_STALE", { correlationId, extra: { authorityBoardRevision: stored.authority.boardRevision, currentBoardRevision: head.record.revision } }));
+  }
+  // Release-time expiration of the fabrication-profile evidence.
+  // [B16-C.4] a pre-split (v1) profile is refused distinctly; the v2 evidence carries its own expiry.
+  const storedProfile = stored.authority.manufacturingRuleProfile as { schemaVersion?: string; evidence?: ManufacturingRuleProfile["evidence"] };
+  if (storedProfile.schemaVersion !== MANUFACTURING_RULE_PROFILE_SCHEMA) return refuse(manufacturingRefusal("MFG_RULE_PROFILE_SCHEMA_RETIRED", { correlationId }));
+  const evidenceStatus = ruleProfileEvidenceStatus(storedProfile.evidence, new Date().toISOString());
+  if (evidenceStatus === "expired") return refuse(manufacturingRefusal("MFG_RULE_PROFILE_EXPIRED", { correlationId }));
+  if (evidenceStatus !== "ok") return refuse(manufacturingRefusal("MFG_RULE_PROFILE_STALE_AT_RELEASE", { correlationId }));
+  const retrievedAt = Date.parse(`${storedProfile.evidence!.retrievedAt}T00:00:00.000Z`);
+  if (Date.now() - retrievedAt > RELEASE_PROFILE_EVIDENCE_MAX_AGE_MS) return refuse(manufacturingRefusal("MFG_RULE_PROFILE_STALE_AT_RELEASE", { correlationId }));
+  // The locator pins the exact board identity the release must match; the
+  // loader re-reads durable storage and refuses anything that drifted.
+  const locator: ManufacturingReleaseLocator = { ...authorityScope, expectedBoardRevision: stored.authority.boardRevision, expectedBoardDigest: stored.authority.boardDigest };
+  return { ok: true, stored, locator };
+}

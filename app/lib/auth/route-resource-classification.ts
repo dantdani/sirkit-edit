@@ -95,6 +95,8 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   "/api/mcp": { durable: "read", sensitivity: "session-identity" },
   // [B20 B2] the token route returns a credential bound to the caller's own identity and live membership; nothing is stored
   "/api/mcp/token": { durable: "none", sensitivity: "session-identity" },
+  // [B23-B1] reads the authority head, the board head and lineage and the release ledger, and regenerates the release (no ledger write)
+  "/api/pcb/provider-exchange": { durable: "read", sensitivity: "project-durable", expensive: true },
 };
 
 /**
@@ -195,7 +197,7 @@ function rowFor(policy: RoutePolicy): RouteResourceRow {
     authoritativeWrite: policy.authoritativeWrite,
     releaseOrQualification: policy.releaseOrQualification,
     staticOrCatalog,
-    outboundEgress: Object.hasOwn(OUTBOUND_EGRESS_BY_PATH, policy.path) ? OUTBOUND_EGRESS_BY_PATH[policy.path]! : "none", // [B23-A2]
+    outboundEgress: policy.externalTransfer === true ? "files" : Object.hasOwn(OUTBOUND_EGRESS_BY_PATH, policy.path) ? OUTBOUND_EGRESS_BY_PATH[policy.path]! : "none", // [B23-A2] [B23-B1] files: declared by the transfer row itself, never derived (OD-182 (a))
     modelEgress: MODEL_EGRESS_PATHS.has(policy.path), // [B23-A2 review]
   };
 }

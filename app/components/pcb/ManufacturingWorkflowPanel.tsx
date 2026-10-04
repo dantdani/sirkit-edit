@@ -16,7 +16,7 @@
 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import type { UseManufacturingWorkflowResult } from "./hooks/useManufacturingWorkflow";
+import type { UseManufacturingWorkflowResult } from "./hooks/useManufacturingWorkflow"; import { ProviderExchangePanel } from "./ProviderExchangePanel"; // [B23-B1] appended in place: every later line keeps the number B16-B23 pages cite
 
 const STATE_LABEL: Record<string, string> = {
   idle: "No durable board yet — synchronize the schematic to the PCB",
@@ -117,6 +117,10 @@ export function ManufacturingWorkflowPanel({ workflow, qualifying, canQualify, o
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* [B23-B1] the provider exchange, offered only for a CURRENT ledgered release of a CURRENT authority (B23-B "given a current deterministic release") */}
+      {workflow.workflow && truth?.authority?.current && truth.latestRelease?.current && (
+        <ProviderExchangePanel scope={workflow.workflow.scope} authority={{ revision: truth.authority.revision, recordDigest: truth.authority.recordDigest }} canAct={releaseCapability.allowed} />
+      )}
     </div>
   );
 }

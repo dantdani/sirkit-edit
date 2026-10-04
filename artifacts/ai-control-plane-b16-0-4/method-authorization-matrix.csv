@@ -115,6 +115,7 @@ GET,/api/pcb/footprints/[id],public,public,publicRoute(…),n/a(public),-,-
 GET,/api/pcb/footprints/resolve,public,public,publicRoute(…),n/a(public),-,-
 GET,/api/pcb/footprints/search,public,public,publicRoute(…),n/a(public),-,-
 POST,/api/pcb/placement/preview,public,public,publicJsonRoute(…),n/a(public),-,-
+POST,/api/pcb/provider-exchange,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/pcb/qualify,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/pcb/release,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/pcb/repair/agent,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute

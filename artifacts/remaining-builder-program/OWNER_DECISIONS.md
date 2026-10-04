@@ -2077,3 +2077,90 @@ Amendments to existing entries:
     schema imports the embedding module's constant.
 - **Evidence:** `tier3-vocabulary.md` sections 11 and 15.
 - Owner confirmation pending.
+
+## OD-163 — what leaves Sirkit in a DFM or quote transfer, as applied (B23-B1, 2026-10-04)
+
+- **Question:** what exactly leaves Sirkit in a DFM or quote transfer?
+- **Default applied:** a derived outbound package built only from a ledgered release whose regenerated archiveSha256 (recomputed from
+  Sirkit's own bytes), releaseId and manifest digest equal the ledger record. It holds the Gerber, Excellon and job files, byte-identical
+  to the release (each sha256 and size equal to its manifest record), and a generated provider manifest naming releaseId,
+  archiveSha256, the file list and the capability-profile id and version. release-manifest.json and README.txt are not sent; no BOM, CPL
+  or distributor value leaves (a release listing any other kind is refused). outboundPackageDigest = mfg-outbound- + the provider
+  manifest's sha256, stable across builds. The identity fields (tenantId, projectId, branchId, designId, boardId, actor) are never
+  provider-manifest fields. An identity whose value occurs in an outbound file name or byte is disclosed as carried, never listed as
+  kept: for the 555 the board's file-safe name embeds the project id and is in every file name, each Gerber's TF.ProjectId and the job
+  file. Every metadata field the bytes carry is listed (84 for the 555).
+- **Open question for the owner:** whether a provider may receive the board's file-safe name. Stripping it would move the release
+  bytes and identity (OD-183 (g)).
+  A project id cut short by the 80-character board name is carried as its kept prefix (form file-safe-prefix).
+- **Evidence:** outbound-disclosure.md sections 1 and 3; b23-b-outbound-package (10 tests), b23-b-approval-plan case 11.
+- Owner confirmation pending.
+
+## OD-164 — who may request a transfer, and on what, as applied (B23-B1, 2026-10-04)
+
+- **Question:** who may request a transfer, and on what?
+- **Default applied:** a human project_admin only (the route policy, the handler and the service each refuse any other actor before any
+  durable read), only for a release already in the ledger whose authority is still head and matches the current board revision AND
+  digest. revalidateReleaseAuthority runs at preview and again at commit, and the release gate re-checks scope, board identity, profile
+  schema and sourceDate-relative expiry. Never on the engineering export. No agent tool: counts 47/36/9/27 unchanged. The action record
+  manufacturing.provider-exchange is Tier 3 (external-transfer, approval tier release), with toolExposure none.
+- **Evidence:** outbound-disclosure.md sections 2 and 5; b23-b-revalidation (23), b23-b-approval-plan case 8, b23-b-exchange-route cases 6-7, 11.
+- Owner confirmation pending.
+
+## OD-166 — how the human approves a named provider and purpose, as applied (B23-B1, 2026-10-04)
+
+- **Question:** how does the human approve a named provider and purpose?
+- **Default applied:** B22-B's sealed-request shape with the assignment queue's opt-in header. preview returns a sealed plan:
+  - provider id, operation, purpose dfm or quote, descriptor version and digest;
+  - the exact files with bytes and sha256, and the provider manifest;
+  - every provider-manifest field, every metadata field the file bytes carry, and the identities carried inside names and bytes;
+  - what stays in Sirkit, release and authority identity, the request digest;
+  - an expiry of 10 minutes, and a planDigest over all of it.
+  commit requires planId, planDigest, an idempotency key and x-sirkit-provider-exchange-commit: send_exact_plan. It consumes the plan
+  once and re-runs steps 1 and 2. It refuses an expired plan, a moved input (the step-1 code or PX_PLAN_INPUT_MOVED), and a key reused
+  with another plan within 24 hours of the key's commit. A throw at commit ends the plan with the bounded envelope, replayed for the
+  same key. Preview and commit are separate requests from two separate controls; one click never sends. In B23 every commit ends
+  provider_not_admitted.
+- **Evidence:** outbound-disclosure.md sections 4 and 6; b23-b-approval-plan (18), b23-b-exchange-route (14), b23-b-provider-panel (9).
+- Owner confirmation pending.
+
+## OD-174 — the route vocabulary and the census, the route half, as applied (B23-B1, 2026-10-04)
+
+- **Default applied:** POST /api/pcb/provider-exchange is one route file with two operations named by a closed body field. It is a
+  canonical authenticated-mutation row appended at the end of the table: trusted human session, CSRF, project_admin only, never public,
+  authoritativeWrite false, releaseOrQualification false, externalTransfer true, spend false. routeVocabularyViolations passes; it is
+  the one transfer row and no row is spend. Its classification row is durable read, project-durable, expensive, no external process,
+  outboundEgress files (declared by the transfer row, never derived; the census checks it against a reviewed transfer list and pins
+  its closure-derived value, none in B1), modelEgress false. b22-a2-process-census case 3 accepts it. The census moved once, by review,
+  to 166/163/3/0, with every ratchet and coverage artifact regenerated and every census pin moved in place. The B16.0.1 CSV does not
+  render the two booleans (OD-182 (f)).
+- **Evidence:** outbound-disclosure.md section 5; b23-b-exchange-route cases 1-4; b23-a-route-vocabulary (8).
+- Owner confirmation pending.
+
+## OD-183 — B23-B1: stated choices beyond its task text, as applied (B23-B1, 2026-10-04)
+
+- **Default applied:**
+  - (a) One route file; two operations named by the closed body field operation: "preview" | "commit", each with its own closed key
+    set; authority-shaped keys are refused first.
+  - (b) The reviewed board-file exchanges: JLCPCB pcb-quote, OSH Park import-upload and api-upload (quote), MacroFab dfm-readiness (dfm)
+    and pcb-quote (quote). Every other operation is refused PX_EXCHANGE_NOT_OFFERED.
+  - (c) B22-B's sealed request is the approval shape: a server nonce and digest; the commit is the human approval of the exact plan,
+    consumed once before steps 1 and 2 re-run. Any human project administrator of the same project may commit; no two-person rule in B1.
+  - (d) Plans and idempotency keys live in memory. Per project scope (tenant, project, branch; each branch is its own scope): at most
+    32 open plans and 256 key records. Backstops over every project: 2,048 open plans and 16,384 key records. A consumed plan keeps only
+    a tombstone (scope, digest, expiry) until its 10 minutes end; it counts toward no bound and is bounded by its key record. Expired
+    plans are dropped first. A bound refuses (PX_PLAN_LIMIT_REACHED or PX_KEY_LIMIT_REACHED, 429) and never evicts. A key record is kept
+    24 hours after its commit, apart from its plan. A restart forgets them; nothing is persisted in B1, and the durable exchange record
+    is B23-B2's (OD-167). The backstops are the one remaining cross-project effect: 64 scopes each at its 32 open plans refuse every
+    other project's preview until one of those plans is committed or expires (at most 10 minutes); 64 scopes each at its 256 key records
+    refuse every other project's commit until the oldest record's 24 hours end. [B23-B1 lead round, 2026-10-04]
+  - (e) The exchange's refusals are a closed PX_* vocabulary; step 1 and the release gate keep their MFG_* codes, statuses and bodies. A
+    throw keeps the release route's bounded envelope; at commit it ends the plan and is recorded as the key's outcome.
+  - (f) The policy row is authenticated-mutation with authoritativeWrite false; the record is manufacturing.provider-exchange with
+    side effect external-transfer and approval tier release.
+  - (g) The board's file-safe name in the file names and the Gerber and job bytes is disclosed as carried, never stripped; whether a
+    provider may receive it is the owner's question.
+  - (h) The panel is shown only for a current ledgered release of a current authority. Commit is disabled until a preview and after one
+    commit; a refused or failed preview discards the plan.
+- **Evidence:** outbound-disclosure.md sections 4, 10 and 13.
+- Owner confirmation pending.

@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B23",
-  "currentCheckpoint": "B23-A2 committed on chapter/b23-external-manufacturing: the structural Tier 3 (external-transfer), the widened id floor, the external-* withdrawal, the chat-closure tripwire, the consumed-tool name floor, the route vocabulary (externalTransfer, spend, outboundEgress, modelEgress), the structural no-order check and the CD-12 stubs pinned; D23-8, D23-9, D23-12, D23-21 closed",
+  "currentCheckpoint": "B23-B1 committed on chapter/b23-external-manufacturing: revalidateReleaseAuthority, buildOutboundPackage, the provider exchange (sealed 10-minute plan; commit always provider_not_admitted, nothing sent), POST /api/pcb/provider-exchange (census 166/163/3/0), the provider panel; D23-6, D23-7 closed",
   "status": "in_progress",
   "baseSha": "43cb1b0",
   "branch": "chapter/b23-external-manufacturing",
-  "lastGreenSha": "79fa18b",
+  "lastGreenSha": "da36d51",
   "pullRequest": "draft PR (chapter/b23-external-manufacturing -> main) opened after the discovery commit; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
@@ -19,7 +19,7 @@
     "live DFM/quote exchange with a manufacturer or quote API: BLOCKED-LIVE-QUALIFICATION (LB-11)",
     "ordering through a provider sandbox: BLOCKED-LIVE-QUALIFICATION (LB-12)"
   ],
-  "nextAction": "B23-B1 (revalidate, disclose, approve: D23-6, D23-7; OD-163, OD-164, OD-166, the provider-exchange route moving the census to 166/163/3/0), test-first; then B2, B3, C, D, closeout. Carried to the owner: OD-160, OD-181, OD-182, OD-174's open question (two public routes send anonymous search text to OpenAI), the B22 items.",
-  "updatedAt": "2026-10-03T23:14:17-04:00",
+  "nextAction": "B23-B2 (bounded transfer and receipts: D23-3, D23-4, D23-5's receipt half; OD-165, OD-167), test-first; then B3, C, D, closeout. Carried to the owner: OD-160, OD-163's open question (may a provider receive the board's file-safe name), OD-174's (two public routes send anonymous search text to OpenAI), OD-181..OD-183, the B22 items.",
+  "updatedAt": "2026-10-04T02:10:53-04:00",
   "previousChapter": "B22 merged normally into main as 43cb1b0 (PR #13, 2026-10-02) after green CI on 849a933; verdict PARTIAL (the production simulation runner BLOCKED under LB-10, OD-134)"
 }

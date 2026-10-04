@@ -3,7 +3,7 @@
  * given. An enabled hand-off is admitted as a hand-off (no host, no credential, no API call); a distributor's read follows its B19
  * source's own admission (OD-33, OD-32, the blocked LCSC); every dfm_quote_transfer and every ordering operation refuses
  * `provider_not_admitted` in B23, whatever the registry or the environment says; the operator switch can only switch OFF; refusals
- * name variables, never values; and nothing outside this directory calls admission yet (no route, no tool).
+ * name variables, never values; and nothing outside this directory calls admission yet (no route, no tool). [B23-B1, 2026-10-03] The provider exchange route now does, through the exchange service.
  *
  * Every credential below is an obvious fake assembled at run time. Nothing is written to disk and nothing leaves the process.
  */
@@ -161,8 +161,8 @@ describe("[B23-A1] admission per provider and per operation tier", () => {
     expect(admit("jlcpcb", "manual-quote-upload", {}).admitted).toBe(true);
   });
 
-  it("8. nothing calls admission from a route, a tool or any module outside its directory; only the CSV generator reads the registry; a read error anywhere in the walk fails the case instead of ending it early", () => {
-    expect(importersOf(ROOT, TOP_LEVEL, DISK)).toEqual(["scripts/generate-b23-provider-registry.ts"]);
+  it("8. nothing calls admission from a tool or any module outside its directory but the provider exchange route ([B23-B1, 2026-10-03]: through the exchange service; was: no route); only the CSV generator reads the registry; a read error anywhere in the walk fails the case instead of ending it early", () => {
+    expect(importersOf(ROOT, TOP_LEVEL, DISK)).toEqual(["app/api/pcb/provider-exchange/route.ts", "scripts/generate-b23-provider-registry.ts"]); // [B23-B1, 2026-10-03] reviewed pin move: + the provider exchange route, which reaches admission only through the exchange service (b23-b-exchange-route case 4 pins its closure)
     // [B23-A1 review, 2026-10-02] the walk skips only a top-level directory that does not exist; any other error (a dangling link, a
     // locked file) propagates, so it can never hide an importer listed after the failing entry
     const tree = new Map<string, string | Error | null>([

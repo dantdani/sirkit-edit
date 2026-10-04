@@ -8,7 +8,7 @@
  * case 3 derives `external_process` (which stays green: its column stays at index 6). The five public cache-only BOM routes reach
  * the boundary only through the pricing gateway, which calls a vendor only for `live: true`; each is a reviewed exemption that holds
  * by reachability and by its own calls, or is dropped. No route sends files in A2 and no route is added: the census stays
- * 165 / 162 / 3 / 0 (the provider exchange route is B23-B1's).
+ * 165 / 162 / 3 / 0 (the provider exchange route is B23-B1's). [B23-B1, 2026-10-03] B1 added it: 166 / 163 / 3 / 0, its row declares `files`.
  *
  * [B23-A2 review] `outboundEgress` sees only the egress boundary. The model-provider SDKs (OpenAI, Anthropic) open their own
  * connections (discovery section 2.3), so a route that sends a prompt or an embedding input to the configured LLM provider is
@@ -84,7 +84,7 @@ const CACHE_ONLY: Readonly<Record<string, CacheOnly>> = {
   "/api/bom/export-csv": { names: ["bomStateRefusal", "bomToCsv", "buildBom", "checkBomState"], calls: ["buildBom"], reason: CACHE_ONLY_REASON },
 };
 /** The paths that send an observation query today (each reaches the boundary and holds no exemption). */
-const QUERY_PATHS = ["/api/bom", "/api/bom/diff", "/api/bom/snapshot", "/api/chat", "/api/parts/external-search", "/api/schematic/cross-verify"];
+const QUERY_PATHS = ["/api/bom", "/api/bom/diff", "/api/bom/snapshot", "/api/chat", "/api/parts/external-search", "/api/schematic/cross-verify"]; const TRANSFER_PATHS: ReadonlySet<string> = new Set(["/api/pcb/provider-exchange"]); // [B23-B1, 2026-10-03] the transfer paths are declared by their policy rows: `files`, never derived (OD-182 (a)). [B23-B1 review, 2026-10-04] tests-5: a reviewed literal, not the policy flag, so case 4 checks the flag's files row against a list it does not read
 
 const edgeCache = new WeakMap<FileMap, Map<string, string[]>>();
 /** A file's runtime import edges to production files: the rule `importClosure` follows (type-only declarations erased). */
@@ -485,7 +485,7 @@ function modelEgressOf(files: FileMap, routes: ReadonlyArray<{ path: string; fil
   return out;
 }
 
-interface EgressRow { path: string; file: string; reached: boolean; exempt: boolean; value: OutboundEgress; modelEgress: boolean }
+interface EgressRow { path: string; file: string; reached: boolean; exempt: boolean; derived: OutboundEgress; value: OutboundEgress; modelEgress: boolean } // [B23-B1 review, 2026-10-04] derived: from the closure alone
 const routeEntries = listRouteFiles(ROOT).map((file) => ({ path: routePathOf(ROOT, file), file: relative(ROOT, file).split("\\").join("/") }));
 async function census(files: FileMap, routes: ReadonlyArray<{ path: string; file: string }>): Promise<EgressRow[]> {
   const rows: EgressRow[] = [];
@@ -494,7 +494,7 @@ async function census(files: FileMap, routes: ReadonlyArray<{ path: string; file
     const reached = closureOf(files, file).has(EGRESS);
     const exemption = CACHE_ONLY[path];
     const exempt = reached && exemption !== undefined && exemptionViolations(files, file, exemption).length === 0;
-    rows.push({ path, file, reached, exempt, value: reached && !exempt ? "observation-query" : "none", modelEgress: models.get(path)! });
+    const derived: OutboundEgress = reached && !exempt ? "observation-query" : "none"; rows.push({ path, file, reached, exempt, derived, value: TRANSFER_PATHS.has(path) ? "files" : derived, modelEgress: models.get(path)! }); // [B23-B1, 2026-10-03] files is declared by a transfer row, never derived (OD-182 (a)); case 4 pins that B1's reaches no boundary. [B23-B1 review, 2026-10-04] the closure-derived value is kept beside it
     await new Promise((resolve) => setImmediate(resolve)); // yield between walks (lead lesson 3: never block the worker for long)
   }
   return rows;
@@ -613,14 +613,14 @@ const TRANSFER: RoutePolicy = {
 };
 
 describe("[B23-A2] the route vocabulary (OD-174)", () => {
-  it("1. every policy row carries explicit externalTransfer and spend booleans; no row is either in A2; the two releaseOrQualification rows are unchanged; the gates pass on the table", () => {
+  it("1. every policy row carries explicit externalTransfer and spend booleans; no row is either in A2 ([B23-B1, 2026-10-03] B1's provider exchange is the one externalTransfer row; none is spend); the two releaseOrQualification rows are unchanged; the gates pass on the table", () => {
     const policies = allRoutePolicies();
-    expect(policies).toHaveLength(165);
+    expect(policies).toHaveLength(166); // [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
     for (const policy of policies) {
       expect(typeof policy.externalTransfer, `${policy.method} ${policy.path}`).toBe("boolean");
       expect(typeof policy.spend, `${policy.method} ${policy.path}`).toBe("boolean");
     }
-    expect(policies.filter((policy) => policy.externalTransfer || policy.spend)).toEqual([]);
+    expect(policies.filter((policy) => policy.externalTransfer || policy.spend).map((policy) => `${policy.method} ${policy.path}:${String(policy.externalTransfer)}/${String(policy.spend)}`)).toEqual(["POST /api/pcb/provider-exchange:true/false"]); // [B23-B1, 2026-10-03] was []: the provider exchange is B1's transfer row
     expect(policies.filter((policy) => policy.releaseOrQualification).map((policy) => policy.path).sort()).toEqual(["/api/pcb/qualify", "/api/pcb/release"]);
     expect(policyFor("/api/pcb/release", "POST")).toMatchObject({ releaseOrQualification: true, externalTransfer: false, spend: false, permittedRoles: ["project_admin"] });
     expect([...ROUTE_VOCABULARY_VIOLATIONS]).toEqual(["flags_not_explicit", "spend_in_b23", "public", "not_human_session", "no_csrf", "any_member", "viewer_or_commenter", "automation", "release_vocabulary"]);
@@ -652,12 +652,12 @@ describe("[B23-A2] the route vocabulary (OD-174)", () => {
     expect(routeVocabularyViolations([chat])).toEqual(["POST /api/chat: not_human_session", "POST /api/chat: automation"]);
   });
 
-  it("3. outboundEgress is a closed vocabulary on every classification row and the CSV's last column (external_process stays at index 6); files only with a transfer row and a transfer row only with files; no public row sends an observation query or files, and a public row that sends a model input is reviewed; no row sends files in A2", () => {
+  it("3. outboundEgress is a closed vocabulary on every classification row and the CSV's last column (external_process stays at index 6); files only with a transfer row and a transfer row only with files; no public row sends an observation query or files, and a public row that sends a model input is reviewed; no row sends files in A2 ([B23-B1, 2026-10-03] B1's provider exchange is the one files row)", () => {
     expect([...OUTBOUND_EGRESS]).toEqual(["none", "observation-query", "files"]);
     const rows = routeResourceClassification();
-    expect(rows).toHaveLength(165);
+    expect(rows).toHaveLength(166); // [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
     for (const row of rows) expect(OUTBOUND_EGRESS, `${row.method} ${row.path}`).toContain(row.outboundEgress);
-    expect(rows.filter((row) => row.outboundEgress === "files")).toEqual([]);
+    expect(rows.filter((row) => row.outboundEgress === "files").map((row) => `${row.method} ${row.path}`)).toEqual(["POST /api/pcb/provider-exchange"]); // [B23-B1, 2026-10-03] was []: declared by B1's transfer row
     expect(rows.filter((row) => row.isPublic && row.outboundEgress !== "none")).toEqual([]);
     expect(outboundEgressViolations()).toEqual([]);
     const header = csvRows()[0]!;
@@ -683,12 +683,13 @@ describe("[B23-A2] the route vocabulary (OD-174)", () => {
     for (const [path, reason] of Object.entries(PUBLIC_MODEL_EGRESS)) expect(reason.length, path).toBeGreaterThan(40);
   });
 
-  it("4. the census: every path's outboundEgress (every method row, and the CSV) equals the value derived from its runtime import closure reaching the egress boundary, with the reviewed cache-only exemptions, and its modelEgress the value derived from its handler bindings; the derivation walks the gates' edges", { timeout: 120_000 }, async () => {
+  it("4. the census: every path's outboundEgress (every method row, and the CSV) equals the value derived from its runtime import closure reaching the egress boundary, with the reviewed cache-only exemptions ([B23-B1 review, 2026-10-04] except a transfer path: its files is declared by its policy row, checked against the reviewed transfer list, and its closure-derived value is pinned beside it), and its modelEgress the value derived from its handler bindings; the derivation walks the gates' edges", { timeout: 120_000 }, async () => {
     const census = await derivedCensus();
     expect(census.map((row) => row.path).sort()).toEqual([...new Set(routeResourceClassification().map((row) => row.path))].sort());
     expect(census.filter((row) => row.value === "observation-query").map((row) => row.path).sort()).toEqual(QUERY_PATHS);
     expect(census.filter((row) => row.exempt).map((row) => row.path).sort()).toEqual(Object.keys(CACHE_ONLY).sort());
-    const byPath = new Map(census.map((row) => [row.path, row.value]));
+    const byPath = new Map(census.map((row) => [row.path, row.value])); expect(routeResourceClassification().filter((row) => row.outboundEgress !== byPath.get(row.path)).map((row) => `${row.method} ${row.path}: ${row.outboundEgress} (census ${String(byPath.get(row.path))})`)).toEqual([]); // [B23-B1 review, 2026-10-04] tests-5: every row at once, before the pins
+    expect(census.filter((row) => row.value === "files").map(({ path, reached, derived }) => ({ path, reached, derived }))).toEqual([{ path: "/api/pcb/provider-exchange", reached: false, derived: "none" }]); // [B23-B1, 2026-10-03] the transfer row's closure reaches no egress boundary in B1: the send is B2's. [B23-B1 review, 2026-10-04] its closure-derived value too: a transfer route that also sent a query could not hide behind files
     for (const row of routeResourceClassification()) expect(row.outboundEgress, `${row.method} ${row.path}`).toBe(byPath.get(row.path));
     const [header, ...body] = csvRows();
     const pathIndex = header!.indexOf("path");
@@ -737,7 +738,7 @@ describe("[B23-A2] the route vocabulary (OD-174)", () => {
     const injected = new Map(files);
     injected.set("app/api/b23-probe/route.ts", 'import { lookUp } from "./hop";\nexport const POST = () => lookUp();\n');
     injected.set("app/api/b23-probe/hop.ts", 'import { outboundFetch } from "@/app/lib/net/outbound-fetch";\nexport const lookUp = () => outboundFetch;\n');
-    expect(await census(injected, [{ path: "/api/b23-probe", file: "app/api/b23-probe/route.ts" }])).toEqual([{ path: "/api/b23-probe", file: "app/api/b23-probe/route.ts", reached: true, exempt: false, value: "observation-query", modelEgress: false }]);
+    expect(await census(injected, [{ path: "/api/b23-probe", file: "app/api/b23-probe/route.ts" }])).toEqual([{ path: "/api/b23-probe", file: "app/api/b23-probe/route.ts", reached: true, exempt: false, derived: "observation-query", value: "observation-query", modelEgress: false }]); // [B23-B1 review, 2026-10-04] the row now carries its closure-derived value too (case 4)
     const route = "app/api/bom/cart/digikey/route.ts";
     const entry = [{ path: "/api/bom/cart/digikey", file: route }];
     expect((await census(files, entry))[0]).toMatchObject({ reached: true, exempt: true, value: "none" });
@@ -774,8 +775,8 @@ describe("[B23-A2] the route vocabulary (OD-174)", () => {
     await loses(mutated("app/lib/bom/build.ts", "{ live: pricing.live === true, forceRefresh", "{ live: true, forceRefresh"), "PRICING_CALLS:1");
   });
 
-  it("7. no route was added or removed: 165 classified rows over the route files (the census stays 165 / 162 / 3 / 0, b16-1c-invariant-tripwires), and the policy table is the route tree", () => {
-    expect(routeResourceClassification()).toHaveLength(165);
+  it("7. [B23-B1, 2026-10-03] one route was added (the provider exchange; A2 added none): 166 classified rows over the route files (the census is 166 / 163 / 3 / 0, b16-1c-invariant-tripwires), and the policy table is the route tree", () => {
+    expect(routeResourceClassification()).toHaveLength(166); // [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
     expect(routeEntries.map((entry) => entry.path).sort()).toEqual([...new Set(allRoutePolicies().map((policy) => policy.path))].sort());
   });
 

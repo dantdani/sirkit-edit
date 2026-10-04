@@ -300,6 +300,8 @@ const ALL: RoutePolicy[] = [
   ...mcpBearer("/api/mcp", ["POST"], "app/api/mcp (the Sirkit MCP endpoint: MCP 2026-07-28 Streamable HTTP, JSON only; a Sirkit-issued bearer token re-checked against the LIVE membership on every call; Origin validated when present; lists the nine-read subset only - every proposal withheld, OD-82 / OD-87)"),
   ...read("/api/mcp/token", ["POST"], "app/api/mcp/token (mints a one-hour, audience-bound MCP access token for the signed-in member's selected project; nothing is stored; same-origin CSRF)", ALL_MEMBERS),
   ...pub("/.well-known/oauth-protected-resource/api/mcp", ["GET"], "RFC 9728 protected-resource metadata of the MCP endpoint (static configuration only; no project data)"),
+  // ── [B23-B1] the provider exchange (OD-174, OD-164): a human project administrator previews, then commits, the DFM or quote exchange of a LEDGERED release with a named provider; files would leave through this row once a provider is admitted (none in B23: every commit is refused provider_not_admitted). Writes no engineering state ──
+  ...mutate("/api/pcb/provider-exchange", ["POST"], "app/api/pcb/provider-exchange (preview and commit of a named provider's DFM or quote exchange of a ledgered release; human project administrator only; no provider admitted in B23, nothing sent)", { roles: ADMIN_ONLY }).map((policy) => ({ ...policy, authoritativeWrite: false, externalTransfer: true })),
 ];
 
 // ── Lookup ────────────────────────────────────────────────────────────────────

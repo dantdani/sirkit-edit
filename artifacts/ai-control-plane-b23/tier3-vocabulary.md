@@ -181,7 +181,7 @@ public searches below send one with `provider_credit` false. Both values are ren
 query and no files (`public_sends`); a public row that sends a model input is one of the reviewed `PUBLIC_MODEL_EGRESS` paths (`:137`,
 `public_model_egress`). CONFIRMED
 
-**Derived, not asserted.** `b23-a-route-vocabulary` case 4 derives both values per path and checks every row and CSV cell against them.
+**Derived, not asserted.** `b23-a-route-vocabulary` case 4 derives both values per path and checks every row and CSV cell against them. [B23-B1, 2026-10-04] Since B23-B1 a transfer path's `files` is declared by its transfer row and checked against the reviewed transfer list (`TRANSFER_PATHS`), its closure-derived value pinned beside it (none in B1); case 4 derives the query and none values (`outbound-disclosure.md` section 5).
 - `outboundEgress`: the route's runtime import closure (the gates' edges, checked equal to `importClosure`) reaches
   `app/lib/net/outbound-fetch.ts`, the way census case 3 derives `external_process`. Eleven route files reach the boundary; five are
   reviewed cache-only exemptions, each holding by reachability and by its own calls (case 5): bridged at the pricing gateway

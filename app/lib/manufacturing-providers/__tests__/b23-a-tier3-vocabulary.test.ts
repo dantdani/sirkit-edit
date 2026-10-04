@@ -269,7 +269,7 @@ describe("[B23-A2] the Tier 3 vocabulary (OD-173)", () => {
     const toolIds = csvIds("artifacts/ai-control-plane-b04/tool-registry.csv");
     const actionIds = csvIds("artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv");
     expect(toolIds).toHaveLength(47);
-    expect(actionIds).toHaveLength(104);
+    expect(actionIds).toHaveLength(105); // [B23-B1, 2026-10-03] was 104: + manufacturing.provider-exchange (the provider exchange route's record; its id matches no new stem)
     expect([...toolIds].sort()).toEqual(registry.list().map((descriptor) => descriptor.toolId).sort());
     expect(actionIds).toEqual(ACTION_COVERAGE_REGISTRY.map((record) => record.id));
     expect([...toolIds, ...actionIds].filter((id) => B23_STEM_PATTERN.test(id))).toEqual([]);
@@ -283,7 +283,7 @@ describe("[B23-A2] the Tier 3 vocabulary (OD-173)", () => {
       expect(mcpExclusionReason(descriptor) === "tier3", descriptor.toolId).toBe(legacyToolTier(descriptor) === 3);
     }
     for (const record of ACTION_COVERAGE_REGISTRY) {
-      expect(record.sideEffects, record.id).toBeUndefined();
+      expect(record.sideEffects, record.id).toBe(record.id === "manufacturing.provider-exchange" ? "external-transfer" : undefined); // [B23-B1, 2026-10-03] was undefined for every record: B1's provider exchange carries the side effect, Tier 3 by it and by its approval tier alike
       expect(permissionTierOfAction(record), record.id).toBe(legacyActionTier(record));
     }
     // B21 role rows: the report is sound and no specialist row holds an id the widened floor reaches

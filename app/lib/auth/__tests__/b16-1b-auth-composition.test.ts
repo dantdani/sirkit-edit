@@ -239,7 +239,7 @@ describe("B16.1B §G — no unrestricted signup surface", () => {
 
 // ═════════════════════════════════════════════════════════════════════════════
 describe("B16.1B §G — exact invariants", () => {
-  it("exactly 165 route methods: 162 canonical wrappers, 3 approved factories, 0 raw handlers (B18-A: + GET/POST /api/agent/autonomy; B19-E E2: + POST /api/parts/external-search; B19-E E4: + GET/POST /api/components/atomic/publication; B19-E E5: + POST /api/components/revision-status; B20-B2: + POST /api/mcp, POST /api/mcp/token, GET /.well-known/oauth-protected-resource/api/mcp); exactly the intentional agent-exposed tools", () => {
+  it("exactly 166 route methods: 163 canonical wrappers, 3 approved factories, 0 raw handlers ([B23-B1, 2026-10-03] + POST /api/pcb/provider-exchange; B18-A: + GET/POST /api/agent/autonomy; B19-E E2: + POST /api/parts/external-search; B19-E E4: + GET/POST /api/components/atomic/publication; B19-E E5: + POST /api/components/revision-status; B20-B2: + POST /api/mcp, POST /api/mcp/token, GET /.well-known/oauth-protected-resource/api/mcp); exactly the intentional agent-exposed tools", () => {
     let total = 0, canonical = 0, factories = 0, raw = 0;
     // [B20 B2] the census walks app/api AND app/.well-known through the one route-tree helper (OD-66)
     for (const file of listRouteFiles(ROOT)) {
@@ -252,7 +252,7 @@ describe("B16.1B §G — exact invariants", () => {
         else raw += 1;
       }
     }
-    expect({ total, canonical, factories, raw }).toEqual({ total: 165, canonical: 162, factories: 3, raw: 0 }); // B18-A: + GET/POST /api/agent/autonomy; B18-B: + GET/POST /api/agent/execution-grant, POST /api/agent/execution-grant/settle; B19-E E2: + POST /api/parts/external-search; B19-E E4: + GET/POST /api/components/atomic/publication; B19-E E5: + POST /api/components/revision-status (reviewed ratchet move: one new canonical wrapper, a member's catalog status read; 0 raw stays 0); B20-B2: + POST /api/mcp (mcpBearerJsonRoute), POST /api/mcp/token (authenticatedJsonRoute), GET /.well-known/oauth-protected-resource/api/mcp (publicRoute): three new canonical wrappers, 0 raw stays 0
+    expect({ total, canonical, factories, raw }).toEqual({ total: 166, canonical: 163, factories: 3, raw: 0 }); // [B23-B1, 2026-10-03] reviewed ratchet move (OD-174): + POST /api/pcb/provider-exchange (authenticatedJsonRoute), one new canonical wrapper, 0 raw stays 0; B18-A: + GET/POST /api/agent/autonomy; B18-B: + GET/POST /api/agent/execution-grant, POST /api/agent/execution-grant/settle; B19-E E2: + POST /api/parts/external-search; B19-E E4: + GET/POST /api/components/atomic/publication; B19-E E5: + POST /api/components/revision-status (reviewed ratchet move: one new canonical wrapper, a member's catalog status read; 0 raw stays 0); B20-B2: + POST /api/mcp (mcpBearerJsonRoute), POST /api/mcp/token (authenticatedJsonRoute), GET /.well-known/oauth-protected-resource/api/mcp (publicRoute): three new canonical wrappers, 0 raw stays 0
     const exposed = sirkitToolRegistry().list().filter((d) => d.agentExposed);
     expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     expect(new Set(exposed.map((d) => d.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
