@@ -204,7 +204,7 @@ every ordering or hand-off operation (`PX_EXCHANGE_NOT_OFFERED` 422). CONFIRMED
 **Commit.** It checks, before any port (a durable read) is called: a human project administrator (`PX_HUMAN_ADMIN_REQUIRED` 403);
 `planId`, `planDigest` and `idempotencyKey` (`PX_PLAN_REQUIRED` 400); a key already used in this project within 24 hours of its commit,
 whether or not its plan is still held: the same plan replays the recorded outcome (`idempotent: true`), another plan is
-`PX_IDEMPOTENCY_KEY_REUSE_CONFLICT` 409; the plan exists in this project (`PX_PLAN_NOT_FOUND` 404), its digest is the request's and
+`PX_IDEMPOTENCY_KEY_REUSE_CONFLICT` 409; the plan exists in this project (`PX_PLAN_NOT_FOUND` 404) ([B23-B2 lead, 2026-10-04] low-1: no longer before any port as written: since B23-B2 the route composes the durable exchange record (`app/api/pcb/provider-exchange/route.ts:62`), and a commit whose plan this instance does not hold first reads that record under its key, up to three replay reads; only a key naming nothing there answers this 404, and a store that cannot be read answers the release route's `MFG_DURABLE_STORE_UNAVAILABLE` 503; `dfm-quote-flow.md` section 4, `b23-b-exchange-ledger` case 23), its digest is the request's and
 still verifies (`PX_PLAN_DIGEST_MISMATCH` 409), it is not expired (`PX_PLAN_EXPIRED` 409) and not consumed (`PX_PLAN_CONSUMED` 409);
 [B23-B1 review, 2026-10-04] the project has room for one more key record (`PX_KEY_LIMIT_REACHED` 429; the plan is not consumed). Then
 it consumes the plan, synchronously, before any await, so a racing second commit finds it consumed; re-runs steps 1 and 2 (a step-1
@@ -215,7 +215,7 @@ consumed: the plan is never re-armed, and the administrator previews again); ref
 `PX_PLAN_INPUT_MOVED` 409 when the regenerated release, its package, the board identity or the provider descriptor differ from the
 plan; and only then asks admission (`admitProviderOperation`), which refuses every `dfm_quote_transfer` in B23:
 `PX_PROVIDER_NOT_ADMITTED` 409 with `refusal: "provider_not_admitted"`, `sent: false`, the plan id and the request digest. Were admission
-ever to admit, the service still has no transport and answers `PX_SEND_UNAVAILABLE` (a forged admitting port shows it, case 9).
+ever to admit, the service still has no transport and answers `PX_SEND_UNAVAILABLE` (a forged admitting port shows it, case 9). [B23-B2, 2026-10-04] No longer true as written: since B23-B2 the service holds the send, and past admission it sends through `provider-egress.ts`; in this build a forged admission still answers `PX_SEND_UNAVAILABLE`, because no reviewed transfer descriptor exists (`dfm-quote-flow.md` section 8; `b23-b-exchange-ledger` case 10).
 CONFIRMED
 
 **The stores** ([B23-B1 review, 2026-10-04]; security-3, coverage-2; OD-183 (d)). Plans and key records live in memory, bounded per
@@ -267,7 +267,7 @@ disclosure, and its approval is the commit itself (OD-183 (c)). CONFIRMED
 - **No connection is reached.** The route's runtime import closure is the release route's plus exactly six modules: the route, the
   exchange, the package, admission, A1's registry and B19's source registry; no egress boundary, no process spawner, and none of the
   six holds a fetch or a network or model SDK import (`b23-b-exchange-route` case 4). The transport census (`b23-a-route-vocabulary`
-  case 8) passes unchanged. CONFIRMED
+  case 8) passes unchanged. CONFIRMED [B23-B2, 2026-10-04] No longer true as written: since B23-B2 the closure adds four modules (`provider-egress.ts`, `exchange-ledger.ts`, `admission-control.ts` and the egress boundary `outbound-fetch.ts`), and it reaches the boundary only through `provider-egress.ts` (`b23-b-exchange-route` case 4, moved in place; `b23-b-egress-import-gate` case 3); still no process spawner, and the transport census keeps one connection site (`dfm-quote-flow.md` section 7).
 - **The census** moved once, by review: 166 route methods = 163 canonical wrappers + 3 approved factories + 0 raw. The B16.0, B16.0.1,
   B16.0.2, B16.0.4 and B16.0.7 artifacts each gained the one row; the raw-route baseline is unchanged (3 -> 3). CONFIRMED
 - **The record.** `manufacturing.provider-exchange` (`action-registry.ts:186`, appended on that line, as B22 did on `:149`): kind
@@ -399,7 +399,7 @@ plan's keys with it): per project scope at most 32 open plans and 256 key record
 of 2,048 open plans ([B23-B1 lead, 2026-10-04] the review round counted every held plan) and 16,384 key records over every project; a
 consumed plan keeps only a tombstone until it expires; expired plans are dropped first; a bound refuses (`PX_PLAN_LIMIT_REACHED`,
 `PX_KEY_LIMIT_REACHED`, 429) and never evicts; a key record is kept 24 hours after its commit, apart from its plan. A restart forgets
-them, and a commit then refuses `PX_PLAN_NOT_FOUND`; nothing is persisted in B1, and the durable exchange record is B23-B2's (OD-167).
+them, and a commit then refuses `PX_PLAN_NOT_FOUND`; nothing is persisted in B1, and the durable exchange record is B23-B2's (OD-167). [B23-B2 lead, 2026-10-04] low-1: no longer true as written: since B23-B2 a commit whose plan is gone first reads the durable exchange record under its key, so a recorded outcome replays and another plan's key is refused `PX_IDEMPOTENCY_KEY_REUSE_CONFLICT`; only a key naming nothing there answers `PX_PLAN_NOT_FOUND` (in this build no reviewed transfer descriptor exists, so nothing is recorded and that is every key), and a store that cannot be read answers `MFG_DURABLE_STORE_UNAVAILABLE` 503 (`b23-b-exchange-ledger` cases 5 and 23).
 The backstops are the one remaining cross-project effect: 64 project scopes (each branch is its own scope) holding 2,048 open plans
 together refuse every other project's next preview until one of them is committed or expires (at most 10 minutes), and [B23-B1 lead,
 2026-10-04] 64 scopes each holding 256 key records refuse every other project's commit until the oldest record's 24 hours end (low-1:
@@ -423,7 +423,7 @@ failed preview discards the plan). RECORDED
 - **The board's name leaves with the files** (section 1): it embeds the project id. Removing it from the Gerber X2 attribute, the job
   file and the file names would change the release bytes and identity; that is an owner decision (OD-183 (g)), not B1's. UNKNOWN
 - **Plans are per process** (OD-183 (d)): in a multi-instance deployment a commit routed to another instance refuses
-  `PX_PLAN_NOT_FOUND`. INFERRED
+  `PX_PLAN_NOT_FOUND`. INFERRED [B23-B2 lead, 2026-10-04] low-1: since B23-B2 that commit first reads the durable exchange record under its key: an outcome the other instance recorded replays (`idempotent: true`), another plan's key is `PX_IDEMPOTENCY_KEY_REUSE_CONFLICT`, only a key naming nothing there answers `PX_PLAN_NOT_FOUND`, and a store that cannot be read answers `MFG_DURABLE_STORE_UNAVAILABLE` 503. CONFIRMED for a restart over one store (`b23-b-exchange-ledger` cases 5 and 23); INFERRED for another instance.
 - **Two `app/lib/pcb/__tests__` suites were not run here**: `manufacturing-release-gate.test.ts` and
   `autonomous-layout-qualification.test.ts` build their authority with `createAutonomousGoldenRealRouter`, the production FreeRouting
   executor, which starts Java when the runtime resolves (INFERRED from `production-router.ts:34-46`); the standing rule forbids that

@@ -298,6 +298,7 @@ jobs:
           app/lib/atomic/__tests__/b19-e-publication-review-durable.test.ts
           app/lib/atomic/__tests__/b19-e-publication-fake-vendors.test.ts
           app/lib/physical-binding/__tests__/b19-e-successor-b14-durable.test.ts
+          app/lib/manufacturing-providers/database/__tests__/b23-b-exchange-ledger-pglite.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-database-delivery.xml
       - name: Upload diagnostics
         if: failure()

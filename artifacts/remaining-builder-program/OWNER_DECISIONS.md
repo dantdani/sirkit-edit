@@ -2164,3 +2164,100 @@ Amendments to existing entries:
     commit; a refused or failed preview discards the plan.
 - **Evidence:** outbound-disclosure.md sections 4, 10 and 13.
 - Owner confirmation pending.
+
+## OD-165 — the transfer mechanics and meters, as applied (B23-B2, 2026-10-04)
+
+- **Default applied:** outboundUpload (app/lib/net/outbound-fetch.ts) carries an in-memory body (bytes, or an RFC 7578 multipart
+  encoding of in-memory parts written there) through outboundFetch itself, so the B19 rules hold (HTTPS, exact host, every resolved
+  address public, the bounded reader, closed redacted failures). The request-byte and part ceilings come from the descriptor and are
+  refused outside 1..64 MiB and 1..64 (validate-package.ts:14-15) before anything is resolved. Idempotency-Key is sent only when the
+  descriptor declares support. maxRedirects must be 0 and every 3xx answer is redirect_refused, never followed. One deadline covers
+  resolution, the caller's durable sent mark (which races it), connection, the upload and the answer. An upload URL carries no query or
+  fragment, and its policy names no secret query parameter. No new dependency (one global fetch, shared). The manufacturing-provider
+  admission key has a minute and a day window and a breaker from the descriptor, and an agent share of 0. The rebinding window stays
+  OD-51's recorded limit. Choices: OD-184.
+- **Evidence:** `artifacts/ai-control-plane-b23/dfm-quote-flow.md` sections 1-3; `b23-b-bounded-upload`, `b23-b-provider-meter`.
+- Owner confirmation pending.
+
+## OD-167 — receipts, retention and ambiguity, as applied (B23-B2, 2026-10-04)
+
+- **Default applied:** one silent durable aggregate mfg.provider-exchange.v1 per (scope, board, provider)
+  (app/lib/manufacturing-providers/exchange-ledger.ts), copying computation.evidence.v1 (CAS on revision, idempotent append, digest
+  re-verified on load, no outbox effect). Attempts are keyed by idempotency key in one project-scope namespace and move prepared -> sent
+  -> acknowledged | rejected | UNKNOWN_PENDING_RECONCILIATION, or -> not_sent when nothing was handed over (OD-184 (a)). Any timeout,
+  abort, transport error, 5xx, 3xx or unparseable answer after the send started is UNKNOWN_PENDING_RECONCILIATION, never retried
+  automatically, never run through DurableOutboxDispatcher (pinned, including the expired-lease re-claim). A duplicate commit replays
+  the record and sends nothing, after a restart too. Two concurrent commits send once (PGlite, database-delivery job). One package to
+  one provider is in flight at a time, keyed on the package digest, provider and operation; a `prepared` attempt that sent nothing is
+  settled not_sent (abandoned) ten minutes after it was prepared (the lead round, OD-184 (q)). The record keeps the provider receipt id,
+  response digest, retrievedAt, the package and release digests, the descriptor and capability-profile versions and at most 16 bounded
+  normalized fields, plus the server-derived provider key. No raw body, no archive bytes: the bytes are re-derived from the ledgered
+  release while its authority is head, its board current and its rule-profile evidence unexpired and within
+  RELEASE_PROFILE_EVIDENCE_MAX_AGE_MS; otherwise the exchange is stale (B23-B3, OD-168). A provider whose terms forbid storage keeps no
+  provider-chosen text: no normalized field and an empty media type. Reconciliation is recorded (statusRead on the descriptor and the
+  record), not built. Live: BLOCKED-LIVE-QUALIFICATION (LB-11). Choices: OD-184.
+- **Evidence:** `dfm-quote-flow.md` sections 4-6 and 16; `b23-b-exchange-ledger`, `b23-b-egress-import-gate`,
+  `database/__tests__/b23-b-exchange-ledger-pglite` (database-delivery job).
+- Owner confirmation pending.
+
+## OD-184 — B23-B2: stated choices beyond its task text, as applied (B23-B2, 2026-10-04)
+
+- **Default applied** (as `dfm-quote-flow.md` section 12 states them, the lead round's (m), (n) notes and (p)-(r) included):
+  -  (a) An attempt the egress boundary refuses before any byte leaves ends `not_sent`, a terminal state beside OD-167's three: a
+    refusal before the hand-over is neither the provider's rejection nor an unknown, and the record says nothing left. It is reached
+    from `prepared`, or from a `sent` mark that landed while nothing was handed over (the deadline fell during the mark), which keeps
+    the mark's time and digest.
+  -  (b) `sent` is written immediately BEFORE the hand-over, inside the one deadline: the mark races the deadline and the caller's
+    abort, and a mark slower than the deadline ends the exchange `not_sent` (`timeout`) with nothing handed over; the request then waits
+    for the mark to land before recording the outcome (the provider is never contacted late). A sender hands bytes over only after its
+    own `prepared` and `sent` appends wrote new records; a crash after `sent` leaves a record to reconcile, never a silent resend.
+  -  (c) B1's in-memory key store stays the first answer within a process. The durable record is the outcome of record and the backstop
+    across processes and restarts: its key namespace is the project scope (tenant, project, branch), B1's, so a key names at most one
+    attempt per project, durably; a commit whose plan the instance does not hold is answered from the record under its key (the same
+    plan id and digest replay, another plan's are a reuse, an unknown key is `PX_PLAN_NOT_FOUND`); a fresh plan under a held key is
+    refused after its plan is consumed.
+  -  (d) The transfer contract is a separate, typed `ProviderTransferDescriptor` beside the registry row, valid only against the row's
+    current version and digest, an enabled board-file transfer operation, a listed host and RECORDED upload-limit and idempotency facts;
+    the registry (and its byte-gated CSV) did not change; none exists in B23.
+  -  (e) The upload is multipart form data: each outbound file under its release path (field `files`) and the provider manifest (field
+    `manifest`), a boundary derived from the package digest; a provider-specific encoding (PCBWay's base64 `DataZipFile`, an S3-signed
+    upload) is a later reviewed descriptor field, not B2's.
+  -  (f) The meter: one per provider, a minute and a day window and a breaker from the descriptor; the agent refused outright (share 0);
+    a rejection other than 429 neutral, an abort inconclusive, a refusal before the hand-over (a pause, the mark's deadline or failure)
+    inconclusive; no coalescing.
+  -  (g) A 2xx answer is acknowledged only as JSON (a media type holding a control character is no usable type) with a receipt id of 1
+    to 128 of `[A-Za-z0-9._:-]`; a 4xx is rejected; everything else after the send started is UNKNOWN; every 3xx answer to an upload,
+    the ones no redirect follows included, is refused and UNKNOWN (a 303 after a POST may mean the provider took it).
+  -  (h) A commit's answer stays B1's envelope, with seven new codes (section 4), every sentence in `error` (the panel's field); showing
+    a receipt id in the panel is a UI change for the increment that admits a provider. The route's code did not change beyond composing
+    the record.
+  -  (i) The PGlite suite lives at `app/lib/manufacturing-providers/database/__tests__/`, outside the prompt-to-gerber filter, with an
+    explicit database-delivery entry.
+  -  (j) Reconciliation: recorded (`statusRead` on the descriptor and the record), not built. RECORDED
+  -  (k) Under `ids_digests_timestamps_only` a record keeps no provider-chosen text: no normalized field and an empty media type; it
+    keeps Sirkit's own classification (state, failure code) and the answer's protocol status, size and SHA-256.
+  -  (l) The provider sees `Idempotency-Key: sx-<64 hex>`, a digest of the scope, board, provider, plan and client key, recorded on the
+    attempt and re-derived on load; never the client's string.
+  -  (m) One package in flight: a new attempt is refused while another attempt of the same request is `prepared` or `sent` in its
+    aggregate; only a person reconciling with the provider ends an interrupted one (no reconciliation read exists: the block stands
+    until one does). [B23-B2 lead, 2026-10-04] low-3: the same request is now the same package digest, provider and operation; low-2: a
+    `prepared` attempt ten minutes old is settled `not_sent` (`abandoned`) by the next attempt of its package, and a `sent` mark lands
+    only while its own attempt is still `prepared`, so only a `sent` one waits for a person.
+  -  (n) An answer that cannot be recorded: the settle is tried three times; then the commit answers with `recorded: false`, the
+    observed state, the receipt id and the response's status, size and digest, and the record stays `sent`. [B23-B2 lead, 2026-10-04]
+    low-2: or `prepared`, for a `not_sent` outcome, and that answer's sentence no longer says the exchange was recorded.
+  -  (o) The provider exchange route's B16.0.2 durable-access row stays `read` while no reviewed transfer descriptor exists; the
+    revision that adds the first one moves it to `read-write` and regenerates the CSV (ledger case 21 fails until it does).
+  -  (p) [B23-B2 lead, 2026-10-04] low-1: the commit's durable read (tests-3's `recorded`) stays before `PX_PLAN_NOT_FOUND`: the
+    restart's replay needs it, and a store that cannot be read answers the release route's `MFG_DURABLE_STORE_UNAVAILABLE` 503 rather
+    than a not-found the store could contradict. B1's statements carry dated notes instead (the smaller truthful change); restoring B1's
+    order is a breakage ledger case 23 catches.
+  -  (q) [B23-B2 lead, 2026-10-04] low-2: `EXCHANGE_PREPARED_ABANDON_MS` is ten minutes, five times the longest deadline a reviewed
+    descriptor may declare (120 s). The bound decides only when a stalled `prepared` attempt stops blocking, never whether two attempts
+    send: the abandonment and the `sent` mark each require the attempt still `prepared` on the head their compare-and-set commits on.
+  -  (r) [B23-B2 lead, 2026-10-04] low-2: text the record keeps refuses a lone UTF-16 surrogate, and the egress drops a provider field
+    holding one; a NUL was already refused (a code below 32). These are the two kinds of string PostgreSQL's jsonb refuses in a JSON
+    string (INFERRED from its JSON input rules; the surrogate CONFIRMED on PGlite, case 5).
+- **Owner attention:** (m) an interrupted `sent` attempt blocks its package to that provider until a reconciliation read exists, and
+  none is built; (o) the B16.0.2 row stays `read` while no transfer descriptor exists.
+- Owner confirmation pending.

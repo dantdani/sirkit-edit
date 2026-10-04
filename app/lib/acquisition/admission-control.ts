@@ -44,14 +44,14 @@ export type RequestOutcome = "success" | "failure" | "rate_limited" | "neutral";
  */
 export type McpRequestOutcome = RequestOutcome | "inconclusive";
 
-/** [B20 A0] What a meter is for: a distributor source, an MCP server, or one tool of an MCP server [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): or, since B21-E1, an LLM provider, OD-115]. */
+/** [B20 A0] What a meter is for: a distributor source, an MCP server, or one tool of an MCP server [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): or, since B21-E1, an LLM provider, OD-115]. [B23-B2: or a manufacturing provider, OD-165]. */
 export type AdmissionKey =
   | { kind: "acquisition-source"; id: AcquisitionSourceId }
-  | { kind: "mcp-server"; serverId: string; tool?: string } | { kind: "llm-provider"; provider: "openai" | "anthropic"; model?: string }; // [B21 E1] + an LLM provider with an optional model (OD-115): a reviewed extension of the union
+  | { kind: "mcp-server"; serverId: string; tool?: string } | { kind: "llm-provider"; provider: "openai" | "anthropic"; model?: string } | { kind: "manufacturing-provider"; providerId: string }; // [B21 E1] + an LLM provider with an optional model (OD-115): a reviewed extension of the union; [B23-B2] + a manufacturing provider (OD-165), the same kind of reviewed extension
 
 /** [B20 A0] The map key of one meter; tool names are registry-validated (`[A-Za-z0-9_.-]`), so the separators are unambiguous. */
 export function admissionKeyString(key: AdmissionKey): string {
-  if (key.kind === "acquisition-source") return `acquisition-source:${key.id}`; if (key.kind === "llm-provider") return key.model === undefined ? `llm-provider:${key.provider}` : `llm-provider:${key.provider}/model:${key.model}`; // [B21 E1] model ids are policy-validated `[a-z0-9._-]`
+  if (key.kind === "acquisition-source") return `acquisition-source:${key.id}`; if (key.kind === "llm-provider") return key.model === undefined ? `llm-provider:${key.provider}` : `llm-provider:${key.provider}/model:${key.model}`; if (key.kind === "manufacturing-provider") return `manufacturing-provider:${key.providerId}`; // [B23-B2] provider ids are registry ids; [B21 E1] model ids are policy-validated `[a-z0-9._-]`
   return key.tool === undefined ? `mcp-server:${key.serverId}` : `mcp-server:${key.serverId}/tool:${key.tool}`;
 }
 
@@ -467,4 +467,55 @@ function recordStaleNoCredits(meterKey: string, ticket: LlmProviderTicket, outco
   state.trialInFlight = false;
   llmProviderOpenCauses.set(meterKey, "insufficient_quota");
   nextGeneration(meterKey);
+}
+
+// ─── [B23-B2] The manufacturing-provider meter (OD-165, D23-3) ───────────────────────────────────────────────────────────────────
+// Appended on purpose: no line the B19-B21 pages cite in this file moves. One meter per manufacturing provider, keyed
+// `manufacturing-provider:<id>`: a minute and a day window and a breaker, each taken from the provider's reviewed transfer descriptor
+// (B23's `provider-egress.ts`; none exists in B23: no provider is admitted, OD-160, LB-11). THE AGENT'S
+// SHARE IS 0: an agent request is refused whatever the windows hold and reserves nothing, so no agent can spend a provider's quota
+// (OD-165; no agent reaches the send at all, b23-b-egress-import-gate). A transfer costs one request; there is no coalescing (two
+// transfers are never the same read). The meters live in this process, the limit the header states.
+
+export type ManufacturingProviderKey = Extract<AdmissionKey, { kind: "manufacturing-provider" }>;
+/** A provider's windows and breaker, from its transfer descriptor. */
+export interface ManufacturingProviderMeterPolicy { readonly requestsPerMinute: number; readonly requestsPerDay: number; readonly consecutiveFailuresToOpen: number; readonly openMs: number }
+/** How an admitted transfer ended, for the breaker: an answer read, a failure, a rate limit, a neutral refusal, or nothing learnt (abandoned). */
+export type ManufacturingProviderOutcome = RequestOutcome | "inconclusive";
+/** The agent's share of every manufacturing-provider window (OD-165). */
+export const MANUFACTURING_PROVIDER_AGENT_SHARE = 0;
+
+function manufacturingProviderMeter(key: ManufacturingProviderKey, policy: ManufacturingProviderMeterPolicy): Meter {
+  const subject = `Manufacturing provider "${key.providerId}"`;
+  return {
+    key: admissionKeyString(key),
+    policy: {
+      subject,
+      shareSubject: subject,
+      limits: [{ window: "minute", max: policy.requestsPerMinute, unit: "request" }, { window: "day", max: policy.requestsPerDay, unit: "request" }],
+      breaker: { consecutiveFailuresToOpen: policy.consecutiveFailuresToOpen, openMs: policy.openMs },
+    },
+  };
+}
+/** The agent's refusal: its share is 0, so it is used up in every window from the start (the retry time is the window's end, as the
+ *  share sentence says; it never admits). */
+function manufacturingProviderAgentRefusal(key: ManufacturingProviderKey, now: number): AdmissionPause {
+  return { reason: "quota_exhausted", retryAtMs: windowEnd("minute", windowStart("minute", now)), message: `Manufacturing provider "${key.providerId}" refuses the agent: the agent's share of its quota is ${MANUFACTURING_PROVIDER_AGENT_SHARE} (OD-165), so no agent request is ever admitted.` };
+}
+
+/** Ask to send ONE transfer to a manufacturing provider. An allowed transfer MUST be followed by `recordManufacturingProviderOutcome`. */
+export function requestManufacturingProviderAdmission(key: ManufacturingProviderKey, policy: ManufacturingProviderMeterPolicy, now: number = Date.now(), purpose: AdmissionPurpose = "interactive"): RequestAdmission {
+  if (purpose !== "interactive") return { allowed: false, ...manufacturingProviderAgentRefusal(key, now) };
+  return admit(manufacturingProviderMeter(key, policy), null, 1, now, "interactive");
+}
+
+/** Record how an admitted transfer ended (the breaker is the provider's). */
+export function recordManufacturingProviderOutcome(key: ManufacturingProviderKey, policy: ManufacturingProviderMeterPolicy, outcome: ManufacturingProviderOutcome, now: number = Date.now()): void {
+  settle(manufacturingProviderMeter(key, policy), outcome, now);
+}
+
+/** Why a manufacturing provider is paused right now, per purpose, without reserving anything (half-open admits a trial). */
+export function currentManufacturingProviderPause(key: ManufacturingProviderKey, policy: ManufacturingProviderMeterPolicy, now: number = Date.now(), purpose: AdmissionPurpose = "interactive"): AdmissionPause | null {
+  if (purpose !== "interactive") return manufacturingProviderAgentRefusal(key, now);
+  return preview(manufacturingProviderMeter(key, policy), null, 1, now, "interactive", { halfOpenAdmits: true });
 }

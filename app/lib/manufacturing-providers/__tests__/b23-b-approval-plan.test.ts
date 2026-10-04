@@ -138,7 +138,7 @@ describe("[B23-B1] step 3: the sealed outbound plan (OD-166, D23-7)", () => {
     expect(refused.ok ? "ok" : refused.refusal).toMatchObject({ status: 409, code: "PX_PACKAGE_REFUSED", body: { refusal: "archive_digest_mismatch" } });
   });
 
-  it("4. commit requires planId, planDigest and an idempotency key; an unknown plan, another project's plan and a wrong digest are refused before any port is called", async () => {
+  it("4. commit requires planId, planDigest and an idempotency key; an unknown plan, another project's plan and a wrong digest are refused before any port is called; [B23-B2 lead, 2026-10-04] low-1: with these ports, which hold no exchange record - the provider exchange route composes one (app/api/pcb/provider-exchange/route.ts:62), and there an unknown plan or another project's plan is refused PX_PLAN_NOT_FOUND only after that record is read under its key, and a store that cannot be read answers MFG_DURABLE_STORE_UNAVAILABLE 503 (b23-b-exchange-ledger case 23)", async () => {
     const svc = service();
     const { ports, calls } = fakePorts();
     const plan = await previewed(svc, ports);
@@ -251,7 +251,7 @@ describe("[B23-B1] step 3: the sealed outbound plan (OD-166, D23-7)", () => {
     expect(await svc.commit({ actor: ADMIN, scope: SCOPE, request: { planId: plan.planId, planDigest: plan.planDigest, idempotencyKey: "admin" }, ports, correlationId: "corr-b23" })).toMatchObject({ ok: false, refusal: { code: "PX_PROVIDER_NOT_ADMITTED" } });
   });
 
-  it("9. in B23 commit always ends refused provider_not_admitted after revalidation and approval, for every offered exchange and whatever the environment holds; even a forged admitting answer sends nothing (there is no send)", async () => {
+  it("9. in B23 commit always ends refused provider_not_admitted after revalidation and approval, for every offered exchange and whatever the environment holds; even a forged admitting answer sends nothing (there is no send) [B23-B2, 2026-10-04: the send exists since B2, but no reviewed transfer descriptor does, so a forged admission still answers PX_SEND_UNAVAILABLE and sends nothing (b23-b-exchange-ledger case 10)]", async () => {
     for (const entry of BOARD_FILE_EXCHANGES) {
       const svc = service();
       const { ports, calls } = fakePorts();

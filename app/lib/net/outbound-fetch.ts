@@ -33,7 +33,7 @@
  *    kept — they were read before it, and a 401's challenge lives there; one dropped for its size sets `errorBodyDropped`;
  *  - `streamBody: { contentTypes }`: a 2xx answer of a named media type is handed back UNREAD as `body` (with empty
  *    `bytes`) for an incremental consumer (`sse-reader.ts`), because the bounded reader succeeds only when a stream ends.
- * Without these options every existing caller sees exactly the B19 behaviour; the distributor policies enable none of them.
+ * Without these options every existing caller sees exactly the B19 behaviour; the distributor policies enable none of them. [B23-B2] `outboundUpload` (end of file) adds a bounded in-memory upload on this same path.
  */
 import { lookup as dnsLookup } from "node:dns/promises";
 import { readBoundedStream } from "../http/bounded-stream";
@@ -227,7 +227,7 @@ function mediaType(header: string | null): string {
  * Perform one bounded, validated exchange. Never throws: every failure is a closed code with a redacted sentence.
  */
 export async function outboundFetch(request: OutboundRequest, policy: OutboundPolicy, deps: OutboundDeps = {}): Promise<OutboundResult> {
-  const transport: typeof fetch = deps.fetch ?? ((input, init) => globalThis.fetch(input, init));
+  const transport: typeof fetch = deps.fetch ?? defaultTransport; // [B23-B2] the one global fetch moved into defaultTransport (end of file), shared with outboundUpload
   const resolve = deps.resolve ?? defaultResolve;
   const controller = new AbortController();
   const deadlineMs = Number.isFinite(policy.deadlineMs) && policy.deadlineMs > 0 ? policy.deadlineMs : 1;
@@ -340,4 +340,220 @@ export function parseOutboundJson(result: Extract<OutboundResult, { ok: true }>,
   } catch {
     return { ok: false, message: `${source}: the response was not valid JSON.` };
   }
+}
+
+// ─── [B23-B2] The bounded upload: an additive, reviewed extension (D23-3, OD-165) ───────────────────────────────────────────────
+// Appended on purpose: no line the B19-B23 pages cite in this file moves; the only in-place edit is line 230's default transport.
+/**
+ * [B23-B2] `outboundUpload` sends ONE in-memory request body - bytes, or a multipart encoding of in-memory parts written here - and
+ * changes nothing else in this module: it calls `outboundFetch` itself, so the HTTPS-only exact-host allowlist, the public-address
+ * check on every resolved address, the one deadline (resolution, connection, the upload, headers and body), the bounded reader and
+ * the closed, redacted failures all hold. Before anything is resolved or sent it adds:
+ *  - the request-byte ceiling: the encoded body is measured against the policy's ceiling, itself never above the release bounds of
+ *    64 files and 64 MiB (`app/lib/pcb/fab/validate-package.ts:14-15`); over it nothing is resolved or sent (`request_too_large`);
+ *  - no redirect: the policy must say `maxRedirects: 0`, and every 3xx answer (300-399, the ones no redirect follows too) is
+ *    `redirect_refused`, never followed and never `ok` [B23-B2 review, 2026-10-04: coverage-5];
+ *  - no secret in the URL: an upload URL carries no query string and no fragment, and its policy names no secret query parameter
+ *    (a credential travels in a header);
+ *  - `Idempotency-Key` only when the policy declares the provider supports it; the caller may set neither it nor the content type,
+ *    length, host or transfer encoding;
+ *  - `sendStarted`: true once the bytes were handed to the transport. From then on the far end may hold them, so a timeout, an abort
+ *    or a transport error is an UNKNOWN outcome for the caller, never a clean failure (OD-167). Nothing here retries;
+ *  - `beforeSend`, awaited inside the deadline immediately before the hand-over (the caller records `sent` durably there): it races
+ *    the deadline and the caller's abort, and the signal is checked again once it resolves, so a beforeSend slower than the deadline
+ *    (or one that never settles) ends `timeout` with nothing handed over, never late; a throw sends nothing and is
+ *    `before_send_failed`, never a network error [B23-B2 review, 2026-10-04: regressions-1, tests-1, coverage-4].
+ * The rebinding window stays the limit the header states (OD-51). No new dependency (OD-42): the body is a Uint8Array handed to the
+ * same transport, the one global fetch (`defaultTransport`, below). Only B23's provider egress module (`provider-egress.ts`) calls
+ * this (b23-b-egress-import-gate).
+ */
+export const OUTBOUND_UPLOAD_MAX_BYTES = 64 * 1024 * 1024;
+export const OUTBOUND_UPLOAD_MAX_PARTS = 64;
+export const OUTBOUND_IDEMPOTENCY_HEADER = "Idempotency-Key";
+/** An idempotency key as the provider exchange accepts one (B23-B1's key rule). */
+export const OUTBOUND_IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+
+export interface OutboundUploadPart { readonly name: string; readonly filename: string; readonly contentType: string; readonly content: Uint8Array }
+export type OutboundUploadBody =
+  | { readonly kind: "bytes"; readonly contentType: string; readonly content: Uint8Array }
+  | { readonly kind: "multipart"; readonly boundary: string; readonly parts: readonly OutboundUploadPart[] };
+/** The descriptor's half of an upload: its byte and part ceilings, and whether the provider declares idempotency-key support. */
+export interface OutboundUploadPolicy { readonly maxRequestBytes: number; readonly maxParts: number; readonly idempotencyKeyHeader: boolean }
+export interface OutboundUploadRequest { readonly url: string; readonly headers?: Readonly<Record<string, string>>; readonly body: OutboundUploadBody; readonly idempotencyKey?: string; readonly signal?: AbortSignal }
+export interface OutboundUploadDeps extends OutboundDeps {
+  /** awaited inside the deadline immediately before the bytes are handed to the transport, with their size and SHA-256 */
+  readonly beforeSend?: (request: { readonly bytes: number; readonly sha256: string }) => Promise<void>;
+}
+export type OutboundUploadFailureCode = OutboundFailureCode | "upload_refused" | "request_too_large" | "before_send_failed";
+interface OutboundUploadFacts {
+  /** the bytes were handed to the transport */
+  readonly sendStarted: boolean;
+  /** the encoded body's size and SHA-256 (0 and null when it was refused before encoding finished) */
+  readonly requestBytes: number;
+  readonly requestSha256: string | null;
+  /** the request that was handed over carried Idempotency-Key */
+  readonly idempotencyKeySent: boolean;
+}
+export type OutboundUploadResult =
+  | (Extract<OutboundResult, { ok: true }> & OutboundUploadFacts)
+  | ({ ok: false; code: OutboundUploadFailureCode; message: string; status?: number; headers?: OutboundHeaders; headersDropped?: number; bytes?: Uint8Array; errorBodyDropped?: true } & OutboundUploadFacts);
+export type OutboundUploadEncoding =
+  | { readonly ok: true; readonly contentType: string; readonly bytes: Uint8Array<ArrayBuffer> }
+  | { readonly ok: false; readonly code: "upload_refused" | "request_too_large"; readonly message: string };
+
+const CRLF = String.fromCharCode(13, 10);
+const DQUOTE = String.fromCharCode(34);
+const BACKSLASH = String.fromCharCode(92);
+/** RFC 2046 boundary characters, no space: 1 to 70 of them. */
+const BOUNDARY_TEXT = /^[0-9A-Za-z'()+_,.\/:=?-]{1,70}$/;
+/** One plain media type with no parameter (RFC 6838 restricted names). */
+const PLAIN_MEDIA_TYPE = /^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}$/;
+/** The headers the boundary owns on an upload. */
+const UPLOAD_OWNED_HEADERS: ReadonlySet<string> = new Set(["idempotency-key", "content-type", "content-length", "host", "transfer-encoding"]);
+const NOT_SENT: OutboundUploadFacts = Object.freeze({ sendStarted: false, requestBytes: 0, requestSha256: null, idempotencyKeySent: false });
+
+/** A part's field or file name: printable text inside a quoted parameter, so no control character, no quote and no backslash. */
+function quotedParameterText(value: string, max: number): boolean {
+  if (value.length === 0 || value.length > max) return false;
+  for (const character of value) {
+    const code = character.codePointAt(0)!;
+    if (code < 32 || code === 127 || character === DQUOTE || character === BACKSLASH) return false;
+  }
+  return true;
+}
+
+/** The first index of `needle` in `haystack`, or -1. */
+function indexOfBytes(haystack: Uint8Array, needle: Uint8Array): number {
+  const last = haystack.byteLength - needle.byteLength;
+  for (let index = haystack.indexOf(needle[0]!); index !== -1 && index <= last; index = haystack.indexOf(needle[0]!, index + 1)) {
+    let match = true;
+    for (let offset = 1; offset < needle.byteLength && match; offset += 1) match = haystack[index + offset] === needle[offset];
+    if (match) return index;
+  }
+  return -1;
+}
+
+/**
+ * [B23-B2] Measure and encode an upload body against the descriptor's ceilings (pure; nothing is resolved or sent). A multipart body
+ * is RFC 7578 form data: each part `--<boundary>`, its Content-Disposition (field and file name) and Content-Type, a blank line, its
+ * bytes; then `--<boundary>--`. Its size is known before anything is allocated, so a body over the ceiling is never assembled.
+ */
+export function encodeOutboundUpload(body: OutboundUploadBody, upload: OutboundUploadPolicy): OutboundUploadEncoding {
+  const refuse = (message: string): OutboundUploadEncoding => ({ ok: false, code: "upload_refused", message });
+  if (!Number.isSafeInteger(upload.maxRequestBytes) || upload.maxRequestBytes < 1 || upload.maxRequestBytes > OUTBOUND_UPLOAD_MAX_BYTES) return refuse(`the request-byte ceiling must be a whole number from 1 to ${OUTBOUND_UPLOAD_MAX_BYTES} (the release bound).`);
+  if (!Number.isSafeInteger(upload.maxParts) || upload.maxParts < 1 || upload.maxParts > OUTBOUND_UPLOAD_MAX_PARTS) return refuse(`the part ceiling must be a whole number from 1 to ${OUTBOUND_UPLOAD_MAX_PARTS} (the release bound).`);
+  const tooLarge = (size: number): OutboundUploadEncoding => ({ ok: false, code: "request_too_large", message: `the request body is ${size} bytes, over the ceiling of ${upload.maxRequestBytes}; nothing was sent.` });
+  const encoder = new TextEncoder();
+  if (body.kind === "bytes") {
+    if (!PLAIN_MEDIA_TYPE.test(body.contentType)) return refuse("the body's media type is not one plain type.");
+    if (body.content.byteLength > upload.maxRequestBytes) return tooLarge(body.content.byteLength);
+    const bytes = new Uint8Array(body.content.byteLength);
+    bytes.set(body.content);
+    return { ok: true, contentType: body.contentType, bytes };
+  }
+  if (!BOUNDARY_TEXT.test(body.boundary)) return refuse("the multipart boundary is not 1 to 70 RFC 2046 characters.");
+  if (body.parts.length === 0 || body.parts.length > upload.maxParts) return refuse(`a multipart body holds 1 to ${upload.maxParts} parts.`);
+  const heads: Uint8Array[] = [];
+  const crlf = encoder.encode(CRLF);
+  const close = encoder.encode(`--${body.boundary}--${CRLF}`);
+  let size = close.byteLength;
+  for (const part of body.parts) {
+    if (!quotedParameterText(part.name, 200) || !quotedParameterText(part.filename, 512)) return refuse("a part's field or file name is empty, too long, or holds a control character, a quote or a backslash.");
+    if (!PLAIN_MEDIA_TYPE.test(part.contentType)) return refuse("a part's media type is not one plain type.");
+    const head = encoder.encode(`--${body.boundary}${CRLF}Content-Disposition: form-data; name=${DQUOTE}${part.name}${DQUOTE}; filename=${DQUOTE}${part.filename}${DQUOTE}${CRLF}Content-Type: ${part.contentType}${CRLF}${CRLF}`);
+    heads.push(head);
+    size += head.byteLength + part.content.byteLength + crlf.byteLength;
+  }
+  if (size > upload.maxRequestBytes) return tooLarge(size);
+  const delimiter = encoder.encode(`--${body.boundary}`);
+  if (body.parts.some((part) => indexOfBytes(part.content, delimiter) >= 0)) return refuse("a part's content holds the multipart delimiter.");
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  body.parts.forEach((part, index) => {
+    for (const chunk of [heads[index]!, part.content, crlf]) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+  });
+  bytes.set(close, offset);
+  return { ok: true, contentType: `multipart/form-data; boundary=${body.boundary}`, bytes };
+}
+
+function uploadRefused(policy: OutboundPolicy, code: "upload_refused" | "request_too_large", message: string): OutboundUploadResult {
+  return { ok: false, code, message: redactSecrets(`${policy.source}: ${message}`), ...NOT_SENT };
+}
+
+/** [B23-B2] Send one bounded upload through the boundary (see the block comment above). Never throws; never retries. */
+export async function outboundUpload(request: OutboundUploadRequest, policy: OutboundPolicy, upload: OutboundUploadPolicy, deps: OutboundUploadDeps = {}): Promise<OutboundUploadResult> {
+  if (policy.maxRedirects !== 0) return uploadRefused(policy, "upload_refused", "an upload is never redirected: its policy must set maxRedirects to 0.");
+  if ((policy.secretQueryParams ?? []).length > 0) return uploadRefused(policy, "upload_refused", "an upload's policy names no secret query parameter: a credential travels in a header, never in the URL.");
+  let url: URL;
+  try {
+    url = new URL(request.url);
+  } catch {
+    return { ...fail("url_invalid", `${policy.source}: the request URL is not a valid URL.`), ...NOT_SENT };
+  }
+  if (url.href.includes("?") || url.href.includes("#")) return uploadRefused(policy, "upload_refused", "an upload URL carries no query string and no fragment (no secret in the URL).");
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(request.headers ?? {})) {
+    if (UPLOAD_OWNED_HEADERS.has(name.toLowerCase())) return uploadRefused(policy, "upload_refused", `the caller may not set the ${name.toLowerCase()} header of an upload: the boundary owns it.`);
+    headers[name] = value;
+  }
+  if (upload.idempotencyKeyHeader) {
+    if (typeof request.idempotencyKey !== "string" || !OUTBOUND_IDEMPOTENCY_KEY_PATTERN.test(request.idempotencyKey)) return uploadRefused(policy, "upload_refused", "the provider declares idempotency-key support, so an upload needs a key of 1 to 128 letters, digits, dots, colons, underscores or hyphens.");
+    headers[OUTBOUND_IDEMPOTENCY_HEADER] = request.idempotencyKey;
+  }
+  const encoded = encodeOutboundUpload(request.body, upload);
+  if (!encoded.ok) return uploadRefused(policy, encoded.code, encoded.message);
+  headers["content-type"] = encoded.contentType;
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", encoded.bytes));
+  const requestSha256 = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const requestBytes = encoded.bytes.byteLength;
+  const transport = deps.fetch ?? defaultTransport;
+  let sendStarted = false;
+  let beforeSendFailed = false;
+  // the one hand-over: the encoded bytes ride on the transport's single call (maxRedirects 0 allows no second one)
+  const handOver: typeof fetch = async (input, init) => {
+    if (sendStarted) throw new Error("an upload is handed to the transport once");
+    const signal = init?.signal ?? undefined;
+    if (deps.beforeSend) {
+      try {
+        // [B23-B2 review, 2026-10-04] regressions-1: beforeSend races the deadline (and the caller's abort); it never holds the upload past it
+        await untilAborted(deps.beforeSend({ bytes: requestBytes, sha256: requestSha256 }), signal);
+      } catch (error) {
+        if (!signal?.aborted) beforeSendFailed = true;
+        throw error;
+      }
+    }
+    // checked again once it resolved: past the deadline nothing is handed over, so `sendStarted` stays false
+    if (signal?.aborted) throw new Error("the deadline or an abort fell before the hand-over; nothing was handed over");
+    sendStarted = true;
+    return transport(input, { ...init, body: encoded.bytes });
+  };
+  const result = await outboundFetch({ url: request.url, method: "POST", headers, ...(request.signal ? { signal: request.signal } : {}) }, { ...policy, maxRedirects: 0 }, { fetch: handOver, ...(deps.resolve ? { resolve: deps.resolve } : {}) });
+  const facts: OutboundUploadFacts = { sendStarted, requestBytes, requestSha256, idempotencyKeySent: sendStarted && upload.idempotencyKeyHeader };
+  if (!result.ok && !sendStarted && beforeSendFailed) return { ok: false, code: "before_send_failed", message: `${policy.source}: the step before the hand-over failed; nothing was handed over.`, ...facts };
+  if (!result.ok && result.code === "too_many_redirects") return { ...result, code: "redirect_refused", message: `${policy.source}: the provider answered the upload with a redirect; it was refused, never followed.`, ...facts };
+  // [B23-B2 review, 2026-10-04] coverage-5: a 3xx no redirect follows (300, 304, 305, 306) is refused too, never `ok`
+  if (result.ok && result.status >= 300 && result.status <= 399) return { ok: false, code: "redirect_refused", status: result.status, message: `${policy.source}: the provider answered the upload with HTTP ${result.status}; a 3xx answer is refused, never followed.`, ...facts };
+  return { ...result, ...facts };
+}
+
+/** [B23-B2 review, 2026-10-04] `work`, or a rejection as soon as `signal` aborts (whichever comes first); a late rejection of `work` is absorbed. */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return work;
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(new Error("aborted"));
+    if (signal.aborted) { onAbort(); work.catch(() => undefined); return; }
+    signal.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (value) => { signal.removeEventListener("abort", onAbort); resolve(value); },
+      (error: unknown) => { signal.removeEventListener("abort", onAbort); reject(error); },
+    );
+  });
+}
+
+/** [B23-B2] The module's ONE global fetch, shared by `outboundFetch` (its default transport) and `outboundUpload`. */
+function defaultTransport(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return globalThis.fetch(input, init);
 }

@@ -11,7 +11,7 @@
  *    carried, beside every metadata field the bytes carry, and lists as kept only an id found in no outbound name or byte.
  *  - `commit` takes the plan's id and digest, an idempotency key and the opt-in header, re-runs the revalidation and the derivation,
  *    and asks admission. No provider is admitted in B23 (no owner account, OD-160; LB-11), so every commit ends refused
- *    `provider_not_admitted`: nothing is sent, and this route reaches no transport. The bounded send is B23-B2's.
+ *    `provider_not_admitted` before any byte leaves. [B23-B2] Only past admission does the service send, through provider-egress.ts.
  *
  * Policy: a canonical route with `externalTransfer: true` and `spend: false`, human-only (a trusted session), CSRF, project_admin
  * only, never public (route-policy.ts; `routeVocabularyViolations`). In the callback, before any durable read: authority-shaped
@@ -33,7 +33,7 @@ import {
   ProviderExchangeService,
   providerExchangeRefusal,
   type ProviderExchangePorts,
-} from "@/app/lib/manufacturing-providers/provider-exchange";
+} from "@/app/lib/manufacturing-providers/provider-exchange"; import { createProviderExchangeLedger } from "@/app/lib/manufacturing-providers/exchange-ledger"; // [B23-B2] appended in place
 import { PCB_SYNC_API_DEADLINE_MS, pcbSyncScopeFromContext } from "../../pcb-sync/_scope";
 import { revalidateReleaseAuthority } from "../release/route";
 
@@ -59,7 +59,7 @@ function durablePorts(correlationId: string): ProviderExchangePorts {
       return { ok: true, locator, authority: { revision: stored.revision, recordDigest: stored.recordDigest, boardRevision: stored.authority.boardRevision, boardDigest: stored.authority.boardDigest } };
     },
     regenerate: (locator) => releaseManufacturingPackage({ locator, loadAuthority: store.loader(locator) }),
-    ledger: (scope) => ledger.list(scope),
+    ledger: (scope) => ledger.list(scope), exchangeLedger: createProviderExchangeLedger(workflow), // [B23-B2] the durable exchange record (OD-167), over the same store
   };
 }
 

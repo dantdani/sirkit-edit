@@ -95,7 +95,7 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   "/api/mcp": { durable: "read", sensitivity: "session-identity" },
   // [B20 B2] the token route returns a credential bound to the caller's own identity and live membership; nothing is stored
   "/api/mcp/token": { durable: "none", sensitivity: "session-identity" },
-  // [B23-B1] reads the authority head, the board head and lineage and the release ledger, and regenerates the release (no ledger write)
+  // [B23-B1] reads the authority head, the board head and lineage and the release ledger, and regenerates the release (no ledger write) [B23-B2 review, 2026-10-04] regressions-3: the commit composes the durable exchange record (mfg.provider-exchange.v1), which writes only past a reviewed transfer descriptor; none exists, so the row stays read; the revision adding the first descriptor moves it to read-write (b23-b-exchange-ledger case 21 fails until it does)
   "/api/pcb/provider-exchange": { durable: "read", sensitivity: "project-durable", expensive: true },
 };
 

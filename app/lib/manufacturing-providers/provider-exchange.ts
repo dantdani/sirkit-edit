@@ -10,13 +10,13 @@
  *  - `commit` takes `planId`, `planDigest` and an idempotency key (the route adds the opt-in header), refuses an expired plan, a
  *    digest that is not the plan's, a key reused for another plan and a consumed plan, consumes the plan ONCE, re-runs step 1 and
  *    step 2, refuses any moved input (the authority, the board, the profile, the release, the package or the provider descriptor),
- *    and only then asks admission. In B23 no provider is admitted (A1), so every commit ends refused `provider_not_admitted`; an
- *    admitting answer would still send nothing (`PX_SEND_UNAVAILABLE`): this module has no transport, the send is B23-B2's.
+ *    and only then asks admission. In B23 no provider is admitted (A1), so every commit ends refused `provider_not_admitted`. [B23-B2]
+ *    Only past an admitting answer, with a reviewed transfer descriptor and the durable record, does `send` reach provider-egress.ts.
  *  - Only a human project administrator acts; every other actor is refused before any port (a durable read) is called.
  *
  * The shape is B22-B's sealed computation request (`app/lib/computation/requests.ts`): server-sealed digest and nonce, a human-only
  * exact-digest approval, consumed once; here the plan also names a provider and a purpose. Plans live in memory, as B22-B's
- * requests do (OD-183): a restart forgets them and a commit then refuses `PX_PLAN_NOT_FOUND` (preview again). Nothing is persisted.
+ * requests do (OD-183): a restart forgets them and a commit then refuses `PX_PLAN_NOT_FOUND` (preview again). [B23-B2] A send's outcome is durable (exchange-ledger.ts). [B23-B2 review, 2026-10-04] tests-3: after a restart a commit whose plan is gone answers what the durable record holds under its key (`recorded`), and only a key naming nothing there answers `PX_PLAN_NOT_FOUND`.
  *
  * [B23-B1 review, 2026-10-04] The stores are bounded per project (tenant, project, branch), each with a backstop over every project
  * together, and a bound REFUSES the new plan or commit (`PX_PLAN_LIMIT_REACHED`, `PX_KEY_LIMIT_REACHED`, 429): it never evicts a
@@ -30,9 +30,9 @@ import { durableWorkflowDigest } from "../durable-workflow/stable";
 import type { ManufacturingReleaseArtifact, ManufacturingReleaseLocator } from "../pcb/fab/release-gate";
 import type { ManufacturingReleaseRecord } from "../pcb/fab/release-ledger";
 import { boundedManufacturingFailure } from "../pcb/fab/manufacturing-errors";
-import { buildOutboundPackage, OUTBOUND_FIELD_PATHS, type CarriedIdentifier, type EmbeddedMetadata, type OutboundManifest, type SourceIdentityField } from "./outbound-package";
+import { buildOutboundPackage, OUTBOUND_FIELD_PATHS, type CarriedIdentifier, type EmbeddedMetadata, type OutboundManifest, type OutboundPackage, type SourceIdentityField } from "./outbound-package";
 import { admitProviderOperation } from "./provider-admission";
-import { PROVIDER_REGISTRY_VERSION, PROVIDER_ROWS, type ProviderId, type ProviderRow } from "./provider-registry";
+import { PROVIDER_REGISTRY_VERSION, PROVIDER_ROWS, type ProviderId, type ProviderRow } from "./provider-registry"; import { PROVIDER_TRANSFER_DESCRIPTORS, sendProviderExchange, transferDescriptorFor, type ProviderEgressDeps, type ProviderTransferDescriptor } from "./provider-egress"; import { exchangeAttemptInput, type ExchangeAttempt, type ProviderExchangeLedger } from "./exchange-ledger"; // [B23-B2] appended in place: the send and its durable record
 
 export const PROVIDER_EXCHANGE_PLAN_SCHEMA = "sirkit.provider-exchange-plan.v1" as const;
 /** A plan expires this long after its preview (OD-166). */
@@ -79,10 +79,10 @@ export const PROVIDER_EXCHANGE_ERRORS = Object.freeze({
   PX_PLAN_INPUT_MOVED: { status: 409, message: "The release, its outbound package or the provider descriptor changed since the preview. Preview again. Nothing was sent." },
   PX_IDEMPOTENCY_KEY_REUSE_CONFLICT: { status: 409, message: "This idempotency key was used for another plan. Nothing was sent." },
   PX_PROVIDER_NOT_ADMITTED: { status: 409, message: "The provider is not admitted for this exchange: no provider is enabled in B23 (no owner account). Nothing was sent." },
-  PX_SEND_UNAVAILABLE: { status: 409, message: "No transfer exists in this build. Nothing was sent." },
+  PX_SEND_UNAVAILABLE: { status: 409, message: "No reviewed transfer descriptor or durable exchange record exists for this provider operation (none in B23). Nothing was sent." }, // [B23-B2] was: "No transfer exists in this build."
   // [B23-B1 review, 2026-10-04] the stores' bounds refuse; they never evict (security-3, coverage-2)
   PX_PLAN_LIMIT_REACHED: { status: 429, message: "This project holds as many open plans as one project may, or the server holds as many as it may. Commit one or let one expire (10 minutes after its preview), then preview again. Nothing was sent." },
-  PX_KEY_LIMIT_REACHED: { status: 429, message: "This project has recorded as many commits as one project may in 24 hours, or the server as many as it may. Try again later. Nothing was sent, and the plan was not consumed." },
+  PX_KEY_LIMIT_REACHED: { status: 429, message: "This project has recorded as many commits as one project may in 24 hours, or the server as many as it may. Try again later. Nothing was sent, and the plan was not consumed." }, /* [B23-B2] a send's outcomes (OD-167), answered in the same envelope: */ PX_EXCHANGE_ACKNOWLEDGED: { status: 200, message: "The provider acknowledged the exchange and its receipt is recorded. An acknowledgement is the provider's observation, never Sirkit proof." }, PX_EXCHANGE_REJECTED: { status: 422, message: "The provider refused the exchange; the answer's status and digest are recorded. It is never retried: preview again to send again." }, PX_EXCHANGE_UNKNOWN_PENDING_RECONCILIATION: { status: 502, message: "The files were handed to the provider but its answer is unknown (a timeout, an abort, a transport error, a server error or an unreadable answer). The exchange is UNKNOWN_PENDING_RECONCILIATION: it is never retried, and a person reconciles it with the provider." }, PX_EXCHANGE_NOT_SENT: { status: 503, message: "The exchange stopped before any byte left Sirkit. Nothing was sent. Preview again." }, PX_PROVIDER_PAUSED: { status: 429, message: "The provider is paused by its quota or its breaker. Nothing was sent. Preview again later." }, PX_EXCHANGE_IN_FLIGHT: { status: 409, message: "An exchange of this package to this provider, or under this idempotency key, is recorded without an answer. If its files may have left (state sent), it is never sent again until a person reconciles it with the provider; if it was recorded before any byte left (state prepared), it stops blocking ten minutes after it was prepared, when the next preview and commit of the package settles it not sent. Nothing was sent by this request." }, PX_EXCHANGE_CONTENDED: { status: 409, message: "The exchange record kept moving under concurrent commits, so this exchange was not recorded. Nothing was sent. Preview again." }, // [B23-B2 lead, 2026-10-04] low-2: PX_EXCHANGE_NOT_SENT no longer says the exchange was recorded (it is also the answer with recorded false); PX_EXCHANGE_IN_FLIGHT says when a prepared attempt stops blocking
 } satisfies Record<string, { status: number; message: string }>);
 export type ProviderExchangeErrorCode = keyof typeof PROVIDER_EXCHANGE_ERRORS;
 
@@ -108,7 +108,7 @@ export interface ProviderExchangePorts {
   /** The release gate's regeneration from the head authority (no ledger write, no archive re-read). */
   regenerate(locator: ManufacturingReleaseLocator): Promise<Pick<ManufacturingReleaseArtifact, "releaseId" | "filename" | "archiveBytes" | "archiveSha256" | "manifest" | "files">>;
   /** The release ledger's records for the board. */
-  ledger(scope: ProviderExchangeScope & { designId: string; boardId: string }): Promise<readonly ManufacturingReleaseRecord[]>;
+  ledger(scope: ProviderExchangeScope & { designId: string; boardId: string }): Promise<readonly ManufacturingReleaseRecord[]>; /** [B23-B2] the durable exchange record (OD-167); without it nothing is sent */ exchangeLedger?: ProviderExchangeLedger;
 }
 
 export interface ProviderExchangePlan {
@@ -209,7 +209,7 @@ export interface ProviderExchangeServiceOptions {
   nonce?: () => string;
   admit?: typeof admitProviderOperation;
   /** [B23-B1 review, 2026-10-04] the stores' bounds (tests narrow them); `PROVIDER_EXCHANGE_LIMITS` otherwise */
-  limits?: Partial<typeof PROVIDER_EXCHANGE_LIMITS>;
+  limits?: Partial<typeof PROVIDER_EXCHANGE_LIMITS>; /** [B23-B2] the reviewed transfer descriptors (PROVIDER_TRANSFER_DESCRIPTORS otherwise: none in B23) and the egress's injection (tests) */ transfer?: { readonly descriptors?: readonly ProviderTransferDescriptor[] | (() => readonly ProviderTransferDescriptor[]); readonly egress?: ProviderEgressDeps };
 }
 
 /** The exchange service: a module-level instance in the route holds the plans; the ports are passed per request. */
@@ -221,7 +221,7 @@ export class ProviderExchangeService {
   private readonly now: () => number;
   private readonly nonce: () => string;
   private readonly admit: typeof admitProviderOperation;
-  private readonly limits: typeof PROVIDER_EXCHANGE_LIMITS;
+  private readonly limits: typeof PROVIDER_EXCHANGE_LIMITS; private readonly descriptors: () => readonly ProviderTransferDescriptor[]; private readonly egress: ProviderEgressDeps; // [B23-B2]
 
   constructor(options: ProviderExchangeServiceOptions = {}) {
     const registry = options.registry ?? PROVIDER_ROWS;
@@ -230,7 +230,7 @@ export class ProviderExchangeService {
     this.now = options.now ?? (() => Date.now());
     this.nonce = options.nonce ?? (() => randomBytes(16).toString("hex"));
     this.admit = options.admit ?? admitProviderOperation;
-    this.limits = Object.freeze({ ...PROVIDER_EXCHANGE_LIMITS, ...(options.limits ?? {}) });
+    this.limits = Object.freeze({ ...PROVIDER_EXCHANGE_LIMITS, ...(options.limits ?? {}) }); const descriptors = options.transfer?.descriptors ?? PROVIDER_TRANSFER_DESCRIPTORS; this.descriptors = typeof descriptors === "function" ? descriptors : () => descriptors; this.egress = options.transfer?.egress ?? {}; // [B23-B2]
   }
 
   /** Step 1, step 2 and the sealed plan. Sends nothing. */
@@ -290,7 +290,7 @@ export class ProviderExchangeService {
     return { ok: true, plan };
   }
 
-  /** Approve the exact plan: consumed once, steps 1 and 2 re-run, then admission. In B23 it always ends refused; nothing is sent. */
+  /** Approve the exact plan: consumed once, steps 1 and 2 re-run, then admission. In B23 it always ends refused; nothing is sent. [B23-B2] Past an admitting answer, `send`; the answer is always the recorded envelope (`refusal`): a refusal, or a send's outcome (`body.ok` only when acknowledged). */
   async commit(input: { actor: ProviderExchangeActor; scope: ProviderExchangeScope; request: Record<string, unknown>; ports: ProviderExchangePorts; correlationId: string }): Promise<ProviderExchangeAnswer> {
     const { actor, request, ports, correlationId } = input;
     if (!isHumanAdmin(actor)) return refused("PX_HUMAN_ADMIN_REQUIRED", correlationId);
@@ -306,7 +306,7 @@ export class ProviderExchangeService {
       return refused("PX_PLAN_CONSUMED", correlationId);
     }
     const stored = this.plans.get(planId);
-    if (!stored || !sameScope(stored.owner, input.scope)) return refused("PX_PLAN_NOT_FOUND", correlationId);
+    if (!stored || !sameScope(stored.owner, input.scope)) return this.recorded(input.scope, { planId, planDigest, key }, ports, correlationId); // [B23-B2 review, 2026-10-04] tests-3: the durable record, else PX_PLAN_NOT_FOUND
     const plan = stored.plan; // [B23-B1 lead, 2026-10-04] low-1: null once consumed; the tombstone answers in the same order as the plan did
     if (planDigest !== stored.planDigest || (plan !== null && verifyProviderExchangePlan(plan).length > 0)) return refused("PX_PLAN_DIGEST_MISMATCH", correlationId);
     if (now >= stored.expiresAt) return refused("PX_PLAN_EXPIRED", correlationId);
@@ -319,7 +319,7 @@ export class ProviderExchangeService {
     this.keys.set(`${scopeKey}\0${key}`, record);
     let outcome: ProviderExchangeRefusal;
     try {
-      outcome = await this.approve(plan, ports, correlationId);
+      outcome = await this.approve(plan, ports, correlationId, { key, actorId: actor.actorId }); // [B23-B2] the key and the committing administrator name the durable attempt
     } catch (error) {
       // [B23-B1 review, 2026-10-04] tests-1: a thrown durable read or release-gate refusal ends this plan with the release route's
       // bounded envelope (its code, status and fixed wording), recorded as the key's outcome: a same-key retry replays it
@@ -329,7 +329,7 @@ export class ProviderExchangeService {
     return { ok: false, refusal: outcome };
   }
 
-  private async approve(plan: ProviderExchangePlan, ports: ProviderExchangePorts, correlationId: string): Promise<ProviderExchangeRefusal> {
+  private async approve(plan: ProviderExchangePlan, ports: ProviderExchangePorts, correlationId: string, commit: { readonly key: string; readonly actorId: string }): Promise<ProviderExchangeRefusal> {
     const prepared = await this.prepare({ scope: plan.scope, designId: plan.designId, boardId: plan.boardId, expectedAuthorityRevision: plan.authority.revision, expectedAuthorityDigest: plan.authority.recordDigest, ports, correlationId });
     if (!prepared.ok) return prepared.refusal;
     const row = this.registry().find((candidate) => candidate.id === plan.provider.providerId);
@@ -344,8 +344,8 @@ export class ProviderExchangeService {
     if (moved) return refusalBody("PX_PLAN_INPUT_MOVED", correlationId, facts);
     const admission = this.admit(this.registry(), plan.provider.providerId, plan.provider.operationId, this.env);
     if (!admission.admitted) return refusalBody("PX_PROVIDER_NOT_ADMITTED", correlationId, { ...facts, refusal: admission.refusal, admission: admission.message, idempotent: false });
-    // [B23-B1] defence in depth: no transport exists in this module; B23-B2 adds the bounded send behind its own review
-    return refusalBody("PX_SEND_UNAVAILABLE", correlationId, { ...facts, idempotent: false });
+    // [B23-B2] past admission, and only here: the bounded send and its durable record (B23-B1 had no transport in this module)
+    return this.send(plan, prepared.package, ports, correlationId, commit);
   }
 
   /** Steps 1 and 2 against the durable truth of the moment: revalidate, regenerate, find the ledger record, derive the package. */
@@ -392,4 +392,81 @@ export class ProviderExchangeService {
     const plans = [...this.plans.values()].filter((stored) => key === null || stored.scope === key);
     return { plans: plans.length, openPlans: plans.filter((stored) => !stored.consumed).length, keys: [...this.keys.values()].filter((record) => key === null || record.scope === key).length };
   }
+
+  /**
+   * [B23-B2] Steps 4 and 5 (D23-3, D23-4, D23-5; OD-165, OD-167), reached only from `approve`: the plan was consumed, steps 1 and 2
+   * re-ran on the durable truth and admission admitted. A reviewed transfer descriptor and the durable record are both required. The
+   * attempt is recorded `prepared` first (a repeated or concurrent commit of its key replays the record and sends nothing), `sent`
+   * immediately before the hand-over, and its terminal state after. Nothing is retried and nothing goes through the outbox.
+   */
+  private async send(plan: ProviderExchangePlan, built: OutboundPackage, ports: ProviderExchangePorts, correlationId: string, commit: { readonly key: string; readonly actorId: string }): Promise<ProviderExchangeRefusal> {
+    const facts = { planId: plan.planId, requestDigest: plan.requestDigest };
+    const descriptor = transferDescriptorFor(this.descriptors(), this.registry(), plan.provider.providerId, plan.provider.operationId);
+    const ledger = ports.exchangeLedger;
+    if (descriptor === null || ledger === undefined) return refusalBody("PX_SEND_UNAVAILABLE", correlationId, { ...facts, sent: false, idempotent: false });
+    const aggregate = { scope: plan.scope, designId: plan.designId, boardId: plan.boardId, providerId: plan.provider.providerId };
+    const at = (): string => new Date(this.now()).toISOString();
+    const begun = await ledger.prepare({ aggregate, at: at(), attempt: exchangeAttemptInput({ plan, key: commit.key, actorId: commit.actorId, descriptor, capabilityProfile: built.manifest.value.capabilityProfile }) });
+    // [B23-B2 review, 2026-10-04] coverage-2: another attempt of this package to this provider is in flight or interrupted: nothing is sent
+    if (!begun.ok && begun.code === "in_flight") return refusalBody("PX_EXCHANGE_IN_FLIGHT", correlationId, { ...facts, sent: false, inFlight: { planId: begun.attempt.planId, state: begun.attempt.state, preparedAt: begun.attempt.preparedAt, sentAt: begun.attempt.sentAt }, idempotent: false });
+    if (!begun.ok) return refusalBody(begun.code === "key_reuse_conflict" ? "PX_IDEMPOTENCY_KEY_REUSE_CONFLICT" : begun.code === "contended" ? "PX_EXCHANGE_CONTENDED" : "PX_SEND_UNAVAILABLE", correlationId, { ...facts, sent: false, idempotent: false });
+    if (begun.replayed) return exchangeEnvelope(begun.attempt, facts, correlationId, true);
+    // [B23-B2 review, 2026-10-04] security-2: the provider sees the record's server-derived key, never the client's string
+    const marking: { pending: Promise<unknown> | null } = { pending: null };
+    const outcome = await sendProviderExchange({ descriptor, package: built, idempotencyKey: begun.attempt.providerIdempotencyKey, env: this.env, beforeSend: (request) => { const mark = ledger.markSent({ aggregate, idempotencyKey: commit.key, request, at: at() }); marking.pending = mark; return mark.then(() => undefined); } }, { ...this.egress, clock: this.now });
+    // [B23-B2 review, 2026-10-04] regressions-1: a `sent` mark still being written when the deadline fell lands before the outcome is
+    // recorded (nothing was handed over: the record settles it not_sent); never two writes of one attempt at once
+    if (marking.pending !== null && !outcome.sendStarted) await marking.pending.catch(() => undefined);
+    // [B23-B2 review, 2026-10-04] coverage-1: the settle is a durable write, never a send, so it is retried a bounded number of times
+    for (let tries = 0; tries < PROVIDER_EXCHANGE_SETTLE_ATTEMPTS; tries += 1) {
+      try {
+        return exchangeEnvelope(await ledger.settle({ aggregate, idempotencyKey: commit.key, outcome, at: at() }), facts, correlationId, false);
+      } catch {
+        // retried below; the record still says `sent` (or `prepared`) until a settle lands
+      }
+    }
+    // the answer could not be recorded: this request answers what the record can stand for - pending reconciliation when bytes left,
+    // not sent otherwise; never a retry of the send. What the provider answered (its receipt id and the response's status, size and
+    // digest; never the raw body) travels in the answer, so a person can reconcile it (coverage-1)
+    const response = outcome.response === null ? null : { status: outcome.response.status, bytes: outcome.response.bytes, sha256: outcome.response.sha256 };
+    return refusalBody(outcome.sendStarted ? "PX_EXCHANGE_UNKNOWN_PENDING_RECONCILIATION" : "PX_EXCHANGE_NOT_SENT", correlationId, { ...facts, sent: outcome.sendStarted, state: outcome.sendStarted ? "UNKNOWN_PENDING_RECONCILIATION" : "not_sent", observed: outcome.state, receipt: outcome.receipt, response, failure: "record_unavailable", recorded: false, idempotent: false });
+  }
+
+  /**
+   * [B23-B2 review, 2026-10-04] tests-3: a commit whose plan this instance does not hold (a restart, another instance, an expired plan)
+   * answers what the durable record holds under its key: the same plan id and digest replay the recorded outcome (sending nothing),
+   * another plan's are a reuse of the key, and a key naming nothing there answers `PX_PLAN_NOT_FOUND` (preview again), as before.
+   */
+  private async recorded(scope: ProviderExchangeScope, commit: { readonly planId: string; readonly planDigest: string; readonly key: string }, ports: ProviderExchangePorts, correlationId: string): Promise<ProviderExchangeAnswer> {
+    const ledger = ports.exchangeLedger;
+    if (ledger === undefined) return refused("PX_PLAN_NOT_FOUND", correlationId);
+    let found: Awaited<ReturnType<ProviderExchangeLedger["attemptForKey"]>>;
+    try {
+      found = await ledger.attemptForKey({ tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId }, commit.key);
+    } catch (error) {
+      return { ok: false, refusal: await fromResponse(boundedManufacturingFailure(error, "release", correlationId)) };
+    }
+    if (found === null) return refused("PX_PLAN_NOT_FOUND", correlationId);
+    if (found.attempt.planId !== commit.planId || found.attempt.planDigest !== commit.planDigest) return refused("PX_IDEMPOTENCY_KEY_REUSE_CONFLICT", correlationId);
+    return { ok: false, refusal: exchangeEnvelope(found.attempt, { planId: found.attempt.planId, requestDigest: found.attempt.requestDigest }, correlationId, true) };
+  }
+}
+
+/** [B23-B2 review, 2026-10-04] coverage-1: how many times a send's answer is written before the commit answers it unrecorded. */
+export const PROVIDER_EXCHANGE_SETTLE_ATTEMPTS = 3;
+
+// ─── [B23-B2] A send's answer ────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** The envelope a recorded attempt answers: its state's code and status and what the record keeps (never a raw provider body). */
+function exchangeEnvelope(attempt: ExchangeAttempt, facts: { readonly planId: string; readonly requestDigest: string }, correlationId: string, idempotent: boolean): ProviderExchangeRefusal {
+  const code: ProviderExchangeErrorCode = attempt.state === "acknowledged" ? "PX_EXCHANGE_ACKNOWLEDGED"
+    : attempt.state === "rejected" ? "PX_EXCHANGE_REJECTED"
+      : attempt.state === "UNKNOWN_PENDING_RECONCILIATION" ? "PX_EXCHANGE_UNKNOWN_PENDING_RECONCILIATION"
+        : attempt.state === "not_sent" ? (attempt.failure?.startsWith("paused_") ? "PX_PROVIDER_PAUSED" : "PX_EXCHANGE_NOT_SENT")
+          : "PX_EXCHANGE_IN_FLIGHT";
+  const entry = PROVIDER_EXCHANGE_ERRORS[code];
+  const acknowledged = attempt.state === "acknowledged";
+  const response = attempt.response === null ? null : { status: attempt.response.status, bytes: attempt.response.bytes, sha256: attempt.response.sha256 };
+  // [B23-B2 review, 2026-10-04] regressions-4: the sentence travels in `error` for every code, B1's envelope, where the panel reads it
+  return { status: entry.status, code, body: { ok: acknowledged, code, error: entry.message, ...(correlationId ? { correlationId } : {}), ...facts, sent: attempt.sendStarted, state: attempt.state, receipt: attempt.receipt, response, failure: attempt.failure, idempotent } };
 }

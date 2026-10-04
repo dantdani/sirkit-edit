@@ -183,7 +183,7 @@ query and no files (`public_sends`); a public row that sends a model input is on
 
 **Derived, not asserted.** `b23-a-route-vocabulary` case 4 derives both values per path and checks every row and CSV cell against them. [B23-B1, 2026-10-04] Since B23-B1 a transfer path's `files` is declared by its transfer row and checked against the reviewed transfer list (`TRANSFER_PATHS`), its closure-derived value pinned beside it (none in B1); case 4 derives the query and none values (`outbound-disclosure.md` section 5).
 - `outboundEgress`: the route's runtime import closure (the gates' edges, checked equal to `importClosure`) reaches
-  `app/lib/net/outbound-fetch.ts`, the way census case 3 derives `external_process`. Eleven route files reach the boundary; five are
+  `app/lib/net/outbound-fetch.ts`, the way census case 3 derives `external_process`. Eleven route files reach the boundary ([B23-B2, 2026-10-04] twelve since B23-B2: the provider exchange route, whose value is the declared `files`, reaches it through `provider-egress.ts` alone; `dfm-quote-flow.md` section 7); five are
   reviewed cache-only exemptions, each holding by reachability and by its own calls (case 5): bridged at the pricing gateway
   (`app/lib/bom-builder.ts`, `app/lib/bom/build.ts`) the route reaches no egress; the route is the gateway's one importer in its
   closure; it imports only its reviewed names; it calls the pricing function with two arguments (no pricing grant); and [review] the

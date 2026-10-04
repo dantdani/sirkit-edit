@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B23",
-  "currentCheckpoint": "B23-B1 committed on chapter/b23-external-manufacturing: revalidateReleaseAuthority, buildOutboundPackage, the provider exchange (sealed 10-minute plan; commit always provider_not_admitted, nothing sent), POST /api/pcb/provider-exchange (census 166/163/3/0), the provider panel; D23-6, D23-7 closed",
+  "currentCheckpoint": "B23-B2 committed on chapter/b23-external-manufacturing: outboundUpload (bounded, no redirect, one deadline), the manufacturing-provider meter (agent share 0), provider-egress.ts (the only sending module; no transfer descriptor in B23), the durable exchange record mfg.provider-exchange.v1 (UNKNOWN_PENDING_RECONCILIATION never retried, no outbox); D23-3, D23-4's exchange half, D23-5's receipt half closed",
   "status": "in_progress",
   "baseSha": "43cb1b0",
   "branch": "chapter/b23-external-manufacturing",
-  "lastGreenSha": "da36d51",
+  "lastGreenSha": "0c78e93",
   "pullRequest": "draft PR (chapter/b23-external-manufacturing -> main) opened after the discovery commit; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
@@ -19,7 +19,7 @@
     "live DFM/quote exchange with a manufacturer or quote API: BLOCKED-LIVE-QUALIFICATION (LB-11)",
     "ordering through a provider sandbox: BLOCKED-LIVE-QUALIFICATION (LB-12)"
   ],
-  "nextAction": "B23-B2 (bounded transfer and receipts: D23-3, D23-4, D23-5's receipt half; OD-165, OD-167), test-first; then B3, C, D, closeout. Carried to the owner: OD-160, OD-163's open question (may a provider receive the board's file-safe name), OD-174's (two public routes send anonymous search text to OpenAI), OD-181..OD-183, the B22 items.",
-  "updatedAt": "2026-10-04T02:10:53-04:00",
+  "nextAction": "B23-B3 (observations, staleness, no auto-accept: D23-17, D23-5's staleness half; OD-168, OD-169), test-first; then C, D, closeout. Carried to the owner: OD-160, OD-163's and OD-174's open questions, OD-181..OD-184 (OD-184 (m): an interrupted sent attempt blocks its package until a reconciliation read exists), the B22 items.",
+  "updatedAt": "2026-10-04T17:25:22-04:00",
   "previousChapter": "B22 merged normally into main as 43cb1b0 (PR #13, 2026-10-02) after green CI on 849a933; verdict PARTIAL (the production simulation runner BLOCKED under LB-10, OD-134)"
 }

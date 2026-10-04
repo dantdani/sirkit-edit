@@ -4545,3 +4545,51 @@ passed / 5 skipped; tripwires + auth + engineering 1593 passed / 9 skipped; page
     resolving. The edit is on the same line, with a dated note. The first edit carried a raw backspace byte from a heredoc escape; it
     was found by the control-byte scan and replaced with `\b`. The page tripwires, readers and the provider folder then passed 276 of
     276; eslint on the file 0.
+
+### B23-B2 - bounded transfer and receipts: B23-B steps 4-5 (2026-10-04 local; increment workflow + review fix + lead round + lead; this commit)
+
+B23-B2 (2026-10-04): bounded transfer and receipts, B23-B steps 4-5. outboundUpload extends the one egress boundary additively
+(in-memory bytes or multipart body, the descriptor's request-byte and part ceilings within the release bounds, maxRedirects 0 with every
+3xx refused, one deadline that also bounds the durable sent mark, no secret in the URL, Idempotency-Key only when declared; no
+dependency). The manufacturing-provider meter has agent share 0. provider-egress.ts is the only sending module, imported only by the
+exchange service and reached only past admission. mfg.provider-exchange.v1 (exchange-ledger.ts) is the silent CAS record of each
+attempt, prepared -> sent -> acknowledged | rejected | UNKNOWN_PENDING_RECONCILIATION | not_sent, keeping ids, digests, versions and
+bounded fields, never a raw body or file byte. Test-first: the suites failed to load on 0c78e93; 37/37 after the first code; seven
+mutations caught. Review round: 22 confirmed findings, each reproduced first (b2fix-01: 15 failed / 33 passed of 48; b2fix-04: page
+suite 3/5 red; test-strength findings by breakages), then fixed: the mark races the deadline and a late mark settles not_sent
+(regressions-1, tests-1, coverage-4); every 3xx refused (coverage-5); the provider sees a server-derived sx- key (security-2,
+coverage-3); keys are unique per project durably and a restarted service answers a commit from the record (tests-3, tests-4); one
+package in flight (coverage-2); a failed settle is retried and the unrecorded answer carries the receipt (coverage-1, tests-2); ids-only
+retention keeps no provider text (coverage-6); every sentence in error (regressions-4); the classification row stays read while no
+descriptor exists, pinned (regressions-3); dated notes on the B1 and A2 pages (regressions-2); the page reworded (coverage-7, -8, -9).
+25 breakages caught, each restored by SHA-256. Gates: readers 396/396 before and 413/413 after;
+net/distributors/schgen/acquisition/durable-workflow 443 passed, 4 skipped; database-delivery 139 passed, 12 skipped;
+auth/api/computation 1930 passed, 27 skipped; agent/orchestration/chat 1024; mcp/project 1214; engineering 1107; pages 48/48; all exit
+0; tsc 0; eslint 0 on 17 files; 21 generators with no drift. Census 166/163/3/0; counts 47/36/9/27; no UI change. Live exchange
+BLOCKED-LIVE-QUALIFICATION (LB-11); production isolation under interleaved commits UNKNOWN.
+
+B23-B2 lead round (2026-10-04): an independent check of the review round's fixes confirmed three low findings, each reproduced first
+(b2low-01: ledger cases 24-28, page case 6 and PGlite case 5 red, 7 failed / 32 passed of 39; b2low-01b: case 25 IN_FLIGHT ten minutes
+later), then fixed. low-1: tests-3's durable read stays before PX_PLAN_NOT_FOUND (OD-184 (p)); B1's statements
+(outbound-disclosure.md:207, :402, :426) and approval-plan case 4's title carry dated lead notes, and ledger case 23 pins the production
+order (three replay reads then 404; MFG_DURABLE_STORE_UNAVAILABLE 503 when the store cannot be read; restoring B1's order fails it,
+b2low-02). low-2: a prepared attempt EXCHANGE_PREPARED_ABANDON_MS (ten minutes) old is settled not_sent (abandoned) by the next attempt
+of its package, and a sent mark lands only while its own attempt is still prepared on that head, so whichever lands first the other is
+refused and nothing is sent twice (OD-184 (q)); PX_EXCHANGE_NOT_SENT no longer says the exchange was recorded and PX_EXCHANGE_IN_FLIGHT
+says when a block ends; a lone UTF-16 surrogate, which PostgreSQL's jsonb refuses with 22P02 (CONFIRMED on PGlite), is refused in the
+record and dropped at normalisation (OD-184 (r)). low-3: one package in flight keys on the package digest, provider and operation, not
+the request digest a registry revision moves (ledger case 27; ledger case 19's and PGlite case 1's helpers moved in place). Twelve
+breakages caught, each restored by SHA-256. Gates: readers 377/377 before, 403/403 after (29 files, B11.5 included);
+manufacturing-providers 279/279; net/acquisition/durable-workflow 290 passed, 4 skipped; database-delivery 140 passed, 12 skipped; auth
+plus b16-1c 486 passed, 9 skipped; pages 49/49 (b21 closeout 10, b22 closeout 9); all exit 0; tsc 0; eslint 0 on 8 files; 21 generators,
+no drift. Census and counts untouched; no UI change; nothing sent; live exchange BLOCKED-LIVE-QUALIFICATION (LB-11).
+- Lead close (2026-10-04):
+  - (1) The lead round's own check raised one more low item and a nit:
+    - The `sent` mark now re-reads and re-verifies the aggregate's whole history on every compare-and-set try, inside the egress
+      deadline. This is recorded on the page (section 13, INFERRED; latent while no transfer descriptor exists).
+    - Three code comments beside the in-flight guard still said "the same request". They are corrected in place.
+  - (2) `regressions-3` (the B16.0.2 row stays `read`) is a forward pin, not a regression test. Reverting the note leaves it green. It
+    fails once a transfer descriptor exists while the row still says `read` (ledger case 21), which is the point.
+  - (3) A session restart cut the lead chain after gate H, with every set to that point exit 0. The stale lock was removed and the chain
+    was resumed from F2 (`b23/lead-gates-from-f2.sh`).
+  - (4) No UI change in B2, so no browser run.
