@@ -126,7 +126,7 @@ export function ProviderExchangePanel(props: ProviderExchangePanelProps) {
   return (
     <div className="mt-2 rounded border border-zinc-700 bg-zinc-950/60 px-2 py-1.5" data-testid="p2g-provider-panel">
       <div className="font-medium text-zinc-100">Provider exchange (DFM or quote)</div>
-      <div className="mt-0.5 text-amber-200/90" data-testid="p2g-provider-notice">No provider is enabled in B23: Sirkit holds no provider account, so nothing is sent. Preview shows exactly which files and fields would leave Sirkit; a commit is refused.</div>
+      <div className="mt-0.5 text-amber-200/90" data-testid="p2g-provider-notice">No provider is enabled in B23: Sirkit holds no provider account, so nothing is sent. Preview shows exactly which files and fields would leave Sirkit; a commit is refused.</div>{/* [B23-C] OD-170: the fixed notice, no control (ordering-enablement.ts ORDERING_DISABLED_NOTICE, pinned equal by b23-c-ordering-disabled) */}<div className="mt-0.5 text-amber-200/90" data-testid="p2g-ordering-notice">Ordering through Sirkit is turned off. The owner has not supplied a provider account, spending and quantity limits, a billing and shipping policy, authorized roles, cancellation and refund terms, legal and compliance requirements or a sandbox path, so nothing in Sirkit can order hardware or spend money.</div>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         <label className="text-zinc-400" htmlFor="p2g-provider-choice">Provider and purpose</label>
         <select id="p2g-provider-choice" data-testid="p2g-provider-choice" value={exchange.choice} onChange={exchange.choose} disabled={exchange.busy} className="rounded border border-zinc-600 bg-zinc-900 px-1 py-0.5">

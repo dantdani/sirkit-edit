@@ -4622,3 +4622,52 @@ no drift. Census and counts untouched; no UI change; nothing sent; live exchange
     until CI on `a02c9fb` reports.
   - (6) B2's OD-184 entry carried a double space in each item marker (the lead's wrap helper), now removed. The helper is fixed, and
     a first B3 records run stopped by its check before writing anything but the discovery, which was restored from HEAD.
+
+### B23-C - ordering visibly disabled, with the full contract (2026-10-04 local; increment workflow + lead; this commit)
+
+- B23-C (2026-10-04, on 8bca09e):
+  - **What landed:** `orderingEnablement` (disabled; seven prerequisites missing; no enabling variable; the stores' default reads only the off switch from the process); the `manufacturing.provider-order` record (`missing`, Tier 3) appended on `:186`; the panel notice on `:129`.
+  - **Offline contract:** the two-person, single-use purchase authorization with an exact approved-importer gate over the agent loop, gateway, chat, MCP and orchestration; the order contract on an injected fake port, which claims the cart before the burn and re-checks enablement before the hand-over; pure webhook verification.
+  - **Review round:** fourteen CONFIRMED findings closed test-first:
+    - the overflowing re-read that threw after the burn;
+    - the off switch that did nothing;
+    - relabelled carts;
+    - the racing second authorization that was burned;
+    - the false `WEBHOOK_RECORDED`;
+    - the untested bounds, abort, line identity, edge, race loser and gate spellings;
+    - the repeating fixture nonces.
+    Nine cases were red on the reviewed tree and nineteen further mutations were caught.
+  - **Decisions:** D23-10 and D23-11 closed, and D23-4's order-contract half; OD-170, OD-171 and OD-172 applied; OD-186 records the choices, amended by the review round.
+  - **Pins:** tier3 census 105 → 106; B01 CSV +1 row. The review round moved pins only in C's own suites, each in place with a dated note.
+  - **Unchanged:** census 166/163/3/0; counts 47/36/9/27; no route or provider client; 21 generators with no drift.
+  - **tsc:** red from `a02c9fb` until the lead's `d5f5512`; green since.
+  - **UI:** changed by the notice; the browser suite was not run here.
+  - **Live:** BLOCKED-LIVE-QUALIFICATION (LB-12).
+
+B23-C low fixes (2026-10-04, `[B23-C lead]`, on `d5f5512` plus the B23-C working tree, uncommitted). An independent check of the review
+round reported two low findings, and both are closed test-first. First, the cart digest grouped and sorted part numbers by their raw
+strings while consume compares bindings after NFC, so a part or provider id spelled with U+212A KELVIN SIGN passed the in-flight check
+and was burned before being refused. The cart is now read from the canonical binding consume compares, and provider ids are compared
+after NFC (order-contract case 14). Second, a cart claimed by another submission answered `ORDER_IN_FLIGHT`, whose message names an
+unresolved order that did not exist. It now answers the closed code `ORDER_CART_BUSY` (case 15; pins of cases 5 and 9 moved in place).
+While correcting the guard comment, a third path was found and closed: a twin submit of the same authorization did not hold the claim,
+so a new authorization could slip in when the first submit failed. Every submit of the claiming authorization now holds the claim (case
+16). The guard after the burn is now unreachable for the real store, and its comment says so. Red: 5 of 16 cases failed on the unchanged
+sources; four mutations were caught and restored by hash. The order-contract suite has 16 cases. Gates: manufacturing-providers 351/351,
+engineering 1107/1107, agent plus orchestration 875/875, mcp 825/825, b14-4 22/22, pages and closeout tripwires 105/105. tsc is exit 0
+after `d5f5512`, eslint is clean, and 21 generators show no drift. Census 166/163/3/0 and counts 47/36/9/27 are untouched: no route,
+control, tool or composition-root wiring was added. Live ordering stays BLOCKED-LIVE-QUALIFICATION (LB-12).
+- Lead close (2026-10-05):
+  - (1) The lead's own error, found by C's implementer: `a02c9fb` gave `b23-b-approval-plan` case 18 a second timeout and broke tsc.
+    The case already carried `}, 60_000);`, and the lead's timing pass had looked only at the `it(` line. CI was red on `a02c9fb` and
+    `8bca09e` at `tsc --noEmit`, which also stopped those runs before their tests. `d5f5512` restored the line byte for byte to
+    `0cd3f59`'s. Rule since: tsc runs before every commit that touches a `.ts` file.
+  - (2) The lead round's own check raised one more low item: `ORDER_CART_BUSY`'s message said "this authorization is unspent", which a
+    voided, expired or forged handle is not; the request reads none of it before answering. The message now says "This request
+    consumed, read and sent nothing; submit the authorization again in a moment." Case 15's pin moved in place and now also refuses
+    "unspent". The page's quote and its OD-186 (p) carry dated notes.
+  - (3) UI (one notice line): both browser suites under the lock passed, the default config 48 of 48 (7.5 min) and the orchestration
+    config 4 of 4 (2.7 min). The 32 evidence PNGs the runs rewrote were restored from HEAD by blob hash, 32 of 32.
+  - (4) Lead gates on the final tree (`b23/lead-gates.sh c`): every set exit 0. M 785 passed, 2 skipped; A 632 passed, 21 skipped; J
+    977 passed, 4 skipped; B 1,107; C 415; D 460; E 825; F 357; H 1,059; F2 22; G 375; I 479 passed, 9 skipped. tsc 0; eslint 0; all 21
+    generators with no drift.

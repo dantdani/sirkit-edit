@@ -2326,3 +2326,104 @@ Amendments to existing entries:
   - (r) Only time expiry is re-judged by the clock.
   - (s) The client validator takes the exact shape, and its bound is pinned to the server's by behaviour.
 - Owner confirmation pending.
+
+## OD-170 — what "visibly disabled" ordering is, as applied (B23-C, 2026-10-04)
+
+- **Default applied:** `manufacturing.provider-order`, appended in place on `action-registry.ts:186`: status `missing`, handler "explicitly blocked: feature-disabled until the owner supplies OD-171's prerequisites", `toolExposure: "none"`, approval tier `release`, Tier 3. Its only source is the panel. It carries no `sideEffects`.
+- The panel shows the fixed notice `ORDERING_DISABLED_NOTICE` with no control, worded outside B19-E's purchase phrases. B17-A `:63` holds and B19-E is unchanged. The B01 CSV moved once, by its generator.
+- **Evidence:** `ordering-boundary.md` section 1; `b23-c-ordering-disabled` cases 4-6.
+- Owner confirmation pending.
+
+
+## OD-171 — how ordering could ever be enabled, as applied (B23-C, 2026-10-04)
+
+- **Default applied:** pure `orderingEnablement({ownerRecord, submissionPort, env})`, defaulting to `ORDERING_OWNER_RECORD = null` and `ORDER_SUBMISSION_PORT_WIRING = "none"`.
+- The owner record is an OD id plus one reference per prerequisite; a blank or `UNKNOWN` value supplies nothing, and an invalid record enables nothing.
+- The switch `SIRKIT_ORDERING_DISABLED` takes any non-blank value as off, and no variable can enable ordering. The pure function reads only the environment it is given.
+- Both stores default to `orderingEnablementFromProcess()`, which reads exactly that one variable from the process at each call. The order contract asks again immediately before the hand-over (`ORDER_DISABLED_BEFORE_SUBMISSION`).
+- No record exists in B23.
+- **Evidence:** `ordering-boundary.md` sections 1-2; `b23-c-ordering-disabled` cases 1-3; `b23-c-order-contract` case 13.
+- Owner confirmation pending.
+
+
+## OD-172 — the purchase-authorization contract, as applied offline (B23-C, 2026-10-04)
+
+- **Default applied:** Closed offline (OD-172). purchase-authorization.ts: a human project_admin requests a closed binding (a registry
+  ordering operation; 1-64 lines with the unit price seen; an ISO currency; an exact decimal price ceiling, CD-12's decimal text, never
+  a JavaScript number; a destination reference; the release/BOM digest; an expiry at most 10 minutes ahead); a DIFFERENT human
+  project_admin confirms the exact request digest (proposerCannotApprove), the one place a single-use, server-held authorization is
+  minted; one compare-and-set on a snapshot read burns it; any changed field refuses and voids it; ai, automation and every other role
+  are refused at every step; only what comes in is bounded to 12 integer digits, and the arithmetic never throws on its own results; the
+  stores are bounded and refuse when full, writing nothing. The exact approved-importer gate admits purchase-authorization.ts itself and
+  order-contract.ts, which consumes and never spells request or confirm in any form; the agent loop, gateway, chat route, MCP and every
+  orchestration module reach none of the four ordering modules (D21-33's gap, closed for them). order-contract.ts (an injected port; no
+  composition root wires one) claims the cart before the burn, re-reads price and availability immediately before the one submission and
+  refuses a changed price, short stock, a total above the ceiling, other lines (by id and part, in order) or an unreadable re-read,
+  without ever throwing; enablement is checked again before the hand-over; one order per authorization and per unresolved or claimed
+  cart, the cart being each part's total quantity; ambiguity is UNKNOWN_PENDING_RECONCILIATION, never retried; webhook-verification.ts
+  checks a signature over the raw body, a timestamp window and a bounded replay store, and a verified event never creates, submits or
+  changes an order. The cart is read from the canonical binding consume compares, a claimed cart answers ORDER_CART_BUSY (no order
+  exists), and every submit of the claiming authorization holds the claim (the lead round). CONFIRMED by b23-c-purchase-authorization
+  (11), b23-c-order-contract (16), b23-c-webhook-verification (7); twenty source mutations caught at implementation and nineteen in the
+  adversarial-review round. Live: BLOCKED-LIVE-QUALIFICATION (LB-12). ordering-boundary.md sections 3-8.
+- one idempotency key per authorization, `so-` and 64 hex characters;
+- re-read deadline 15 s and submission deadline 30 s, with the port's signal aborted at a deadline;
+- in-memory stores, bounded and refusing when full: 32 requests and 64 authorizations per project, 2,048 and 4,096 overall, an hour's retention after expiry; 256 orders per project, 16,384 overall; 32 observations per order;
+- money bounded to 12 integer and 6 fraction digits on the way in, with unbounded exact arithmetic on its own results;
+- `project_admin` only (no new role).
+- **Evidence:** `ordering-boundary.md` sections 3-6 and 8; `b23-c-purchase-authorization` cases 1-11 (bounds: case 10), `b23-c-order-contract` cases 1-13 (bounds: case 11), `b23-c-webhook-verification` cases 1-7.
+- Owner confirmation pending.
+
+
+## OD-186 — B23-C: stated choices beyond its task text, as applied (B23-C, 2026-10-04)
+
+- **Default applied** (as `ordering-boundary.md` section 11 states them, the lead round's (g) amendment and (p) included):
+  - (a) The exact approved-importer set is the B18-B form (`b18-b-import-gates`: an authority module and the one composition module that
+    imports it): `purchase-authorization.ts`, which holds the human-only confirmation, and `order-contract.ts`, its only importer, which
+    only consumes. A confirmation route is a later, separately reviewed change that adds itself to the set.
+  - (b) The owner record is an owner-decision id and one reference text per prerequisite; blank or `UNKNOWN` supplies nothing; an
+    invalid record enables nothing and is the one reason given. Its limits and roles are applied by the reviewed change that enables
+    ordering.
+  - (c) The operator switch `SIRKIT_ORDERING_DISABLED`: any non-blank value turns ordering off, `0` and `false` included; the function
+    reads only the environment it is given [B23-C fix, 2026-10-04: and the stores' production default,
+    `orderingEnablementFromProcess()`, gives it that one switch read from the process at each call - the only process variable any
+    ordering module reads].
+  - (d) Money: decimal text of at most 12 integer and 6 fraction digits, one canonical spelling in a binding, exact integer arithmetic;
+    a provider's re-read is canonicalised before it is compared [B23-C fix, 2026-10-04: only what comes in is bounded; the arithmetic
+    reads its own results unbounded, so a sum past 12 digits is compared, never thrown].
+  - (e) A binding carries each line's unit price as the person saw it; "a change" at the re-read is any differing unit price, up or
+    down; the ceiling covers the lines and the provider's charges, and the provider's total must add up exactly.
+  - (f) Any human project administrator of the project may consume an authorization (the order contract's caller); the submission uses
+    the held binding.
+  - (g) The order contract burns the authorization before the re-read, so a refused re-read spends it and two people confirm again at
+    the new price; a new authorization for an unresolved cart is refused before it is burned [B23-C fix, 2026-10-04: also when it races:
+    a submit claims its cart synchronously before the burn and releases it in the turn that records the order, so a second authorization
+    for that cart is refused still unspent] [B23-C lead, 2026-10-04: also when it is presented with an equivalent spelling, since the
+    cart is read from the canonical (NFC) binding consume compares, and when a twin submit of the claiming authorization outlives a
+    failing claimant, since every submit of it holds the claim; a cart that is claimed but holds no order yet is refused
+    `ORDER_CART_BUSY` (p)].
+  - (h) One order in flight per cart [B23-C fix, 2026-10-04: the cart is the provider, the operation and each part's total quantity;
+    line ids and line order are labels and no longer count (they did: "provider, operation, line ids, parts and quantities")]; an
+    accepted order does not block a new, separately confirmed one.
+  - (i) `manufacturing.provider-order` carries no `sideEffects`: it is Tier 3 by approval tier `release` and by its id's `order` stem,
+    and the side effect would move B23-B1's pin that the provider exchange alone carries it; its sources cite only the provider panel,
+    because naming the provider directory from `action-registry.ts` would fail `b23-a-provider-admission` case 8.
+  - (j) The webhook contract is Sirkit's own: `webhook-id`, `webhook-timestamp`, `webhook-signature` headers, `v1=` hex HMAC-SHA256 over
+    `<id>.<timestamp>.<raw body>`, a five-minute window, a 4096-entry replay store that refuses when full, a secret of at least 32
+    characters, one provider per configured secret; a verified event is an observation only.
+  - (k) Requests, authorizations, orders and the replay store live in memory: a restart forgets them, and a forgotten authorization
+    cannot be consumed; durable storage is the enabling increment's.
+  - (l) Deadlines: the re-read 15 s, the submission 30 s; a timed-out re-read ends `not_submitted`, a timed-out submission
+    `UNKNOWN_PENDING_RECONCILIATION`.
+  - (m) enablement is checked again immediately before the hand-over; turned off after the burn, nothing is sent and the record ends
+    `not_submitted` with `ORDER_DISABLED_BEFORE_SUBMISSION`, the authorization spent.
+  - (n) A judgement of an untrusted answer that throws while it is read is a refusal, never a throw: a re-read is
+    `ORDER_REQUOTE_MISMATCH` (`unreadable`), a submission's answer `UNKNOWN_PENDING_RECONCILIATION` (`unreadable`);
+    `purchaseBindingProblems` answers `binding: unreadable`.
+  - (o) An order holding 32 observations answers a verified event `WEBHOOK_OBSERVATIONS_FULL` and records nothing more; the event's id
+    is spent, so its redelivery is `replayed`.
+  - (p) a cart that another authorization's submit has claimed for its consume, and that holds no order yet, is refused
+    `ORDER_CART_BUSY` ("submit it again in a moment"; this authorization unspent [B23-C lead, 2026-10-05: the request spends nothing,
+    but it reads no handle first, so the message no longer claims the authorization is unspent]), never `ORDER_IN_FLIGHT`, which names
+    an unresolved order; chosen over validating the handle before the claim (section 8).
+- Owner confirmation pending.

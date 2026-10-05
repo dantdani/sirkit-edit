@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B23",
-  "currentCheckpoint": "B23-B3 committed on chapter/b23-external-manufacturing: an acknowledged answer becomes a closed external observation (verdict none, every provider string screened), judged stale at every read (OD-168), suggestions shown never applied (OD-169), the summary's current flag compares revision AND authoritative digest (D23-17); the provider observation list in the panel",
+  "currentCheckpoint": "B23-C committed on chapter/b23-external-manufacturing: ordering visibly disabled (orderingEnablement: seven prerequisites missing, no enabling variable, the off switch honoured on the production path; manufacturing.provider-order missing, Tier 3; the panel notice) and the full contract offline (two-person single-use purchase authorization, order contract on an injected fake port, webhook verification); D23-10, D23-11 and D23-4's order-contract half closed",
   "status": "in_progress",
   "baseSha": "43cb1b0",
   "branch": "chapter/b23-external-manufacturing",
-  "lastGreenSha": "0c78e93",
+  "lastGreenSha": "d5f5512",
   "pullRequest": "draft PR (chapter/b23-external-manufacturing -> main) opened after the discovery commit; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
@@ -19,7 +19,7 @@
     "live DFM/quote exchange with a manufacturer or quote API: BLOCKED-LIVE-QUALIFICATION (LB-11)",
     "ordering through a provider sandbox: BLOCKED-LIVE-QUALIFICATION (LB-12)"
   ],
-  "nextAction": "B23-C (ordering visibly disabled with the full contract: D23-10, D23-11; OD-170..OD-172), test-first; then D, closeout. Carried to the owner: OD-160, OD-163's and OD-174's open questions, OD-181..OD-185, the B22 items.",
-  "updatedAt": "2026-10-04T21:19:33-04:00",
+  "nextAction": "B23-D (physical-hardware evidence defined, never fabricated: D23-13, D23-14, D23-15; OD-175..OD-177), test-first; then the closeout (1/2, 2/2; tasks drafted). Carried to the owner: OD-160, OD-163's and OD-174's open questions, OD-181..OD-186, the B22 items.",
+  "updatedAt": "2026-10-05T00:26:49-04:00",
   "previousChapter": "B22 merged normally into main as 43cb1b0 (PR #13, 2026-10-02) after green CI on 849a933; verdict PARTIAL (the production simulation runner BLOCKED under LB-10, OD-134)"
 }
