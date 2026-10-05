@@ -16,7 +16,7 @@
 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import type { UseManufacturingWorkflowResult } from "./hooks/useManufacturingWorkflow"; import { ProviderExchangePanel } from "./ProviderExchangePanel"; // [B23-B1] appended in place: every later line keeps the number B16-B23 pages cite
+import { ProviderObservationList } from "./ProviderObservationList"; import type { UseManufacturingWorkflowResult } from "./hooks/useManufacturingWorkflow"; import { ProviderExchangePanel } from "./ProviderExchangePanel"; // [B23-B1] appended in place: every later line keeps the number B16-B23 pages cite [B23-B3] the observation list is imported first on this line, so B1's cited text stays whole
 
 const STATE_LABEL: Record<string, string> = {
   idle: "No durable board yet — synchronize the schematic to the PCB",
@@ -121,6 +121,8 @@ export function ManufacturingWorkflowPanel({ workflow, qualifying, canQualify, o
       {workflow.workflow && truth?.authority?.current && truth.latestRelease?.current && (
         <ProviderExchangePanel scope={workflow.workflow.scope} authority={{ revision: truth.authority.revision, recordDigest: truth.authority.recordDigest }} canAct={releaseCapability.allowed} />
       )}
+      {/* [B23-B3] the provider observations (external, never Sirkit proof), shown whatever the authority: a stale one stays listed, labelled stale (OD-168, OD-169) [B23-B3 review, 2026-10-04] coverage-5: while the hydration is loaded; a hydration that failed integrity verification shows no durable truth, these included (fail closed, B16-A F12) */}
+      {truth?.observations && <ProviderObservationList observations={truth.observations} />}
     </div>
   );
 }

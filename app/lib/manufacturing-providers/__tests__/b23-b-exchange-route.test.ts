@@ -120,7 +120,7 @@ describe("[B23-B1] POST /api/pcb/provider-exchange: the policy and classificatio
     expect(classifyRouteMethodForm(src, "POST", join(ROOT, ROUTE_FILE), ROOT).form).toBe("canonical-wrapper");
   });
 
-  it("4. in B1 the route reaches no connection: its runtime import closure is the release route's plus the reviewed B23 modules - no egress boundary, no process spawner, no new transport (the send is B2's) [B23-B2, 2026-10-04] reviewed pin move: since B2 the closure adds the one sending module (provider-egress.ts), the exchange record, the meters and the egress boundary, which it reaches only through provider-egress.ts; still no process spawner, no distributor egress and no other transport", () => {
+  it("4. in B1 the route reaches no connection: its runtime import closure is the release route's plus the reviewed B23 modules - no egress boundary, no process spawner, no new transport (the send is B2's) [B23-B2, 2026-10-04] reviewed pin move: since B2 the closure adds the one sending module (provider-egress.ts), the exchange record, the meters and the egress boundary, which it reaches only through provider-egress.ts; still no process spawner, no distributor egress and no other transport [B23-B3 review, 2026-10-04] regressions-2: and every B23 module of the closure - the ones the release route's closure now holds through GET /api/pcb-sync's route module included - holds no connection primitive; that shared part is pinned exactly", { timeout: 120_000 }, () => { // [B23-B3 review, 2026-10-04] + the closure gates' timeout: its two walks took 5.6 s and 6.5 s here (b3f-00, b3f-01), over vitest's 5 s default
     const files = collectProductionFiles(ROOT);
     const exchangeClosure = importClosure(files, [ROUTE_FILE]);
     const releaseClosure = importClosure(files, ["app/api/pcb/release/route.ts"]);
@@ -128,13 +128,13 @@ describe("[B23-B1] POST /api/pcb/provider-exchange: the policy and classificatio
     expect(added).toEqual([
       "app/api/pcb/provider-exchange/route.ts",
       "app/lib/acquisition/admission-control.ts", // [B23-B2, 2026-10-04] the manufacturing-provider meter (OD-165)
-      "app/lib/acquisition/source-registry.ts",
-      "app/lib/manufacturing-providers/exchange-ledger.ts", // [B23-B2, 2026-10-04] the durable exchange record (OD-167)
+      // "app/lib/acquisition/source-registry.ts", [B23-B3, 2026-10-04] reviewed pin move: now in the release route's closure too (it imports the board store from GET /api/pcb-sync's route module, which composes the observation reader over the exchange record and the registry), so no longer added
+      // "app/lib/manufacturing-providers/exchange-ledger.ts", [B23-B2, 2026-10-04] the durable exchange record (OD-167) [B23-B3, 2026-10-04] reviewed pin move: now in the release route's closure too (it imports the board store from GET /api/pcb-sync's route module, which composes the observation reader over the exchange record and the registry), so no longer added
       "app/lib/manufacturing-providers/outbound-package.ts",
       "app/lib/manufacturing-providers/provider-admission.ts",
       "app/lib/manufacturing-providers/provider-egress.ts", // [B23-B2, 2026-10-04] the one sending module
       "app/lib/manufacturing-providers/provider-exchange.ts",
-      "app/lib/manufacturing-providers/provider-registry.ts",
+      // "app/lib/manufacturing-providers/provider-registry.ts", [B23-B3, 2026-10-04] reviewed pin move: now in the release route's closure too (it imports the board store from GET /api/pcb-sync's route module, which composes the observation reader over the exchange record and the registry), so no longer added
       "app/lib/net/outbound-fetch.ts", // [B23-B2, 2026-10-04] the egress boundary, reached only through provider-egress.ts (below)
     ]);
     expect(exchangeClosure.has("app/api/pcb/release/route.ts")).toBe(true);
@@ -142,6 +142,22 @@ describe("[B23-B1] POST /api/pcb/provider-exchange: the policy and classificatio
     expect(importClosure(files, [ROUTE_FILE], new Set(["app/lib/manufacturing-providers/provider-egress.ts"])).has("app/lib/net/outbound-fetch.ts"), "[B23-B2] the boundary only through provider-egress.ts").toBe(false);
     // the added modules hold no connection primitive: no fetch call, no network or model SDK import; [B23-B2, 2026-10-04] the boundary aside, whose one global fetch is the transport census's reviewed site (b23-a-route-vocabulary case 8)
     for (const member of added.filter((file) => file !== "app/lib/net/outbound-fetch.ts")) expect(files.get(member)!, member).not.toMatch(/\bfetch\(|from "(?:node:)?(?:https?|net|tls|http2|dgram)"|from "(?:undici|axios|node-fetch|ws|openai|@anthropic-ai\/sdk)"/);
+    // [B23-B3 review, 2026-10-04] regressions-2: the three entries commented out above are scanned still. The release route's closure now
+    // holds B23 modules through GET /api/pcb-sync's route module (its board-store import, `release/route.ts:45`), which composes the
+    // observation reader; that shared part is pinned exactly, it reaches no sender, and every B23 module of the exchange closure - added
+    // or shared - holds no connection primitive
+    const B23_MODULE = /^app\/lib\/manufacturing-providers\/|^app\/lib\/acquisition\/(?:admission-control|source-registry)\.ts$/;
+    expect([...releaseClosure.keys()].filter((file) => B23_MODULE.test(file)).sort()).toEqual([
+      "app/lib/acquisition/source-registry.ts",
+      "app/lib/manufacturing-providers/exchange-ledger.ts",
+      "app/lib/manufacturing-providers/provider-observation.ts",
+      "app/lib/manufacturing-providers/provider-registry.ts",
+      "app/lib/manufacturing-providers/provider-text-screen.ts",
+    ]);
+    for (const sender of ["app/lib/manufacturing-providers/provider-egress.ts", "app/lib/manufacturing-providers/provider-exchange.ts", "app/lib/net/outbound-fetch.ts"]) expect(releaseClosure.has(sender), sender).toBe(false);
+    const scanned = [...exchangeClosure.keys()].filter((file) => B23_MODULE.test(file) || added.includes(file)).filter((file) => file !== "app/lib/net/outbound-fetch.ts").sort();
+    expect(scanned.filter((file) => !added.includes(file))).toEqual(["app/lib/acquisition/source-registry.ts", "app/lib/manufacturing-providers/exchange-ledger.ts", "app/lib/manufacturing-providers/provider-observation.ts", "app/lib/manufacturing-providers/provider-registry.ts", "app/lib/manufacturing-providers/provider-text-screen.ts"]);
+    for (const member of scanned) expect(files.get(member)!, member).not.toMatch(/\bfetch\(|from "(?:node:)?(?:https?|net|tls|http2|dgram)"|from "(?:undici|axios|node-fetch|ws|openai|@anthropic-ai\/sdk)"/);
   });
 });
 

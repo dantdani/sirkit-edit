@@ -4593,3 +4593,32 @@ no drift. Census and counts untouched; no UI change; nothing sent; live exchange
   - (3) A session restart cut the lead chain after gate H, with every set to that point exit 0. The stale lock was removed and the chain
     was resumed from F2 (`b23/lead-gates-from-f2.sh`).
   - (4) No UI change in B2, so no browser run.
+
+### B23-B3 - observations, staleness, no auto-accept: B23-B steps 6-8 (2026-10-04 local; increment workflow + review fix + lead; this commit)
+
+- B23-B3 (2026-10-04, on `0cd3f59`):
+  - **What landed:** B23-B steps 6-8. An acknowledged answer of B2's record becomes a closed external observation with verdict none. Every provider string, the receipt id included, is screened by a verbatim copy of A2's matcher. It is judged stale or current at every GET /api/pcb-sync read against B1's step-1 checks, the ledger head, the descriptor and the profile. Provider suggestions are closed records, shown and never applied. The summary's current flag now compares revision AND the authoritative digest (D23-17).
+  - **Decisions:** D23-17 and D23-5's staleness half closed; OD-168 and OD-169 applied; OD-185 records the choices.
+  - **Review round:** 16 confirmed findings (13 distinct issues) fixed test-first (`dfm-quote-flow.md` section 28).
+  - **One structural consequence (RECORDED):** the release and qualify routes load the observation modules through their board-store import of GET /api/pcb-sync's route module. They never call them, and exchange-route case 4 scans them.
+  - **Unchanged:** census 166/163/3/0; counts 47/36/9/27; `release-gate.ts`; every B1 and B2 citation.
+  - **UI:** changed; the browser suite was not run here.
+  - **Live:** BLOCKED-LIVE-QUALIFICATION (LB-11).
+- Lead close (2026-10-04):
+  - (1) The check (16 of 16 fixes revert-sensitive) raised two new low items. Case 2 of `b23-b-observation` asserted that an unlisted
+    provider's answer stays an observation, but its title and the file header still said such a provider is refused; both are now
+    corrected in place to what the case asserts (line-neutral). The reader's nine sequential record reads per hydration, four of which
+    can never return a record, are recorded on the page (section 25, INFERRED: a latency cost, nothing wrong).
+  - (2) The review's count: the page and the drafts said "fourteen findings, three reported twice", but the workflow confirmed sixteen
+    ids in thirteen table rows, so thirteen distinct issues. Corrected on the page with a dated note and in these records.
+  - (3) UI: both browser suites under the lock passed, the default config 48 of 48 (4.5 min) and the orchestration config 4 of 4 (2.5
+    min). The 32 evidence PNGs the runs rewrote were restored from HEAD by blob hash, 32 of 32.
+  - (4) Lead gates on the final tree (`b23/lead-gates.sh b3`): every set exit 0. M 744 passed, 2 skipped; A 632 passed, 21 skipped; J
+    977 passed, 4 skipped; B 1,107; C 415; D 460; E 825; F 357; H 1,059; F2 22; G 375; I 479 passed, 9 skipped. tsc 0; eslint 0; all 21
+    generators with no drift.
+  - (5) CI on `0cd3f59` (B2) failed one test: `b23-b-page` case 4 timed out at vitest's 5 s default on the runner (2.2 s here; a
+    whole-tree closure scan). A timing pass over the provider folder found one more CPU-bound case on the default, `b23-b-approval-plan`
+    case 18 (2.2 s). Both got explicit budgets on their own lines in `a02c9fb`, committed before this one. Last green stays `0c78e93`
+    until CI on `a02c9fb` reports.
+  - (6) B2's OD-184 entry carried a double space in each item marker (the lead's wrap helper), now removed. The helper is fixed, and
+    a first B3 records run stopped by its check before writing anything but the discovery, which was restored from HEAD.

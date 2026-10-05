@@ -41,7 +41,7 @@ export interface PcbSyncManufacturingTruth {
   /** [B16-A F12] per-subject verification state from the server; a `corrupt` subject is null with `current` false and its bounded code is listed. */
   integrity: { authority: PcbSyncManufacturingIntegrityState; snapshot: PcbSyncManufacturingIntegrityState; latestRelease: PcbSyncManufacturingIntegrityState; codes: string[] };
   /** [B16-A F14] the server-derived viewer and whether it may authorize a release (informational; the release route enforces). */
-  viewer: { role: string; actorKind: string; canRelease: boolean };
+  viewer: { role: string; actorKind: string; canRelease: boolean }; /** [B23-B3] the provider observations: external, never Sirkit proof; absent unless the server composes them */ observations?: PcbSyncManufacturingObservations;
 }
 
 function object(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
@@ -65,7 +65,7 @@ function manufacturingTruth(value: unknown): value is PcbSyncManufacturingTruth 
   if (authority !== null && !(object(authority) && Number.isSafeInteger(authority.revision) && typeof authority.recordDigest === "string" && typeof authority.boardRevision === "string" && typeof authority.componentAuthorityDigest === "string" && typeof authority.current === "boolean")) return false;
   if (latestRelease !== null && !(object(latestRelease) && typeof latestRelease.releaseId === "string" && typeof latestRelease.filename === "string" && typeof latestRelease.authorityRecordDigest === "string" && Number.isSafeInteger(latestRelease.authorityRevision) && typeof latestRelease.current === "boolean")) return false;
   if (!object(integrity) || !integrityState(integrity.authority) || !integrityState(integrity.snapshot) || !integrityState(integrity.latestRelease) || !Array.isArray(integrity.codes) || !integrity.codes.every((code) => typeof code === "string")) return false;
-  return object(viewer) && typeof viewer.role === "string" && typeof viewer.actorKind === "string" && typeof viewer.canRelease === "boolean";
+  return object(viewer) && typeof viewer.role === "string" && typeof viewer.actorKind === "string" && typeof viewer.canRelease === "boolean" && (value.observations === undefined || manufacturingObservations(value.observations)); // [B23-B3] + the observation block, in its exact shape when present
 }
 /** A thrown fetch is not always a network outage: aborts (page navigation/reload,
  * AbortController) and serialization failures land here too. Keep the real cause. */
@@ -132,4 +132,69 @@ export class PcbSyncClient {
     return { ok: true, value: { load: body.result, manufacturing } };
   }
   async loadBoard(boardId: string, known?: Pick<PcbSyncBoardRecord, "revision" | "digest">): Promise<PcbSyncClientResult<PcbSyncBoardLoadResult>> { const query = new URLSearchParams({ boardId, ...(known ? { knownRevision: known.revision, knownDigest: known.digest } : {}) }); let response: Response; try { response = await this.request(`${this.endpoint}?${query}`, { method: "GET", headers: this.headers() }); } catch (error) { return fetchFailure(error); } let body: unknown; try { body = await response.json(); } catch { return failure("PS_API_INVALID_RESPONSE", 502); } if (!object(body) || body.ok !== true || !boardLoad(body.result)) return failure(object(body) && typeof body.code === "string" ? body.code : "PS_API_INVALID_RESPONSE", response.status); return { ok: true, value: body.result }; }
+}
+
+// -- [B23-B3] the provider observations beside the board read (runbook B23-B steps 6-8; OD-168, OD-169) --
+
+/** [B23-B3] A provider's suggestion: shown, never applied. */
+export interface PcbSyncObservationSuggestion { schema: "sirkit.provider-suggestion.v1"; kind: "substitution" | "design_change"; field: string; text: string | number | boolean | null; withheld: string | null; disposition: "shown_never_applied" }
+/** [B23-B3] One observation as the server judged it at the read: an external observation, never Sirkit proof. [B23-B3 review, 2026-10-04] coverage-3: every closed value typed as the server sends it; the receipt id null when the screen withheld it (security-1); the answer's licence (coverage-6). */
+export interface PcbSyncManufacturingObservation {
+  schema: "sirkit.manufacturing-observation.v1";
+  observationClass: "manufacturing_observation";
+  label: "external observation, not Sirkit proof";
+  sirkitVerdict: "none";
+  observationId: string;
+  purpose: "dfm" | "quote";
+  source: { providerId: string; displayName: string; operationId: string; providerReceiptId: string | null; registryVersion: string; registryDigest: string; transferVersion: string };
+  retrievedAt: string;
+  terms: { kept: "normalized" | "ids_digests_timestamps_only"; providerRetention: string; providerConfidentiality: string; answerLicense: string };
+  freshness: { basis: "provider_stated" | "default_24h"; providerValidUntil: string | null; staleAt: string };
+  digests: { releaseId: string; archiveSha256: string; outboundPackageDigest: string; requestSha256: string; responseSha256: string };
+  capabilityProfile: { profileId: string; version: number };
+  fields: Array<{ name: string; value: string | number | boolean }>;
+  withheld: Array<{ name: string; reason: string }>;
+  suggestions: PcbSyncObservationSuggestion[];
+  stale: boolean;
+  staleReasons: string[];
+}
+export interface PcbSyncManufacturingObservations { state: PcbSyncManufacturingIntegrityState; codes: string[]; items: PcbSyncManufacturingObservation[]; omitted: number }
+
+const OBSERVATION_LIST_MAX = 32;
+const strings = (value: unknown): value is string[] => Array.isArray(value) && value.every((entry) => typeof entry === "string");
+const scalar = (value: unknown): boolean => typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value));
+/** [B23-B3] The observation block in exactly the shape the server sends, at most 32 observations, each labelled, verdict-free and judged. [B23-B3 review, 2026-10-04] coverage-3, tests-2: exactly - every object's own keys, the fixed label, the closed values, a stale flag equal to its reasons, the server's bound (`OBSERVATION_LIST_MAX`, round-tripped by `b23-b-observation` case 9); was: the label's type only, and unknown keys admitted. */
+function manufacturingObservations(value: unknown): value is PcbSyncManufacturingObservations {
+  if (!keysExactly(value, ["state", "codes", "items", "omitted"]) || !integrityState(value.state) || !strings(value.codes) || !Number.isSafeInteger(value.omitted) || (value.omitted as number) < 0 || !Array.isArray(value.items) || value.items.length > OBSERVATION_LIST_MAX) return false;
+  return value.items.every(observationItem);
+}
+
+// -- [B23-B3 review, 2026-10-04] coverage-3, tests-2: the exact shape of one observation --
+
+const OBSERVATION_LABEL = "external observation, not Sirkit proof";
+const ITEM_KEYS = ["schema", "observationClass", "label", "sirkitVerdict", "observationId", "purpose", "source", "retrievedAt", "terms", "freshness", "digests", "capabilityProfile", "fields", "withheld", "suggestions", "stale", "staleReasons"] as const;
+const SOURCE_KEYS = ["providerId", "displayName", "operationId", "providerReceiptId", "registryVersion", "registryDigest", "transferVersion"] as const;
+const DIGEST_KEYS = ["releaseId", "archiveSha256", "outboundPackageDigest", "requestSha256", "responseSha256"] as const;
+const SUGGESTION_KEYS = ["schema", "kind", "field", "text", "withheld", "disposition"] as const;
+const text = (value: unknown): value is string => typeof value === "string";
+/** An object whose own keys are exactly `keys` (no key missing, none added). */
+function keysExactly(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  if (!object(value)) return false;
+  const own = Object.keys(value);
+  return own.length === keys.length && keys.every((key) => own.includes(key));
+}
+function observationItem(item: unknown): boolean {
+  if (!keysExactly(item, ITEM_KEYS)) return false;
+  const { source, terms, freshness, digests, capabilityProfile, fields, withheld, suggestions, staleReasons } = item;
+  return item.schema === "sirkit.manufacturing-observation.v1" && item.observationClass === "manufacturing_observation" && item.label === OBSERVATION_LABEL && item.sirkitVerdict === "none"
+    && text(item.observationId) && (item.purpose === "dfm" || item.purpose === "quote") && text(item.retrievedAt)
+    && keysExactly(source, SOURCE_KEYS) && SOURCE_KEYS.every((key) => text(source[key]) || (key === "providerReceiptId" && source[key] === null))
+    && keysExactly(terms, ["kept", "providerRetention", "providerConfidentiality", "answerLicense"]) && (terms.kept === "normalized" || terms.kept === "ids_digests_timestamps_only") && text(terms.providerRetention) && text(terms.providerConfidentiality) && text(terms.answerLicense)
+    && keysExactly(freshness, ["basis", "providerValidUntil", "staleAt"]) && (freshness.basis === "provider_stated" || freshness.basis === "default_24h") && (freshness.providerValidUntil === null || text(freshness.providerValidUntil)) && text(freshness.staleAt)
+    && keysExactly(digests, DIGEST_KEYS) && DIGEST_KEYS.every((key) => text(digests[key]))
+    && keysExactly(capabilityProfile, ["profileId", "version"]) && text(capabilityProfile.profileId) && Number.isSafeInteger(capabilityProfile.version)
+    && Array.isArray(fields) && fields.every((field) => keysExactly(field, ["name", "value"]) && text(field.name) && scalar(field.value))
+    && Array.isArray(withheld) && withheld.every((entry) => keysExactly(entry, ["name", "reason"]) && text(entry.name) && text(entry.reason))
+    && Array.isArray(suggestions) && suggestions.every((suggestion) => keysExactly(suggestion, SUGGESTION_KEYS) && suggestion.schema === "sirkit.provider-suggestion.v1" && suggestion.disposition === "shown_never_applied" && (suggestion.kind === "substitution" || suggestion.kind === "design_change") && text(suggestion.field) && (suggestion.text === null || scalar(suggestion.text)) && (suggestion.withheld === null || text(suggestion.withheld)))
+    && typeof item.stale === "boolean" && strings(staleReasons) && item.stale === (staleReasons.length > 0);
 }

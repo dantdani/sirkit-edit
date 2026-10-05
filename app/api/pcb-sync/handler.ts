@@ -1,4 +1,4 @@
-import { createEmptyBoard } from "@/app/lib/pcb/types";
+import { createEmptyBoard, type PcbBoard } from "@/app/lib/pcb/types"; // [B23-B3] + PcbBoard: the loaded board travels to the summary (D23-17)
 import { makeBoardRecord } from "@/app/lib/pcb-sync/board";
 import { PcbSyncSnapshotRevisionConflict } from "@/app/lib/pcb-sync/durable";
 import type { DurableBoardLineageStore } from "@/app/lib/pcb-sync/board-lineage";
@@ -21,7 +21,7 @@ import {
   type PcbSyncSchematicNet,
   type PcbSyncSnapshotPublisher,
 } from "@/app/lib/pcb-sync/types";
-import { object, pcbSyncScope, scopedPcbSyncJson } from "./_scope";
+import { object, pcbSyncScope, scopedPcbSyncJson } from "./_scope"; import type { ManufacturingObservationView } from "@/app/lib/manufacturing-providers/provider-observation"; // [B23-B3] appended in place (types only)
 
 const MAX_COMPONENTS = 4_096, MAX_NETS = 32_768, MAX_PINS = 131_072, MAX_LIST = 4_096;
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:/@+_-]{0,255}$/;
@@ -195,9 +195,9 @@ export interface PcbSyncManufacturingSummary {
   /** [B16-A F12] per-subject verification state; `codes` lists the bounded error codes observed (never a message or stack). A `corrupt` subject is reported as null above with `current` false. */
   integrity: { authority: PcbSyncManufacturingIntegrityState; snapshot: PcbSyncManufacturingIntegrityState; latestRelease: PcbSyncManufacturingIntegrityState; codes: string[] };
   /** [B16-A F14] the trusted viewer and whether it may authorize a release (human project administrator only). */
-  viewer: { role: string; actorKind: string; canRelease: boolean };
+  viewer: { role: string; actorKind: string; canRelease: boolean }; /** [B23-B3] the provider observations (external, never Sirkit proof), present only when the route composes their reader */ observations?: PcbSyncManufacturingObservations;
 }
-export type PcbSyncManufacturingSummaryReader = (scope: { tenantId: string; projectId: string; branchId: string; boardId: string }, current: { revision: string; digest: string } | null, viewer?: PcbSyncManufacturingViewer) => Promise<PcbSyncManufacturingSummary>;
+export type PcbSyncManufacturingSummaryReader = (scope: { tenantId: string; projectId: string; branchId: string; boardId: string }, current: { revision: string; digest: string; board: PcbBoard; superseded?: boolean } | null, viewer?: PcbSyncManufacturingViewer) => Promise<PcbSyncManufacturingSummary>; // [B23-B3] + board (its authoritative digest is recomputed, D23-17) and its lineage state
 
 export function createPcbSyncBoardGetCore(repository: PcbSyncRepository, featureState: () => PcbSyncFeatureState, manufacturing?: PcbSyncManufacturingSummaryReader, lineage?: DurableBoardLineageStore) {
   // [B16-A F14] `viewer` is the route's trusted actor projection (role + kind); it only ever reaches the summary reader.
@@ -225,7 +225,7 @@ export function createPcbSyncBoardGetCore(repository: PcbSyncRepository, feature
       if (rebuilt.revision !== record.revision || rebuilt.digest !== record.digest) fail("PS_BOARD_RECORD_DIGEST_MISMATCH");
       const conditional = (knownRevision !== null || knownDigest !== null) && (knownRevision === null || knownRevision === record.revision) && (knownDigest === null || knownDigest === record.digest);
       const result: PcbSyncBoardLoadResult = conditional ? { ...common, status: "not_modified" } : { ...common, status: "found", record };
-      const summary = includeManufacturing ? await manufacturing!(boardScope, { revision: record.revision, digest: record.digest }, viewer) : undefined;
+      const summary = includeManufacturing ? await manufacturing!(boardScope, { revision: record.revision, digest: record.digest, board: record.board, superseded: lineageSummary?.state === "superseded" }, viewer) : undefined; // [B23-B3] the loaded board and its lineage state reach the summary
       return Response.json({ ok: true, operation: "load_board", boardChanged: false, result, ...(summary ? { manufacturing: summary } : {}) }, { headers: { "Cache-Control": "no-store", "X-Sirkit-Pcb-Sync-State": state } });
     } catch (error) { return errorResponse(error); }
   };
@@ -246,3 +246,7 @@ export function createPcbSyncBoardGetHandler(repository: PcbSyncRepository, feat
     } catch (error) { return errorResponse(error); }
   };
 }
+
+/** [B23-B3] The provider observations beside the board read (runbook B23-B steps 6-8; OD-168, OD-169): each an external observation,
+ *  never Sirkit proof, judged stale or current at this read; `state` and `codes` follow the summary's one read policy. */
+export interface PcbSyncManufacturingObservations { state: PcbSyncManufacturingIntegrityState; codes: string[]; items: ManufacturingObservationView[]; omitted: number }

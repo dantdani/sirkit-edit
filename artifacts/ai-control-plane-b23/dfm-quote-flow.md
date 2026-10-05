@@ -9,7 +9,7 @@ receipt, artifact digest, capability/profile version and timestamp." Closes D23-
 D23-4's order-contract half stays B23-C's (OD-172) and D23-5's staleness half B23-B3's (OD-168). Owner decisions applied: OD-165 and
 OD-167; B2's own choices beyond its task text are OD-184 (section 12). **Verdict: steps 4 and 5 are met offline, against an in-process
 fake provider behind the real egress boundary. A live exchange stays BLOCKED-LIVE-QUALIFICATION (LB-11): no provider is admitted, no
-transfer descriptor exists and Sirkit holds no provider account (OD-160).** Steps 6-8 (observations, staleness, no auto-accept) are B23-B3's.
+transfer descriptor exists and Sirkit holds no provider account (OD-160).** Steps 6-8 (observations, staleness, no auto-accept) are B23-B3's. [B23-B3, 2026-10-04] Since B23-B3 steps 6-8 are met offline too: section 17 holds the verdict for all eight steps, sections 18-20 the three steps.
 
 ## 0. What B23-B2 is
 
@@ -184,7 +184,7 @@ read is declared; the state; `preparedAt`, `sentAt`, `settledAt`; whether the se
 status, media type, size and SHA-256; the provider's receipt id with `retrievedAt`; at most 16 normalized fields; and a closed failure
 code. **It keeps no raw provider body and no archive or file byte**: B1 re-derives the bytes from the ledgered release while its authority
 is head, its board current and its rule-profile evidence unexpired and within `RELEASE_PROFILE_EVIDENCE_MAX_AGE_MS` (discovery 9.5 item
-18); otherwise the exchange is stale, which is B23-B3's to show (OD-168). A provider whose terms forbid storage keeps no provider-chosen
+18); otherwise the exchange is stale, which is B23-B3's to show (OD-168). [B23-B3, 2026-10-04] Shown since B23-B3: an observation of an exchange whose authority is no longer head, whose board is not current or whose rule-profile evidence is out of window is stale at once (section 19); an ids-only answer is not stale for its retention. [B23-B3 review, 2026-10-04] coverage-7: this note stood after B2's next sentence and split it, so it seemed to call an ids-only answer stale; it now names its antecedent. A provider whose terms forbid storage keeps no provider-chosen
 text: no normalized field and an empty media type (`:459`); what it keeps is Sirkit's own classification (state, failure code) and the
 answer's protocol status, size and SHA-256 (OD-184 (k)). CONFIRMED (ledger cases 1, 7; PGlite case 3 over what PostgreSQL holds)
 
@@ -277,7 +277,7 @@ skipped). CONFIRMED
 and the route that composes it; the exchange service only by the route; the agent loop, the gateway, the chat route, the orchestration
 runtime, the MCP route, its read runtime and dispatcher, and every production module under `app/lib/agent/`, `app/lib/mcp/`,
 `app/api/chat/` and `app/api/mcp/` reach none of the three; the route reaches the egress boundary only through `provider-egress.ts`
-(with it bridged, nowhere); `provider-egress.ts` imports exactly six reviewed modules. Case 6 shows each rule bite. CONFIRMED
+(with it bridged, nowhere); `provider-egress.ts` imports exactly six reviewed modules. Case 6 shows each rule bite. CONFIRMED [B23-B3, 2026-10-04] Since B23-B3 the record is also imported by GET /api/pcb-sync's route, which composes it for the observation reader's read (`load` only; `b23-b-egress-import-gate` case 1 moved in place, section 23).
 
 The route's closure therefore now reaches the boundary. Its classification row stays `outboundEgress: files`, declared by the transfer
 row (OD-182 (a)), and its closure-derived census value moved, by review, from `none` to `observation-query` (`b23-a-route-vocabulary` case
@@ -632,3 +632,439 @@ the whole tree's digest equal before and after (`b4c304ee...`). Each was caught 
 | every generator (21; `b2low-11`) | each exit 0; no drift |
 | the readers again on the final tree, with `b11-5-capture-exactness` (B11.5 case 12: no test writes under the tree) (`b2low-12`) | 29 files; 403 / 403; exit 0 (before: 28 files, 377) |
 | the page suites over this page after its last edit: `b23-b-dfm-quote-flow-page`, `b23-b-page`, both closeout suites, `b21-f-page` (`b2low-13`) | 5 files; 49 / 49; exit 0 |
+
+## 17. B23-B3 - steps 6 to 8, and the verdict for all eight steps
+
+[B23-B3, 2026-10-04] Tree: `chapter/b23-external-manufacturing`, base `0cd3f59` (B23-B2), working tree of 2026-10-04. Runbook B23-B steps 6-8
+(`:980-982`): "Normalize DFM/quote results as external observations, not Sirkit proof.", "Detect stale quotes and changed release
+inputs." and "Never auto-accept substitutions or design changes suggested by a provider."; global `:140`: "Every external observation
+must retain source identity, retrieval time, licensing/retention policy, freshness and evidence hashes." B23-B3 closes D23-17 and D23-5's
+staleness half. Owner decisions applied: OD-168 and OD-169; B3's own choices beyond its task text are OD-185 (section 24). **Verdict: steps
+6-8 are met offline - an acknowledged answer of B2's record is an external observation, judged stale or current at every read, and a
+provider's suggestion is shown and never applied. A live answer stays BLOCKED-LIVE-QUALIFICATION (LB-11): no provider is admitted, no
+reviewed transfer descriptor exists and Sirkit holds no provider account (OD-160), so no live observation can exist.**
+
+The eight steps of B23-B (runbook `:975-982`), each as the tree holds it:
+
+| step | the runbook's words | what holds it | verdict | live |
+|---|---|---|---|---|
+| 1 | "Revalidate authority immediately before upload." | `revalidateReleaseAuthority` (`release/route.ts:145`), re-run at preview and again at commit (B23-B1; `outbound-disclosure.md` section 2) | met: CONFIRMED (`b23-b-revalidation`) | nothing leaves in B23 |
+| 2 | "Present exactly which files and metadata will leave Sirkit." | `buildOutboundPackage`, the sealed plan and the provider panel (B23-B1; `outbound-disclosure.md` sections 1, 3, 6) | met: CONFIRMED (`b23-b-outbound-package`, `b23-b-approval-plan`, `b23-b-provider-panel`) | nothing leaves in B23 |
+| 3 | "Require explicit user approval for the named provider and purpose." | preview and commit: plan id, plan digest, idempotency key and the opt-in header; a human project administrator only (B23-B1; `outbound-disclosure.md` section 4) | met: CONFIRMED (`b23-b-approval-plan`, `b23-b-exchange-route`) | nothing leaves in B23 |
+| 4 | "Upload with bounded streaming, timeouts and idempotency." | `outboundUpload` and `provider-egress.ts` (B23-B2; sections 1-3) | met offline against the fake: CONFIRMED (`b23-b-bounded-upload`, `b23-b-provider-meter`) | BLOCKED-LIVE-QUALIFICATION (LB-11) |
+| 5 | "Store provider receipt, artifact digest, capability/profile version and timestamp." | `mfg.provider-exchange.v1` (B23-B2; sections 4-6) | met offline: CONFIRMED (`b23-b-exchange-ledger`, `b23-b-exchange-ledger-pglite`) | BLOCKED-LIVE-QUALIFICATION (LB-11) |
+| 6 | "Normalize DFM/quote results as external observations, not Sirkit proof." | `provider-observation.ts` and `provider-text-screen.ts` (B23-B3; section 18) | met offline: CONFIRMED (`b23-b-observation`, 9 cases) | BLOCKED-LIVE-QUALIFICATION (LB-11) |
+| 7 | "Detect stale quotes and changed release inputs." | `evaluateObservationStaleness`; the summary's current flag compares the board revision AND its authoritative digest (D23-17) (B23-B3; section 19) | met offline: CONFIRMED (`b23-b-stale-quote`, 14 cases; `b16-a-manufacturing-summary`, 2 new cases) | no live answer exists to go stale |
+| 8 | "Never auto-accept substitutions or design changes suggested by a provider." | the closed `providerSuggestion` and the import gate (B23-B3; section 20) | met: CONFIRMED (`b23-b-no-auto-accept`, 9 cases) | no live answer exists |
+
+End to end, `b23-b-observation` case 7 runs the exchange service's preview and commit (a forged admitting answer and the fake's transfer
+descriptor, the real egress boundary, B2's record) and reads the acknowledged answer back through GET /api/pcb-sync's core as an
+observation; steps 1 and 2 are stubbed ports there (B1's own suites run them for real). CONFIRMED
+
+## 18. Step 6: the observation, never Sirkit proof (OD-185)
+
+**The source is B2's record, never a body.** `normalizeManufacturingObservation` (`provider-observation.ts:151`) reads one attempt of
+`mfg.provider-exchange.v1` as `load` returns it (every record re-verified on load, B2's section 4); no raw provider body exists to read.
+Only an `acknowledged` attempt with its receipt, request and response is an observation: `prepared`, `sent`, `rejected`,
+`UNKNOWN_PENDING_RECONCILIATION` and `not_sent` stay exchange states (B2's envelope answers them), and an unknown provider or an
+unreadable `retrievedAt` is refused. CONFIRMED (`b23-b-observation` cases 1, 2) [B23-B3 review, 2026-10-04] coverage-2: an unknown provider is no longer refused - a row a reviewed registry revision withdrew still names its recorded answers, listed stale (`descriptor_moved`) under `OBSERVATION_UNLISTED_PROVIDER_NAME` with its terms UNKNOWN (`b23-b-stale-quote` case 12; case 2 moved in place); only an unreadable `retrievedAt` is refused.
+
+**The record** `sirkit.manufacturing-observation.v1`, class `manufacturing_observation`, closed and deep-frozen, keeps what runbook `:140`
+asks for:
+
+| `:140` asks for | the observation keeps |
+|---|---|
+| source identity | `source`: provider id and name, operation, the provider's receipt id, the registry version and row digest and the transfer descriptor's version the exchange ran under [B23-B3 review, 2026-10-04] security-1: the receipt id is null when the screen withheld it |
+| retrieval time | `retrievedAt` (the receipt's) |
+| licensing/retention policy | `terms`: what Sirkit keeps of the answer (`kept`: `normalized` or `ids_digests_timestamps_only`, the record's retention) and the provider's own terms for what Sirkit sends (`providerRetention`, `providerConfidentiality`, the registry row's, `UNKNOWN` with its reason where nobody read them) [B23-B3 review, 2026-10-04] coverage-6: that was only half of `:140`: the licence under which Sirkit may keep, show or pass on the provider's ANSWER is the terms' `answerLicense`, `UNKNOWN` with its reason (`OBSERVATION_ANSWER_LICENSE`, `provider-observation.ts:69`) while nobody has read any provider's terms for its answers; the registry records only `outboundTerms`, and it is not changed (OD-185 (o)) |
+| freshness | `freshness`: `provider_stated` (`validUntil`) or `default_24h`, and `staleAt` |
+| evidence hashes | `digests`: the release id, the archive SHA-256, the outbound package digest, the request's and the response's SHA-256; and `capabilityProfile` |
+
+plus `observationId`, `purpose`, the bounded `fields`, the names of the `withheld` fields with their reasons, the `suggestions`
+(section 20), the fixed `label` "external observation, not Sirkit proof" (`:38`) and `sirkitVerdict: "none"` (`:195`). CONFIRMED (case 1)
+
+**Provider text is untrusted.** Every kept string passes `screenProviderText` (`provider-text-screen.ts:305`) before it is shown, in
+order: at most 256 characters (the record's own bound, `EXCHANGE_LEDGER_BOUNDS.maxNormalizedText`, pinned equal); printable ASCII and
+B20-C3's closed typographic set only (pinned equal to `DESCRIPTOR_TEXT_ALLOWED_EXTRA`) - so a control character and a lone UTF-16
+surrogate, which B2 already refuses in what its record keeps and drops at the egress, are refused here too, and so is every format,
+bidirectional, look-alike or other-script spelling; no secret shape (`app/lib/agent/redaction.ts`, `:19`); and B20's directive matcher.
+The strings one observation shows are then read together, across their joins, as B20-A4 reads a result's blocks (`provider-observation.ts:174`):
+a directive split across two fields withholds every string field. A string that fails is withheld WHOLE, by its field name and the rule,
+never stripped; numbers and booleans are kept. CONFIRMED (case 3: eight hostile fields among eleven, the joined case; [B23-B3 review, 2026-10-04] coverage-7: the first tree called all eleven hostile, but note, price and accepted are the benign controls) [B23-B3 review, 2026-10-04] security-1: the first tree screened the fields only. The provider's receipt id - the one provider-chosen string outside them, read from its answer's id field and admitted by B2's charset `[A-Za-z0-9._:-]` - was shown unscreened to every member. It is now screened like a field (`provider-observation.ts:163`) and read first in the joined reading, as the panel shows it before the fields (`:174`); when it fails, `source.providerReceiptId` is null and `withheld` names `source.providerReceiptId` (`OBSERVATION_RECEIPT_FIELD`; no kept field's name holds a '.') with the rule; the observation id still hashes it, so identity stays whole. CONFIRMED (case 8: a `SYSTEM:` marker, a dotted directive and a key-shaped id are each withheld and shown nowhere, in the GET summary and the list included; a directive split between the receipt id and a field withholds both; a benign id is shown)
+
+**The matcher is B20's, copied verbatim.** `foreign-tools.ts` imports the MCP transport (`foreign-tools.ts:59`), which imports the egress
+boundary (`http-transport.ts:47`); importing it would make GET /api/pcb-sync - which sends nothing - derive `observation-query` in the
+route census (`b23-a-route-vocabulary` case 4, `QUERY_PATHS`). B20-C3's first-party gate states the same reason for not importing it
+(`descriptor-text.ts:25`). So `provider-text-screen.ts` holds a byte-for-byte copy of A2's matcher (the phrase list `:49`, the markers, the
+streams, the skeleton, `providerTextReadsAsDirective` `:244`, `providerJoinedTextReadsAsDirective` `:256`), renamed only where a name says
+MCP, and `b23-b-observation` case 4 pins it: all 32 copied declarations equal A2's printed without comments under the reviewed renames,
+the phrase list equals `MCP_DIRECTIVE_PHRASES`, and a corpus (the phrases spelled four ways, benign provider prose, the markers, non-ASCII
+disguises and 1,500 seeded mixes) is judged exactly as A2 judges it, alone and as 400 joined pairs; the screen withholds every corpus
+string A2 reads as an instruction. A one-letter change to the copied phrase list fails it. CONFIRMED
+
+**No verdict, no consumer.** A provider's "accepted" or "pass" is a field like any other: `sirkitVerdict` stays `none`, and the summary's
+authority, release, viewer, snapshot and integrity are identical with and without the observation (case 5). The workflow machine and its
+hook never name an observation (case 5). The release route, the release gate, the authority store, the release ledger, the qualify route,
+the workflow machine and hook, CD-12's readiness, the full-flow verdict, the action registry, the exchange service, admission and the
+provider exchange route reach the observation module and its screen only through GET /api/pcb-sync's route module and name none of
+their exports; the release route reaches it at all only because it imports its board store from that module (`release/route.ts:45`).
+The route hands the reader only to `createManufacturingSummaryReader` as its `observations` option (`route.ts:33`). CONFIRMED (case 6) [B23-B3 review, 2026-10-04] tests-4: each consumer also names none of the observation types (`ManufacturingObservation*`, `PcbSyncManufacturingObservation(s)`, `PcbSyncObservationSuggestion`) nor `.observations` or `.suggestions` - a type-only import is erased from the closure, so the name is the check (case 6's pattern widened in place); production names those types only in the five reviewed files (`b23-b-no-auto-accept` case 8).
+
+## 19. Step 7: stale quotes and changed release inputs (OD-168, D23-17)
+
+**D23-17's counterexample, executed.** The board read's `current.digest` is a pcbSyncDigest of the revision payload (`pcb-sync/board.ts:8`),
+which sorts the board's arrays; the authority's `boardDigest` is `authoritativeBoardDigest`, a SHA-256 of the board's stable JSON
+(`release-gate.ts:133`), which the release route compares (`release/route.ts:178`). Two boards whose nets are listed in another order have
+ONE revision id and ONE pcbSyncDigest but TWO authoritative digests. On `0cd3f59` the summary called the authority and its release current
+for both (`b3-01-red`: `b16-a-manufacturing-summary` "expected { authority: true, release: true } to deeply equal { authority: false,
+release: false }"), so discovery section 9.5's "same-revision, different-JSON board head" is now CONFIRMED, not INFERRED. The fix, in
+place: `authorityCurrent` compares the revision AND the authoritative digest recomputed from the loaded board (`manufacturing-summary.ts:83`),
+never `current.digest`; the stale header line carries a dated note (`:8`); the handler hands the loaded board and its lineage state to the
+reader (`handler.ts:200`, `:228`). CONFIRMED (`b16-a-manufacturing-summary`'s two new cases; `b23-b-stale-quote` case 1) [B23-B3 review, 2026-10-04] regressions-1: the first tree imported `authoritativeBoardDigest` from `release-gate.ts`, which put the release generator (JSZip, the native compiler, the verifiers; about a hundred modules) into every GET /api/pcb-sync's closure for one digest. The summary now declares the same formula over the same `native/stable` helpers (`manufacturing-summary.ts:152`), pinned equal as printed code, and the route's runtime closure holds neither `release-gate.ts` nor a JSZip importer (`b23-b-stale-quote` case 11).
+
+**When an observation is stale** (`evaluateObservationStaleness`, `provider-observation.ts:212`), every reason reported in a fixed order:
+
+| reason | stale when | compared with | case |
+|---|---|---|---|
+| `expired` | `now` reaches the provider's `validUntil` (an ISO instant), else `retrievedAt` + 24 hours (`:41`); a validity at or before `retrievedAt` is stale at once; one that is no instant is ignored | the read's clock | 2, 3 |
+| `authority_unavailable`, `authority_moved` | no authority head; the ledger head's authority is not the head authority (a re-qualification) | the authority head's revision and record digest | 4, 9 |
+| `release_unavailable`, `ledger_head_moved` | no ledgered release; the ledger head is another release | the release ledger's head: release id and archive SHA-256 | 4, 5, 9 |
+| `board_unavailable`, `board_superseded` | no board at the read; the board is superseded in its lineage | the board read and its lineage | 9 |
+| `board_revision_moved`, `board_digest_moved` | the loaded board's revision, OR its authoritative digest recomputed from it (`:227`), is not the authority's and the ledger head's | `authoritativeBoardDigest(board)`, never `current.digest` | 6 |
+| `descriptor_moved` | the registry version, the row's digest, or the reviewed transfer descriptor's version is not the one the exchange ran under; [B23-B3 review, 2026-10-04] or the row is gone from the registry (coverage-2) | `PROVIDER_REGISTRY_VERSION`, the row's `durableWorkflowDigest`, `REVIEWED_TRANSFER_VERSIONS` | 7, 12 |
+| `profile_moved` | the authority's rule profile id or version is not the observation's capability profile | the authority head's profile | 8 |
+| `profile_evidence_invalid`, `profile_evidence_expired`, `profile_evidence_too_old` | the profile is not v2 or its evidence is missing or out of window; the evidence expired (2027-09-09 for `jlcpcb-2l`); it is older than 366 days (`:43`, pinned equal to `RELEASE_PROFILE_EVIDENCE_MAX_AGE_MS`, `release/route.ts:51`) | `ruleProfileEvidenceStatus` at the read | 8, 14 |
+
+These are B1's step-1 checks (`revalidateReleaseAuthority`) as of the read - the authority head, the current board of its lineage, the
+board revision AND digest, the v2 profile, its expiry and its age - plus the release ledger head, the descriptor and the capability
+profile. D23-5's re-derivation condition (the authority head, the board current, the rule-profile evidence unexpired and within
+`RELEASE_PROFILE_EVIDENCE_MAX_AGE_MS`) is therefore exactly when an observation of the exchange can be current. The outbound package digest
+is not recomputed on a read: the regeneration is the release gate's whole pipeline. It is compared through its inputs - the ledger
+head's release id and archive digest and the capability profile - which B1 pins to give one stable digest (INFERRED for a later change
+to the package builder itself). CONFIRMED (cases 2-9)
+
+**No observation can be current in production today.** `REVIEWED_TRANSFER_VERSIONS` (`provider-observation.ts:59`) mirrors
+`provider-egress.ts`'s `PROVIDER_TRANSFER_DESCRIPTORS` (`:69`), which is empty: the mirror is pinned equal (case 7), and any observation's
+transfer descriptor is not a reviewed one, so it is `descriptor_moved`. The mirror exists because `provider-egress.ts` reaches the egress
+boundary and GET /api/pcb-sync must not. CONFIRMED
+
+**Visible, labelled, never current.** A stale observation stays in the list with `stale: true` and its reasons; at most 32 are listed,
+newest first, and the rest counted (`OBSERVATION_LIST_MAX`, `:47`). A corrupt exchange record makes the block `corrupt` with its bounded code
+(`PX_LEDGER_DIGEST_MISMATCH`), nothing of it shown and nothing thrown, under the summary's one read policy (B16-A F12); the authority,
+release, snapshot and integrity verdicts are unaffected (case 10). CONFIRMED [B23-B3 review, 2026-10-04] coverage-2, tests-6: an answer whose provider row was withdrawn, or whose operation was re-tiered, stays listed too: the reader loads every registry row's record, any tier, and every id of the append-only `OBSERVATION_WITHDRAWN_PROVIDER_IDS` (`:65`, none in B23; `:77`), pinned as a list that never shrinks (case 12). tests-7: every provider's answers are listed, newest first across providers (case 13). tests-9: the evidence-age bound is pinned on both sides - exactly 366 days is not too old, as the release route's `>` (`release/route.ts:189`), 1 ms later is - and another profile id is `profile_moved` (case 14). CONFIRMED
+
+## 20. Step 8: shown, never applied (OD-169)
+
+**The suggestion record.** A kept field whose name says it suggests, substitutes, recommends or replaces (`provider-observation.ts:135`,
+OD-185 (g)) becomes a closed `sirkit.provider-suggestion.v1`: its kind (`substitution` when the name says substitute, alternative or
+replace, else `design_change`), the field, its text screened like every provider string (null and the reason when withheld) and the one
+disposition `shown_never_applied` (`:186`). CONFIRMED (`b23-b-no-auto-accept` case 1: five suggestions, one withheld as a directive)
+
+**Nothing is applied.** Reading observations through GET /api/pcb-sync commits nothing: no durable write, no outbox event, and the
+authority, release ledger and exchange record heads stay where they were. CONFIRMED (case 2)
+
+**The import gate.** `provider-observation.ts` imports exactly six reviewed modules (the digest, the release manifest's schema, the rule
+profile's evidence status, the code-point compare, the registry and the screen; B2's record only as types), and the screen one (the
+redaction authority). Their whole runtime closure holds no command, executor or mutation module - no listed writer, sender or dispatcher,
+no module whose name says command, executor, dispatch, mutation or apply, and no module whose code commits, fetches or reaches a process
+or network module - and never the exchange record, the exchange service, the send, the egress boundary or `foreign-tools.ts`. CONFIRMED
+(case 3)
+
+**No code path turns a suggestion into a command.** The suggestion vocabulary is named in production only by the observation module, the
+client's types and validator, and the display list; the list holds no control (no button, form, input, select or link, no event-handler
+attribute) and no runtime import; only GET /api/pcb-sync's route imports the observation module, and only the observation module the
+screen; the workflow panel hands the list the server's observations and nothing else. Each rule bites on an injected violation: an
+executor import, a committing module in the closure, a command module importing the observation module, a button in the list. A person who
+wants a suggested change makes it in the editor, which yields a new board, a new release and a stale observation (OD-169). CONFIRMED
+(cases 4, 6) [B23-B3 review, 2026-10-04] coverage-4: the list now imports `react` (`useState`, `useEffect`) for its expiry clock, its one runtime import, pinned (case 4 moved in place); it holds no control still. tests-4: no control of any component sits inside a JSX expression that reads `.observations` or `.suggestions` (case 8, which bites on a button mapping the suggestions in the workflow panel).
+
+## 21. On GET /api/pcb-sync, and in the panel
+
+**The summary block.** `GET /api/pcb-sync?boardId=...&include=manufacturing` carries `observations: { state, codes, items, omitted }`
+(`handler.ts:252`) beside the authority, the release, the snapshot, the integrity and the viewer - read-only, scoped to the request's
+trusted project and board, with no provider call. The route composes the reader over B2's record through `load` only (`route.ts:33`). A board
+with no exchange record has no block at all, so the summary keeps the shape it had before B23-B3 for every project today (OD-185 (h);
+`manufacturing-summary.ts:142`). The client accepts the block only in its exact shape (`client.ts:167`). CONFIRMED (`b23-b-stale-quote`
+case 10; the B16 acceptance and recovery pipelines green with their exact summaries) [B23-B3 review, 2026-10-04] coverage-3: that CONFIRMED was not earned: no test ran the validator, which checked the label's type only and admitted unknown keys and missing shown fields. The validator now takes each object's exact own keys, the fixed label, the closed purpose, retention and freshness basis, a stale flag equal to its reasons and the server's bound (`client.ts:167`, `:186`). CONFIRMED by `b23-b-observation` case 9: an answer round-trips through `PcbSyncClient.loadBoardWithManufacturing`, fifteen forged blocks are each `PS_API_INVALID_RESPONSE`, and exactly `OBSERVATION_LIST_MAX` observations pass, so the client's bound is pinned to the server's by behaviour (the client imports no server module).
+
+**The panel.** `ProviderObservationList` (`ProviderObservationList.tsx:33`) renders in the manufacturing workflow panel
+(`ManufacturingWorkflowPanel.tsx:125`), whatever the authority's state - the provider panel shows only for a current release, and a stale
+observation must stay visible. [B23-B3 review, 2026-10-04] coverage-5: whatever the authority's and the release's state while the hydration is loaded; a hydration that failed integrity verification (a corrupt authority, snapshot or release, B16-A F12) shows none of the durable truth, the observations included - fail closed, since their reasons would read "no qualification authority" for an authority that exists and did not verify (the panel's comment corrected in place, `ManufacturingWorkflowPanel.tsx:124`; OD-185 (l) narrowed). tests-1: CONFIRMED by rendering the workflow panel (`b23-b-no-auto-accept` case 7: a stale authority and release list the observations and hide the provider panel; current ones show both; a failed hydration shows none). [B23-B3 review, 2026-10-04] coverage-4: the list re-judges time expiry by the clock - an observation the server judged current reads "stale: past its validity" once its `staleAt` passes (`ProviderObservationList.tsx:45`), and a timer re-renders the list at the next `staleAt` (`nextExpiryDelayMs`, `:77`), so a panel left open never keeps an expired quote current (case 9); the other reasons stay the server's, judged at the read. Each observation reads "external observation, not Sirkit proof", "stale:" with its reasons in words or
+"current until" its `staleAt`, the provider's fields as the provider's words, the withheld fields by name, and each suggestion as "shown,
+never applied". It holds no control: the B17-A control inventory and its generator are unchanged. The import is the first statement on
+line 19, so B1's cited text on that line stays whole (`outbound-disclosure.md` C20). **This is a UI change: the browser suite was not run
+here; the lead runs it.** CONFIRMED (`b23-b-no-auto-accept` case 5, rendered to static markup), RECORDED (browser)
+
+**Who sees it.** GET /api/pcb-sync is readable by every member of the project (its policy row), automation included; the provider text
+it shows has passed the screen. RECORDED [B23-B3 review, 2026-10-04] security-1: the receipt id had not, until this round; it has now (section 18). regressions-2: GET /api/pcb-sync's route module composes the reader, and the release and qualify routes import their board store from that module (`release/route.ts:45`, `qualify/route.ts:73`), so their runtime closures hold the exchange record, the observation module, its screen and the registry (modules loaded, nothing of them called). A separate composition module would not help - every module that route imports is in their closures - and moving the board store's import would move lines B16-B23 pages cite and the B16 route mocks, so the composition is kept; `b23-b-exchange-route` case 4 now pins that shared part exactly and scans every B23 module of the exchange closure for a connection primitive again (OD-185 (q)). RECORDED
+
+## 22. Test-first record
+
+- **Red first** (`b3-01-red`, the three new suites and the summary suite's two new cases, no production edit): 4 files failed; three
+  failed to load (`Cannot find module '../provider-observation'`, `'@/app/components/pcb/ProviderObservationList'`), and the summary suite
+  failed its 2 new cases with its 17 others green - the D23-17 counterexample above. CONFIRMED
+- **First code** (`b3-02`): 41 / 42. One expectation of `b23-b-stale-quote` itself was wrong: case 1 read the whole flag line, whose
+  dated comment names `current.digest`; it now reads the code before the comment. Then green. CONFIRMED
+- **The readers after the code** (`b3-03`): 7 failed / 553 passed of 562. Three were pins B3 moves (section 23); B1's citation C20
+  (`ManufacturingWorkflowPanel.tsx:19`) lost its anchor, so the import moved to the front of that line; and the B16 acceptance and
+  recovery pipelines pin the summary's exact keys, so a board with no exchange record now carries no block (OD-185 (h)). Then 45 files,
+  560 passed, 2 skipped (`b3-04`). CONFIRMED
+- **The raw-route ratchet** (`b3-07`): `b16-0-8-migration-ratchet` failed once on POST /api/pcb-sync's source SHA-1 - its route file
+  changed on line 14 and line 33 (the GET composition). Its own generator updated the baseline (`b3-08`: "3 -> 3 legacy methods (0
+  migrated, 0 added)", only that SHA-1, `_raw-route-baseline.json:15`), the B16-A and B17 precedent; then green (`b3-09`). CONFIRMED
+- **The suites bite** (`b3-14`): fifteen source breakages, each applied by exact text, run, the file restored and checked by SHA-256, the
+  whole tree's digest equal before and after (`9707df7e52bc...`). Each was caught (exit 1):
+
+| breakage | caught by |
+|---|---|
+| the flag compares the revision only | `b16-a-manufacturing-summary` (both new cases), stale-quote case 1 |
+| the flag compares `current.digest` | the summary suite's control, two integrity and round-trip cases and both new cases, observation case 7, stale-quote cases 1, 10 |
+| no `board_digest_moved` | stale-quote case 6 |
+| 48 hours by default | observation case 1, stale-quote cases 2, 3 |
+| the provider's validity ignored | observation case 1, stale-quote cases 3, 8 |
+| no directive screen | observation cases 3, 4, no-auto-accept case 1 |
+| no character rule | observation case 3 |
+| a suggestion marked applied | no-auto-accept cases 1, 2 |
+| no `profile_evidence_too_old` | stale-quote case 8 |
+| no transfer-version check | stale-quote case 7 |
+| no `authority_moved` | stale-quote case 4 |
+| the copied phrase list drifts by one letter | observation case 4 |
+| the handler drops the loaded board | the summary suite's board-read case, observation case 5, stale-quote cases 1-5 and 7-10 |
+| an absent block kept | stale-quote case 10 |
+| the joined reading off | observation case 3 |
+
+## 23. Every pin moved, and why
+
+| pin | moved how | why |
+|---|---|---|
+| `b16-a-manufacturing-summary.test.ts`: the import, `CURRENT`, the authority fixture's `boardDigest`, the release record's `boardDigest` | in place, each with a dated `[B23-B3, 2026-10-04]` note: `CURRENT` carries the loaded board; both digests are `authoritativeBoardDigest(BOARD.board)` (they held the board record's pcbSyncDigest, another domain, which the revision-only flag never read); two cases appended at the end | D23-17: the fixture was in the wrong domain, and the digest half was never asserted |
+| `b23-b-egress-import-gate.test.ts` case 1 | in place, dated: the record's importers gain `app/api/pcb-sync/route.ts`; the title and the header item carry dated notes | GET /api/pcb-sync's route composes the record for the observation reader (`load` only) |
+| `b23-b-exchange-route.test.ts` case 4 | in place, dated: `source-registry.ts`, `exchange-ledger.ts` and `provider-registry.ts` commented out of the added list (no line moved) | the release route's own closure now holds them, through GET /api/pcb-sync's route module |
+| `b23-a-provider-admission.test.ts` case 8 | in place, dated: + `app/api/pcb-sync/handler.ts`, `manufacturing-summary.ts` (type-only imports) and `route.ts` (the composition); the header carries a dated note | the observation reader reads the registry for a provider's name, terms and row digest; it never calls admission |
+| `app/lib/auth/__tests__/_raw-route-baseline.json` | regenerated by `generate-b16-0-8-baseline`: POST /api/pcb-sync's SHA-1 only | its route file changed (the GET composition) |
+| `outbound-disclosure.md:270`, `:432`; this page's `:12`, `:187`, `:280` | a dated `[B23-B3, 2026-10-04]` note on the statement's own line (no line moved) | B3 made them incomplete |
+
+[B23-B3 review, 2026-10-04] The review round moved more pins, each in place with a dated note: section 28.
+
+No other pin moved. Every line B1's and B2's pages cite in the files B3 edited holds its content: `manufacturing-summary.ts`,
+`handler.ts`, `route.ts`, `client.ts` and `ManufacturingWorkflowPanel.tsx` changed by in-place edits of existing lines and appended blocks
+(the panel's one inserted render line comes after every cited line). CONFIRMED (`b23-b-page`, `b23-b-dfm-quote-flow-page` green)
+
+## 24. OD-185 - B23-B3's choices beyond its task text
+
+(a) An observation is derived at the read from B2's record (`load`); it is not stored a second time, and no raw body exists to derive it from.
+(b) Only an `acknowledged` attempt is an observation; a rejected, unknown or not-sent attempt stays an exchange state.
+(c) The screen: the length, printable ASCII and B20-C3's typographic set, no secret shape, B20's directive matcher alone and joined;
+withheld whole, by name and reason; numbers and booleans kept. The matcher is a verbatim copy of A2's, pinned to it, because importing
+`foreign-tools.ts` would put the egress boundary into GET /api/pcb-sync's closure.
+(d) The stated validity is the kept field `validUntil`, an ISO instant; otherwise 24 hours after `retrievedAt`; a validity at or before
+`retrievedAt` is stale at once; no cap beyond the other triggers (the rule-profile evidence bounds every observation within 366 days).
+(e) Staleness reads B1's step-1 checks as of the read, the release ledger head, the descriptor (registry version, row digest, reviewed
+transfer descriptor version) and the capability profile; a superseded board stales; the outbound package digest is compared through its
+inputs, never recomputed on a read.
+(f) `REVIEWED_TRANSFER_VERSIONS` mirrors `PROVIDER_TRANSFER_DESCRIPTORS` (empty), pinned equal: no observation is current in production
+until a reviewed transfer descriptor exists.
+(g) A provider suggestion is a kept field whose name matches `suggest`, `substitut`, `alternat`, `recommend` or `replace`; it is a
+`substitution` when the name says substitute, alternative or replace, else a `design_change`. A provider's own field names reach Sirkit
+only through a reviewed transfer descriptor's receipt fields, so the descriptor that admits a provider decides which of its fields are
+suggestions.
+(h) The summary carries `observations` only when the route composes the reader AND the board has an exchange record; a board with none
+keeps the summary's earlier shape. A failed read is `corrupt` with its bounded code.
+(i) The composition root is GET /api/pcb-sync's route; the release, qualify and provider exchange routes reach the observation module only
+through that route module (their board-store import). The raw-route baseline's SHA-1 for POST /api/pcb-sync is regenerated.
+(j) At most 32 observations are listed, newest first; the rest are counted.
+(k) The summary recomputes `authoritativeBoardDigest` from the loaded board at every `include=manufacturing` read, as the release route does
+at every release; the handler passes the board and its lineage state.
+(l) The list renders in the manufacturing workflow panel, not inside the provider panel, so a stale observation stays visible after the
+authority moves. [B23-B3 review, 2026-10-04] coverage-5: while the hydration is loaded; a hydration that failed integrity verification shows no observation
+(fail closed, B16-A F12).
+[B23-B3 review, 2026-10-04] The review round's choices:
+(m) The provider's receipt id is provider text: screened alone and first in the joined reading; withheld under `source.providerReceiptId`
+(null in `source`); still hashed into the observation id.
+(n) A row a reviewed registry revision withdraws keeps its recorded answers listed, stale (`descriptor_moved`), named
+`OBSERVATION_UNLISTED_PROVIDER_NAME` with its terms UNKNOWN; the reader loads every registry row's record (any tier) and every id of the
+append-only `OBSERVATION_WITHDRAWN_PROVIDER_IDS`, which the revision that removes a row appends to.
+(o) `terms.answerLicense` states the licence for the provider's answer, UNKNOWN (`OBSERVATION_ANSWER_LICENSE`) until a provider's terms
+are read; the registry, its version and its byte-gated CSV are not changed.
+(p) The summary declares `authoritativeBoardDigest`'s formula over `native/stable` instead of importing `release-gate.ts`, pinned equal
+as printed code.
+(q) The composition stays in GET /api/pcb-sync's route module; the release and qualify routes' closures hold the observation modules
+(loaded, never called), and `b23-b-exchange-route` case 4 scans them.
+(r) The list judges time expiry by the clock and re-renders at the next `staleAt`; every other stale reason stays the server's, judged
+at the read.
+(s) The client's validator takes the exact shape; its bound is the server's, pinned by behaviour (the client imports no server module).
+
+## 25. What stays open
+
+- **Live answers: BLOCKED-LIVE-QUALIFICATION (LB-11).** No provider is admitted, no reviewed transfer descriptor exists and Sirkit holds no
+  provider account (OD-160): no live observation can exist, and in production every observation would read `descriptor_moved`. RECORDED
+- **A provider's own field names** (its validity field, its suggestion fields) are the reviewed transfer descriptor's to map; none exists.
+  RECORDED
+- **The screen is defence in depth** (OD-81's limit, as for B20): it fails closed on what it recognises and cannot recognise every
+  paraphrase; that a provider's words direct nothing rests on the label, the absent verdict and the absence of any consumer. RECORDED
+- **The copied matcher** must move with A2's: `b23-b-observation` case 4 fails until it does. Extracting A2's matcher into a transport-free
+  module both import would remove the copy; it moves lines B20's pages cite, so it is a later reviewed change. RECORDED
+- **The digest at every read** costs a SHA-256 of the board's stable JSON per `include=manufacturing` read (the release route pays the same
+  per release). INFERRED
+- **Who sees observations:** every project member who can read GET /api/pcb-sync, automation included (section 21). RECORDED
+- **The browser suite was not run:** B3 changed the UI; the lead runs it. RECORDED
+- [B23-B3 review, 2026-10-04] **The release and qualify routes load the observation modules** through their board-store import of GET /api/pcb-sync's
+  route module (section 21; OD-185 (q)): load time only, nothing of them is called. RECORDED
+- [B23-B3 review, 2026-10-04] **A withdrawn provider stays listed only if its id is appended** to `OBSERVATION_WITHDRAWN_PROVIDER_IDS` by the registry
+  revision that removes its row; `b23-b-stale-quote` case 12's append-only list fails until it is. RECORDED
+- [B23-B3 review, 2026-10-04] **The answer's licence is UNKNOWN** for every provider (`terms.answerLicense`): nobody has read any provider's terms for its
+  answers, and no provider is admitted. BLOCKED-LIVE-QUALIFICATION (LB-11)
+- [B23-B3 review, 2026-10-04] **The list's clock re-judges expiry only**: an authority, release, board or descriptor move is seen at the next hydration, as
+  every other durable flag of the panel is. RECORDED
+- [B23-B3 lead, 2026-10-04] **Nine sequential record reads per hydration.** Since the review the reader loads the exchange record of every
+  registry row (`OBSERVATION_PROVIDER_IDS`, nine), one `loadHead` round trip each, where five rows ever had a `dfm_quote_transfer`
+  operation; Eurocircuits, Mouser, Nexar and LCSC can hold no record (B2 refuses any other tier, `PX_EXCHANGE_NOT_OFFERED`), so their four
+  reads always return nothing. A latency cost on every `include=manufacturing` read, nothing wrong; narrowing the list to rows that ever
+  had a transfer operation is a later reviewed change. INFERRED
+
+## 26. Citations (B23-B3)
+
+As of this working tree on `0cd3f59` (2026-10-04); the anchor text is the check, the line is for the reader; `b23-b-dfm-quote-flow-page`
+case 8 checks every row. [B23-B3 review, 2026-10-04] Re-pointed after the review round (D1-D13, D29; D8's anchor is the new joined
+reading), and D40-D50 added.
+
+| # | file | line | anchor |
+|---|---|---|---|
+| D1 | `app/lib/manufacturing-providers/provider-observation.ts` | 38 | `export const MANUFACTURING_OBSERVATION_LABEL = "external observation, not Sirkit proof" as const;` |
+| D2 | `app/lib/manufacturing-providers/provider-observation.ts` | 41 | `export const OBSERVATION_DEFAULT_FRESHNESS_MS = 24 * 60 * 60_000;` |
+| D3 | `app/lib/manufacturing-providers/provider-observation.ts` | 43 | `export const OBSERVATION_PROFILE_EVIDENCE_MAX_AGE_MS = 366 * 24 * 60 * 60 * 1000;` |
+| D4 | `app/lib/manufacturing-providers/provider-observation.ts` | 47 | `export const OBSERVATION_LIST_MAX = 32;` |
+| D5 | `app/lib/manufacturing-providers/provider-observation.ts` | 59 | `export const REVIEWED_TRANSFER_VERSIONS: readonly TransferVersion[] = Object.freeze([]);` |
+| D6 | `app/lib/manufacturing-providers/provider-observation.ts` | 135 | `const SUGGESTION_NAME = /suggest` |
+| D7 | `app/lib/manufacturing-providers/provider-observation.ts` | 151 | `export function normalizeManufacturingObservation(` |
+| D8 | `app/lib/manufacturing-providers/provider-observation.ts` | 174 | `if (screenProviderTextsTogether([...(receiptReason === null ? [receiptId] : []), ...strings.map((field) => field.value as string)]) !== "clean") {` |
+| D9 | `app/lib/manufacturing-providers/provider-observation.ts` | 186 | `disposition: "shown_never_applied" };` |
+| D10 | `app/lib/manufacturing-providers/provider-observation.ts` | 195 | `sirkitVerdict: "none",` |
+| D11 | `app/lib/manufacturing-providers/provider-observation.ts` | 212 | `export function evaluateObservationStaleness(` |
+| D12 | `app/lib/manufacturing-providers/provider-observation.ts` | 227 | `reasons.add("board_digest_moved");` |
+| D13 | `app/lib/manufacturing-providers/provider-observation.ts` | 260 | `export function createProviderObservationReader(` |
+| D14 | `app/lib/manufacturing-providers/provider-text-screen.ts` | 19 | `import { containsSecretShapedText } from "../agent/redaction";` |
+| D15 | `app/lib/manufacturing-providers/provider-text-screen.ts` | 49 | `export const PROVIDER_DIRECTIVE_PHRASES: readonly string[] = Object.freeze([` |
+| D16 | `app/lib/manufacturing-providers/provider-text-screen.ts` | 244 | `export function providerTextReadsAsDirective(` |
+| D17 | `app/lib/manufacturing-providers/provider-text-screen.ts` | 256 | `export function providerJoinedTextReadsAsDirective(` |
+| D18 | `app/lib/manufacturing-providers/provider-text-screen.ts` | 305 | `export function screenProviderText(` |
+| D19 | `app/api/pcb-sync/manufacturing-summary.ts` | 8 | `[B23-B3, 2026-10-04] D23-17: until B23-B3 only the revision was compared` |
+| D20 | `app/api/pcb-sync/manufacturing-summary.ts` | 83 | `authority.authority.boardDigest === currentBoardDigest);` |
+| D21 | `app/api/pcb-sync/manufacturing-summary.ts` | 142 | `if (read.state === "absent") return null;` |
+| D22 | `app/api/pcb-sync/handler.ts` | 200 | `board: PcbBoard; superseded?: boolean } \| null` |
+| D23 | `app/api/pcb-sync/handler.ts` | 228 | `board: record.board, superseded: lineageSummary?.state === "superseded"` |
+| D24 | `app/api/pcb-sync/handler.ts` | 252 | `export interface PcbSyncManufacturingObservations` |
+| D25 | `app/api/pcb-sync/route.ts` | 33 | `createManufacturingSummaryReader(workflow, { observations: createProviderObservationReader({ exchanges: createProviderExchangeLedger(workflow) }) })` |
+| D26 | `app/lib/pcb-sync/client.ts` | 167 | `function manufacturingObservations(` |
+| D27 | `app/components/pcb/ManufacturingWorkflowPanel.tsx` | 19 | `import { ProviderObservationList } from "./ProviderObservationList";` |
+| D28 | `app/components/pcb/ManufacturingWorkflowPanel.tsx` | 125 | `{truth?.observations && <ProviderObservationList observations={truth.observations} />}` |
+| D29 | `app/components/pcb/ProviderObservationList.tsx` | 33 | `export function ProviderObservationList(` |
+| D30 | `app/api/pcb/release/route.ts` | 45 | `import { stage3Repository } from "../../pcb-sync/route";` |
+| D31 | `app/api/pcb/release/route.ts` | 51 | `export const RELEASE_PROFILE_EVIDENCE_MAX_AGE_MS = 366 * 24 * 60 * 60 * 1000;` |
+| D32 | `app/api/pcb/release/route.ts` | 178 | `authoritativeBoardDigest(head.record.board) !== stored.authority.boardDigest` |
+| D33 | `app/lib/pcb/fab/release-gate.ts` | 133 | `export function authoritativeBoardDigest(board: PcbBoard): string {` |
+| D34 | `app/lib/pcb-sync/board.ts` | 8 | `export function boardDigest(board: PcbBoard): string { return pcbSyncDigest(pcbRevisionPayload(board)); }` |
+| D35 | `app/lib/mcp/foreign-tools.ts` | 59 | `import { MCP_PARAM_HEADER_MAX, scrubWindow, skeletonCarries } from "./http-transport";` |
+| D36 | `app/lib/mcp/http-transport.ts` | 47 | `import { outboundFetch, type OutboundDeps` |
+| D37 | `app/lib/manufacturing-providers/provider-egress.ts` | 69 | `export const PROVIDER_TRANSFER_DESCRIPTORS: readonly ProviderTransferDescriptor[] = Object.freeze([]);` |
+| D38 | `app/lib/engineering/descriptor-text.ts` | 25 | `It is NOT A2` |
+| D39 | `app/lib/auth/__tests__/_raw-route-baseline.json` | 15 | `"sha1": "eab017f0467c989a3148a7b1d35e5b7de85abbfb"` |
+| D40 | `app/api/pcb-sync/manufacturing-summary.ts` | 152 | `function authoritativeBoardDigest(board: PcbBoard): string {` |
+| D41 | `app/lib/manufacturing-providers/provider-observation.ts` | 65 | `export const OBSERVATION_WITHDRAWN_PROVIDER_IDS: readonly string[] = Object.freeze([]);` |
+| D42 | `app/lib/manufacturing-providers/provider-observation.ts` | 69 | `export const OBSERVATION_ANSWER_LICENSE = "UNKNOWN:` |
+| D43 | `app/lib/manufacturing-providers/provider-observation.ts` | 77 | `...PROVIDER_ROWS.map((row) => row.id), ...OBSERVATION_WITHDRAWN_PROVIDER_IDS` |
+| D44 | `app/lib/manufacturing-providers/provider-observation.ts` | 163 | `const receiptReason = screenProviderText(receiptId);` |
+| D45 | `app/lib/manufacturing-providers/provider-observation.ts` | 241 | `> OBSERVATION_PROFILE_EVIDENCE_MAX_AGE_MS) reasons.add("profile_evidence_too_old");` |
+| D46 | `app/lib/pcb-sync/client.ts` | 186 | `function observationItem(item: unknown): boolean {` |
+| D47 | `app/components/pcb/ProviderObservationList.tsx` | 45 | `now >= Date.parse(item.freshness.staleAt)` |
+| D48 | `app/components/pcb/ProviderObservationList.tsx` | 77 | `export function nextExpiryDelayMs(` |
+| D49 | `app/components/pcb/ManufacturingWorkflowPanel.tsx` | 124 | `[B23-B3 review, 2026-10-04] coverage-5` |
+| D50 | `app/api/pcb/release/route.ts` | 189 | `if (Date.now() - retrievedAt > RELEASE_PROFILE_EVIDENCE_MAX_AGE_MS)` |
+
+## 27. Gates (B23-B3)
+
+Every run went through the shared lock, one at a time; every CLI process was stopped after it (leftover count 0 each time). No run
+printed `Timeout calling "onTaskUpdate"`. Logs `b3-*` in the program's scratch log folder.
+
+| gate | result |
+|---|---|
+| every suite that reads a file B3 changed, before any edit (`b3-00`) | 42 files; 535 passed, 2 skipped; exit 0 |
+| the new suites and the summary suite's new cases on the unmodified source (`b3-01`, red) | 4 files failed: 3 to load, the summary suite 2 failed / 17 passed; exit 1 |
+| the same on the first code (`b3-02`) | 1 failed / 41 passed of 42 (an expectation of the suite itself, section 22); exit 1 |
+| the readers after the code, before the pin moves (`b3-03`) | 7 failed / 553 passed / 2 skipped of 562; exit 1 |
+| the readers after the fixes and the moves (`b3-04`) | 45 files; 560 passed, 2 skipped; exit 0 |
+| `app/lib/auth/__tests__`, `app/api/__tests__`, `app/lib/computation/__tests__`, `app/api/components/__tests__`, `app/api/parts/__tests__` (`b3-07`) | 1 failed (the raw-route ratchet, section 22) / 1929 passed / 27 skipped; exit 1 |
+| the same after the baseline's own generator (`b3-08`, `b3-09`; the census 166 / 163 / 3 / 0, the B22 process census) | 100 files (98 passed, 2 skipped); 1930 passed, 27 skipped; exit 0 |
+| `app/lib/agent/__tests__` (B11.5 case 12), `app/lib/agent/orchestration/__tests__`, `app/api/chat/__tests__` (`b3-10`) | 107 files; 1024 / 1024; exit 0 |
+| `app/lib/mcp` (counts 47 / 36 / 9 / 27, `b20-b4-process-gate`), `app/lib/project/__tests__` (`b14-4-ast-import-gates`), `app/api/mcp/__tests__` (`b3-11`) | 89 files; 1214 / 1214; exit 0 |
+| `app/lib/engineering/__tests__` (B17-A, the B19-E tripwire, the tiers), `app/components/pcb/__tests__`, `app/lib/pcb-sync/__tests__` (`b3-12`) | 125 files; 1255 passed, 1 skipped; exit 0 |
+| every generator (21; `b3-13`, then `b3-20` on the final tree) | each exit 0; no drift |
+| fifteen source breakages (`b3-14`) and three page breakages (`b3-16`), each restored and checked by SHA-256 | each caught (exit 1); the tree equal after every one |
+| the page suites over this page: `b23-b-dfm-quote-flow-page`, `b23-b-page`, both closeout suites, `b21-f-page` (`b3-15`) | 5 files; 52 / 52; exit 0 |
+| the readers again on the final tree: `app/lib/manufacturing-providers` (the PGlite and page suites included), `app/api/pcb-sync`, the release, qualify and component suites, the prompt-to-Gerber pipelines, B17-A, the B19-E tripwire, the census, both closeout suites, `b21-f-page`, the chat-closure tripwire, `b11-5-capture-exactness`, the CI job-scope guard, the raw-route ratchet, `app/lib/pcb-sync/__tests__` (`b3-17`) | 73 files; 757 passed, 2 skipped; exit 0 |
+| tsc (`--noEmit -p tsconfig.json`; `b3-05`, `b3-18`) | exit 0, no output |
+| eslint on the 17 changed or added `.ts` and `.tsx` files (`b3-06`: one unused import in a new suite, removed; `b3-19`) | exit 0, no output |
+
+`app/lib/pcb` was not run: B3 changed no PCB module. The browser suite was not run (section 21).
+
+## 28. The adversarial review of the first B3 tree, and what it changed
+
+[B23-B3 review, 2026-10-04] An adversarial review of the first B3 working tree (on `0cd3f59`) confirmed sixteen findings ([B23-B3 lead, 2026-10-04]: sixteen ids, first written fourteen), three issues of them
+reported twice (security-1 with coverage-1, coverage-2 with tests-6, coverage-3 with tests-2), so thirteen distinct issues. Each was fixed test-first. "Red" is a case
+that failed on the unfixed tree (`b3f-02`: 6 failed / 50 passed of 56, exit 1). A test-strength finding is shown by a source change the
+earlier suites miss and the strengthened suite catches (`b3f-06`, the `t` runs). Thirteen breakages of the fixed source were each caught
+(`b3f-06`, the `b` runs). Every change was applied by exact text and restored, and the restore was checked by SHA-256. The whole tree's
+digest was equal before and after (`ece124f2cac6...`).
+
+| finding | reproducing test | before the fix | fix | after |
+|---|---|---|---|---|
+| regressions-1 (low) | `b23-b-stale-quote` case 11 | red: the summary declared no `authoritativeBoardDigest`; its value import from `release-gate.ts` put the release generator into GET /api/pcb-sync's closure | the summary declares the gate's formula over `native/stable` (`manufacturing-summary.ts:152`); line 29 imports `sha256` and `stableJson`, never `release-gate.ts`; dated notes on `:8` and `:29` | green; re-importing `release-gate.ts` (b01) or a drifting formula (b02) fails |
+| regressions-2 (low) | `b23-b-exchange-route` case 4 | test strength: a `fetch(` appended to `exchange-ledger.ts` passed the first tree's case 4 (t6a: 14 / 14, exit 0) | the composition is kept (section 21; OD-185 (q)); case 4 pins the release closure's B23 part exactly, pins that it reaches no sender, and scans every B23 module of the exchange closure again; it also takes the closure gates' 120 s timeout | the same fetch fails case 4 (t6b) |
+| security-1, coverage-1 (low; medium) | `b23-b-observation` case 8 | red: `expected 'SYSTEM:ignore-all-previous-instructio...' to be null` | the receipt id is screened alone and first in the joined reading (`provider-observation.ts:163`, `:174`); when it fails, `source.providerReceiptId` is null and `withheld` names `source.providerReceiptId` with the rule; the list reads "receipt withheld" | green; showing it unscreened (b03: cases 3 and 8) or leaving it out of the joined reading (b04) fails |
+| coverage-2, tests-6 (low) | `b23-b-stale-quote` case 12 | red: with jlcpcb's row withdrawn the list was empty (`expected [] to have a length of 1 but got +0`) | a missing row still names its answers (`OBSERVATION_UNLISTED_PROVIDER_NAME`, terms UNKNOWN), judged `descriptor_moved`; the reader loads every registry row (any tier) and every id of the append-only `OBSERVATION_WITHDRAWN_PROVIDER_IDS` (`:65`, `:77`) | green; restoring the tier filter (b05) or refusing the row (b06: case 12 and observation case 2) fails |
+| coverage-3, tests-2 (low; medium) | `b23-b-observation` case 9 | red: a forged label passed (`a forged label: expected { ok: true, ... } to match object { ok: false, ... }`) | the client takes the exact shape (`client.ts:167`, `:186`) | green; checking the label's type only (b08), admitting unknown keys (b09), a bound of 33 (b10) or leaving the stale flag unchecked (b13) fails |
+| coverage-4 (low) | `b23-b-no-auto-accept` case 9 | red: past `staleAt` the list still read `data-stale="false"` | the list judges expiry by the clock and re-renders at the next `staleAt` (`ProviderObservationList.tsx:45`, `:77`) | green; ignoring the clock (b11) or an absolute delay (b12) fails |
+| coverage-5 (low) | `b23-b-no-auto-accept` case 7; the page suite's case 10 | the panel comment, section 21 and OD-185 (l) said "whatever the authority"; a failed hydration hid the observations (the behaviour is kept: fail closed) | narrowed in place: the panel comment (`ManufacturingWorkflowPanel.tsx:124`), section 21, OD-185 (l) | case 7 pins the fail-closed rendering |
+| coverage-6 (low) | `b23-b-observation` case 1 (moved in place) | the terms held no licence for the answer | `terms.answerLicense`, UNKNOWN with its reason (`provider-observation.ts:69`); section 18's row says so | green; dropping it (b07: cases 1 and 9) fails |
+| coverage-7 (low) | the page suite's case 10 | red: line 187's note read "an observation of such an exchange" | the note stands before B2's next sentence and names its antecedent; section 18 says eight hostile fields among eleven | green |
+| tests-1 (medium) | `b23-b-no-auto-accept` case 7 | test strength: wrapping the list into the B1 conditional (lines 122 and 125 keep their cited text) passed every earlier suite | case 7 renders the workflow panel | the wrap fails case 7 (t4; re-run on the final page, `b3f-09`: only case 7 failed, with `b23-b-provider-panel`, `b23-b-page` and the page suite green) |
+| tests-4 (low) | `b23-b-observation` case 6 (widened), `b23-b-no-auto-accept` case 8 | test strength: a type-only import of `PcbSyncManufacturingObservations` into `readiness.ts`, gating on `accepted`, passed case 6 with its first-tree names (t5a: only the new case 8 failed) | case 6's names gain the observation types and `.observations` / `.suggestions`; case 8 pins the five files that name the types, and that no control sits inside an expression reading observations or suggestions | the import fails case 6 and case 8 (t5b) |
+| tests-7 (low) | `b23-b-stale-quote` case 13 | test strength: the reader cut to its first provider passed | case 13: jlcpcb and pcbway, newest first across providers | the cut fails case 13 (t1) |
+| tests-9 (low) | `b23-b-stale-quote` case 14 | test strength: `>=` for `>`, and the profile id ignored, both passed | case 14: exactly 366 days is not too old and 1 ms later is; another profile id is `profile_moved`; the release route's `>` is pinned | each fails case 14 (t2, t3) |
+
+**The pins this round moved**, each in place with a dated `[B23-B3 review, 2026-10-04]` note:
+
+| pin | moved how | why |
+|---|---|---|
+| `b23-b-observation` case 1 | the terms keys gain `answerLicense`, pinned UNKNOWN | coverage-6 |
+| `b23-b-observation` case 2 | an unknown provider's answer is an observation named `OBSERVATION_UNLISTED_PROVIDER_NAME`; was `provider_unknown` | coverage-2 |
+| `b23-b-observation` case 3 | the joined case withholds the receipt id too | security-1 |
+| `b23-b-observation` case 6 | the consumers' name pattern widened | tests-4 |
+| `b23-b-no-auto-accept` case 4 | the list's runtime imports are `react` | coverage-4 |
+| `b23-b-no-auto-accept` case 5 | reads at a fixed instant; it read the real clock, so from 2026-10-05T12:00Z its current item would have read stale | coverage-4 |
+| `b23-b-exchange-route` case 4 | the shared B23 part, the senders, every B23 module scanned; plus `{ timeout: 120_000 }` | regressions-2. Its two closure walks took 5.6 s and 6.5 s here (`b3f-00` in the readers run, `b3f-01` alone: "Test timed out in 5000ms"), over vitest's 5 s default. In the first tree's runs case 4 took 3.7-4.7 s (`b3-04`, `b3-17`, the review's `b3r-00`); every closure gate in these suites already takes 120 s. |
+| this page | section 26 re-pointed (D1-D13, D29; D8's anchor), D40-D50 added; the prose line citations of sections 18-21 re-pointed; the counts of section 17 | the round moved lines in B3's own new files |
+
+**Gates of the round.** Every run went through the shared lock, one at a time, and every CLI process was stopped after it (leftover count
+0 each time). No run printed `Timeout calling "onTaskUpdate"`. The logs are named `b3f-*`.
+
+| gate | result |
+|---|---|
+| the readers (`b3-17`'s 73 files) before any edit (`b3f-00`) | 1 failed (`b23-b-exchange-route` case 4: "Test timed out in 5000ms", 5632 ms) / 756 passed / 2 skipped; exit 1 |
+| that suite alone (`b3f-01`) | 1 failed (case 4, the same timeout, 6514 ms) / 13 passed; exit 1 |
+| the new and moved cases on the unfixed tree (`b3f-02`, red) | 5 files; 6 failed / 50 passed of 56; exit 1 |
+| the three B3 suites, the exchange route, the provider panel and the summary suite on the fixed code (`b3f-05`) | 6 files; 74 / 74; exit 0 |
+| test strength and breakages (`b3f-06`; t4 again on the final page, `b3f-09`) | t5a and t6a green on the change (the earlier suites miss it); t1-t4, t5b and t6b each caught by the strengthened suite; b01-b13 each caught; every file restored by SHA-256; the tree digest equal |
+| the readers again (`b3f-10`) | 73 files; 767 passed, 2 skipped; exit 0 |
+| `app/lib/auth/__tests__`, `app/api/__tests__`, `app/lib/computation/__tests__`, `app/api/components/__tests__`, `app/api/parts/__tests__` (`b3f-11`; the census 166 / 163 / 3 / 0, the raw-route ratchet, the B22 process census) | 100 files (98 passed, 2 skipped); 1930 passed, 27 skipped; exit 0 |
+| `app/lib/agent/__tests__` (B11.5 case 12), `app/lib/agent/orchestration/__tests__`, `app/api/chat/__tests__` (`b3f-12`) | 107 files; 1024 / 1024; exit 0 |
+| `app/lib/mcp` (counts 47 / 36 / 9 / 27, `b20-b4-process-gate`), `app/lib/project/__tests__` (`b14-4-ast-import-gates`), `app/api/mcp/__tests__` (`b3f-13`) | 89 files; 1214 / 1214; exit 0 |
+| `app/lib/engineering/__tests__` (B17-A, the B19-E tripwire), `app/components/pcb/__tests__`, `app/lib/pcb-sync/__tests__` (`b3f-14`) | 125 files; 1255 passed, 1 skipped; exit 0 |
+| tsc (`--noEmit -p tsconfig.json`; `b3f-15`) | exit 0, no output |
+| eslint on the 17 changed or added `.ts` and `.tsx` files (`b3f-16`) | exit 0, no output |
+| every generator (21; `b3f-17`) | each exit 0; no drift (status, diff and untracked digests equal) |
+| the page suites over this page after its last edit: `b23-b-dfm-quote-flow-page`, `b23-b-page`, both closeout suites, `b21-f-page` (`b3f-18`) | 5 files; 53 / 53; exit 0 |
+
+New cases: `b23-b-observation` 8, 9; `b23-b-stale-quote` 11-14; `b23-b-no-auto-accept` 7-9; the page suite's 10. No other suite changed.
+`app/lib/pcb` was not run: no PCB module changed. The UI changed again (the list's clock, "receipt withheld"): **the lead runs the browser
+suite**. RECORDED

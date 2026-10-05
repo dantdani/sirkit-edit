@@ -5,7 +5,7 @@
  * plan and an admitting answer. This gate pins, over the runtime import graph (type-only imports erased):
  *  1. the importers: provider-egress.ts has exactly one production importer, provider-exchange.ts; `outboundUpload` is named in
  *     production only by its definition and provider-egress.ts; the exchange record is imported only by the exchange service (types)
- *     and the provider exchange route (its composition);
+ *     and the provider exchange route (its composition); [B23-B3, 2026-10-04] and GET /api/pcb-sync's route, which composes it for the observation reader's read;
  *  2. the agent loop, the gateway, the chat route, the MCP server and every orchestration module reach none of the three B23-B2
  *     modules, nor the exchange service;
  *  3. the provider exchange route reaches the egress boundary only through provider-egress.ts;
@@ -86,12 +86,12 @@ function commitOutboxes(path: string, source: string): Array<{ line: number; emp
 }
 
 describe("[B23-B2] only the exchange service reaches the send (OD-165, OD-167)", () => {
-  it("1. provider-egress.ts has exactly one production importer, the exchange service; outboundUpload is named only by its definition and provider-egress.ts; the exchange record is imported only by the exchange service and by the provider exchange route, which composes it; the exchange service only by that route", { timeout: 120_000 }, () => {
+  it("1. provider-egress.ts has exactly one production importer, the exchange service; outboundUpload is named only by its definition and provider-egress.ts; the exchange record is imported only by the exchange service and by the provider exchange route, which composes it; the exchange service only by that route [B23-B3, 2026-10-04] - and the record also by GET /api/pcb-sync's route, which composes it for the observation reader's read", { timeout: 120_000 }, () => {
     const map = files();
     expect(map.has(EGRESS) && map.has(LEDGER)).toBe(true);
     expect(importersOf(map, EGRESS)).toEqual([SERVICE]);
     expect([...map.keys()].filter((file) => /\boutboundUpload\b/.test(map.get(file)!)).sort()).toEqual([BOUNDARY, EGRESS].sort());
-    expect(importersOf(map, LEDGER)).toEqual([ROUTE, SERVICE].sort());
+    expect(importersOf(map, LEDGER)).toEqual(["app/api/pcb-sync/route.ts", ROUTE, SERVICE].sort()); // [B23-B3, 2026-10-04] reviewed pin move: + GET /api/pcb-sync's route, which composes the record for the observation reader, whose one port is `load` (OD-185); the observation module imports no writer (b23-b-no-auto-accept case 3)
     expect(importersOf(map, SERVICE)).toEqual([ROUTE]);
   });
 

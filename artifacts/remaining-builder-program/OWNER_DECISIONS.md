@@ -2203,61 +2203,126 @@ Amendments to existing entries:
 ## OD-184 — B23-B2: stated choices beyond its task text, as applied (B23-B2, 2026-10-04)
 
 - **Default applied** (as `dfm-quote-flow.md` section 12 states them, the lead round's (m), (n) notes and (p)-(r) included):
-  -  (a) An attempt the egress boundary refuses before any byte leaves ends `not_sent`, a terminal state beside OD-167's three: a
+  - (a) An attempt the egress boundary refuses before any byte leaves ends `not_sent`, a terminal state beside OD-167's three: a
     refusal before the hand-over is neither the provider's rejection nor an unknown, and the record says nothing left. It is reached
     from `prepared`, or from a `sent` mark that landed while nothing was handed over (the deadline fell during the mark), which keeps
     the mark's time and digest.
-  -  (b) `sent` is written immediately BEFORE the hand-over, inside the one deadline: the mark races the deadline and the caller's
+  - (b) `sent` is written immediately BEFORE the hand-over, inside the one deadline: the mark races the deadline and the caller's
     abort, and a mark slower than the deadline ends the exchange `not_sent` (`timeout`) with nothing handed over; the request then waits
     for the mark to land before recording the outcome (the provider is never contacted late). A sender hands bytes over only after its
     own `prepared` and `sent` appends wrote new records; a crash after `sent` leaves a record to reconcile, never a silent resend.
-  -  (c) B1's in-memory key store stays the first answer within a process. The durable record is the outcome of record and the backstop
+  - (c) B1's in-memory key store stays the first answer within a process. The durable record is the outcome of record and the backstop
     across processes and restarts: its key namespace is the project scope (tenant, project, branch), B1's, so a key names at most one
     attempt per project, durably; a commit whose plan the instance does not hold is answered from the record under its key (the same
     plan id and digest replay, another plan's are a reuse, an unknown key is `PX_PLAN_NOT_FOUND`); a fresh plan under a held key is
     refused after its plan is consumed.
-  -  (d) The transfer contract is a separate, typed `ProviderTransferDescriptor` beside the registry row, valid only against the row's
+  - (d) The transfer contract is a separate, typed `ProviderTransferDescriptor` beside the registry row, valid only against the row's
     current version and digest, an enabled board-file transfer operation, a listed host and RECORDED upload-limit and idempotency facts;
     the registry (and its byte-gated CSV) did not change; none exists in B23.
-  -  (e) The upload is multipart form data: each outbound file under its release path (field `files`) and the provider manifest (field
+  - (e) The upload is multipart form data: each outbound file under its release path (field `files`) and the provider manifest (field
     `manifest`), a boundary derived from the package digest; a provider-specific encoding (PCBWay's base64 `DataZipFile`, an S3-signed
     upload) is a later reviewed descriptor field, not B2's.
-  -  (f) The meter: one per provider, a minute and a day window and a breaker from the descriptor; the agent refused outright (share 0);
+  - (f) The meter: one per provider, a minute and a day window and a breaker from the descriptor; the agent refused outright (share 0);
     a rejection other than 429 neutral, an abort inconclusive, a refusal before the hand-over (a pause, the mark's deadline or failure)
     inconclusive; no coalescing.
-  -  (g) A 2xx answer is acknowledged only as JSON (a media type holding a control character is no usable type) with a receipt id of 1
+  - (g) A 2xx answer is acknowledged only as JSON (a media type holding a control character is no usable type) with a receipt id of 1
     to 128 of `[A-Za-z0-9._:-]`; a 4xx is rejected; everything else after the send started is UNKNOWN; every 3xx answer to an upload,
     the ones no redirect follows included, is refused and UNKNOWN (a 303 after a POST may mean the provider took it).
-  -  (h) A commit's answer stays B1's envelope, with seven new codes (section 4), every sentence in `error` (the panel's field); showing
+  - (h) A commit's answer stays B1's envelope, with seven new codes (section 4), every sentence in `error` (the panel's field); showing
     a receipt id in the panel is a UI change for the increment that admits a provider. The route's code did not change beyond composing
     the record.
-  -  (i) The PGlite suite lives at `app/lib/manufacturing-providers/database/__tests__/`, outside the prompt-to-gerber filter, with an
+  - (i) The PGlite suite lives at `app/lib/manufacturing-providers/database/__tests__/`, outside the prompt-to-gerber filter, with an
     explicit database-delivery entry.
-  -  (j) Reconciliation: recorded (`statusRead` on the descriptor and the record), not built. RECORDED
-  -  (k) Under `ids_digests_timestamps_only` a record keeps no provider-chosen text: no normalized field and an empty media type; it
+  - (j) Reconciliation: recorded (`statusRead` on the descriptor and the record), not built. RECORDED
+  - (k) Under `ids_digests_timestamps_only` a record keeps no provider-chosen text: no normalized field and an empty media type; it
     keeps Sirkit's own classification (state, failure code) and the answer's protocol status, size and SHA-256.
-  -  (l) The provider sees `Idempotency-Key: sx-<64 hex>`, a digest of the scope, board, provider, plan and client key, recorded on the
+  - (l) The provider sees `Idempotency-Key: sx-<64 hex>`, a digest of the scope, board, provider, plan and client key, recorded on the
     attempt and re-derived on load; never the client's string.
-  -  (m) One package in flight: a new attempt is refused while another attempt of the same request is `prepared` or `sent` in its
+  - (m) One package in flight: a new attempt is refused while another attempt of the same request is `prepared` or `sent` in its
     aggregate; only a person reconciling with the provider ends an interrupted one (no reconciliation read exists: the block stands
     until one does). [B23-B2 lead, 2026-10-04] low-3: the same request is now the same package digest, provider and operation; low-2: a
     `prepared` attempt ten minutes old is settled `not_sent` (`abandoned`) by the next attempt of its package, and a `sent` mark lands
     only while its own attempt is still `prepared`, so only a `sent` one waits for a person.
-  -  (n) An answer that cannot be recorded: the settle is tried three times; then the commit answers with `recorded: false`, the
+  - (n) An answer that cannot be recorded: the settle is tried three times; then the commit answers with `recorded: false`, the
     observed state, the receipt id and the response's status, size and digest, and the record stays `sent`. [B23-B2 lead, 2026-10-04]
     low-2: or `prepared`, for a `not_sent` outcome, and that answer's sentence no longer says the exchange was recorded.
-  -  (o) The provider exchange route's B16.0.2 durable-access row stays `read` while no reviewed transfer descriptor exists; the
+  - (o) The provider exchange route's B16.0.2 durable-access row stays `read` while no reviewed transfer descriptor exists; the
     revision that adds the first one moves it to `read-write` and regenerates the CSV (ledger case 21 fails until it does).
-  -  (p) [B23-B2 lead, 2026-10-04] low-1: the commit's durable read (tests-3's `recorded`) stays before `PX_PLAN_NOT_FOUND`: the
+  - (p) [B23-B2 lead, 2026-10-04] low-1: the commit's durable read (tests-3's `recorded`) stays before `PX_PLAN_NOT_FOUND`: the
     restart's replay needs it, and a store that cannot be read answers the release route's `MFG_DURABLE_STORE_UNAVAILABLE` 503 rather
     than a not-found the store could contradict. B1's statements carry dated notes instead (the smaller truthful change); restoring B1's
     order is a breakage ledger case 23 catches.
-  -  (q) [B23-B2 lead, 2026-10-04] low-2: `EXCHANGE_PREPARED_ABANDON_MS` is ten minutes, five times the longest deadline a reviewed
+  - (q) [B23-B2 lead, 2026-10-04] low-2: `EXCHANGE_PREPARED_ABANDON_MS` is ten minutes, five times the longest deadline a reviewed
     descriptor may declare (120 s). The bound decides only when a stalled `prepared` attempt stops blocking, never whether two attempts
     send: the abandonment and the `sent` mark each require the attempt still `prepared` on the head their compare-and-set commits on.
-  -  (r) [B23-B2 lead, 2026-10-04] low-2: text the record keeps refuses a lone UTF-16 surrogate, and the egress drops a provider field
+  - (r) [B23-B2 lead, 2026-10-04] low-2: text the record keeps refuses a lone UTF-16 surrogate, and the egress drops a provider field
     holding one; a NUL was already refused (a code below 32). These are the two kinds of string PostgreSQL's jsonb refuses in a JSON
     string (INFERRED from its JSON input rules; the surrogate CONFIRMED on PGlite, case 5).
 - **Owner attention:** (m) an interrupted `sent` attempt blocks its package to that provider until a reconciliation read exists, and
   none is built; (o) the B16.0.2 row stays `read` while no transfer descriptor exists.
+- Owner confirmation pending.
+
+## OD-168 — when a quote or DFM observation is stale, as applied (B23-B3, 2026-10-04)
+
+- **Default applied:** `evaluateObservationStaleness` (`provider-observation.ts`) runs at every `include=manufacturing` read.
+  - **Time:** stale at the provider's stated `validUntil` (an ISO instant; one at or before `retrievedAt` is stale at once; prose is ignored), else 24 hours after `retrievedAt`.
+  - **At once**, when any of these holds:
+    - the authority head is gone, or moved (the ledger head's authority is not the head);
+    - the release ledger head is gone, or is another release;
+    - the board is gone or superseded;
+    - the board revision OR its authoritative digest (recomputed, never the pcbSyncDigest) is not the authority's and the ledger head's;
+    - the registry version, the row's digest (or the row itself, withdrawn) or the reviewed transfer descriptor's version moved;
+    - the profile id or version moved;
+    - the rule-profile evidence is not v2, missing, out of window, expired (2027-09-09 for `jlcpcb-2l`) or older than 366 days (pinned equal to `RELEASE_PROFILE_EVIDENCE_MAX_AGE_MS`; both sides of the bound tested).
+  - **Reporting:** fourteen closed reasons, in a fixed order.
+  - **Listing:** stale observations stay listed and labelled stale, never current. At most 32 are listed, newest first across providers, and the rest are counted. A withdrawn row's answers stay listed.
+  - **Panel:** the list re-judges time expiry by the clock and re-renders at the next `staleAt`. A hydration that failed integrity verification shows no observation (fail closed).
+  - **D23-17:** the summary's current flag compares revision AND authoritative digest.
+  - **Production:** no observation is current today. `REVIEWED_TRANSFER_VERSIONS` mirrors the empty `PROVIDER_TRANSFER_DESCRIPTORS` and is pinned equal to it.
+  - Live: BLOCKED-LIVE-QUALIFICATION (LB-11). Choices: OD-185.
+- **Evidence:** `dfm-quote-flow.md` sections 19, 21, 28; `b23-b-stale-quote` (14); `b16-a-manufacturing-summary` (two cases); `b23-b-no-auto-accept` cases 7, 9.
+- Owner confirmation pending.
+
+## OD-169 — provider-suggested substitutions or design changes, as applied (B23-B3, 2026-10-04)
+
+- **Default applied:**
+  - **The record:** a kept field whose name says suggest, substitute, alternative, recommend or replace becomes a closed `sirkit.provider-suggestion.v1`: kind `substitution` or `design_change`, the field, its screened text (or null with the reason), and the one disposition `shown_never_applied`. Shown, never applied.
+  - **The import gate:** the observation module and its screen import exactly their reviewed modules. Their runtime closure holds no command, executor or mutation module, and nothing that commits, sends, spawns or dispatches.
+  - **Who names what:** the suggestion vocabulary appears in production only in the observation module, the client and the list. The observation types appear only in five reviewed files.
+  - **No path to a command:** the list holds no control, and no component has a control inside an expression reading observations or suggestions. Reading observations commits nothing.
+  - **No verdict:** a provider's "accepted" or "pass" sets no Sirkit verdict (`sirkitVerdict: "none"`).
+  - **Changes:** a person makes any change in the editor, which yields a new release and stales every observation.
+- **Evidence:** `dfm-quote-flow.md` sections 20, 28; `b23-b-no-auto-accept` (9); `b23-b-observation` cases 5, 6.
+- Owner confirmation pending.
+
+## OD-185 — B23-B3: stated choices beyond its task text, as applied (B23-B3, 2026-10-04)
+
+- **Default applied** (as `dfm-quote-flow.md` section 24 states them):
+  - (a) An observation is derived at the read from B2's record (`load`). It is not stored twice, and no raw body exists to derive it
+    from.
+  - (b) Only an `acknowledged` attempt is an observation.
+  - (c) The screen: the length, printable ASCII plus B20-C3's typographic set, no secret shape, and B20's matcher alone and joined. A
+    failing string is withheld whole. The matcher is a verbatim copy of A2's, pinned to it, because importing `foreign-tools.ts` would
+    put the egress boundary into GET /api/pcb-sync's closure.
+  - (d) The stated validity is `validUntil` (an ISO instant), else 24 hours.
+  - (e) Staleness reads B1's step-1 checks as of the read, plus the ledger head, the descriptor and the capability profile. The package
+    digest is compared through its inputs.
+  - (f) `REVIEWED_TRANSFER_VERSIONS` mirrors the empty `PROVIDER_TRANSFER_DESCRIPTORS`.
+  - (g) Suggestion field names match `suggest|substitut|alternat|recommend|replace`.
+  - (h) The block is present only when the reader is composed and the board has an exchange record. A failed read is `corrupt`.
+  - (i) The composition root is GET /api/pcb-sync's route. The raw-route baseline's SHA-1 for POST /api/pcb-sync was regenerated.
+  - (j) 32 listed, newest first.
+  - (k) The digest is recomputed at every read.
+  - (l) The list is in the workflow panel, so a stale observation stays visible, while the hydration is loaded. A failed integrity
+    hydration shows none (fail closed).
+  - (m) The receipt id is provider text: screened alone and first in the joined reading, withheld under `source.providerReceiptId`,
+    still hashed into the observation id.
+  - (n) A withdrawn row's answers stay listed and stale under `OBSERVATION_UNLISTED_PROVIDER_NAME` with terms UNKNOWN. The reader loads
+    every row of any tier plus the append-only `OBSERVATION_WITHDRAWN_PROVIDER_IDS`.
+  - (o) `terms.answerLicense` is UNKNOWN until a provider's terms are read. The registry is unchanged.
+  - (p) The summary declares the gate's digest formula over `native/stable`, pinned equal as printed code.
+  - (q) The composition stays in the route module. The release and qualify routes load the observation modules (never call them), and
+    exchange-route case 4 scans them.
+  - (r) Only time expiry is re-judged by the clock.
+  - (s) The client validator takes the exact shape, and its bound is pinned to the server's by behaviour.
 - Owner confirmation pending.

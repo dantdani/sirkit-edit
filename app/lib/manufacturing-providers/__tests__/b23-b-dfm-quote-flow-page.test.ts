@@ -99,3 +99,74 @@ describe("[B23-B2 review] the dfm-quote-flow page and the statements B2 made fal
     for (const part of [LEAD, "MFG_DURABLE_STORE_UNAVAILABLE", "case 23"]) expect(four, part).toContain(part);
   });
 });
+
+// [B23-B3, 2026-10-04] The page's B23-B3 sections (17-26): the closure, the verdict for all eight steps, every citation of section 26 on
+// the line it names, and a dated B3 note on each earlier statement B3 made incomplete. Reads files only.
+describe("[B23-B3] the dfm-quote-flow page: steps 6-8 and the verdict for all eight steps", () => {
+  const B3 = "[B23-B3, 2026-10-04]";
+  /** The runbook's eight steps of B23-B, verbatim (`:975-982`). */
+  const STEPS = [
+    "Revalidate authority immediately before upload.",
+    "Present exactly which files and metadata will leave Sirkit.",
+    "Require explicit user approval for the named provider and purpose.",
+    "Upload with bounded streaming, timeouts and idempotency.",
+    "Store provider receipt, artifact digest, capability/profile version and timestamp.",
+    "Normalize DFM/quote results as external observations, not Sirkit proof.",
+    "Detect stale quotes and changed release inputs.",
+    "Never auto-accept substitutions or design changes suggested by a provider.",
+  ];
+
+  it("7. section 17 closes D23-17 and D23-5's staleness half, names OD-168, OD-169 and OD-185, keeps live answers BLOCKED-LIVE-QUALIFICATION (LB-11), and holds one verdict row per step, quoting the runbook's words", () => {
+    const seventeen = section(read(PAGE), 17);
+    for (const fact of ["closes D23-17 and D23-5's", "staleness half", "OD-168 and OD-169", "OD-185", "BLOCKED-LIVE-QUALIFICATION (LB-11)", B3]) expect(seventeen, fact).toContain(fact);
+    const rows = [...seventeen.matchAll(/^\| (\d) \| "([^"]+)" \| .+ \|$/gm)];
+    expect(rows.map((row) => Number(row[1]))).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(rows.map((row) => row[2])).toEqual(STEPS);
+    for (const [number, title] of [[18, "Step 6"], [19, "Step 7"], [20, "Step 8"]] as const) expect(section(read(PAGE), number), `section ${number}`).toContain(title);
+  });
+
+  it("8. every citation of section 26 resolves on the line it names, and ids run D1..Dn", () => {
+    const rows = [...section(read(PAGE), 26).matchAll(/^\| (D\d+) \| `([^`]+)` \| (\d+) \| (.+) \|$/gm)];
+    expect(rows.length).toBeGreaterThanOrEqual(30);
+    expect(rows.map((row) => row[1])).toEqual(rows.map((_, index) => `D${index + 1}`));
+    const unescape = (cell: string): string => {
+      expect(cell.startsWith("`") && cell.endsWith("`"), cell).toBe(true);
+      return cell.slice(1, -1).replaceAll("\\|", "|");
+    };
+    const stale = rows.filter((row) => !(lines(row[2]!)[Number(row[3]) - 1] ?? "").includes(unescape(row[4]!))).map((row) => `${row[1]} ${row[2]}:${row[3]}`);
+    expect(stale).toEqual([]);
+  });
+
+  it("9. each earlier statement B3 made incomplete carries a dated B3 note on its own line", () => {
+    const statements: ReadonlyArray<readonly [string, string]> = [
+      [PAGE, "Steps 6-8 (observations, staleness, no auto-accept) are B23-B3's."],
+      [PAGE, "otherwise the exchange is stale, which is B23-B3's to show (OD-168)."],
+      [PAGE, "imports exactly six reviewed modules. Case 6 shows each rule bite."],
+      ["artifacts/ai-control-plane-b23/outbound-disclosure.md", "case 8) passes unchanged. CONFIRMED"],
+      ["artifacts/ai-control-plane-b23/outbound-disclosure.md", "no route reads this registry yet.\"; since B1"],
+    ];
+    for (const [path, statement] of statements) {
+      const found = lines(path).filter((line) => line.includes(statement));
+      expect(found, `${path}: ${statement}`).toHaveLength(1);
+      expect(found[0], `${path}: ${statement}`).toContain(B3);
+    }
+  });
+
+  // [B23-B3 review, 2026-10-04] coverage-7, security-1, coverage-1, coverage-3, coverage-5, coverage-6: each statement the review found
+  // false or overstated carries its correction where it stands
+  it("10. the review round's corrections stand where the statements are: the B3 note on B2's storage sentence names its antecedent and leaves B2's sentence whole; case 3 is eight hostile fields among eleven; the receipt id is screened; the client's exact shape is CONFIRMED by the client round trip; a failed hydration shows no observation; the answer's licence is UNKNOWN; section 28 records the round", () => {
+    const REVIEW = "[B23-B3 review, 2026-10-04]";
+    const storage = lines(PAGE).filter((line) => line.includes("otherwise the exchange is stale, which is B23-B3's to show (OD-168)."));
+    expect(storage).toHaveLength(1);
+    expect(storage[0]).not.toContain("an observation of such an exchange");
+    expect(storage[0]).toMatch(/\(OD-168\)\. \[B23-B3, 2026-10-04\] .*whose authority is no longer head.*\. A provider whose terms forbid storage keeps no provider-chosen$/);
+    const eighteen = section(read(PAGE), 18);
+    expect(eighteen).not.toContain("eleven hostile fields");
+    expect(eighteen).toContain("eight hostile fields among eleven");
+    for (const fact of [`${REVIEW} security-1`, "`source.providerReceiptId`", "case 8", `${REVIEW} coverage-6`, "`answerLicense`"]) expect(eighteen, fact).toContain(fact);
+    const twentyOne = section(read(PAGE), 21);
+    for (const fact of [`${REVIEW} coverage-3`, "`b23-b-observation` case 9", `${REVIEW} coverage-5`, "failed integrity verification", "`b23-b-no-auto-accept` case 7", `${REVIEW} coverage-4`]) expect(twentyOne, fact).toContain(fact);
+    const twentyEight = section(read(PAGE), 28);
+    for (const id of ["regressions-1", "regressions-2", "security-1", "coverage-1", "coverage-2", "coverage-3", "coverage-4", "coverage-5", "coverage-6", "coverage-7", "tests-1", "tests-2", "tests-4", "tests-6", "tests-7", "tests-9"]) expect(twentyEight, id).toContain(id);
+  });
+});
