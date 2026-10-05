@@ -496,7 +496,7 @@ describe("[B23-B1 lead, 2026-10-04] the whole-store backstops count only what ca
     expect(svc.heldCounts(SCOPE)).toEqual({ plans: 1, openPlans: 1, keys: 1 });
   });
 
-  it("18. only open plans count toward the plan backstop: eight project scopes at their own bounds hold more consumed plans than the backstop (8 x 256 + 8 x 32 = 2,304 > 2,048), and a ninth project still previews and commits", async () => {
+  it("18. only open plans count toward the plan backstop: eight project scopes at their own bounds hold more consumed plans than the backstop (8 x 256 + 8 x 32 = 2,304 > 2,048), and a ninth project still previews and commits", { timeout: 60_000 }, async () => { // [B23-B3 lead, 2026-10-04] fills the stores: 2.2 s here, on vitest's 5 s default (the CPU-bound cases get an explicit budget)
     const svc = service();
     const { ports } = fakePorts();
     const { plans, plansPerProject, keysPerProject } = PROVIDER_EXCHANGE_LIMITS;

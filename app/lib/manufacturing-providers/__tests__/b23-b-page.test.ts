@@ -82,7 +82,7 @@ describe("[B23-B1 review] the outbound-disclosure page", () => {
     expect(stale).toEqual([]);
   });
 
-  it("4. regressions-4: while the provider registry's header still says no route reads it and the provider exchange route's closure reads it, the page records that statement as stale, citing its line", () => {
+  it("4. regressions-4: while the provider registry's header still says no route reads it and the provider exchange route's closure reads it, the page records that statement as stale, citing its line", { timeout: 120_000 }, () => { // [B23-B3 lead, 2026-10-04] a whole-tree closure scan: 2.2 s here, over vitest's 5 s default on CI (0cd3f59, prompt-to-gerber)
     const header = lines(REGISTRY);
     const at = header.findIndex((line) => line.includes(STALE_SENTENCE));
     const closure = importClosure(collectProductionFiles(ROOT), ["app/api/pcb/provider-exchange/route.ts"]);
