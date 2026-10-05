@@ -2427,3 +2427,108 @@ Amendments to existing entries:
     but it reads no handle first, so the message no longer claims the authorization is unspent]), never `ORDER_IN_FLIGHT`, which names
     an unresolved order; chosen over validating the handle before the claim (section 8).
 - Owner confirmation pending.
+
+## OD-175 — physical-evidence definitions, as applied (B23-D, 2026-10-05)
+
+- **Default applied:** `physical-evidence.ts` defines the eight runbook kinds as closed record types with validators.
+- **Binding:** every record binds `releaseId`, `archiveSha256`, board revision and digest; the unit or lot; the procedure (`sha256:` digest); typed equipment and operator references; raw artifact digests; an execution class; and a result.
+- **Review:** a human `project_admin` with a `qualificationRef`, from a server port asked only by record id, kind and digest. The answer carries `operatorActorIds`, and the reviewer is none of them.
+- **Never satisfies:** missing raw artifacts, dry run, a result other than pass, no server-derived review of the exact digest, or `use_as_is`.
+- **Cross-record rules:** the lot's identity binds units; failures raise nonconformances; reworks close only on the raising subject, with later physical retests; a final qualification comes after every failure and rework.
+- **Blocked:** the evaluator answers blocked for every input.
+- **Nothing is wired or created:** no port is wired; no route, store, tool or form exists; recording is B24-E's under LB-5.
+- **Lead-fix rounds and the lead round (2026-10-05):** independent checks' six low findings, closed test-first (contract cases 11-16): a failure of this release and lot always raises; a disposition comes no earlier than what raised it; a scrap removes its unit or lot by its own rules, whatever record shares its id; a lot with no unit left is scrapped; a final qualification follows every hardware rework, satisfying or not.
+- **Evidence:** `physical-evidence.md` sections 1-5 and 9; `b23-d-physical-evidence-contract` cases 1-16.
+- Owner confirmation pending.
+
+
+## OD-176 — the latent CD-11/CD-12/CD-13 claim paths, as applied (B23-D, 2026-10-05)
+
+- **Default applied:** not rewired. The tripwire pins no production caller for the five functions and executes D23-14's counterexamples.
+- **Hardening list** (`physical-evidence.md` section 6): resolve refs against stored, reviewed evidence; a server-derived actor; verified provenance for a hardware class; a waiver never satisfies a physical gate; `factory.ts:5`'s unchecked refs and missing operator; the seed types `FactoryTestResult` and `CalibrationResult`.
+- **Evidence:** `b23-d-latent-claim-paths` cases 1-6.
+- Owner confirmation pending.
+
+
+## OD-177 — `manufacturing.assembled-release` and its unblock condition, as applied (B23-D, 2026-10-05)
+
+- **Default applied:** one record, kept `missing`, Tier 3, unreachable.
+- **Both conditions named:** in the note (`:118`), the gate's refusal (`:189`) and the public message (`manufacturing-errors.ts:62`).
+- **Pinned by id** in `b23-d-assembled-release-blocked` (CI-admitted, no router); the gate refuses `assembled_pcb`.
+- **B01 CSV** moved once, by its generator; the release identity did not move.
+- **Evidence:** `physical-evidence.md` section 7; `b23-d-assembled-release-blocked` cases 1-6.
+- Owner confirmation pending.
+
+
+## OD-187 — B23-D: stated choices beyond its task text, as applied (B23-D, 2026-10-05)
+
+- **Default applied** (as `physical-evidence.md` section 12 states them, the review round's, both lead-fix rounds' and the lead round's amendments included):
+  - (a) **Where.** `app/lib/manufacturing-providers/physical-evidence.ts`, in the CI-admitted B23 directory; it imports only the durable
+    digest helper and nothing in production imports it.
+  - (b) **Required kinds.** Every kind but `deviation_rework` for an assembled-product claim; `deviation_rework` for each nonconformance
+    that a record of the claim raises (amended: a failure raises itself), until a satisfying rework, repair or scrap closes it.
+  - (c) **Who reviews.** A human `project_admin` with a recorded `qualificationRef`, derived by the server from its session
+    (`derivation: "server_session"`), no earlier than the work. No new role until the owner names one (as OD-172). Amended: never one of
+    the record's operators as the server resolves them - the answer carries `operatorActorIds`, one per operator reference, and an
+    answer without them is refused; that the resolution is right is the port's (B24-E).
+  - (d) **The review port.** Asked by record id, kind and digest only; its answer copied as data and checked;
+    `PHYSICAL_EVIDENCE_REVIEW_PORT_WIRING` is `"none"`, and the reviewed change that wires one changes it with it.
+  - (e) **Waivers and dispositions.** `use_as_is` is a waiver: it never satisfies and never closes a nonconformance. Scrap closes one
+    without a retest. Rework and repair need at least one satisfying retest performed no earlier than the rework. Amended: every
+    disposition acts on a subject that covers each record that raised the nonconformance (a lot's nonconformance needs a lot-scope
+    rework and retest, since a lot record names no unit), and each retest is an incoming inspection, continuity/power-on or functional
+    test covering the reworked subject, never a record that raised the nonconformance. [B23-D low round, 2026-10-05] Amended: every
+    disposition comes no earlier than each record that raised the nonconformance it names, so each retest does too; "no earlier than"
+    admits the same instant, as every ordering here does. A scrap closes only the nonconformance it names, and it removes its subject
+    (s). [B23-D low round 2, 2026-10-05] Amended: it removes its subject only when it satisfies on its own (s).
+  - (f) **Final physical qualification** relies only on satisfying records of the same evaluation, performed no later than itself.
+    Amended: and it comes no earlier than every record that raised a nonconformance and every satisfying rework of the claim. [B23-D low
+    round 2, 2026-10-05] Amended: every hardware rework of the claim, satisfying or not and removed or not - a rework, a waiver or a
+    scrap done after it leaves it stale, reviewed or not.
+  - (g) **Duplicate record ids** void every record that carries the id. [B23-D low round, 2026-10-05] Amended: a voided record still
+    counts against the claim - it raises what it names (a hardware failure, itself), and a voided hardware scrap still removes its
+    subject. [B23-D low round 2, 2026-10-05] Amended: a voided scrap removes nothing (s); a voided hardware rework still keeps a final
+    qualification dated before it stale (f). [B23-D lead, 2026-10-05] Amended: a duplicate voids what a record would satisfy or close,
+    never what it imposes - a voided scrap that satisfies its own rules still removes its subject, and a voided lot identity still binds
+    units and counts them (s, case 16).
+  - (h) **References are identifiers**: no space and no "@", so no prose and no address. Amended: operators and equipment are typed
+    (`operator:<id>`, `equipment:<id>`); a regex cannot tell an id from a name, so that an operator id spells no name is the recording
+    route's (B24-E). Operators are references, resolved to actor ids only by the server (c).
+  - (i) **Coverage.** A lot claim counts one satisfying record per kind; whether every unit or a sample must be covered is the owner's
+    question (UNKNOWN), moot while the block stands. Amended: the claim's identity is its lot-scope identity records; a unit record
+    names a serial each lists, and an inspection inspects no more than the lot holds. [B23-D low round, 2026-10-05] A record outside
+    that identity never satisfies, yet its failure still raises (p).
+  - (j) **Blocked by type and by fact.** `eligible` is `false` in the answer's type, and `ASSEMBLY_DATA_AUTHORITY` is `"absent"`; no
+    input supplies the assembly-data authority.
+  - (k) **Where a person sees it.** The unblock condition is stated in the error table (`manufacturing-errors.ts:62`), not the panel: a
+    person meets the block only through that refusal (no control requests an assembled release), and the panel stays unchanged (no UI
+    change). Limit: no qualification produces `assembled_pcb` today, so in practice nobody sees it yet.
+  - (l) **Wording.** The gate's refusal says "approved MPN, variant, ..." so that the redacted trace's 200-character bound keeps both
+    conditions whole; the registry note keeps its `[B17-A]` prefix and adds `[B23-D]`.
+  - (m) **The latent paths** are not rewired; their counterexamples are pinned as executed (latent case 4), so a hardening change moves
+    that pin by review.
+  - (n) **Inputs are read once, as data** (a structured clone): a getter answers once, and a proxy or a function is refused. Amended:
+    the evaluator copies each record once and reports a refused record's id and kind from that copy; every read of the caller's claim is
+    guarded, so a throwing read is a malformed claim, never an exception.
+  - (o) **Bounds.** 512 records per evaluation; 64 equipment refs, 16 operators, 256 raw artifacts, 64 nonconformances, 4,096 serials
+    and 64 relied-on records per record; quantities up to 1,000,000.
+  - (p) **A failure is never outvoted** (review round). A `hardware` record of the claim whose result is not pass raises the
+    nonconformances it names, or itself when it names none; a dry run raises nothing of its own. [B23-D low round, 2026-10-05] Amended:
+    "of the claim" is of this release and lot - every valid record of them raises what it names, whatever its serial listing or a
+    duplicate id; only another release or another lot puts a record outside the claim.
+  - (q) **Manufacturer acceptance** (review round). It binds the release's own `archiveSha256` only; an outbound package digest waits
+    for a server that can resolve it to its release. Its refs are the manufacturer's, never Sirkit's minted `mfg-` ids.
+  - (r) **Digest-named fields** (review round). `procedureDigest`, `testDefinitionDigest` and `assemblyDataDigest` are `sha256:<64
+    hex>`.
+  - (s) **A scrap removes its subject** ([B23-D low round, 2026-10-05]). Every `hardware` scrap of this release and lot removes its unit
+    or lot, reviewed or not and whatever its id's duplicates, as a failure raises whatever its review; a dry run removes nothing. No
+    other record of a removed subject satisfies any kind (`subject_scrapped`), its passes, final qualification and reworks included; the
+    scrap itself stays and closes only the nonconformance it names, when it satisfies and acts on it. [B23-D low round 2, 2026-10-05]
+    Amended: only a scrap that satisfies on its own - its own rules (this release and lot, raw artifacts, hardware, pass, a
+    server-derived human review) and an id no other record shares - removes its subject, whatever the lot's identity lists for its unit;
+    one that does not satisfy, a dry run included, removes nothing. A lot with no unit left is removed: every serial one of its
+    identities lists (one or more), or as many distinct units as its smallest `lotQuantity`, scrapped. A removal never relaxes a rule:
+    what a removed record raised, and when a removed rework was done, still count (f). [B23-D lead, 2026-10-05] Amended: "an id no other
+    record shares" is no longer one of a scrap's own rules - whatever record shares its id, a scrap that satisfies its own rules removes
+    its subject, and the identities that count a lot's units out are read the same way (g, case 16).
+- Owner confirmation pending.

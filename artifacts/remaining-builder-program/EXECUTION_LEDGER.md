@@ -4671,3 +4671,65 @@ control, tool or composition-root wiring was added. Live ordering stays BLOCKED-
   - (4) Lead gates on the final tree (`b23/lead-gates.sh c`): every set exit 0. M 785 passed, 2 skipped; A 632 passed, 21 skipped; J
     977 passed, 4 skipped; B 1,107; C 415; D 460; E 825; F 357; H 1,059; F2 22; G 375; I 479 passed, 9 skipped. tsc 0; eslint 0; all 21
     generators with no drift.
+
+### B23-D - physical-hardware evidence, defined and never fabricated (2026-10-05 local; increment workflow + review fix + lead; this commit)
+
+- B23-D (2026-10-05, on `4e71563`):
+  - **What landed:** `physical-evidence.ts` (eight closed kinds; validators; server-derived review by record digest with server-resolved operators; `assembledProductEligibility`, blocked for every input); the latent-claim-path tripwire; the assembled-release block pinned by id, with both unblock conditions in the note `:118`, the gate `:189` and the public message `manufacturing-errors.ts:62`.
+  - **Review round:** sixteen CONFIRMED findings (thirteen distinct) closed test-first:
+    - the operator check across namespaces;
+    - failures outvoted by a pass;
+    - unbound acceptance digests and minted ids;
+    - raw re-reads after refusal;
+    - any record as a retest;
+    - unit and lot identity unbound across records;
+    - free-text digests;
+    - the "no person's name" overclaim;
+    - a wrong B14.4 citation;
+    - four test-strength gaps.
+    8 of 22 cases were red, the per-finding probe was 10/10 red, and 25 of 26 breakages of the fixed module were caught (the survivor exposed a redundant clause, which was removed).
+  - **Decisions:** D23-13, D23-14 and D23-15 closed; OD-175, OD-176 and OD-177 applied; OD-187 records the choices, amended by the review round.
+  - **Pins:** B01 CSV row `:47` re-rendered (one row); no pin outside D's new suites moved.
+  - **Gates:** manufacturing-providers 391/391 (set M 813 passed, 2 skipped, at the lead close after the lead-fix rounds), engineering 1107/1107, pcb 977 (+4 skipped), prompt-to-gerber 34/34, agent 415/415, orchestration 460/460, computation 300 (+18 skipped), b14-4 22/22; tsc 0; eslint 0; 21 generators with no drift.
+  - **Unchanged:** census 166/163/3/0; counts 47/36/9/27; no route, tool, store or wiring.
+  - **UI:** one error string; no control change.
+  - **Lead's single run:** manufacturing-release-gate.test.ts (in no CI workflow) ran once, deliberately, on the final tree: 5 of 5 passed, exit 0, its refusal of assembled_pcb included (it asserts the code, not the message).
+  - **Live:** BLOCKED-LIVE-QUALIFICATION (LB-5).
+- **B23-D low round (2026-10-05, uncommitted on `4e71563`).** An independent check of the review fixes raised three low issues, closed test-first in `physical-evidence.ts`, the contract suite and `physical-evidence.md`:
+  - **Failures always raise.** A failure of this release and lot raises its nonconformance whatever its serial listing or a duplicate id; only another release or another lot puts a record outside the claim (`outsideClaim`).
+  - **Dispositions come after the failure.** A rework comes no earlier than every record that raised its nonconformance, so its retests do too (`actsOn`).
+  - **A scrap removes its subject.** Every hardware scrap of the claim removes its unit or lot, so a scrapped lot presents no evidence (`withoutScrapped`, rejection `subject_scrapped`).
+  - **Red:** 5 of 13 contract cases, plus a 6-of-6 per-scenario probe, each answering `missing []` and `openNonconformances []`.
+  - **Checks that bite:** 12 of 12 breakages of the new code caught; the review round's 25 still caught.
+  - **Pins moved** in contract cases 1 and 6 only, each toward refusing more, with dated notes.
+  - **Gates:** manufacturing-providers 394/394, engineering 1107/1107, release-engineering/firmware/full-flow 33/33, agent 415/415, closeouts 19/19, tsc 0, eslint 0, 21 generators with no drift. Census, counts, routes, tools and UI unchanged.
+  - **OD-187:** (e), (g), (i) and (p) amended; (s) added.
+  - **Live:** BLOCKED-LIVE-QUALIFICATION (LB-5).
+- **B23-D low round 2 (2026-10-05, uncommitted on `4e71563`).** A second independent check raised two low issues, closed test-first in `physical-evidence.ts`, the contract suite and `physical-evidence.md`:
+  - **A removal never relaxes a rule (low-4).** Only a scrap that satisfies on its own removes its subject (`removedSubjects`). A final physical qualification comes after every hardware rework of the claim, satisfying or not and removed or not (`reworkInstants`).
+  - **A lot with no unit left is scrapped (low-5).** That is, once every serial an identity lists, or `lotQuantity` distinct units, is scrapped.
+  - **Red:** 3 of 15 contract cases, plus a 7-of-7 per-scenario probe, each answering `missing []` and `openNonconformances []`.
+  - **Mutations caught:** 14 of 14 of the new code, the low round's 9 of 9, and the review round's 26 of 26.
+  - **Pins moved:** only in contract case 13, two pins toward refusing less as directed, with case 13's title corrected.
+  - **Gates:** manufacturing-providers 396/396, engineering 1107/1107, release-engineering/firmware/full-flow 33/33, agent 415/415, closeouts 19/19, tsc 0, eslint 0, generators with no drift. Census, counts, routes, tools and UI are unchanged.
+  - **OD-187:** (e), (f), (g) and (s) amended.
+  - **Live:** BLOCKED-LIVE-QUALIFICATION (LB-5).
+- Lead close (2026-10-05):
+  - (1) The second low round's own re-check raised one more low issue. A record that is not physical evidence (a dry run) sharing a
+    reviewed scrap's id voided the scrap and took its removal back, so the unit's pass satisfied again and the claim moved toward
+    complete; the same through the lot identities that bind units and count a lot's units out. The lead closed it test-first:
+    contract case 16 failed on the unchanged module (1 of 16), and a per-scenario probe failed 3 of 3, each at its intended assertion
+    after its baseline passed. The fix is in place with no line moved: the scraps that remove, and the identities that bind and count,
+    are read from each record's own verdict before the duplicate check. A duplicate now voids what a record would satisfy or close,
+    never what it imposes. Three pins moved toward refusing more, each with a dated `[B23-D lead, 2026-10-05]` note: the shared-id
+    scraps of cases 13, 14 and 15 now remove their subject. Reverting either half of the fix was caught (case 16; cases 13-16). The
+    earlier rounds' 49 breakages were not re-run after this change. `physical-evidence.md` carries dated notes in sections 0, 2, 4 and
+    9-14; OD-187 (g) and (s) are amended. Further D edge cases go on the page (section 13), not into another round.
+  - (2) `manufacturing-release-gate.test.ts` (in no CI workflow) ran once, deliberately, on the final tree: 5 of 5 passed, exit 0,
+    10.7 s. It asserts the assembled refusal's code, not its message, so `release-gate.ts:189`'s new wording moved no pin.
+  - (3) UI (one error string, no control): both browser suites passed under the lock, the default configuration 48 of 48 (7.3 min)
+    and the orchestration configuration 4 of 4 (2.7 min). The evidence PNGs they rewrote (31; one was byte-identical) were restored
+    from HEAD, all 32 equal by blob hash.
+  - (4) Lead gates on the final tree (`b23/lead-gates.sh d`): every set exit 0. M 813 passed, 2 skipped; A 632 passed, 21 skipped; J
+    977 passed, 4 skipped; B 1,107; C 415; D 460; E 825; F 357; H 1,059; F2 22; G 375; I 479 passed, 9 skipped. tsc 0; eslint 0;
+    all 21 generators with no drift.

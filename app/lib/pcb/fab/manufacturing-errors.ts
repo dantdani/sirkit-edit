@@ -59,7 +59,7 @@ export const MANUFACTURING_PUBLIC_ERRORS = Object.freeze({
   MFG_RC03_EVIDENCE_INVALID: { status: 422, message: "Post-layout capability evidence is missing or stale." },
   MFG_RC03_RECOMPUTATION_MISMATCH: { status: 422, message: "Fresh capability evaluation differs from the stored evidence." },
   MFG_COMPONENT_AUTHORITY_INVALID: { status: 422, message: "Component authority evidence is incomplete or its digest is invalid." },
-  MFG_ASSEMBLY_AUTHORITY_UNAVAILABLE: { status: 422, message: "Assembled release is not available." },
+  MFG_ASSEMBLY_AUTHORITY_UNAVAILABLE: { status: 422, message: "Assembled release is not available. It stays blocked until both exist: exact approved assembly data (MPN, population variant, BOM, placement and paste) and physical evidence from the built boards, reviewed by a qualified person." }, // [B23-D] OD-177: what a person sees names both unblock conditions
   MFG_ZONE_FILL_STALE: { status: 422, message: "A conductive zone lacks a current fill proof." },
   MFG_VIA_SPAN_UNSUPPORTED: { status: 422, message: "Only full through-vias are releasable." },
   MFG_OUTLINE_INVALID: { status: 422, message: "A closed non-zero board outline is required." },
