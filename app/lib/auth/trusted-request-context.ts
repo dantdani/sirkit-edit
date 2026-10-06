@@ -21,7 +21,7 @@
 
 import { engineeringDigest } from "../engineering/stable";
 import type { EngineeringActor } from "../engineering/types";
-import { resolveAuthMode, sensitiveOperationsBlocker } from "./mode";
+import { resolveAuthMode } from "./mode"; import { productionServingBlocker } from "./deployment-profile"; // [B24-A1] OD-190: the one sensitive-route blocker, over mode.ts
 import { resolveIdentityProvider, resolveMembershipRepository } from "./identity-runtime";
 import { membershipRevisionOf, projectRoleFromMembership } from "./project-membership";
 import { unauthenticated, forbidden, jsonError, requireSameOrigin } from "./request-security";
@@ -60,9 +60,9 @@ export async function resolveTrustedRequestContext(request: Request, options: Re
 
   // 0. Production must have authentication configured; otherwise sensitive
   //    operations fail closed.
-  const blocker = sensitiveOperationsBlocker(environment);
+  const blocker = productionServingBlocker(environment); // [B24-A1] OD-190: + in a production runtime, a serving profile and the expected origin (reads included)
   if (blocker) {
-    return refuse(forbidden("AUTH_PRODUCTION_NOT_CONFIGURED", blocker));
+    return refuse(forbidden(blocker.code, blocker.message));
   }
 
   // 0b. Same-origin CSRF check for cookie-authenticated mutations (production

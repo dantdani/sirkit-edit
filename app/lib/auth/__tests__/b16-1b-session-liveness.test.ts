@@ -39,7 +39,7 @@ import { setIdentityProviderFactory } from "../identity-runtime";
 const USER = "user-sirkit-qual-0001";
 const now = () => Math.floor(Date.now() / 1000);
 const CLAIMS: SupabaseVerifiedClaims = { sub: USER, exp: now() + 3600, aal: "aal1", session_id: "sess-0001", aud: "authenticated" };
-const ENV = { NODE_ENV: "production", NEXT_PUBLIC_SUPABASE_URL: "https://sirkitqualification.supabase.co", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_SIRKIT_QUAL_SENTINEL_000000" } as const;
+const ENV = { NODE_ENV: "production", NEXT_PUBLIC_SUPABASE_URL: "https://sirkitqualification.supabase.co", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_SIRKIT_QUAL_SENTINEL_000000", SIRKIT_DEPLOYMENT_ENV: "production", SIRKIT_EXPECTED_ORIGIN: "https://sirkit.example" } as const; // [B24-A1, 2026-10-06] + the deployment profile and the expected origin: a production runtime refuses sensitive reads without them (OD-190)
 const req = (headers: Record<string, string> = {}) => new Request("https://sirkit.example/api/pcb-sync", { headers });
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 function verifier(impl: (request: Request, expected: string, signal: AbortSignal) => Promise<SessionLivenessOutcome> | SessionLivenessOutcome): SessionLivenessVerifier & { calls: number } {

@@ -101,7 +101,7 @@ describe("[B23-B1] POST /api/pcb/provider-exchange: the policy and classificatio
     expect(read("artifacts/ai-control-plane-b16-0-1/exact-route-authorization-policy.csv").split(NEWLINE).filter((line) => line.startsWith(`${PATH},`))).toHaveLength(1);
   });
 
-  it("3. the census moves once, by this one route file: 166 route methods = 163 canonical + 3 factories + 0 raw; the route is a canonical wrapper; B23 has exactly one route file", () => {
+  it("3. the census moves once, by this one route file: 166 route methods = 163 canonical + 3 factories + 0 raw ([B24-A1, 2026-10-06] B24-A1's health and readiness since: 168 = 165 + 3 + 0); the route is a canonical wrapper; B23 has exactly one route file", () => {
     let total = 0, canonical = 0, factories = 0, raw = 0;
     const exchangeFiles: string[] = [];
     for (const file of listRouteFiles(ROOT)) {
@@ -113,7 +113,7 @@ describe("[B23-B1] POST /api/pcb/provider-exchange: the policy and classificatio
         if (form === "canonical-wrapper") canonical += 1; else if (form === "factory") factories += 1; else raw += 1;
       }
     }
-    expect({ total, canonical, factories, raw }).toEqual({ total: 166, canonical: 163, factories: 3, raw: 0 });
+    expect({ total, canonical, factories, raw }).toEqual({ total: 168, canonical: 165, factories: 3, raw: 0 }); // [B24-A1, 2026-10-06] reviewed census move (OD-198), was 166 / 163: + GET /api/health and GET /api/ready, two canonical wrappers
     expect(exchangeFiles).toEqual([ROUTE_FILE]);
     const src = read(ROUTE_FILE);
     expect(exportedHttpMethods(src, join(ROOT, ROUTE_FILE))).toEqual(["POST"]);

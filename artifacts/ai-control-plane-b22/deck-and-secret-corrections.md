@@ -481,7 +481,7 @@ Each row resolves by content on the line it names (the page case 5 checks every 
 | C74 | `app/components/spice/SpiceStudio.tsx` | 461 | `setApprovedOps(new Set(preselectedOperationIndexes(data.proposal)));` | the studio's one pre-selection |
 | C75 | `app/components/spice/SpiceStudio.tsx` | 472 | `entry.operation.op === "request-run")` | Apply starts only selected run requests |
 | C76 | `.github/workflows/deterministic-manufacturing.yml` | 226 | `app/lib/computation/__tests__` | the one directory filter |
-| C77 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 54 | `const CHAPTERS = ["b19-", "b20-", "b21-", "b22-", "b23-"] as const;` | the chapter admitted [B23-A1, 2026-10-02] re-pinned in place: B23-A1 appended `"b23-"` to this line (OD-180); `"b22-"` stands where B22-A1 put it |
+| C77 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 54 | `const CHAPTERS = ["b19-", "b20-", "b21-", "b22-", "b23-", "b24-"] as const;` | the chapter admitted [B23-A1, 2026-10-02] re-pinned in place: B23-A1 appended `"b23-"` to this line (OD-180); `"b22-"` stands where B22-A1 put it [B24-A1, 2026-10-06] re-pinned in place: B24-A1 appended `"b24-"` to this line (OD-222); `"b22-"` and `"b23-"` stand |
 
 ## 11. For the lead
 

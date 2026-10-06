@@ -266,7 +266,7 @@ first append meets on a server. The isolation level of a production server stays
 
 CI: the suite starts PostgreSQL, so it lives outside the B23 test folder (`app/lib/manufacturing-providers/database/__tests__/`; the
 folder `app/lib/manufacturing-providers/__tests__` is a prompt-to-gerber directory filter, and the job-scope guard refuses a PGlite suite
-there) and is an explicit database-delivery entry (`.github/workflows/deterministic-manufacturing.yml:301`), the B19-E E6 precedent.
+there) and is an explicit database-delivery entry (`.github/workflows/deterministic-manufacturing.yml:302`; [B24-A1, 2026-10-06] was `:301` before B24-A1's filter line after `:227`), the B19-E E6 precedent.
 The guard (`b19-e-ci-job-scope`, its `b23-` case) admits it; DB-backed tests stay opt-in (the database-delivery run: 16 files passed, 3
 skipped). CONFIRMED
 
@@ -467,7 +467,7 @@ JSON input rules; the surrogate CONFIRMED on PGlite, case 5).
 ## 14. Citations
 
 As of this working tree on `0c78e93` after the review round (2026-10-04); the anchor text is the check, the line is for the reader;
-`b23-b-dfm-quote-flow-page` case 3 checks every row. [B23-B2 lead, 2026-10-04] C65-C72 were added by the lead's round.
+`b23-b-dfm-quote-flow-page` case 3 checks every row. [B23-B2 lead, 2026-10-04] C65-C72 were added by the lead's round. [B24-A1, 2026-10-06] C64 re-pinned `:301` -> `:302` in place: B24-A1 inserted its filter line after `:227` (OD-222).
 
 | # | file | line | anchor |
 |---|---|---|---|
@@ -534,7 +534,7 @@ As of this working tree on `0c78e93` after the review round (2026-10-04); the an
 | C61 | `app/lib/pcb/fab/validate-package.ts` | 14 | `const MAX_FILES = 64;` |
 | C62 | `app/lib/durable-workflow/repository.ts` | 36 | `async claimOutbox(` |
 | C63 | `app/lib/durable-workflow/server-repository.ts` | 32 | `async claimOutbox(` |
-| C64 | `.github/workflows/deterministic-manufacturing.yml` | 301 | `app/lib/manufacturing-providers/database/__tests__/b23-b-exchange-ledger-pglite.test.ts` |
+| C64 | `.github/workflows/deterministic-manufacturing.yml` | 302 | `app/lib/manufacturing-providers/database/__tests__/b23-b-exchange-ledger-pglite.test.ts` |
 | C65 | `app/lib/manufacturing-providers/exchange-ledger.ts` | 195 | `\|\| hasLoneSurrogate(value)) return false;` |
 | C66 | `app/lib/manufacturing-providers/exchange-ledger.ts` | 367 | `if (head && phase === "sent") await stillPrepared(historyOf, aggregate, attempt.idempotencyKey);` |
 | C67 | `app/lib/manufacturing-providers/exchange-ledger.ts` | 421 | `samePackage(other, attempt) && (other.state === "prepared" \|\| other.state === "sent")` |

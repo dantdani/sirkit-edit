@@ -3,7 +3,7 @@ import {
   configuredOpenAIReasoningEffort,
   openAIModelProfile,
 } from "@/app/lib/llm/openai-config";
-
+import { anthropicModelSetting } from "@/app/lib/llm/anthropic-config"; // [B24-A1] OD-199: the setting the adapters send, refused when empty or padded
 import { publicRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 export const GET = publicRoute(undefined, async (): Promise<Response> => {
   const openAIModel = configuredOpenAIModel();
   const openAIProfile = openAIModelProfile(openAIModel);
-  const anthropicModel = process.env.SIRKIT_ANTHROPIC_MODEL?.trim() || "claude-opus-4-7";
+  const anthropicSetting = anthropicModelSetting(); const anthropicModel = anthropicSetting.ok ? anthropicSetting.model : null; // [B24-A1] OD-199: what the Anthropic clients send (was `?.trim() || "claude-opus-4-7"`, D24-10); a refused setting reports no model
 
   return Response.json(
     {
@@ -28,7 +28,7 @@ export const GET = publicRoute(undefined, async (): Promise<Response> => {
         },
         anthropic: {
           model: anthropicModel,
-          label: anthropicModel,
+          label: anthropicSetting.ok ? anthropicSetting.model : `SIRKIT_ANTHROPIC_MODEL refused (${anthropicSetting.refusal})`,
         },
       },
       embeddings: {

@@ -61,7 +61,7 @@ No response body or header contained the project reference, key, token, refresh 
    pnpm exec next build
    ```
    ```bash
-   PORT=3100 SIRKIT_EXPECTED_ORIGIN=http://127.0.0.1:3100 pnpm exec next start -p 3100
+   PORT=3100 SIRKIT_EXPECTED_ORIGIN=http://127.0.0.1:3100 pnpm exec next start -p 3100  # [B24-A1, 2026-10-06] the production runtime also needs SIRKIT_DEPLOYMENT_ENV=staging (or production), or every sensitive route answers 403 AUTH_PRODUCTION_NOT_CONFIGURED (OD-190)
    ```
 3. Run the opt-in live matrix (skipped everywhere else):
    ```bash

@@ -210,13 +210,13 @@ export class AnthropicAgentAdapter implements ProviderAgentAdapter {
   }
 
   private getClient(): AnthropicClient {
-    this.client ??= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: this.maxRetries });
+    this.client ??= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 120_000, maxRetries: this.maxRetries }); // [B24-A1] D24-10: OpenAI's client timeout (:112) and the loop's run deadline (contracts.ts:185); the retries as before
     return this.client;
   }
 
   private params(state: AnthropicContinuationState, tools: readonly ProviderToolDeclaration[]): MessageCreateParamsNonStreaming {
     return {
-      model: this.model,
+      model: sendableAnthropicModel(this.model), // [B24-A1] OD-199: an empty or padded model is refused (bad_request) before messages.create, never sent
       max_tokens: MAX_OUTPUT_TOKENS,
       system: state.system,
       messages: state.messages,
@@ -332,3 +332,4 @@ export function agentAdapterForRole(role: SpecialistRole, provider: "openai" | "
 import type { StepStop } from "./contracts";
 import type { SpecialistRole } from "./orchestration/contracts";
 import { configuredAnthropicModel } from "../llm/anthropic-config";
+import { sendableAnthropicModel } from "../llm/anthropic-model-guard"; // [B24-A1] on its own line at the end (an import is hoisted): no cited line moves

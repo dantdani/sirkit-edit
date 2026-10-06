@@ -10,7 +10,7 @@
  *                                                        isolated-project marker (prefix enforced)
  *   SIRKIT_AUTH_QUALIFICATION_BASE_URL=http://127.0.0.1:<port>
  *                                                        the REAL Next.js app, started in production auth
- *                                                        mode with SIRKIT_EXPECTED_ORIGIN equal to this origin
+ *                                                        mode with SIRKIT_EXPECTED_ORIGIN equal to this origin [B24-A1, 2026-10-06] and SIRKIT_DEPLOYMENT_ENV=staging (or production): without it every sensitive route answers 403 AUTH_PRODUCTION_NOT_CONFIGURED
  *   SIRKIT_AUTH_QUALIFICATION_EMAIL / _PASSWORD          a dedicated qualification account (existing)
  *   SIRKIT_AUTH_QUALIFICATION_PROJECT_ID                 a project the account holds an ACTIVE membership in
  *   SIRKIT_AUTH_QUALIFICATION_TENANT_ID                  optional (default "local")

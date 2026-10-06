@@ -567,7 +567,7 @@ added for the low fixes.
 | C49 | `app/components/pcb/ProviderExchangePanel.tsx` | 122 | `export function ProviderExchangePanel(props: ProviderExchangePanelProps) {` |
 | C50 | `app/components/pcb/ProviderExchangePanel.tsx` | 157 | `data-testid="p2g-provider-carried"` |
 | C51 | `artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv` | 107 | `manufacturing.provider-order,1,manufacturing,` |
-| C52 | `app/lib/manufacturing-providers/__tests__/b23-a-tier3-vocabulary.test.ts` | 272 | `expect(actionIds).toHaveLength(106);` |
+| C52 | `app/lib/manufacturing-providers/__tests__/b23-a-tier3-vocabulary.test.ts` | 272 | `expect(actionIds).toHaveLength(107); // [B24-A1, 2026-10-06] reviewed pin move (D9), was 106` |
 | C53 | `app/lib/engineering/__tests__/b17-a-control-inventory.test.ts` | 63 | `if (record.status === "missing") expect(reached.has(record.id) \|\| routed.has(record.id)` |
 | C54 | `app/lib/engineering/__tests__/b19-e-no-purchase-tripwire.test.ts` | 26 | `const PURCHASE_WORDING = /add to cart` |
 | C55 | `app/lib/project/__tests__/b18-b-import-gates.test.ts` | 34 | `const MINT_APPROVED = new Set(["app/lib/execution-grant/mint.ts", "app/api/chat/route.ts"]);` |

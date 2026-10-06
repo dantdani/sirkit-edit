@@ -43,7 +43,7 @@ import { authorizeKicadHttpLibrary } from "../atomic/server-auth";
 import { policyFor } from "./route-policy";
 import { requireSameOrigin, forbidden, jsonError } from "./request-security";
 import { parseOriginHeader, resolveExpectedOrigin } from "./expected-origin";
-import { projectAuthRuntime, sensitiveOperationsBlocker, type AuthRuntimeProjection } from "./mode";
+import { projectAuthRuntime, type AuthRuntimeProjection } from "./mode"; import { productionServingBlocker } from "./deployment-profile"; // [B24-A1] OD-190: the one sensitive-route blocker, over mode.ts
 import { resolveTrustedRequestContext } from "./trusted-request-context";
 import { resolveMembershipRepository } from "./identity-runtime";
 import { membershipRevisionOf, projectRoleFromMembership, type ProjectMembershipRecord } from "./project-membership";
@@ -1007,8 +1007,8 @@ export function mcpBearerJsonRoute(
       if (!policy) return jsonError(500, "AUTH_POLICY_MISSING", "This route has no authorization policy.");
       if (policy.identitySource !== "mcp-bearer") return wrapperMismatch();
       // 4. the production blocker
-      const blocker = sensitiveOperationsBlocker(environment);
-      if (blocker) return forbidden("AUTH_PRODUCTION_NOT_CONFIGURED", blocker);
+      const blocker = productionServingBlocker(environment); // [B24-A1] OD-190: + in a production runtime, a serving profile and the expected origin
+      if (blocker) return forbidden(blocker.code, blocker.message);
       // 5. the configuration and the verifier
       const config = resolveMcpResourceConfiguration(environment);
       const verifier = resolveMcpAccessTokenVerifier(environment);

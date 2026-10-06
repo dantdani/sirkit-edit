@@ -8,7 +8,7 @@
  * case 3 derives `external_process` (which stays green: its column stays at index 6). The five public cache-only BOM routes reach
  * the boundary only through the pricing gateway, which calls a vendor only for `live: true`; each is a reviewed exemption that holds
  * by reachability and by its own calls, or is dropped. No route sends files in A2 and no route is added: the census stays
- * 165 / 162 / 3 / 0 (the provider exchange route is B23-B1's). [B23-B1, 2026-10-03] B1 added it: 166 / 163 / 3 / 0, its row declares `files`.
+ * 165 / 162 / 3 / 0 (the provider exchange route is B23-B1's). [B23-B1, 2026-10-03] B1 added it: 166 / 163 / 3 / 0, its row declares `files`. [B24-A1, 2026-10-06] B24-A1 added health and readiness: 168 / 165 / 3 / 0 (OD-198), both `none` and no model egress.
  *
  * [B23-A2 review] `outboundEgress` sees only the egress boundary. The model-provider SDKs (OpenAI, Anthropic) open their own
  * connections (discovery section 2.3), so a route that sends a prompt or an embedding input to the configured LLM provider is
@@ -615,7 +615,7 @@ const TRANSFER: RoutePolicy = {
 describe("[B23-A2] the route vocabulary (OD-174)", () => {
   it("1. every policy row carries explicit externalTransfer and spend booleans; no row is either in A2 ([B23-B1, 2026-10-03] B1's provider exchange is the one externalTransfer row; none is spend); the two releaseOrQualification rows are unchanged; the gates pass on the table", () => {
     const policies = allRoutePolicies();
-    expect(policies).toHaveLength(166); // [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
+    expect(policies).toHaveLength(168); // [B24-A1, 2026-10-06] reviewed census move (OD-198), was 166; [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
     for (const policy of policies) {
       expect(typeof policy.externalTransfer, `${policy.method} ${policy.path}`).toBe("boolean");
       expect(typeof policy.spend, `${policy.method} ${policy.path}`).toBe("boolean");
@@ -655,7 +655,7 @@ describe("[B23-A2] the route vocabulary (OD-174)", () => {
   it("3. outboundEgress is a closed vocabulary on every classification row and the CSV's last column (external_process stays at index 6); files only with a transfer row and a transfer row only with files; no public row sends an observation query or files, and a public row that sends a model input is reviewed; no row sends files in A2 ([B23-B1, 2026-10-03] B1's provider exchange is the one files row)", () => {
     expect([...OUTBOUND_EGRESS]).toEqual(["none", "observation-query", "files"]);
     const rows = routeResourceClassification();
-    expect(rows).toHaveLength(166); // [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
+    expect(rows).toHaveLength(168); // [B24-A1, 2026-10-06] reviewed census move (OD-198), was 166; [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
     for (const row of rows) expect(OUTBOUND_EGRESS, `${row.method} ${row.path}`).toContain(row.outboundEgress);
     expect(rows.filter((row) => row.outboundEgress === "files").map((row) => `${row.method} ${row.path}`)).toEqual(["POST /api/pcb/provider-exchange"]); // [B23-B1, 2026-10-03] was []: declared by B1's transfer row
     expect(rows.filter((row) => row.isPublic && row.outboundEgress !== "none")).toEqual([]);
@@ -775,8 +775,8 @@ describe("[B23-A2] the route vocabulary (OD-174)", () => {
     await loses(mutated("app/lib/bom/build.ts", "{ live: pricing.live === true, forceRefresh", "{ live: true, forceRefresh"), "PRICING_CALLS:1");
   });
 
-  it("7. [B23-B1, 2026-10-03] one route was added (the provider exchange; A2 added none): 166 classified rows over the route files (the census is 166 / 163 / 3 / 0, b16-1c-invariant-tripwires), and the policy table is the route tree", () => {
-    expect(routeResourceClassification()).toHaveLength(166); // [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
+  it("7. [B23-B1, 2026-10-03] one route was added (the provider exchange; A2 added none); [B24-A1, 2026-10-06] B24-A1 added two (health and readiness): 168 classified rows over the route files (the census is 168 / 165 / 3 / 0, b16-1c-invariant-tripwires), and the policy table is the route tree", () => {
+    expect(routeResourceClassification()).toHaveLength(168); // [B24-A1, 2026-10-06] reviewed census move (OD-198), was 166; [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
     expect(routeEntries.map((entry) => entry.path).sort()).toEqual([...new Set(allRoutePolicies().map((policy) => policy.path))].sort());
   });
 

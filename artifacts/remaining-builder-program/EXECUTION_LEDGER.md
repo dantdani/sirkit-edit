@@ -4832,3 +4832,43 @@ control, tool or composition-root wiring was added. Live ordering stays BLOCKED-
   read-only reviewer and a reviser per increment, then a cross-task critic); the critic's twenty cross-task issues are applied before
   B24-A1 launches.
 - Documents only: no production, test or generator file changed.
+
+### B24-A1 - environment profile, production-mode CI, health, readiness, configuration, flags (2026-10-06 local; increment workflow + lead; this commit)
+
+- Test-first on `chapter/b24-production-qualification` from `8664964`: the four `b24-a1-*` suites failed to load on the unmodified tree; with the new modules present but unwired, 20 of 37 failed, each counterexample for its reason (no profile, a ci profile and an origin-less read resolved; the MCP wrapper passed the blocker; the coordinator's Anthropic client had no timeout; the route reported `claude-opus-4-7` for an empty model; the diagnostic runner reached its install check with the switch set); then 47 / 47.
+- The profile and the blocker (D24-1 offline, OD-190): `SIRKIT_DEPLOYMENT_ENV`, `productionServingBlocker` at its two callers in place, the four production fixtures outside CI gaining the profile; the worker and public paths never call it.
+- The configuration (D24-10, OD-199): the digested `sirkit.deployment-configuration.v1` record, every provider SDK client in it with its timeout and retries; the Anthropic model setting refused rather than sent by both clients, with the refusal's own message; `adapters.ts:213` `timeout: 120_000`; `/api/ai/runtime` reporting what the clients send.
+- The flags (D24-11, OD-200): the 49-name inventory pinned against the tree and the owners, each recorded flag state checked against its owner; `SIRKIT_DIAGNOSTIC_RUNNER_DISABLED`, off-only, refusing every diagnostic run and every install check first.
+- CI (OD-222): `b24-` admitted by one directory filter; the `production-smoke` job (`next build`, `next start`, fail-closed probes) appended, PROPOSED until the lead's local production-mode run and its first CI run are green; no `next build` was run by the builder.
+- Health and readiness (D24-9, OD-198): `GET /api/health`, `GET /api/ready`; census 166 -> 168 by review; action records 106 -> 107; every pin moved in place with a dated note (page section 9), the eight CSVs regenerated.
+- Records: OD-190, OD-198, OD-199, OD-200, OD-222 and OD-217 (in part) as applied, OD-223 for A1's own choices; LB-13; the closure clauses; `environments-and-deployment.md`. Staging, production and every live step BLOCKED-LIVE-QUALIFICATION (LB-13).
+- Review round (2026-10-06): 14 confirmed findings (13 distinct) fixed test-first, the test-strength ones proven against seven deliberate breakages, each restored by hash; the four suites 54 / 54 (page section 8): readiness can no longer reach a real database (a guard port before every case, the database client faked) and its 2,000 ms bound and default port are exercised; the record covers every provider SDK client and its flag states are checked against the owners; the Anthropic model refusal says it sent nothing; the blocker order, the effort list and the ambient-model independence are pinned; the workflow table and the job-order case take later insertions in place; B23's `dfm-quote-flow.md:269` prose citation moved; the production-smoke statements say PROPOSED; the section-10 amendment lists the unnamed pins.
+- Check round (2026-10-06): two low findings fixed test-first. A later workflow insertion now changes only data: every inserting B24 task (A2, A4, B2, B3, C1, C2, C3, D1, D2) appends one row per contiguous group to the page's section-10 insertion table. A1's checks carry A1's lines (the old -> new table, C35, C47) through the rows, check each row's job and the line total since A1's 435, and find A1's filter line, the permissions block and B23's prose citation of the PGlite entry by content; that citation needs a dated note from each task whose rows moved it. A simulation of the nine tasks' 13 planned groups passes; each designed failure still bites (16 breakages caught, each restored by hash). The paste-ready handover for the nine task files is in section 13, and the edge cases left open are in section 15 (INFERRED). `b24-a1-environment-profile` 20/20; the four suites 55/55.
+- Lead close (2026-10-06):
+  - (1) The check round's own check raised one more low issue: case 11's "no `secrets.` reference" guard (`\bsecrets\.` over the whole
+    workflow) also matched B24-A2's planned `scripts/scan-secrets.ts` step. The lead closed it test-first: case 16 applies the guard
+    to the simulated planned workflow and failed on the old pattern (`a1lead-secrets-red2`); the guard is now a GitHub
+    `${{ ... secrets. ... }}` expression (`SECRETS_REFERENCE`), and case 16 pins that such an expression is still refused (`a1lead-secrets-green`,
+    with the three closeout tripwires, 47 tests).
+  - (2) The lead's local production-mode run of the `production-smoke` job's steps (`b24/smoke/smoke.sh`): a fresh detached worktree
+    holding the uncommitted A1 tree, no `.env*` file but `.env.example`, every live variable explicitly empty, dependencies installed as
+    CI installs them (`pnpm install --frozen-lockfile --offline`, pnpm 11.2.2, nothing fetched). `next build` exit 0 in 234 s;
+    `engine-worker.mjs` emitted, as the hashed asset `.next/server/assets/engine-worker.<hash>.mjs`; `next start` answered after 2 s;
+    the job's sixteen probe checks all passed (health 200; ready 503 naming the profile, Supabase and the database, without the
+    secret; ready 401 anonymous; autonomy 403 `AUTH_PRODUCTION_NOT_CONFIGURED`; sign-out 403 cross-origin and 503 same-origin; the
+    runtime report 200 with a `Content-Security-Policy` header). Two earlier attempts failed on the lead's environment, not on A1: Turbopack
+    refuses a `node_modules` junction that points outside the project root, and the scratchpad path pushed pnpm's deepest package past
+    Windows' 260-character limit; the run moved to a short worktree path. The worktree was removed afterwards, junctions as themselves.
+  - (3) The nine later task files that insert workflow lines (A2, A4, B2, B3, C1, C2, C3, D1, D2) carry the A1 handover paragraph, with
+    the instructions it overrides marked in place.
+  - (4) The lead's supplementary gates on the final tree (the sets the implementer did not run): `app/lib/pcb` without its three
+    real-process suites 977 passed, 4 skipped; the B14.4 AST gate 22; the confinement gates 375; tsc 0; eslint 0 on 35 files. The
+    implementer's own gates covered auth, `app/api`, MCP, the agent and orchestration, computation, engineering, the provider folder and
+    the project gates, all green, and all 21 generators with no drift.
+  - (5) Browser suites under the lock: the default configuration 47 of 48 - `e2e/prompt-to-gerber.spec.ts` failed before its body ran,
+    the Playwright worker exiting `0xC0000409` (0 ms) - and the orchestration configuration 2 of 4, F12's browser half timing out its
+    240 s wait for the resumed run (6.0 min against its usual 2.1) with F12b not run. Neither reproduced: each spec alone passed
+    (prompt-to-gerber 1.0 min; F12 2.1 min), and the orchestration configuration re-run passed 4 of 4 (3.0 min). A1 changes no fixture
+    path either test takes: the Anthropic client timeout applies to the real SDK client only, and the deployment profile never blocks a
+    non-production runtime. Recorded as not reproduced; CI on the pushed commit runs both configurations. The 31 evidence PNGs the
+    runs rewrote were restored from HEAD, all 32 equal by blob hash.

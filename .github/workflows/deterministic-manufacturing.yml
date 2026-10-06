@@ -225,6 +225,7 @@ jobs:
           app/lib/spice/__tests__/sec-1-deck-injection.test.ts
           app/lib/computation/__tests__
           app/lib/manufacturing-providers/__tests__
+          app/lib/qualification/__tests__
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts
           app/lib/project/__tests__/b18-e-claimed-nothing.test.ts
           app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts
@@ -344,5 +345,91 @@ jobs:
             test-results
             playwright-report-orchestration
             test-results-orchestration
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # [B24-A1] D24-1 (offline), OD-190: production mode in CI - `next build`, then `next start`, then fail-closed probes. This is the
+  # first `next build` in CI, and the first since B22 added engine-worker.mjs (B22 final-verdict.md:110): whether it is emitted is
+  # printed, and named computations stay off. The server declares the ci profile, the expected origin and a worker secret generated
+  # for this run (masked); no Supabase, database, provider or fixture variable is set, so sensitive routes refuse and readiness
+  # answers 503. Nothing is deployed and no live resource is used: staging and production stay BLOCKED-LIVE-QUALIFICATION (LB-13).
+  production-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SMOKE_PORT: "3200"
+      SMOKE_ORIGIN: http://localhost:3200
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: next build (production)
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: |
+          set -euo pipefail
+          started=$(date +%s)
+          pnpm exec next build 2>&1 | tee next-build.log
+          echo "next build took $(( $(date +%s) - started )) s"
+          emitted="$(find .next -name 'engine-worker*' -print)"
+          if [ -n "$emitted" ]; then echo "engine-worker.mjs: emitted"; echo "$emitted"; else echo "engine-worker.mjs: not emitted"; fi
+      - name: next start (production, in the background)
+        env:
+          SIRKIT_DEPLOYMENT_ENV: ci
+          SIRKIT_EXPECTED_ORIGIN: http://localhost:3200
+        run: |
+          set -euo pipefail
+          secret="$(openssl rand -hex 32)"
+          echo "::add-mask::${secret}"
+          echo "SMOKE_WORKER_SECRET=${secret}" >> "$GITHUB_ENV"
+          started=$(date +%s)
+          SIRKIT_WORKFLOW_WORKER_SECRET="${secret}" nohup pnpm exec next start --port "$SMOKE_PORT" > next-start.log 2>&1 &
+          echo $! > next-start.pid
+          for attempt in $(seq 1 90); do
+            if curl -fsS -o /dev/null "$SMOKE_ORIGIN/api/health"; then echo "next start answered after $(( $(date +%s) - started )) s"; exit 0; fi
+            sleep 1
+          done
+          echo "next start did not answer /api/health within 90 s"
+          exit 1
+      - name: Probe the production server (fail-closed answers)
+        run: |
+          set -euo pipefail
+          status() { curl -s -o "$1" -w '%{http_code}' "${@:2}"; }
+          test "$(status health.json "$SMOKE_ORIGIN/api/health")" = 200
+          grep -qF '{"ok":true}' health.json
+          test "$(status ready.json -H "Authorization: Bearer ${SMOKE_WORKER_SECRET}" "$SMOKE_ORIGIN/api/ready")" = 503
+          grep -qF '{"name":"deployment_profile","state":"not_serving"}' ready.json
+          grep -qF '{"name":"supabase_auth_configuration","state":"not_configured"}' ready.json
+          grep -qF '{"name":"database","state":"not_configured"}' ready.json
+          if grep -qF "${SMOKE_WORKER_SECRET}" ready.json; then echo "the readiness answer carries the worker secret"; exit 1; fi
+          test "$(status ready-anonymous.json "$SMOKE_ORIGIN/api/ready")" = 401
+          test "$(status autonomy.json -H 'x-sirkit-project-id: smoke-project' "$SMOKE_ORIGIN/api/agent/autonomy")" = 403
+          grep -qF '"code":"AUTH_PRODUCTION_NOT_CONFIGURED"' autonomy.json
+          test "$(status signout-cross.json -X POST -H 'Origin: http://evil.example' "$SMOKE_ORIGIN/api/auth/signout")" = 403
+          grep -qF '"code":"AUTH_CROSS_ORIGIN_DENIED"' signout-cross.json
+          test "$(status signout.json -X POST -H "Origin: $SMOKE_ORIGIN" "$SMOKE_ORIGIN/api/auth/signout")" = 503
+          grep -qF '"code":"AUTH_SIGNOUT_UNAVAILABLE"' signout.json
+          test "$(curl -s -D ai-runtime.headers -o ai-runtime.json -w '%{http_code}' "$SMOKE_ORIGIN/api/ai/runtime")" = 200
+          grep -qi '^content-security-policy:' ai-runtime.headers
+          echo "every probe answered as pinned"
+      - name: Stop the production server
+        if: always()
+        run: |
+          if [ -f next-start.pid ]; then kill "$(cat next-start.pid)" 2>/dev/null || true; fi
+          pkill -f "next start --port" 2>/dev/null || true
+      - name: Upload the production-smoke logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-smoke-logs
+          path: |
+            next-build.log
+            next-start.log
           if-no-files-found: ignore
           retention-days: 14

@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B24",
-  "currentCheckpoint": "B24 discovery committed on chapter/b24-production-qualification: D24-1..40 (re-verified on the B23 tree dfd51e3 by twelve verifiers: 0 refuted, none fully closed, 16 changed or partly closed since; 193 corrections, each audited, applied in place; B23's closeout delta-checked), OD-190..OD-222 drafted with safe defaults, LB-13..LB-17 proposed; plan A1..A4, B1..B3, C1..C3, D1..D3, E, F, closeout and the final program report; expected program verdict PARTIAL",
+  "currentCheckpoint": "B24-A1 committed on chapter/b24-production-qualification (records in the ledger)",
   "status": "in_progress",
   "baseSha": "57c3b29",
   "branch": "chapter/b24-production-qualification",
-  "lastGreenSha": "f663d71",
+  "lastGreenSha": "8664964",
   "pullRequest": "draft PR (chapter/b24-production-qualification -> main) opened after the discovery commit; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
@@ -17,9 +17,10 @@
     "authoritative sandboxed simulation on a qualified OCI platform: BLOCKED-LIVE-QUALIFICATION (LB-10)",
     "physical fabrication, assembly, incoming inspection and functional test: not attempted (LB-5)",
     "live DFM/quote exchange with a manufacturer or quote API: BLOCKED-LIVE-QUALIFICATION (LB-11)",
-    "ordering through a provider sandbox: BLOCKED-LIVE-QUALIFICATION (LB-12)"
+    "ordering through a provider sandbox: BLOCKED-LIVE-QUALIFICATION (LB-12)",
+    "staging and production environments, edge TLS and headers, the Supabase redirect list: BLOCKED-LIVE-QUALIFICATION (LB-13)"
   ],
-  "nextAction": "Apply the task critic's cross-task decisions to the B24 task drafts, then B24-A1 (environment profile, production-mode CI, health, readiness, configuration, flags; D24-1 offline, D24-9, D24-10, D24-11), test-first. Carried to the owner: OD-190..OD-222 (each with a safe default), B23's OD-160..OD-188, the B22 items.",
-  "updatedAt": "2026-10-06T02:52:06-04:00",
+  "nextAction": "the next B24 increment in order (A1..A4, B1..B3, C1..C3, D1..D3, E, F), then the closeout and the final program report",
+  "updatedAt": "2026-10-06T12:48:04-04:00",
   "previousChapter": "B23 merged normally into main as 57c3b29 (PR #14, 2026-10-06) after green CI on f663d71; verdict PARTIAL (no provider admitted, LB-11; ordering visibly disabled, its contract tested offline only, LB-12; physical evidence defined, none exists, LB-5; no agent can release, transfer or spend; census 166/163/3/0, counts 47/36/9/27)"
 }

@@ -301,7 +301,7 @@ const ALL: RoutePolicy[] = [
   ...read("/api/mcp/token", ["POST"], "app/api/mcp/token (mints a one-hour, audience-bound MCP access token for the signed-in member's selected project; nothing is stored; same-origin CSRF)", ALL_MEMBERS),
   ...pub("/.well-known/oauth-protected-resource/api/mcp", ["GET"], "RFC 9728 protected-resource metadata of the MCP endpoint (static configuration only; no project data)"),
   // ── [B23-B1] the provider exchange (OD-174, OD-164): a human project administrator previews, then commits, the DFM or quote exchange of a LEDGERED release with a named provider; files would leave through this row once a provider is admitted (none in B23: every commit is refused provider_not_admitted). Writes no engineering state ──
-  ...mutate("/api/pcb/provider-exchange", ["POST"], "app/api/pcb/provider-exchange (preview and commit of a named provider's DFM or quote exchange of a ledgered release; human project administrator only; no provider admitted in B23, nothing sent)", { roles: ADMIN_ONLY }).map((policy) => ({ ...policy, authoritativeWrite: false, externalTransfer: true })),
+  ...mutate("/api/pcb/provider-exchange", ["POST"], "app/api/pcb/provider-exchange (preview and commit of a named provider's DFM or quote exchange of a ledgered release; human project administrator only; no provider admitted in B23, nothing sent)", { roles: ADMIN_ONLY }).map((policy) => ({ ...policy, authoritativeWrite: false, externalTransfer: true })), ...pub("/api/health", ["GET"], "app/api/health: liveness, { ok: true }, reads nothing"), ...readOnlyWorker("/api/ready", ["GET"], "app/api/ready: readiness by check name and closed state, never a value; the worker secret; reads the configuration digest and a bounded select 1; writes nothing"), // [B24-A1] OD-198: appended in place (census 166 -> 168)
 ];
 
 // ── Lookup ────────────────────────────────────────────────────────────────────
@@ -393,4 +393,11 @@ export function routeVocabularyViolations(policies: readonly RoutePolicy[] = ALL
     for (const reason of ROUTE_VOCABULARY_VIOLATIONS) if (found.has(reason)) out.push(`${policy.method} ${policy.path}: ${reason}`);
   }
   return out;
+}
+
+/** [B24-A1] OD-198: the reviewed READ-ONLY worker row for `GET /api/ready` - the worker secret like `worker()`, but no authoritative
+ *  write, no transfer, no spend and no provider credit (`worker()` hard-codes `authoritativeWrite: true` for the three worker write
+ *  routes). Least privilege, RECORDED: the same secret authorizes those routes too; a separate credential is OD-195's (B24-A2). */
+function readOnlyWorker(path: string, methods: readonly string[], evidence: string): RoutePolicy[] {
+  return methods.map((method) => ({ path, method, authClass: "internal-worker", identitySource: "worker-secret", requiresAuth: true, permittedRoles: [], providerCredit: false, requiresCsrf: false, authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence }));
 }

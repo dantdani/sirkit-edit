@@ -165,7 +165,7 @@ describe("[B21 E1] the per-role provider/model policy (OD-117)", () => {
     const anthropic = agentAdapterForRole("schematic", "anthropic", "claude-sonnet-4-5");
     expect(anthropic).toBeInstanceOf(AnthropicAgentAdapter);
     await anthropic.start(start);
-    expect(Object.keys(sdk.anthropic[0]!).sort()).toEqual(["apiKey", "maxRetries"]);
+    expect(Object.keys(sdk.anthropic[0]!).sort()).toEqual(["apiKey", "maxRetries", "timeout"]); // [B24-A1, 2026-10-06] reviewed pin move (D24-10): the Anthropic client gains OpenAI's timeout: 120_000 (adapters.ts:213), was ["apiKey", "maxRetries"]; the retries below hold
     expect(sdk.anthropic[0]!.maxRetries).toBe(0);
     expect(sdk.requests[1]).toMatchObject({ model: "claude-sonnet-4-5" });
     // the configured model when the route names none

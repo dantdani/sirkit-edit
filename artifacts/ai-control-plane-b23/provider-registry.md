@@ -300,7 +300,7 @@ As of this increment's working tree on `3806cba`; the anchor text is the check, 
 | C12 | `app/lib/manufacturing-providers/cd12-projection.ts` | 28 | `export function toProcurementProviderDescriptor(row: ProviderRow): ProcurementProviderDescriptor {` |
 | C13 | `scripts/generate-b23-provider-registry.ts` | 23 | `await writeFile(resolve(outDir, "provider-registry.csv"), renderProviderRegistryCsv(), "utf8");` |
 | C14 | `.github/workflows/deterministic-manufacturing.yml` | 227 | `app/lib/manufacturing-providers/__tests__` |
-| C15 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 54 | `const CHAPTERS = ["b19-", "b20-", "b21-", "b22-", "b23-"] as const;` |
+| C15 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 54 | `const CHAPTERS = ["b19-", "b20-", "b21-", "b22-", "b23-", "b24-"] as const;` [B24-A1, 2026-10-06] re-pinned in place: B24-A1 appended `"b24-"` to this line (OD-222); `"b23-"` stands where B23-A1 put it |
 | C16 | `app/lib/pcb/fab/rule-profile.ts` | 30 | `export const QUALIFIED_RULE_PROFILE_IDS` |
 | C17 | `app/lib/release-engineering/providers.ts` | 8 | `export function createProviderDescriptor(` |
 | C18 | `app/lib/acquisition/source-registry.ts` | 568 | `export function admitSource(` |

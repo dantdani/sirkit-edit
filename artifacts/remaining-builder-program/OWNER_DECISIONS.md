@@ -2563,3 +2563,59 @@ Amendments to existing entries:
 - **Default applied:** none assumed. The read-only DFM/quote flow is built end to end offline against an in-process fake provider behind the real egress boundary (B23-B1..B3); `admitProviderOperation` refuses every `dfm_quote_transfer` and `ordering` operation `provider_not_admitted` before anything else (`provider-admission.ts:54-56`); `PROVIDER_TRANSFER_DESCRIPTORS` is empty; every live exchange is BLOCKED-LIVE-QUALIFICATION (LB-11) and every order (LB-12). The builder applied for no access, created no account and entered no credential. B23-B4, the opt-in owner-run sandbox qualification, did not run: no account exists.
 - **Evidence:** `final-verdict.md`; `unknowns-and-owner-decisions.md`; `b23-a-provider-admission`; LB-11, LB-12.
 - Recorded at the closeout ([B23 closeout (2/2), 2026-10-06]). Owner confirmation pending.
+
+
+## OD-190 — the hosting platform and environment topology, as applied in part (B24-A1, 2026-10-06)
+
+- **Default applied:** no platform assumed and no deployment file written. `SIRKIT_DEPLOYMENT_ENV` is a closed, exact vocabulary (development, ci, staging, production); in a production runtime only staging and production serve sensitive routes, and an unset or invalid profile answers 403 `AUTH_PRODUCTION_NOT_CONFIGURED`; a non-production runtime is never blocked. The CI job `production-smoke` is written to build and start the production server with the ci profile and no Supabase and to pin its fail-closed answers - PROPOSED until the lead's local production-mode run and its first CI run are green (nothing has built or started it yet). Staging and production are BLOCKED-LIVE-QUALIFICATION (LB-13); LB-10 stays blocked. The hosting platform is UNKNOWN.
+- Owner confirmation pending.
+
+
+## OD-198 — health and readiness, as applied (B24-A1, 2026-10-06)
+
+- **Default applied:** `GET /api/health` public liveness (`{ ok: true }`, no-store, reads nothing); `GET /api/ready` on the internal-worker class through the reviewed read-only constructor `readOnlyWorker` (no write, transfer, spend or credit), reporting by name and closed state only the deployment profile, auth mode, Supabase and expected-origin configuration, a bounded database probe (an injected port; `select 1`, 2,000 ms), key presence, the Anthropic model setting and the role table, plus the configuration digest; never a value. The census moved once by review, 166 -> 168 = 165 + 3 + 0; both rows derive `model_egress` false, `outbound_egress` none and no process; the action records are 107. The same worker secret also authorizes the three worker write routes (recorded; a separate credential is OD-195's).
+- Owner confirmation pending.
+
+
+## OD-199 — versioned provider and tool configuration, as applied (B24-A1, 2026-10-06)
+
+- **Default applied:** one frozen `sirkit.deployment-configuration.v1` record, built once per process over `process.env`, digested by `engineeringDigest`: profile, auth mode, OpenAI model and effort, the Anthropic model setting, every provider SDK client Sirkit builds with its timeout and retries (the agent coordinator: OpenAI 120,000 ms and 2, Anthropic 120,000 ms and the SDK default; a specialist: 120,000 ms and 0; the llmRouter: OpenAI 600,000 ms and 5, Anthropic the SDK defaults; the embedding client and the parts-search reranker: the SDK defaults), the role table, the source, MCP-server and provider registry versions each with a digest of its rows (`PROVIDER_ROWS`, the rows production reads), the embedding and rerank models (copied), the runtime profiles (referenced), the tool registry digest, key presence and every flag state; names and closed states only. `/api/ready` reports its digest; attaching it to trace records is B24-C2's (OD-208). `/api/ai/runtime` reads `anthropicModelSetting()`; an empty or padded model is refused (bad_request, with the refusal's own message naming the server setting) rather than sent, by both Anthropic clients.
+- Owner confirmation pending.
+
+
+## OD-200 — feature flags for MCP, the sandbox and external manufacturing, as applied (B24-A1, 2026-10-06)
+
+- **Default applied:** one data-only inventory (`app/lib/deployment/flag-inventory.ts`) of every `SIRKIT_*` name read in code, with kind, default, direction, owner and constant, pinned by `b24-a1-flags` against the tree and the owners; the sandbox gets the off-only `SIRKIT_DIAGNOSTIC_RUNNER_DISABLED` (any non-blank value refuses every diagnostic run and every install check with `NGSPICE_DIAGNOSTIC_DISABLED`; a version line already probed is answered from memory, with no process; it never enables production simulation); external manufacturing keeps B23's two off-only switches; MCP keeps its exact-"1" flag.
+- Owner confirmation pending.
+
+
+## OD-222 — CI admission for B24 suites, as applied (B24-A1, 2026-10-06)
+
+- **Default applied:** `CHAPTERS` gains `b24-` (`b19-e-ci-job-scope.test.ts:54`) and one directory filter, `app/lib/qualification/__tests__`, admits the B24 suites to prompt-to-gerber after `deterministic-manufacturing.yml:227`; PGlite suites go per file to database-delivery (none in A1). The B22 C77 and B23 C15 anchors were re-pinned in place, and B21's C49, C93, C94 and B23's C64 moved +1 by review. B24-B3 amends this heading for the live suites.
+- Owner confirmation pending.
+
+
+## OD-217 — the live-blocker register, as applied in part (B24-A1, 2026-10-06)
+
+- **Default applied in part:** the LB-13 row, in OD-217's vocabulary (below), and its `PROGRAM_STATE.json` mirror. B24-A4 (LB-14), B24-B1 (LB-15..LB-17) and B24-E (the rest of OD-217) append dated amendments under this heading.
+- Owner confirmation pending.
+
+
+## OD-223 — B24-A1: stated choices beyond its task text, as applied (B24-A1, 2026-10-06)
+
+- **Default applied:**
+  - (a) The blocker order and codes: `sensitiveOperationsBlocker` first (text unchanged, `AUTH_PRODUCTION_NOT_CONFIGURED`), then in a production runtime a non-serving profile (`AUTH_PRODUCTION_NOT_CONFIGURED`, the message naming only `SIRKIT_DEPLOYMENT_ENV`), then a missing or malformed expected origin (`AUTH_ORIGIN_NOT_CONFIGURED`, `AUTH_ORIGIN_CONFIG_MALFORMED`, by `resolveExpectedOrigin`'s rules with production forced); its own two messages name the variables only.
+  - (b) The profile scope: exact matching; an absent variable is `unset` and any other value, an empty one included, `invalid`; only the trusted context and the MCP wrapper call the blocker; the worker and public paths never do.
+  - (c) The worker-secret limit: `/api/ready` shares the worker secret with the three worker write routes (OD-195 owns a separate credential).
+  - (d) The Anthropic client timeout: `timeout: 120_000` on `adapters.ts:213`, OpenAI's value and the loop's run deadline, spelled before the retries so B21-E1's C19 anchor stays unique.
+  - (e) The record's registry digests read `PROVIDER_ROWS`, never `PROVIDER_REGISTRY` (B23's test oracle), and no generator render; the embedding (`text-embedding-3-small`) and rerank (`claude-haiku-4-5`) models are copied, each with a source-reading parity case; the OpenAI reasoning efforts accepted are copied too (not exported by `openai-config.ts`), pinned equal to the source's list, read from the file, and to `configuredOpenAIReasoningEffort` over it; every provider SDK client's timeout and retries is copied from its construction site (`OPENAI_CLIENTS`, `ANTHROPIC_CLIENTS`: the agent coordinator and a specialist, the llmRouter, the embedding client, the parts-search reranker), each pinned by reading the site, and those five sites are pinned as the only ones in production code (review finding coverage-4; the record named only the agent adapters' before).
+  - (f) The hand-overs: the trace attachment of the digest to B24-C2 (OD-208); the `.env.example` declarations of four names to B24-A2 (OD-195); the kinds-to-classes map to B24-A2 (D16); D1's three names to B24-D1 (D15); test-only live flags to B24-B3 (OD-209).
+  - (g) The inventory kinds: nine, closed; `SIRKIT_DB_QUALIFICATION_URL` is a `secret` (a connection string), not a live-test gate, and `SIRKIT_LIVE_ORCHESTRATION_PROVIDER` a live-test gate that selects; the census does not scan the inventory module itself (it is the list); the two Anthropic refusal codes are exclusions.
+  - (h) The B24-root class of `b23-a-provider-admission` case 8: `app/lib/deployment/`, `app/lib/evaluation/`, `app/lib/qualification/`, `app/lib/observability/`, by prefix; the walk still reads every file under them.
+  - (i) The switch name and parse: `SIRKIT_DIAGNOSTIC_RUNNER_DISABLED`, any non-blank value, read from the process at each call; the code `NGSPICE_DIAGNOSTIC_DISABLED`. Its reach: every run and every install check refuse first; a version line already probed, for an install handed to `diagnosticNgspiceVersion` as `verified`, is answered from memory, with no refusal and no process (the two checks stay where the task put them, `:249` and `:633`; review finding coverage-6).
+  - (j) The `project.service-health` record is appended at the registry's end (`action-registry.ts:186`), not on `:162`, so the B01 matrix keeps B23's line-checked C51 on row 107.
+  - (k) The CI job uses port 3200 and polls `/api/health` for at most 90 s after `next start`; it prints the build and start durations and whether `engine-worker.mjs` is emitted, and sets no Supabase, database, provider or fixture variable at all (in CI none exists to blank).
+  - (l) The local refusal of an empty or padded Anthropic model keeps the reason `bad_request` (the task text) and carries its own message (`ANTHROPIC_MODEL_REFUSED_MESSAGE`): Sirkit did not send the request, and the cause is the server setting `SIRKIT_ANTHROPIC_MODEL`. The generic `bad_request` text says Anthropic rejected a request Sirkit built, which is untrue here (review finding regressions-4). `model_access` was not taken: its text says Anthropic denied access, also untrue when nothing was sent.
+  - (m) Section 10's workflow table is A1's own shift and never moves: a later task that inserts workflow lines appends one dated row to the insertion table under it, and `production-smoke` (PROPOSED until its first CI run) is pinned as the job after `page-browser-e2e`, not as the last job (review finding regressions-2).
+  - (n) The record's flag states are checked against each flag's owner, not against a copy of the parse: the three list owners spell one parse, so MCP's exposed result answers for all three; the two owners the suite does not import (named computations, orchestration) answer by the compare literal read from their lines (review finding tests-1).
+- Owner confirmation pending.
