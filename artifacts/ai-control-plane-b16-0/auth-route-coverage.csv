@@ -104,6 +104,7 @@ path,methods,auth_class,identity_source,migrated
 /api/pcb/footprints/resolve,GET,public,none,no
 /api/pcb/footprints/search,GET,public,none,no
 /api/pcb/placement/preview,POST,public,none,no
+/api/pcb/provider-exchange,POST,authenticated-mutation,trusted-context,yes
 /api/pcb/qualify,POST,authenticated-release,trusted-context,yes
 /api/pcb/release,POST,authenticated-release,trusted-context,yes
 /api/pcb/repair/agent,POST,authenticated-propose,body-scope-server-actor,yes

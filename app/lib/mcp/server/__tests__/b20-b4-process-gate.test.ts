@@ -226,7 +226,7 @@ describe("[B20 B4] the MCP routes reach no process or thread module (F4)", () =>
     expect([...closure.keys()].filter((file) => processModulesOf(file, production.get(file)!).length > 0)).toEqual([]);
   });
 
-  it("3. tripwire: a probe reached from /api/mcp that imports a process or thread module — directly, by re-export, through a hop, by require, by a dynamic import, as cluster, or by importing an app spawner — or ([B20 B4 review]) loads one by name, reaches an internal binding, compiles a string or imports an unreviewed package, is caught with its chain; a type-only import is erased and not caught, and a static non-process built-in and a property merely named binding are not caught", { timeout: 120_000 }, () => {
+  it("3. tripwire: a probe reached from /api/mcp that imports a process or thread module — directly, by re-export, through a hop, by require, by a dynamic import, as cluster, or by importing an app spawner — or ([B20 B4 review]) loads one by name, reaches an internal binding, compiles a string or imports an unreviewed package, is caught with its chain; a type-only import is erased and not caught, and a static non-process built-in and a property merely named binding are not caught", { timeout: 120_000 }, async () => {
     const PROBE = "app/lib/mcp/server/b4-probe.ts";
     const HOP = "app/lib/mcp/server/b4-probe-hop.ts";
     const probes: ReadonlyArray<readonly [string, string, string]> = [
@@ -269,7 +269,7 @@ describe("[B20 B4] the MCP routes reach no process or thread module (F4)", () =>
       ["Function.apply", 'export const compile = (code: string) => Function.apply(null, [code]);', `${ENDPOINT} -> ${PROBE} => Function`],
     ];
     const routed = `${production.get(ENDPOINT)!}\nimport "../../lib/mcp/server/b4-probe";\n`;
-    for (const [label, probe, expected] of probes) {
+    for (const [label, probe, expected] of probes) { await new Promise<void>((resolve) => setImmediate(resolve)); // [B23-A1 lead, 2026-10-02] yield between probes: run alone this case held the worker past vitest's 60 s onTaskUpdate RPC timeout (exit 1, every assertion green)
       const injected = new Map(production);
       injected.set(ENDPOINT, routed);
       injected.set(PROBE, probe);

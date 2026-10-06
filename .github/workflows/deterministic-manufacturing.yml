@@ -224,6 +224,7 @@ jobs:
           app/lib/spice/__tests__/b19-d-report-escaping.test.ts
           app/lib/spice/__tests__/sec-1-deck-injection.test.ts
           app/lib/computation/__tests__
+          app/lib/manufacturing-providers/__tests__
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts
           app/lib/project/__tests__/b18-e-claimed-nothing.test.ts
           app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts
@@ -297,6 +298,7 @@ jobs:
           app/lib/atomic/__tests__/b19-e-publication-review-durable.test.ts
           app/lib/atomic/__tests__/b19-e-publication-fake-vendors.test.ts
           app/lib/physical-binding/__tests__/b19-e-successor-b14-durable.test.ts
+          app/lib/manufacturing-providers/database/__tests__/b23-b-exchange-ledger-pglite.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-database-delivery.xml
       - name: Upload diagnostics
         if: failure()

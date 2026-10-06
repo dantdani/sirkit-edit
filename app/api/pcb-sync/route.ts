@@ -11,7 +11,7 @@ import { PCB_SYNC_APPLY_REQUEST_VERSION, PCB_SYNC_APPLY_RESULT_VERSION, PCB_SYNC
 import { authenticatedRoute } from "@/app/lib/auth/route-handlers";
 import { pcbSyncScopeFromContext } from "./_scope";
 import { createPcbSyncBoardGetCore, createPcbSyncPostHandler } from "./handler";
-import { createManufacturingSummaryReader } from "./manufacturing-summary";
+import { createManufacturingSummaryReader } from "./manufacturing-summary"; import { createProviderExchangeLedger } from "@/app/lib/manufacturing-providers/exchange-ledger"; import { createProviderObservationReader } from "@/app/lib/manufacturing-providers/provider-observation"; // [B23-B3] appended in place: the observation reader over B2's exchange record (read only)
 
 export const runtime = "nodejs";
 
@@ -30,7 +30,7 @@ const service = new PcbSynchronizationService({ snapshotProvider: stage3Snapshot
 // [B16.1C §C] reload-time manufacturing truth (qualification authority head +
 // latest ledgered release) over the SAME durable workflow repository, so what a
 // browser reconstructs after refresh is exactly what the server committed.
-const boardGet = createPcbSyncBoardGetCore(stage3Repository, pcbSyncFeatureState, createManufacturingSummaryReader(workflow), new DurableBoardLineageStore(workflow));
+const boardGet = createPcbSyncBoardGetCore(stage3Repository, pcbSyncFeatureState, createManufacturingSummaryReader(workflow, { observations: createProviderObservationReader({ exchanges: createProviderExchangeLedger(workflow) }) }), new DurableBoardLineageStore(workflow)); // [B23-B3] + the provider observations (OD-168, OD-169): B2's record read through `load` only, judged at each read; no provider call
 
 // [B16.0.22] canonical wrapper — authorization inside the wrapper (all-members
 // read, no CSRF per the exact policy row). The `boardId` dispatch and the

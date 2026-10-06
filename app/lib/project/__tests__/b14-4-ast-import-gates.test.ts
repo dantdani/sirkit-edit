@@ -61,10 +61,10 @@ function inject(path: string, source: string): FileMap {
 // ─── §1 — the real production tree ───────────────────────────────────────────
 
 describe("B14.4 §1 — the real production tree under the AST gate", () => {
-  it("1. every capability target is clean with its exact approved importer set", { timeout: 60_000 }, () => {
-    expect(moduleImportOffenders(files, CHANNEL, CHANNEL_APPROVED)).toEqual([]);
-    expect(moduleImportOffenders(files, CONTROLLER, CONTROLLER_APPROVED)).toEqual([]);
-    expect(moduleImportOffenders(files, INTENT, INTENT_APPROVED)).toEqual([]);
+  it("1. every capability target is clean with its exact approved importer set", { timeout: 120_000 }, async () => { // [B23-A1 lead, 2026-10-02] yields between the four whole-tree walks (about 9 s each) so the worker answers vitest's onTaskUpdate RPC (60 s)
+    expect(moduleImportOffenders(files, CHANNEL, CHANNEL_APPROVED)).toEqual([]); await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(moduleImportOffenders(files, CONTROLLER, CONTROLLER_APPROVED)).toEqual([]); await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(moduleImportOffenders(files, INTENT, INTENT_APPROVED)).toEqual([]); await new Promise<void>((resolve) => setImmediate(resolve));
     expect(identifierReferences(files, FACTORY, FACTORY_APPROVED)).toEqual([]);
   });
 
@@ -288,7 +288,7 @@ describe("B14.4 §4 — opaque module loads and bounded static evaluation", () =
 // ─── §5 — the test-only factory identifier and the barrel ────────────────────
 
 describe("B14.4 §5 — factory identifier forms and the engineering barrel", () => {
-  it("16. every access form to the test-only factory is detected", { timeout: 60_000 }, () => {
+  it("16. every access form to the test-only factory is detected", { timeout: 120_000 }, async () => { await new Promise<void>((resolve) => setImmediate(resolve)); // [B23-A1 lead, 2026-10-02] yield first: cases 1-16 ran as one synchronous block of about 58-63 s, past vitest's 60 s onTaskUpdate RPC timeout (exit 1, every assertion green)
     const cases: Array<[string, string, string]> = [
       ["aliased-named-import", "app/lib/agent/evil-alias.ts", 'import { __createTestReplacementReauthorizationChannel as makeChannel } from "../project/replacement-reauthorization";'],
       ["namespace-access", "app/lib/agent/evil-namespace.ts", 'import * as reauth from "../project/replacement-reauthorization";\nconst c = reauth.__createTestReplacementReauthorizationChannel;'],

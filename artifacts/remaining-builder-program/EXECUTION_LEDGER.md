@@ -4274,3 +4274,523 @@ Pages: `artifacts/ai-control-plane-b22/diagnostic-runner.md`.
   the discovery's dated addenda to D22-2, D22-4, D22-6 and D22-12 and its section 10 block; OD-137's heading (as applied) and OD-134's
   dated amendment in `OWNER_DECISIONS.md`; LB-10's dated notes in its row. Not done: the optional OD-144 amendment and the optional
   owner-confirmation lines on the B22-C entries.
+
+### B22 — merged (2026-10-02 local; lead)
+
+- PR #13 (`chapter/b22-sandboxed-computation` -> `main`) merged normally as `43cb1b0` at 13:42 UTC after all four checks passed on
+  `849a933` (benchmark-core 3m48s, database-delivery 2m16s, prompt-to-gerber 13m16s, page-browser-e2e 19m50s with both Playwright
+  configs; benchmark-nightly skipped). No auto-merge, no force-push. Verdict PARTIAL (`artifacts/ai-control-plane-b22/final-verdict.md`):
+  the production simulation runner BLOCKED (LB-10, OD-134). The merge tree equals `849a933`.
+
+### B23 — chapter start and discovery (2026-10-01/10-02 local; read-only workflows + lead; this commit)
+
+- Branch `chapter/b23-external-manufacturing` from main `43cb1b0` (runbook `:28`: B22's closeout merged).
+- First commit `e8c7928` (a lead fix, test-only): `b22-closeout-statements` case 3 failed run alone at `43cb1b0` at vitest's 5 s default
+  (5,076 ms without any B23 page, 5,048 ms with the discovery page; CPU load 18%). Its whole-tree scans (cases 1, 2, 3, 6, 8, 9) now take
+  `{ timeout: 60_000 }` on the same lines, as `b20-b4-withhold-proposals` case 5 does. No assertion, title, allow-list or count changed,
+  and `it(` stays 9. The three page-scanning tripwires then passed 27 of 27.
+- Read-only discovery over the tree at `0432fb8` (main `d0d2ec8` plus the B22 discovery commit), run while B22-A1 ran:
+  - seven parallel readers: existing external integrations; the deterministic release B23 would send; outbound data and uploads;
+    procurement, ordering and spend; physical-hardware evidence and the assembled-product claim; prior records and pinning tests;
+    external manufacturer, DFM, quote and distributor APIs;
+  - 59 gap candidates; one synthesizer re-read every defect-bearing fact and merged them into D23-1..21;
+  - reader 7 read the provider documentation through WebFetch/WebSearch on 2026-10-01 (summaries, labelled RECORDED). No reader signed
+    up for, submitted to or scraped any provider, and nothing was sent anywhere.
+- Re-verification on the B22-complete tree `849a933` (`b23-discovery-verify`, eight read-only verifiers and a synthesizer, 2026-10-02):
+  - 36 items (D23-1..21 and sections 0-8); 0 refuted, 25 stand, 9 changed by B22, 1 partly closed by B22 (section 8: items 11 and 12
+    answered), 1 standing with moved citations (D23-19);
+  - 90 text corrections applied in place before the first commit, among them three statements already wrong at `0432fb8` (D23-5's
+    `retrievedAt`, section 2.1's CD-12 caller and live-route citation, D23-18's other preset consumers); dated notes on D23-8, D23-19 and
+    D23-20; section 9 lists every moved citation and what B22 changed that B23 inherits.
+  - Changes since the draft: the agent counts 47/36/9/27 (B22-B); the B21 withdrawal a three-name denylist (`computation-engine`); CI
+    chapters end with `b22-`; LB-10 taken.
+  - The first verification run (`wf_7e1312f7-e65`) was void: the lead's script passed each verifier an array instead of its prompt, and
+    three agents also failed with API errors. The lead fixed the script, added retries and re-ran it as `wf_d2009b1a-1d3`.
+- What exists:
+  - three coded read-only distributor or aggregator integrations: DigiKey and Nexar enabled, Mouser disabled; LCSC blocked;
+  - no manufacturer, assembler, DFM or quote API call, upload, webhook, quote, order or receipt anywhere;
+  - one egress boundary (`outboundFetch`) with no upload body;
+  - the deterministic release, reachable only through `POST /api/pcb/release` (the pinned 555 release
+    `mfg-release-45b3b7efbc85dc3a8ecd233c906384cd`);
+  - four fab presets with "upload this zip" hand-off notes;
+  - an unused CD-12 procurement descriptor and four unpinned throwing stubs;
+  - `manufacturing.assembled-release` kept missing.
+- Defects D23-1..21:
+  - D23-1, D23-2: no reviewed provider descriptor, and neither descriptor shape can express the B23-A fields;
+  - D23-3: the egress boundary cannot send an upload;
+  - D23-4: no outbound idempotency or ambiguous-outcome state;
+  - D23-5: no receipt, quote or staleness store;
+  - D23-6, D23-7: no exact outbound disclosure (the release manifest would leak internal ids) and no per-request approval of a named
+    provider and purpose;
+  - D23-8, D23-9: the Tier 3 floor and the route vocabulary see transfer or spend only by a word;
+  - D23-10, D23-11: ordering absent rather than visibly disabled, and no purchase-authorization contract;
+  - D23-12: the no-order tripwire matches names;
+  - D23-13..D23-15: no physical-evidence definition, latent claim paths, and an assembled-release block pinned only generically;
+  - D23-16: two documents imply a quote-tool acceptance;
+  - D23-17: the reload "current" flag compares by revision only;
+  - D23-18: only `jlcpcb-2l` produces a release;
+  - D23-19: no live-blocker rows;
+  - D23-20: CI admission;
+  - D23-21: unpinned CD-12 stubs.
+  - Severity: high 6, medium 6, low 9.
+- Owner decisions OD-160..OD-180 drafted with safe defaults (section 6):
+  - no provider account assumed (every live exchange BLOCKED-LIVE-QUALIFICATION, LB-11);
+  - a sibling provider registry;
+  - a derived outbound package with no internal ids;
+  - a human `project_admin` preview/commit approval naming provider and purpose;
+  - `UNKNOWN_PENDING_RECONCILIATION`, never retried;
+  - ordering visibly disabled behind seven owner prerequisites (LB-12), and the purchase-authorization contract tested offline only;
+  - physical evidence defined, none recorded (LB-5);
+  - OD-181..OD-189 reserved for the increments.
+  Expected verdict PARTIAL unless the owner supplies a provider account (B23-B4).
+- Plan (section 7):
+  - A1: the provider registry, LB-11/LB-12, CI admission;
+  - A2: the Tier 3 and route vocabulary;
+  - B1: revalidate, disclose, approve;
+  - B2: bounded transfer and receipts;
+  - B3: observations, staleness, no auto-accept;
+  - B4: only with an owner account;
+  - C: ordering visibly disabled with its full contract;
+  - D: physical evidence defined, never fabricated;
+  - the closeout.
+- Records: `artifacts/ai-control-plane-b23/{discovery.md, README.md}`; `PROGRAM_STATE.json` -> B23 (base `43cb1b0`, last green `849a933`);
+  draft PR after this commit, so that every increment gets CI. Gates for this commit: documents only. The three page-scanning tripwires
+  pass with the discovery page in place.
+
+### B23-A1 - the provider registry with reviewed descriptors (2026-10-02 local; increment workflow + lead; this commit)
+
+Test-first on `chapter/b23-external-manufacturing` from `3806cba`. The two suites under `app/lib/manufacturing-providers/__tests__/` failed to load on the unmodified tree. With `b23-` in `CHAPTERS` and no workflow filter, the CI guard failed 1 of 13. Both then went green at 55 tests.
+
+What landed:
+- A sibling registry (OD-161), 1.0.0, with nine deep-frozen rows carrying the twelve runbook fields.
+- Per-operation tier, channel and state (D23-2), with ordering present-but-disabled in nine operations.
+- 22 validator rules.
+- A byte-gated CSV, `artifacts/ai-control-plane-b23/provider-registry.csv`.
+- Admission per provider and operation, with the off-only switch `SIRKIT_MANUFACTURING_DISABLED_PROVIDERS`. Every transfer and order refuses `provider_not_admitted`.
+- The CD-12 projection.
+- `jlcpcb-2l` mapped (D23-18).
+- CI admission of `b23-` in place (OD-180). The B21 evaluation-matrix C49/C93/C94 and B22 C77 pins were moved in place with dated notes.
+
+Every provider fact is RECORDED from discovery section 1.2 and was not re-read (OD-181).
+
+An adversarial review then CONFIRMED 8 findings, each reproduced first: 9 red of 104 on the unfixed source, plus seven deliberate breakages of the fixed source, each caught and restored by hash. The fixes:
+- The validator holds path endpoints to B19's no-query/no-credentials rule.
+- The CSV renders each operation's endpoint, auth and source (33 columns), and the generator header states what it does not render.
+- Admission refuses a row the validator refuses, never admits an API operation as a hand-off, and delegates only a B19 read.
+- The tests were strengthened: one crafted revision per guarded branch (80), auth and endpoint pins, a CD-12 projection pinned whole, stricter documentation provenance, and a walk that cannot swallow a read error.
+
+104 green. The live blockers LB-11 and LB-12 were added, and LB-5, LB-11 and LB-12 were mirrored into `liveBlockers` (OD-179). No route, tool, UI, egress or fetch; route census 165 / 162 / 3 / 0; the agent-tool counts are unchanged. Lead gates on the final tree are in the commit message.
+- Lead close (2026-10-02):
+  - (1) The check (8 of 8 fixes revert-sensitive) found three new low issues, each fixed test-first by the lead:
+    - admission's structural layer was unreachable after validation, so no test pinned it: it is now `structuralDelegation`, which
+      admission case 11 calls directly (red: no such export; green; reverting either condition fails it);
+    - registry case 5's sibling rule let a quoted word name a page (`https://oshpark.com/developer/checkout` and
+      `https://api-partner.pcbway.com/Help/Api/PCBWayWebPay` were accepted, red): a bare segment now counts only in its sibling's
+      naming family, and the 31 recorded URLs still pass;
+    - the generator header, the column comment and the page listed the API access's reason and the reading's `where` as covered by the
+      byte gate, but neither is rendered: corrected.
+    105 tests green.
+  - (2) `b20-b4-process-gate` exited 1 from vitest's onTaskUpdate RPC timeout even run alone (64 s; every assertion green; the same
+    in the B22 lead's log). Its synchronous cases held the worker past 60 s. Committed separately as `4a988c8`: case 3 yields between
+    probes on the same lines, the gate alone passes 5 of 5 with exit 0, and the four suites that read the file pass.
+    The same timeout then hit `b14-4-ast-import-gates` in A1's lead chain (gate F2, 22 of 22, exit 1, 63.5 s; B22's chain had passed
+    it just under 60 s). Committed separately as `9cb675d`: cases 1 and 16 are async, yield between their whole-tree walks, and have
+    120 s timeouts, all on the same lines. The gate then passed alone (exit 0, twice) and beside B11.5 (40 of 40, exit 0); tsc and
+    eslint on both gate files were 0.
+  - (3) The drafted LB-12 row named the agent-tool counts as 42/33/9/24; it records 47/36/9/27.
+  - (4) Still open (recorded): a path a section-1.2 bullet names passes on any host that bullet names (INFERRED, low); admission
+    validates the row on every call (small cost, INFERRED); `b20-b4-process-gate` case 1 still runs about 34 s synchronously.
+
+### B23-A2 - Tier 3 and the route vocabulary (2026-10-02 local; increment workflow + review fix + lead; this commit)
+
+Test-first on `chapter/b23-external-manufacturing` from `79fa18b`. The four suites under the provider directory's `__tests__` ran
+14 red / 15 green of 29 on the unmodified tree (the bound read computed Tier 0 and `create-order` was admitted as an MCP agent tool:
+the D23-8 and D23-12 counterexamples; the CD-12 stubs already threw, so D23-21 was a missing pin, shown by a four-stub breakage that
+failed 9 of 9 and was restored by hash).
+
+What landed:
+- `external-transfer` as a tool side effect and its action equivalent, Tier 3 in every tier computation; never exposed, listed for an
+  agent, MCP-listed, in a B21 role row or executed (OD-173).
+- `TIER3_FLOOR_PATTERN` = the nine family stems + `quote|dfm|submit|checkout|cart|buy|payment` + the word `pay`, after a census of 47 tool
+  and 104 action ids (0 matches, 0 tiers moved); `TIER3_FAMILY_PATTERN` stays the router's chat families (OD-182 (b), (h)).
+- The B21 withdrawal by one predicate, `isWithdrawnAuthority`; the claims check unchanged by decision (OD-182 (c)).
+- The chat-closure FORBIDDEN list + the egress module and the provider directory (b19-d:128, reviewed in place).
+- Consumed MCP `agentTools` names matching the floor or a money or data-leaving word refused at registry validation and approving nothing
+  in the agent port (empty registry, OD-48).
+- `RoutePolicy.externalTransfer` and `.spend` with `routeVocabularyViolations`; the classification's derived `outboundEgress` (7
+  observation-query rows over 6 paths, 5 reviewed cache-only exemptions with the pricing gateway's edges pinned, 0 files) and
+  `modelEgress` (23 paths; 2 public, recorded), two appended CSV columns (OD-174, OD-182 (a), (k)).
+- A structural no-order route check over every declared or called name, and the four CD-12 stubs pinned by id over the whole-root walk.
+
+Review round: an adversarial review confirmed 12 findings (`none` documented as "sends nothing" while 22 LLM-prompting routes carried
+it; a top-level-only port scan; the floor without `pay` and an over-claiming refusal; the port still admitting `create-order`; a vacuous
+sweep case; an exemption blind to the gateway's own edges; a CD-12 scan skipping root files). Each was reproduced red first
+(`a2fix-red-1..3`) or by a deliberate source mutation (`a2fix-mut-A..C`, every file restored by SHA-256), then fixed; 32/32.
+
+Pins moved in place with dated notes: b19-d:128 (two entries), b20-b2-mcp-route-policy cases 2-3 (three expected rows + the two false
+booleans), b20-a4-agent-read-port case 14 (the writing-tool fixture `create-order` -> `update-record`), the B16.0.2 CSV (regenerated).
+Every edited file stays line-neutral up to its last cited line.
+
+Gates after the review round: providers + acquisition 350 passed / 2 skipped; engineering 1107/1107; agent + orchestration 875/875;
+mcp + auth 1304 passed / 9 skipped; api + chat 1208/1208; computation + release-engineering 310 passed / 18 skipped; b14-4 alone 22/22;
+21 route-reader files 264 passed / 1 skipped; b21 + b22 closeout statements over the page 19/19; all exit 0. tsc 0, eslint 0 on 20 files;
+8 generators exit 0 with the classification's two columns as the only drift. No route, tool, UI or egress; census 165 / 162 / 3 / 0;
+counts 47 / 36 / 9 / 27.
+- Lead close (2026-10-02):
+  - B23-A2 independent-check round (2026-10-02 local; lead): four low issues from the independent check of the review fixes, each test-first
+    on the uncommitted A2 tree (logs a2low2-*). (1) The connector policy's private agentTools rule disagreed with mcpAgentToolAllowlist for
+    floor names; B20-A5's parity list gained five shapes (red: four disagreements), and provider-connector-policy.ts:156 now applies the
+    registry's isTier3McpToolName (helper at :170, still one runtime import). (2) The no-order scan skipped import bindings, destructured
+    bindings and single-part calls; nine case 3b probes failed, then declaredNames read imports, binding elements, single-part calls, string
+    keys and constructions; no route reaches a new port. (3) The transport census reviewed modules, not primitives; six injected connections
+    (a third-party fetch in db/client.ts, ip-policy.ts or embeddings.ts, a second fetch, a node:net socket, a second postgres client) passed
+    case 8, then each TRANSPORTS entry pinned its primitives and connection sites and a no-connection module holds none. (4) B20-A4 case 17
+    was masked by the floor (a truncate-to-32 mutation passed 18/18); its fixture moved to update-record in place, and the same mutation now
+    fails it; agent-port.ts restored by SHA-256. Recorded, not changed: case 18's array-like shape is masked the same way (B20-A5 parity
+    still catches it). Red 3 failed / 39 passed of 42, then 42/42. Gates: providers + acquisition 350 passed / 2 skipped; mcp 825/825;
+    engineering 1107/1107; agent 415/415; b21 + b22 closeouts + b21-f-page 38/38; tsc 0; eslint 0 on 5 files; B16.0.2 generator exit 0 with
+    zero drift. No case added or removed (32 / 18 / 10); census 165/162/3/0; counts 47/36/9/27; tier3-vocabulary.md section 16.
+  - The A2 review confirmed TWELVE findings (regressions-1, security-2, -4, -5, coverage-1..3, tests-1, -3, -4, -5, -8); the fixer's
+    texts said eleven, corrected in these records.
+  - Case 18's array-like shape, recorded above as masked by the floor, was then fixed by the lead the same way: it names
+    `update-record` (in place, dated note). Under the `Array.from` coercion of `mcpAgentToolAllowlist`, B20-A4 passed 18 of 18 before
+    and fails 1 of 18 after; without the mutation 18 of 18; `agent-port.ts` restored by SHA-256.
+  - The first launch of this round's workflow passed a placeholder instead of the issue list. The lead stopped it, but its agent had
+    already begun editing five files. The relaunched fixer found those edits, copied them aside and restored the A2 baseline by hash
+    before starting (8 of 8 hashes and the diff SHA matched).
+  - CI on `9cb675d` failed `b22-a3-diagnostic-runner` case 13 ("timed out waiting for the abort's tree kill"). It did not reproduce
+    under CPU load (alone 5 of 5, the whole file 4 of 4 beside 28 burners). The lead root-caused it: one forced garbage collection
+    between the spawn and the abort failed it 3 of 3; without the collection it passed; with the test's Request held strongly it
+    passed. The route wrappers handed a handler only `request.signal`, so once the body was read nothing held the Request, and its
+    collection lost the caller's abort. Committed separately as `f0e7bae`: `retainedSignal(request)` at all nine wrapper sites (a
+    WeakMap from signal to Request). Case 13 now forces the collection on every run (red on the old wrappers, green with the fix),
+    and `b23-lead-wrapper-signal-retention` pins the source. In production a lost abort left the run to its wall clock.
+  - A session restart cut A2's first lead chain during the generators, after every vitest set, tsc and eslint had passed. The 21
+    generators were re-run (exit 0, no drift), and the full chain was then re-run on A2 plus `f0e7bae`'s files: every set exit 0,
+    tsc 0, eslint 0, no generator drift.
+
+### B23-B1 - revalidate, disclose, approve: B23-B steps 1-3 (2026-10-03/10-04 local; increment workflow + review fix + lead; this commit)
+
+Test-first on `chapter/b23-external-manufacturing` from `da36d51`. The five new suites failed to load on the unmodified tree
+(`b1-02-red`). The D23-6 counterexample, the release's own manifest carrying `tenantId` and the qualifying actor, is
+`b23-b-outbound-package` case 1. First code 53/58 (four suite expectations corrected), then 58/58; three source mutations failed 17 of
+58 and were restored by hash.
+
+What landed:
+- `revalidateReleaseAuthority` (release/route.ts:145): the route-only checks moved verbatim; the release route calls it (:91) with the
+  same codes, statuses and bodies; its suites are unchanged and green; the pinned 555 identity did not move (D23-7).
+- `buildOutboundPackage`: built only from a ledgered release; eight files byte-identical plus a provider manifest; release-manifest.json
+  and README.txt withheld; outboundPackageDigest stable. The plan lists carried ids and every in-file metadata field (D23-6, OD-163).
+- The provider exchange: a sealed 10-minute plan; commit with id, digest, key and opt-in header, consumed once, steps 1-2 re-run,
+  ending `provider_not_admitted`. Human project_admin only. Stores bounded per project, refusing instead of evicting; keys kept 24 h
+  (OD-164, OD-166, OD-183).
+- `POST /api/pcb/provider-exchange` (externalTransfer true, spend false, outboundEgress files declared); census 166/163/3/0 with every
+  census pin moved in place (OD-174).
+- The provider panel; B17-A classifies its three controls.
+
+Review round: an adversarial review confirmed 17 findings:
+- The plan called projectId and boardId kept while the board's file-safe name carries them in file names and bytes, and it listed no
+  in-file metadata.
+- A process-wide 256-plan store evicted across tenants and forgot a key with its plan.
+- A throw at commit left the plan consumed with no outcome, under an unsupported CONFIRMED label.
+- Test gaps: a vacuous cross-origin case, an untested mounting condition and panel failure paths, a tautological census row, a
+  1-in-16 wrong-digest construction.
+- Documentation: an off-by-one and incomplete citation map, a +1 panel line shift, a stale registry header.
+Each was reproduced red (`b1fix-07-red`: 12 failed / 200 passed of 212) or by a source breakage the first suites missed
+(`b1fix-01..06`), then fixed. Ten breakages of the fixed source each failed the strengthened cases and were restored by SHA-256
+(`b1fix-10`). Result: 74/74 across six suites (`b23-b-page` new).
+
+Pins moved in place with dated notes: b23-a-route-vocabulary TRANSFER_PATHS, EgressRow, census, case 4 (retitled) and case 6
+(line-neutral, 838 lines). ManufacturingWorkflowPanel's import was appended on :19, so the discovery's panel citations hold.
+
+Gates after the review round: providers + page scans + panel + B17-A + CI guard 281/281; pcb + p2g 822 passed / 9 skipped; auth + api +
+computation + orchestration + chat 2447 passed / 27 skipped; engineering + components + acquisition 1393 passed / 3 skipped; agent + mcp
++ project 1534/1534; readers 305/305; all exit 0. tsc 0; eslint 0 on 24 files; 21 generators exit 0 with no drift. Counts 47/36/9/27;
+census 166/163/3/0. UI changed: the lead runs the browser suite. Live exchange BLOCKED-LIVE-QUALIFICATION (LB-11).
+
+Lead round (2026-10-04): the independent check of the review fixes found three low issues, each fixed test-first (`lowfix-01-red`: 4
+failed / 28 passed of 32). low-1: the store backstops counted consumed plans, and 1,024 key records per project let 16 scopes fill the
+key store; two branches of one project at their own bounds refused every other project's preview (approval case 16), and the page
+understated the cross-project effect. The plan backstop now counts open plans only; a consumed plan keeps a tombstone (scope, digest,
+expiry) until it expires; keysPerProject is 256, so filling either backstop takes 64 scopes at their bounds (previews for up to 10
+minutes, commits for up to 24 hours; page sections 4 and 10, OD-183 (d)); cases 16-18 new, case 12's pin moved in place. low-2: section
+8 listed discovery :544 and :997, which cite the runbook, as release-route citations; corrected, and page case 5 checks the "cited at"
+column. low-3: a project id over 74 file-safe characters leaves cut short in the 80-character board name and was listed as kept; the
+package now carries the kept prefix (form file-safe-prefix), shown by outbound case 10 on the 555 release built for an 86-character id;
+the request selector admits ids up to 128 characters, and whether a deployment uses one is UNKNOWN. Four source breakages each failed the
+new cases and were restored by SHA-256 (`lowfix-03`). Gates: readers 263/263 before and 268/268 after; app/api/pcb + app/lib/pcb/fab 157
+passed / 5 skipped; tripwires + auth + engineering 1593 passed / 9 skipped; page scans 43/43; all exit 0; tsc 0; eslint 0 on 5 files;
+21 generators exit 0 with no drift. Six B23-B1 suites 79. Census 166/163/3/0. No UI change in this round.
+- Lead close (2026-10-04):
+  - (1) A record correction: B1's implementer found that `app/lib/pcb/__tests__/autonomous-layout-qualification.test.ts` and
+    `manufacturing-release-gate.test.ts` call `createAutonomousGoldenRealRouter`, the production FreeRouting executor, which starts Java
+    whenever the bundled runtime resolves. The lead's gate J in the A1, A2 and A2-with-`f0e7bae` chains ran the first of them: its RC03
+    "real no-edit placement-to-routing qualification" printed three golden runs each time (CONFIRMED from `a1-lead-J.log` and
+    `a2r-lead-J.log`). The ledger texts of A1 and A2, and `f0e7bae`'s message, named only `autoroute-boundary-integrity` as excluded.
+    From B1 on, gate J excludes all three suites (CI replays recordings, never the real router).
+  - (2) UI: both browser suites under the lock: the default config 48 of 48 (4.9 min) and the orchestration config 4 of 4 (2.5 min).
+    The wrapper's own exit 0 is now printed: `scratchpad/b23/pw2.sh` spares its own shell in the cleanup, which matched any command line
+    naming the orchestration config. The 32 evidence PNGs the runs rewrite (5 under B17, 20 under B18, 7 under B21) were restored from
+    HEAD and checked by blob hash, 32 of 32.
+  - (3) Lead gates on the final tree (`b23/lead-gates.sh b1`): every set exit 0. M 48 files, 646 passed, 2 skipped; A 632 passed, 21
+    skipped; J 127 files, 977 passed, 4 skipped (three Java-capable suites excluded); B engineering 1,107; C agent 415; D orchestration
+    460; E mcp 825; F 357; H app/api 1,059; F2 b14-4 alone 22; G 375; I auth 479 passed, 9 skipped. tsc 0; eslint 0; all 21 generators
+    with no drift.
+  - (4) Left as recorded: `provider-registry.ts:16` ("no route reads this registry yet") has been stale since B1, and is corrected with
+    the next reviewed registry revision, which bumps `PROVIDER_REGISTRY_VERSION`. `tier3-vocabulary.md`'s statement that case 4 derives
+    both values carries a dated note on its own line.
+  - (5) After the records, `b23-b-page` case 5 failed. It resolves the citation map's "cited at" discovery lines by number, and the
+    lead's two B1 closure clauses had shifted the discovery by two lines. The map numbers the discovery as at `da36d51`, so case 5 now
+    drops each dated single-line clause inserted from B23-B1 on (`- [B23-B…`, `- [B23-C…`, `- [B23-D…`, `- [B23 closeout…`) before
+    resolving. The edit is on the same line, with a dated note. The first edit carried a raw backspace byte from a heredoc escape; it
+    was found by the control-byte scan and replaced with `\b`. The page tripwires, readers and the provider folder then passed 276 of
+    276; eslint on the file 0.
+
+### B23-B2 - bounded transfer and receipts: B23-B steps 4-5 (2026-10-04 local; increment workflow + review fix + lead round + lead; this commit)
+
+B23-B2 (2026-10-04): bounded transfer and receipts, B23-B steps 4-5. outboundUpload extends the one egress boundary additively
+(in-memory bytes or multipart body, the descriptor's request-byte and part ceilings within the release bounds, maxRedirects 0 with every
+3xx refused, one deadline that also bounds the durable sent mark, no secret in the URL, Idempotency-Key only when declared; no
+dependency). The manufacturing-provider meter has agent share 0. provider-egress.ts is the only sending module, imported only by the
+exchange service and reached only past admission. mfg.provider-exchange.v1 (exchange-ledger.ts) is the silent CAS record of each
+attempt, prepared -> sent -> acknowledged | rejected | UNKNOWN_PENDING_RECONCILIATION | not_sent, keeping ids, digests, versions and
+bounded fields, never a raw body or file byte. Test-first: the suites failed to load on 0c78e93; 37/37 after the first code; seven
+mutations caught. Review round: 22 confirmed findings, each reproduced first (b2fix-01: 15 failed / 33 passed of 48; b2fix-04: page
+suite 3/5 red; test-strength findings by breakages), then fixed: the mark races the deadline and a late mark settles not_sent
+(regressions-1, tests-1, coverage-4); every 3xx refused (coverage-5); the provider sees a server-derived sx- key (security-2,
+coverage-3); keys are unique per project durably and a restarted service answers a commit from the record (tests-3, tests-4); one
+package in flight (coverage-2); a failed settle is retried and the unrecorded answer carries the receipt (coverage-1, tests-2); ids-only
+retention keeps no provider text (coverage-6); every sentence in error (regressions-4); the classification row stays read while no
+descriptor exists, pinned (regressions-3); dated notes on the B1 and A2 pages (regressions-2); the page reworded (coverage-7, -8, -9).
+25 breakages caught, each restored by SHA-256. Gates: readers 396/396 before and 413/413 after;
+net/distributors/schgen/acquisition/durable-workflow 443 passed, 4 skipped; database-delivery 139 passed, 12 skipped;
+auth/api/computation 1930 passed, 27 skipped; agent/orchestration/chat 1024; mcp/project 1214; engineering 1107; pages 48/48; all exit
+0; tsc 0; eslint 0 on 17 files; 21 generators with no drift. Census 166/163/3/0; counts 47/36/9/27; no UI change. Live exchange
+BLOCKED-LIVE-QUALIFICATION (LB-11); production isolation under interleaved commits UNKNOWN.
+
+B23-B2 lead round (2026-10-04): an independent check of the review round's fixes confirmed three low findings, each reproduced first
+(b2low-01: ledger cases 24-28, page case 6 and PGlite case 5 red, 7 failed / 32 passed of 39; b2low-01b: case 25 IN_FLIGHT ten minutes
+later), then fixed. low-1: tests-3's durable read stays before PX_PLAN_NOT_FOUND (OD-184 (p)); B1's statements
+(outbound-disclosure.md:207, :402, :426) and approval-plan case 4's title carry dated lead notes, and ledger case 23 pins the production
+order (three replay reads then 404; MFG_DURABLE_STORE_UNAVAILABLE 503 when the store cannot be read; restoring B1's order fails it,
+b2low-02). low-2: a prepared attempt EXCHANGE_PREPARED_ABANDON_MS (ten minutes) old is settled not_sent (abandoned) by the next attempt
+of its package, and a sent mark lands only while its own attempt is still prepared on that head, so whichever lands first the other is
+refused and nothing is sent twice (OD-184 (q)); PX_EXCHANGE_NOT_SENT no longer says the exchange was recorded and PX_EXCHANGE_IN_FLIGHT
+says when a block ends; a lone UTF-16 surrogate, which PostgreSQL's jsonb refuses with 22P02 (CONFIRMED on PGlite), is refused in the
+record and dropped at normalisation (OD-184 (r)). low-3: one package in flight keys on the package digest, provider and operation, not
+the request digest a registry revision moves (ledger case 27; ledger case 19's and PGlite case 1's helpers moved in place). Twelve
+breakages caught, each restored by SHA-256. Gates: readers 377/377 before, 403/403 after (29 files, B11.5 included);
+manufacturing-providers 279/279; net/acquisition/durable-workflow 290 passed, 4 skipped; database-delivery 140 passed, 12 skipped; auth
+plus b16-1c 486 passed, 9 skipped; pages 49/49 (b21 closeout 10, b22 closeout 9); all exit 0; tsc 0; eslint 0 on 8 files; 21 generators,
+no drift. Census and counts untouched; no UI change; nothing sent; live exchange BLOCKED-LIVE-QUALIFICATION (LB-11).
+- Lead close (2026-10-04):
+  - (1) The lead round's own check raised one more low item and a nit:
+    - The `sent` mark now re-reads and re-verifies the aggregate's whole history on every compare-and-set try, inside the egress
+      deadline. This is recorded on the page (section 13, INFERRED; latent while no transfer descriptor exists).
+    - Three code comments beside the in-flight guard still said "the same request". They are corrected in place.
+  - (2) `regressions-3` (the B16.0.2 row stays `read`) is a forward pin, not a regression test. Reverting the note leaves it green. It
+    fails once a transfer descriptor exists while the row still says `read` (ledger case 21), which is the point.
+  - (3) A session restart cut the lead chain after gate H, with every set to that point exit 0. The stale lock was removed and the chain
+    was resumed from F2 (`b23/lead-gates-from-f2.sh`).
+  - (4) No UI change in B2, so no browser run.
+
+### B23-B3 - observations, staleness, no auto-accept: B23-B steps 6-8 (2026-10-04 local; increment workflow + review fix + lead; this commit)
+
+- B23-B3 (2026-10-04, on `0cd3f59`):
+  - **What landed:** B23-B steps 6-8. An acknowledged answer of B2's record becomes a closed external observation with verdict none. Every provider string, the receipt id included, is screened by a verbatim copy of A2's matcher. It is judged stale or current at every GET /api/pcb-sync read against B1's step-1 checks, the ledger head, the descriptor and the profile. Provider suggestions are closed records, shown and never applied. The summary's current flag now compares revision AND the authoritative digest (D23-17).
+  - **Decisions:** D23-17 and D23-5's staleness half closed; OD-168 and OD-169 applied; OD-185 records the choices.
+  - **Review round:** 16 confirmed findings (13 distinct issues) fixed test-first (`dfm-quote-flow.md` section 28).
+  - **One structural consequence (RECORDED):** the release and qualify routes load the observation modules through their board-store import of GET /api/pcb-sync's route module. They never call them, and exchange-route case 4 scans them.
+  - **Unchanged:** census 166/163/3/0; counts 47/36/9/27; `release-gate.ts`; every B1 and B2 citation.
+  - **UI:** changed; the browser suite was not run here.
+  - **Live:** BLOCKED-LIVE-QUALIFICATION (LB-11).
+- Lead close (2026-10-04):
+  - (1) The check (16 of 16 fixes revert-sensitive) raised two new low items. Case 2 of `b23-b-observation` asserted that an unlisted
+    provider's answer stays an observation, but its title and the file header still said such a provider is refused; both are now
+    corrected in place to what the case asserts (line-neutral). The reader's nine sequential record reads per hydration, four of which
+    can never return a record, are recorded on the page (section 25, INFERRED: a latency cost, nothing wrong).
+  - (2) The review's count: the page and the drafts said "fourteen findings, three reported twice", but the workflow confirmed sixteen
+    ids in thirteen table rows, so thirteen distinct issues. Corrected on the page with a dated note and in these records.
+  - (3) UI: both browser suites under the lock passed, the default config 48 of 48 (4.5 min) and the orchestration config 4 of 4 (2.5
+    min). The 32 evidence PNGs the runs rewrote were restored from HEAD by blob hash, 32 of 32.
+  - (4) Lead gates on the final tree (`b23/lead-gates.sh b3`): every set exit 0. M 744 passed, 2 skipped; A 632 passed, 21 skipped; J
+    977 passed, 4 skipped; B 1,107; C 415; D 460; E 825; F 357; H 1,059; F2 22; G 375; I 479 passed, 9 skipped. tsc 0; eslint 0; all 21
+    generators with no drift.
+  - (5) CI on `0cd3f59` (B2) failed one test: `b23-b-page` case 4 timed out at vitest's 5 s default on the runner (2.2 s here; a
+    whole-tree closure scan). A timing pass over the provider folder found one more CPU-bound case on the default, `b23-b-approval-plan`
+    case 18 (2.2 s). Both got explicit budgets on their own lines in `a02c9fb`, committed before this one. Last green stays `0c78e93`
+    until CI on `a02c9fb` reports.
+  - (6) B2's OD-184 entry carried a double space in each item marker (the lead's wrap helper), now removed. The helper is fixed, and
+    a first B3 records run stopped by its check before writing anything but the discovery, which was restored from HEAD.
+
+### B23-C - ordering visibly disabled, with the full contract (2026-10-04 local; increment workflow + lead; this commit)
+
+- B23-C (2026-10-04, on 8bca09e):
+  - **What landed:** `orderingEnablement` (disabled; seven prerequisites missing; no enabling variable; the stores' default reads only the off switch from the process); the `manufacturing.provider-order` record (`missing`, Tier 3) appended on `:186`; the panel notice on `:129`.
+  - **Offline contract:** the two-person, single-use purchase authorization with an exact approved-importer gate over the agent loop, gateway, chat, MCP and orchestration; the order contract on an injected fake port, which claims the cart before the burn and re-checks enablement before the hand-over; pure webhook verification.
+  - **Review round:** fourteen CONFIRMED findings closed test-first:
+    - the overflowing re-read that threw after the burn;
+    - the off switch that did nothing;
+    - relabelled carts;
+    - the racing second authorization that was burned;
+    - the false `WEBHOOK_RECORDED`;
+    - the untested bounds, abort, line identity, edge, race loser and gate spellings;
+    - the repeating fixture nonces.
+    Nine cases were red on the reviewed tree and nineteen further mutations were caught.
+  - **Decisions:** D23-10 and D23-11 closed, and D23-4's order-contract half; OD-170, OD-171 and OD-172 applied; OD-186 records the choices, amended by the review round.
+  - **Pins:** tier3 census 105 → 106; B01 CSV +1 row. The review round moved pins only in C's own suites, each in place with a dated note.
+  - **Unchanged:** census 166/163/3/0; counts 47/36/9/27; no route or provider client; 21 generators with no drift.
+  - **tsc:** red from `a02c9fb` until the lead's `d5f5512`; green since.
+  - **UI:** changed by the notice; the browser suite was not run here.
+  - **Live:** BLOCKED-LIVE-QUALIFICATION (LB-12).
+
+B23-C low fixes (2026-10-04, `[B23-C lead]`, on `d5f5512` plus the B23-C working tree, uncommitted). An independent check of the review
+round reported two low findings, and both are closed test-first. First, the cart digest grouped and sorted part numbers by their raw
+strings while consume compares bindings after NFC, so a part or provider id spelled with U+212A KELVIN SIGN passed the in-flight check
+and was burned before being refused. The cart is now read from the canonical binding consume compares, and provider ids are compared
+after NFC (order-contract case 14). Second, a cart claimed by another submission answered `ORDER_IN_FLIGHT`, whose message names an
+unresolved order that did not exist. It now answers the closed code `ORDER_CART_BUSY` (case 15; pins of cases 5 and 9 moved in place).
+While correcting the guard comment, a third path was found and closed: a twin submit of the same authorization did not hold the claim,
+so a new authorization could slip in when the first submit failed. Every submit of the claiming authorization now holds the claim (case
+16). The guard after the burn is now unreachable for the real store, and its comment says so. Red: 5 of 16 cases failed on the unchanged
+sources; four mutations were caught and restored by hash. The order-contract suite has 16 cases. Gates: manufacturing-providers 351/351,
+engineering 1107/1107, agent plus orchestration 875/875, mcp 825/825, b14-4 22/22, pages and closeout tripwires 105/105. tsc is exit 0
+after `d5f5512`, eslint is clean, and 21 generators show no drift. Census 166/163/3/0 and counts 47/36/9/27 are untouched: no route,
+control, tool or composition-root wiring was added. Live ordering stays BLOCKED-LIVE-QUALIFICATION (LB-12).
+- Lead close (2026-10-05):
+  - (1) The lead's own error, found by C's implementer: `a02c9fb` gave `b23-b-approval-plan` case 18 a second timeout and broke tsc.
+    The case already carried `}, 60_000);`, and the lead's timing pass had looked only at the `it(` line. CI was red on `a02c9fb` and
+    `8bca09e` at `tsc --noEmit`, which also stopped those runs before their tests. `d5f5512` restored the line byte for byte to
+    `0cd3f59`'s. Rule since: tsc runs before every commit that touches a `.ts` file.
+  - (2) The lead round's own check raised one more low item: `ORDER_CART_BUSY`'s message said "this authorization is unspent", which a
+    voided, expired or forged handle is not; the request reads none of it before answering. The message now says "This request
+    consumed, read and sent nothing; submit the authorization again in a moment." Case 15's pin moved in place and now also refuses
+    "unspent". The page's quote and its OD-186 (p) carry dated notes.
+  - (3) UI (one notice line): both browser suites under the lock passed, the default config 48 of 48 (7.5 min) and the orchestration
+    config 4 of 4 (2.7 min). The 32 evidence PNGs the runs rewrote were restored from HEAD by blob hash, 32 of 32.
+  - (4) Lead gates on the final tree (`b23/lead-gates.sh c`): every set exit 0. M 785 passed, 2 skipped; A 632 passed, 21 skipped; J
+    977 passed, 4 skipped; B 1,107; C 415; D 460; E 825; F 357; H 1,059; F2 22; G 375; I 479 passed, 9 skipped. tsc 0; eslint 0; all 21
+    generators with no drift.
+
+### B23-D - physical-hardware evidence, defined and never fabricated (2026-10-05 local; increment workflow + review fix + lead; this commit)
+
+- B23-D (2026-10-05, on `4e71563`):
+  - **What landed:** `physical-evidence.ts` (eight closed kinds; validators; server-derived review by record digest with server-resolved operators; `assembledProductEligibility`, blocked for every input); the latent-claim-path tripwire; the assembled-release block pinned by id, with both unblock conditions in the note `:118`, the gate `:189` and the public message `manufacturing-errors.ts:62`.
+  - **Review round:** sixteen CONFIRMED findings (thirteen distinct) closed test-first:
+    - the operator check across namespaces;
+    - failures outvoted by a pass;
+    - unbound acceptance digests and minted ids;
+    - raw re-reads after refusal;
+    - any record as a retest;
+    - unit and lot identity unbound across records;
+    - free-text digests;
+    - the "no person's name" overclaim;
+    - a wrong B14.4 citation;
+    - four test-strength gaps.
+    8 of 22 cases were red, the per-finding probe was 10/10 red, and 25 of 26 breakages of the fixed module were caught (the survivor exposed a redundant clause, which was removed).
+  - **Decisions:** D23-13, D23-14 and D23-15 closed; OD-175, OD-176 and OD-177 applied; OD-187 records the choices, amended by the review round.
+  - **Pins:** B01 CSV row `:47` re-rendered (one row); no pin outside D's new suites moved.
+  - **Gates:** manufacturing-providers 391/391 (set M 813 passed, 2 skipped, at the lead close after the lead-fix rounds), engineering 1107/1107, pcb 977 (+4 skipped), prompt-to-gerber 34/34, agent 415/415, orchestration 460/460, computation 300 (+18 skipped), b14-4 22/22; tsc 0; eslint 0; 21 generators with no drift.
+  - **Unchanged:** census 166/163/3/0; counts 47/36/9/27; no route, tool, store or wiring.
+  - **UI:** one error string; no control change.
+  - **Lead's single run:** manufacturing-release-gate.test.ts (in no CI workflow) ran once, deliberately, on the final tree: 5 of 5 passed, exit 0, its refusal of assembled_pcb included (it asserts the code, not the message).
+  - **Live:** BLOCKED-LIVE-QUALIFICATION (LB-5).
+- **B23-D low round (2026-10-05, uncommitted on `4e71563`).** An independent check of the review fixes raised three low issues, closed test-first in `physical-evidence.ts`, the contract suite and `physical-evidence.md`:
+  - **Failures always raise.** A failure of this release and lot raises its nonconformance whatever its serial listing or a duplicate id; only another release or another lot puts a record outside the claim (`outsideClaim`).
+  - **Dispositions come after the failure.** A rework comes no earlier than every record that raised its nonconformance, so its retests do too (`actsOn`).
+  - **A scrap removes its subject.** Every hardware scrap of the claim removes its unit or lot, so a scrapped lot presents no evidence (`withoutScrapped`, rejection `subject_scrapped`).
+  - **Red:** 5 of 13 contract cases, plus a 6-of-6 per-scenario probe, each answering `missing []` and `openNonconformances []`.
+  - **Checks that bite:** 12 of 12 breakages of the new code caught; the review round's 25 still caught.
+  - **Pins moved** in contract cases 1 and 6 only, each toward refusing more, with dated notes.
+  - **Gates:** manufacturing-providers 394/394, engineering 1107/1107, release-engineering/firmware/full-flow 33/33, agent 415/415, closeouts 19/19, tsc 0, eslint 0, 21 generators with no drift. Census, counts, routes, tools and UI unchanged.
+  - **OD-187:** (e), (g), (i) and (p) amended; (s) added.
+  - **Live:** BLOCKED-LIVE-QUALIFICATION (LB-5).
+- **B23-D low round 2 (2026-10-05, uncommitted on `4e71563`).** A second independent check raised two low issues, closed test-first in `physical-evidence.ts`, the contract suite and `physical-evidence.md`:
+  - **A removal never relaxes a rule (low-4).** Only a scrap that satisfies on its own removes its subject (`removedSubjects`). A final physical qualification comes after every hardware rework of the claim, satisfying or not and removed or not (`reworkInstants`).
+  - **A lot with no unit left is scrapped (low-5).** That is, once every serial an identity lists, or `lotQuantity` distinct units, is scrapped.
+  - **Red:** 3 of 15 contract cases, plus a 7-of-7 per-scenario probe, each answering `missing []` and `openNonconformances []`.
+  - **Mutations caught:** 14 of 14 of the new code, the low round's 9 of 9, and the review round's 26 of 26.
+  - **Pins moved:** only in contract case 13, two pins toward refusing less as directed, with case 13's title corrected.
+  - **Gates:** manufacturing-providers 396/396, engineering 1107/1107, release-engineering/firmware/full-flow 33/33, agent 415/415, closeouts 19/19, tsc 0, eslint 0, generators with no drift. Census, counts, routes, tools and UI are unchanged.
+  - **OD-187:** (e), (f), (g) and (s) amended.
+  - **Live:** BLOCKED-LIVE-QUALIFICATION (LB-5).
+- Lead close (2026-10-05):
+  - (1) The second low round's own re-check raised one more low issue. A record that is not physical evidence (a dry run) sharing a
+    reviewed scrap's id voided the scrap and took its removal back, so the unit's pass satisfied again and the claim moved toward
+    complete; the same through the lot identities that bind units and count a lot's units out. The lead closed it test-first:
+    contract case 16 failed on the unchanged module (1 of 16), and a per-scenario probe failed 3 of 3, each at its intended assertion
+    after its baseline passed. The fix is in place with no line moved: the scraps that remove, and the identities that bind and count,
+    are read from each record's own verdict before the duplicate check. A duplicate now voids what a record would satisfy or close,
+    never what it imposes. Three pins moved toward refusing more, each with a dated `[B23-D lead, 2026-10-05]` note: the shared-id
+    scraps of cases 13, 14 and 15 now remove their subject. Reverting either half of the fix was caught (case 16; cases 13-16). The
+    earlier rounds' 49 breakages were not re-run after this change. `physical-evidence.md` carries dated notes in sections 0, 2, 4 and
+    9-14; OD-187 (g) and (s) are amended. Further D edge cases go on the page (section 13), not into another round.
+  - (2) `manufacturing-release-gate.test.ts` (in no CI workflow) ran once, deliberately, on the final tree: 5 of 5 passed, exit 0,
+    10.7 s. It asserts the assembled refusal's code, not its message, so `release-gate.ts:189`'s new wording moved no pin.
+  - (3) UI (one error string, no control): both browser suites passed under the lock, the default configuration 48 of 48 (7.3 min)
+    and the orchestration configuration 4 of 4 (2.7 min). The evidence PNGs they rewrote (31; one was byte-identical) were restored
+    from HEAD, all 32 equal by blob hash.
+  - (4) Lead gates on the final tree (`b23/lead-gates.sh d`): every set exit 0. M 813 passed, 2 skipped; A 632 passed, 21 skipped; J
+    977 passed, 4 skipped; B 1,107; C 415; D 460; E 825; F 357; H 1,059; F2 22; G 375; I 479 passed, 9 skipped. tsc 0; eslint 0;
+    all 21 generators with no drift.
+
+### B23 closeout (1/2) - the provider-claim and stale statements superseded, the stale title retitled, the unused exports recorded, the tripwire (2026-10-05 local; implementation; this commit)
+
+**Test-first** on `chapter/b23-external-manufacturing` from `dfd51e3`. The scope is the verified sweep (`closeout-scope/`, at `8bca09e`), each item re-checked by its text at `dfd51e3`; B23-C and B23-D landed since, and their files were swept the same way (nothing outside `discovery.md` made untrue).
+- `b23-closeout-statements` was written first: with only the suite added, 8 of 8 red (`co1-red-pre-edit-2`), then 8 of 8 green (`co1-green-2`). Six deliberate breakages caught, each restored by hash (`co1-mut-*`).
+- **Dated notes in place** (`[superseded 2026-10-05 by the B23 closeout (<refs>): ...]`), 11 in 10 files: D23-16/OD-178 on `README.md:41`, `docs/pcb-quickstart.md:6` and `:47` (the task's generalisation of OD-178's draft wording, "a provider's" for "JLCPCB's"; OD-188 (g)); `provider-registry.ts:16` (B23-B1, B23-B3; a comment note, not a registry revision - OD-188 (a)), `route-policy.ts:358`, `route-resource-classification.ts:107`, `admission-control.ts:19` (after B21's note), `provider-egress.ts:135` (added beyond the verified scope), `tier3-vocabulary.md:166`, and two B23 suite comments. Every note is in place on its line: no line moved in a production file or at any line a page cites; the six B23 pages each gained one closing section (the export record) after their last line.
+- **Retitle:** `b23-a-provider-admission` case 8, `[B23 closeout, 2026-10-05] retitled (B23-B1, B23-B3): ...; assertions unchanged`; 11 `it(` unchanged.
+- **Exports:** 34 rows recorded (29 from the sweep; B23-C's four modules and `physical-evidence.ts` whole), written up in a closing section on each of six B23 pages; none retired. `providerRow` and `renderProviderRegistryCsv`'s `rows` parameter wait for the next reviewed registry revision (OD-188 (a)).
+- **Review round** (adversarial review, 14 confirmed findings: 9 on the tripwire's bite, 5 on the records). Each bite gap was shown first: a breakage of the tree that the suite as reviewed passed 8 of 8 (`co1fix-gap-*`), restored by hash. The strengthened suite (still 8 cases): the claim vocabulary takes auxiliaries, an object before the preposition, the present tense naming a provider and a DFM pass, 19 forms each pinned by its own examples; an allowed line admits only the claims inside its allowed text and a note only the claim before it, the admissions pinned per entry; no note states a claim; CS-B20's statement is scanned (the stripped scan now reports all 11 noted statements); the "Send to fab" uses are pinned per file; the retitle is derived from the files and assertions of its body; each production composition is parsed with the TypeScript API to a closed literal of its pinned keys. The same nine breakages each failed it (`co1fix-bite-*`), and the first round's six are still caught (`co1fix-remut-*`). Case 3's 63 examples cover each verb, preposition and site a form names: dropping `fulfilled`, `transferred` or `through` from the suite's own vocabulary fails case 3 on that example alone (`co1fix-altdrop-*`, restored by hash). The records: the page's line statement and the D23-16 wording (coverage-4, coverage-5), `jlcpcb-2l` alone inside the pinned release identity (coverage-6), and the section-10 line's discovery numbers counted after the D23-16 clause (regressions-1, coverage-3; `co1fix/cites.mjs`).
+- **No behaviour change, no assertion weakened, no route** (census 166 = 163 + 3 + 0), counts 47/36/9/27. No UI change. No verdict: that is commit 2/2.
+
+**Gates** (one run at a time under the shared lock, every run exit 0; the first round `co1-gate-*` and the review round `co1fix-gate-*` gave the same counts): `app/lib/manufacturing-providers/__tests__` + `b19-e-ci-job-scope` 30 files / 400 tests; `database/__tests__` (PGlite) 1 / 5; `b21-closeout-statements` + `b22-closeout-statements` 2 / 19; the 28 suites that read or import a touched file 28 / 320 (+1 skipped); `app/api/chat/__tests__` + `app/lib/acquisition/__tests__` 36 (+1 skipped) / 362 (+2 skipped); `app/lib/agent/__tests__` (B11.5) 36 / 415; `app/lib/agent/orchestration/__tests__` 49 / 460; `app/lib/computation/__tests__` (the B22 process census) 26 (+2 skipped) / 300 (+18 skipped); `app/lib/engineering/__tests__` 99 / 1,107; `app/lib/auth/__tests__` 41 / 479 (+9 skipped); `app/api/__tests__` (the B16.1c census tripwires, 166/163/3/0) 27 / 1,059; `app/lib/mcp` (the B20-B4 process gate) 45 / 825; `b14-4-ast-import-gates` 1 / 22; tsc 0; eslint 0 on the nine changed TypeScript files; the 21 generators with no drift. After the last edits to the suite and the page (`co1fix-final-*`): the suite alone 1 / 8 (case 3 the slowest, 4.8 s, inside its declared 60 s), the provider folder + ci-job-scope 30 / 400, the two closeout suites 2 / 19, `app/lib/agent/__tests__` 36 / 415, tsc 0, eslint 0. No UI file changed: the B17-A control inventory and the browser suite are not needed. No `app/lib/pcb` file changed; the Java-capable suites were not run.
+
+**Found, not edited (for the lead):** the LB-11 state cell (CS-ADD-LB11); the README's B2 row counts `b23-b-dfm-quote-flow-page` as (5) though B2's lead round made it 6 (10 with B3's four); see the report's seen-not-in-scope list.
+- Lead close (2026-10-05):
+  - (1) The independent check of the review round's fixes raised two low issues in the tripwire's own vocabulary, each inferred from
+    a replica. The strengthened condition list had put "until", "before", "when" and "once" before a provider, so a past-tense claim
+    such as "When JLCPCB accepted the bundle" was no longer reported, though the suite as reviewed reported it. And `ONE`'s article
+    branch took a part alone, so "the API accepts only a JSON body" read as a provider's acceptance. The lead closed both test-first in
+    `b23-closeout-statements.test.ts` alone: case 3 gained four past-tense claims and five non-claims and failed on all seven the
+    issues predicted (`colead-01-red`); a temporal word is now a condition only before a present or perfect verb (`WHEN`, `PAST_AUX`,
+    `said()` beside `IF`), and a part needs a provider's name or role; 8 of 8 green (`colead-02`). Putting the temporal words back
+    fails case 3 on the four claims, and letting a part stand alone fails it on the three non-claims (`colead-mut-*`, the suite
+    restored by hash each time). `closeout-statements.md` sections 4 and 5 carry dated `[B23 closeout lead, 2026-10-05]` notes, and
+    OD-188 (i) records the choice.
+  - (2) A correction to the increment workflow the lead's runs used since B23-B1: its defaults still stated the route ratchet as 165 and
+    the agent-tool counts as 42/33/9/24, while the binding lessons in every run's context gave the true 166/163/3/0 and 47/36/9/27. No
+    increment acted on the stale defaults (each report states 166 and 47/36/9/27, and the census and tool-count suites pin both); the
+    script was corrected before this closeout's run.
+  - (3) The lead's gate chain (`b23/lead-gates.sh co1`) was cut by a session restart during set H; the stale lock was removed and the
+    chain resumed from H (`b23/lead-gates-from-h.sh`). Every set exit 0: M 821 passed, 2 skipped; A 632 passed, 21 skipped; J 977 passed, 4
+    skipped; B 1,107; C 415; D 460; E 825; F 357; H 1,059; F2 22; G 375; I 479 passed, 9 skipped; tsc 0; eslint 0; all 21 generators
+    with no drift.
+  - (4) OD-178 had no heading in the register; this commit records it as applied. OD-160's heading follows with the verdict in commit
+    2/2.
+
+### B23 closeout (2/2) - the four validation artifacts, the final validation run, the verdict (2026-10-06 local; increment workflow + lead; this commit)
+
+- The four artifacts in `artifacts/ai-control-plane-b23/`: `changed-files.md` (every path from `43cb1b0` to `b6c6b0d` - 123: 63 added, 60 modified, 0 deleted; 24,201 insertions, 355 deletions - grouped by area with the first commit that touched it, 123 of 123 checked against `git log --reverse 43cb1b0..HEAD -- <path>`; the 15 commits to `b6c6b0d`, linear, each authored and committed by Dandi Desta with no AI trailer; this commit's four new artifacts make 127 paths in 16 commits), `test-and-validation-report.md` (30 suites - 29 under `app/lib/manufacturing-providers/__tests__` and the PGlite suite - 289 `it(` blocks and 392 tests in the final run, all passing, each suite's run count CONFIRMED from gate M; the fakes named; the final validation run with every number; CI on every B23 commit; each increment's gate lines from the commit messages and the ledger), `unknowns-and-owner-decisions.md` (OD-160..OD-188 with their state - OD-160's default applied and its heading recorded in this commit, the 29 headings at `b6c6b0d` for OD-161..OD-188 each "Owner confirmation pending", OD-189 unused; D23-1..21 all closed - D23-11 and D23-13 offline only, D23-4's order half offline, D23-18 as the recorded mapping, each with its RECORDED residuals; section 8's nineteen items with their state; every other UNKNOWN, INFERRED and BLOCKED item the B23 pages record; LB-5, LB-11, LB-12) and `final-verdict.md` (PARTIAL: met offline - the read-only DFM/quote flow safe and traceable against an in-process fake provider behind the real egress boundary, ordering visibly disabled with its contract tested offline, no agent can release, transfer or spend; not met live - no provider admitted, LB-11; ordering cannot be enabled, LB-12; physical evidence defined, none exists, LB-5; the PROVIDER STATUS, ORDERING STATUS and ROUTE RATCHET lines). The first three drafted by the lead's read-only generator (re-run at `b6c6b0d`) and corrected by hand (its clause parser counted D23-4, D23-5 and D23-19 in part and D23-16 and D23-18 open; its pattern left `app/api/__tests__` under the root); the verdict is the lead's draft, filled and checked - its judgement unchanged. Factual details corrected in the draft: the human `project_admin` rule for a transfer is B1's, not A2's; ordering is present but disabled in nine operations on six of the nine rows (MacroFab, Eurocircuits and Nexar have none), not on every row; a transfer row's `outboundEgress` is declared `files` since B1, not derived; the outbound package carries no tenant, branch, design or actor id, but the board's file-safe name carries the board and project ids (not "no internal id"); "no account exists" scoped to DFM/quote transfers and orders (the distributor reads keep B19's account scope); the board's file-safe name is the board id, which embeds the project id or its kept prefix; "B24-A3 owns it" comes from the uncommitted B24 discovery draft, so the verdict leaves the assignment for the B24 discovery to record.
+- The final validation run at HEAD `b6c6b0d` (2026-10-05 23:44:57 to 2026-10-06 00:07:36, `b23/logs/closeout2-*`, the chain of `b23/lead-gates.sh closeout2` in its order, one heavy job at a time through the lock scripts, the tree clean before and after): M 66 files (1 skipped) 821 passed 2 skipped; A 40 files (3 skipped) 632 passed 21 skipped; J 128 files (1 skipped) 977 passed 4 skipped (the three Java-capable suites excluded); B 99 files 1,107; C 36 files 415; D 49 files 460; E 45 files 825; F 39 files 357; H 27 files 1,059; F2 1 file 22; G 27 files 375; I 41 files 479 passed 9 skipped - 7,529 passed, 36 opt-in skipped, no failure, no onTaskUpdate timeout, identical to the closeout (1/2)'s chain; tsc 0; all 21 generators exit 0 with zero drift; census 166/163/3/0; counts 47/36/9/27. The chain's eslint step exited 1: on a clean tree its file list is empty, so eslint linted the whole project - 69 problems (33 errors, 36 warnings) in 37 files, the 33 errors in 14 of them, none changed by B23 and all byte-identical to `main` with the eslint configuration (30 react-hooks errors, 14 of them in `app/page.tsx`; two `prefer-const`; one `@next/next/no-assign-module-variable`); no CI job runs eslint. As B22's closeout did, eslint then ran on the 92 files B23 changed (87 TypeScript, 5 TSX): exit 0. Then the full existing browser suite 48 of 48 in 257 s and the orchestration config 4 of 4 in 149 s (both lines `pw2.sh`'s own, `playwright-exit=0`; the wrapper's exit 0 each time), 406 s of OD-30's 30 minutes; the 32 evidence PNGs the runs rewrote (25 by the existing suite - 5 under B17, 20 under B18 - and 7 under B21 by the orchestration config; none byte-identical before) restored from HEAD by blob hash, 32 of 32. Then gate S, an addition (six named places outside the chain: `app/lib/workflow/prompt-to-gerber/__tests__`, `app/api/pcb/qualify`, `app/api/pcb/release`, `app/api/pcb-sync/__tests__`, `app/lib/pcb-sync/__tests__`, `manufacturing-workflow-panel.test.tsx`): 19 files, 177 passed, 1 opt-in skipped; its acceptance replays reproduce the committed identities, the 555 release `mfg-release-45b3b7efbc85dc3a8ecd233c906384cd` among them. After the review round (2026-10-06 00:40, HEAD `b6c6b0d`, only the closeout's documents uncommitted), gate S2: the eleven other suites outside every gate that directly read a file B23 changed (`b18-a-autonomy-route`, `b18-b-execution-grant-route`, `b16-0-1-signin`, `b16-0-2-bom-ownership`, `b19-bom-quota`, `b16-0-2-engineering-export`, `b19-e-successor-rebind`, `pcb-sync-authority`, `b19-e-adopt-exact-revision`, `b19-e-publication-fake-vendors`, `b19-e-bom-sources`) and `route-security` (passive-policy, named by the review): 12 files, 100 passed, 1 opt-in skipped (`SIRKIT_DB_QUALIFICATION`). With S2, of the 269 suites that import, spell the path of, or are a file B23 changed, all ran but the Java-capable `manufacturing-release-gate.test.ts` (excluded by rule; `scratchpad/b23/co2fix/readers.mjs`); 124 suites reach a changed file only through their imports and were not selected (61 of them in a CI filter, CI green on `b6c6b0d`; `transitive.mjs`).
+- No real engineering process and no provider: the three Java-capable `app/lib/pcb` suites were excluded and named in no gate log; every live suite skipped; every browser chat turn is the scripted fixture agent's, and the server's `missing_credentials` lines (3 in the existing suite's log, 1 in the orchestration log) are the fixture runtime's answer to a model request.
+- CI (read-only): four B23 commits ran red, each fixed by a later commit - `9cb675d` (prompt-to-gerber: `b22-a3-diagnostic-runner` case 13's abort lost to a garbage collection; fixed in `f0e7bae`), `0cd3f59` (prompt-to-gerber: `b23-b-page` case 4 at the 5 s default; budgeted in `a02c9fb`), `a02c9fb` and `8bca09e` (`tsc --noEmit` TS2554 in both workflows, from `a02c9fb`'s second timeout on `b23-b-approval-plan` case 18; restored in `d5f5512`); `e8c7928` has no run (pushed with `3806cba` before the PR); every run since `d5f5512` is green, `b6c6b0d` included (deterministic-manufacturing `37410317063`: prompt-to-gerber 17 min 31 s, database-delivery 2 min 23 s, page-browser-e2e 20 min 25 s with both Playwright configs; benchmark-quality `37410317237`).
+- README: the validation row (written by this increment). PROGRAM_STATE: B23 complete pending PR #14's green CI and a normal merge; last green `b6c6b0d`; next B24.
+- Report lines: `PROVIDER STATUS: no provider admitted (...)`, `ORDERING STATUS: visibly disabled (...)` as in `final-verdict.md`; `ROUTE RATCHET: 166 = 163 canonical + 3 factories + 0 raw. B23-B1 added POST /api/pcb/provider-exchange, the one transfer row, by review.`
+- Record corrections the closeout named (the ledger is append-only, so they are stated here): OD-160 recorded in `OWNER_DECISIONS.md` as applied (the default; B23-B4 not run); D23-4's closure clause and the README's B2 row give `b23-b-exchange-ledger` 22 and the PGlite suite 4 - 28 and 5 since B2's lead round - and the B2 row gives `b23-b-dfm-quote-flow-page` 5 (6 since that round, 10 with B3's four); LB-11's check cell cites runbook `:973-984`, while B23-B is `:971-982` (steps `:975-982`) and `:984` is B23-C's heading; `tier3-vocabulary.md` section 12 still labels runtime human-only enforcement PROPOSED, built by B1 (`b23-b-exchange-route` cases 5-7) - recorded in `unknowns-and-owner-decisions.md`, the page left as A2 wrote it.
+- Review round (2026-10-06): an adversarial review confirmed six findings on five issues (coverage-1 and tests-1 are one), all in the records and all low on verification (coverage-1 was raised as medium), none against a test, a page or the verdict's judgement. Each was reproduced first by a read-only check in `scratchpad/b23/co2fix/`: `claims.mjs` failed 47 of its 73 checks on the reviewed texts and passes 73 of 73 on the corrected ones; `readers.mjs` found 11 suites outside every gate that directly read a B23-changed file, none after gate S2. The corrections: gate S was described as every outside reader of a B23-changed file, and it is six named places, so gate S2 then ran the eleven others (`pcb-sync-authority` and the three route-policy readers, in no CI job, among them) and `route-security`: 12 files, 100 passed, 1 skipped. The 124 suites that reach a changed file only through their imports are recorded as not selected. The eslint wording is corrected: the 33 errors stand in 14 files (69 problems in 37 files), where the texts had given all 37 files as the errors' files. OD-160's heading is worded as recorded in this commit. The path and commit counts are scoped to `b6c6b0d` (127 paths and 16 commits with this commit), and the PR names both closeout commits. The verdict's pass-criteria clauses now cite a suite and case each (57 case citations, each resolving to a block of its suite), the five pre-B23 release pins with their gates, and OD-182 (c), and no uncommitted B24 id. The verdict and its judgement are unchanged. After the corrections the chain re-ran on the corrected tree, HEAD still `b6c6b0d` (`lead-gates.sh closeout2fix`, 00:53:57 to 01:06:05): every gate's counts identical (7,529 passed, 36 skipped, every gate exit 0), tsc 0, the same whole-project eslint (69 problems line for line, exit 1), the 21 generators exit 0 with zero drift; then eslint 0 on the 92 files B23 changed, and the three page tripwires with every B23 page suite 33 files, 432 passed. The browser configs were not re-run: no source, spec or UI changed, and no browser spec reads a B23 page.
+- Documents only: no production, test, generator or page file changed in this commit.
+- Lead close (2026-10-06):
+  - (1) The independent check of the review round's fixes (six findings on five issues, each reproduced and fixed) raised one more
+    low issue: `test-and-validation-report.md`'s S2 row said `route-security` reaches `route-policy.ts` "through its route"; the suite
+    imports `../handler`, and the path is `handler.ts` -> `_scope.ts` -> `app/lib/auth/authorize.ts:21`. Corrected in place with a dated
+    `[B23 closeout lead, 2026-10-06]` note; wording only, nothing that ran or any count changed.
+  - (2) The chain's eslint step: on a clean tree the lead's gate script handed eslint an empty file list, so it linted the whole project
+    (69 problems in 37 files, the 33 errors in 14 files, none changed by B23, all byte-identical to `main`). The lead re-ran eslint over
+    every TypeScript file B23 changed since `43cb1b0` - 92 files: exit 0, no output (`b23/logs/co2-lead-eslint-chapter.log`). The gate
+    scripts now lint the chapter's changed files when the working tree has none. The 33 pre-existing errors on `main` (14 of them in
+    `app/page.tsx`, where `fix/b21-page-react-hooks-refs` is still unmerged) stay a carried item.
+  - (3) Applied as the closeout listed them: the ledger paragraph, `PROGRAM_STATE.json`, the discovery's section 10 block, OD-160's
+    heading as recorded, LB-11's dated note on its runbook range and the README B2 row's dated note on its case counts. The verdict is
+    the lead's: PARTIAL, its judgement unchanged by the closeout's nine factual corrections.
+  - (4) PR #14's description is the closeout's summary for the owner, with no AI attribution footer or co-author line (owner rule).

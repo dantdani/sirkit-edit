@@ -94,15 +94,15 @@ describe("[B20 B2] B — the vocabulary and the rows", () => {
 
   it("2. exactly one mcp-bearer row, POST /api/mcp, with the D-5 shape; a sub-path has no policy", () => {
     const rows = allRoutePolicies().filter((policy) => policy.identitySource === "mcp-bearer" || policy.authClass === "authenticated-mcp");
-    expect(rows.map((row) => ({ ...row, evidence: undefined }))).toEqual([{ path: "/api/mcp", method: "POST", authClass: "authenticated-mcp", identitySource: "mcp-bearer", requiresAuth: true, permittedRoles: ALL_MEMBERS, providerCredit: false, requiresCsrf: false, authoritativeWrite: false, releaseOrQualification: false, evidence: undefined }]);
+    expect(rows.map((row) => ({ ...row, evidence: undefined }))).toEqual([{ path: "/api/mcp", method: "POST", authClass: "authenticated-mcp", identitySource: "mcp-bearer", requiresAuth: true, permittedRoles: ALL_MEMBERS, providerCredit: false, requiresCsrf: false, authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence: undefined }]); // [B23-A2, 2026-10-02] reviewed pin move: + externalTransfer and spend, both false (OD-174; every row now states both)
     expect(policyFor("/api/mcp/evil", "POST")).toBeNull();
     expect(policyFor("/api/mcp", "GET")).toBeNull();
     expect(policyFor("/api/mcp", "DELETE")).toBeNull();
   });
 
   it("3. the token row is an authenticated same-origin read for every member; the metadata row is public, GET only, no CSRF", () => {
-    expect(allRoutePolicies().filter((row) => row.path === "/api/mcp/token").map((row) => ({ ...row, evidence: undefined }))).toEqual([{ path: "/api/mcp/token", method: "POST", authClass: "authenticated-read", identitySource: "trusted-context", requiresAuth: true, permittedRoles: ALL_MEMBERS, providerCredit: false, requiresCsrf: true, authoritativeWrite: false, releaseOrQualification: false, evidence: undefined }]);
-    expect(allRoutePolicies().filter((row) => row.path === METADATA_PATH).map((row) => ({ ...row, evidence: undefined }))).toEqual([{ path: METADATA_PATH, method: "GET", authClass: "public", identitySource: "none", requiresAuth: false, permittedRoles: [], providerCredit: false, requiresCsrf: false, authoritativeWrite: false, releaseOrQualification: false, evidence: undefined }]);
+    expect(allRoutePolicies().filter((row) => row.path === "/api/mcp/token").map((row) => ({ ...row, evidence: undefined }))).toEqual([{ path: "/api/mcp/token", method: "POST", authClass: "authenticated-read", identitySource: "trusted-context", requiresAuth: true, permittedRoles: ALL_MEMBERS, providerCredit: false, requiresCsrf: true, authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence: undefined }]); // [B23-A2, 2026-10-02] reviewed pin move: + externalTransfer and spend, both false (OD-174; every row now states both)
+    expect(allRoutePolicies().filter((row) => row.path === METADATA_PATH).map((row) => ({ ...row, evidence: undefined }))).toEqual([{ path: METADATA_PATH, method: "GET", authClass: "public", identitySource: "none", requiresAuth: false, permittedRoles: [], providerCredit: false, requiresCsrf: false, authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence: undefined }]); // [B23-A2, 2026-10-02] reviewed pin move: + externalTransfer and spend, both false (OD-174; every row now states both)
   });
 
   it("4. CSRF restated: the exemption from same-origin CSRF is exactly POST /api/mcp; a production POST without Origin elsewhere is still 403 AUTH_ORIGIN_MISSING", async () => {

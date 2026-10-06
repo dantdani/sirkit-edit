@@ -104,6 +104,7 @@ path,methods,record_id,class
 /api/pcb/footprints/resolve,GET,parts.catalog-read,read
 /api/pcb/footprints/search,GET,parts.catalog-read,read
 /api/pcb/placement/preview,POST,placement.preview-api,propose
+/api/pcb/provider-exchange,POST,manufacturing.provider-exchange,destructive
 /api/pcb/qualify,POST,pcb.qualify-route,mutate
 /api/pcb/release,POST,manufacturing.release,destructive
 /api/pcb/repair/agent,POST,pcb.board-repair,propose

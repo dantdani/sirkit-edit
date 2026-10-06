@@ -348,7 +348,7 @@ to six, `specialist-roles.md` section 6); B21-B had moved them from three to fiv
 (merge.ts joins the entry set; the same three pins moved from six modules to seven, `merge-and-disagreement.md` section 7).
 
 The guard's `it.each(CHAPTERS)` adds one runtime test per chapter of its list, so a run prints 8 + 3 = 11 tests today (`b19-`, `b20-`,
-`b21-`) for its 8 `it(` blocks ([SEC-1, 2026-10-01] 7 and 10 until SEC-1 added its explicit-entry case; [B22-A1, 2026-10-01] 8 + 4 = 12 since B22-A1 admitted `b22-`, no `it(` added); the page case computes the `it(` count and the rule from the source and pins the rule as a FORMULA, never
+`b21-`) for its 8 `it(` blocks ([SEC-1, 2026-10-01] 7 and 10 until SEC-1 added its explicit-entry case; [B22-A1, 2026-10-01] 8 + 4 = 12 since B22-A1 admitted `b22-`, no `it(` added; [B23-A1, 2026-10-02] 8 + 5 = 13 since B23-A1 admitted `b23-`, no `it(` added); the page case computes the `it(` count and the rule from the source and pins the rule as a FORMULA, never
 today's total, so the next chapter's admission (`b22-`, an eleventh test) moves nothing in this closed increment (review correction: the
 earlier row said 7 against runs printing 10, and a first correction pinned 10, which the `b22-` probe below showed would break here).
 

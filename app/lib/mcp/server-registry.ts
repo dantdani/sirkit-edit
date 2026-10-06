@@ -23,7 +23,7 @@
  */
 import { containsTokenAnchoredSecretShapedText } from "../agent/redaction";
 import { MCP_DISABLED_SERVERS_ENV, MCP_ENABLED_ENV, mcpFeatureState } from "./rollout";
-
+import { TIER3_FLOOR_PATTERN } from "../engineering/permission-tiers";
 export const MCP_SERVER_REGISTRY_VERSION = "1.2.0"; // [B20 A0]; [B20 A3] 1.1.0: the authorization-server pin and its two columns (OD-61); [B20 A4L] 1.2.0: the per-tool agent allowlist and its column (OD-74 amendment)
 
 /** The current specification revision (the authority path, OD-41) and the compatibility-era revision (never the authority path). */
@@ -561,7 +561,7 @@ export function validateMcpServerRegistry(entries: readonly McpServerRegistryEnt
       for (const name of agentTools) if (typeof name !== "string" || !MCP_TOOL_NAME_PATTERN.test(name)) at("agent-tools", `an agentTools entry must be a tool name matching ${MCP_TOOL_NAME_PATTERN.source}`);
       const names = agentTools.filter((name): name is string => typeof name === "string");
       if (new Set(names).size !== names.length) at("agent-tools", "duplicate agentTools entry");
-      if (names.some((name, index) => index > 0 && name < names[index - 1]!)) at("agent-tools", "agentTools must be sorted in code-point order (the CSV column renders them in that order)");
+      if (names.some((name, index) => index > 0 && name < names[index - 1]!)) at("agent-tools", "agentTools must be sorted in code-point order (the CSV column renders them in that order)"); if (names.some((name) => isTier3McpToolName(name))) at("agent-tools", MCP_TIER3_TOOL_NAME_REFUSAL); // [B23-A2] the floor applies to a consumed tool's name too (OD-173, D23-12); [B23-A2 review] + the money and data-leaving words, isTier3McpToolName
     }
 
     const terms = entry.terms ?? {};
@@ -644,4 +644,26 @@ export function renderMcpServerRegistryCsv(entries: readonly McpServerRegistryEn
     lines.push(row.map(csvCell).join(","));
   }
   return `${lines.join("\n")}\n`;
+}
+
+/** [B23-A2] D23-12, OD-173: a consumed MCP tool is excluded by the listing only when it DECLARES a write (`readOnlyHint: false` or
+ *  `destructiveHint: true`, foreign-tools.ts), so a reviewed row could otherwise approve a vendor's `create_order` as an observation
+ *  read. A row may therefore not approve a tool whose name `isTier3McpToolName` matches, whatever the tool's annotations claim. The
+ *  message never echoes the name. [B23-A2 review] It claims no completeness: a word list refuses the names it holds and proves no
+ *  other name harmless, so approving a row stays a human review. The registry is empty (OD-48), so no row moves. */
+export const MCP_TIER3_TOOL_NAME_REFUSAL = "an agentTools entry names a Tier 3 operation by the floor's word list (an order, a purchase, a checkout, a cart, a payment, a submission, a quote, an upload, a release, a qualification, a shipment, or design data sent, shared, transferred or exported): such a tool is never approved, whatever its annotations claim; the list proves no other name harmless, so a row is still approved only by a human review (OD-173, D23-12)";
+
+/** [B23-A2 review] The words a CONSUMED tool's name may not hold beyond the permission tiers' id floor: money (`pay`, a purchase
+ *  order `po`, procurement) and design data leaving Sirkit (send, transfer, share, export, email), each a whole word
+ *  of the name and its common inflections. Not part of the id floor: Sirkit's own `pcb.export-kicad` and
+ *  `schematic.import-export-kicad` are browser downloads, never Tier 3 (OD-173's census). */
+export const MCP_TIER3_NAME_WORDS = Object.freeze(["pay", "pays", "paid", "po", "pos", "procure", "procures", "procured", "procurement", "send", "sends", "sent", "sending", "transfer", "transfers", "transferred", "transferring", "share", "shares", "shared", "sharing", "export", "exports", "exported", "exporting", "email", "emails", "emailed", "emailing"] as const);
+
+/** [B23-A2 review] Whether a consumed MCP tool's name names a Tier 3 operation: the id floor (`TIER3_FLOOR_PATTERN`), or a whole word
+ *  in `MCP_TIER3_NAME_WORDS` - words split at case changes and at every non-alphanumeric character, so `payInvoice`, `pay_invoice`
+ *  and `PAY-NOW` read alike. The validator refuses a row naming one and the agent port's allowlist approves nothing for it. Pure. */
+export function isTier3McpToolName(name: string): boolean {
+  if (TIER3_FLOOR_PATTERN.test(name)) return true;
+  const words = name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2").split(/[^A-Za-z0-9]+/).filter((word) => word !== "").map((word) => word.toLowerCase());
+  return words.some((word) => (MCP_TIER3_NAME_WORDS as readonly string[]).includes(word));
 }

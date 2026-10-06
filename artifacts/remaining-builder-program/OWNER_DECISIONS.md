@@ -1940,3 +1940,626 @@ Amendments to existing entries:
   - The default for the rest, inside B22, each with a pre-edit counterexample at the existing seam: D22-4's remainder, kicad-cli's environment and D22-8's output caps in B22-A1; D22-7 in B22-C.
 - **Evidence:** `artifacts/ai-control-plane-b22/sec-1-spice-deck-injection.md`, `deck-and-secret-corrections.md` and `simulation-authority.md`; the discovery's section 6 row and section 9.4; `unknowns-and-owner-decisions.md`.
 - Recorded at the closeout as discovery section 9.4 asked ([B22 closeout (2/2), 2026-10-02]). Owner confirmation pending.
+
+## OD-161 — where manufacturer and quote providers live, as applied (B23-A1, 2026-10-02)
+
+- **Question:** extend B19's `SOURCE_REGISTRY` or a sibling registry, and what happens to CD-12's `ProcurementProviderDescriptor`?
+- **Default applied:** a sibling registry, `app/lib/manufacturing-providers/provider-registry.ts` (`PROVIDER_REGISTRY_VERSION` 1.0.0),
+  with kinds `manufacturer`, `assembler`, `quote_service` and `distributor`, copying B19's validator rules, among them B19's rule that an
+  operation URL carries no query or credentials (`source-registry.ts:626`), extended to path-form endpoints. The byte-gated CSV
+  (`artifacts/ai-control-plane-b23/provider-registry.csv`, 33 columns) renders every reviewed field, including each operation's endpoint,
+  auth and record source. Prose is not rendered and is reviewed in source, where the registry suite reads it. B19's registry and its two
+  suites are untouched except the `CHAPTERS` line (OD-180). Distributor rows reference their B19 entry by id, with no duplicated hosts or
+  secrets. CD-12's descriptor comes from a pure projection, `toProcurementProviderDescriptor`; there is no third shape.
+- **Evidence:** `provider-registry.md`; `b23-a-provider-registry` (94 tests).
+- Owner confirmation pending.
+
+## OD-162 — the initial provider rows and their tiers, as applied (B23-A1, 2026-10-02)
+
+- **Question:** which rows, and which tier for each operation?
+- **Default applied:**
+  - The tier vocabulary per operation is `none` < `handoff` < `read_observation` < `dfm_quote_transfer` < `ordering`, and `ordering`
+    is never above `disabled`.
+  - The nine rows are as drafted: JLCPCB, PCBWay, OSH Park, MacroFab, Eurocircuits, DigiKey, Mouser, Nexar and LCSC.
+  - Every transfer operation is blocked or disabled (LB-11), and the nine ordering operations are present but disabled (LB-12). OSH Park's
+    checkout is recorded as never called.
+  - Exception: the documentation was not re-read before commit; see OD-181 (a).
+- **Evidence:** `provider-registry.md` section 3; `provider-registry.csv`; `b23-a-provider-registry`, `b23-a-provider-admission`.
+- Owner confirmation pending.
+
+## OD-179 — live-blocker rows, as applied (B23-A1, 2026-10-02)
+
+- **Default applied:** LB-11 ("live DFM/quote exchange with a manufacturer or quote API") and LB-12 ("ordering through a provider
+  sandbox"), both BLOCKED-LIVE-QUALIFICATION, are in `LIVE_BLOCKERS.md`. Each transfer operation's reason names LB-11 and each ordering
+  operation's names LB-12. `PROGRAM_STATE.json` `liveBlockers` mirrors LB-5, LB-11 and LB-12; LB-4, LB-6, LB-7 and LB-8 stay unmirrored
+  (discovery 9.6).
+- Owner confirmation pending.
+
+## OD-180 — CI admission for B23 suites, as applied (B23-A1, 2026-10-02)
+
+- **Default applied:** `CHAPTERS` gains `"b23-"` in place (`app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts:54`). One
+  directory filter, `app/lib/manufacturing-providers/__tests__`, is admitted to the prompt-to-gerber job
+  (`deterministic-manufacturing.yml:227`) in the same commit as the first `b23-` suites. No live suite runs in CI; the opt-in
+  `SIRKIT_B23_LIVE_PROVIDER=1` stays local and owner-approved. Pins moved in place with dated notes: the B21 evaluation matrix C49, C93
+  and C94 (one line down); B22's C77 (the whole new `CHAPTERS` line); the B21 orchestration contracts' count statement (8 + 5 = 13).
+- Owner confirmation pending.
+
+## OD-181 — B23-A1: stated choices beyond its task text, as applied (B23-A1, 2026-10-02)
+
+- **Default applied:**
+  - (a) **The provider documentation was not re-read in A1**, a departure from OD-162's "re-read before commit". Every fact is the
+    discovery's section 1.2 summary of 2026-10-01 (reader 7, RECORDED), and each row records `reReadInA1: false`. No tier rises in B23,
+    so nothing relies on a fresher reading. A person re-reads a provider's own pages before any tier rises.
+  - (b) **The operator switch is `SIRKIT_MANUFACTURING_DISABLED_PROVIDERS`:** a comma list of provider ids or `provider:operation`
+    pairs, case- and space-tolerant, that can only disable. B19's `SIRKIT_ACQUISITION_DISABLED_SOURCES` still governs a delegated read.
+  - (c) **The closed vocabularies:**
+    - channels: `api`, `deep_link`, `csv_export`, `manual_upload`;
+    - API access: `enabled`, `disabled`, `blocked`, `none_found`;
+    - the seven auth schemes of `AUTH_SCHEMES`;
+    - operation sources: `discovery-1.2`, `repository`, `b19-registry`;
+    - a `neverCalled` mark per operation.
+  - (d) **CD-12 kind words:** an assembler projects to `manufacturer`, a quote service to `formal_quote`, a distributor to
+    `authorized_distributor`, and Nexar (B19's aggregated `octopart`) to `approved_aggregator`. These describe the kind only and carry no
+    authorization evidence.
+  - (e) **Row-level choices:**
+    - MacroFab's enabled tier is `none` (Sirkit has no MacroFab hand-off).
+    - OSH Park's unauthenticated import is recorded as a disabled `dfm_quote_transfer`, because it sends the design out.
+    - PCBWay's endpoint paths are INFERRED from the help pages' names.
+  - (f) **Admission:**
+    - It refuses `provider_not_admitted` for any row `validateProviderRegistry` refuses.
+    - It admits a hand-off only when the operation is one structurally: tier `handoff`, a non-`api` channel, auth `none`.
+    - It delegates only an `api` read at `read_observation` recorded from `b19-registry`.
+    - The structural layer is the exported `structuralDelegation`, pinned directly by admission case 11 ([B23-A1 lead, 2026-10-02]).
+  - (g) **Path endpoints** are held to path characters and `{template}` segments, and the validator's message never echoes the target.
+- Owner confirmation pending.
+
+## OD-173 — the Tier 3 vocabulary, as applied (B23-A2, 2026-10-02)
+
+- **Question:** how does Tier 3 see a file-sending or spending tool other than by a word in its id?
+- **Default applied:** structural first. A side effect `external-transfer` in `TOOL_SIDE_EFFECTS` and its action-registry equivalent
+  (`ActionCoverageRecord.sideEffects`, `ACTION_SIDE_EFFECTS`) computes Tier 3 whatever the id, class or approval tier, in every tier
+  computation (the MCP structural rule and the served `dev.sirkit/permissionTier` included). The validators refuse an agent-exposed
+  transfer tool and a tool-exposed transfer action; the exposure rule, discovery (never listed for an agent, whatever exposure a
+  registry claims) and the B21 role rows refuse the side effect; both port-bound classes already refuse it. The id floor gains
+  `quote|dfm|submit|checkout|cart|buy|payment` and the whole word `pay` as `TIER3_FLOOR_PATTERN`, after a census proved no tool id (47,
+  B22's five computation ids included) or action id (104) changes tier and no B21 role row changes; `TIER3_FAMILY_PATTERN` stays the
+  router's nine chat families, unchanged. The B21 withdrawal drops every `external-*` authority and `computation-engine` through
+  `isWithdrawnAuthority`; the `MCP_EXCLUSION_REASONS` order is unchanged (a transfer is excluded as `tier3`, first). The chat-closure
+  tripwire also forbids `app/lib/net/outbound-fetch.ts` and the provider directory. A consumed MCP row may not approve an `agentTools`
+  name the floor or a money or data-leaving word matches (`isTier3McpToolName`), and the agent port approves nothing for such a list;
+  the refusal claims no completeness. The router's chat families are unchanged: a quote ask reaches nothing.
+- **Evidence:** `tier3-vocabulary.md` (sections 1-5, 15); `b23-a-tier3-vocabulary` (9 tests), `b23-a-no-order-structural` (6).
+- Owner confirmation pending.
+
+## OD-174 — the route vocabulary and the census, as applied (B23-A2, 2026-10-02)
+
+- **Question:** how does the route table mark an external-transfer or spend route?
+- **Default applied:** `RoutePolicy` gains `externalTransfer` and `spend`, explicit on every row and false on all 165.
+  `routeVocabularyViolations` requires such a row to be human-only (a trusted human session; no automation role), CSRF-checked, never
+  public, never open to any member, a viewer or a commenter, and never on the release vocabulary; no `spend` row may exist in B23. The
+  two-row `releaseOrQualification` pin is unchanged. The B16.0.2 classification gains `outboundEgress` (`none`, `observation-query`,
+  `files`: what leaves through the egress boundary) and `modelEgress` (a model input sent to the LLM provider through its SDK), the two
+  last columns, both derived from the code, with five reviewed public cache-only exemptions and two reviewed public model-egress paths,
+  and gated (`files` exactly with a transfer row; a public row sends no observation query and no files; a public model egress is a
+  reviewed path). No route is added: the census stays 165 / 162 / 3 / 0, and B23-B1's provider exchange route moves it.
+- **Open question for the owner:** `POST /api/parts/search` and `GET /api/pcb/footprints/search` are public and embed the anonymous
+  caller's search text with OpenAI, with `provider_credit` false. A2 records them and changes no route.
+- **Evidence:** `tier3-vocabulary.md` section 6; `b23-a-route-vocabulary` (8 tests); the regenerated
+  `route-data-and-resource-classification.csv` (two appended columns).
+- Owner confirmation pending.
+
+## OD-182 — B23-A2: stated choices beyond its task text, as applied (B23-A2, 2026-10-02)
+
+- **Default applied:**
+  - (a) `outboundEgress` is the closed vocabulary `none | observation-query | files`, per path, derived from the import closure reaching
+    the egress boundary with reviewed cache-only exemptions (the B22-A2 census pattern); `files` is never derived, only declared with a
+    transfer row. `none` means nothing through the boundary. The separate derived boolean `modelEgress` records a model input sent to the
+    LLM provider through its SDK, so a row sends nothing out of Sirkit exactly when it is `none` and not `modelEgress`; a public row with
+    `modelEgress` is a reviewed `PUBLIC_MODEL_EGRESS` path.
+  - (b) The widened id floor is a new constant, `TIER3_FLOOR_PATTERN`, not an edit of `TIER3_FAMILY_PATTERN`
+    (`permission-tiers.ts:36`): `b21-b-router` case 1 pins every stem of the family pattern to a router family, and OD-173 keeps the
+    router's families unchanged.
+  - (c) The specialist-claims check (`scheduler.ts:257-258`) does not follow the prefix withdrawal; a tripwire pins that the authority
+    vocabulary holds exactly the two external authorities it names.
+  - (d) The structural no-order check's port vocabulary (an `order` with a verb; `purchas*`, `checkout`, `payment`, `pay`, `buy`; a `cart`
+    with add, fill or populate) over every declared or called name, with seven reviewed look-alikes (two reached by no route; five
+    reached: `last_time_buy` in three modules, `buyUnits`, `hasExternalOrPurchasingSideEffects`).
+  - (e) The foreign MCP name floor applies at registry validation and in the agent port's allowlist (a list naming a floor tool approves
+    nothing).
+  - (f) The B16.0.1 policy CSV does not render the two booleans in A2 (all false; the gate pins them).
+  - (g) Validator rules refuse an agent-exposed `external-transfer` tool and a tool-exposed `external-transfer` action.
+  - (h) The id floor gains the whole word `pay` (word-bounded; no id moves).
+  - (i) Discovery never lists an `external-transfer` tool on the agent or automation channel, whatever exposure a registry claims.
+  - (j) The consumed-tool name floor adds money and data-leaving words (`pay`, `po`, `procure`, `send`, `transfer`, `share`, `export`,
+    `email` and inflections); `export` stays out of the id floor (Sirkit's own `pcb.export-kicad` would move); the refusal claims no
+    completeness.
+  - (k) `modelEgress` is derived binding by binding (handler exports and import-time calls), not by module reachability, because the DB
+    schema imports the embedding module's constant.
+- **Evidence:** `tier3-vocabulary.md` sections 11 and 15.
+- Owner confirmation pending.
+
+## OD-163 — what leaves Sirkit in a DFM or quote transfer, as applied (B23-B1, 2026-10-04)
+
+- **Question:** what exactly leaves Sirkit in a DFM or quote transfer?
+- **Default applied:** a derived outbound package built only from a ledgered release whose regenerated archiveSha256 (recomputed from
+  Sirkit's own bytes), releaseId and manifest digest equal the ledger record. It holds the Gerber, Excellon and job files, byte-identical
+  to the release (each sha256 and size equal to its manifest record), and a generated provider manifest naming releaseId,
+  archiveSha256, the file list and the capability-profile id and version. release-manifest.json and README.txt are not sent; no BOM, CPL
+  or distributor value leaves (a release listing any other kind is refused). outboundPackageDigest = mfg-outbound- + the provider
+  manifest's sha256, stable across builds. The identity fields (tenantId, projectId, branchId, designId, boardId, actor) are never
+  provider-manifest fields. An identity whose value occurs in an outbound file name or byte is disclosed as carried, never listed as
+  kept: for the 555 the board's file-safe name embeds the project id and is in every file name, each Gerber's TF.ProjectId and the job
+  file. Every metadata field the bytes carry is listed (84 for the 555).
+- **Open question for the owner:** whether a provider may receive the board's file-safe name. Stripping it would move the release
+  bytes and identity (OD-183 (g)).
+  A project id cut short by the 80-character board name is carried as its kept prefix (form file-safe-prefix).
+- **Evidence:** outbound-disclosure.md sections 1 and 3; b23-b-outbound-package (10 tests), b23-b-approval-plan case 11.
+- Owner confirmation pending.
+
+## OD-164 — who may request a transfer, and on what, as applied (B23-B1, 2026-10-04)
+
+- **Question:** who may request a transfer, and on what?
+- **Default applied:** a human project_admin only (the route policy, the handler and the service each refuse any other actor before any
+  durable read), only for a release already in the ledger whose authority is still head and matches the current board revision AND
+  digest. revalidateReleaseAuthority runs at preview and again at commit, and the release gate re-checks scope, board identity, profile
+  schema and sourceDate-relative expiry. Never on the engineering export. No agent tool: counts 47/36/9/27 unchanged. The action record
+  manufacturing.provider-exchange is Tier 3 (external-transfer, approval tier release), with toolExposure none.
+- **Evidence:** outbound-disclosure.md sections 2 and 5; b23-b-revalidation (23), b23-b-approval-plan case 8, b23-b-exchange-route cases 6-7, 11.
+- Owner confirmation pending.
+
+## OD-166 — how the human approves a named provider and purpose, as applied (B23-B1, 2026-10-04)
+
+- **Question:** how does the human approve a named provider and purpose?
+- **Default applied:** B22-B's sealed-request shape with the assignment queue's opt-in header. preview returns a sealed plan:
+  - provider id, operation, purpose dfm or quote, descriptor version and digest;
+  - the exact files with bytes and sha256, and the provider manifest;
+  - every provider-manifest field, every metadata field the file bytes carry, and the identities carried inside names and bytes;
+  - what stays in Sirkit, release and authority identity, the request digest;
+  - an expiry of 10 minutes, and a planDigest over all of it.
+  commit requires planId, planDigest, an idempotency key and x-sirkit-provider-exchange-commit: send_exact_plan. It consumes the plan
+  once and re-runs steps 1 and 2. It refuses an expired plan, a moved input (the step-1 code or PX_PLAN_INPUT_MOVED), and a key reused
+  with another plan within 24 hours of the key's commit. A throw at commit ends the plan with the bounded envelope, replayed for the
+  same key. Preview and commit are separate requests from two separate controls; one click never sends. In B23 every commit ends
+  provider_not_admitted.
+- **Evidence:** outbound-disclosure.md sections 4 and 6; b23-b-approval-plan (18), b23-b-exchange-route (14), b23-b-provider-panel (9).
+- Owner confirmation pending.
+
+## OD-174 — the route vocabulary and the census, the route half, as applied (B23-B1, 2026-10-04)
+
+- **Default applied:** POST /api/pcb/provider-exchange is one route file with two operations named by a closed body field. It is a
+  canonical authenticated-mutation row appended at the end of the table: trusted human session, CSRF, project_admin only, never public,
+  authoritativeWrite false, releaseOrQualification false, externalTransfer true, spend false. routeVocabularyViolations passes; it is
+  the one transfer row and no row is spend. Its classification row is durable read, project-durable, expensive, no external process,
+  outboundEgress files (declared by the transfer row, never derived; the census checks it against a reviewed transfer list and pins
+  its closure-derived value, none in B1), modelEgress false. b22-a2-process-census case 3 accepts it. The census moved once, by review,
+  to 166/163/3/0, with every ratchet and coverage artifact regenerated and every census pin moved in place. The B16.0.1 CSV does not
+  render the two booleans (OD-182 (f)).
+- **Evidence:** outbound-disclosure.md section 5; b23-b-exchange-route cases 1-4; b23-a-route-vocabulary (8).
+- Owner confirmation pending.
+
+## OD-183 — B23-B1: stated choices beyond its task text, as applied (B23-B1, 2026-10-04)
+
+- **Default applied:**
+  - (a) One route file; two operations named by the closed body field operation: "preview" | "commit", each with its own closed key
+    set; authority-shaped keys are refused first.
+  - (b) The reviewed board-file exchanges: JLCPCB pcb-quote, OSH Park import-upload and api-upload (quote), MacroFab dfm-readiness (dfm)
+    and pcb-quote (quote). Every other operation is refused PX_EXCHANGE_NOT_OFFERED.
+  - (c) B22-B's sealed request is the approval shape: a server nonce and digest; the commit is the human approval of the exact plan,
+    consumed once before steps 1 and 2 re-run. Any human project administrator of the same project may commit; no two-person rule in B1.
+  - (d) Plans and idempotency keys live in memory. Per project scope (tenant, project, branch; each branch is its own scope): at most
+    32 open plans and 256 key records. Backstops over every project: 2,048 open plans and 16,384 key records. A consumed plan keeps only
+    a tombstone (scope, digest, expiry) until its 10 minutes end; it counts toward no bound and is bounded by its key record. Expired
+    plans are dropped first. A bound refuses (PX_PLAN_LIMIT_REACHED or PX_KEY_LIMIT_REACHED, 429) and never evicts. A key record is kept
+    24 hours after its commit, apart from its plan. A restart forgets them; nothing is persisted in B1, and the durable exchange record
+    is B23-B2's (OD-167). The backstops are the one remaining cross-project effect: 64 scopes each at its 32 open plans refuse every
+    other project's preview until one of those plans is committed or expires (at most 10 minutes); 64 scopes each at its 256 key records
+    refuse every other project's commit until the oldest record's 24 hours end. [B23-B1 lead round, 2026-10-04]
+  - (e) The exchange's refusals are a closed PX_* vocabulary; step 1 and the release gate keep their MFG_* codes, statuses and bodies. A
+    throw keeps the release route's bounded envelope; at commit it ends the plan and is recorded as the key's outcome.
+  - (f) The policy row is authenticated-mutation with authoritativeWrite false; the record is manufacturing.provider-exchange with
+    side effect external-transfer and approval tier release.
+  - (g) The board's file-safe name in the file names and the Gerber and job bytes is disclosed as carried, never stripped; whether a
+    provider may receive it is the owner's question.
+  - (h) The panel is shown only for a current ledgered release of a current authority. Commit is disabled until a preview and after one
+    commit; a refused or failed preview discards the plan.
+- **Evidence:** outbound-disclosure.md sections 4, 10 and 13.
+- Owner confirmation pending.
+
+## OD-165 — the transfer mechanics and meters, as applied (B23-B2, 2026-10-04)
+
+- **Default applied:** outboundUpload (app/lib/net/outbound-fetch.ts) carries an in-memory body (bytes, or an RFC 7578 multipart
+  encoding of in-memory parts written there) through outboundFetch itself, so the B19 rules hold (HTTPS, exact host, every resolved
+  address public, the bounded reader, closed redacted failures). The request-byte and part ceilings come from the descriptor and are
+  refused outside 1..64 MiB and 1..64 (validate-package.ts:14-15) before anything is resolved. Idempotency-Key is sent only when the
+  descriptor declares support. maxRedirects must be 0 and every 3xx answer is redirect_refused, never followed. One deadline covers
+  resolution, the caller's durable sent mark (which races it), connection, the upload and the answer. An upload URL carries no query or
+  fragment, and its policy names no secret query parameter. No new dependency (one global fetch, shared). The manufacturing-provider
+  admission key has a minute and a day window and a breaker from the descriptor, and an agent share of 0. The rebinding window stays
+  OD-51's recorded limit. Choices: OD-184.
+- **Evidence:** `artifacts/ai-control-plane-b23/dfm-quote-flow.md` sections 1-3; `b23-b-bounded-upload`, `b23-b-provider-meter`.
+- Owner confirmation pending.
+
+## OD-167 — receipts, retention and ambiguity, as applied (B23-B2, 2026-10-04)
+
+- **Default applied:** one silent durable aggregate mfg.provider-exchange.v1 per (scope, board, provider)
+  (app/lib/manufacturing-providers/exchange-ledger.ts), copying computation.evidence.v1 (CAS on revision, idempotent append, digest
+  re-verified on load, no outbox effect). Attempts are keyed by idempotency key in one project-scope namespace and move prepared -> sent
+  -> acknowledged | rejected | UNKNOWN_PENDING_RECONCILIATION, or -> not_sent when nothing was handed over (OD-184 (a)). Any timeout,
+  abort, transport error, 5xx, 3xx or unparseable answer after the send started is UNKNOWN_PENDING_RECONCILIATION, never retried
+  automatically, never run through DurableOutboxDispatcher (pinned, including the expired-lease re-claim). A duplicate commit replays
+  the record and sends nothing, after a restart too. Two concurrent commits send once (PGlite, database-delivery job). One package to
+  one provider is in flight at a time, keyed on the package digest, provider and operation; a `prepared` attempt that sent nothing is
+  settled not_sent (abandoned) ten minutes after it was prepared (the lead round, OD-184 (q)). The record keeps the provider receipt id,
+  response digest, retrievedAt, the package and release digests, the descriptor and capability-profile versions and at most 16 bounded
+  normalized fields, plus the server-derived provider key. No raw body, no archive bytes: the bytes are re-derived from the ledgered
+  release while its authority is head, its board current and its rule-profile evidence unexpired and within
+  RELEASE_PROFILE_EVIDENCE_MAX_AGE_MS; otherwise the exchange is stale (B23-B3, OD-168). A provider whose terms forbid storage keeps no
+  provider-chosen text: no normalized field and an empty media type. Reconciliation is recorded (statusRead on the descriptor and the
+  record), not built. Live: BLOCKED-LIVE-QUALIFICATION (LB-11). Choices: OD-184.
+- **Evidence:** `dfm-quote-flow.md` sections 4-6 and 16; `b23-b-exchange-ledger`, `b23-b-egress-import-gate`,
+  `database/__tests__/b23-b-exchange-ledger-pglite` (database-delivery job).
+- Owner confirmation pending.
+
+## OD-184 — B23-B2: stated choices beyond its task text, as applied (B23-B2, 2026-10-04)
+
+- **Default applied** (as `dfm-quote-flow.md` section 12 states them, the lead round's (m), (n) notes and (p)-(r) included):
+  - (a) An attempt the egress boundary refuses before any byte leaves ends `not_sent`, a terminal state beside OD-167's three: a
+    refusal before the hand-over is neither the provider's rejection nor an unknown, and the record says nothing left. It is reached
+    from `prepared`, or from a `sent` mark that landed while nothing was handed over (the deadline fell during the mark), which keeps
+    the mark's time and digest.
+  - (b) `sent` is written immediately BEFORE the hand-over, inside the one deadline: the mark races the deadline and the caller's
+    abort, and a mark slower than the deadline ends the exchange `not_sent` (`timeout`) with nothing handed over; the request then waits
+    for the mark to land before recording the outcome (the provider is never contacted late). A sender hands bytes over only after its
+    own `prepared` and `sent` appends wrote new records; a crash after `sent` leaves a record to reconcile, never a silent resend.
+  - (c) B1's in-memory key store stays the first answer within a process. The durable record is the outcome of record and the backstop
+    across processes and restarts: its key namespace is the project scope (tenant, project, branch), B1's, so a key names at most one
+    attempt per project, durably; a commit whose plan the instance does not hold is answered from the record under its key (the same
+    plan id and digest replay, another plan's are a reuse, an unknown key is `PX_PLAN_NOT_FOUND`); a fresh plan under a held key is
+    refused after its plan is consumed.
+  - (d) The transfer contract is a separate, typed `ProviderTransferDescriptor` beside the registry row, valid only against the row's
+    current version and digest, an enabled board-file transfer operation, a listed host and RECORDED upload-limit and idempotency facts;
+    the registry (and its byte-gated CSV) did not change; none exists in B23.
+  - (e) The upload is multipart form data: each outbound file under its release path (field `files`) and the provider manifest (field
+    `manifest`), a boundary derived from the package digest; a provider-specific encoding (PCBWay's base64 `DataZipFile`, an S3-signed
+    upload) is a later reviewed descriptor field, not B2's.
+  - (f) The meter: one per provider, a minute and a day window and a breaker from the descriptor; the agent refused outright (share 0);
+    a rejection other than 429 neutral, an abort inconclusive, a refusal before the hand-over (a pause, the mark's deadline or failure)
+    inconclusive; no coalescing.
+  - (g) A 2xx answer is acknowledged only as JSON (a media type holding a control character is no usable type) with a receipt id of 1
+    to 128 of `[A-Za-z0-9._:-]`; a 4xx is rejected; everything else after the send started is UNKNOWN; every 3xx answer to an upload,
+    the ones no redirect follows included, is refused and UNKNOWN (a 303 after a POST may mean the provider took it).
+  - (h) A commit's answer stays B1's envelope, with seven new codes (section 4), every sentence in `error` (the panel's field); showing
+    a receipt id in the panel is a UI change for the increment that admits a provider. The route's code did not change beyond composing
+    the record.
+  - (i) The PGlite suite lives at `app/lib/manufacturing-providers/database/__tests__/`, outside the prompt-to-gerber filter, with an
+    explicit database-delivery entry.
+  - (j) Reconciliation: recorded (`statusRead` on the descriptor and the record), not built. RECORDED
+  - (k) Under `ids_digests_timestamps_only` a record keeps no provider-chosen text: no normalized field and an empty media type; it
+    keeps Sirkit's own classification (state, failure code) and the answer's protocol status, size and SHA-256.
+  - (l) The provider sees `Idempotency-Key: sx-<64 hex>`, a digest of the scope, board, provider, plan and client key, recorded on the
+    attempt and re-derived on load; never the client's string.
+  - (m) One package in flight: a new attempt is refused while another attempt of the same request is `prepared` or `sent` in its
+    aggregate; only a person reconciling with the provider ends an interrupted one (no reconciliation read exists: the block stands
+    until one does). [B23-B2 lead, 2026-10-04] low-3: the same request is now the same package digest, provider and operation; low-2: a
+    `prepared` attempt ten minutes old is settled `not_sent` (`abandoned`) by the next attempt of its package, and a `sent` mark lands
+    only while its own attempt is still `prepared`, so only a `sent` one waits for a person.
+  - (n) An answer that cannot be recorded: the settle is tried three times; then the commit answers with `recorded: false`, the
+    observed state, the receipt id and the response's status, size and digest, and the record stays `sent`. [B23-B2 lead, 2026-10-04]
+    low-2: or `prepared`, for a `not_sent` outcome, and that answer's sentence no longer says the exchange was recorded.
+  - (o) The provider exchange route's B16.0.2 durable-access row stays `read` while no reviewed transfer descriptor exists; the
+    revision that adds the first one moves it to `read-write` and regenerates the CSV (ledger case 21 fails until it does).
+  - (p) [B23-B2 lead, 2026-10-04] low-1: the commit's durable read (tests-3's `recorded`) stays before `PX_PLAN_NOT_FOUND`: the
+    restart's replay needs it, and a store that cannot be read answers the release route's `MFG_DURABLE_STORE_UNAVAILABLE` 503 rather
+    than a not-found the store could contradict. B1's statements carry dated notes instead (the smaller truthful change); restoring B1's
+    order is a breakage ledger case 23 catches.
+  - (q) [B23-B2 lead, 2026-10-04] low-2: `EXCHANGE_PREPARED_ABANDON_MS` is ten minutes, five times the longest deadline a reviewed
+    descriptor may declare (120 s). The bound decides only when a stalled `prepared` attempt stops blocking, never whether two attempts
+    send: the abandonment and the `sent` mark each require the attempt still `prepared` on the head their compare-and-set commits on.
+  - (r) [B23-B2 lead, 2026-10-04] low-2: text the record keeps refuses a lone UTF-16 surrogate, and the egress drops a provider field
+    holding one; a NUL was already refused (a code below 32). These are the two kinds of string PostgreSQL's jsonb refuses in a JSON
+    string (INFERRED from its JSON input rules; the surrogate CONFIRMED on PGlite, case 5).
+- **Owner attention:** (m) an interrupted `sent` attempt blocks its package to that provider until a reconciliation read exists, and
+  none is built; (o) the B16.0.2 row stays `read` while no transfer descriptor exists.
+- Owner confirmation pending.
+
+## OD-168 — when a quote or DFM observation is stale, as applied (B23-B3, 2026-10-04)
+
+- **Default applied:** `evaluateObservationStaleness` (`provider-observation.ts`) runs at every `include=manufacturing` read.
+  - **Time:** stale at the provider's stated `validUntil` (an ISO instant; one at or before `retrievedAt` is stale at once; prose is ignored), else 24 hours after `retrievedAt`.
+  - **At once**, when any of these holds:
+    - the authority head is gone, or moved (the ledger head's authority is not the head);
+    - the release ledger head is gone, or is another release;
+    - the board is gone or superseded;
+    - the board revision OR its authoritative digest (recomputed, never the pcbSyncDigest) is not the authority's and the ledger head's;
+    - the registry version, the row's digest (or the row itself, withdrawn) or the reviewed transfer descriptor's version moved;
+    - the profile id or version moved;
+    - the rule-profile evidence is not v2, missing, out of window, expired (2027-09-09 for `jlcpcb-2l`) or older than 366 days (pinned equal to `RELEASE_PROFILE_EVIDENCE_MAX_AGE_MS`; both sides of the bound tested).
+  - **Reporting:** fourteen closed reasons, in a fixed order.
+  - **Listing:** stale observations stay listed and labelled stale, never current. At most 32 are listed, newest first across providers, and the rest are counted. A withdrawn row's answers stay listed.
+  - **Panel:** the list re-judges time expiry by the clock and re-renders at the next `staleAt`. A hydration that failed integrity verification shows no observation (fail closed).
+  - **D23-17:** the summary's current flag compares revision AND authoritative digest.
+  - **Production:** no observation is current today. `REVIEWED_TRANSFER_VERSIONS` mirrors the empty `PROVIDER_TRANSFER_DESCRIPTORS` and is pinned equal to it.
+  - Live: BLOCKED-LIVE-QUALIFICATION (LB-11). Choices: OD-185.
+- **Evidence:** `dfm-quote-flow.md` sections 19, 21, 28; `b23-b-stale-quote` (14); `b16-a-manufacturing-summary` (two cases); `b23-b-no-auto-accept` cases 7, 9.
+- Owner confirmation pending.
+
+## OD-169 — provider-suggested substitutions or design changes, as applied (B23-B3, 2026-10-04)
+
+- **Default applied:**
+  - **The record:** a kept field whose name says suggest, substitute, alternative, recommend or replace becomes a closed `sirkit.provider-suggestion.v1`: kind `substitution` or `design_change`, the field, its screened text (or null with the reason), and the one disposition `shown_never_applied`. Shown, never applied.
+  - **The import gate:** the observation module and its screen import exactly their reviewed modules. Their runtime closure holds no command, executor or mutation module, and nothing that commits, sends, spawns or dispatches.
+  - **Who names what:** the suggestion vocabulary appears in production only in the observation module, the client and the list. The observation types appear only in five reviewed files.
+  - **No path to a command:** the list holds no control, and no component has a control inside an expression reading observations or suggestions. Reading observations commits nothing.
+  - **No verdict:** a provider's "accepted" or "pass" sets no Sirkit verdict (`sirkitVerdict: "none"`).
+  - **Changes:** a person makes any change in the editor, which yields a new release and stales every observation.
+- **Evidence:** `dfm-quote-flow.md` sections 20, 28; `b23-b-no-auto-accept` (9); `b23-b-observation` cases 5, 6.
+- Owner confirmation pending.
+
+## OD-185 — B23-B3: stated choices beyond its task text, as applied (B23-B3, 2026-10-04)
+
+- **Default applied** (as `dfm-quote-flow.md` section 24 states them):
+  - (a) An observation is derived at the read from B2's record (`load`). It is not stored twice, and no raw body exists to derive it
+    from.
+  - (b) Only an `acknowledged` attempt is an observation.
+  - (c) The screen: the length, printable ASCII plus B20-C3's typographic set, no secret shape, and B20's matcher alone and joined. A
+    failing string is withheld whole. The matcher is a verbatim copy of A2's, pinned to it, because importing `foreign-tools.ts` would
+    put the egress boundary into GET /api/pcb-sync's closure.
+  - (d) The stated validity is `validUntil` (an ISO instant), else 24 hours.
+  - (e) Staleness reads B1's step-1 checks as of the read, plus the ledger head, the descriptor and the capability profile. The package
+    digest is compared through its inputs.
+  - (f) `REVIEWED_TRANSFER_VERSIONS` mirrors the empty `PROVIDER_TRANSFER_DESCRIPTORS`.
+  - (g) Suggestion field names match `suggest|substitut|alternat|recommend|replace`.
+  - (h) The block is present only when the reader is composed and the board has an exchange record. A failed read is `corrupt`.
+  - (i) The composition root is GET /api/pcb-sync's route. The raw-route baseline's SHA-1 for POST /api/pcb-sync was regenerated.
+  - (j) 32 listed, newest first.
+  - (k) The digest is recomputed at every read.
+  - (l) The list is in the workflow panel, so a stale observation stays visible, while the hydration is loaded. A failed integrity
+    hydration shows none (fail closed).
+  - (m) The receipt id is provider text: screened alone and first in the joined reading, withheld under `source.providerReceiptId`,
+    still hashed into the observation id.
+  - (n) A withdrawn row's answers stay listed and stale under `OBSERVATION_UNLISTED_PROVIDER_NAME` with terms UNKNOWN. The reader loads
+    every row of any tier plus the append-only `OBSERVATION_WITHDRAWN_PROVIDER_IDS`.
+  - (o) `terms.answerLicense` is UNKNOWN until a provider's terms are read. The registry is unchanged.
+  - (p) The summary declares the gate's digest formula over `native/stable`, pinned equal as printed code.
+  - (q) The composition stays in the route module. The release and qualify routes load the observation modules (never call them), and
+    exchange-route case 4 scans them.
+  - (r) Only time expiry is re-judged by the clock.
+  - (s) The client validator takes the exact shape, and its bound is pinned to the server's by behaviour.
+- Owner confirmation pending.
+
+## OD-170 — what "visibly disabled" ordering is, as applied (B23-C, 2026-10-04)
+
+- **Default applied:** `manufacturing.provider-order`, appended in place on `action-registry.ts:186`: status `missing`, handler "explicitly blocked: feature-disabled until the owner supplies OD-171's prerequisites", `toolExposure: "none"`, approval tier `release`, Tier 3. Its only source is the panel. It carries no `sideEffects`.
+- The panel shows the fixed notice `ORDERING_DISABLED_NOTICE` with no control, worded outside B19-E's purchase phrases. B17-A `:63` holds and B19-E is unchanged. The B01 CSV moved once, by its generator.
+- **Evidence:** `ordering-boundary.md` section 1; `b23-c-ordering-disabled` cases 4-6.
+- Owner confirmation pending.
+
+
+## OD-171 — how ordering could ever be enabled, as applied (B23-C, 2026-10-04)
+
+- **Default applied:** pure `orderingEnablement({ownerRecord, submissionPort, env})`, defaulting to `ORDERING_OWNER_RECORD = null` and `ORDER_SUBMISSION_PORT_WIRING = "none"`.
+- The owner record is an OD id plus one reference per prerequisite; a blank or `UNKNOWN` value supplies nothing, and an invalid record enables nothing.
+- The switch `SIRKIT_ORDERING_DISABLED` takes any non-blank value as off, and no variable can enable ordering. The pure function reads only the environment it is given.
+- Both stores default to `orderingEnablementFromProcess()`, which reads exactly that one variable from the process at each call. The order contract asks again immediately before the hand-over (`ORDER_DISABLED_BEFORE_SUBMISSION`).
+- No record exists in B23.
+- **Evidence:** `ordering-boundary.md` sections 1-2; `b23-c-ordering-disabled` cases 1-3; `b23-c-order-contract` case 13.
+- Owner confirmation pending.
+
+
+## OD-172 — the purchase-authorization contract, as applied offline (B23-C, 2026-10-04)
+
+- **Default applied:** Closed offline (OD-172). purchase-authorization.ts: a human project_admin requests a closed binding (a registry
+  ordering operation; 1-64 lines with the unit price seen; an ISO currency; an exact decimal price ceiling, CD-12's decimal text, never
+  a JavaScript number; a destination reference; the release/BOM digest; an expiry at most 10 minutes ahead); a DIFFERENT human
+  project_admin confirms the exact request digest (proposerCannotApprove), the one place a single-use, server-held authorization is
+  minted; one compare-and-set on a snapshot read burns it; any changed field refuses and voids it; ai, automation and every other role
+  are refused at every step; only what comes in is bounded to 12 integer digits, and the arithmetic never throws on its own results; the
+  stores are bounded and refuse when full, writing nothing. The exact approved-importer gate admits purchase-authorization.ts itself and
+  order-contract.ts, which consumes and never spells request or confirm in any form; the agent loop, gateway, chat route, MCP and every
+  orchestration module reach none of the four ordering modules (D21-33's gap, closed for them). order-contract.ts (an injected port; no
+  composition root wires one) claims the cart before the burn, re-reads price and availability immediately before the one submission and
+  refuses a changed price, short stock, a total above the ceiling, other lines (by id and part, in order) or an unreadable re-read,
+  without ever throwing; enablement is checked again before the hand-over; one order per authorization and per unresolved or claimed
+  cart, the cart being each part's total quantity; ambiguity is UNKNOWN_PENDING_RECONCILIATION, never retried; webhook-verification.ts
+  checks a signature over the raw body, a timestamp window and a bounded replay store, and a verified event never creates, submits or
+  changes an order. The cart is read from the canonical binding consume compares, a claimed cart answers ORDER_CART_BUSY (no order
+  exists), and every submit of the claiming authorization holds the claim (the lead round). CONFIRMED by b23-c-purchase-authorization
+  (11), b23-c-order-contract (16), b23-c-webhook-verification (7); twenty source mutations caught at implementation and nineteen in the
+  adversarial-review round. Live: BLOCKED-LIVE-QUALIFICATION (LB-12). ordering-boundary.md sections 3-8.
+- one idempotency key per authorization, `so-` and 64 hex characters;
+- re-read deadline 15 s and submission deadline 30 s, with the port's signal aborted at a deadline;
+- in-memory stores, bounded and refusing when full: 32 requests and 64 authorizations per project, 2,048 and 4,096 overall, an hour's retention after expiry; 256 orders per project, 16,384 overall; 32 observations per order;
+- money bounded to 12 integer and 6 fraction digits on the way in, with unbounded exact arithmetic on its own results;
+- `project_admin` only (no new role).
+- **Evidence:** `ordering-boundary.md` sections 3-6 and 8; `b23-c-purchase-authorization` cases 1-11 (bounds: case 10), `b23-c-order-contract` cases 1-13 (bounds: case 11), `b23-c-webhook-verification` cases 1-7.
+- Owner confirmation pending.
+
+
+## OD-186 — B23-C: stated choices beyond its task text, as applied (B23-C, 2026-10-04)
+
+- **Default applied** (as `ordering-boundary.md` section 11 states them, the lead round's (g) amendment and (p) included):
+  - (a) The exact approved-importer set is the B18-B form (`b18-b-import-gates`: an authority module and the one composition module that
+    imports it): `purchase-authorization.ts`, which holds the human-only confirmation, and `order-contract.ts`, its only importer, which
+    only consumes. A confirmation route is a later, separately reviewed change that adds itself to the set.
+  - (b) The owner record is an owner-decision id and one reference text per prerequisite; blank or `UNKNOWN` supplies nothing; an
+    invalid record enables nothing and is the one reason given. Its limits and roles are applied by the reviewed change that enables
+    ordering.
+  - (c) The operator switch `SIRKIT_ORDERING_DISABLED`: any non-blank value turns ordering off, `0` and `false` included; the function
+    reads only the environment it is given [B23-C fix, 2026-10-04: and the stores' production default,
+    `orderingEnablementFromProcess()`, gives it that one switch read from the process at each call - the only process variable any
+    ordering module reads].
+  - (d) Money: decimal text of at most 12 integer and 6 fraction digits, one canonical spelling in a binding, exact integer arithmetic;
+    a provider's re-read is canonicalised before it is compared [B23-C fix, 2026-10-04: only what comes in is bounded; the arithmetic
+    reads its own results unbounded, so a sum past 12 digits is compared, never thrown].
+  - (e) A binding carries each line's unit price as the person saw it; "a change" at the re-read is any differing unit price, up or
+    down; the ceiling covers the lines and the provider's charges, and the provider's total must add up exactly.
+  - (f) Any human project administrator of the project may consume an authorization (the order contract's caller); the submission uses
+    the held binding.
+  - (g) The order contract burns the authorization before the re-read, so a refused re-read spends it and two people confirm again at
+    the new price; a new authorization for an unresolved cart is refused before it is burned [B23-C fix, 2026-10-04: also when it races:
+    a submit claims its cart synchronously before the burn and releases it in the turn that records the order, so a second authorization
+    for that cart is refused still unspent] [B23-C lead, 2026-10-04: also when it is presented with an equivalent spelling, since the
+    cart is read from the canonical (NFC) binding consume compares, and when a twin submit of the claiming authorization outlives a
+    failing claimant, since every submit of it holds the claim; a cart that is claimed but holds no order yet is refused
+    `ORDER_CART_BUSY` (p)].
+  - (h) One order in flight per cart [B23-C fix, 2026-10-04: the cart is the provider, the operation and each part's total quantity;
+    line ids and line order are labels and no longer count (they did: "provider, operation, line ids, parts and quantities")]; an
+    accepted order does not block a new, separately confirmed one.
+  - (i) `manufacturing.provider-order` carries no `sideEffects`: it is Tier 3 by approval tier `release` and by its id's `order` stem,
+    and the side effect would move B23-B1's pin that the provider exchange alone carries it; its sources cite only the provider panel,
+    because naming the provider directory from `action-registry.ts` would fail `b23-a-provider-admission` case 8.
+  - (j) The webhook contract is Sirkit's own: `webhook-id`, `webhook-timestamp`, `webhook-signature` headers, `v1=` hex HMAC-SHA256 over
+    `<id>.<timestamp>.<raw body>`, a five-minute window, a 4096-entry replay store that refuses when full, a secret of at least 32
+    characters, one provider per configured secret; a verified event is an observation only.
+  - (k) Requests, authorizations, orders and the replay store live in memory: a restart forgets them, and a forgotten authorization
+    cannot be consumed; durable storage is the enabling increment's.
+  - (l) Deadlines: the re-read 15 s, the submission 30 s; a timed-out re-read ends `not_submitted`, a timed-out submission
+    `UNKNOWN_PENDING_RECONCILIATION`.
+  - (m) enablement is checked again immediately before the hand-over; turned off after the burn, nothing is sent and the record ends
+    `not_submitted` with `ORDER_DISABLED_BEFORE_SUBMISSION`, the authorization spent.
+  - (n) A judgement of an untrusted answer that throws while it is read is a refusal, never a throw: a re-read is
+    `ORDER_REQUOTE_MISMATCH` (`unreadable`), a submission's answer `UNKNOWN_PENDING_RECONCILIATION` (`unreadable`);
+    `purchaseBindingProblems` answers `binding: unreadable`.
+  - (o) An order holding 32 observations answers a verified event `WEBHOOK_OBSERVATIONS_FULL` and records nothing more; the event's id
+    is spent, so its redelivery is `replayed`.
+  - (p) a cart that another authorization's submit has claimed for its consume, and that holds no order yet, is refused
+    `ORDER_CART_BUSY` ("submit it again in a moment"; this authorization unspent [B23-C lead, 2026-10-05: the request spends nothing,
+    but it reads no handle first, so the message no longer claims the authorization is unspent]), never `ORDER_IN_FLIGHT`, which names
+    an unresolved order; chosen over validating the handle before the claim (section 8).
+- Owner confirmation pending.
+
+## OD-175 — physical-evidence definitions, as applied (B23-D, 2026-10-05)
+
+- **Default applied:** `physical-evidence.ts` defines the eight runbook kinds as closed record types with validators.
+- **Binding:** every record binds `releaseId`, `archiveSha256`, board revision and digest; the unit or lot; the procedure (`sha256:` digest); typed equipment and operator references; raw artifact digests; an execution class; and a result.
+- **Review:** a human `project_admin` with a `qualificationRef`, from a server port asked only by record id, kind and digest. The answer carries `operatorActorIds`, and the reviewer is none of them.
+- **Never satisfies:** missing raw artifacts, dry run, a result other than pass, no server-derived review of the exact digest, or `use_as_is`.
+- **Cross-record rules:** the lot's identity binds units; failures raise nonconformances; reworks close only on the raising subject, with later physical retests; a final qualification comes after every failure and rework.
+- **Blocked:** the evaluator answers blocked for every input.
+- **Nothing is wired or created:** no port is wired; no route, store, tool or form exists; recording is B24-E's under LB-5.
+- **Lead-fix rounds and the lead round (2026-10-05):** independent checks' six low findings, closed test-first (contract cases 11-16): a failure of this release and lot always raises; a disposition comes no earlier than what raised it; a scrap removes its unit or lot by its own rules, whatever record shares its id; a lot with no unit left is scrapped; a final qualification follows every hardware rework, satisfying or not.
+- **Evidence:** `physical-evidence.md` sections 1-5 and 9; `b23-d-physical-evidence-contract` cases 1-16.
+- Owner confirmation pending.
+
+
+## OD-176 — the latent CD-11/CD-12/CD-13 claim paths, as applied (B23-D, 2026-10-05)
+
+- **Default applied:** not rewired. The tripwire pins no production caller for the five functions and executes D23-14's counterexamples.
+- **Hardening list** (`physical-evidence.md` section 6): resolve refs against stored, reviewed evidence; a server-derived actor; verified provenance for a hardware class; a waiver never satisfies a physical gate; `factory.ts:5`'s unchecked refs and missing operator; the seed types `FactoryTestResult` and `CalibrationResult`.
+- **Evidence:** `b23-d-latent-claim-paths` cases 1-6.
+- Owner confirmation pending.
+
+
+## OD-177 — `manufacturing.assembled-release` and its unblock condition, as applied (B23-D, 2026-10-05)
+
+- **Default applied:** one record, kept `missing`, Tier 3, unreachable.
+- **Both conditions named:** in the note (`:118`), the gate's refusal (`:189`) and the public message (`manufacturing-errors.ts:62`).
+- **Pinned by id** in `b23-d-assembled-release-blocked` (CI-admitted, no router); the gate refuses `assembled_pcb`.
+- **B01 CSV** moved once, by its generator; the release identity did not move.
+- **Evidence:** `physical-evidence.md` section 7; `b23-d-assembled-release-blocked` cases 1-6.
+- Owner confirmation pending.
+
+
+## OD-187 — B23-D: stated choices beyond its task text, as applied (B23-D, 2026-10-05)
+
+- **Default applied** (as `physical-evidence.md` section 12 states them, the review round's, both lead-fix rounds' and the lead round's amendments included):
+  - (a) **Where.** `app/lib/manufacturing-providers/physical-evidence.ts`, in the CI-admitted B23 directory; it imports only the durable
+    digest helper and nothing in production imports it.
+  - (b) **Required kinds.** Every kind but `deviation_rework` for an assembled-product claim; `deviation_rework` for each nonconformance
+    that a record of the claim raises (amended: a failure raises itself), until a satisfying rework, repair or scrap closes it.
+  - (c) **Who reviews.** A human `project_admin` with a recorded `qualificationRef`, derived by the server from its session
+    (`derivation: "server_session"`), no earlier than the work. No new role until the owner names one (as OD-172). Amended: never one of
+    the record's operators as the server resolves them - the answer carries `operatorActorIds`, one per operator reference, and an
+    answer without them is refused; that the resolution is right is the port's (B24-E).
+  - (d) **The review port.** Asked by record id, kind and digest only; its answer copied as data and checked;
+    `PHYSICAL_EVIDENCE_REVIEW_PORT_WIRING` is `"none"`, and the reviewed change that wires one changes it with it.
+  - (e) **Waivers and dispositions.** `use_as_is` is a waiver: it never satisfies and never closes a nonconformance. Scrap closes one
+    without a retest. Rework and repair need at least one satisfying retest performed no earlier than the rework. Amended: every
+    disposition acts on a subject that covers each record that raised the nonconformance (a lot's nonconformance needs a lot-scope
+    rework and retest, since a lot record names no unit), and each retest is an incoming inspection, continuity/power-on or functional
+    test covering the reworked subject, never a record that raised the nonconformance. [B23-D low round, 2026-10-05] Amended: every
+    disposition comes no earlier than each record that raised the nonconformance it names, so each retest does too; "no earlier than"
+    admits the same instant, as every ordering here does. A scrap closes only the nonconformance it names, and it removes its subject
+    (s). [B23-D low round 2, 2026-10-05] Amended: it removes its subject only when it satisfies on its own (s).
+  - (f) **Final physical qualification** relies only on satisfying records of the same evaluation, performed no later than itself.
+    Amended: and it comes no earlier than every record that raised a nonconformance and every satisfying rework of the claim. [B23-D low
+    round 2, 2026-10-05] Amended: every hardware rework of the claim, satisfying or not and removed or not - a rework, a waiver or a
+    scrap done after it leaves it stale, reviewed or not.
+  - (g) **Duplicate record ids** void every record that carries the id. [B23-D low round, 2026-10-05] Amended: a voided record still
+    counts against the claim - it raises what it names (a hardware failure, itself), and a voided hardware scrap still removes its
+    subject. [B23-D low round 2, 2026-10-05] Amended: a voided scrap removes nothing (s); a voided hardware rework still keeps a final
+    qualification dated before it stale (f). [B23-D lead, 2026-10-05] Amended: a duplicate voids what a record would satisfy or close,
+    never what it imposes - a voided scrap that satisfies its own rules still removes its subject, and a voided lot identity still binds
+    units and counts them (s, case 16).
+  - (h) **References are identifiers**: no space and no "@", so no prose and no address. Amended: operators and equipment are typed
+    (`operator:<id>`, `equipment:<id>`); a regex cannot tell an id from a name, so that an operator id spells no name is the recording
+    route's (B24-E). Operators are references, resolved to actor ids only by the server (c).
+  - (i) **Coverage.** A lot claim counts one satisfying record per kind; whether every unit or a sample must be covered is the owner's
+    question (UNKNOWN), moot while the block stands. Amended: the claim's identity is its lot-scope identity records; a unit record
+    names a serial each lists, and an inspection inspects no more than the lot holds. [B23-D low round, 2026-10-05] A record outside
+    that identity never satisfies, yet its failure still raises (p).
+  - (j) **Blocked by type and by fact.** `eligible` is `false` in the answer's type, and `ASSEMBLY_DATA_AUTHORITY` is `"absent"`; no
+    input supplies the assembly-data authority.
+  - (k) **Where a person sees it.** The unblock condition is stated in the error table (`manufacturing-errors.ts:62`), not the panel: a
+    person meets the block only through that refusal (no control requests an assembled release), and the panel stays unchanged (no UI
+    change). Limit: no qualification produces `assembled_pcb` today, so in practice nobody sees it yet.
+  - (l) **Wording.** The gate's refusal says "approved MPN, variant, ..." so that the redacted trace's 200-character bound keeps both
+    conditions whole; the registry note keeps its `[B17-A]` prefix and adds `[B23-D]`.
+  - (m) **The latent paths** are not rewired; their counterexamples are pinned as executed (latent case 4), so a hardening change moves
+    that pin by review.
+  - (n) **Inputs are read once, as data** (a structured clone): a getter answers once, and a proxy or a function is refused. Amended:
+    the evaluator copies each record once and reports a refused record's id and kind from that copy; every read of the caller's claim is
+    guarded, so a throwing read is a malformed claim, never an exception.
+  - (o) **Bounds.** 512 records per evaluation; 64 equipment refs, 16 operators, 256 raw artifacts, 64 nonconformances, 4,096 serials
+    and 64 relied-on records per record; quantities up to 1,000,000.
+  - (p) **A failure is never outvoted** (review round). A `hardware` record of the claim whose result is not pass raises the
+    nonconformances it names, or itself when it names none; a dry run raises nothing of its own. [B23-D low round, 2026-10-05] Amended:
+    "of the claim" is of this release and lot - every valid record of them raises what it names, whatever its serial listing or a
+    duplicate id; only another release or another lot puts a record outside the claim.
+  - (q) **Manufacturer acceptance** (review round). It binds the release's own `archiveSha256` only; an outbound package digest waits
+    for a server that can resolve it to its release. Its refs are the manufacturer's, never Sirkit's minted `mfg-` ids.
+  - (r) **Digest-named fields** (review round). `procedureDigest`, `testDefinitionDigest` and `assemblyDataDigest` are `sha256:<64
+    hex>`.
+  - (s) **A scrap removes its subject** ([B23-D low round, 2026-10-05]). Every `hardware` scrap of this release and lot removes its unit
+    or lot, reviewed or not and whatever its id's duplicates, as a failure raises whatever its review; a dry run removes nothing. No
+    other record of a removed subject satisfies any kind (`subject_scrapped`), its passes, final qualification and reworks included; the
+    scrap itself stays and closes only the nonconformance it names, when it satisfies and acts on it. [B23-D low round 2, 2026-10-05]
+    Amended: only a scrap that satisfies on its own - its own rules (this release and lot, raw artifacts, hardware, pass, a
+    server-derived human review) and an id no other record shares - removes its subject, whatever the lot's identity lists for its unit;
+    one that does not satisfy, a dry run included, removes nothing. A lot with no unit left is removed: every serial one of its
+    identities lists (one or more), or as many distinct units as its smallest `lotQuantity`, scrapped. A removal never relaxes a rule:
+    what a removed record raised, and when a removed rework was done, still count (f). [B23-D lead, 2026-10-05] Amended: "an id no other
+    record shares" is no longer one of a scrap's own rules - whatever record shares its id, a scrap that satisfies its own rules removes
+    its subject, and the identities that count a lot's units out are read the same way (g, case 16).
+- Owner confirmation pending.
+
+## OD-178 — the README and quickstart claim, as applied (B23 closeout, 2026-10-05)
+
+- **Default applied:** `README.md:41`, `docs/pcb-quickstart.md:6` (the statement of `:3-6`) and quickstart `:47` keep their words and carry a dated `[superseded 2026-10-05 by the B23 closeout (D23-16, OD-178): ...]` note in place, never a rewrite.
+- **Wording:** the closeout task's generalisation of the drafted note - "a bundle prepared for a provider's quote upload; no upload has been recorded, and no provider has accepted, quoted, DFM-checked or ordered a Sirkit bundle (no stored acknowledged receipt; LB-11)"; the quickstart names no single provider (OD-188 (g)).
+- **Pinned by** `b23-closeout-statements` (8 cases): no copy, doc or page outside an exact allow-list states such a claim in its vocabulary's 19 forms; a phrasing outside them is not seen (`closeout-statements.md` section 4).
+- **Evidence:** `closeout-statements.md` sections 1, 4 and 5; D23-16's closure clause.
+- Owner confirmation pending.
+
+
+## OD-188 — B23 closeout (1/2): stated choices beyond its task text, as applied (B23 closeout, 2026-10-05)
+
+- **Default applied:**
+  - (a) A same-line comment note on `provider-registry.ts:16` is not a registry revision: no row, rendered byte, descriptor or `PROVIDER_REGISTRY_VERSION` changes (the generator re-renders the CSV with zero drift); removing code from the module (`providerRow`, the `rows` parameter) is, so both wait for the next reviewed revision, which also rewrites the `:16` sentence.
+  - (b) The four fab preset notes stay as written on the allow-list, as the task says. Only `jlcpcb-2l`'s are inside the pinned release identity (the qualify route reads that one preset, `QUALIFIED_FABRICATION_PROFILE_ID`, and its notes are in the B05 replay fixtures `b05-read-invocation` compares byte for byte); the other three feed a native snapshot's source hash whenever chosen (INFERRED). A visible caveat belongs at the dialog's render site in a reviewed UI change if the owner wants one.
+  - (c) "Send to fab" is admitted as the control's name with its uses pinned per file (12 production, 6 pages), B19's rename deferral standing.
+  - (d) The discovery's stale snapshot statements are recorded by one section-10 line, not per-line notes (the reserved-file rule).
+  - (e) `provider-egress.ts:135` was noted beyond the verified scope (the dead-code verifier found it).
+  - (f) No export is retired; whole dormant modules (B23-C's four, `physical-evidence.ts`, `cd12-projection.ts`) are recorded with pinned production importers, and `ServerDerivedHumanReview` (named nowhere) is recorded with its module as the review port's answer shape.
+  - (g) The D23-16 notes use the closeout task's wording, not OD-178's draft verbatim: "a provider's quote upload" for OD-178's "JLCPCB's quote upload" (the quickstart names no single provider), plus "no provider has accepted, quoted, DFM-checked or ordered a Sirkit bundle (no stored acknowledged receipt; LB-11)".
+  - (h) The tripwire's claim vocabulary is finite (19 forms, closeout-statements.md section 4): a phrasing outside it is not seen; the present tense counts as a send only with a provider named, since "what Sirkit sends to a provider" describes the egress (a B20 page says so).
+  - (i) [B23 closeout lead, 2026-10-05] The tripwire's vocabulary reads a temporal word ("until", "before", "when", "once") before a provider as a condition only before a present or perfect verb; before a simple past it dates a claim and is reported. "The API" or "a quote" is a provider only with its name or role. Both added by the lead round, test-first.
+- Owner confirmation pending.
+
+
+## OD-160 — which providers B23 targets and whether the owner holds approved API access, as applied (B23, recorded at the B23 closeout, 2026-10-06)
+
+- **Question:** which providers does B23 target, and does the owner hold approved API access for any (JLCPCB app id and keys, PCBWay `api-key`, an OSH Park or MacroFab account, a DigiKey Credit account)?
+- **Default applied:** none assumed. The read-only DFM/quote flow is built end to end offline against an in-process fake provider behind the real egress boundary (B23-B1..B3); `admitProviderOperation` refuses every `dfm_quote_transfer` and `ordering` operation `provider_not_admitted` before anything else (`provider-admission.ts:54-56`); `PROVIDER_TRANSFER_DESCRIPTORS` is empty; every live exchange is BLOCKED-LIVE-QUALIFICATION (LB-11) and every order (LB-12). The builder applied for no access, created no account and entered no credential. B23-B4, the opt-in owner-run sandbox qualification, did not run: no account exists.
+- **Evidence:** `final-verdict.md`; `unknowns-and-owner-decisions.md`; `b23-a-provider-admission`; LB-11, LB-12.
+- Recorded at the closeout ([B23 closeout (2/2), 2026-10-06]). Owner confirmation pending.

@@ -16,7 +16,7 @@
  * an input — the only input it can repeat is the id of a registry row that was found AND validates with no violation
  * naming it (S1, S2).
  */
-import { MCP_AGENT_TOOLS_MAX, MCP_SERVER_REGISTRY, MCP_TOOL_NAME_PATTERN, admittedMcpServer, mcpServerEntry, validateMcpServerRegistry, type McpServerRegistryEntry } from "./server-registry";
+import { MCP_AGENT_TOOLS_MAX, MCP_SERVER_REGISTRY, MCP_TOOL_NAME_PATTERN, admittedMcpServer, isTier3McpToolName, mcpServerEntry, validateMcpServerRegistry, type McpServerRegistryEntry } from "./server-registry"; // [B23-A2 lead, 2026-10-02] + the consumed-tool name floor, still the one runtime import
 
 export const PROVIDER_CONNECTOR_POLICY_VERSION = "1.0.0";
 
@@ -150,13 +150,23 @@ export function providerConnectorVerdict(
     if (entry.agentDisclosure !== "permitted") reasons.push("disclosure_not_permitted");
     // [B20 A5 review] A4L's per-tool allowlist, judged the way `mcpAgentToolAllowlist` judges it and inline, so this
     // module keeps its single runtime import: a row that names no usable tool is a row Sirkit's own agent roster drops
-    // (`[]` means no tool of this row is agent-callable), and a connector for it could be allowed to call nothing.
+    // (`[]` means no tool of this row is agent-callable), and a connector for it could be allowed to call nothing. [B23-A2 lead, 2026-10-02] A list naming a usable Tier 3 tool approves NOTHING, as in the port (agent-port.ts:223): the registry's own `isTier3McpToolName`, the port's predicate, never a copy (D23-12).
     const approved: unknown = entry.agentTools;
     const approvesATool = Array.isArray(approved) && approved.length <= MCP_AGENT_TOOLS_MAX
-      && approved.some((name) => typeof name === "string" && name.length <= MCP_TOOL_NAME_MAX_CHARS && MCP_TOOL_NAME_PATTERN.test(name));
+      && approved.some(usableAgentToolName) && !approved.some((name) => usableAgentToolName(name) && isTier3McpToolName(name));
     if (!approvesATool) reasons.push("no_agent_tools");
     return verdictOf(known, named ? null : entry.id, reasons);
   } catch {
     return verdictOf(known, null, ["connectors_refused", providerCode, ...MECHANISM, "server_not_admitted"]);
   }
+}
+
+/**
+ * [B23-A2 lead, 2026-10-02] A name the port's allowlist reads at all: a string within the pattern's length (judged before the
+ * pattern runs, S5) that matches `MCP_TOOL_NAME_PATTERN`. The port skips any other entry, so only such a name can approve a tool, and
+ * only such a name that `isTier3McpToolName` matches voids the whole list (agent-port.ts:223); a floor-like name outside the pattern
+ * voids nothing in either reader.
+ */
+function usableAgentToolName(name: unknown): name is string {
+  return typeof name === "string" && name.length <= MCP_TOOL_NAME_MAX_CHARS && MCP_TOOL_NAME_PATTERN.test(name);
 }

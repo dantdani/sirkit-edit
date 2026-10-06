@@ -344,7 +344,7 @@ export function authenticatedJsonRoute<B = Record<string, unknown>>(
       if (!params.ok) return params.response;
       extra.params = params.params;
     }
-    if (options.exposeAbortSignal) extra.signal = request.signal;
+    if (options.exposeAbortSignal) extra.signal = retainedSignal(request);
     const meta = buildMeta(request, options);
     const readOpts = { maxBytes: options.maxBytes, ...(options.deadlineMs !== undefined ? { deadlineMs: options.deadlineMs } : {}) };
     if (options.requireObject ?? true) {
@@ -395,7 +395,7 @@ export function authenticatedRoute(
       if (!params.ok) return params.response;
       extra.params = params.params;
     }
-    if (opts.exposeAbortSignal) extra.signal = request.signal;
+    if (opts.exposeAbortSignal) extra.signal = retainedSignal(request);
     return handler({ context: authorized.context, meta: buildMeta(request, opts), ...extra });
   };
 }
@@ -439,7 +439,7 @@ export function publicRoute(
       if (!params.ok) return params.response;
       extra.params = params.params;
     }
-    if (opts.exposeAbortSignal) extra.signal = request.signal;
+    if (opts.exposeAbortSignal) extra.signal = retainedSignal(request);
     // [B16.0.24.1 §2] least privilege: only the frozen three-field projection
     // ever reaches a callback — never the raw environment object.
     if (opts.exposeAuthRuntime) extra.authRuntime = projectAuthRuntime(opts.environment ?? process.env);
@@ -496,7 +496,7 @@ export function workerJsonRoute<B = Record<string, unknown>>(
       return Response.json({ ok: false, code: "AUTH_WORKER_REQUIRED", error: "This route requires a worker credential." }, { status: 401, headers: { "Cache-Control": "no-store" } });
     }
     if ((options.requireJsonContentType ?? true) && !mediaTypeOk(request)) return unsupportedMedia();
-    const signal = options.exposeAbortSignal ? request.signal : undefined;
+    const signal = options.exposeAbortSignal ? retainedSignal(request) : undefined;
     const meta = buildMeta(request, options);
     const readOpts = { maxBytes: options.maxBytes, ...(options.deadlineMs !== undefined ? { deadlineMs: options.deadlineMs } : {}) };
     if (options.requireObject ?? true) {
@@ -537,7 +537,7 @@ export function workerRoute(
     if (authorized.kind !== "worker") {
       return Response.json({ ok: false, code: "AUTH_WORKER_REQUIRED", error: "This route requires a worker credential." }, { status: 401, headers: { "Cache-Control": "no-store" } });
     }
-    const signal = options.exposeAbortSignal ? request.signal : undefined;
+    const signal = options.exposeAbortSignal ? retainedSignal(request) : undefined;
     return handler({ principal: authorized.principal, meta: buildMeta(request, options), ...(signal ? { signal } : {}) });
   };
 }
@@ -576,7 +576,7 @@ export function publicJsonRoute<B = Record<string, unknown>>(
       if (!params.ok) return params.response;
       extra.params = params.params;
     }
-    if (options.exposeAbortSignal) extra.signal = request.signal;
+    if (options.exposeAbortSignal) extra.signal = retainedSignal(request);
     const meta = buildMeta(request, options);
     const readOpts = { maxBytes: options.maxBytes, ...(options.deadlineMs !== undefined ? { deadlineMs: options.deadlineMs } : {}) };
     if (options.requireObject ?? true) {
@@ -743,7 +743,7 @@ export function selectorEnvelopeJsonRoute<B = Record<string, unknown>>(
 
     // 9. callback — trusted context + parsed body only; no Request escapes.
     const extra: Pick<SelectorEnvelopeInput<B>, "signal"> = {};
-    if (options.exposeAbortSignal) extra.signal = request.signal;
+    if (options.exposeAbortSignal) extra.signal = retainedSignal(request);
     return handler({ context: trusted.context, body: body as B, bytes: read.bytes, meta: buildMeta(request, {}), ...extra });
   };
 }
@@ -854,7 +854,7 @@ export function agentStreamRoute(
 
     // 8. callback — trusted context + parsed body + scope + signal; the raw
     //    Request never escapes. The callback builds the NDJSON stream Response.
-    return handler({ context: trusted.context, body, scope, signal: request.signal, meta: buildMeta(request, {}) });
+    return handler({ context: trusted.context, body, scope, signal: retainedSignal(request), meta: buildMeta(request, {}) });
   };
 }
 
@@ -1066,9 +1066,27 @@ export function mcpBearerJsonRoute(
       }
       // 15. the handler: the principal, the parsed message and the bounded MCP headers only
       parsed = read.value;
-      return await handler({ principal, message: read.value, bytes: read.bytes, mcp: mcpHeadersOf(request), meta: buildMeta(request, {}), signal: request.signal });
+      return await handler({ principal, message: read.value, bytes: read.bytes, mcp: mcpHeadersOf(request), meta: buildMeta(request, {}), signal: retainedSignal(request) });
     } catch {
       return mcpJsonRpcFailure(500, -32603, "Internal error", readableMcpRequestId(parsed));
     }
   };
+}
+
+/**
+ * [B23 lead, 2026-10-03] The signal a wrapper hands a handler keeps its Request alive for as long as the signal is held. Before this,
+ * a wrapper kept nothing but `request.signal`. Once it had read the body and returned the handler's promise, nothing held the Request,
+ * and a garbage collection during a long run could take the Request and, with it, the caller's abort.
+ *
+ * CI hit this on 9cb675d (`b22-a3-diagnostic-runner` case 13: the abort's tree kill never came). The lead's probes on that case:
+ * - one forced collection between the spawn and the abort failed it, 3 of 3;
+ * - the same probe without the collection passed;
+ * - the collection with the test's Request held strongly passed.
+ * The WeakMap ties the Request's life to its signal's, so a run that still listens on the signal still hears the abort.
+ */
+const RETAINED_REQUESTS = new WeakMap<AbortSignal, Request>();
+export function retainedSignal(request: Request): AbortSignal {
+  const signal = request.signal;
+  RETAINED_REQUESTS.set(signal, request);
+  return signal;
 }

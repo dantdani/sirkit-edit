@@ -11,14 +11,14 @@
  *   Tier 1  reversible requested edits                → preview + confirmation by default; a project may opt
  *                                                        into `execute_explicit_tier1` for EXACT user-requested ops
  *   Tier 2  topology / geometry / authority changes   → always an inert sealed proposal + exact human approval
- *   Tier 3  publish, release, upload, purchase/order  → never agent-executable
+ *   Tier 3  publish, release, upload, purchase/order  → never agent-executable ([B23-A2] and any external-transfer side effect, OD-173)
  *
  * Every function here is pure. The setting is SERVER-OWNED (repository +
  * canonical route + audit): nothing in a request body, a tool argument or a
  * model output can assert a mode — see `app/lib/agent/autonomy-*.ts`.
  */
 import type { ActionCoverageRecord, ApprovalTier } from "./action-registry";
-import type { ToolDescriptor, ToolOperationClass } from "./tool-registry";
+import type { ToolDescriptor, ToolOperationClass, ToolSideEffect } from "./tool-registry";
 import type { ProjectRole } from "./types";
 
 export const PERMISSION_TIERS = [0, 1, 2, 3] as const;
@@ -32,7 +32,7 @@ export const PERMISSION_TIER_TITLES: Readonly<Record<PermissionTier, string>> = 
 });
 
 /** A defensive floor: an id in one of these families is Tier 3 whatever its record says. [B19-E E4 review] gates-2: `publica`
- *  (publication) is publish authority too — "publication" does not contain "publish". */
+ *  (publication) is publish authority too — "publication" does not contain "publish". [B23-A2] These nine stems are the router's chat families too; the id floor every tier computation applies is `TIER3_FLOOR_PATTERN` (end of file): these nine plus OD-173's seven. */
 export const TIER3_FAMILY_PATTERN = /(release|publish|publica|upload|order|purchas|qualif|ship|deliver)/i;
 
 /** The tier of an operation from the registry's approval tier and its operation kind/class. */
@@ -48,13 +48,13 @@ export function permissionTierOfApproval(approvalTier: ApprovalTier, kind: Actio
   return 1;
 }
 
-export function permissionTierOfDescriptor(descriptor: Pick<ToolDescriptor, "toolId" | "operationClass" | "approvalTier">): PermissionTier {
-  if (TIER3_FAMILY_PATTERN.test(descriptor.toolId)) return 3;
+export function permissionTierOfDescriptor(descriptor: Pick<ToolDescriptor, "toolId" | "operationClass" | "approvalTier" | "sideEffects">): PermissionTier {
+  if (TIER3_FLOOR_PATTERN.test(descriptor.toolId) || descriptor.sideEffects === EXTERNAL_TRANSFER_SIDE_EFFECT) return 3; // [B23-A2] the widened floor, and data leaving Sirkit whatever the id says (OD-173)
   return permissionTierOfApproval(descriptor.approvalTier, descriptor.operationClass);
 }
 
-export function permissionTierOfAction(record: Pick<ActionCoverageRecord, "id" | "kind" | "approvalTier" | "area">): PermissionTier {
-  if (TIER3_FAMILY_PATTERN.test(record.id)) return 3;
+export function permissionTierOfAction(record: Pick<ActionCoverageRecord, "id" | "kind" | "approvalTier" | "area" | "sideEffects">): PermissionTier {
+  if (TIER3_FLOOR_PATTERN.test(record.id) || record.sideEffects === EXTERNAL_TRANSFER_SIDE_EFFECT) return 3; // [B23-A2] OD-173, as for a tool
   // View records mutate VIEW state only (the B17 bus): Tier 0 whatever their record kind says.
   if (record.area === "view" && record.approvalTier === "none") return 0;
   return permissionTierOfApproval(record.approvalTier, record.kind);
@@ -147,3 +147,23 @@ export function decideAgentExecution(input: { tier: PermissionTier; setting: Age
   }
   return { tier, decision: "execute_direct", requiresGrant: false, requiresHumanApproval: false, reason: "Tier 0 reads, inspections, measurements and view-session actions execute directly for authorized project readers." };
 }
+
+// ── [B23-A2] the Tier 3 vocabulary for data leaving Sirkit and for spend (OD-173, D23-8) ─────────────────────────────────────
+
+/** [B23-A2] The side effect of data leaving Sirkit for a third party (design files, part data, a DFM or quote request). A tool
+ *  (`TOOL_SIDE_EFFECTS`) or an action (`ActionCoverageRecord.sideEffects`) that carries it is Tier 3 whatever its id, class or
+ *  approval tier says: the structure, never a word, makes it Tier 3. Both port-bound read classes refuse it (tool-registry.ts). */
+export const EXTERNAL_TRANSFER_SIDE_EFFECT: Extract<ToolSideEffect, "external-transfer"> = "external-transfer";
+
+/** [B23-A2] The stems OD-173 adds to the id floor: a quote, a DFM check, a submission, a checkout, a cart, a purchase, a payment.
+ *  No current tool or action id holds one (the census, b23-a-tier3-vocabulary case 5). They are not chat families: the router's
+ *  nine head-verb families stay as B21 pinned them (OD-173; discovery section 8 item 16), so they live beside the family pattern. */
+export const TIER3_B23_STEMS = Object.freeze(["quote", "dfm", "submit", "checkout", "cart", "buy", "payment"] as const);
+
+/** [B23-A2 review] Whole WORDS the id floor adds beside the stems: `pay` (a stem would catch payload and display), the word the
+ *  structural no-order check already counts as a payment port (OD-182 (h)). No current tool or action id holds it (case 5's census). */
+export const TIER3_B23_WORDS = Object.freeze(["pay"] as const);
+
+/** [B23-A2] THE id floor: an id in one of these families is Tier 3 whatever its record says - the nine family stems, OD-173's
+ *  seven and the word `pay`. Every tier computation above, the B21 role rows and the consumed MCP tool names apply it. */
+export const TIER3_FLOOR_PATTERN = new RegExp(TIER3_FAMILY_PATTERN.source.replace(/\)$/, `|${[...TIER3_B23_STEMS, ...TIER3_B23_WORDS.map((word) => `(?<![a-z0-9])${word}(?![a-z0-9])`)].join("|")})`), "i");

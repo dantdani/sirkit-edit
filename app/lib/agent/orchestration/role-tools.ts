@@ -13,7 +13,7 @@
  * no tool at all. Nothing here reads a registry at load, names a module that changes project state, or holds authority.
  */
 import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, NEVER_EXPOSED_TOOL_PATTERNS } from "../../engineering/agent-exposure";
-import { TIER3_FAMILY_PATTERN } from "../../engineering/permission-tiers";
+import { TIER3_FLOOR_PATTERN } from "../../engineering/permission-tiers";
 import type { ToolDescriptor } from "../../engineering/tool-registry";
 import { ORCHESTRATION_BOUNDS, SPECIALIST_ROLES, type SpecialistRole } from "./contracts";
 
@@ -114,11 +114,11 @@ export function roleAllowedToolIds(role: string): readonly string[] {
   return Object.hasOwn(INTENTIONAL_ROLE_TOOL_IDS, role) ? INTENTIONAL_ROLE_TOOL_IDS[role as SpecialistRole] : NO_TOOLS;
 }
 
-export type RoleToolDescriptor = Pick<ToolDescriptor, "toolId" | "operationClass" | "agentExposed">;
+export type RoleToolDescriptor = Pick<ToolDescriptor, "toolId" | "operationClass" | "agentExposed"> & Partial<Pick<ToolDescriptor, "sideEffects">>; // [B23-A2] the side effect, when the caller has it (OD-173)
 const EXPOSED: ReadonlySet<string> = new Set(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS);
 /** The classes the exposure rule can admit at all; `destructive` and a final-tier class never are. */
 const EXPOSABLE_CLASSES: ReadonlySet<string> = new Set(["read", "propose", "view-session", "mutate"]);
-const outsideReach = (toolId: string): boolean => NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(toolId)) || TIER3_FAMILY_PATTERN.test(toolId);
+const outsideReach = (toolId: string): boolean => NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(toolId)) || TIER3_FLOOR_PATTERN.test(toolId); // [B23-A2] the widened Tier 3 id floor (OD-173)
 
 /** Why one descriptor may not sit in one role's row (empty: it may). The coordinator's row holds the whole single-agent set, so a
  *  mutation or a view-session control is its own there; every other role may hold neither. */
@@ -127,7 +127,7 @@ export function roleToolViolations(role: SpecialistRole, descriptor: RoleToolDes
   if (!EXPOSED.has(descriptor.toolId) || descriptor.agentExposed !== true) found.add("not_exposed");
   if (role !== "coordinator" && descriptor.operationClass === "mutate") found.add("granted_execution");
   if (role !== "coordinator" && descriptor.operationClass === "view-session") found.add("view_control");
-  if (outsideReach(descriptor.toolId) || !EXPOSABLE_CLASSES.has(descriptor.operationClass)) found.add("never_exposed_pattern");
+  if (outsideReach(descriptor.toolId) || descriptor.sideEffects === "external-transfer" || !EXPOSABLE_CLASSES.has(descriptor.operationClass)) found.add("never_exposed_pattern"); // [B23-A2] data leaving Sirkit is never in a row (OD-173)
   if (descriptor.operationClass === "propose" && !PROPOSING_ROLES.includes(role)) found.add("proposal_for_non_proposing_role");
   return ROLE_TOOL_VIOLATIONS.filter((reason) => found.has(reason));
 }
@@ -185,7 +185,7 @@ function judgeRow(role: SpecialistRole, row: unknown, registry: DescriptorLookup
     const descriptor = lookup(registry, entry);
     let reasons: RoleToolViolation[];
     try {
-      reasons = descriptor ? roleToolViolations(role, { toolId: entry, operationClass: descriptor.operationClass, agentExposed: descriptor.agentExposed }) : roleToolViolations(role, { toolId: entry, operationClass: "read", agentExposed: false });
+      reasons = descriptor ? roleToolViolations(role, { toolId: entry, operationClass: descriptor.operationClass, agentExposed: descriptor.agentExposed, sideEffects: descriptor.sideEffects }) : roleToolViolations(role, { toolId: entry, operationClass: "read", agentExposed: false });
     } catch {
       reasons = ["not_exposed"];
     }

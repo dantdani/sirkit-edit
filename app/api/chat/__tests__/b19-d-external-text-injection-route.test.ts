@@ -125,7 +125,13 @@ describe("[B19-D I5e row 31] vendor-data code is outside the model-facing import
   // only runtime import is the source registry allowed above. It is still walked (a forbidden import behind it is still found), and
   // b21-e1-provider-policy case 6 pins that its runtime imports stay exactly `./source-registry` and that provider-policy.ts is its one
   // runtime importer in the chat closure. Every other acquisition module stays forbidden.
-  const FORBIDDEN = [/^app\/lib\/acquisition\/(?!source-registry\.ts$|admission-control\.ts$)/, /^app\/lib\/distributors\/(?!types\.ts$|lifecycle-sql\.ts$|shared\.ts$)/, /^app\/lib\/mcp\/(?!server-registry\.ts$|rollout\.ts$|server\/inbound-limits\.ts$|server\/protocol\.ts$)/];
+  const FORBIDDEN = [/^app\/lib\/acquisition\/(?!source-registry\.ts$|admission-control\.ts$)/, /^app\/lib\/distributors\/(?!types\.ts$|lifecycle-sql\.ts$|shared\.ts$)/, /^app\/lib\/mcp\/(?!server-registry\.ts$|rollout\.ts$|server\/inbound-limits\.ts$|server\/protocol\.ts$)/, /^app\/lib\/net\/outbound-fetch\.ts$/, new RegExp(["^app/lib/manufacturing", "providers/"].join("-"))]; // [B23-A2, 2026-10-02] reviewed move: + the egress module and the provider directory (note below)
+  // [B23-A2, 2026-10-02] REVIEWED AMENDMENT (pin move) of the list on the line above (OD-173, D23-8): + the one egress boundary,
+  // `app/lib/net/outbound-fetch.ts`, and the B23 provider directory (spelled in two parts: b23-a-provider-admission case 8 flags any
+  // file outside that directory whose text names it). Nothing in the chat, Build-mode or LLM-router closure reaches either today;
+  // the chat route reaches the boundary only through the two approved boundaries below, which stop the walk. Every earlier entry
+  // stands as it was. The line stays line 128 (the B21-E1 citation C59 reads it there); b23-a-tier3-vocabulary case 7 pins both
+  // entries and shows the rule is not vacuous (through the boundaries the closure reaches the egress module, around them neither).
 
   function resolveImport(from: string, spec: string): string | null {
     let base: string;

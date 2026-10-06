@@ -18,7 +18,7 @@ import { InMemoryDurableWorkflowRepository } from "@/app/lib/durable-workflow/re
 import type { DurableAggregateIdentity, DurableAggregateRecord, DurableWorkflowRepository } from "@/app/lib/durable-workflow/types";
 import { DurableManufacturingAuthorityStore } from "@/app/lib/pcb/fab/authority-store";
 import { DurableManufacturingReleaseLedger } from "@/app/lib/pcb/fab/release-ledger";
-import type { ManufacturingReleaseAuthority } from "@/app/lib/pcb/fab/release-gate";
+import { authoritativeBoardDigest, type ManufacturingReleaseAuthority } from "@/app/lib/pcb/fab/release-gate"; // [B23-B3, 2026-10-04] + authoritativeBoardDigest (D23-17): the authority's board digest is in its own domain
 import { PCB_BOARD_ASSEMBLY_VARIANT_ID, pcbDesignInstanceId } from "@/app/lib/pcb/board-identity";
 import { createEmptyBoard } from "@/app/lib/pcb/types";
 import { snapshotBase } from "@/app/lib/pcb-sync/__tests__/fixtures";
@@ -34,7 +34,7 @@ const SCOPE = { tenantId: "tenant-1", projectId: "project-1", branchId: "main", 
 const DESIGN_ID = pcbDesignInstanceId(SCOPE.projectId);
 const AUTHORITY_SCOPE = { ...SCOPE, designId: DESIGN_ID };
 const BOARD = makeBoardRecord({ ...SCOPE, board: JSON.parse(JSON.stringify(createEmptyBoard())), updatedAt: "2026-09-07T12:00:00.000Z" });
-const CURRENT = { revision: BOARD.revision, digest: BOARD.digest };
+const CURRENT = { revision: BOARD.revision, digest: BOARD.digest, board: BOARD.board }; // [B23-B3, 2026-10-04] reviewed pin move (D23-17): the reader recomputes the authority's digest from the loaded board, so the board travels with its revision and digest, as the handler hands it over
 const ADMIN = { role: "project_admin", actorKind: "human" };
 const EDITOR = { role: "pcb_editor", actorKind: "human" };
 const AI_ADMIN = { role: "project_admin", actorKind: "ai" };
@@ -48,7 +48,7 @@ function authority(): ManufacturingReleaseAuthority {
     schemaVersion: AUTHORITY_SCHEMA,
     ...AUTHORITY_SCOPE,
     boardRevision: BOARD.revision,
-    boardDigest: BOARD.digest,
+    boardDigest: authoritativeBoardDigest(BOARD.board), // [B23-B3, 2026-10-04] reviewed pin move (D23-17): an authority's boardDigest is `pcb-authority-<sha256>` (release-gate.ts authoritativeBoardDigest), never the board record's pcbSyncDigest; the fixture held the other domain, which the revision-only flag never read
     schematic: { revision: "schematic-r1", digest: "sha256:schematic-r1" },
     componentAuthority: { digest: "component-authority-r1" },
     manufacturingRuleProfile: { profileId: "jlcpcb-2l" },
@@ -62,7 +62,7 @@ async function seedAuthority(workflow: DurableWorkflowRepository): Promise<{ rev
 }
 
 async function seedRelease(workflow: DurableWorkflowRepository, saved: { revision: number; recordDigest: string }): Promise<void> {
-  await new DurableManufacturingReleaseLedger(workflow).record(AUTHORITY_SCOPE, { releaseId: "mfg-release-1", archiveSha256: "a".repeat(64), manifestContentDigest: "mfg-manifest-1", filename: "sirkit-board-1-release-1.zip", authorityRecordDigest: saved.recordDigest, authorityRevision: saved.revision, boardRevision: BOARD.revision, boardDigest: BOARD.digest, schematicRevision: "schematic-r1", componentAuthorityDigest: "component-authority-r1", actor: "u-admin", releasedAt: "2026-09-07T12:30:00.000Z" });
+  await new DurableManufacturingReleaseLedger(workflow).record(AUTHORITY_SCOPE, { releaseId: "mfg-release-1", archiveSha256: "a".repeat(64), manifestContentDigest: "mfg-manifest-1", filename: "sirkit-board-1-release-1.zip", authorityRecordDigest: saved.recordDigest, authorityRevision: saved.revision, boardRevision: BOARD.revision, boardDigest: authoritativeBoardDigest(BOARD.board), schematicRevision: "schematic-r1", componentAuthorityDigest: "component-authority-r1", actor: "u-admin", releasedAt: "2026-09-07T12:30:00.000Z" }); // [B23-B3, 2026-10-04] the ledger records the authority's board digest (the release route writes stored.authority.boardDigest)
 }
 
 async function seedSnapshot(workflow: DurableWorkflowRepository): Promise<void> {
@@ -255,5 +255,48 @@ describe("B16-A F25 — board read `include` surface and the summary beside the 
     };
     const degraded = await new PcbSyncClient({ tenantId: SCOPE.tenantId, projectId: SCOPE.projectId, branchId: SCOPE.branchId }, legacy).loadBoardWithManufacturing(SCOPE.boardId);
     expect(degraded).toMatchObject({ ok: false, code: "PS_API_INVALID_RESPONSE" });
+  });
+});
+
+// [B23-B3, 2026-10-04] D23-17: the digest-only case this suite never asserted (discovery 9.4, 9.5 item 30). The flag compared the
+// authority by revision only, though the header said revision/digest; `current.digest` is a pcbSyncDigest of the revision payload,
+// which sorts the board's arrays, so it cannot see what the release route compares (`authoritativeBoardDigest`, release/route.ts).
+describe("[B23-B3] D23-17 — the current flag compares the authority's board revision AND its authoritative digest", () => {
+  const net0 = createEmptyBoard().nets[0]!;
+  const vcc = { id: 1, name: "VCC", stableId: "net:vcc", endpointKeys: [] as string[] };
+  const gnd = { id: 2, name: "GND", stableId: "net:gnd", endpointKeys: [] as string[] };
+  const QUALIFIED = makeBoardRecord({ ...SCOPE, board: { ...createEmptyBoard(), nets: [net0, vcc, gnd] }, updatedAt: "2026-10-04T10:00:00.000Z" });
+  const REORDERED = makeBoardRecord({ ...SCOPE, board: { ...createEmptyBoard(), nets: [net0, gnd, vcc] }, updatedAt: "2026-10-04T10:05:00.000Z" });
+  const seedQualified = async (workflow: DurableWorkflowRepository) => {
+    const saved = await new DurableManufacturingAuthorityStore(workflow).save({ ...authority(), boardRevision: QUALIFIED.revision, boardDigest: authoritativeBoardDigest(QUALIFIED.board) } as ManufacturingReleaseAuthority, { idempotencyKey: "qualify-b3", savedAt: "2026-10-04T11:00:00.000Z" });
+    await new DurableManufacturingReleaseLedger(workflow).record(AUTHORITY_SCOPE, { releaseId: "mfg-release-b3", archiveSha256: "b".repeat(64), manifestContentDigest: "mfg-manifest-b3", filename: "sirkit-board-1-b3.zip", authorityRecordDigest: saved.recordDigest, authorityRevision: saved.revision, boardRevision: QUALIFIED.revision, boardDigest: authoritativeBoardDigest(QUALIFIED.board), schematicRevision: "schematic-r1", componentAuthorityDigest: "component-authority-r1", actor: "u-admin", releasedAt: "2026-10-04T11:30:00.000Z" });
+    return saved;
+  };
+
+  it("the same board revision with another authoritative digest (the nets in another order: one revision id, one pcbSyncDigest, two board JSONs) is not current, nor is its release; the qualified board is; a revision-only move is not current either", async () => {
+    expect(REORDERED.revision).toBe(QUALIFIED.revision);
+    expect(REORDERED.digest).toBe(QUALIFIED.digest);
+    expect(authoritativeBoardDigest(REORDERED.board)).not.toBe(authoritativeBoardDigest(QUALIFIED.board));
+    const workflow = new InMemoryDurableWorkflowRepository();
+    await seedQualified(workflow);
+    const read = (record: typeof QUALIFIED) => createManufacturingSummaryReader(workflow)(SCOPE, { revision: record.revision, digest: record.digest, board: record.board }, ADMIN);
+    const qualified = await read(QUALIFIED);
+    expect({ authority: qualified.authority?.current, release: qualified.latestRelease?.current }).toEqual({ authority: true, release: true });
+    const reordered = await read(REORDERED);
+    expect({ authority: reordered.authority?.current, release: reordered.latestRelease?.current }).toEqual({ authority: false, release: false });
+    expect(reordered.integrity).toEqual({ authority: "ok", snapshot: "absent", latestRelease: "ok", codes: [] });
+    const moved = await read(BOARD);
+    expect({ authority: moved.authority?.current, release: moved.latestRelease?.current }).toEqual({ authority: false, release: false });
+  });
+
+  it("through the board read: the handler hands the loaded board to the reader, so a re-serialised head with the same revision reads not current", async () => {
+    const workflow = new InMemoryDurableWorkflowRepository();
+    await seedQualified(workflow);
+    for (const [record, current] of [[QUALIFIED, true], [REORDERED, false]] as const) {
+      const response = await createPcbSyncBoardGetCore(stubRepository(record), () => "opt_in", createManufacturingSummaryReader(workflow))(SCOPE, { boardId: SCOPE.boardId, include: "manufacturing" }, ADMIN);
+      const body = await response.json() as { manufacturing: PcbSyncManufacturingSummary };
+      expect(body.manufacturing.authority!.current, record.revision).toBe(current);
+      expect(body.manufacturing.latestRelease!.current).toBe(current);
+    }
   });
 });

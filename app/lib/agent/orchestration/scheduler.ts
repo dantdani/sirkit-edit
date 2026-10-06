@@ -180,7 +180,7 @@ export function withdrawAuthority(context: AgentRunContext): AgentRunContext {
     executionGrantsAvailable: false,
     discovery: {
       ...discovery,
-      availableAuthority: discovery.availableAuthority.filter((authority) => authority !== "external-observation" && authority !== "external-mcp-observation" && authority !== "computation-engine"), // [B22-B] and the computation port's authority
+      availableAuthority: discovery.availableAuthority.filter((authority) => !isWithdrawnAuthority(authority)), // [B22-B] and the computation port's authority; [B23-A2] every external-* authority (OD-173): one predicate, at the end of this file
       riskCeiling: "propose",
       approvalsAvailable: [],
     },
@@ -217,7 +217,7 @@ export function deriveSpecialistContext(context: AgentRunContext): AgentRunConte
       currentEditor: discovery.currentEditor,
       selectedKinds: discovery.selectedKinds,
       projectState: discovery.projectState.filter((state) => !state.endsWith("-surface")),
-      availableAuthority: discovery.availableAuthority.filter((authority) => authority !== "external-observation" && authority !== "external-mcp-observation" && authority !== "computation-engine"), // [B22-B] and the computation port's authority
+      availableAuthority: discovery.availableAuthority.filter((authority) => !isWithdrawnAuthority(authority)), // [B22-B] and the computation port's authority; [B23-A2] every external-* authority (OD-173): one predicate, at the end of this file
       providerCapabilities: discovery.providerCapabilities,
       riskCeiling: "propose",
       approvalsAvailable: [],
@@ -843,4 +843,13 @@ function sealExpiresAt(payload: unknown): number {
   const raw = typeof payload === "object" && payload !== null ? (payload as Record<string, unknown>).expiresAt : undefined;
   const at = typeof raw === "number" ? raw : typeof raw === "string" ? (/^\d+$/.test(raw) ? Number(raw) : Date.parse(raw)) : Number.NaN;
   return Number.isFinite(at) ? at : Number.POSITIVE_INFINITY;
+}
+
+/** [B23-A2] The authorities a follow-up coordinator turn (`withdrawAuthority`) and a specialist (`deriveSpecialistContext`) never hold
+ *  (OD-173): EVERY `external-*` authority - the acquisition and MCP ports today, and any external authority a later chapter adds - and
+ *  B22-B's `computation-engine` (b22-b-exposure case 4). A prefix, never a list of names, so a new external authority is withdrawn
+ *  before anyone remembers to name it. The claims check (`specialistContextClaims`) still names the two external facts: the
+ *  authority vocabulary holds exactly those two, which b23-a-tier3-vocabulary case 6 pins. */
+export function isWithdrawnAuthority(authority: string): boolean {
+  return authority.startsWith("external-") || authority === "computation-engine";
 }

@@ -19,7 +19,7 @@ import { collectProductionFiles, moduleImportOffenders } from "../../project/__t
 import { createMcpAgentPort, mcpAgentRoster, mcpAgentToolAllowlist, mcpPortRefusalOf, mcpRunIdentifierSubjects, resolveMcpAgentPort, type McpAgentPortOptions } from "../agent-port";
 import { MCP_AUTHORIZATION_FAILURE_CODES, mcpAuthorizationTokenProvider, resetMcpAuthorization, type McpAuthorizationClosed } from "../authorization";
 import { mcpInFlight, preIssuedTokenEnvProvider, resetMcpInFlight, type McpTokenProvider } from "../http-transport";
-import { validateMcpServerRegistry, type McpServerRegistryEntry } from "../server-registry";
+import { isTier3McpToolName, validateMcpServerRegistry, type McpServerRegistryEntry } from "../server-registry"; // [B23-A2 lead, 2026-10-02] + the floor, for case 17's premise
 import { mcpToolsListDigest, resetMcpToolCache } from "../tool-discovery";
 import { importClosure } from "../server/__tests__/_import-closure";
 import { T0 } from "./_fixtures";
@@ -562,33 +562,33 @@ describe("[B20 A4] 6.2 the agent read port", () => {
   it("14. the row's per-tool agent allowlist, fail closed (B20-A4L, the OD-74 amendment): only the tools the operator named are offered or called, and the list NARROWS — it never admits", async () => {
     // the A4 review's security-2 scenario: the pinned listing holds a WRITING tool that declares no annotations, so A2 accepts
     // it exactly as it accepts the read (annotations grant nothing). The row's operator named the read alone.
-    const defs = [tool("lookup"), tool("create-order", { title: "Create order", description: "Create a supplier order." })];
+    const defs = [tool("lookup"), tool("update-record", { title: "Update record", description: "Overwrite a supplier record." })]; // [B23-A2 review, 2026-10-02] reviewed pin move: the writing tool was `create-order`, which the consumed-tool name floor now refuses in the port itself (D23-12), so the premise below (A2 accepts both; only the operator's list narrows) needs a writing tool OUTSIDE the floor; b23-a-tier3-vocabulary case 9 pins the floor
     const fake = fakeMcpServer(script(defs, (call) => rpcResult(call, { content: [text(BENIGN)] })));
     const port = portOver([namingRow("docs-read", defs, ["lookup"])], fake.transport);
     // [B20 A4L lead] the premise, asserted not merely stated: under a row that approves the WHOLE listing, A2 accepts both, so
-    // what removes `create-order` below is the operator's list and nothing else (the check's second new issue)
+    // what removes `update-record` below is the operator's list and nothing else (the check's second new issue)
     const wholeFake = fakeMcpServer(script(defs, (call) => rpcResult(call, { content: [text(BENIGN)] })));
     const wholePort = portOver([wholeListingRow("docs-whole", defs)], wholeFake.transport);
     const wholeCatalog = await wholePort.tools(toolsRequest("docs-whole")) as Extract<McpObservationToolsAnswer, { ok: true }>;
-    expect(wholeCatalog.tools.map((entry) => entry.name), "A2 accepts both; only the row's list narrows").toEqual(["lookup", "create-order"]);
+    expect(wholeCatalog.tools.map((entry) => entry.name), "A2 accepts both; only the row's list narrows").toEqual(["lookup", "update-record"]);
     resetAdmissionControl();
     const catalog = await port.tools(toolsRequest("docs-read")) as Extract<McpObservationToolsAnswer, { ok: true }>;
     expect(catalog.tools.map((entry) => entry.name)).toEqual(["lookup"]);
     expect(catalog.toolsTotal).toBe(1);
     const listed = fake.calls.length;
-    expect(await port.call(callRequest("docs-read", "create-order", { mpn: "LM358DR" }))).toMatchObject({ ok: false, code: "unknown_tool", sent: false });
-    expect(await port.tools(toolsRequest("docs-read", "create-order"))).toMatchObject({ ok: false, code: "unknown_tool", sent: false });
+    expect(await port.call(callRequest("docs-read", "update-record", { mpn: "LM358DR" }))).toMatchObject({ ok: false, code: "unknown_tool", sent: false });
+    expect(await port.tools(toolsRequest("docs-read", "update-record"))).toMatchObject({ ok: false, code: "unknown_tool", sent: false });
     // the argument screen (OD-75) stays FIRST: arguments that disclose the run are refused as that even for a tool the row
     // does not name — the allowlist is the step after it, and neither sends anything
-    expect(await port.call(callRequest("docs-read", "create-order", { mpn: `for ${PRINCIPAL.projectId}` }))).toMatchObject({ ok: false, code: "arguments_disclose_run_identity", sent: false });
+    expect(await port.call(callRequest("docs-read", "update-record", { mpn: `for ${PRINCIPAL.projectId}` }))).toMatchObject({ ok: false, code: "arguments_disclose_run_identity", sent: false });
     expect(fake.calls, "nothing is negotiated, listed or sent for a tool the row does not name").toHaveLength(listed);
     expect(observation(await port.call(callRequest("docs-read", "lookup", { mpn: "LM358DR" }))).content.blocks[0]).toMatchObject({ disposition: "text", untrustedText: BENIGN });
 
-    // [B20 A4L review] D18's ONE fixed sentence per code must be TRUE of both causes (review regressions-5). `create-order` IS
+    // [B20 A4L review] D18's ONE fixed sentence per code must be TRUE of both causes (review regressions-5). `update-record` IS
     // an accepted tool of this pinned listing — A2 accepted it — so a sentence saying otherwise would send the model off to
     // report that the server does not offer it, or to retry elsewhere. It may not name the cause either: which of the two
     // fired would let a model enumerate the operator's list one name at a time.
-    const refusedCall = await viaService(port, { operation: "call", serverId: "docs-read", toolName: "create-order", argumentsJson: JSON.stringify({ mpn: "LM358DR" }) }, "permitted", "run-a4-000000000014");
+    const refusedCall = await viaService(port, { operation: "call", serverId: "docs-read", toolName: "update-record", argumentsJson: JSON.stringify({ mpn: "LM358DR" }) }, "permitted", "run-a4-000000000014");
     expect(refusedCall).toMatchObject({ kind: "refused", status: "unknown_tool" });
     const sentence = (refusedCall as unknown as { diagnostics: string[] }).diagnostics[0]!;
     expect(sentence).toBe("That tool is not available for agent use on MCP server \"docs-read\"; nothing was sent.");
@@ -643,17 +643,17 @@ describe("[B20 A4] 6.2 the agent read port", () => {
     // so the reviewed answer for a 33-name list is "this row approves nothing". Truncating to the first 32 would admit 32
     // unreviewed names — and the writing tool named FIRST would be one of them, which is the security-2 hole A4L closes.
     resetAdmissionControl();
-    const overDefs = [...Array.from({ length: 32 }, (_unused, index) => tool(`t${String(index).padStart(2, "0")}`)), tool("create-order")];
-    const overNames = ["create-order", ...Array.from({ length: 32 }, (_unused, index) => `t${String(index).padStart(2, "0")}`)];
-    expect(overNames).toHaveLength(33);
-    expect(overNames[0], "the writing tool is FIRST, well inside any truncation to 32").toBe("create-order");
+    const overDefs = [...Array.from({ length: 32 }, (_unused, index) => tool(`t${String(index).padStart(2, "0")}`)), tool("update-record")]; // [B23-A2 lead, 2026-10-02] reviewed pin move, as case 14 (:565): the writing tool was `create-order`, which the consumed-tool name floor now voids by itself (agent-port.ts:223), so a truncation to 32 that read it first still approved nothing and this case no longer proved its own claim; `update-record` is outside the floor, so only the count can void the list
+    const overNames = ["update-record", ...Array.from({ length: 32 }, (_unused, index) => `t${String(index).padStart(2, "0")}`)];
+    expect(overNames).toHaveLength(33); expect(overNames.filter((name) => isTier3McpToolName(name)), "no name is a floor name: only the count can void the list").toEqual([]); // [B23-A2 lead, 2026-10-02]
+    expect(overNames[0], "the writing tool is FIRST, well inside any truncation to 32").toBe("update-record");
     const overRow = pinnedRow("docs-over", overDefs, { agentTools: overNames });
     expect(validateMcpServerRegistry([overRow]).map((violation) => violation.rule), "the validator refuses the row on the count alone").toEqual(["agent-tools"]);
     expect(mcpAgentToolAllowlist(overRow), "the whole list is void, never its first 32 names").toEqual(new Set());
     expect(mcpAgentRoster([overRow], ENV_ON)).toEqual([]);
     const overFake = fakeMcpServer(script(overDefs, (call) => rpcResult(call, { content: [text(BENIGN)] })));
     const overPort = portOver([overRow], overFake.transport);
-    for (const name of ["create-order", "t00", "t31"]) {
+    for (const name of ["update-record", "t00", "t31"]) {
       expect(await overPort.call(callRequest("docs-over", name, { mpn: "LM358DR" })), name).toMatchObject({ ok: false, code: "server_unavailable", sent: false });
     }
     expect(overFake.calls, "nothing is sent for a row whose list the validator refuses whole").toHaveLength(0);
@@ -672,7 +672,7 @@ describe("[B20 A4] 6.2 the agent read port", () => {
     const crafted: ReadonlyArray<readonly [string, (row: Record<string, unknown>) => void, boolean]> = [
       ["no agentTools at all", (row) => { delete row.agentTools; }, true],
       ["a string", (row) => { row.agentTools = "lookup"; }, true],
-      ["an array-like object", (row) => { row.agentTools = { 0: "create-order", 1: "lookup", length: 2 }; }, true],
+      ["an array-like object", (row) => { row.agentTools = { 0: "update-record", 1: "lookup", length: 2 }; }, true], // [B23-A2 lead, 2026-10-02] was "create-order": since the floor (D23-12) a coerced list naming it approves nothing anyway, so the shape no longer proved the port refuses the coercion
       ["a list whose entry throws when it is read", (row) => { row.agentTools = throwing; }, false],
     ];
     for (const [label, change, validated] of crafted) {

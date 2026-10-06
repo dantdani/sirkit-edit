@@ -50,8 +50,8 @@ const ALL_TESTS = ["app", "lib", "components"].flatMap((root) => {
 });
 const selected = (filters: readonly string[]): string[] => ALL_TESTS.filter((file) => filters.some((filter) => file.includes(filter)));
 /** [B20 A0] The chapters whose every suite must be admitted to a CI job (OD-59); a suite belongs to a chapter by its file-name prefix.
- *  [B21 A] b21- admitted (OD-124). [B22-A1] b22- admitted with the first b22- suites, by one directory filter (OD-146). */
-const CHAPTERS = ["b19-", "b20-", "b21-", "b22-"] as const;
+ *  [B21 A] b21- admitted (OD-124). [B22-A1] b22- admitted with the first b22- suites, by one directory filter (OD-146). [B23-A1] b23- admitted with the first b23- suites, by one directory filter (OD-180). */
+const CHAPTERS = ["b19-", "b20-", "b21-", "b22-", "b23-"] as const;
 const chapterFiles = (chapter: (typeof CHAPTERS)[number]): string[] => ALL_TESTS.filter((file) => file.includes(`/${chapter}`));
 
 /**

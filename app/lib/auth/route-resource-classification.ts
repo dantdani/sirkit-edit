@@ -95,7 +95,51 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   "/api/mcp": { durable: "read", sensitivity: "session-identity" },
   // [B20 B2] the token route returns a credential bound to the caller's own identity and live membership; nothing is stored
   "/api/mcp/token": { durable: "none", sensitivity: "session-identity" },
+  // [B23-B1] reads the authority head, the board head and lineage and the release ledger, and regenerates the release (no ledger write) [B23-B2 review, 2026-10-04] regressions-3: the commit composes the durable exchange record (mfg.provider-exchange.v1), which writes only past a reviewed transfer descriptor; none exists, so the row stays read; the revision adding the first descriptor moves it to read-write (b23-b-exchange-ledger case 21 fails until it does)
+  "/api/pcb/provider-exchange": { durable: "read", sensitivity: "project-durable", expensive: true },
 };
+
+/**
+ * [B23-A2] OD-174, D23-9: what a route sends OUT of Sirkit through the egress boundary, a closed vocabulary - `none` (nothing
+ * through the boundary: no observation query and no files), `observation-query` (a bounded query whose answer is an observation:
+ * a distributor or aggregator search, an approved MCP server's tool call, the cross-verify prompt to the operator's SchGen
+ * endpoint; never a file) or `files` (design or part files leave Sirkit: only through a human-only `externalTransfer` row,
+ * OD-174). The value is per path and DERIVED: a path sends an observation query exactly when its runtime import closure reaches [superseded 2026-10-05 by the B23 closeout (B23-B1, B23-B2, OD-182): but a transfer row's value is declared `files` since B23-B1, never derived; since B23-B2 the provider exchange route's closure reaches the boundary only through provider-egress.ts, and its derived value, observation-query, is pinned beside the declared one]
+ * the egress boundary `app/lib/net/outbound-fetch.ts`, unless a reviewed cache-only exemption holds (`b23-a-route-vocabulary`, the
+ * way `b22-a2-process-census` case 3 derives `external_process`). No route sends files in B23-A2. [B23-A2 review] `none` does NOT
+ * mean the route sends nothing: the model-provider SDKs open their own connections, so a prompt or an embedding input sent to the
+ * configured LLM provider is the separate `modelEgress` column (below). A row sends nothing out of Sirkit exactly when it is
+ * `none` and not `modelEgress` (Sirkit's own Supabase and Postgres store aside: the durable_access column), OD-182 (a).
+ */
+export const OUTBOUND_EGRESS = Object.freeze(["none", "observation-query", "files"] as const);
+export type OutboundEgress = (typeof OUTBOUND_EGRESS)[number];
+const OUTBOUND_EGRESS_BY_PATH: Readonly<Record<string, OutboundEgress>> = Object.freeze({
+  "/api/bom": "observation-query", // live distributor pricing for a member (OD-31, OD-33)
+  "/api/bom/diff": "observation-query", // live pricing of the current BOM against a snapshot
+  "/api/bom/snapshot": "observation-query", // live pricing of the snapshot taken (the path's GET row carries the path's value)
+  "/api/chat": "observation-query", // the external acquisition read port and the approved MCP observation port
+  "/api/parts/external-search": "observation-query", // a member's bounded external candidate search
+  "/api/schematic/cross-verify": "observation-query", // the cross-verify prompt to the operator-configured SchGen endpoint
+});
+/**
+ * [B23-A2 review] The paths that can send a model input - a prompt or an embedding input - to the configured LLM provider (OpenAI
+ * or Anthropic) through the provider SDK's own transport: DERIVED (b23-a-route-vocabulary case 4) from the route's handler
+ * bindings referencing an SDK client (a binding-level walk: module reachability would mark nearly every route, because the DB
+ * schema imports the embedding module's dimension constant). The `provider_credit` column is a cost marker, not this.
+ */
+const MODEL_EGRESS_PATHS: ReadonlySet<string> = new Set([
+  "/api/architecture/propose", "/api/calculation/propose", "/api/chat", "/api/circuit-knowledge/propose", "/api/circuit-verification/propose",
+  "/api/component-selection/propose", "/api/interfaces/propose", "/api/parts/search", "/api/pcb/ai-rules/from-brief", "/api/pcb/assign/suggest",
+  "/api/pcb/edit/assist", "/api/pcb/footprints/search", "/api/pcb/repair/agent", "/api/power/propose", "/api/schematic", "/api/schematic-compiler/propose",
+  "/api/schematic/build", "/api/schematic/build-multi", "/api/schematic/edit", "/api/schematic/edit-build", "/api/schematic/layout-critic",
+  "/api/schematic/review", "/api/spice/ai",
+]);
+/** [B23-A2 review] Reviewed: the PUBLIC paths that send a model input, one reason each (`outboundEgressViolations`). Both embed the
+ *  anonymous caller's search text with OpenAI; nothing else of the caller's leaves. Recorded, not changed: A2 adds no route change. */
+export const PUBLIC_MODEL_EGRESS: Readonly<Record<string, string>> = Object.freeze({
+  "/api/parts/search": "the public catalogue search embeds the caller's query text with OpenAI (embedQuery) for its semantic ranking",
+  "/api/pcb/footprints/search": "the public footprint search embeds the caller's q text with OpenAI (embedQuery) for its semantic ranking",
+});
 
 /**
  * [B16.0.3 §C] the effective-resource ANNOTATION-COMPLETENESS map: a route
@@ -128,6 +172,10 @@ export interface RouteResourceRow {
   authoritativeWrite: boolean;
   releaseOrQualification: boolean;
   staticOrCatalog: boolean;
+  /** [B23-A2] OD-174: what the route sends out of Sirkit through the egress boundary (none, observation-query or files). */
+  outboundEgress: OutboundEgress;
+  /** [B23-A2 review] OD-182 (a): whether the route can send a model input to the configured LLM provider (its SDK's own transport). */
+  modelEgress: boolean;
 }
 
 function rowFor(policy: RoutePolicy): RouteResourceRow {
@@ -149,6 +197,8 @@ function rowFor(policy: RoutePolicy): RouteResourceRow {
     authoritativeWrite: policy.authoritativeWrite,
     releaseOrQualification: policy.releaseOrQualification,
     staticOrCatalog,
+    outboundEgress: policy.externalTransfer === true ? "files" : Object.hasOwn(OUTBOUND_EGRESS_BY_PATH, policy.path) ? OUTBOUND_EGRESS_BY_PATH[policy.path]! : "none", // [B23-A2] [B23-B1] files: declared by the transfer row itself, never derived (OD-182 (a))
+    modelEgress: MODEL_EGRESS_PATHS.has(policy.path), // [B23-A2 review]
   };
 }
 
@@ -171,13 +221,30 @@ function csvCell(value: string): string {
 }
 
 export function renderRouteResourceClassificationCsv(): string {
-  const header = ["path", "method", "is_public", "durable_access", "project_data_sensitivity", "provider_credit", "external_process", "expensive", "authoritative_write", "release_or_qualification", "static_or_catalog"];
+  const header = ["path", "method", "is_public", "durable_access", "project_data_sensitivity", "provider_credit", "external_process", "expensive", "authoritative_write", "release_or_qualification", "static_or_catalog", "outbound_egress", "model_egress"]; // [B23-A2] appended columns, so external_process stays at index 6 (b22-a2-process-census case 3)
   const rows = [...routeResourceClassification()]
     .sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method))
     .map((r) => [
       r.path, r.method, String(r.isPublic), r.durableAccess, r.projectDataSensitivity,
       String(r.providerCredit), r.externalProcess, String(r.expensive), String(r.authoritativeWrite),
-      String(r.releaseOrQualification), String(r.staticOrCatalog),
+      String(r.releaseOrQualification), String(r.staticOrCatalog), r.outboundEgress, String(r.modelEgress),
     ].map(csvCell).join(","));
   return [header.join(","), ...rows].join("\n") + "\n";
+}
+
+/** [B23-A2] OD-174's classification gates, one line per violation (`<METHOD> <path>: <reason>`): the value is in the closed vocabulary;
+ *  `files` only on an `externalTransfer` row and an `externalTransfer` row only with `files`; a public row sends no observation query
+ *  and no files. [B23-A2 review] `modelEgress` is a boolean, and a public row that sends a model input is a `PUBLIC_MODEL_EGRESS` path. */
+export function outboundEgressViolations(rows: readonly RouteResourceRow[] = routeResourceClassification(), policies: readonly RoutePolicy[] = allRoutePolicies()): string[] {
+  const out: string[] = [];
+  for (const row of rows) {
+    const policy = policies.find((candidate) => candidate.path === row.path && candidate.method === row.method);
+    const key = `${row.method} ${row.path}`;
+    if (!(OUTBOUND_EGRESS as readonly string[]).includes(row.outboundEgress) || typeof row.modelEgress !== "boolean") { out.push(`${key}: unknown_value`); continue; }
+    if (row.outboundEgress === "files" && policy?.externalTransfer !== true) out.push(`${key}: files_without_transfer`);
+    if (policy?.externalTransfer === true && row.outboundEgress !== "files") out.push(`${key}: transfer_without_files`);
+    if (row.isPublic && row.outboundEgress !== "none") out.push(`${key}: public_sends`);
+    if (row.isPublic && row.modelEgress && !Object.hasOwn(PUBLIC_MODEL_EGRESS, row.path)) out.push(`${key}: public_model_egress`); // [B23-A2 review]
+  }
+  return out;
 }

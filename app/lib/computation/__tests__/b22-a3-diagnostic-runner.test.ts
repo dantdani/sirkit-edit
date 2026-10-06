@@ -29,7 +29,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, sep } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest"; import { setFlagsFromString } from "node:v8"; import { runInNewContext } from "node:vm"; // [B23 lead, 2026-10-03] collectGarbage, case 13
 
 interface FakeScript {
   stdout?: string | ((call: SpawnCall) => string);
@@ -203,7 +203,7 @@ const childOf = (call: SpawnCall): FakeChild => proc.children.find((child) => ch
 const spawnedPid = (pid: number): boolean => proc.children.some((child) => child.pid === pid);
 const killedPid = (pid: number): boolean => taskkillCalls().some((call) => call.args[1] === String(pid));
 const deckOf = (call: SpawnCall): string | undefined => fsState.writes.find((write) => write.path === join(String(call.options.cwd), "deck.cir"))?.content;
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)); const collectGarbage = (): void => { setFlagsFromString("--expose_gc"); const gc = runInNewContext("gc") as () => void; for (let index = 0; index < 5; index += 1) gc(); }; // [B23 lead, 2026-10-03]
 async function until(condition: () => boolean, label: string, ms = 2_000): Promise<void> {
   const deadline = Date.now() + ms;
   while (!condition()) {
@@ -875,7 +875,7 @@ describe("[B22-A3] the runner executes the ngspice-local-diagnostic profile", ()
     proc.script.push({ pid: 1403, hang: true });
     const abortUnconfirmed = new AbortController();
     const unconfirmed = simulate(abortUnconfirmed.signal);
-    await until(() => spawnedPid(1403), "the simulate spawn 1403");
+    await until(() => spawnedPid(1403), "the simulate spawn 1403"); collectGarbage(); // [B23 lead, 2026-10-03] a collection between the spawn and the abort: before retainedSignal it took the dropped Request and the abort with it (CI on 9cb675d; 3 of 3 with this line)
     abortUnconfirmed.abort();
     await until(() => killedPid(1403), "the abort's tree kill");
     await vi.advanceTimersByTimeAsync(runner.DIAGNOSTIC_KILL_CONFIRM_MS);

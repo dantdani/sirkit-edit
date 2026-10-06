@@ -1,22 +1,25 @@
 {
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
-  "currentChapter": "B22",
-  "currentCheckpoint": "B22 complete on chapter/b22-sandboxed-computation: the discovery, A1, A2, A3, B, C, D and the closeout (1/2, 2/2) committed; the four validation artifacts (192 paths / 8 commits since d0d2ec8; 29 suites / 291 it( blocks / 586 tests; OD-134..OD-159, OD-137 drafted, OD-159 proposed; D22-1..24 - 13 closed, 9 in part, 2 RECORDED); the final validation run at 85439e7 green (6,719 vitest passed, 34 opt-in skipped - gate J ran the real bundled FreeRouting twice, recorded; tsc 0; eslint 0 on 130 files, 121 TypeScript and 9 .mjs; 20 generators zero drift; the existing browser suite 48 of 48 and the orchestration config 4 of 4, 407 s); the review's 18 confirmed findings (documents only) fixed test-first; CI green on all 8 B22 commits; verdict PARTIAL (the production simulation runner BLOCKED - no qualified isolation boundary, production host undetermined, LB-10, OD-134; named computations and diagnostic simulation diagnostic-only on runner-enforced limits, no OS limit; live case 4 NOT CONTAINED); PR #13 to be undrafted and merged normally after green CI",
+  "currentChapter": "B23",
+  "currentCheckpoint": "B23 complete on chapter/b23-external-manufacturing: the discovery, A1, A2, B1, B2, B3, C, D and the closeout (1/2, 2/2) committed, with the lead fixes e8c7928, 4a988c8, 9cb675d, f0e7bae, a02c9fb and d5f5512; the four validation artifacts (123 paths / 15 commits from 43cb1b0 to b6c6b0d, 127 / 16 with this commit; 30 suites / 289 it( blocks / 392 tests; OD-160..OD-188, OD-160's heading recorded in this commit, OD-189 unused; D23-1..21 all closed, D23-11 and D23-13 offline only); the final validation run at b6c6b0d green (7,529 vitest passed, 36 opt-in skipped, the Java-capable suites excluded; tsc 0; eslint 0 on the 92 files B23 changed - the chain's whole-project eslint on a clean tree exits 1 on 33 pre-existing errors in 14 files (69 problems in 37 files) B23 never changed; 21 generators zero drift; the existing browser suite 48 of 48 and the orchestration config 4 of 4, 406 s; gate S 177 passed and, after the review round, gate S2 100 passed - every suite that directly reads a B23-changed file ran but the Java-capable manufacturing-release-gate); CI green on every run since d5f5512, b6c6b0d included; verdict PARTIAL (no provider admitted, no live exchange - LB-11, OD-160; ordering visibly disabled, its contract tested offline only - LB-12; physical evidence defined, none exists - LB-5; no agent can release, transfer or spend; census 166/163/3/0, counts 47/36/9/27); PR #14 to be undrafted and merged normally after green CI",
   "status": "in_progress",
-  "baseSha": "d0d2ec8",
-  "branch": "chapter/b22-sandboxed-computation",
-  "lastGreenSha": "85439e7",
-  "pullRequest": "PR #13 (chapter/b22-sandboxed-computation -> main): undrafted at the closeout; merge only after green CI, never auto-merge",
+  "baseSha": "43cb1b0",
+  "branch": "chapter/b23-external-manufacturing",
+  "lastGreenSha": "b6c6b0d",
+  "pullRequest": "PR #14 (chapter/b23-external-manufacturing -> main): undrafted at the closeout; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings",
     "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)",
-    "authoritative sandboxed simulation on a qualified OCI platform: BLOCKED-LIVE-QUALIFICATION (LB-10)"
+    "authoritative sandboxed simulation on a qualified OCI platform: BLOCKED-LIVE-QUALIFICATION (LB-10)",
+    "physical fabrication, assembly, incoming inspection and functional test: not attempted (LB-5)",
+    "live DFM/quote exchange with a manufacturer or quote API: BLOCKED-LIVE-QUALIFICATION (LB-11)",
+    "ordering through a provider sandbox: BLOCKED-LIVE-QUALIFICATION (LB-12)"
   ],
-  "nextAction": "Undraft PR #13 with the closeout's description, wait for green CI on commit 2/2, merge normally (no auto-merge); then B23 (external manufacturing, DFM, quoting and procurement boundaries) on a new chapter branch from main, starting from its discovery draft (ready). Carried to the owner: the two pinning settings SIRKIT_NGSPICE_INSTALL_ROOT and SIRKIT_NGSPICE_INSTALL_SHA256 (local simulation fails closed until set), OD-134 (an OCI engine and B22-A4; B24-A's production host), OD-159 (a decision), OD-158, OD-141, OD-140, OD-155, OD-156, OD-151. Later work (no owner decision): FreeRouting's and kicad-cli's kill semantics and digest checks, the fab archive reader's per-entry bound, one deck validator across /api/simulate and the Studio, a count bound on a record's event list, execute's lowering manifest bound to the server (D22-6), the job store's per-scope plan limit, the D22-12 relabel, OD-157's early 422, pw.sh's self-matching cleanup, an opt-in guard (or an agent-chain exclusion) for autoroute-boundary-integrity.",
-  "updatedAt": "2026-10-02T08:35:38-04:00",
-  "previousChapter": "B21 merged normally into main as e109d76 (PR #11, 2026-10-01) after green CI on b11ef18; verdict PARTIAL (live qualification BLOCKED under LB-9). SEC-1 (corrective security branch fix/spice-deck-injection; D22-3 and D22-5's ngspice half) merged normally as d0d2ec8 (PR #12) after green CI on 0d38504"
+  "nextAction": "Undraft PR #14 with the closeout's description, wait for green CI on commit 2/2, merge normally (no auto-merge); then B24 (production qualification, evaluation and launch hardening) on a new chapter branch from main, starting from its discovery draft (ready: verified and audited at dfd51e3; re-verify on the B23-complete tree and finalize after the merge). Carried to the owner: OD-160 (a provider account with a sandbox or staging path; B23-B4 only then), OD-171 (the seven ordering prerequisites and a reviewed port wiring), OD-163/OD-183 (g) (the board's file-safe name), OD-174 (the two public searches that send anonymous text to OpenAI), OD-181 (a)/(b), OD-184 (m), OD-177 with discovery section 8 item 14, OD-187 (i), section 8 items 15-17, the answer licence (LB-11), and the B22 items. Later work (no owner decision): a reconciliation read, the matcher extraction, the next reviewed registry revision (providerRow, the rows parameter, provider-registry.ts:16), the latent paths' hardening, B24-E's evidence store and review port, lead-gates.sh's eslint step on a clean tree (it lints the whole project), the 33 pre-existing eslint errors on main (14 files).",
+  "updatedAt": "2026-10-06T01:25:54-04:00",
+  "previousChapter": "B22 merged normally into main as 43cb1b0 (PR #13, 2026-10-02) after green CI on 849a933; verdict PARTIAL (the production simulation runner BLOCKED under LB-10, OD-134)"
 }

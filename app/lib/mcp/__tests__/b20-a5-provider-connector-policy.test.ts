@@ -327,6 +327,13 @@ describe("[B20 A5] providerConnectorVerdict — the closed refusal (OD-90)", () 
       ["unsorted", ["lookup", "search"]],
       ["a non-string entry", [7]],
       ["one valid name beside an invalid one", ["search", "not a tool name"]],
+      // [B23-A2 lead, 2026-10-02] + the consumed-tool name floor (D23-12): the port approves NOTHING for a list naming a Tier 3 tool
+      // (agent-port.ts:223, isTier3McpToolName), wherever the name stands; a floor-like name outside the pattern is skipped by both
+      ["a floor name first", ["create-order", "lookup"]],
+      ["a floor name last", ["lookup", "send_gerbers"]],
+      ["a money word beside a read", ["search", "payInvoice"]],
+      ["only floor names", ["checkout", "get_quote"]],
+      ["a floor-like name outside the pattern beside a valid one", ["create order", "lookup"]],
     ];
     const disagreements: string[] = [];
     for (const [label, agentTools] of shapes) {

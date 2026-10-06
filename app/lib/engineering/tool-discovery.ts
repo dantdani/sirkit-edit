@@ -176,7 +176,7 @@ export function discoverTools(registry: ToolRegistry, context: DiscoveryContext)
       }
       // Channel: agents see only agent-exposed tools (B04 exposes none of the mutation classes; B18-C exposes reviewed
       // granted executions to the assistant-agent channel only).
-      if ((context.channel === "assistant-agent" || context.channel === "automation") && !descriptor.agentExposed) {
+      if ((context.channel === "assistant-agent" || context.channel === "automation") && (!descriptor.agentExposed || descriptor.sideEffects === "external-transfer")) { // [B23-A2 review] a transfer is never listed for an agent, whatever exposure a registry claims (OD-173)
         return exclude(descriptor, "not_agent_exposed");
       }
       if (descriptor.grantOnly && context.channel !== "assistant-agent") return exclude(descriptor, "grant_only");

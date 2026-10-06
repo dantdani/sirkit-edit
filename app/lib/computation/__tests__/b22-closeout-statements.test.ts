@@ -452,7 +452,7 @@ function subsection(text: string, heading: string): string {
 }
 
 describe("[B22 closeout] the sandbox, authority and count statements are superseded in place, and none comes back uncorrected (D22-14, D22-16, OD-144)", () => {
-  it("1. no production source or test file states a superseded claim uncorrected: every line that calls the ngspice runner a sandbox, confined, isolated or networkless, calls local execution authoritative, chooses the executable from PATH, names the simulate route as the process pattern, or counts the agent set, the registry or the spawners as before B22 carries the closeout's dated note on it (or, for the one wrapped statement, on the line after it) - or is one of four statements true as written (the allow-list)", () => {
+  it("1. no production source or test file states a superseded claim uncorrected: every line that calls the ngspice runner a sandbox, confined, isolated or networkless, calls local execution authoritative, chooses the executable from PATH, names the simulate route as the process pattern, or counts the agent set, the registry or the spawners as before B22 carries the closeout's dated note on it (or, for the one wrapped statement, on the line after it) - or is one of four statements true as written (the allow-list)", { timeout: 60_000 }, () => {
     // [B22 closeout (1/2) lead] the check's new issue: the 'no network' proximity rule must not flag the repository's own test-header
     // disclaimer "No network, no model" beside a simulation word (true of the test, not a runner guarantee), and must still flag a claim
     const network = new RegExp(CLAIMS.find(([label]) => label.startsWith("'no network'"))![1].source, "i");
@@ -467,7 +467,7 @@ describe("[B22 closeout] the sandbox, authority and count statements are superse
     expect(uncorrectedCode([...paths, ...tests], read)).toEqual([]);
   });
 
-  it("2. no page states a superseded claim uncorrected: every artifact page (the lead's records aside), every doc and the root README that calls the runner a sandbox, confined, isolated or networkless (or puts 'no network' in one sentence with ngspice, the diagnostic runner or the simulator), calls local execution authoritative, chooses the executable from PATH, names the simulate route as the process pattern, or counts the agent set, the registry or the spawners as before B22 carries the closeout's dated note in that statement's own block - or is one of the finder's dated records the page allow-list names, or a B15/B16 chapter's own dated count, each admission pinned", () => {
+  it("2. no page states a superseded claim uncorrected: every artifact page (the lead's records aside), every doc and the root README that calls the runner a sandbox, confined, isolated or networkless (or puts 'no network' in one sentence with ngspice, the diagnostic runner or the simulator), calls local execution authoritative, chooses the executable from PATH, names the simulate route as the process pattern, or counts the agent set, the registry or the spawners as before B22 carries the closeout's dated note in that statement's own block - or is one of the finder's dated records the page allow-list names, or a B15/B16 chapter's own dated count, each admission pinned", { timeout: 60_000 }, () => {
     const paths = pages();
     expect(paths).toEqual(expect.arrayContaining([`${B24}simulate-process-security-proof.md`, "docs/STATUS.md", "README.md"]));
     expect(paths).not.toContain(PAGE);
@@ -478,7 +478,7 @@ describe("[B22 closeout] the sandbox, authority and count statements are superse
     expect([admitted.filter((by) => by === "allowed").length, admitted.filter((by) => by === "history").length]).toEqual([PAGE_ALLOWED_ADMITS, PAGE_HISTORY.admits]);
   });
 
-  it("3. the allow-lists are small, exact and cannot rot, and the scans bite: four code statements and eighteen page lines, each on exactly one line of its file, each still stating a claim and none carrying a note; the one wrapped statement is followed by its note; with every note stripped the scans report exactly the statements the closeout noted; an ordinary count of 12 is not reported while every retired \"12\" title wording is; an unnoted count, spawner or 'no network' statement added to a page or a route comment is reported; an allowed line moved to another file is reported; and a page note moved away from its statement's block is reported", () => {
+  it("3. the allow-lists are small, exact and cannot rot, and the scans bite: four code statements and eighteen page lines, each on exactly one line of its file, each still stating a claim and none carrying a note; the one wrapped statement is followed by its note; with every note stripped the scans report exactly the statements the closeout noted; an ordinary count of 12 is not reported while every retired \"12\" title wording is; an unnoted count, spawner or 'no network' statement added to a page or a route comment is reported; an allowed line moved to another file is reported; and a page note moved away from its statement's block is reported", { timeout: 60_000 }, () => { // [B23 lead, 2026-10-02] whole-tree scans: case 3 took 5,076 ms alone at 43cb1b0 against the 5 s default, and every later page adds to them
     // [B22 closeout (1/2) review] regressions-1: an ordinary count of 12 is no agent-set claim, while every retired "12" title wording
     // still is; tests-2: a page's stale count or spawner count, and 'no network' beside ngspice on a page or in a route comment, are reported
     const misses: string[] = [];
@@ -615,7 +615,7 @@ describe("[B22 closeout] the sandbox, authority and count statements are superse
     for (const path of suites) for (const line of read(path).split(NEWLINE).filter((text) => text.includes(RETITLED))) expect(line, path).toMatch(/; assertions unchanged$/);
   });
 
-  it("6. every page statement the closeout noted carries the note in its own block (60 statements, the B22 pages' own hand-offs to the closeout among them), each note keeps what its statement needs (an INFERRED reading stays open, a kill_unconfirmed run is no exit, the exact map is not the win32 child's whole environment), and every test file and page keeps its pinned number of notes - 75 - while no other file carries one (the lead's records are not scanned)", () => {
+  it("6. every page statement the closeout noted carries the note in its own block (60 statements, the B22 pages' own hand-offs to the closeout among them), each note keeps what its statement needs (an INFERRED reading stays open, a kill_unconfirmed run is no exit, the exact map is not the win32 child's whole environment), and every test file and page keeps its pinned number of notes - 75 - while no other file carries one (the lead's records are not scanned)", { timeout: 60_000 }, () => {
     const problems: string[] = [];
     for (const [path, statement] of NOTED_PAGES) {
       if (statement.includes(NOTE)) problems.push(`${path}: the entry is a note, not a stale statement`);
@@ -666,7 +666,7 @@ describe("[B22 closeout] the sandbox, authority and count statements are superse
     }
   });
 
-  it("8. the closeout page records every B22 export with no production caller and what was done with it, re-derived from the tree: a recorded export is still exported and used only as its kind says (no other production source names it; a vocabulary is typed from it; a test names a seam; a dormant module has no production importer but its dormant sibling); a retired one is gone, its tombstone or retired parameter in place; and each B22 page names its records", () => {
+  it("8. the closeout page records every B22 export with no production caller and what was done with it, re-derived from the tree: a recorded export is still exported and used only as its kind says (no other production source names it; a vocabulary is typed from it; a test names a seam; a dormant module has no production importer but its dormant sibling); a retired one is gone, its tombstone or retired parameter in place; and each B22 page names its records", { timeout: 60_000 }, () => {
     const rows = [...section(read(PAGE), "## 3. ").matchAll(EXPORT_ROW)].map((match) => ({ module: match[1]!, name: match[2]!, member: match[3]!.replace(/`/g, ""), kind: match[4]!, decision: match[5]!, page: match[6]!, why: match[7]!.trim() }));
     expect(rows).toHaveLength(30);
     expect(rows.filter((row) => row.decision === "RETIRE")).toHaveLength(4);
@@ -743,7 +743,7 @@ describe("[B22 closeout] the sandbox, authority and count statements are superse
     }
   });
 
-  it("9. the page's sections 1 and 2 are the tree's notes and retitles, row for row - each row's file:line carries the note with the row's references and words, or the retitle note in a suite of the row's `it(` count; no note or retitle in the tree lacks a row and every retired wording has one - every closeout tag in app/ is a retitle, a tombstone or the dead mock key's annotation, and the page's head says which sections the tripwire re-derives (coverage-1, tests-5)", () => {
+  it("9. the page's sections 1 and 2 are the tree's notes and retitles, row for row - each row's file:line carries the note with the row's references and words, or the retitle note in a suite of the row's `it(` count; no note or retitle in the tree lacks a row and every retired wording has one - every closeout tag in app/ is a retitle, a tombstone or the dead mock key's annotation, and the page's head says which sections the tripwire re-derives (coverage-1, tests-5)", { timeout: 60_000 }, () => {
     const page = read(PAGE);
     const problems: string[] = [];
     const head = page.slice(0, page.indexOf(`${NEWLINE}## 0. `));

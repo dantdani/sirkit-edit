@@ -51,7 +51,7 @@ export const OPERATION_CLASS_RISK: Record<ToolOperationClass, number> = Object.f
   release: 4,
 });
 
-export const TOOL_SIDE_EFFECTS = ["none", "derived-cache", "proposal-artifact", "engineering-state", "release-artifact", "session-state"] as const;
+export const TOOL_SIDE_EFFECTS = ["none", "derived-cache", "proposal-artifact", "engineering-state", "release-artifact", "session-state", "external-transfer"] as const; // [B23-A2] external-transfer: data leaves Sirkit for a third party - Tier 3 whatever the id says (permission-tiers.ts, OD-173)
 export type ToolSideEffect = (typeof TOOL_SIDE_EFFECTS)[number];
 
 export const TOOL_BINDING_STATUSES = [
@@ -292,7 +292,7 @@ export function validateToolDescriptor(descriptor: ToolDescriptor, knownCommandI
   } for (const issue of computationBindingIssues(descriptor, binding)) err(issue); // [B22-B] the bound-computation rule (OD-139), at the end of this file
   if (descriptor.lifecycle === "deprecated" && !descriptor.deprecation?.reason) err("deprecated tools must carry deprecation metadata");
   if (descriptor.lifecycle === "retired" && descriptor.discovery !== "internal-only") err("retired tools cannot remain discoverable");
-  if (descriptor.operationClass === "release" && descriptor.agentExposed) err("release tools can never be agent-exposed");
+  if (descriptor.operationClass === "release" && descriptor.agentExposed) err("release tools can never be agent-exposed"); for (const issue of externalTransferIssues(descriptor)) err(issue); // [B23-A2] the external-transfer rule (OD-173), at the end of this file
   return errors;
 }
 
@@ -497,4 +497,10 @@ function computationBindingIssues(descriptor: ToolDescriptor, binding: ToolImple
     issues.push("the computation-engine authority belongs to bound-computation tools only");
   }
   return issues;
+}
+
+/** [B23-A2] A tool whose side effect is `external-transfer` sends data out of Sirkit: it is Tier 3 (permission-tiers.ts) and can
+ *  never be agent-exposed, whatever its class says (OD-173). Both port-bound read bindings already refuse the side effect (above). */
+function externalTransferIssues(descriptor: ToolDescriptor): string[] {
+  return descriptor.sideEffects === "external-transfer" && descriptor.agentExposed ? ["an external-transfer tool can never be agent-exposed (Tier 3: data leaves Sirkit, OD-173)"] : [];
 }

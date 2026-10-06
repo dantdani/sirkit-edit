@@ -115,6 +115,7 @@ GET,/api/pcb/footprints/[id],public,public,publicRoute(…),-,-,-,no-body,-,dura
 GET,/api/pcb/footprints/resolve,public,public,publicRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
 GET,/api/pcb/footprints/search,public,public,publicRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
 POST,/api/pcb/placement/preview,public,public,publicJsonRoute(…),application/json,16000000,45000,bounded-body-before-compute,canonical-wrapper:publicJsonRoute,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/pcb/provider-exchange,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,16384,PCB_SYNC_API_DEADLINE_MS,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/pcb/qualify,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,PCB_SYNC_API_MAX_BYTES,PCB_SYNC_API_DEADLINE_MS,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,durable+process,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/pcb/release,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,PCB_SYNC_API_MAX_BYTES,PCB_SYNC_API_DEADLINE_MS,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/pcb/repair/agent,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,16000000,45000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
