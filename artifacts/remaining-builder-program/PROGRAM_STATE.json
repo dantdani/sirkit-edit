@@ -1,13 +1,13 @@
 {
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
-  "currentChapter": "B23",
-  "currentCheckpoint": "B23 complete on chapter/b23-external-manufacturing: the discovery, A1, A2, B1, B2, B3, C, D and the closeout (1/2, 2/2) committed, with the lead fixes e8c7928, 4a988c8, 9cb675d, f0e7bae, a02c9fb and d5f5512; the four validation artifacts (123 paths / 15 commits from 43cb1b0 to b6c6b0d, 127 / 16 with this commit; 30 suites / 289 it( blocks / 392 tests; OD-160..OD-188, OD-160's heading recorded in this commit, OD-189 unused; D23-1..21 all closed, D23-11 and D23-13 offline only); the final validation run at b6c6b0d green (7,529 vitest passed, 36 opt-in skipped, the Java-capable suites excluded; tsc 0; eslint 0 on the 92 files B23 changed - the chain's whole-project eslint on a clean tree exits 1 on 33 pre-existing errors in 14 files (69 problems in 37 files) B23 never changed; 21 generators zero drift; the existing browser suite 48 of 48 and the orchestration config 4 of 4, 406 s; gate S 177 passed and, after the review round, gate S2 100 passed - every suite that directly reads a B23-changed file ran but the Java-capable manufacturing-release-gate); CI green on every run since d5f5512, b6c6b0d included; verdict PARTIAL (no provider admitted, no live exchange - LB-11, OD-160; ordering visibly disabled, its contract tested offline only - LB-12; physical evidence defined, none exists - LB-5; no agent can release, transfer or spend; census 166/163/3/0, counts 47/36/9/27); PR #14 to be undrafted and merged normally after green CI",
+  "currentChapter": "B24",
+  "currentCheckpoint": "B24 discovery committed on chapter/b24-production-qualification: D24-1..40 (re-verified on the B23 tree dfd51e3 by twelve verifiers: 0 refuted, none fully closed, 16 changed or partly closed since; 193 corrections, each audited, applied in place; B23's closeout delta-checked), OD-190..OD-222 drafted with safe defaults, LB-13..LB-17 proposed; plan A1..A4, B1..B3, C1..C3, D1..D3, E, F, closeout and the final program report; expected program verdict PARTIAL",
   "status": "in_progress",
-  "baseSha": "43cb1b0",
-  "branch": "chapter/b23-external-manufacturing",
-  "lastGreenSha": "b6c6b0d",
-  "pullRequest": "PR #14 (chapter/b23-external-manufacturing -> main): undrafted at the closeout; merge only after green CI, never auto-merge",
+  "baseSha": "57c3b29",
+  "branch": "chapter/b24-production-qualification",
+  "lastGreenSha": "f663d71",
+  "pullRequest": "draft PR (chapter/b24-production-qualification -> main) opened after the discovery commit; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
@@ -19,7 +19,7 @@
     "live DFM/quote exchange with a manufacturer or quote API: BLOCKED-LIVE-QUALIFICATION (LB-11)",
     "ordering through a provider sandbox: BLOCKED-LIVE-QUALIFICATION (LB-12)"
   ],
-  "nextAction": "Undraft PR #14 with the closeout's description, wait for green CI on commit 2/2, merge normally (no auto-merge); then B24 (production qualification, evaluation and launch hardening) on a new chapter branch from main, starting from its discovery draft (ready: verified and audited at dfd51e3; re-verify on the B23-complete tree and finalize after the merge). Carried to the owner: OD-160 (a provider account with a sandbox or staging path; B23-B4 only then), OD-171 (the seven ordering prerequisites and a reviewed port wiring), OD-163/OD-183 (g) (the board's file-safe name), OD-174 (the two public searches that send anonymous text to OpenAI), OD-181 (a)/(b), OD-184 (m), OD-177 with discovery section 8 item 14, OD-187 (i), section 8 items 15-17, the answer licence (LB-11), and the B22 items. Later work (no owner decision): a reconciliation read, the matcher extraction, the next reviewed registry revision (providerRow, the rows parameter, provider-registry.ts:16), the latent paths' hardening, B24-E's evidence store and review port, lead-gates.sh's eslint step on a clean tree (it lints the whole project), the 33 pre-existing eslint errors on main (14 files).",
-  "updatedAt": "2026-10-06T01:25:54-04:00",
-  "previousChapter": "B22 merged normally into main as 43cb1b0 (PR #13, 2026-10-02) after green CI on 849a933; verdict PARTIAL (the production simulation runner BLOCKED under LB-10, OD-134)"
+  "nextAction": "Apply the task critic's cross-task decisions to the B24 task drafts, then B24-A1 (environment profile, production-mode CI, health, readiness, configuration, flags; D24-1 offline, D24-9, D24-10, D24-11), test-first. Carried to the owner: OD-190..OD-222 (each with a safe default), B23's OD-160..OD-188, the B22 items.",
+  "updatedAt": "2026-10-06T02:52:06-04:00",
+  "previousChapter": "B23 merged normally into main as 57c3b29 (PR #14, 2026-10-06) after green CI on f663d71; verdict PARTIAL (no provider admitted, LB-11; ordering visibly disabled, its contract tested offline only, LB-12; physical evidence defined, none exists, LB-5; no agent can release, transfer or spend; census 166/163/3/0, counts 47/36/9/27)"
 }

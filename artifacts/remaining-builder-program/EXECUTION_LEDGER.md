@@ -4794,3 +4794,41 @@ control, tool or composition-root wiring was added. Live ordering stays BLOCKED-
     heading as recorded, LB-11's dated note on its runbook range and the README B2 row's dated note on its case counts. The verdict is
     the lead's: PARTIAL, its judgement unchanged by the closeout's nine factual corrections.
   - (4) PR #14's description is the closeout's summary for the owner, with no AI attribution footer or co-author line (owner rule).
+
+### B23 — merged (2026-10-06 local; lead)
+
+- PR #14 (`chapter/b23-external-manufacturing` -> `main`) merged normally as `57c3b29` at 06:50 UTC after all four checks passed on
+  `f663d71` (benchmark-core 3m43s, database-delivery 2m21s, page-browser-e2e 14m48s with both Playwright configs, prompt-to-gerber
+  17m09s; benchmark-nightly skipped). No auto-merge, no force-push. Verdict PARTIAL (`artifacts/ai-control-plane-b23/final-verdict.md`):
+  no provider admitted (LB-11), ordering visibly disabled (LB-12), physical evidence defined and none exists (LB-5). The merge tree
+  equals `f663d71`.
+
+### B24 — chapter start and discovery (2026-10-01/10-06 local; read-only workflows + lead; this commit)
+
+- Branch `chapter/b24-production-qualification` from main `57c3b29` (runbook `:28`: B23's closeout merged).
+- The discovery was drafted on 2026-10-01 over the tree at `50fe156` (B22-A1): seven read-only readers (environments and deployment,
+  the golden evaluation program, observability and replay, reliability, performance and accessibility, the live and physical gates,
+  prior records and the final report, the maps B24-F must produce), 82 gap candidates, one synthesizer that re-read every
+  defect-bearing fact and merged them into D24-1..40 (12 high, 23 medium, 5 low); OD-190..OD-222 drafted with safe defaults; LB-13..LB-17
+  proposed. Nothing was executed, sent or fetched.
+- Re-verification on the B23 tree `dfd51e3` (`b24-discovery-verify`, `wf_a8eafd9c-5d3`, twelve read-only verifiers and a synthesizer,
+  2026-10-05): 74 items (D24-1..40 and sections 0-8). Of the defects: 0 refuted, none fully closed, 24 stand, 5 stand with moved
+  citations, 4 changed since and 7 partly closed since (B22 and B23 work: the default-off computation and ordering switches, the
+  physical-evidence contract, the CI admission of b22-/b23- suites, the census 166/163/3/0 and the tool counts 47/36/9/27). 193 text
+  corrections proposed.
+- Audit (`b24-verify-audit`, `wf_5107d3ba-493`, five read-only auditors, 2026-10-05): every proposed correction, amendment and section-9
+  claim checked against the code at `dfd51e3`; 37 problems found (wrong attributions such as OD-151 and OD-152 to B22, a nine-suite
+  count given as eight, a credential seam called unwired that the provider exchange route reaches past admission, wrong line numbers,
+  overstated counts). One agent corrected each; the lead validated the result (every replaced text unchanged, unique and applicable in
+  order) and re-read eight of the new citations at `dfd51e3`.
+- The 193 corrections are applied in place; sixteen defects carry the re-verification's dated notes; section 9 is the reconciliation
+  with the lead's decisions as 9.6 (the database-delivery range, one set of webhook citations, D24-34 aligned to LB-1 and LB-13 with
+  OD-191, OD-174's open question assigned to B24-A3, and the numbering: OD-190..OD-222 and LB-13..LB-17 free).
+- B23's closeout (`b6c6b0d`, `f663d71`) landed after `dfd51e3` and was delta-checked against every citation of the page: four B23
+  discovery citations moved by one line and the statements about OD-160, OD-178 and OD-188 changed, each corrected in place, with a dated
+  note on D24-40; nothing else the page cites moved.
+- The verifiers wrote four scratch files of environment-variable names outside the repository; the lead deleted them.
+- Task drafts for the fifteen increments were prepared outside the repository (`b24-task-drafts`, `wf_6e22a4be-118`: a drafter, a
+  read-only reviewer and a reviser per increment, then a cross-task critic); the critic's twenty cross-task issues are applied before
+  B24-A1 launches.
+- Documents only: no production, test or generator file changed.
