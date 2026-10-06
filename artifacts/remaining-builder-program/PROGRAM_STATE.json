@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B23",
-  "currentCheckpoint": "B23-D committed on chapter/b23-external-manufacturing: physical-hardware evidence defined and never fabricated (physical-evidence.ts: eight closed kinds, validators, a server-derived review port nothing wires, assembledProductEligibility blocked for every input); the latent claim paths pinned unrewired; manufacturing.assembled-release pinned blocked by id with both unblock conditions named; D23-13, D23-14 and D23-15 closed",
+  "currentCheckpoint": "B23 closeout (1/2) committed on chapter/b23-external-manufacturing: D23-16 closed (OD-178) - the README and quickstart provider claim superseded in place; 11 dated notes in 10 files, 1 retitle, 34 export rows recorded (none retired); the tripwire b23-closeout-statements (8 cases); closeout-statements.md",
   "status": "in_progress",
   "baseSha": "43cb1b0",
   "branch": "chapter/b23-external-manufacturing",
-  "lastGreenSha": "4e71563",
+  "lastGreenSha": "dfd51e3",
   "pullRequest": "draft PR (chapter/b23-external-manufacturing -> main) opened after the discovery commit; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
@@ -19,7 +19,7 @@
     "live DFM/quote exchange with a manufacturer or quote API: BLOCKED-LIVE-QUALIFICATION (LB-11)",
     "ordering through a provider sandbox: BLOCKED-LIVE-QUALIFICATION (LB-12)"
   ],
-  "nextAction": "B23 closeout (1/2: claim statements, stale titles, records audit, dead code; 2/2: changed files, test and validation report, unknowns and owner decisions, final verdict PARTIAL), then PR #14 ready and merged after green CI; then B24. Carried to the owner: OD-160, OD-163's and OD-174's open questions, OD-181..OD-187, the B22 items.",
-  "updatedAt": "2026-10-05T08:37:56Z",
+  "nextAction": "B23 closeout (2/2): changed files, test and validation report, unknowns and owner decisions, final verdict (PARTIAL); OD-160's heading as recorded; then PR #14 ready and merged after green CI; then B24 (discovery verified and audited at dfd51e3, finalize after the merge). Carried to the owner: OD-160, OD-163's and OD-174's open questions, OD-181..OD-188, the B22 items.",
+  "updatedAt": "2026-10-06T03:41:13Z",
   "previousChapter": "B22 merged normally into main as 43cb1b0 (PR #13, 2026-10-02) after green CI on 849a933; verdict PARTIAL (the production simulation runner BLOCKED under LB-10, OD-134)"
 }

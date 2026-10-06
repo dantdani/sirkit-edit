@@ -330,3 +330,29 @@ and checked by hash. All runs went through the shared lock. CONFIRMED
 
 The suites: `b23-a-provider-registry` 14 `it(` plus one `it.each` of 80 = 94 tests; `b23-a-provider-admission` 11 (the lead's case 11). Neither writes to
 disk (the B11.5 rule). CONFIRMED
+
+## 12. The B23 closeout's export record
+
+[B23 closeout (1/2), 2026-10-05] The A1 exports no production module calls, and why each stays. The table is in
+`closeout-statements.md` section 3, which `b23-closeout-statements` case 7 re-derives from the tree. RECORDED; nothing here is
+retired.
+
+- `cd12-projection.ts` (the whole module, `toProcurementProviderDescriptor` among its exports): the CD-12 projection OD-161 asks for,
+  delivered unbound - no production module imports it (section 5); `b23-a-provider-registry` case 14 runs it. It is the extension
+  point for CD-12's procurement descriptors.
+- `renderProviderRegistryCsv` and `PROVIDER_REGISTRY_CSV_COLUMNS`: the CSV render and its header row. Only
+  `scripts/generate-b23-provider-registry.ts` calls the render, and registry case 15 compares its output with `provider-registry.csv`
+  byte for byte (section 6).
+- `RUNBOOK_FIELDS`: the runbook's twelve field names in the runbook's order (section 1), the oracle registry case 3 maps onto the
+  row keys.
+- `PROVIDER_REGISTRY`: the id-keyed view of `PROVIDER_ROWS` that the registry and admission suites read; production reads
+  `PROVIDER_ROWS`.
+- `PROVIDER_REGISTRY_RULES`: the validator's closed rule tags as data beside `ProviderRegistryRule` (citation C7).
+- `PROVIDER_ADMISSION_REFUSALS`: admission's closed refusal codes as data beside `ProviderAdmissionRefusal` (section 4).
+- `structuralDelegation`: runs inside `admitProviderOperation`; it is exported only so admission case 11 can show the structural layer
+  bite, which a validated registry never reaches.
+- `providerRow`: named nowhere, not even by a test - dead. Its retirement waits for the next reviewed registry revision, the one that
+  rewrites the header sentence on `:16` and bumps `PROVIDER_REGISTRY_VERSION` (the registry's own rule, `:18`): removing code from
+  this module is a registry change, where a same-line comment note is not (the closeout's choice, recorded for the owner).
+- `renderProviderRegistryCsv`'s `rows` parameter: no caller passes it (the generator and case 15 both call the render bare); it is
+  dropped in that same reviewed revision.

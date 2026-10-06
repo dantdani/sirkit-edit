@@ -784,3 +784,13 @@ every row.
 | C79 | `app/lib/manufacturing-providers/physical-evidence.ts` | 575 | `removed.some((subject) => covers(subject, record.subject)) ? withRejection(verdict, "subject_scrapped") : verdict;` |
 | C80 | `app/lib/manufacturing-providers/physical-evidence.ts` | 591 | `const noUnitLeft = units.size >= Math.min(...identities.map((identity) => identity.lotQuantity))` |
 | C81 | `app/lib/manufacturing-providers/physical-evidence.ts` | 595 | `const reworkInstants = (verdicts: readonly JudgedVerdict[], lotId: string): number[] => verdicts.flatMap((verdict) => (verdict.record?.kind === "deviation_rework" && verdict.record.executionClass === "hardware" && !outsideClaim(verdict, verdict.record, lotId)` |
+
+## 15. The B23 closeout's export record
+
+[B23 closeout (1/2), 2026-10-05] `physical-evidence.ts` is delivered unbound (sections 1-5): no production module imports it and
+nothing creates a record. It is recorded whole and not retired; the table is in `closeout-statements.md` section 3, and
+`b23-closeout-statements` case 7 pins that it has no production importer. RECORDED
+
+One export in it is named nowhere, not even by a test: `ServerDerivedHumanReview`, the shape a review port's answer takes (section 3).
+The reviewed change that wires a port would type the port's answer with it; until then the validator checks the same keys through
+`PHYSICAL_EVIDENCE_REVIEW_KEYS`. It is recorded with its module, not retired (PROPOSED for that change).

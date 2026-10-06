@@ -1068,3 +1068,24 @@ digest was equal before and after (`ece124f2cac6...`).
 New cases: `b23-b-observation` 8, 9; `b23-b-stale-quote` 11-14; `b23-b-no-auto-accept` 7-9; the page suite's 10. No other suite changed.
 `app/lib/pcb` was not run: no PCB module changed. The UI changed again (the list's clock, "receipt withheld"): **the lead runs the browser
 suite**. RECORDED
+
+## 29. The B23 closeout's export record
+
+[B23 closeout (1/2), 2026-10-05] The B2 and B3 exports and members no production module uses, and why each stays. The table is in
+`closeout-statements.md` section 3, which `b23-closeout-statements` case 7 re-derives from the tree. RECORDED; nothing here is
+retired. The exchange record, the provider egress, the empty transfer descriptor list and the observation reader are delivered and
+kept (section 8); none of them is retired.
+
+- `EXCHANGE_PHASES`: the record's three phases (section 4) as data beside `ExchangePhase`.
+- `ProviderExchangeLedger`'s `attempt` and `history`: the record's reconciliation reads (OD-167 records reconciliation, it does not
+  build it), which `b23-b-exchange-ledger` reads; production calls `prepare`, `markSent`, `settle`, `attemptForKey` and `load`.
+- `currentManufacturingProviderPause`: the meter's non-reserving read, the oracle `b23-b-provider-meter` cases 2, 4 and 7 use to show
+  that an agent's request reserves nothing; its sibling `currentMcpPause` has no production caller either.
+- `ProviderSendInput`'s `signal`: a caller's abort input for a send, which only the suites set. The exchange service passes no signal
+  into a send, so an upload would be bounded by its descriptor's one deadline alone; none can start in B23, since no reviewed
+  descriptor exists (section 8).
+- `PROVIDER_TEXT_SCREEN_REASONS`: the screen's closed reasons (section 18) as data beside `ProviderTextScreenReason`.
+- `ManufacturingSummaryOptions`' `now`: the summary's clock seam; GET /api/pcb-sync's route composes only `observations`, and the
+  default is the system clock.
+- `createProviderObservationReader`'s `registry` and `transferVersions`: seams for a later registry revision and a reviewed descriptor
+  version; the route passes only `exchanges`, so production reads `PROVIDER_ROWS` and the empty `REVIEWED_TRANSFER_VERSIONS`.

@@ -13,7 +13,7 @@
  *
  * Every provider fact is RECORDED from the B23 discovery's section 1.2 (reader 7, read 2026-10-01); A1 did not re-read the pages.
  * A value nobody could read is the literal UNKNOWN with the reason. Hand-offs Sirkit already offers cite the repository file that
- * offers them. Nothing here calls a provider, and no route reads this registry yet.
+ * offers them. Nothing here calls a provider, and no route reads this registry yet. [superseded 2026-10-05 by the B23 closeout (B23-B1, B23-B3): POST /api/pcb/provider-exchange reads this registry since B23-B1, and GET /api/pcb-sync through the observation reader since B23-B3; nothing here calls a provider still. A comment note, not a registry revision: no row, render or version changes]
  *
  * Browser-safe: no environment reads at module load, no server imports. Bump PROVIDER_REGISTRY_VERSION on any change; the render
  * (`artifacts/ai-control-plane-b23/provider-registry.csv`) is gated byte for byte.

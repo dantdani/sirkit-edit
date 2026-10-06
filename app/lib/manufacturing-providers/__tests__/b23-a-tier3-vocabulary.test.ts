@@ -276,7 +276,7 @@ describe("[B23-A2] the Tier 3 vocabulary (OD-173)", () => {
     const computation = toolIds.filter((id) => id.startsWith("sirkit.computation."));
     expect(computation.sort()).toEqual(["sirkit.computation.analytical-equation", "sirkit.computation.artifact-compare", "sirkit.computation.artifact-parse", "sirkit.computation.circuit-analysis", "sirkit.computation.layout-experiment"]);
     for (const id of computation) expect(TIER3_FLOOR_PATTERN.test(id), id).toBe(false);
-    // ... and no tier moves: every descriptor and every record computes the tier it computed at 79fa18b, and none carries the side effect
+    // ... and no tier moves: every descriptor and every record computes the tier it computed at 79fa18b, and none carries the side effect [superseded 2026-10-05 by the B23 closeout (B23-B1, B23-C): no descriptor carries it, and one record does since B23-B1, manufacturing.provider-exchange (below); a record added since 79fa18b - that one and B23-C's manufacturing.provider-order - computes the tier the 79fa18b rule gives it, legacyActionTier]
     for (const descriptor of registry.list()) {
       expect(descriptor.sideEffects, descriptor.toolId).not.toBe("external-transfer");
       expect(permissionTierOfDescriptor(descriptor), descriptor.toolId).toBe(legacyToolTier(descriptor));

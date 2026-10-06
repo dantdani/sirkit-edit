@@ -163,7 +163,7 @@ stays where it is; every constructor and both literal rows set them `false` in p
 with nine closed reasons: `flags_not_explicit`, `spend_in_b23` (no spend row may exist in B23), and for a transfer or spend row `public`,
 `not_human_session` (only a trusted human session: never a worker secret, an MCP bearer or a body-scope server actor), `no_csrf`,
 `any_member`, `viewer_or_commenter`, `automation` and `release_vocabulary` (a transfer never reuses `releaseOrQualification`; its two-row
-pin, `b16-0-1-ci-gates.test.ts:186-196`, stays as it is). The table carries no transfer and no spend row. CONFIRMED
+pin, `b16-0-1-ci-gates.test.ts:186-196`, stays as it is). The table carries no transfer and no spend row. CONFIRMED [superseded 2026-10-05 by the B23 closeout (B23-B1, OD-174): since B23-B1 the table carries one transfer row, POST /api/pcb/provider-exchange (outbound-disclosure.md section 5); no row is spend]
 
 **`outboundEgress`: what leaves through the egress boundary (OD-182 (a)).** A closed vocabulary (`route-resource-classification.ts:112`):
 `none` (nothing through the boundary: no observation query and no files), `observation-query` (a bounded query whose answer is an
@@ -472,3 +472,18 @@ The runs, in order, are `a2low2-00-before` (the readers of every edited file on 
 (1 failed / 17 passed; exit 1), `a2low2-04-green-1` (42 / 42; exit 0), `a2low2-05-obs-mut-arraylike` (exit 1, as expected) and the gates
 `a2low2-10` to `a2low2-13`, `a2low2-20` (tsc), `a2low2-21` (eslint), `a2low2-22` (the B16.0.2 generator) and `a2low2-30` (the B21 and B22
 closeout statements and `b21-f-page` over this page: 3 files; 38 / 38; exit 0), in the increment's scratch log directory.
+
+## 17. The B23 closeout's export record
+
+[B23 closeout (1/2), 2026-10-05] The A2 exports no production module calls, and why each stays. The table is in
+`closeout-statements.md` section 3, which `b23-closeout-statements` case 7 re-derives from the tree. RECORDED; nothing here is
+retired.
+
+- `ACTION_SIDE_EFFECTS`: the action side effect as data beside `ActionSideEffect`; its one run-time read is
+  `validateActionCoverageRegistry`, which only the B01 generator and the suites call.
+- `routeVocabularyViolations` and `ROUTE_VOCABULARY_VIOLATIONS`: OD-174's gate over the route table and its nine closed reasons (section
+  6). The suites run it (`b23-a-route-vocabulary`, `b23-a-no-order-structural`, `b23-b-exchange-route`), as they run the route-coverage
+  gates before it; no route calls a gate at run time.
+- `outboundEgressViolations` and `PUBLIC_MODEL_EGRESS`: the egress columns' gate and its reviewed allow-list of public model-egress
+  paths (OD-182 (a)); the allow-list is read only by the gate, which `b23-a-route-vocabulary` and `b23-b-exchange-route` run.
+- `OUTBOUND_EGRESS`: the closed `outboundEgress` vocabulary as data beside `OutboundEgress`.

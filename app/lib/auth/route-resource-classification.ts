@@ -104,7 +104,7 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
  * through the boundary: no observation query and no files), `observation-query` (a bounded query whose answer is an observation:
  * a distributor or aggregator search, an approved MCP server's tool call, the cross-verify prompt to the operator's SchGen
  * endpoint; never a file) or `files` (design or part files leave Sirkit: only through a human-only `externalTransfer` row,
- * OD-174). The value is per path and DERIVED: a path sends an observation query exactly when its runtime import closure reaches
+ * OD-174). The value is per path and DERIVED: a path sends an observation query exactly when its runtime import closure reaches [superseded 2026-10-05 by the B23 closeout (B23-B1, B23-B2, OD-182): but a transfer row's value is declared `files` since B23-B1, never derived; since B23-B2 the provider exchange route's closure reaches the boundary only through provider-egress.ts, and its derived value, observation-query, is pinned beside the declared one]
  * the egress boundary `app/lib/net/outbound-fetch.ts`, unless a reviewed cache-only exemption holds (`b23-a-route-vocabulary`, the
  * way `b22-a2-process-census` case 3 derives `external_process`). No route sends files in B23-A2. [B23-A2 review] `none` does NOT
  * mean the route sends nothing: the model-provider SDKs open their own connections, so a prompt or an embedding input sent to the

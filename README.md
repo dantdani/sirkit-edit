@@ -38,7 +38,7 @@ The result: LLM flexibility with deterministic correctness guarantees.
 The PCB module ships schematic-to-fab: sync footprints from the schematic,
 auto-place, autoroute (Freerouting), zones, DRC against real fab presets,
 silkscreen, 3D preview, KiCad export, and a one-click Gerber/drill/BOM/
-pick-and-place bundle that JLCPCB's quote tool accepts.
+pick-and-place bundle that JLCPCB's quote tool accepts. [superseded 2026-10-05 by the B23 closeout (D23-16, OD-178): a bundle prepared for a provider's quote upload; no upload has been recorded, and no provider has accepted, quoted, DFM-checked or ordered a Sirkit bundle (no stored acknowledged receipt; LB-11)]
 
 - **Demo**: open the PCB tab with `?pcbdemo=story` and follow the five-click
   flow (`Ctrl+P` place → `Ctrl+E` route → `Ctrl+D` DRC → `Ctrl+3` 3D →

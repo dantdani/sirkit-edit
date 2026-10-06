@@ -132,7 +132,7 @@ export function transferDescriptorFor(descriptors: readonly ProviderTransferDesc
   return validateTransferDescriptor(found[0]!, registry).length === 0 ? found[0]! : null;
 }
 
-/** Injection for tests; production passes nothing and gets the real transport, the real resolver and the system clock. */
+/** Injection for tests; production passes nothing [superseded 2026-10-05 by the B23 closeout (B23-B2): the exchange service passes its own clock, the system clock in production, and nothing else] and gets the real transport, the real resolver and the system clock. */
 export interface ProviderEgressDeps extends OutboundDeps {
   readonly clock?: () => number;
 }

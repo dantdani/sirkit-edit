@@ -2532,3 +2532,26 @@ Amendments to existing entries:
     record shares" is no longer one of a scrap's own rules - whatever record shares its id, a scrap that satisfies its own rules removes
     its subject, and the identities that count a lot's units out are read the same way (g, case 16).
 - Owner confirmation pending.
+
+## OD-178 — the README and quickstart claim, as applied (B23 closeout, 2026-10-05)
+
+- **Default applied:** `README.md:41`, `docs/pcb-quickstart.md:6` (the statement of `:3-6`) and quickstart `:47` keep their words and carry a dated `[superseded 2026-10-05 by the B23 closeout (D23-16, OD-178): ...]` note in place, never a rewrite.
+- **Wording:** the closeout task's generalisation of the drafted note - "a bundle prepared for a provider's quote upload; no upload has been recorded, and no provider has accepted, quoted, DFM-checked or ordered a Sirkit bundle (no stored acknowledged receipt; LB-11)"; the quickstart names no single provider (OD-188 (g)).
+- **Pinned by** `b23-closeout-statements` (8 cases): no copy, doc or page outside an exact allow-list states such a claim in its vocabulary's 19 forms; a phrasing outside them is not seen (`closeout-statements.md` section 4).
+- **Evidence:** `closeout-statements.md` sections 1, 4 and 5; D23-16's closure clause.
+- Owner confirmation pending.
+
+
+## OD-188 — B23 closeout (1/2): stated choices beyond its task text, as applied (B23 closeout, 2026-10-05)
+
+- **Default applied:**
+  - (a) A same-line comment note on `provider-registry.ts:16` is not a registry revision: no row, rendered byte, descriptor or `PROVIDER_REGISTRY_VERSION` changes (the generator re-renders the CSV with zero drift); removing code from the module (`providerRow`, the `rows` parameter) is, so both wait for the next reviewed revision, which also rewrites the `:16` sentence.
+  - (b) The four fab preset notes stay as written on the allow-list, as the task says. Only `jlcpcb-2l`'s are inside the pinned release identity (the qualify route reads that one preset, `QUALIFIED_FABRICATION_PROFILE_ID`, and its notes are in the B05 replay fixtures `b05-read-invocation` compares byte for byte); the other three feed a native snapshot's source hash whenever chosen (INFERRED). A visible caveat belongs at the dialog's render site in a reviewed UI change if the owner wants one.
+  - (c) "Send to fab" is admitted as the control's name with its uses pinned per file (12 production, 6 pages), B19's rename deferral standing.
+  - (d) The discovery's stale snapshot statements are recorded by one section-10 line, not per-line notes (the reserved-file rule).
+  - (e) `provider-egress.ts:135` was noted beyond the verified scope (the dead-code verifier found it).
+  - (f) No export is retired; whole dormant modules (B23-C's four, `physical-evidence.ts`, `cd12-projection.ts`) are recorded with pinned production importers, and `ServerDerivedHumanReview` (named nowhere) is recorded with its module as the review port's answer shape.
+  - (g) The D23-16 notes use the closeout task's wording, not OD-178's draft verbatim: "a provider's quote upload" for OD-178's "JLCPCB's quote upload" (the quickstart names no single provider), plus "no provider has accepted, quoted, DFM-checked or ordered a Sirkit bundle (no stored acknowledged receipt; LB-11)".
+  - (h) The tripwire's claim vocabulary is finite (19 forms, closeout-statements.md section 4): a phrasing outside it is not seen; the present tense counts as a send only with a provider named, since "what Sirkit sends to a provider" describes the egress (a B20 page says so).
+  - (i) [B23 closeout lead, 2026-10-05] The tripwire's vocabulary reads a temporal word ("until", "before", "when", "once") before a provider as a condition only before a present or perfect verb; before a simple past it dates a claim and is reported. "The API" or "a quote" is a provider only with its name or role. Both added by the lead round, test-first.
+- Owner confirmation pending.

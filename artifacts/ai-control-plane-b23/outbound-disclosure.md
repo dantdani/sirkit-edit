@@ -552,3 +552,23 @@ did). RECORDED
 No route, tool, control, generated artifact or runtime dependency changed. The census stays 166 / 163 / 3 / 0 (`lowfix-06`). No tool
 or registry file changed, so the agent-tool counts stay 47 / 36 / 9 / 27; that suite was not re-run here (INFERRED). The panel's markup
 did not change in this round. RECORDED
+
+## 14. The B23 closeout's export record
+
+[B23 closeout (1/2), 2026-10-05] The B1 exports and members no production module uses, and why each stays. The table is in
+`closeout-statements.md` section 3, which `b23-closeout-statements` case 7 re-derives from the tree. RECORDED; nothing here is
+retired.
+
+- `OUTBOUND_MANIFEST_FIELDS`: the manifest's closed top-level keys (section 1) as data; the manifest is built from literals, and
+  `b23-b-outbound-package` case 4 pins the two equal.
+- `OUTBOUND_PACKAGE_REFUSALS`: the package's closed refusals (section 3) as data beside `OutboundPackageRefusal`.
+- `PROVIDER_EXCHANGE_PURPOSES`: the two purposes as data beside `ProviderExchangePurpose`; a purpose is checked through
+  `BOARD_FILE_EXCHANGES`.
+- `ProviderExchangeService`'s `heldCounts`: the count of held plans and keys, the oracle `b23-b-approval-plan` cases 12, 13 and 16-18
+  read; the route calls only `preview` and `commit`.
+- `ProviderExchangeServiceOptions`' `registry`, `now`, `nonce`, `admit`, `limits` and `transfer`: injection seams. The route builds the
+  service with `env` alone, so production gets the reviewed registry, the system clock, server nonces, `admitProviderOperation`,
+  `PROVIDER_EXCHANGE_LIMITS` and the service's default transfer table, the empty `PROVIDER_TRANSFER_DESCRIPTORS` (dfm-quote-flow.md
+  section 8: a live exchange needs a reviewed registry revision and a reviewed transfer descriptor, LB-11).
+- `ProviderExchangePanelProps`' `fetchImpl` and `newKey`: the panel suite's transport and key seams (section 6); the workflow panel
+  passes only the scope, the authority and `canAct`.

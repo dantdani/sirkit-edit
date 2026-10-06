@@ -355,7 +355,7 @@ export function renderExactRoutePolicyCsv(): string {
 /** [B23-A2] Two booleans every row carries, merged into `RoutePolicy` here so every cited line above stays where it is (OD-174):
  *  `externalTransfer` - design or part FILES leave Sirkit for a third party through this row (B23-B1's provider exchange; no row
  *  in A2); `spend` - the row can spend money (an order, a purchase, a payment): no such row may exist in B23, ordering stays
- *  feature-disabled (runbook :986, OD-171). Both are false on every row; `routeVocabularyViolations` gates them, and the two-row
+ *  feature-disabled (runbook :986, OD-171). Both are false on every row; [superseded 2026-10-05 by the B23 closeout (B23-B1, OD-174): since B23-B1 one row is externalTransfer, POST /api/pcb/provider-exchange; spend stays false on every row] `routeVocabularyViolations` gates them, and the two-row
  *  `releaseOrQualification` pin (b16-0-1-ci-gates) is not reused for either. */
 export interface RoutePolicy {
   externalTransfer: boolean;

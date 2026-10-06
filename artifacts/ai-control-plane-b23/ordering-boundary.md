@@ -584,3 +584,17 @@ added for the low fixes.
 | C66 | `app/lib/manufacturing-providers/order-contract.ts` | 249 | `const claimed = claim !== null; // [B23-C lead, 2026-10-04] every submit of the claiming authorization holds the claim` |
 | C67 | `app/lib/manufacturing-providers/purchase-authorization.ts` | 203 | `const read: unknown = JSON.parse(durableWorkflowJson(binding));` |
 | C68 | `app/lib/manufacturing-providers/order-contract.ts` | 336 | `binding.providerId.normalize("NFC") : undefined;` |
+
+## 14. The B23 closeout's export record
+
+[B23 closeout (1/2), 2026-10-05] B23-C's four modules are delivered unbound (sections 1-6): no production module imports
+`order-contract.ts`, and the other three are imported only inside the cluster. Each is recorded whole and none is retired; the table
+is in `closeout-statements.md` section 3, and `b23-closeout-statements` case 7 pins each module's production importers. RECORDED
+
+- `order-contract.ts`: the order contract against an injected port (section 4); no composition root wires a port
+  (`ORDER_SUBMISSION_PORT_WIRING` is "none").
+- `purchase-authorization.ts`: the two-person, single-use purchase authorization (section 3); `order-contract.ts` is its one approved
+  importer (`b23-c-purchase-authorization` case 7).
+- `webhook-verification.ts`: pure webhook verification (section 5); imported only by `order-contract.ts`.
+- `ordering-enablement.ts`: `orderingEnablement()` and the fixed notice (section 1); imported by `order-contract.ts` and
+  `purchase-authorization.ts`, while the provider panel carries the notice's literal, pinned equal by `b23-c-ordering-disabled`.

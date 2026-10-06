@@ -3,7 +3,7 @@
 sirkit's PCB module takes a schematic to a manufacturable board: footprints sync
 from the schematic, auto-place and autoroute do the heavy lifting, DRC checks the
 result against a real fab's rules, and one click produces a Gerber bundle their
-quote tool accepts.
+quote tool accepts. [superseded 2026-10-05 by the B23 closeout (D23-16, OD-178): a bundle prepared for a provider's quote upload; no upload has been recorded, and no provider has accepted, quoted, DFM-checked or ordered a Sirkit bundle (no stored acknowledged receipt; LB-11)]
 
 ## Try the demo
 
@@ -44,7 +44,7 @@ variable is needed.
 4. **3D preview** (`Ctrl+3`) — inspect the board; silkscreen and zones render too.
 5. **Send to fab** (`Ctrl+B`) — pick a preset, pass the DRC gate, and download
    `<board>-<fab>-<date>.zip` with Gerbers, drill files, pick-and-place CSVs, and
-   a BOM. Upload it to jlcpcb.com/quote (or pcbway.com) as-is.
+   a BOM. Upload it to jlcpcb.com/quote (or pcbway.com) as-is. [superseded 2026-10-05 by the B23 closeout (D23-16, OD-178): a bundle prepared for a provider's quote upload; no upload has been recorded, and no provider has accepted, quoted, DFM-checked or ordered a Sirkit bundle (no stored acknowledged receipt; LB-11); uploading it is a person's own act outside Sirkit]
 
 The dialog now offers two engines. **KiCad-assisted fallback** remains the
 default while external acceptance gates are open. **Sirkit native beta** builds

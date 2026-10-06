@@ -100,7 +100,7 @@ describe("[B23-B2 review] the dfm-quote-flow page and the statements B2 made fal
   });
 });
 
-// [B23-B3, 2026-10-04] The page's B23-B3 sections (17-26): the closure, the verdict for all eight steps, every citation of section 26 on
+// [B23-B3, 2026-10-04] The page's B23-B3 sections (17-26) [superseded 2026-10-05 by the B23 closeout (B23-B3 review): the B23-B3 sections are 17-28 - section 27 holds the gates and section 28 the review round, which case 10 reads]: the closure, the verdict for all eight steps, every citation of section 26 on
 // the line it names, and a dated B3 note on each earlier statement B3 made incomplete. Reads files only.
 describe("[B23-B3] the dfm-quote-flow page: steps 6-8 and the verdict for all eight steps", () => {
   const B3 = "[B23-B3, 2026-10-04]";
