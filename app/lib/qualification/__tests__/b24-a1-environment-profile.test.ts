@@ -556,6 +556,12 @@ const PLANNED: readonly PlannedInsertion[] = [
   { task: "B24-D1", job: "page-browser-e2e", after: lastLineOf("page-browser-e2e"), lines: ["      - if: always() # [B24-D1] OD-30: page-browser-e2e's headroom", "        run: pnpm exec tsx scripts/ci-job-headroom.ts .github/workflows/deterministic-manufacturing.yml page-browser-e2e"] },
   { task: "B24-D2", job: "database-delivery", after: lastDatabaseEntry, lines: [pgliteEntry("B24-D2")] },
 ];
+/** [B24-A2 STOP, 2026-10-06] reviewed move (the lead's): the planned steps of the tasks still to land - a task whose rows section 10's
+ *  insertion table already records has landed, its real lines stand in the tree, and it is simulated no more. */
+const stillPlanned = (): PlannedInsertion[] => {
+  const landed = new Set(insertionTable(read(PAGE)).rows.map((row) => row.task));
+  return PLANNED.filter((step) => !landed.has(step.task));
+};
 const insertionRow = (task: string, job: string, first: number, count: number): string => `| [${task}, ${SIM_DATE}] | ${job} | \`:${first}\` | ${count} |`;
 /** The tree and the pages as the planned tasks leave them when each follows the handover (page section 13): its rows appended to the
  *  insertion table, no number of this page moved, and B23's prose citation moved in place with the task's own dated note
@@ -627,9 +633,13 @@ describe("[B24-A1] the page environments-and-deployment.md", () => {
     for (const heading of ["The README row", "The ledger paragraph", "Section 10 amendment", "The B16.1B recipe notes", "The workflow shift for the later increments", "The local production-mode run"]) expect(lead, heading).toContain(heading);
   });
 
-  it("16. [B24-A1 review] regressions-2, [B24-A1 check, 2026-10-06]: the workflow edits every later inserting task plans (A2, A4, B2, B3, C1, C2, C3, D1, D2: 59 lines in 13 groups) keep cases 11, 12 and 14 green when each task only appends its rows to section 10's insertion table - no number of this page moved, no A1 test logic edited; the designed failures still bite: an insertion left unrecorded, the old -> new table's new column (or both columns) moved in place, an earlier row edited, a wrong count, a wrong job, a row in the old form, a section-14 number moved as well as recorded", () => {
-    const planned = simulate(PLANNED);
-    expect(lineCount(planned.workflow) - lineCount(lines(WORKFLOW))).toBe(59);
+  it("16. [B24-A1 review] regressions-2, [B24-A1 check, 2026-10-06]: the workflow edits every later inserting task plans (A2, A4, B2, B3, C1, C2, C3, D1, D2: 59 lines in 13 groups at A1; [B24-A2 STOP, 2026-10-06] a task that landed is simulated no more, its real rows standing in the table) keep cases 11, 12 and 14 green when each task only appends its rows to section 10's insertion table - no number of this page moved, no A1 test logic edited; the designed failures still bite: an insertion left unrecorded, the old -> new table's new column (or both columns) moved in place, an earlier row edited, a wrong count, a wrong job, a row in the old form, a section-14 number moved as well as recorded", () => {
+    // [B24-A2 STOP, 2026-10-06] reviewed move (the lead's): the tasks still to land are simulated on top of the landed tasks' real rows
+    // (59 lines in 13 groups at A1; after A2, 51 lines in 11 groups beside A2's two real rows); every task's groups are still 13 rows
+    const remaining = stillPlanned();
+    const planned = simulate(remaining);
+    expect(lineCount(planned.workflow) - lineCount(lines(WORKFLOW))).toBe(remaining.reduce((sum, step) => sum + step.lines.length, 0));
+    expect(insertionRowsOf(planned.page)).toHaveLength(insertionTable(read(PAGE)).rows.length + remaining.length);
     expect(insertionRowsOf(planned.page)).toHaveLength(13);
     expect(jobOrderProblems(planned.workflow)).toEqual([]); // A2's appended job (task-A2.md:340) follows production-smoke
     expect(shiftTableProblems(planned.page, planned.workflow)).toEqual([]);
@@ -642,7 +652,10 @@ describe("[B24-A1] the page environments-and-deployment.md", () => {
     const replaceRow = (row: string, by: string): string => planned.page.replace(`${row}${NEWLINE}`, by === "" ? "" : `${by}${NEWLINE}`);
     const c1 = rows.find((row) => row.startsWith("| [B24-C1, "))!;
     const [first, count] = [Number(/`:(\d+)`/.exec(c1)![1]), Number(/\| (\d+) \|$/.exec(c1)![1])];
-    expect(shiftTableProblems(replaceRow(rows[1]!, ""), planned.workflow).join(" "), "A2's appended job unrecorded").toMatch(/53 recorded/);
+    // [B24-A2 STOP, 2026-10-06] reviewed move (the lead's): A2's appended job by its row (real once A2 landed), not by its index; 53 at A1
+    const secretScan = rows.find((row) => row.includes("| secret-scan |"))!;
+    const recordedWithout = lineCount(planned.workflow) - A1_WORKFLOW_LINES - Number(/\| (\d+) \|$/.exec(secretScan)![1]);
+    expect(shiftTableProblems(replaceRow(secretScan, ""), planned.workflow).join(" "), "A2's appended job unrecorded").toContain(`${recordedWithout} recorded`);
     expect(shiftTableProblems(replaceRow(c1, ""), planned.workflow), "C1's line unrecorded").not.toEqual([]);
     expect(shiftTableProblems(replaceRow(c1, c1.replace(`\`:${first}\``, `\`:${first + 3}\``)), planned.workflow), "C1's row moved in place by D1's three lines above it").not.toEqual([]);
     expect(shiftTableProblems(replaceRow(c1, c1.replace(/\| \d+ \|$/, `| ${count + 1} |`)), planned.workflow), "a wrong count").not.toEqual([]);

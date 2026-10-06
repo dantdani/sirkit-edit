@@ -4872,3 +4872,30 @@ control, tool or composition-root wiring was added. Live ordering stays BLOCKED-
     path either test takes: the Anthropic client timeout applies to the real SDK client only, and the deployment profile never blocks a
     non-production runtime. Recorded as not reproduced; CI on the pushed commit runs both configurations. The 31 evidence PNGs the
     runs rewrote were restored from HEAD, all 32 equal by blob hash.
+
+### B24-A2 - headers, origins, secrets (2026-10-06 local; increment workflow + lead; this commit)
+
+- Test-first on `chapter/b24-production-qualification` from `1b2c08c`: the five `b24-a2-*` suites failed first (three failed to load; with the new modules present and no existing file edited, 26 of 42 red, each counterexample for its reason: no builder and the one image header; a previous worker secret, KiCad token or MCP key refused; 51 names read and undeclared, 33 of a declared class; the workflow's last job `production-smoke`); then green.
+- Headers (D24-5, OD-196): six headers on every path from `securityHeaders` (a named export of `next.config.ts`, the task's fallback), HSTS only for an https build-time origin, `poweredByHeader: false`; `e2e/security-headers.spec.ts` gains the served proof and `production-smoke` the probes, both PROPOSED until the lead's runs.
+- Origins (D24-6, OD-196): `supabaseAuthUrls` records the Site URL and the one redirect per profile; the app starts no Supabase flow that lands on the callback; the project's settings UNKNOWN and BLOCKED-LIVE-QUALIFICATION (LB-1, LB-13).
+- Secrets (D24-4, OD-195): previous values that only verify for the worker secret, the KiCad token and the MCP key, with the planned-rotation and leak procedures; the 80-row census and `.env.example` parity over the declared classes (OD-195 narrowed); the secret scan in three modes and the `secret-scan` CI job (PROPOSED until its first CI run); B23's two single-value seams recorded.
+- Records: OD-195 and OD-196 as applied, OD-224 for A2's own choices, the OD-30 amendment, the LB-13 note, the closure clauses, `edge-security.md`. The edge, the Supabase project and a real rotation BLOCKED-LIVE-QUALIFICATION (LB-1, LB-13).
+- Review round (2026-10-06): 16 confirmed findings (14 distinct) fixed test-first, the test-strength ones proven against eight deliberate breakages, each restored by hash (page section 8): no file skipped for a NUL byte any more (UTF-16 decoded; `pcb-delta.ts` and two tests were never scanned) and a blob git does not return fails the run; the rules widened to OpenAI's and GitHub's current forms and the project's connection strings (allowlist six -> eight test fakes); an empty `--staged` or `--history` run fails, and CI scans every commit of a pull request; the leak procedure and a seven-day maximum written; A1's page notes 49 -> 51; the page's records completed (section 13 in full, every gate run in section 10). One STOP for the lead: `b24-a1-environment-profile` case 16 re-applies A2's planned groups on top of A2's real rows (15 rows where 13 are pinned) - A2 does not edit A1's test logic; the proposed reviewed move is written and was probed green on the tree. Gates (page section 10): the qualification suites 112 of 113 (case 16, the STOP); `app/lib/auth/__tests__` 479 + 9 skipped; `app/api/__tests__` 1,059 of 1,059 with one `onTaskUpdate` timeout in B16.0's `b16-0-identity-header-gate` (alone: 6 / 6, the same timeout; recorded, not loosened); MCP 95 and 825; orchestration 460; computation 300 + 18 skipped; manufacturing providers 387; B14 22; tsc 0; eslint 0 on 17 files; three generators with no drift; the tree scan and `--history 57c3b29..HEAD` clean.
+- Lead close (2026-10-06):
+  - (1) A2's first implementer run did the increment but its gate run held `app/lib/manufacturing-providers/__tests__` for about 38 minutes
+    (B23-D case 8, 2,271 s) and never returned; the workflow's retry found the tree dirty and stopped, as the single-writer rule requires,
+    and the review and fix rounds then worked on that tree. The fix round's run of the same set passed 387 of 387: the stall did not
+    reproduce, and its cause is UNKNOWN (recorded in edge-security.md section 12).
+  - (2) The review's one STOP item - B24-A1's case 16 simulated A2's planned rows on top of A2's real ones (15 rows where 13 were pinned)
+    - is closed by the lead's reviewed move of case 16, written by the fix round and probed green: only the tasks still to land are
+    simulated, the counts derive from them, and A2's job is found by its row. The qualification suites pass 113 of 113, and a later task
+    that lands needs no further move (environments-and-deployment.md section 15).
+  - (3) The browser run found A2's new framing case failing (a page response event Chromium never emits for a refused frame; reproduced
+    alone). The lead fixed it in place: the headers by a direct request, a positive control, the frame check unchanged; the spec alone 8
+    of 8. The default configuration was 53 of 54 before the fix (10.3 min) and the orchestration configuration 4 of 4 (2.6 min).
+  - (4) The independent check's three new low issues are recorded in edge-security.md section 12, not iterated.
+  - (5) The lead's supplementary gates: `app/lib/pcb` 977 passed, 4 skipped; B14.4 22; the confinement gates 375; the qualification
+    suites 113; tsc 0; eslint 0 on 18 files. `.next/` (889 MB, recreated by the lead's earlier browser runs) was removed first.
+  - (6) B24-A1's first CI run (`1b2c08c`, run 37499322603) was green in every job, `production-smoke` included (2m16s: next build
+    99 s, next start 2 s, engine-worker.mjs emitted, every probe as pinned): D24-1's production-mode half is closed offline, with dated
+    notes under OD-190, in LB-13's row and on A1's README row.

@@ -417,6 +417,17 @@ jobs:
           grep -qF '"code":"AUTH_SIGNOUT_UNAVAILABLE"' signout.json
           test "$(curl -s -D ai-runtime.headers -o ai-runtime.json -w '%{http_code}' "$SMOKE_ORIGIN/api/ai/runtime")" = 200
           grep -qi '^content-security-policy:' ai-runtime.headers
+          # [B24-A2] D24-5, OD-196: every security header with its exact value, and no X-Powered-By, on the page, an API route, the
+          # liveness route and a file outside the proxy's matcher; no HSTS (this build had no SIRKIT_EXPECTED_ORIGIN: not https)
+          for path in / /api/ai/runtime /api/health /favicon.ico; do
+            curl -s -o /dev/null -D headers.txt "$SMOKE_ORIGIN$path"
+            tr -d '\r' < headers.txt | sed -E 's/^([A-Za-z-]+):/\L\1:/' > headers.lf
+            for expected in "content-security-policy: img-src 'self' data: blob:; frame-ancestors 'none'" "x-frame-options: DENY" "x-content-type-options: nosniff" "referrer-policy: strict-origin-when-cross-origin" "permissions-policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()" "content-security-policy-report-only: default-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'"; do
+              grep -qxF "$expected" headers.lf || { echo "$path: a security header is missing or different: ${expected%%:*}"; exit 1; }
+            done
+            if grep -qi '^x-powered-by:' headers.lf; then echo "$path sends x-powered-by"; exit 1; fi
+            if grep -qi '^strict-transport-security:' headers.lf; then echo "$path sends strict-transport-security on an http origin"; exit 1; fi
+          done
           echo "every probe answered as pinned"
       - name: Stop the production server
         if: always()
@@ -433,3 +444,29 @@ jobs:
             next-start.log
           if-no-files-found: ignore
           retention-days: 14
+
+  # [B24-A2] D24-4, OD-195, runbook :168: the secret scan in tree mode - the closed rules and the reviewed allowlist of
+  # app/lib/deployment/secret-scan.ts over every listed file - and, on a pull request, over every commit of it ([B24-A2 review]
+  # security-3); a hit prints path:line rule only, never the text. Read-only git calls, no write; the workflow's read-only token.
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsx scripts/scan-secrets.ts
+      - name: Scan every commit of the pull request (a secret added, then deleted, stays in the history a merge keeps)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: pnpm exec tsx scripts/scan-secrets.ts --history "$BASE_SHA..$HEAD_SHA"

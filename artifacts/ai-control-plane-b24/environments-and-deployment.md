@@ -103,10 +103,10 @@ lead. Every citation in section 14 is the line at this increment's working tree;
   47 at `8664964` and A1's two - each with its kind, default, direction, owner `file:line` and the owner's exported name constant (or
   null). Every other `SIRKIT_` token is one of eleven reviewed exclusions, one reason each (bundle file names, a SPICE model name, the
   stage-report names, two constants, the two Anthropic refusal codes, the `_ENV` constants of inventoried names, and the two atomic
-  catalog names inside a description string). **CONFIRMED** (`b24-a1-flags` 1, 2: the census is re-derived from the tree).
+  catalog names inside a description string). **CONFIRMED** (`b24-a1-flags` 1, 2: the census is re-derived from the tree). [B24-A2, 2026-10-06] 49 -> 51: B24-A2 reads and appends `SIRKIT_MCP_TOKEN_SECRET_PREVIOUS` and `SIRKIT_WORKFLOW_WORKER_SECRET_PREVIOUS` (kind secret, verification only; D16, OD-195), on the lines of their current names (`flag-inventory.ts:84`, `:99`), and moved `b24-a1-flags` case 1 in place with a dated note.
 - **The kinds** are closed: enable-flag (3), disable-switch (5), rollout-stage (4), shadow (2), fixture (6), live-test-gate (4),
   configuration (19), secret (3), tooling (3). `SIRKIT_AUTH_MODE` is configuration, never a fixture. B24-A2 pins the map to its census
-  classes (D16); B24-D1 adds its three names in these kinds (D15). Live-suite flags read only by tests are B24-B3's (OD-209).
+  classes (D16); B24-D1 adds its three names in these kinds (D15). Live-suite flags read only by tests are B24-B3's (OD-209). [B24-A2, 2026-10-06] secret (3) -> secret (5): the same two `*_PREVIOUS` names.
 - **Defaults pinned through the owners.** With an empty environment MCP, orchestration and named computations are off, the four stages
   off, both shadows off, every off-only switch unset; each flag's parse equals its owner's over sample values. **CONFIRMED** (cases 3, 4).
 - **The off-only switches** only ever turn something off (acquisition sources, manufacturing providers, ordering, MCP servers, the
@@ -383,6 +383,8 @@ handover text the lead pastes into the nine task files is in section 13.
 
 | task | job | first line | count |
 |---|---|---|---|
+| [B24-A2, 2026-10-06] | production-smoke | `:420` | 11 |
+| [B24-A2, 2026-10-06] | secret-scan | `:447` | 26 |
 
 ## 11. Gates
 
@@ -718,3 +720,9 @@ fixed, that round being A1's last; each is **INFERRED** (reasoned from the check
 - `A1_WORKFLOW_LINES` (435) in `b24-a1-environment-profile` is A1's own tree. If the lead's local production-mode run changes A1's
   `production-smoke` job (PROPOSED until its first CI run) before the A1 commit, the lead moves that constant in place with a dated
   note, as A1's own amendment; after the A1 commit it never moves.
+
+- [B24-A2 lead, 2026-10-06] **Case 16, moved by review.** With A2 landed, case 16 simulated A2's planned rows on top of its real
+  ones (15 rows where 13 were pinned). The lead's reviewed move: only the tasks still to land are simulated (`stillPlanned()`), the line
+  and row counts are derived from them, and A2's job is found by its row, not its index; at A1's tree this gives 59 lines, 13 groups and
+  "53 recorded" as before. A later task that lands needs no further move. CONFIRMED (`a2lead-case16`, the qualification suites 113 of
+  113)
