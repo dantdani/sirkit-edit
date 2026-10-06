@@ -2,12 +2,12 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B23",
-  "currentCheckpoint": "B23 closeout (1/2) committed on chapter/b23-external-manufacturing: D23-16 closed (OD-178) - the README and quickstart provider claim superseded in place; 11 dated notes in 10 files, 1 retitle, 34 export rows recorded (none retired); the tripwire b23-closeout-statements (8 cases); closeout-statements.md",
+  "currentCheckpoint": "B23 complete on chapter/b23-external-manufacturing: the discovery, A1, A2, B1, B2, B3, C, D and the closeout (1/2, 2/2) committed, with the lead fixes e8c7928, 4a988c8, 9cb675d, f0e7bae, a02c9fb and d5f5512; the four validation artifacts (123 paths / 15 commits from 43cb1b0 to b6c6b0d, 127 / 16 with this commit; 30 suites / 289 it( blocks / 392 tests; OD-160..OD-188, OD-160's heading recorded in this commit, OD-189 unused; D23-1..21 all closed, D23-11 and D23-13 offline only); the final validation run at b6c6b0d green (7,529 vitest passed, 36 opt-in skipped, the Java-capable suites excluded; tsc 0; eslint 0 on the 92 files B23 changed - the chain's whole-project eslint on a clean tree exits 1 on 33 pre-existing errors in 14 files (69 problems in 37 files) B23 never changed; 21 generators zero drift; the existing browser suite 48 of 48 and the orchestration config 4 of 4, 406 s; gate S 177 passed and, after the review round, gate S2 100 passed - every suite that directly reads a B23-changed file ran but the Java-capable manufacturing-release-gate); CI green on every run since d5f5512, b6c6b0d included; verdict PARTIAL (no provider admitted, no live exchange - LB-11, OD-160; ordering visibly disabled, its contract tested offline only - LB-12; physical evidence defined, none exists - LB-5; no agent can release, transfer or spend; census 166/163/3/0, counts 47/36/9/27); PR #14 to be undrafted and merged normally after green CI",
   "status": "in_progress",
   "baseSha": "43cb1b0",
   "branch": "chapter/b23-external-manufacturing",
-  "lastGreenSha": "dfd51e3",
-  "pullRequest": "draft PR (chapter/b23-external-manufacturing -> main) opened after the discovery commit; merge only after green CI, never auto-merge",
+  "lastGreenSha": "b6c6b0d",
+  "pullRequest": "PR #14 (chapter/b23-external-manufacturing -> main): undrafted at the closeout; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
@@ -19,7 +19,7 @@
     "live DFM/quote exchange with a manufacturer or quote API: BLOCKED-LIVE-QUALIFICATION (LB-11)",
     "ordering through a provider sandbox: BLOCKED-LIVE-QUALIFICATION (LB-12)"
   ],
-  "nextAction": "B23 closeout (2/2): changed files, test and validation report, unknowns and owner decisions, final verdict (PARTIAL); OD-160's heading as recorded; then PR #14 ready and merged after green CI; then B24 (discovery verified and audited at dfd51e3, finalize after the merge). Carried to the owner: OD-160, OD-163's and OD-174's open questions, OD-181..OD-188, the B22 items.",
-  "updatedAt": "2026-10-06T03:41:13Z",
+  "nextAction": "Undraft PR #14 with the closeout's description, wait for green CI on commit 2/2, merge normally (no auto-merge); then B24 (production qualification, evaluation and launch hardening) on a new chapter branch from main, starting from its discovery draft (ready: verified and audited at dfd51e3; re-verify on the B23-complete tree and finalize after the merge). Carried to the owner: OD-160 (a provider account with a sandbox or staging path; B23-B4 only then), OD-171 (the seven ordering prerequisites and a reviewed port wiring), OD-163/OD-183 (g) (the board's file-safe name), OD-174 (the two public searches that send anonymous text to OpenAI), OD-181 (a)/(b), OD-184 (m), OD-177 with discovery section 8 item 14, OD-187 (i), section 8 items 15-17, the answer licence (LB-11), and the B22 items. Later work (no owner decision): a reconciliation read, the matcher extraction, the next reviewed registry revision (providerRow, the rows parameter, provider-registry.ts:16), the latent paths' hardening, B24-E's evidence store and review port, lead-gates.sh's eslint step on a clean tree (it lints the whole project), the 33 pre-existing eslint errors on main (14 files).",
+  "updatedAt": "2026-10-06T01:25:54-04:00",
   "previousChapter": "B22 merged normally into main as 43cb1b0 (PR #13, 2026-10-02) after green CI on 849a933; verdict PARTIAL (the production simulation runner BLOCKED under LB-10, OD-134)"
 }

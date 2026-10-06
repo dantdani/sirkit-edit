@@ -2555,3 +2555,11 @@ Amendments to existing entries:
   - (h) The tripwire's claim vocabulary is finite (19 forms, closeout-statements.md section 4): a phrasing outside it is not seen; the present tense counts as a send only with a provider named, since "what Sirkit sends to a provider" describes the egress (a B20 page says so).
   - (i) [B23 closeout lead, 2026-10-05] The tripwire's vocabulary reads a temporal word ("until", "before", "when", "once") before a provider as a condition only before a present or perfect verb; before a simple past it dates a claim and is reported. "The API" or "a quote" is a provider only with its name or role. Both added by the lead round, test-first.
 - Owner confirmation pending.
+
+
+## OD-160 — which providers B23 targets and whether the owner holds approved API access, as applied (B23, recorded at the B23 closeout, 2026-10-06)
+
+- **Question:** which providers does B23 target, and does the owner hold approved API access for any (JLCPCB app id and keys, PCBWay `api-key`, an OSH Park or MacroFab account, a DigiKey Credit account)?
+- **Default applied:** none assumed. The read-only DFM/quote flow is built end to end offline against an in-process fake provider behind the real egress boundary (B23-B1..B3); `admitProviderOperation` refuses every `dfm_quote_transfer` and `ordering` operation `provider_not_admitted` before anything else (`provider-admission.ts:54-56`); `PROVIDER_TRANSFER_DESCRIPTORS` is empty; every live exchange is BLOCKED-LIVE-QUALIFICATION (LB-11) and every order (LB-12). The builder applied for no access, created no account and entered no credential. B23-B4, the opt-in owner-run sandbox qualification, did not run: no account exists.
+- **Evidence:** `final-verdict.md`; `unknowns-and-owner-decisions.md`; `b23-a-provider-admission`; LB-11, LB-12.
+- Recorded at the closeout ([B23 closeout (2/2), 2026-10-06]). Owner confirmation pending.
