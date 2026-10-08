@@ -257,6 +257,38 @@ jobs:
           app/lib/engineering/__tests__/b18-c-silk-text.test.ts
           app/lib/engineering/__tests__/b18-c-tier2-truth.test.ts
           app/lib/engineering/__tests__/b18-c-undo-redo.test.ts
+          app/lib/agent/__tests__/b09-1-boundary.test.ts
+          app/lib/agent/__tests__/b09-1-recovery.test.tsx
+          app/lib/agent/__tests__/b09-2-closure.test.ts
+          app/lib/agent/__tests__/b09-2-recovery.test.tsx
+          app/lib/agent/__tests__/b09-3-closure.test.ts
+          app/lib/agent/__tests__/b09-loop-safety.test.ts
+          app/lib/agent/__tests__/b09-proposals.test.ts
+          app/lib/agent/__tests__/b09-provider-contracts.test.ts
+          app/lib/agent/__tests__/b10-1-strict-mode-publisher.test.tsx
+          app/lib/agent/__tests__/b10-editor-context.test.ts
+          app/lib/agent/__tests__/b11-1-trace-integrity.test.ts
+          app/lib/agent/__tests__/b11-2-replay-context.test.ts
+          app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts
+          app/lib/agent/__tests__/b11-4-capture-ownership.test.ts
+          app/lib/agent/__tests__/b11-4-no-execution.test.ts
+          app/lib/agent/__tests__/b11-5-capture-exactness.test.ts
+          app/lib/agent/__tests__/b11-6-projection-ownership.test.ts
+          app/lib/agent/__tests__/b11-7-primitive-discipline.test.ts
+          app/lib/agent/__tests__/b11-trace-replay-evaluation.test.ts
+          app/api/chat/__tests__/b10-1-request-boundary.test.ts
+          app/api/chat/__tests__/b10-2-closure.test.ts
+          app/api/chat/__tests__/b10-chat-boundary.test.ts
+          app/api/chat/__tests__/b11-1-route-finalization.test.ts
+          app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts
+          app/lib/auth/__tests__/b16-0-2-gates.test.ts
+          app/api/__tests__/b16-0-auth-route-coverage.test.ts
+          app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts
+          app/lib/pcb/__tests__/pin-pad-mapping.test.ts
+          app/lib/footprint-resolver/__tests__
+          app/api/pcb/edit/__tests__/assist-live.test.ts
+          app/lib/auth/__tests__/b16-1b-live-qualification.test.ts
+          app/lib/pcb/__tests__/kicad-cli-oracle.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml
       - name: Upload evidence and diagnostics
         if: always()

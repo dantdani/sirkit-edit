@@ -72,7 +72,7 @@ alternative and is not built. **CONFIRMED** by reading (C5, C7, C40); how many i
 real wall clock: `Date.now()` in a deployment and in a test (a test's faked `Date` included), and the original `Date.now()` while the
 fixture runtime's frozen clock is installed. The browser jobs run `next dev` under the fixture runtime, whose instrumentation installs
 that frozen clock (C57): `Date.now()` answers one fixed instant for the whole run. A window keyed on it never rolls over (the limiter
-opens a new window only when the clock has moved a full window, C8), so `e2e/agent-execution.spec.ts` - 82 chat runs from one
+opens a new window only when the clock has moved a full window, C8), so `e2e/agent-execution.spec.ts` - 82 chat runs ([B24-B2, 2026-10-08] 85 since B24-B2's order case) from one
 principal in one project over its serial run - would have met 429 `PRINCIPAL_RATE_LIMITED` from its 61st run to its end, and every
 other window would have been one budget for the whole run. The windows and the meter mint no identity, so the real clock costs the
 fixture runtime no determinism. **CONFIRMED** (`b24-a3-abuse-limits` 9, `b24-a3-principal-limits` 9, `b24-a3-embedding-admission` 9:
@@ -383,9 +383,9 @@ never a body field (`PRINCIPAL_ABUSE_LIMITS`, C40; one constant per kind, C41). 
   (simulate), and 11 to 35 in ten more files, twelve over the proposed 10 in all - so 50, not the proposed 10; `/api/chat` at most 37
   (`b21-e3-chat-resume`; `b21-e4-chat-first-turn` 24, `b21-f-evaluation` 21), and the browser job's `e2e/agent-execution.spec.ts`
   sends 82 chat runs from one principal in one project (29 `chat(...)` turns, 49 `board()` reads, 4 direct sends) over its 29 serial
-  tests, its first scenarios 17 in 39.6 s in B18-C's recorded run (`safe-mutation-tools.md:37`), about 20 in its first minute - so 60,
+  tests ([B24-B2, 2026-10-08] 85 runs since B24-B2's order case: 30 turns, 51 reads, 4 direct sends, 30 tests; ci-admission.md section 10), its first scenarios 17 in 39.6 s in B18-C's recorded run (`safe-mutation-tools.md:37`), about 20 in its first minute - so 60,
   not the proposed 20. [B24-A3 review, 2026-10-08] `regressions-1`: that premise holds only on a real clock. The browser job's server
-  runs the fixture runtime's frozen clock, under which a window keyed on `Date.now()` never rolls over, so the spec's 82 runs would
+  runs the fixture runtime's frozen clock, under which a window keyed on `Date.now()` never rolls over, so the spec's 82 runs ([B24-B2, 2026-10-08] 85) would
   have been one window and its 61st run refused for the rest of the run; every window now reads `unfrozenNowMs` (section 2), and
   whether a real minute of the spec stays under 60 is the lead's browser run (**PROPOSED**). Each is A3b's stated choice (OD-197); tightening expensive to 10 or chat to 20 needs those suites to reset their
   windows per case, the lead's or the owner's choice (section 19). The public windows met no suite's count: sign-in at most 8 of 30,

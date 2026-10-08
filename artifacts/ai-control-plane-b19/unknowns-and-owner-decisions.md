@@ -88,7 +88,7 @@ Operator scripts and adjacent routes:
 
 Test and CI hygiene:
 - The B11.5 write-closure gate and the full suite run only outside CI (CI runs narrow deterministic lists); the full suite is
-  run at each increment and at the closeout instead.
+  run at each increment and at the closeout instead. [B24-B2, 2026-10-08] Superseded in part: the B11.5 write-closure gate (`b11-5-capture-exactness`) runs in prompt-to-gerber since B24-B2 (D24-15, OD-204; `ai-control-plane-b24/ci-admission.md`); the full suite still runs only outside CI.
 - The tripwire scan for vendor-module imports covers `distributors/clients` and `acquisition/external-search` by name; new
   vendor-reaching modules must be added deliberately.
 

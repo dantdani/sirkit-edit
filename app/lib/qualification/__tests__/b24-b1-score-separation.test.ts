@@ -2,7 +2,7 @@
  * [B24-B1] Scores per class, never summed (D24-14, OD-203; runbook `:1070` "Keep scores separate so a fake-backed pass cannot hide a
  * missing live test", `:147` "Missing evidence must remain missing or unknown; never invent a pass").
  *
- *  1. the committed scores: the six classes, in order, and nothing else; deterministic offline incomplete (power and ground missing,
+ *  1. the committed scores: the six classes, in order, and nothing else; deterministic offline incomplete (power and ground missing, [B24-B2, 2026-10-08] failing since B24-B2: power-ground's recorded counterexample),
  *     links outside pull-request CI), model-in-loop and external-provider staging BLOCKED-LIVE-QUALIFICATION, physical-hardware
  *     validation failing, browser E2E and database-backed as the JSON records them;
  *  2. a blocked row never counts as covered, on synthetic valid catalogs; an invalid catalog is never scored;
@@ -62,7 +62,7 @@ function result(id: string, gates: CorrectnessGateResult[]): BenchmarkResult {
 const gate = (metricId: string, state: CorrectnessGateResult["state"]): CorrectnessGateResult => ({ gateId: `gate:${metricId}:v1`, metricId, state, critical: true, evidenceRefs: [], explanation: state });
 
 describe("[B24-B1] scores per class, never summed", () => {
-  it("1. the committed scores: the six classes in order and nothing else; offline incomplete, model-in-loop and staging BLOCKED-LIVE-QUALIFICATION, physical failing, browser and database as the JSON records them", () => {
+  it("1. the committed scores: the six classes in order and nothing else; offline failing ([B24-B2, 2026-10-08] was incomplete until B24-B2's power-ground evaluation), model-in-loop and staging BLOCKED-LIVE-QUALIFICATION, physical failing, browser and database as the JSON records them", () => {
     const scores = scoreGoldenCatalog(GOLDEN_EVAL_CATALOG);
     expect(Object.keys(scores)).toEqual([...EVAL_CLASS_IDS]);
     expect(Object.keys(scores).filter((key) => FORBIDDEN_KEY.test(key))).toEqual([]);
@@ -74,9 +74,9 @@ describe("[B24-B1] scores per class, never summed", () => {
       expect(score.covered + score.coveredInPart + score.missing + score.blocked + score.failing + score.notApplicable, evalClass).toBe(rows.length); // one class's own rows, never two classes
     }
     const offline = scores.deterministic_offline;
-    expect(offline.verdict).toBe("incomplete");
-    expect(offline.missing).toBe(1);
-    expect(GOLDEN_EVAL_CATALOG.filter((row) => row.class === "deterministic_offline" && row.state === "missing").map((row) => row.area)).toEqual(["power-ground"]);
+    expect(offline.verdict).toBe("failing"); // [B24-B2, 2026-10-08] reviewed pin move, was "incomplete" (power-ground missing): B24-B2's power/ground evaluation fails on its recorded counterexample (b24-b2-power-ground case 9; D24-16), and a failing row decides the verdict
+    expect(offline.missing).toBe(0); // [B24-B2, 2026-10-08] reviewed pin move, was 1: power-ground is evaluated
+    expect(GOLDEN_EVAL_CATALOG.filter((row) => row.class === "deterministic_offline" && row.state === "failing").map((row) => row.area)).toEqual(["power-ground"]); // [B24-B2, 2026-10-08] reviewed pin move, was the missing rows, ["power-ground"]
     expect(offline.outsidePullRequestCi).toBeGreaterThan(0);
     expect(offline.notApplicable).toBe(0);
     expect(scores.model_in_loop.verdict).toBe("BLOCKED-LIVE-QUALIFICATION");

@@ -682,15 +682,27 @@ describe("[B24-A1] the page environments-and-deployment.md", () => {
     expect(proseCitationProblems(dfm, lines(WORKFLOW), read(PAGE))).toEqual([]);
     // [B24-A1 check, 2026-10-06] a later task that inserts lines above the PGlite entry moves the citation in place with its own dated
     // note and appends its rows - nothing else; one that leaves it unmoved (task-D1.md:553-554), or moves it without a note, fails
-    const planned = simulate(PLANNED);
+    // [B24-B2 STOP, 2026-10-08] reviewed move (the lead's), as case 16's since A2's STOP: only the tasks still to land are simulated - a
+    // landed task's real rows and real dated note stand in the tree - so the unmoved citation is the tree's own PGlite line, and the tasks
+    // that must note are derived step by step from the simulation (was: PLANNED, `cites :302`, B2 listed by name); once no task still to
+    // land moves the entry (after B3 and D1 land), a synthetic insertion above it (B24-A9, no task) keeps the three probes biting
+    const remaining = stillPlanned();
+    const entryOf = (workflow: readonly string[]): number => workflow.findIndex((line) => line.includes(PGLITE));
+    const moversIn = (steps: readonly PlannedInsertion[]): Set<string> => new Set(steps.filter((_, index) => entryOf(simulate(steps.slice(0, index + 1)).workflow) !== entryOf(simulate(steps.slice(0, index)).workflow)).map((step) => step.task));
+    const synthetic: PlannedInsertion = { task: "B24-A9", job: "prompt-to-gerber", after: beforeLineHolding("--outputFile=vitest-deterministic-manufacturing.xml"), lines: ["          app/lib/simulated/__tests__/b24-a9-synthetic-mover.test.ts"] };
+    const probe = moversIn(remaining).size > 0 ? remaining : [...remaining, synthetic];
+    const movers = moversIn(probe);
+    expect(movers.size).toBeGreaterThan(0);
+    const planned = simulate(probe);
     expect(planned.dfm).not.toBe(dfm);
     expect(proseCitationProblems(planned.dfm, planned.workflow, planned.page)).toEqual([]);
-    const unmoved = simulate(PLANNED, "unmoved");
-    expect(proseCitationProblems(unmoved.dfm, unmoved.workflow, unmoved.page).join(" "), "unmoved").toMatch(/cites :302/);
-    const unnoted = simulate(PLANNED, "unnoted");
+    const unmoved = simulate(probe, "unmoved");
+    expect(proseCitationProblems(unmoved.dfm, unmoved.workflow, unmoved.page).join(" "), "unmoved").toContain(`cites :${entryOf(lines(WORKFLOW)) + 1};`);
+    const unnoted = simulate(probe, "unnoted");
     const missing = proseCitationProblems(unnoted.dfm, unnoted.workflow, unnoted.page).join(" ");
-    for (const task of ["B24-B2", "B24-B3", "B24-D1"]) expect(missing, task).toContain(`no dated ${task} note`);
-    for (const task of ["B24-A1", "B24-A2", "B24-A4", "B24-C1", "B24-D2"]) expect(missing, task).not.toContain(`no dated ${task} note`);
+    for (const task of movers) expect(missing, task).toContain(`no dated ${task} note`);
+    const landed = insertionTable(read(PAGE)).rows.map((row) => row.task);
+    for (const task of new Set(["B24-A1", ...landed, ...probe.map((step) => step.task).filter((task) => !movers.has(task))])) expect(missing, task).not.toContain(`no dated ${task} note`);
     expect(proseCitationProblems(dfm.replace("; [B24-A1, 2026-10-06] was `:301` before B24-A1's filter line after `:227`", ""), lines(WORKFLOW), read(PAGE)).join(" "), "A1's note stripped").toContain("no dated B24-A1 note");
     expect(dfm).toMatch(/\[B24-A1, 2026-10-06\] C64 re-pinned `:301` -> `:302`/);
     const matrix = read("artifacts/ai-control-plane-b21/evaluation-matrix.md").split(NEWLINE);

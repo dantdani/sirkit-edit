@@ -15,6 +15,9 @@
  *  - package.json: the `stage10:test` script (`vitest run app/lib/engineering/__tests__`);
  *  - vitest.config.ts: the include pattern (vitest runs only `app/**` + `/__tests__/` + `*.test.ts(x)` files).
  * It holds no route-file matcher (b20-b2-route-tree case 3).
+ * [B24-B2, 2026-10-08] Extended in place (D24-15, OD-204; no second reader): each benchmark job's one-line vitest step may carry an
+ * `env` block (the nightly step's `SIRKIT_B24_CORPUS_NIGHTLY: "1"`), returned as `stepEnv`; an `env:` with no entry, an entry
+ * outside one, or a doubled key throws CI_ANCHOR.
  */
 import { readFileSync } from "node:fs";
 import { join, posix } from "node:path";
@@ -102,12 +105,37 @@ function inlineVitestFilters(lines: readonly string[], start: number, end: numbe
   if (filters.length === 0) fail(`${file}: ${key.trim()}'s vitest step has no filter`);
   return filters;
 }
+/** [B24-B2] The `env` block of a job's one-line vitest step: the step's own keys (eight spaces) up to the next step or the job's end;
+ *  `env:` among them, then its `KEY: value` entries (ten spaces), each value with one pair of surrounding quotes removed. */
+function inlineStepEnv(lines: readonly string[], start: number, end: number, file: string, key: string): Record<string, string> {
+  const run = onlyLineStarting(lines, `- run: ${CI_ADMISSION_ANCHORS.vitestStep} `, file, start, end);
+  const env: Record<string, string> = {};
+  let inEnv = false;
+  let entries = 0;
+  for (let index = run + 1; index < end && /^ {8,}\S/.test(lines[index]!); index += 1) {
+    const line = lines[index]!;
+    if (/^ {8}\S/.test(line)) {
+      if (inEnv && entries === 0) fail(`${file}: ${key.trim()}'s vitest step has an env block with no entry`);
+      inEnv = /^ {8}env:\s*$/.test(line);
+      continue;
+    }
+    const entry = /^ {10}([A-Za-z_][A-Za-z0-9_]*):\s*(.*?)\s*$/.exec(line);
+    if (!inEnv || entry === null) fail(`${file}: ${key.trim()}'s vitest step has a line outside an env entry: "${line.trim()}"`);
+    if (Object.hasOwn(env, entry![1]!)) fail(`${file}: ${key.trim()}'s vitest step sets ${entry![1]} twice`);
+    env[entry![1]!] = /^"(.*)"$|^'(.*)'$/.test(entry![2]!) ? entry![2]!.slice(1, -1) : entry![2]!;
+    entries += 1;
+  }
+  if (inEnv && entries === 0) fail(`${file}: ${key.trim()}'s vitest step has an env block with no entry`);
+  return env;
+}
 
 export interface CiAdmission {
   /** The jobs that run `path` (repository-relative), in CI_JOB_IDS order. */
   readonly jobsOf: (path: string) => CiJobId[];
   /** The filters each vitest job applies, as derived (for the page and the bite checks). */
   readonly filters: Readonly<Record<"prompt-to-gerber" | "database-delivery" | "benchmark-core" | "benchmark-nightly", readonly string[]>>;
+  /** [B24-B2] The `env` block of each benchmark job's vitest step, values unquoted ({} when the step has none). */
+  readonly stepEnv: Readonly<Record<"benchmark-core" | "benchmark-nightly", Readonly<Record<string, string>>>>;
 }
 
 /** Derive the admission from the workflows; throws CI_ANCHOR when any anchor is absent or appears twice. */
@@ -141,6 +169,11 @@ export function ciAdmission(read: RepoReader = readRepoText): CiAdmission {
   };
   const core = benchmarkFilters(CI_ADMISSION_ANCHORS.benchmarkCore);
   const nightly = benchmarkFilters(CI_ADMISSION_ANCHORS.benchmarkNightly);
+  const stepEnvOf = (key: string): Readonly<Record<string, string>> => {
+    const [start, end] = jobBlock(benchmark, key, BENCHMARK);
+    return Object.freeze(inlineStepEnv(benchmark, start, end, BENCHMARK, key));
+  };
+  const stepEnv = Object.freeze({ "benchmark-core": stepEnvOf(CI_ADMISSION_ANCHORS.benchmarkCore), "benchmark-nightly": stepEnvOf(CI_ADMISSION_ANCHORS.benchmarkNightly) });
   const [nightlyStart, nightlyEnd] = jobBlock(benchmark, CI_ADMISSION_ANCHORS.benchmarkNightly, BENCHMARK);
   const condition = onlyLine(benchmark, CI_ADMISSION_ANCHORS.nightlyCondition, BENCHMARK, false);
   if (condition < nightlyStart || condition >= nightlyEnd) fail(`${BENCHMARK}: the schedule-and-dispatch condition is outside benchmark-nightly`);
@@ -162,7 +195,7 @@ export function ciAdmission(read: RepoReader = readRepoText): CiAdmission {
     if (/^e2e\/[^/]+\.spec\.ts$/.test(normal) || /^e2e-orchestration\/[^/]+\.spec\.ts$/.test(normal)) jobs.add("page-browser-e2e");
     return CI_JOB_IDS.filter((job) => jobs.has(job));
   };
-  return Object.freeze({ jobsOf, filters: Object.freeze({ "prompt-to-gerber": promptToGerber, "database-delivery": databaseDelivery, "benchmark-core": core, "benchmark-nightly": nightly }) });
+  return Object.freeze({ jobsOf, filters: Object.freeze({ "prompt-to-gerber": promptToGerber, "database-delivery": databaseDelivery, "benchmark-core": core, "benchmark-nightly": nightly }), stepEnv });
 }
 
 // ── B19-E's PGlite detector, re-implemented (b19-e-ci-job-scope.test.ts; never imported) ─────────────────────────────────────────

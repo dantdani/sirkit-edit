@@ -107,6 +107,9 @@ Decisions the program cannot take safely on its own. Each row states the safe de
 - Default applied: accept a longer job while it stays well inside its timeout; split it if a run comes within five minutes of the limit.
 - The owner may choose otherwise.
 - [B24-A2, 2026-10-06] B24-A2 adds six tests to `e2e/security-headers.spec.ts` (four served-header paths, the framing case with its one-second negative wait, the report-only case) on `page-browser-e2e`'s default configuration, and one CI job, `secret-scan` (tree mode on every run, every commit of a pull request; a 10-minute limit, beside the other jobs). The builder ran no browser job. The lead's local run: the default configuration 54 tests in 10.3 min and the orchestration configuration 4 of 4 in 2.6 min, against `page-browser-e2e`'s 30-minute limit (B24-A1's CI run of the job took 20m13s with both configurations); the CI times of `page-browser-e2e` and `secret-scan` with A2's tests are recorded with the next increment. The default applies: split the browser job if a run comes within five minutes of its limit.
+- [B24-A4, 2026-10-08] B24-A4 adds four PGlite suites to `database-delivery` (`deterministic-manufacturing.yml:303-306`). The list ran in 95 s locally (93.41 s, two workers; A4's four files 88.0 s of file time), about 1.6 minutes of the job's 15-minute limit, about 13.4 minutes of headroom. CI's time is recorded with its first run. The default applies.
+- [B24-B2, 2026-10-08] B24-B2 adds the 36 admitted suites and its three suites to prompt-to-gerber: 17 min 54 s (run 37747294504 at `72c1376`; 17 min 46 s at `b0af256`, run 37757043996) + about 45 s local ≈ 18 min 44 s of 25 (INFERRED; about 6 min 16 s of headroom). page-browser-e2e gains one test (three chat runs): 20 min 08 s at `b0af256` + one case (INFERRED; the first CI run after B2 measures it). benchmark-nightly gains the corpus (6.4 s locally), and `stage10:test` now runs even after a red corpus; no reading until its first scheduled run (UNKNOWN). No `timeout-minutes` changed.
+
 
 ## OD-31 — Who may spend live distributor quota (B19-B I2, 2026-09-13)
 
@@ -2048,6 +2051,8 @@ Amendments to existing entries:
 - **Evidence:** `tier3-vocabulary.md` section 6; `b23-a-route-vocabulary` (8 tests); the regenerated
   `route-data-and-resource-classification.csv` (two appended columns).
 - Owner confirmation pending.
+- [B24-A3, 2026-10-08] The open question is answered by B24-A3 (OD-197; discovery 9.6 assigns it to A3). Both searches stay public. Their policy rows now declare `providerCredit: true` (`pub()` takes an optional `{ providerCredit }` and adds no key to `RoutePolicy`), and both, with the preview, are classified `expensive`. Each meets its public windows and the `embedding` meter. `publicHasCreditOrWrite` excuses public credit only on a reviewed `PUBLIC_MODEL_EGRESS` path with a valid `ABUSE_LIMITS` entry; this narrows it in place without loosening it, and the B16.0.2, B20-B2 and B20-B3 pins stay `[]`. `abuseLimitViolations` refuses such a path without a window. B16.0.1's invariants "provider-credit routes are NEVER public" and "public rows carry no credit" are narrowed in place to exactly the two metered searches. Requiring sign-in stays the owner's alternative. The B23 records that still call the question open go to B24-F (item 8).
+
 
 ## OD-182 — B23-A2: stated choices beyond its task text, as applied (B23-A2, 2026-10-02)
 
@@ -2600,6 +2605,8 @@ Amendments to existing entries:
 
 - **Default applied in part:** the LB-13 row, in OD-217's vocabulary (below), and its `PROGRAM_STATE.json` mirror. B24-A4 (LB-14), B24-B1 (LB-15..LB-17) and B24-E (the rest of OD-217) append dated amendments under this heading.
 - Owner confirmation pending.
+- [B24-A4, 2026-10-08] LB-14 applied. The row "database platform: Data API exposure, roles, backup, PITR, failover, restart" is appended after LB-13 in OD-217's vocabulary (BLOCKED-LIVE-QUALIFICATION), with its `PROGRAM_STATE.json` `liveBlockers` mirror. B24-B1 (LB-15..LB-17) and B24-E (the rest of OD-217) append next.
+- [B24-B2 lead, 2026-10-08] Records repair: B24-A3's, B24-A4's and B24-B1's records copied their reports' later sections into this file (inside OD-197, OD-225, OD-201, OD-226 and OD-227). The README-row copies and the report headings were removed (README.md holds the rows), and three amendments that had landed only there now stand under their own headings: B24-A3's under OD-174 (B23-A2), B24-A4's LB-14 line under OD-217 and B24-A4's database-delivery time under OD-30.
 
 
 ## OD-223 — B24-A1: stated choices beyond its task text, as applied (B24-A1, 2026-10-06)
@@ -2674,12 +2681,6 @@ Amendments to existing entries:
   - The gate covers every authenticated gated row (`credit_unlimited`, `expensive_unlimited`); the key set is exactly 43 rows plus sign-in.
   - Q8: 0 LLM admissions on the flag-off chat path.
 
-**4. OD-174 amendment** (under its B23-A2 heading at `OWNER_DECISIONS.md:2035`; the question is at :2045-2046):
-
-- [B24-A3, 2026-10-08] The open question is answered by B24-A3 (OD-197; discovery 9.6 assigns it to A3). Both searches stay public. Their policy rows now declare `providerCredit: true` (`pub()` takes an optional `{ providerCredit }` and adds no key to `RoutePolicy`), and both, with the preview, are classified `expensive`. Each meets its public windows and the `embedding` meter. `publicHasCreditOrWrite` excuses public credit only on a reviewed `PUBLIC_MODEL_EGRESS` path with a valid `ABUSE_LIMITS` entry; this narrows it in place without loosening it, and the B16.0.2, B20-B2 and B20-B3 pins stay `[]`. `abuseLimitViolations` refuses such a path without a window. B16.0.1's invariants "provider-credit routes are NEVER public" and "public rows carry no credit" are narrowed in place to exactly the two metered searches. Requiring sign-in stays the owner's alternative. The B23 records that still call the question open go to B24-F (item 8).
-
-**5. OD-225** (the next free number at `b3b6b05`):
-
 
 ## OD-225 — B24-A3: stated choices beyond its task text, as applied (B24-A3, 2026-10-08)
 
@@ -2701,12 +2702,6 @@ Amendments to existing entries:
   - (k) The suite names `b24-a3-*`.
 - Owner confirmation pending.
 - [B24-A3b, 2026-10-08] The per-principal numbers (60 / 50 / chat 60), the keys (`[tenantId, projectId, principalId]`) and the enforcement sites (`authorizeRequest` after membership and role; `agentStreamRoute` after its role check), any refusal refusing.
-
-**6. README row:**
-
-| B24-A3 abuse controls (D24-8; OD-197, OD-174's question, OD-225; discovery 8 item 8) | `abuse-controls.md`; code `app/lib/auth/abuse-limits.ts`, `app/lib/embedding-admission.ts`, `app/lib/auth/{authorize,route-handlers,route-policy,route-resource-classification}.ts`, `app/lib/acquisition/admission-control.ts` (the `embedding` meter, appended), the parts, footprint-search and preview routes, `app/lib/pcb/footprint-search-service.ts`, `app/lib/fixture-runtime/clock.ts` (`unfrozenNowMs`), `app/signin/page.tsx`; suites `app/lib/qualification/__tests__/b24-a3-*` | done 2026-10-08 offline; review round of 14 findings closed (section 21); every window per process; browser jobs PROPOSED until the lead's runs; census 168 / 165 / 3 / 0, counts 47 / 36 / 9 / 27, 107 action records; a real proxy, several instances, Supabase's own sign-in limits and OpenAI's 429 and quota BLOCKED-LIVE-QUALIFICATION (LB-13, LB-1, LB-2) |
-
-**7. Ledger paragraph:**
 
 
 ## OD-191 — the main Supabase project and an isolated staging project, as applied (B24-A4, 2026-10-08)
@@ -2762,11 +2757,6 @@ Amendments to existing entries:
   - The acceptance driver's check is narrowed from "the server reports the fixture runtime or a disposable marker" to `--disposable-target`, a loopback base URL, and a catalog read that cannot reach a non-loopback database (OD-226). The server's own database is not checked, and stays BLOCKED-LIVE-QUALIFICATION (LB-14).
 - Owner confirmation pending.
 
-**4. OD-217 amendment** (under B24-A1's heading at `OWNER_DECISIONS.md:2599`):
-- [B24-A4, 2026-10-08] LB-14 applied. The row "database platform: Data API exposure, roles, backup, PITR, failover, restart" is appended after LB-13 in OD-217's vocabulary (BLOCKED-LIVE-QUALIFICATION), with its `PROGRAM_STATE.json` `liveBlockers` mirror. B24-B1 (LB-15..LB-17) and B24-E (the rest of OD-217) append next.
-
-**5. OD-226**, the next free number at `3cd7d6e`:
-
 
 ## OD-226 — B24-A4: stated choices beyond its task text, as applied (B24-A4, 2026-10-08)
 
@@ -2789,15 +2779,6 @@ Amendments to existing entries:
     - cleanup hooks only once admitted;
     - an unencoded `@` before a host list refused as `DB_URL_MALFORMED`.
 - Owner confirmation pending.
-
-**6. OD-30 amendment** (optional; A2 set the precedent):
-- [B24-A4, 2026-10-08] B24-A4 adds four PGlite suites to `database-delivery` (`deterministic-manufacturing.yml:303-306`). The list ran in 95 s locally (93.41 s, two workers; A4's four files 88.0 s of file time), about 1.6 minutes of the job's 15-minute limit, about 13.4 minutes of headroom. CI's time is recorded with its first run. The default applies.
-
-**7. README row:**
-
-| B24-A4 data layer: roles, row security, TLS, test isolation, rollback, recovery (D24-2, D24-3 and D24-7 offline, D24-12; OD-191, OD-192, OD-193, OD-194, OD-201, OD-217 in part (LB-14), OD-226) | `database-and-recovery.md`; code `drizzle/0031_rls_default_deny.sql`, `drizzle/rollback/0027..0031.down.sql`, `app/lib/db/{connection-security,qualification-target}.ts`, `app/lib/db/migrations/{rollback,cli-arguments}.ts`, `app/lib/db/recovery/logical-dump.ts`, `.enableRLS()` in `schema.ts`, `verifyDefaultDenyRls`, `scripts/db-migrate.ts` (`--rollback`), `scripts/e2e-prompt-to-gerber.ts` (`--disposable-target`); suites `app/lib/qualification/__tests__/b24-a4-database-tls.test.ts`, `app/lib/qualification/database/__tests__/b24-a4-*` | done 2026-10-08 offline on PGlite; review round of ten findings closed (section 18); migrations 31 -> 32; census 168 / 165 / 3 / 0, counts 47 / 36 / 9 / 27, 107 action records; the real project's Data API exposure, grants and roles, 0031's pre-apply check, certificate verification, backups, PITR, failover and a real-server rollback and restore BLOCKED-LIVE-QUALIFICATION (LB-14) |
-
-**8. Ledger paragraph:**
 
 
 ## OD-203 — the golden catalog: where it lives and how classes are typed, as applied (B24-B1, 2026-10-08)
@@ -2830,8 +2811,82 @@ Under the existing OD-217 heading (`:2599`), append:
   - (k) Review round: a malformed LB id is a refusal, never thrown. The helper's sixteen anchors and six placement or step-shape guards are each probed.
 - Owner confirmation pending.
 
-**6. README row** (`artifacts/ai-control-plane-b24/README.md`):
 
-| B24-B1 golden evaluation catalog (D24-14; OD-203, OD-217 in part (LB-15..LB-17), OD-227) | `eval-catalog.md`, `eval-catalog.csv`, `eval-catalog.json`; code `app/lib/evaluation/golden-catalog.ts`, `scripts/generate-b24-eval-catalog.ts`, `app/lib/benchmark/regression-policy.ts` (`NO_EVIDENCE_STATUS`), test-only `app/lib/qualification/__tests__/_ci-admission.ts`; suites `b24-b1-catalog` (11), `b24-b1-score-separation` (5); B23-D pin `b23-d-physical-evidence-contract` case 8 moved and `physical-evidence.md:222` noted | done 2026-10-08 offline; review round of nine findings closed (section 16); scores per class, none a pass (offline incomplete, model-in-loop and staging BLOCKED-LIVE-QUALIFICATION, browser and database incomplete, physical failing on B22-D's record, LB-10); census 168 / 165 / 3 / 0, counts 47 / 36 / 9 / 27; every live row BLOCKED-LIVE-QUALIFICATION except the failing physical row (LB-1, LB-2, LB-3, LB-5, LB-7, LB-9, LB-11..LB-13, LB-15..LB-17) |
+## OD-204 — CI admission of the older suites and the corpus, as applied (B24-B2, 2026-10-08)
 
-**7. Ledger paragraph:**
+- **Default applied:**
+  - The 23 B09-B11 suites, the four B16.0 byte pins, `pin-pad-mapping` and the five footprint-resolver suites ride prompt-to-gerber after one local green run at `b0af256`. With the three live ones that is 36 files: 431 passed, 15 skipped.
+  - They are explicit entries before the `--reporter` line, with the footprint-resolver five under one directory filter: 32 lines at `deterministic-manufacturing.yml:260-291`.
+  - There is no `app/lib/agent/__tests__` filter, because of B19-E's redundancy rule.
+  - Time (OD-30 by analogy): 17 min 54 s + 45 s ≈ 18 min 44 s of 25 (INFERRED). That is under the 20-minute line, so there is no separate job.
+- **The corpus:**
+  - It does not use `benchmark baseline`, which is publicDevelopment only, writes `wx` into the committed baseline and runs git.
+  - Instead `b24-b2-corpus-nightly` runs the 58 non-holdout packages into a temporary root, gated on `SIRKIT_B24_CORPUS_NIGHTLY` exactly "1". Only benchmark-nightly's vitest step sets it, on schedule and dispatch.
+  - The holdout stays declared unavailable. Four separate buckets are reported, never one score.
+  - [B24-B2 review, 2026-10-08] The nightly's `stage10:test` and the holdout declaration carry `if: ${{ !cancelled() }}`.
+- [B24-B2 lead, 2026-10-08] Lead decision on the red corpus (STOP 1): option (c), recorded red and not excused. The three CD-9 packages fail because `app/lib/benchmark/builtin-executor.ts` has no `circuit_verification_*` case (every other CD domain has a `benchmark.ts` executor; CD-9 has none). D24-41 is opened and owned by B24-D1 (benchmark methodology), which writes the executor test-first, deriving every expected value from the CD-9 modules. The flagged corpus runs only on benchmark-nightly, which is scheduled on the default branch, so it first runs after this chapter merges, after B24-D1. A known-failure list (option b) was declined: it would excuse a gap this chapter closes.
+- Owner confirmation pending.
+
+
+## OD-205 — the power and ground invariant, as applied (B24-B2, 2026-10-08)
+
+- **Default applied:**
+  - For every net `classifyNets` rates power or ground, its name, its power symbols and its net-class membership are unchanged by every agent delete, replace or edit, unless the sealed proposal names the net (operation targets or `removedLabelNames`).
+  - There is one offline evaluation per verb through the agent's path and the canonical executor (`b24-b2-power-ground`, 10 cases). Member pins are added by OD-228 (c).
+  - The defaults hold in every case. The member rule records one counterexample (case 9, STOP 2; D24-42, OD-229 for the owner).
+- Owner confirmation pending.
+
+
+## OD-228 — B24-B2: stated choices beyond its task text, as applied (B24-B2, 2026-10-08)
+
+- **Default applied:**
+  - (a) The named D24-15 list, beyond the catalog, plus the three opt-in live suites (`assist-live`, `b16-1b-live-qualification`, `kicad-cli-oracle`), admitted as skipping (OD-222).
+  - (b) A new guard, `b24-b2-ci-admission`, rather than an edit to B19's. It reuses B1's `_ci-admission.ts`, extended in place (`stepEnv`), so there is no second reader; detector parity uses B19-E's fixtures.
+  - (c) Power and ground:
+    - a net is "named" when it is an operation target or in the sealed `removedLabelNames`;
+    - member pins are keyed by component id and pin, an addition to OD-205's default;
+    - they are compared over surviving components only;
+    - the acknowledged-drop exemption (`schematic-plans.ts:415-420`) cannot be reached by any agent verb, because the B14 assembler never supplies `acknowledgeDroppedPins`;
+    - the agent path's replace refusal detail comes from `explicit-pin-mapping-required`, not from `unacknowledged-dropped-connections`.
+  - (d) The corpus rule:
+    - a baseline pass must stay `passed`;
+    - no `BLOCKING_STATUS` is accepted except a baseline-recorded `failed_correctness` that still fails, its ids read from the store;
+    - four buckets, reported apart;
+    - the holdout is excluded (58 of 63), with a fixed `codeRevision` and no `scripts/benchmark.ts` edit;
+    - [review] a red corpus skips no later nightly step.
+  - (e) No quote case: it needs a new scripted sentence in `fixture-agent-adapter.ts`, which carries 18 artifact pins and has 8 readers.
+  - (f) The `b16-0-*` suites still outside CI: 73 at `f663d71` and at `b0af256`.
+    - Five are already in a job: the 12 and 15 tranche-parity suites in prompt-to-gerber, `b16-0-3-bom-ownership-check` in database-delivery, and `b16-0-1-replacement-authorization` and `b16-0-1-tier1-authorization` in benchmark-core.
+    - Four are admitted here.
+    - The 64 outside:
+      - `app/api/__tests__`: b16-0-10, -11, -13, -14, -16, -17, -18, -19, -20, -21, -22, -23, -24, -8 and -9 tranche-parity; b16-0-17-1, -18 and -19 proposal-validation; b16-0-24-1-security-correction, b16-0-4-bounded-body-behavior, b16-0-5-media-type-and-wrapper, b16-0-identity-header-gate.
+      - `app/api/auth/__tests__`: b16-0-1-signin.
+      - `app/api/bom/__tests__`: b16-0-2-bom-ownership.
+      - `app/api/chat/__tests__`: b16-0-1-chat-authorization.
+      - `app/api/pcb/export/gerbers/__tests__`: b16-0-2-engineering-export.
+      - `app/api/replacement-authority/__tests__`: b16-0-3-route-auth.
+      - `app/lib/agent/__tests__`: b16-0-1-verified-actor.
+      - `app/lib/auth/__tests__`: b16-0-1-route-authorization; b16-0-11-bom, -16-calculation, -17-schematic-compiler, -18-component-selection, -19-circuit, -20-simulation, -21-tranche14, -22-tranche15, -23-tranche16 and -24-tranche17 confinement gates; b16-0-14-selector-envelope-gate; b16-0-15-manufacturing-boundary-gate; b16-0-2-csrf-exact-origin; b16-0-2-mode-diagnostics; b16-0-3-boundary-gate; b16-0-3-effective-classification; b16-0-4-authorization-and-body-gates; b16-0-5, -6 and -7 analyzer-hardening; b16-0-7-wrapper-adoption-gate; b16-0-8-wrapper-capabilities; b16-0-ai-approval-lifecycle; b16-0-local-dev-and-csrf; b16-0-trusted-request-context.
+      - `app/lib/http/__tests__`: b16-0-2-bounded-json.
+      - `app/lib/llm/__tests__`: b16-0-17-2, -18, -19 and -23 adapter-schema-parity.
+      - `app/lib/project/__tests__`: b16-0-1-apply-reauthorization, b16-0-2-required-apply-role, b16-0-2-session-identity.
+      - `app/lib/schematic-compiler/__tests__`: b16-0-17-2-schema-parity.
+      - `app/lib/spice/__tests__`: b16-0-2-spice-scope-isolation.
+  - (g) Time rule: no stop. The footprint-resolver five ride one directory filter (32 lines, not 36).
+  - (h) [review] The order case asserts its own turn by count growth, not `.last()`; its path check is the task's unbounded pattern; the catalog's in-part gap says "no browser request" and PROPOSED until its first browser run.
+  - (i) [review] Two comment-only notes in production files (`abuse-limits.ts:165`, `clock.ts:73`), on a statement B2 made false.
+  - (j) [review] A1 case 17's corrected move is the lead's (A1 handover (4)); the lead applied it on 2026-10-08 (the qualification folder 212 passed, 3 skipped).
+- Owner confirmation pending.
+
+
+## OD-229 — a delete that removes a wire joining surviving pins (D24-42), proposed (B24-B2 lead, 2026-10-08)
+
+- **What B24-B2 found** (RECORDED, `b24-b2-power-ground` case 9): the delete plan (`schematic-plans.ts:90-98`, B06's policy) removes every wire with an end on a deleted pin. When that wire also passes through a surviving pin (an interior vertex), the sealed delete removes the connection between the survivors too, and the sealed impact lists the wire id but names no net. The case: R4's wire runs through C5's pin to C6's GND symbol; deleting R4 takes C5 off GND.
+- **Who it reaches:** the same planner serves the agent's Tier 1 delete (`gateway.ts:330`, through `compileTier1Proposal`) and the user's own delete (`app/page.tsx:3616`), so a change is a product behaviour change for both. B24-B2 changed nothing (its task's STOP rule).
+- **Options for the owner:**
+  - (a) fail closed: refuse a delete whose removed wire touches two or more surviving connection points (pins, labels, other wires' vertices), on the agent path only or on both paths;
+  - (b) trim: keep the part of the wire beyond the first surviving connection point (a new sealed operation shape);
+  - (c) name: add the survivors whose membership changes to the sealed impact, so the approval shows them.
+- **Recommended default:** (a) on the agent path (the AI's proposals stay bounded to what they name), the user's own delete unchanged until (b) is designed.
+- Until the owner decides, the catalog's power-ground x deterministic offline row stays `failing` and D24-42 stays open in the final report. No B24 increment owns the change.
+- Owner decision pending.

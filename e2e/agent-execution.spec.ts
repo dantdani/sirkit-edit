@@ -1009,6 +1009,52 @@ test("[B18-E E16] and the human's Apply lands it: ONE canonical replacement tran
   await expect(page.getByText(/Replacement NOT applied/), "the apply was not refused").toHaveCount(0);
 });
 
+test("[B24-B2] an order request in the browser (D24-16, quote/order x browser E2E): the composer routes it to the assistant with the Tier 3 hint, the forged order call is refused before anything runs, nothing changes and no browser request reaches a provider exchange or an order path", async ({}, testInfo) => {
+  const start = await board();
+  const entries = page.getByTestId("chat-execution-entry");
+  const entriesBefore = await entries.count();
+  const committed = await committedLines().count();
+  // [B24-B2 review, 2026-10-08] E9's "Release the board." turn left the same refusal line, labelled note and nothing-changed label in
+  // this serial page, so each is counted before this turn and must grow after it (a .last() check would pass on E9's line)
+  const refusals = page.getByText(/Unknown tool — refused before running \(unknown_tool\) — nothing ran/);
+  const notes = page.getByText(/^Assistant note \(written before the result\): \(fixture interim\)/);
+  const nothingChanged = page.getByText(NOTHING_CHANGED);
+  const requests: string[] = [];
+  const record = (request: Request): void => { requests.push(`${request.method()} ${new URL(request.url()).pathname}`); };
+  page.on("request", record);
+  try {
+    // before sending: the composer shows where Enter sends it and that ordering is never the assistant's
+    await openChat();
+    await page.getByTestId("prompt-input").fill("Order the parts.");
+    await expect(page.getByTestId("composer-route")).toHaveAttribute("data-route", "ask");
+    await expect(page.getByTestId("composer-tier3-hint")).toHaveText("Release, qualification and ordering are never done by the assistant — use the release workflow.");
+    const refusalsBefore = await refusals.count();
+    const notesBefore = await notes.count();
+    const nothingChangedBefore = await nothingChanged.count();
+    const sentAt = chatBodies.length;
+    await chat("Order the parts."); // the scripted agent emits sirkit_bom_order, a provider name this run never advertised
+    expect(chatBodies[sentAt]!.messages?.at(-1)).toMatchObject({ role: "user", content: "Order the parts." });
+    await expect.poll(() => refusals.count(), { message: "this turn's own unknown_tool refusal line" }).toBeGreaterThan(refusalsBefore);
+    await expect(entries, "nothing was prepared, so there is no execution entry").toHaveCount(entriesBefore);
+    await expect(page.getByTestId("granted-execution-card")).toBeHidden();
+    await expect.poll(() => notes.count(), { message: "this turn's own labelled note" }).toBeGreaterThan(notesBefore);
+    await expect.poll(() => nothingChanged.count(), { message: "this turn's own nothing-changed label" }).toBeGreaterThan(nothingChangedBefore);
+    await expect(refusals.last()).toBeVisible();
+    await expect(committedLines()).toHaveCount(committed);
+    const after = await board();
+    expect(after.footprints).toEqual(start.footprints);
+    expect(silkTexts(after)).toEqual(silkTexts(start));
+    expect(JSON.stringify(chatBodies.at(-1)!.messages ?? []), "the claim never enters the history a later run receives").not.toContain("(fixture interim)");
+  } finally {
+    page.off("request", record);
+    await testInfo.attach("order-case-requests.json", { body: JSON.stringify(requests, null, 2), contentType: "application/json" });
+  }
+  expect(requests.filter((entry) => entry.endsWith(" /api/pcb/provider-exchange")), "no provider exchange").toEqual([]);
+  // [B24-B2 review, 2026-10-08] deliverable 5's pattern as written, with no word boundary: any browser request path that contains it
+  expect(requests.filter((entry) => /order|purchase|checkout|cart/i.test(entry.slice(entry.indexOf(" ") + 1))), "no order, purchase, checkout or cart path").toEqual([]);
+  expect(requests.filter((entry) => entry === "POST /api/chat").length, "the order turn and the board reads went to the chat route only").toBeGreaterThanOrEqual(2);
+});
+
 test("B18-D review 2: the S5 observer records interim text inside mixed markup, so a leak into a formatted answer could not hide", async () => {
   const probeText = "(fixture interim) Done — R3 moved";
   const before = interimLog.length;

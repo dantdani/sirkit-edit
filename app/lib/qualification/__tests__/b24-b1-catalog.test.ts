@@ -183,14 +183,14 @@ describe("[B24-B1] the golden catalog (D24-14, OD-203)", () => {
     // ... while a live_opt_in link is the evaluation itself
     expect(problems(mutate("argument-generation", "model_in_loop", { note: "Blocked (LB-2, LB-7)." }))).toEqual([]);
     // not applicable: never in the two classes every area has, never without a reason
-    expect(problems(mutate("power-ground", "deterministic_offline", { state: "not_applicable" }).map((row) => (row.area === "power-ground" && row.class === "deterministic_offline" ? without(row, "owner") : row)))).toEqual(["NA_FORBIDDEN"]);
+    expect(problems(mutate("power-ground", "deterministic_offline", { state: "not_applicable", links: [], note: "Not applicable: synthetic." }).map((row) => (row.area === "power-ground" && row.class === "deterministic_offline" ? without(row, "recordedResult") : row)))).toEqual(["NA_FORBIDDEN"]); // [B24-B2, 2026-10-08] reviewed pin move: the row is failing since B24-B2 (links, a recorded result, no owner), so the probe strips its links and result instead of an owner; the refusal probed is unchanged
     expect(problems(mutate("power-ground", "model_in_loop", { state: "not_applicable", liveBlockers: [] }))).toEqual(["NA_FORBIDDEN"]);
     expect(problems(mutate("sandbox-escape", "browser_e2e", { note: " " }))).toEqual(["NA_WITHOUT_REASON"]);
     // a missing row names its owner (a B24 increment, or exactly "none planned in B24") and its evaluation; an owner is for missing rows only
-    for (const owner of ["B25-A", "B24-G", "B24-B4", "none planned", "None planned in B24", ""]) expect(problems(mutate("power-ground", "deterministic_offline", { owner })), owner).toEqual(["MISSING_WITHOUT_OWNER"]);
-    for (const owner of ["B24-B2", "B24-E", "B24-A3", NONE_PLANNED_IN_B24]) expect(problems(mutate("power-ground", "deterministic_offline", { owner })), owner).toEqual([]);
-    expect(problems(GOLDEN_EVAL_CATALOG.map((row) => (row.area === "power-ground" && row.class === "deterministic_offline" ? without(row, "owner") : row)))).toEqual(["MISSING_WITHOUT_OWNER"]);
-    expect(problems(mutate("power-ground", "deterministic_offline", { note: "" }))).toEqual(["MISSING_WITHOUT_OWNER"]);
+    for (const owner of ["B25-A", "B24-G", "B24-B4", "none planned", "None planned in B24", ""]) expect(problems(mutate("power-ground", "browser_e2e", { owner })), owner).toEqual(["MISSING_WITHOUT_OWNER"]); // [B24-B2, 2026-10-08] reviewed pin move: B24-B2's evaluation made power-ground x deterministic_offline failing (D24-16), so the missing-row probes run on power-ground x browser_e2e, still missing; the refusal probed is unchanged
+    for (const owner of ["B24-B2", "B24-E", "B24-A3", NONE_PLANNED_IN_B24]) expect(problems(mutate("power-ground", "browser_e2e", { owner })), owner).toEqual([]); // [B24-B2, 2026-10-08] reviewed pin move: B24-B2's evaluation made power-ground x deterministic_offline failing (D24-16), so the missing-row probes run on power-ground x browser_e2e, still missing; the refusal probed is unchanged
+    expect(problems(GOLDEN_EVAL_CATALOG.map((row) => (row.area === "power-ground" && row.class === "browser_e2e" ? without(row, "owner") : row)))).toEqual(["MISSING_WITHOUT_OWNER"]); // [B24-B2, 2026-10-08] reviewed pin move: B24-B2's evaluation made power-ground x deterministic_offline failing (D24-16), so the missing-row probes run on power-ground x browser_e2e, still missing; the refusal probed is unchanged
+    expect(problems(mutate("power-ground", "browser_e2e", { note: "" }))).toEqual(["MISSING_WITHOUT_OWNER"]); // [B24-B2, 2026-10-08] reviewed pin move: B24-B2's evaluation made power-ground x deterministic_offline failing (D24-16), so the missing-row probes run on power-ground x browser_e2e, still missing; the refusal probed is unchanged
     expect(problems(mutate("view-3d", "deterministic_offline", { owner: "B24-B2" }))).toEqual(["MISSING_WITHOUT_OWNER"]);
     // an in-part row states its gap
     expect(problems(mutate("footprint-pin-authority", "browser_e2e", { note: "the browser proves the handoff only" }))).toEqual(["IN_PART_WITHOUT_GAP"]);
@@ -273,7 +273,7 @@ describe("[B24-B1] the golden catalog (D24-14, OD-203)", () => {
     expect(admission.jobsOf("app/lib/manufacturing-providers/database/__tests__/b23-b-exchange-ledger-pglite.test.ts")).toEqual(["database-delivery"]);
     expect(admission.jobsOf("e2e/agent-execution.spec.ts")).toEqual(["page-browser-e2e"]);
     expect(admission.jobsOf(ORCHESTRATION_SPEC)).toEqual(["page-browser-e2e"]);
-    expect(admission.jobsOf("app/lib/agent/__tests__/b11-trace-replay-evaluation.test.ts")).toEqual([]);
+    expect(admission.jobsOf("app/lib/agent/__tests__/b11-trace-replay-evaluation.test.ts")).toEqual(["prompt-to-gerber"]); // [B24-B2, 2026-10-08] reviewed pin move, was []: B24-B2 admitted the B11 suites to prompt-to-gerber by explicit entries (D24-15, OD-204)
     expect(admission.jobsOf("app/lib/qualification/__tests__/b24-b1-catalog.test.ts")).toEqual(["prompt-to-gerber"]);
     // every anchor bites: absent or doubled, the derivation throws
     const files = new Map<string, string>();
@@ -369,16 +369,9 @@ describe("[B24-B1] the golden catalog (D24-14, OD-203)", () => {
     expect(CI_ADMISSION_ANCHORS.orchestrationRun.startsWith("run: ")).toBe(true);
     expect(() => ciAdmission(reader(lineEdit(".github/workflows/deterministic-manufacturing.yml", CI_ADMISSION_ANCHORS.playwrightRun, "drop")))).toThrow(/absent/);
     // B24-B2 flips these by admitting suites: today they run in no pull-request job
+    // [B24-B2, 2026-10-08] reviewed pin move: B24-B2 admitted b09-loop-safety, b11-trace-replay-evaluation, pin-pad-mapping and the five footprint-resolver suites to prompt-to-gerber (D24-15, OD-204); stage-08-professional-routing alone stays nightly-only (benchmark-nightly)
     const outside = [...new Set(allLinks().filter((entry) => entry.kind !== "live_opt_in" && !entry.ciJobs.some((job) => job !== "benchmark-nightly")).map((entry) => entry.path))].sort();
     expect(outside).toEqual([
-      "app/lib/agent/__tests__/b09-loop-safety.test.ts",
-      "app/lib/agent/__tests__/b11-trace-replay-evaluation.test.ts",
-      "app/lib/footprint-resolver/__tests__/normalization-conflict.test.ts",
-      "app/lib/footprint-resolver/__tests__/policy-request.test.ts",
-      "app/lib/footprint-resolver/__tests__/resolution-e2e.test.ts",
-      "app/lib/footprint-resolver/__tests__/safety-status-property.test.ts",
-      "app/lib/footprint-resolver/__tests__/service-shadow-api-security.test.ts",
-      "app/lib/pcb/__tests__/pin-pad-mapping.test.ts",
       "app/lib/pcb/__tests__/stage-08-professional-routing.test.ts",
     ]);
   });
@@ -496,7 +489,7 @@ describe("[B24-B1] the golden catalog (D24-14, OD-203)", () => {
       ["deletion-replacement", "deterministic_offline", "covered", [...b06, `${E}b14-replacement-proposal.test.ts`, `${E}b14-replacement-apply.test.ts`, `${O}b21-d3-replacement-roles.test.ts`, "app/api/chat/__tests__/b21-d3-chat-replacement.test.ts", `${O}b21-f-evaluation.test.ts#1|b21f:F1`]],
       ["deletion-replacement", "browser_e2e", "covered", ["e2e/agent-execution.spec.ts#[B18-E E16] scenario 4 in the browser|the human's Apply lands it"]],
       ["deletion-replacement", "database_backed", "covered", ["app/lib/physical-binding/__tests__/b19-e-successor-b14-durable.test.ts"]],
-      ["power-ground", "deterministic_offline", "missing", [], undefined, "B24-B2"],
+      ["power-ground", "deterministic_offline", "failing", ["app/lib/qualification/__tests__/b24-b2-power-ground.test.ts#1|2|3|4|5|6|7|8|9"], []], // [B24-B2, 2026-10-08] reviewed pin move, was missing (owner B24-B2): B24-B2's evaluation, failing on its recorded case 9 (D24-16, OD-205)
       ["power-ground", "browser_e2e", "missing", [], undefined, NONE_PLANNED_IN_B24],
       ["footprint-pin-authority", "deterministic_offline", "covered", [...b13, "app/lib/atomic/__tests__/b19-e-adopt-exact-revision.test.ts", "app/lib/pcb/__tests__/pin-pad-mapping.test.ts", ...resolver, `${B11}#b11:e07a-netlist-proven|b11:e07b-netlist-forged|b11:e08-kicad-netlist-withheld`]],
       ["footprint-pin-authority", "database_backed", "covered", ["app/lib/atomic/__tests__/b19-e-atomic-publication-durable.test.ts", "app/lib/distributors/__tests__/b19-e-exact-mpn-offer-cache.test.ts"]],
@@ -525,7 +518,7 @@ describe("[B24-B1] the golden catalog (D24-14, OD-203)", () => {
       ["manufacturing-release", "external_provider_staging", "blocked", [], ["LB-11"]],
       ["manufacturing-release", "physical_hardware", "blocked", [], ["LB-5"]],
       ["quote-order", "deterministic_offline", "covered", [`${E}b18-e-scenario-8.test.ts`, `${E}b19-e-no-purchase-tripwire.test.ts#no API route implements an order`, `${M}b23-a-no-order-structural.test.ts#1`, `${M}b23-b-approval-plan.test.ts#7|13`, `${M}b23-b-exchange-ledger.test.ts`, `${M}b23-c-purchase-authorization.test.ts`, `${M}b23-c-order-contract.test.ts#4`, `${M}b23-c-ordering-disabled.test.tsx`]],
-      ["quote-order", "browser_e2e", "missing", [], undefined, "B24-B2"],
+      ["quote-order", "browser_e2e", "covered_in_part", ["e2e/agent-execution.spec.ts#[B24-B2] an order request in the browser"], []], // [B24-B2, 2026-10-08] reviewed pin move, was missing (owner B24-B2): B24-B2's order-refusal case; a quote ask and idempotency stay offline (D24-16)
       ["quote-order", "database_backed", "covered", ["app/lib/manufacturing-providers/database/__tests__/b23-b-exchange-ledger-pglite.test.ts"]],
       ["quote-order", "external_provider_staging", "blocked", [], ["LB-11", "LB-12"]],
     ];
@@ -545,7 +538,8 @@ describe("[B24-B1] the golden catalog (D24-14, OD-203)", () => {
     }
     expect(off).toEqual([]);
     // the deterministic-offline row of power-ground and the browser row of quote-order are missing, B24-B2's
-    expect([rowOf("power-ground", "deterministic_offline"), rowOf("quote-order", "browser_e2e")].map((row) => [row.state, row.owner])).toEqual([["missing", "B24-B2"], ["missing", "B24-B2"]]);
+    // [B24-B2, 2026-10-08] reviewed pin move, was [["missing", "B24-B2"], ["missing", "B24-B2"]]: B24-B2 delivered both (D24-16); the offline row fails on its recorded counterexample and the browser row is in part
+    expect([rowOf("power-ground", "deterministic_offline"), rowOf("quote-order", "browser_e2e")].map((row) => [row.state, row.owner])).toEqual([["failing", undefined], ["covered_in_part", undefined]]);
     // the rule cells
     const mapped = new Set(GOLDEN_EVAL_CATALOG.filter((row) => row.class === "deterministic_offline" && row.links.some((entry) => (entry.b21FCases ?? []).length > 0)).map((row) => row.area));
     for (const area of EVAL_AREA_IDS) {
@@ -581,7 +575,7 @@ describe("[B24-B1] the golden catalog (D24-14, OD-203)", () => {
     expect(cells.every((row) => row[0] === GOLDEN_EVAL_CATALOG_VERSION)).toBe(true);
     expect(cells.map((row) => row[2])).toEqual(GOLDEN_EVAL_CATALOG.map((row) => String(EVAL_AREAS.find((area) => area.id === row.area)!.runbookLine)));
     // an empty cell is (none); a link's jobs join with + and the links with ;
-    expect(cells.find((row) => row[1] === "power-ground" && row[3] === "deterministic_offline")!.slice(5, 8)).toEqual(["(none)", "(none)", "(none)"]);
+    expect(cells.find((row) => row[1] === "power-ground" && row[3] === "browser_e2e")!.slice(5, 8)).toEqual(["(none)", "(none)", "(none)"]); // [B24-B2, 2026-10-08] reviewed pin move: the empty-cell example moves from power-ground x deterministic_offline (B24-B2 linked its suite) to power-ground x browser_e2e, still missing; the rendering rule probed is unchanged
     expect(cells.find((row) => row[1] === "vias-tracks-geometry" && row[3] === "deterministic_offline")![6]).toBe("prompt-to-gerber+benchmark-core+benchmark-nightly;prompt-to-gerber+benchmark-core+benchmark-nightly;prompt-to-gerber+benchmark-core+benchmark-nightly;prompt-to-gerber");
     const parsed = JSON.parse(json) as { schema: string; version: string; runbook: string; rows: unknown[]; scores: Record<string, unknown>; catalogDigest: string; classes: unknown[]; areas: unknown[]; unmappedB11Cases: unknown[] };
     expect([parsed.schema, parsed.version, parsed.runbook]).toEqual([GOLDEN_EVAL_CATALOG_SCHEMA, GOLDEN_EVAL_CATALOG_VERSION, "Sirkit_Remaining_Builder_Master_Runbook.md :1046-1070"]);

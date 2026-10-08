@@ -5060,3 +5060,42 @@ No browser run, no B17-A inventory run and no local production-mode run is neede
   `8262dbe0da09afe5…d21c3` unchanged each time (the bytes the implementer rendered). The lead's close: pcb 977 passed, 4 skipped;
   B14.4 22; confinement 375; `app/lib/qualification/__tests__` 191/191 (case 5 green with the rows); tsc 0; eslint 0 on the 7 code
   files. No browser run: B1 changes no page or served behaviour.
+
+### B24-B2 - CI admission and the missing areas (2026-10-08 local; increment workflow + lead; this commit)
+
+- **Test-first from b0af256:** guard 5 failed and 2 passed (cases 1, 3, 4, 5, 7); corpus case 1 red; power-ground case 10 red.
+- **Local run of the 36:** 431 passed, 15 skipped, 43.81 s.
+- **Score lines:**
+  ```text
+  deterministic offline: failing - covered 18, in part 0, missing 0, blocked 0, failing 1, not applicable 0; outside pull-request CI 1; live blockers none
+  model-in-loop: BLOCKED-LIVE-QUALIFICATION - covered 0, in part 0, missing 0, blocked 19, failing 0, not applicable 0; outside pull-request CI 0; live blockers LB-2, LB-7, LB-9
+  browser E2E: incomplete - covered 8, in part 5, missing 3, blocked 0, failing 0, not applicable 3; outside pull-request CI 0; live blockers LB-1, LB-8, LB-13
+  database-backed: incomplete - covered 3, in part 0, missing 5, blocked 0, failing 0, not applicable 11; outside pull-request CI 0; live blockers none
+  external-provider staging: BLOCKED-LIVE-QUALIFICATION - covered 0, in part 0, missing 0, blocked 6, failing 0, not applicable 13; outside pull-request CI 0; live blockers LB-1, LB-11, LB-12, LB-13, LB-15, LB-16
+  physical-hardware validation: failing - covered 0, in part 0, missing 0, blocked 3, failing 1, not applicable 15; outside pull-request CI 0; live blockers LB-3, LB-5, LB-10, LB-17
+  ```
+- **OD-30 arithmetic:** as under OD-30 above.
+- **Review round:** ten confirmed findings (seven distinct), fixed test-first.
+  - Red first: corpus case 5, guard cases 8 and 9, and A1 case 17 reproduced.
+  - Two deliberate spec breakages were caught and restored by sha256.
+  - The case-17 move v2 was checked on a temporary copy at the tree and at six later landing points.
+- **Gates:**
+  - G1 616/634 (18 skipped); agent 425; orchestration 460; engineering 1,107;
+  - qualification and pages 315 passed, 1 failed (A1 case 17); the corpus flagged run red on case 4;
+  - tsc 0; eslint 0 on 11 files; catalog generator zero drift; B17 inventory and toolability no drift.
+- **Census and counts:** unchanged.
+- Lead close (2026-10-08): the fast increment form, with three STOPs the implementer handed up. (1) A1 case 17: the lead reviewed the
+  implementer's v2 move (`stillPlanned()`, the tree's own PGlite line instead of `:302`, the noting tasks derived step by step, a
+  synthetic insertion once no remaining task moves the entry) and applied it in place with its dated `[B24-B2 STOP]` note; the
+  qualification folder then passed 212, 3 skipped (the corpus's flagged cases), and A1's `it(` count stays 20. (2) The red corpus:
+  option (c), recorded and not excused; D24-41 opened and owned by B24-D1 (the CD-9 executor), recorded under OD-204. (3) The
+  member-pin counterexample: the delete planner is shared with the user's own delete, so the change is the owner's; D24-42 opened and
+  OD-229 proposed (recommended default: fail closed on the agent path), and the catalog's power-ground offline row stays `failing`.
+  The lead's close: pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification 212 passed, 3 skipped; tsc 0; eslint 0 on 12
+  files; the browser default configuration 55 passed in 4.8 min (the `[B24-B2]` order case green, 8.3 s) and the orchestration
+  configuration 4 passed in 2.5 min; 32 evidence PNGs restored by blob hash, 0 mismatched.
+- Records repair (2026-10-08): the lead found that B24-A3's, B24-A4's and B24-B1's records had copied their reports' later sections
+  (numbered report headings and README-row copies) into `OWNER_DECISIONS.md` inside OD-197, OD-225, OD-201, OD-226 and OD-227. They
+  were removed (README.md holds the rows), and three amendments that had landed only there now stand under their own headings:
+  B24-A3's answer under OD-174 (B23-A2), B24-A4's LB-14 line under OD-217 and B24-A4's database-delivery time under OD-30 (dated note
+  under OD-217). The lead's records script now ends an OD body at a numbered report heading or a README row.

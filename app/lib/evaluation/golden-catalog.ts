@@ -126,7 +126,7 @@ const ENGINEERING: readonly CatalogCiJob[] = ["benchmark-core", "benchmark-night
 const P2G_ENGINEERING: readonly CatalogCiJob[] = ["prompt-to-gerber", "benchmark-core", "benchmark-nightly"];
 const NIGHTLY: readonly CatalogCiJob[] = ["benchmark-nightly"];
 const BROWSER: readonly CatalogCiJob[] = ["page-browser-e2e"];
-const NO_JOB: readonly CatalogCiJob[] = [];
+// [B24-B2, 2026-10-08] NO_JOB removed: since B24-B2 every catalogued suite runs in a CI job (D24-15, OD-204; b24-b2-ci-admission).
 
 const link = (path: string, kind: LinkKind, refs: readonly string[], ciJobs: readonly CatalogCiJob[], ids: { readonly b11?: readonly string[]; readonly b21f?: readonly string[] } = {}): EvalLink =>
   Object.freeze({ path, kind, refs: Object.freeze([...refs]), ...(ids.b11 ? { b11Cases: Object.freeze([...ids.b11]) } : {}), ...(ids.b21f ? { b21FCases: Object.freeze([...ids.b21f]) } : {}), ciJobs: Object.freeze([...ciJobs]) });
@@ -147,8 +147,8 @@ const suite = (path: string, refs: readonly string[], ciJobs: readonly CatalogCi
 const spec = (path: string, refs: readonly string[], b21f?: readonly string[]): EvalLink => link(path, "spec", refs, BROWSER, b21f ? { b21f } : {});
 const pglite = (path: string, refs: readonly string[]): EvalLink => link(path, "pglite", refs, DBD);
 const liveOptIn = (path: string, refs: readonly string[], ciJobs: readonly CatalogCiJob[]): EvalLink => link(path, "live_opt_in", refs, ciJobs);
-/** B11's permanent cases replay in one suite, which no CI job runs (D24-15). */
-const b11 = (...ids: readonly string[]): EvalLink => link(`${AGENT}b11-trace-replay-evaluation.test.ts`, "suite", ["every permanent case passes"], NO_JOB, { b11: ids });
+/** B11's permanent cases replay in one suite, admitted to prompt-to-gerber by B24-B2 (D24-15, OD-204). */
+const b11 = (...ids: readonly string[]): EvalLink => link(`${AGENT}b11-trace-replay-evaluation.test.ts`, "suite", ["every permanent case passes"], P2G, { b11: ids });
 /** B21-F's runbook evaluations: one case each in b21-f-evaluation. */
 const b21f = (cases: Readonly<Record<string, string>>): EvalLink => link(`${ORCH}b21-f-evaluation.test.ts`, "suite", Object.values(cases), P2G, { b21f: Object.keys(cases) });
 const acceptancePipeline = suite(ACCEPTANCE_PIPELINE, ["B16.1C fresh-browser prompt-to-Gerber (deterministic, credit-free)"], P2G);
@@ -185,7 +185,7 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
       suite(`${ENG}b04-tool-registry.test.ts`, ["registry validation (fail closed)"], ENGINEERING),
       suite(`${ENG}b17-f-agent-exposure.test.ts`, ["the intentional exposure set is derived, reviewed and exact"], P2G_ENGINEERING),
       suite("app/lib/mcp/__tests__/b20-a2-tool-discovery.test.ts", ["[B20 A2] one page on the wire"], P2G),
-    ], "B11's e02, e03, e06c and e09 replay in b11-trace-replay-evaluation, which no CI job runs (D24-15; its admission is B24-B2's, OD-204)."),
+    ], "B11's e02, e03, e06c and e09 replay in b11-trace-replay-evaluation, which runs in prompt-to-gerber since B24-B2 (D24-15, OD-204)."),
     model_in_loop: blocked(["LB-7"], noLivePath("no live run lets a real model discover and choose Sirkit's tools; the record-only command runs four task-graph capsules only", "LB-7")),
     browser_e2e: notApplicable("Not applicable: the run's toolset is built on the server and the choice of tool is the model's; the page renders only results, and the fixture runtime's scripted agent chooses by script, so no browser journey evaluates either (the live choice is the model_in_loop row)."),
     database_backed: notApplicable("Not applicable: the toolset is built per run from the in-code registry; no durable store is on its path."),
@@ -198,7 +198,7 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
       suite(`${ENG}b18-c-explicit-grammars.test.ts`, ["derive EXACTLY the rotation the editor's own rotate command produces"], P2G_ENGINEERING),
     ]),
     model_in_loop: blocked(["LB-2", "LB-7"], "Live evaluation: assist-live (opt-in on an Anthropic key) asks a real model for PCB edit arguments; INFERRED refused before any model call (it expects 200 where the route answers 400 or 401, D24-19), repaired in B24-B3 (OD-209); never run by B1 (LB-2, LB-7).", [
-      liveOptIn("app/api/pcb/edit/__tests__/assist-live.test.ts", ["POST /api/pcb/edit/assist (live Claude)"], NO_JOB),
+      liveOptIn("app/api/pcb/edit/__tests__/assist-live.test.ts", ["POST /api/pcb/edit/assist (live Claude)"], P2G),
     ]),
     browser_e2e: notApplicable("Not applicable: arguments pass between the model and the server's tool gateway; the page renders only the result, and the fixture runtime's scripted agent sends fixed arguments (the live arguments are the model_in_loop row)."),
     database_backed: notApplicable("Not applicable: arguments are validated against in-code schemas in the gateway; no durable store is on their path."),
@@ -215,7 +215,7 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
       suite(`${ENG}b07-graph-gestures.test.ts`, ["stable theory identity"], ENGINEERING),
       viaFacts,
       b11("e01-no-canonical-state", "e04-invalid-board", "e05-resource-fail-closed", "e06a-selection-absent", "e06b-selection-malformed"),
-    ], "B11's e01, e04, e05, e06a and e06b replay in b11-trace-replay-evaluation, which no CI job runs (D24-15; B24-B2, OD-204)."),
+    ], "B11's e01, e04, e05, e06a and e06b replay in b11-trace-replay-evaluation, which runs in prompt-to-gerber since B24-B2 (D24-15, OD-204)."),
     model_in_loop: blocked(["LB-7"], noLivePath("no live run lets a real model resolve a reference against a canonical document", "LB-7")),
     browser_e2e: covered([spec(SEMANTIC_SPEC, ["Go to J1 selects and frames it", "Go to R1 selects and frames it"])]),
     database_backed: notApplicable("Not applicable: references resolve against the canonical document already loaded for the run; no store is read during resolution."),
@@ -230,12 +230,12 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
       suite(`${MFG}b23-a-route-vocabulary.test.ts`, ["1"], P2G),
       suite("app/api/mcp/__tests__/b20-d2-never-reachable-sweep.test.ts", ["[B20 D2] the never-reachable sweep"], P2G),
       b11("e09-mutation-not-exposed", "e10-proposal-only"),
-    ], "B11's e09 and e10 replay in b11-trace-replay-evaluation, which no CI job runs (D24-15; B24-B2, OD-204)."),
+    ], "B11's e09 and e10 replay in b11-trace-replay-evaluation, which runs in prompt-to-gerber since B24-B2 (D24-15, OD-204)."),
     model_in_loop: blocked(["LB-7"], noLivePath("no live run lets a real model choose tiered tools under the gateway; the tier gate is proven against scripted adapters", "LB-7")),
     browser_e2e: inPart([spec(AGENT_SPEC, ["[B18-E E9] scenario 8 in the browser"])], "Gap: every browser run is local_dev (the fixture runtime's identity); production auth is LB-1, LB-13.", ["LB-1", "LB-13"]),
     database_backed: missing(NONE_PLANNED_IN_B24, `Missing evaluation: the execution-grant store (app/lib/execution-grant/store.ts, Tier 2 grants on the durable-workflow repository) on PostgreSQL; no PGlite suite evaluates it, and ${DB_GATED}.`),
     external_provider_staging: blocked(["LB-1", "LB-13"], "Live evaluation: b16-1b-live-qualification (opt-in on two markers) signs in, reads the cookie and liveness and signs out against an isolated project; it passes with no database URL (D24-19, B24-B3's repair, OD-209) and never ran against an isolated project (LB-1); production auth on a hosted environment is LB-13.", [
-      liveOptIn("app/lib/auth/__tests__/b16-1b-live-qualification.test.ts", ["live qualification is OPT-IN and refuses to run without BOTH markers"], NO_JOB),
+      liveOptIn("app/lib/auth/__tests__/b16-1b-live-qualification.test.ts", ["live qualification is OPT-IN and refuses to run without BOTH markers"], P2G),
     ]),
     physical_hardware: notApplicable(softwareOnly("the tier gate and its approvals")),
   },
@@ -298,8 +298,16 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
     physical_hardware: notApplicable("Not applicable: deletion and replacement change the design document only; a fabricated board is the manufacturing-release row."),
   },
   "power-ground": {
-    deterministic_offline: missing("B24-B2", "Missing evaluation: power and ground net names, power-symbol presence and net-class membership unchanged by an agent delete, replace or edit (OD-205); no agent or evaluation case names it, and F1's assertions name no net (b21-f-evaluation.test.ts:168-195)."),
-    model_in_loop: blocked(["LB-7"], noLivePath("no live run has a real model edit around a power or ground net, and the offline evaluation itself is missing (B24-B2)", "LB-7")),
+    deterministic_offline: {
+      state: "failing",
+      links: [suite("app/lib/qualification/__tests__/b24-b2-power-ground.test.ts", ["1", "2", "3", "4", "5", "6", "7", "8", "9"], P2G)],
+      recordedResult: {
+        source: "app/lib/qualification/__tests__/b24-b2-power-ground.test.ts case 9 (B24-B2, 2026-10-08)",
+        summary: "a sealed agent delete of a theory part whose pin is the first vertex of one wire that also passes through a surviving part's pin and ends on another's GND symbol removes the whole wire (schematic-plans.ts:90-98) and names no net: one surviving pin leaves GND and the other's co-members change (the member-pin rule, OD-228 (c)); OD-205's default facts (net names, power symbols, net classes) hold",
+      },
+      note: "B24-B2's offline evaluation (OD-205, member pins added by OD-228 (c)): delete, replace and edit each go through the agent's own path and the canonical executor; every other case holds, and the delete case fails the member-pin rule (RECORDED; changing what a delete removes is a behaviour change, the lead's call).",
+    },
+    model_in_loop: blocked(["LB-7"], noLivePath("no live run has a real model edit around a power or ground net; the offline evaluation is B24-B2's b24-b2-power-ground", "LB-7")),
     browser_e2e: missing(NONE_PLANNED_IN_B24, "Missing evaluation: a browser journey in which an agent edit leaves the power and ground nets, the power symbols and the net classes unchanged; no B24 increment plans it (the offline evaluation is B24-B2's, OD-205)."),
     database_backed: notApplicable("Not applicable: the invariant compares the canonical document before and after an agent edit; the stores that persist the edit are the deletion-replacement and stale-revision-conflict rows."),
     external_provider_staging: notApplicable("Not applicable: the invariant is over Sirkit's own canonical document; no external service is on its path."),
@@ -311,14 +319,14 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
       suite(`${ENG}b13-2-authority-scope-and-cancellation.test.ts`, ["complete requested authority scope"], ENGINEERING),
       suite(`${ENG}b13-component-authority-bridge.test.ts`, ["server-owned authority loader"], ENGINEERING),
       suite("app/lib/atomic/__tests__/b19-e-adopt-exact-revision.test.ts", ["[B19-E E5 g] adopting a published exact revision"], P2G),
-      suite("app/lib/pcb/__tests__/pin-pad-mapping.test.ts", ["explicit pin-to-pad mapping invariant"], NO_JOB),
-      suite("app/lib/footprint-resolver/__tests__/normalization-conflict.test.ts", ["candidate normalization, deduplication, precedence, and conflicts"], NO_JOB),
-      suite("app/lib/footprint-resolver/__tests__/policy-request.test.ts", ["Stage 2 request and immutable policy contracts"], NO_JOB),
-      suite("app/lib/footprint-resolver/__tests__/resolution-e2e.test.ts", ["Stage 2 end-to-end product truth"], NO_JOB),
-      suite("app/lib/footprint-resolver/__tests__/safety-status-property.test.ts", ["status priority, freshness, aliases, and metamorphic safety"], NO_JOB),
-      suite("app/lib/footprint-resolver/__tests__/service-shadow-api-security.test.ts", ["bounded service, shadow compatibility, API, and hostile adapters"], NO_JOB),
+      suite("app/lib/pcb/__tests__/pin-pad-mapping.test.ts", ["explicit pin-to-pad mapping invariant"], P2G),
+      suite("app/lib/footprint-resolver/__tests__/normalization-conflict.test.ts", ["candidate normalization, deduplication, precedence, and conflicts"], P2G),
+      suite("app/lib/footprint-resolver/__tests__/policy-request.test.ts", ["Stage 2 request and immutable policy contracts"], P2G),
+      suite("app/lib/footprint-resolver/__tests__/resolution-e2e.test.ts", ["Stage 2 end-to-end product truth"], P2G),
+      suite("app/lib/footprint-resolver/__tests__/safety-status-property.test.ts", ["status priority, freshness, aliases, and metamorphic safety"], P2G),
+      suite("app/lib/footprint-resolver/__tests__/service-shadow-api-security.test.ts", ["bounded service, shadow compatibility, API, and hostile adapters"], P2G),
       b11("e07a-netlist-proven", "e07b-netlist-forged", "e08-kicad-netlist-withheld"),
-    ], "pin-pad-mapping, the five footprint-resolver suites and B11's e07a, e07b and e08 run in no CI job (D24-15; B24-B2, OD-204)."),
+    ], "pin-pad-mapping, the five footprint-resolver suites and B11's e07a, e07b and e08 run in prompt-to-gerber since B24-B2 (D24-15, OD-204)."),
     model_in_loop: blocked(["LB-7"], noLivePath("no live run has a real model choose or bind a footprint", "LB-7")),
     browser_e2e: inPart([spec(ACCEPTANCE_SPEC, ["the component-review handoff (editor requests, reviewer approves, editor resumes)"])], "Gap: the browser proves the component-review handoff (an editor requests, a reviewer approves, the editor resumes) for the recorded design's parts; exact pin-to-pad authority (a forged or withheld netlist, a successor revision) is proven offline only."),
     database_backed: covered([
@@ -342,7 +350,7 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
     database_backed: notApplicable("Not applicable: geometry edits are derived and checked on the in-memory board; the commit's store is the stale-revision-conflict row."),
     external_provider_staging: notApplicable("Not applicable: geometry is edited and checked in Sirkit's own board model; no external service is on its path."),
     physical_hardware: blocked(["LB-17"], "Live evaluation: kicad-cli-oracle (opt-in on a local kicad-cli) loads the exported routed demo in KiCad and compares its DRC counts; INFERRED broken (an empty board against a count expectation, D24-19), repaired in B24-B3 (OD-209); never run by B1 (LB-17).", [
-      liveOptIn("app/lib/pcb/__tests__/kicad-cli-oracle.test.ts", ["exported routed demo loads in KiCad"], NO_JOB),
+      liveOptIn("app/lib/pcb/__tests__/kicad-cli-oracle.test.ts", ["exported routed demo loads in KiCad"], P2G),
     ]),
   },
   "view-3d": {
@@ -384,9 +392,9 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
       suite(`${ORCH}b21-e1-provider-policy.test.ts`, ["the per-role provider/model policy (OD-117)"], P2G),
       suite("app/api/chat/__tests__/b21-e1-chat-provider.test.ts", ["the provider layer through the production POST"], P2G),
       b11("e12-provider-quota", "e13-no-fallback", "e14-parity-anthropic"),
-      suite(`${AGENT}b09-loop-safety.test.ts`, ["25"], NO_JOB),
+      suite(`${AGENT}b09-loop-safety.test.ts`, ["25"], P2G),
       b21f({ F9: "9", F10: "10" }),
-    ], "B11's e12, e13 and e14 (scripted replays whose provider column reads openai or anthropic) and b09-loop-safety case 25 (the B09 loop budgets' no-fallback case) run in no CI job (D24-15; B24-B2, OD-204)."),
+    ], "B11's e12, e13 and e14 (scripted replays whose provider column reads openai or anthropic) and b09-loop-safety case 25 (the B09 loop budgets' no-fallback case) run in prompt-to-gerber since B24-B2 (D24-15, OD-204)."),
     model_in_loop: blocked(["LB-2", "LB-7", "LB-9"], shapeOnly("F9 and F10", "LB-2, LB-7, LB-9")),
     browser_e2e: missing(NONE_PLANNED_IN_B24, "Missing evaluation: a browser journey that shows a provider's quota or outage failure (the breaker's degraded answer, no Retry offered); no B24 increment plans it."),
     database_backed: notApplicable("Not applicable: the breaker and the admission meters are per-process memory (B24-A3 states every limit per process); no database is on their path."),
@@ -473,7 +481,7 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
       suite(`${MFG}b23-c-ordering-disabled.test.tsx`, ["1"], P2G),
     ]),
     model_in_loop: blocked(["LB-7"], noLivePath("no live run has a real model asked to quote or order; the refusal is proven against scripted adapters", "LB-7")),
-    browser_e2e: missing("B24-B2", "Missing evaluation: a browser journey that sends \"Order the parts.\" and is refused (B24-B2)."),
+    browser_e2e: inPart([spec(AGENT_SPEC, ["[B24-B2] an order request in the browser"])], "Gap: the browser case shows the order denial (\"Order the parts.\" is refused before anything runs, nothing changes and no browser request reaches a provider exchange or an order path), PROPOSED until its first browser run (ci-admission.md section 10); a quote ask (OD-173: it reaches nothing) and the exchange idempotency have no browser journey (no quote case in B24-B2; idempotency is proven offline and on PGlite)."),
     database_backed: covered([pglite("app/lib/manufacturing-providers/database/__tests__/b23-b-exchange-ledger-pglite.test.ts", ["1", "4"])]),
     external_provider_staging: blocked(["LB-11", "LB-12"], "Live evaluation (missing): a quote request and an order through a provider sandbox under OD-171's owner record; no provider is admitted and ordering stays disabled (B23; LB-11, LB-12)."),
     physical_hardware: notApplicable("Not applicable: a quote or an order is a provider transaction (the external_provider_staging row); no board, instrument or real executable is on its path."),

@@ -162,7 +162,7 @@ export const PRINCIPAL_CREDIT_LIMIT: FixedWindowLimit = perMinute(60);
  *  B22-D's adversarial simulate suite), and ten more send 11 to 35, so 50. */
 export const PRINCIPAL_EXPENSIVE_LIMIT: FixedWindowLimit = perMinute(50);
 /** `POST /api/chat` (one agent run per request, one or more model turns each): 60 a minute per principal. The task proposed 20; one
- *  suite file sends 37 chat runs in one window (b21-e3-chat-resume), and the browser job's agent-execution spec sends 82 from one
+ *  suite file sends 37 chat runs in one window (b21-e3-chat-resume), and the browser job's agent-execution spec sends 82 ([B24-B2, 2026-10-08] 85 since B24-B2's order case) from one
  *  principal in one project over its whole run - [B24-A3 review, 2026-10-08] regressions-1: a minute's count only because every window reads the real clock (`unfrozenNowMs`), never the fixture runtime's frozen one; 17 in 39.6 s in B18-C's recorded run - so 60. */
 export const PRINCIPAL_CHAT_LIMIT: FixedWindowLimit = perMinute(60);
 

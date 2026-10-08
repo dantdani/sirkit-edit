@@ -59,8 +59,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run benchmark:validate > benchmark-validate.json
-      - run: pnpm exec vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts app/lib/pcb/__tests__/stage-08-professional-routing.test.ts --reporter=dot --reporter=junit --outputFile=vitest-nightly.xml
+      # [B24-B2] D24-15, OD-204: the stage-09 corpus (every package outside the hidden holdout, below) runs only here, on schedule and
+      # dispatch, through b24-b2-corpus-nightly and this step's flag; every pull-request job skips that suite's corpus cases.
+      - run: pnpm exec vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts app/lib/pcb/__tests__/stage-08-professional-routing.test.ts app/lib/qualification/__tests__/b24-b2-corpus-nightly.test.ts --reporter=dot --reporter=junit --outputFile=vitest-nightly.xml
+        env:
+          SIRKIT_B24_CORPUS_NIGHTLY: "1"
       - run: pnpm run stage10:test -- --reporter=dot --reporter=junit --outputFile=vitest-stage10.xml
+        if: ${{ !cancelled() }} # [B24-B2 review, 2026-10-08] a red corpus run above never skips this step
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -72,6 +77,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
       - name: Declare unavailable protected suites
+        if: ${{ !cancelled() }} # [B24-B2 review, 2026-10-08] the holdout stays declared when a step above fails
         run: |
           echo "Hidden holdout requires holdout-admin credentials and is not exposed to CI candidates."
           echo "Licensed competitor runs require approved tools/operators and remain manual."
