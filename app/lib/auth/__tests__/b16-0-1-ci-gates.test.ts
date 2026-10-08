@@ -13,7 +13,7 @@
  *     tripwire proving the scanner sees such a read;
  *  4. policy invariants: provider-credit routes are never public; mutation/
  *     release rows never ride identity_source=none; authenticated writes
- *     require same-origin CSRF; public rows carry no credit/write/release;
+ *     require same-origin CSRF; public rows carry no credit/write/release; [B24-A3, 2026-10-06] narrowed in place by review (OD-197): "never public" and "no credit" now except the reviewed, metered public model-egress rows - the two OpenAI-embedding searches, each a PUBLIC_MODEL_EGRESS path with a valid ABUSE_LIMITS entry (reviewedMeteredPublicCredit); no other public row may carry credit;
  *     the release perimeter is role-exact (release=project_admin only,
  *     qualify=pcb_editor|project_admin);
  *  5. negative tripwires: an unclassified sub-path under a classified family
@@ -24,7 +24,7 @@
  *     auth modules, and the provider/agent/gateway layer can never import the
  *     apply-time reauthorization or approval authority.
  */
-
+import { reviewedMeteredPublicCredit } from "../route-resource-classification"; // [B24-A3, 2026-10-06] the one excuse of invariant 4's narrowing (OD-197), imported in place of a blank line so no line here moves
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -145,8 +145,8 @@ describe("B16.0.1 §I — zero caller-identity header reads in production app/ap
 describe("B16.0.1 §I — policy invariants", () => {
   const policies = allRoutePolicies();
 
-  it("provider-credit routes are NEVER public", () => {
-    const offending = policies.filter((policy) => policy.providerCredit && !policy.requiresAuth);
+  it("provider-credit routes are NEVER public ([B24-A3, 2026-10-06] narrowed by review, OD-197: except the reviewed, metered public model-egress rows, exactly the two OpenAI-embedding searches)", () => {
+    const offending = policies.filter((policy) => policy.providerCredit && !policy.requiresAuth && !reviewedMeteredPublicCredit({ path: policy.path, method: policy.method, isPublic: true, providerCredit: true })); expect(policies.filter((policy) => policy.providerCredit && !policy.requiresAuth).map((policy) => `${policy.method} ${policy.path}`).sort()).toEqual(["GET /api/pcb/footprints/search", "POST /api/parts/search"]); // [B24-A3, 2026-10-06] reviewed pin move: the excused set is exactly the two reviewed metered rows
     expect(offending.map((policy) => `${policy.method} ${policy.path}`)).toEqual([]);
   });
 
@@ -176,9 +176,9 @@ describe("B16.0.1 §I — policy invariants", () => {
     expect(policies.filter((policy) => policy.identitySource === "mcp-bearer").map((policy) => `${policy.method} ${policy.path}`)).toEqual(["POST /api/mcp"]);
   });
 
-  it("public rows carry no credit, no authoritative write, no release", () => {
+  it("public rows carry no credit, no authoritative write, no release ([B24-A3, 2026-10-06] credit narrowed by review, OD-197: except the reviewed, metered public model-egress rows)", () => {
     const offending = policies.filter(
-      (policy) => !policy.requiresAuth && (policy.providerCredit || policy.authoritativeWrite || policy.releaseOrQualification),
+      (policy) => !policy.requiresAuth && ((policy.providerCredit && !reviewedMeteredPublicCredit({ path: policy.path, method: policy.method, isPublic: true, providerCredit: true })) || policy.authoritativeWrite || policy.releaseOrQualification), // [B24-A3, 2026-10-06] reviewed pin move: credit excused only on a reviewed metered public model-egress row
     );
     expect(offending.map((policy) => `${policy.method} ${policy.path}`)).toEqual([]);
   });

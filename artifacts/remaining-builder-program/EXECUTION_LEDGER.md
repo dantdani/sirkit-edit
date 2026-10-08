@@ -4899,3 +4899,49 @@ control, tool or composition-root wiring was added. Live ordering stays BLOCKED-
   - (6) B24-A1's first CI run (`1b2c08c`, run 37499322603) was green in every job, `production-smoke` included (2m16s: next build
     99 s, next start 2 s, engine-worker.mjs emitted, every probe as pinned): D24-1's production-mode half is closed offline, with dated
     notes under OD-190, in LB-13's row and on A1's README row.
+
+### B24-A3 - abuse controls (2026-10-08 local; increment workflow + lead; this commit)
+
+- Test-first from `b3b6b05`, A3a then A3b in one run. The six part-1 suites failed first on `b3b6b05`'s sources (6 files, 32 cases red: request 301 answered 200; a throttled sign-in showed the credentials message; the provider fake counted 241 calls; `providerCredit` false; the engine got `localRefinementPasses: 3`; the page was absent). The part-2 suites failed first on the A3a tree (11 cases, twice; the final suites again in the review round, 16 cases).
+- Part 1: public windows on the four anonymous rows, the trusted-header rule, the `embedding` meter, the credit and `expensive` declarations, `abuseLimitViolations`, the preview's work bound, and the sign-in 429 message.
+- Part 2: per-principal windows on the 40 authenticated gated rows (60 / 50 / chat 60); Q8 answered with 0.
+- Review round (2026-10-08): 14 confirmed findings fixed test-first. The five test-strength findings were proven against eight deliberate breakages, each restored by sha256. The fixes:
+  - the windows and the meter on the real clock (the frozen browser clock would have refused agent-execution's 61st chat run);
+  - the preview's ceilings and measured bounds (at most 1.5 s per admitted request, against more than 900 s);
+  - IPv6 keyed by /64, and the lockout stated as standing with the header set;
+  - `public_signin_unlimited`;
+  - A2's page total;
+  - the A3b red record and the measurement evidence corrected.
+- Gates green (see `abuse-controls.md` section 20). Census, tool counts and action records unchanged. Live halves BLOCKED-LIVE-QUALIFICATION (LB-13, LB-1, LB-2).
+
+**8. Superseded statements for B24-F:**
+- B23 `tier3-vocabulary.md:177-178, :238-241, :343-345`
+- B23 `unknowns-and-owner-decisions.md:44`
+- B23 `final-verdict.md:131-132`
+- `admission-control.ts:19`'s key-kind enumeration (listed, not edited)
+- B20 `final-verdict.md:67-68` and `mcp-server-proposals.md:258-264` (F1)
+- B22 `discovery.md:360, :796` and `named-computations.md:161, :404`
+
+**9. Live blockers** (dated notes only, no new row):
+- LB-13: [B24-A3, 2026-10-08] LB-13 (B24-A3): still BLOCKED-LIVE-QUALIFICATION for a real edge or proxy that overwrites one of the four allow-listed client headers, for per-client keying behind it, and for several instances, each with its own windows. Proven offline by `b24-a3-abuse-limits`. Unblocks when the owner names the platform (OD-190).
+- LB-1: [B24-A3, 2026-10-08] LB-1 (B24-A3): sign-in throttled against a live Supabase project (its own auth limits beside the app's 30 / 10 windows) is BLOCKED-LIVE-QUALIFICATION.
+- LB-2: [B24-A3, 2026-10-08] LB-2 (B24-A3): OpenAI's own 429 and `insufficient_quota` under the `embedding` meter, and how many HTTP requests one call becomes with the SDK's retries, are BLOCKED-LIVE-QUALIFICATION (OD-216).
+
+**10. Lead runs and decisions:**
+- **Browser runs:** run `playwright.config.ts` once, with `e2e/agent-execution.spec.ts` (the regressions-1 path) and `e2e/security-headers.spec.ts`, then `playwright.orchestration.config.ts` once, each with no vitest running. Neither ran here, and no `next dev`, `next build` or `next start` ran.
+- **Sign-in UI:** the sign-in message is the only UI change. `app/signin` is outside B17-A's control roots, and the control-inventory generator showed no diff; the browser suite is yours.
+- **Preview restriction:** the public preview now refuses polygon outlines and boards above 30 footprints. That is OD-225 (d) for the owner.
+- **Older meters on the frozen clock (inferred, not checked):** the B21 LLM-provider meter and B20's distributor meter, which predate A3, still read `Date.now()` under the frozen clock. Recorded on the page, section 19.
+- Lead close (2026-10-08):
+  - (1) A3 ran three times: the first two implementer runs were cut off (an account usage limit on 2026-10-06, a session end on
+    2026-10-07) after building most of A3a; the third adopted their 30 files, verified each against the task by sha256 and the logs,
+    confirmed the recorded red runs, and finished A3a and A3b. No other writer changed the tree.
+  - (2) The independent check of the review fixes raised one more medium issue on the anonymous preview: a footprint's
+    `allowedRotations` (refined value by value inside the uninterruptible first candidate) and `pinPadMappings` were not counted. The
+    lead closed it test-first (`b24-a3-placement-bound` case 7: 1,000 rotations admitted, red; then 413 naming the bound for more than 4
+    rotations, a rotation other than 0, 90, 180 or 270, more than 128 mappings in one footprint or 600 in all; the B24 suites and
+    `b20-b4-stop-evidence` 176 of 176). The check's other new item, the shared per-client window of an IPv6 /64, is recorded on the page.
+  - (3) The lead's close (`b24/lead-close.sh a3 yes`): `app/lib/pcb` 977 passed, 4 skipped; B14.4 22; the confinement gates 375; the
+    B24 suites 168; tsc 0; eslint 0 on 26 files; the default browser configuration 54 of 54 (4.9 min, `agent-execution`'s chat runs
+    inside the new per-principal windows) and the orchestration configuration 4 of 4 (2.5 min); 31 rewritten evidence PNGs restored, all
+    equal by blob hash.

@@ -41,7 +41,7 @@ export default function SignInPage() {
       setMessage(
         code === "AUTH_SIGNIN_UNAVAILABLE"
           ? "Sign-in is not available in this deployment."
-          : "Sign-in failed. Check your email and password.",
+          : code === "PUBLIC_RATE_LIMITED" ? "Too many sign-in attempts; try again in a minute." : "Sign-in failed. Check your email and password.", // [B24-A3] OD-197: the sign-in window answered 429
       );
     } catch {
       setMessage("Sign-in could not be completed. Try again.");

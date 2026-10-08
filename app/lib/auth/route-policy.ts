@@ -59,8 +59,8 @@ const QUALIFY_ROLES: readonly ProjectRole[] = ["pcb_editor", "project_admin"];
 const TIER1_EXECUTE: readonly ProjectRole[] = ["pcb_editor", "project_admin"];
 
 // ── Policy constructors (defaults per class) ─────────────────────────────────
-function pub(path: string, methods: readonly string[], evidence: string): RoutePolicy[] {
-  return methods.map((method) => ({ path, method, authClass: "public", identitySource: "none", requiresAuth: false, permittedRoles: [], providerCredit: false, requiresCsrf: false, authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence }));
+function pub(path: string, methods: readonly string[], evidence: string, opts: { providerCredit?: boolean } = {}): RoutePolicy[] { // [B24-A3] OD-197: a public row may declare metered provider credit; no key is added to RoutePolicy
+  return methods.map((method) => ({ path, method, authClass: "public", identitySource: "none", requiresAuth: false, permittedRoles: [], providerCredit: opts.providerCredit ?? false, requiresCsrf: false, authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence }));
 }
 function read(path: string, methods: readonly string[], evidence: string, roles: readonly ProjectRole[] = ALL_MEMBERS): RoutePolicy[] {
   return methods.map((method) => ({ path, method, authClass: "authenticated-read", identitySource: "trusted-context", requiresAuth: true, permittedRoles: roles, providerCredit: false, requiresCsrf: method !== "GET" && method !== "HEAD", authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence }));
@@ -243,7 +243,7 @@ const ALL: RoutePolicy[] = [
   ...pub("/api/components/atomic/search", ["POST"], "catalog read"),
   // [B19-E E5] a member reads the catalog status of the revisions the project pins (bounded ids, no quota, no write)
   ...read("/api/components/revision-status", ["POST"], "app/api/components/revision-status (catalog status of pinned atomic revisions; at most 500 ids; trusted project scope)"),
-  ...pub("/api/parts/search", ["POST"], "catalog read"),
+  ...pub("/api/parts/search", ["POST"], "catalog read; embeds the anonymous caller's query text with OpenAI: metered provider credit behind its public windows and the embedding meter (B24-A3, OD-197)", { providerCredit: true }),
   ...pub("/api/parts/categories", ["GET"], "catalog read"),
   ...pub("/api/parts/[id]", ["GET"], "catalog read"),
   ...pub("/api/parts/[id]/alternates", ["GET"], "catalog read"),
@@ -253,7 +253,7 @@ const ALL: RoutePolicy[] = [
   ...pub("/api/kicad/v1/parts/category/[id]", ["GET"], "public KiCad HTTP library"),
   ...pub("/api/pcb/footprints/[id]", ["GET"], "footprint catalog read"),
   ...pub("/api/pcb/footprints/resolve", ["GET"], "footprint catalog read"),
-  ...pub("/api/pcb/footprints/search", ["GET"], "footprint catalog read"),
+  ...pub("/api/pcb/footprints/search", ["GET"], "footprint catalog read; embeds the anonymous caller's q text with OpenAI: metered provider credit behind its public windows and the embedding meter (B24-A3, OD-197)", { providerCredit: true }),
   ...pub("/api/pcb/placement/preview", ["POST"], "stateless compute"),
   ...pub("/api/pcb/export/kicad-pcb", ["POST"], "stateless export"),
   ...pub("/api/constraints/explain", ["POST"], "stateless compute"),

@@ -34,7 +34,7 @@
  * project/session data. Body limits are EXPLICIT per route.
  */
 
-import { authorizeRequest, authorizeActor, type AuthorizeRequestOptions } from "./authorize";
+import { authorizeRequest, authorizeActor, principalRateLimitRefusal, type AuthorizeRequestOptions } from "./authorize"; // [B24-A3b] + the per-principal window (OD-197)
 import type { TrustedRequestContext, ProjectSelector } from "./types";
 import type { WorkerPrincipal } from "./worker-principal";
 import { readBoundedJsonBody, readBoundedJsonObject, boundedJsonRefusalResponse, isJsonContentType } from "../http/bounded-json";
@@ -850,7 +850,7 @@ export function agentStreamRoute(
     const trusted = await resolveTrustedRequestContext(request, { selector: scope, enforceSameOrigin: true });
     if (!trusted.ok) return trusted.refusal.response;
     const roleRefusal = authorizeActor(trusted.context.actor, policy);
-    if (roleRefusal) return roleRefusal;
+    if (roleRefusal) return roleRefusal; const principalRefusal = principalRateLimitRefusal(trusted.context, policy); if (principalRefusal) return principalRefusal; // [B24-A3b] OD-197: the per-principal window, after membership and role (and after the body read, by design: the scope is in the body)
 
     // 8. callback — trusted context + parsed body + scope + signal; the raw
     //    Request never escapes. The callback builds the NDJSON stream Response.

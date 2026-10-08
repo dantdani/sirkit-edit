@@ -6,7 +6,7 @@
  * deadlineMs bounds the body read alone. The engine's clock is faked (vi.setSystemTime); no network, no child process. The
  * seconds measured on the synthetic probe board are on mcp-server-proposals.md; these cases pin the mechanism, and the last
  * one the statements the record cites, by content (the page states their lines as of the base 4299067).
- * [B20 B4 second dispatch] These cases pin UNCHANGED base code: they passed on 4299067 (they did not fail first); five
+ * [B20 B4 second dispatch] These cases pin UNCHANGED base code: they passed on 4299067 (they did not fail first) [B24-A3, 2026-10-06] - case 6 no longer: the route clamps F1 since B24-A3 (OD-197), a reviewed pin move noted on the case -; five
  * mutations of the cited code, each restored by sha256, showed they are sensitive (M1 to M5 of the first dispatch's review).
  */
 import { readFileSync } from "node:fs";
@@ -137,12 +137,12 @@ describe("[B20 B4] stop evidence — the placement engine's budget and cancellat
     expect(high.candidateHash).toBe(low.candidateHash);
   });
 
-  it("6. F1: an anonymous POST to the public preview route forwards the caller's localRefinementPasses, gridNm and timeoutMs to the engine", async () => {
+  it("6. F1: an anonymous POST to the public preview route forwards the caller's localRefinementPasses, gridNm and timeoutMs to the engine ([B24-A3, 2026-10-06] reviewed pin move, OD-197: F1 closed as a work bound - the route clamps them to the public ceilings: passes at most 1, the grid at least 100,000, the timeout at most 5,000; the values inside them pass unchanged; [B24-A3 review, 2026-10-08] passes at most 0, candidates at most 2)", async () => {
     const body = JSON.stringify({ board: board(), options: { candidateCount: 2, maxIterations: 1, localRefinementPasses: 3, gridNm: 10_000, timeoutMs: 1 } });
     const response = await previewPost(new Request("http://localhost/api/pcb/placement/preview", { method: "POST", headers: { "content-type": "application/json" }, body }));
     expect([200, 422]).toContain(response.status);
     expect(engineCalls).toHaveLength(1);
-    expect(engineCalls[0]).toMatchObject({ localRefinementPasses: 3, gridNm: 10_000, timeoutMs: 1, candidateCount: 2, maxIterations: 1 });
+    expect(engineCalls[0]).toMatchObject({ localRefinementPasses: 0, gridNm: 100_000, timeoutMs: 1, candidateCount: 2, maxIterations: 1 }); // [B24-A3, 2026-10-06] was { localRefinementPasses: 3, gridNm: 10_000, ... } (F1 open, B20); clamped by the route since B24-A3 (OD-197). [B24-A3 review, 2026-10-08] reviewed pin move: passes 1 -> 0 (one pass is up to 64 more evaluations: 10.8 s at 30 footprints, abuse-controls.md section 9)
   });
 
   it("7. source: one budget poll per spec, none inside localRefine; the route's deadlineMs reaches only the body reader; runPlacementCandidate passes no observer (base)", () => {

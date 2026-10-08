@@ -16,7 +16,7 @@
 import { and, cosineDistance, count, desc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import { parts, libraries } from "@/app/lib/db/schema";
-import { embedQuery } from "@/app/lib/embeddings";
+import { admittedEmbedQuery } from "@/app/lib/embedding-admission"; // [B24-A3] OD-197: every query embedding goes through the embedding meter (embeddings.ts unchanged)
 import type { KicadPin } from "@/app/lib/kicad/types";
 import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
 import { partLifecycleStatus } from "@/app/lib/distributors/lifecycle-sql"; // [B19-D I5b review] vendor lifecycle expires at read time
@@ -247,7 +247,7 @@ async function semantic(
 ): Promise<Row[]> {
   let queryEmbedding: number[];
   try {
-    queryEmbedding = await embedQuery(query);
+    queryEmbedding = await admittedEmbedQuery(query, { purpose: "interactive" }); // [B24-A3] a refusal (EmbeddingAdmissionRefused) takes the lexical fallback below, with no provider call
   } catch (error) {
     console.warn("[parts/search] embedding provider unavailable; lexical fallback:", error instanceof Error ? error.message : String(error));
     return lexical(db, where, query, limit, offset);

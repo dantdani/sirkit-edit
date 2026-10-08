@@ -44,7 +44,7 @@ export interface FootprintSearchInput {
 /** Run the hybrid footprint search. Throws on database failure — callers map
  *  that to their own error contract (the public route → 500 JSON; the provider
  *  loop → an in-band tool error). */
-export async function searchFootprints(input: FootprintSearchInput): Promise<FootprintSearchHit[]> {
+export async function searchFootprints(input: FootprintSearchInput, deps: FootprintSearchDeps = {}): Promise<FootprintSearchHit[]> { // [B24-A3] OD-197: the embedding call is injectable
   const { q, limit, padCount, smd } = input;
   const db = getDb();
 
@@ -60,7 +60,7 @@ export async function searchFootprints(input: FootprintSearchInput): Promise<Foo
   if (padCount !== null) filters.push(eq(pcbFootprints.padCount, padCount));
   if (smd !== null) filters.push(eq(pcbFootprints.attrSmd, smd));
 
-  const queryEmbedding = await embedQuery(q);
+  const queryEmbedding = await (deps.embed ?? embedQuery)(q); // [B24-A3] the public route passes the metered call; POST /api/pcb/assign/suggest keeps the default
   const distance = cosineDistance(pcbFootprints.embedding, queryEmbedding);
   const fullName = sql<string>`${pcbFootprints.libName} || ':' || ${pcbFootprints.name}`;
   const trigramSim = sql<number>`similarity(${fullName}, ${q})`;
@@ -156,4 +156,10 @@ async function findExact(
     bodyBBox: row.bodyBBox as BBox,
     score: 1,
   };
+}
+
+/** [B24-A3] OD-197: the embedding call, injectable - the public footprint route passes the metered `admittedEmbedQuery`
+ *  (app/lib/embedding-admission.ts); every other caller (POST /api/pcb/assign/suggest) keeps the default `embedQuery`, unchanged. */
+export interface FootprintSearchDeps {
+  readonly embed?: (text: string) => Promise<number[]>;
 }

@@ -171,7 +171,7 @@ present only in a comment fails: `NGSPICE_BIN` at `app/api/simulate/route.ts`, `
 | class | count | in `.env.example` | names (an undeclared class: each name) |
 |---|---|---|---|
 | `secret` | 14 | declared | the API keys, `DATABASE_URL`, the distributor credentials, the KiCad token, the SchGen token and `HF_TOKEN`, the worker secret, the MCP key, `SIRKIT_DB_QUALIFICATION_URL` |
-| `configuration` | 27 | declared | the Supabase URL and keys (the older anon-key name included), the origin, the auth mode, models, pool size, role table, catalog ids, the runtime-profile pins, the FreeRouting, Java and KiCad paths, the SchGen endpoint, the deployment profile |
+| `configuration` | 28 | declared | the Supabase URL and keys (the older anon-key name included), the origin, the auth mode, models, pool size, role table, catalog ids, the runtime-profile pins, the FreeRouting, Java and KiCad paths, the SchGen endpoint, the deployment profile; [B24-A3, 2026-10-06] 27 -> 28: + `SIRKIT_TRUSTED_CLIENT_IP_HEADER`, the trusted proxy header of the public windows (OD-197) |
 | `flag` | 14 | declared | every enable flag, off-only switch, rollout stage and shadow of A1's inventory |
 | `rotation-previous` | 3 | declared | `SIRKIT_WORKFLOW_WORKER_SECRET_PREVIOUS`, `KICAD_HTTP_LIBRARY_TOKEN_PREVIOUS`, `SIRKIT_MCP_TOKEN_SECRET_PREVIOUS` |
 | `fixture` | 6 | not declared: honoured only outside production | `SIRKIT_FIXTURE_AGENT`, `SIRKIT_FIXTURE_CLOCK`, `SIRKIT_FIXTURE_ROUTER`, `SIRKIT_FIXTURE_ROUTER_DUMP`, `SIRKIT_FIXTURE_ROUTER_FIXTURE`, `SIRKIT_FIXTURE_RUNTIME` |
@@ -180,7 +180,7 @@ present only in a comment fails: `NGSPICE_BIN` at `app/api/simulate/route.ts`, `
 | `child-passthrough` | 1 | not declared: handed to a child process, never read for Sirkit | `KICAD_CONFIG_HOME` |
 | `not-an-environment-name` | 3 | not declared: a literal that only looks like a name | `SIRKIT_ANTHROPIC_MODEL_EMPTY`, `SIRKIT_ANTHROPIC_MODEL_PADDED` (refusal codes), `SIRKIT_D1N4148` (a SPICE model name) |
 
-80 rows. `SIRKIT_AUTH_MODE` is `configuration`, declared: it is honoured only outside production (`mode.ts:36-41`) but it is a
+80 rows. [B24-A3 review, 2026-10-08] 80 -> 81: + `SIRKIT_TRUSTED_CLIENT_IP_HEADER` (configuration, the row above). `SIRKIT_AUTH_MODE` is `configuration`, declared: it is honoured only outside production (`mode.ts:36-41`) but it is a
 deployment knob, never a fixture.
 
 **The kind -> class map (D16)**, pinned as a constant by `b24-a2-env-names` case 4 and total over A1's nine kinds:

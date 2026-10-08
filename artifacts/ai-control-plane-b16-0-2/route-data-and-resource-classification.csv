@@ -100,7 +100,7 @@ path,method,is_public,durable_access,project_data_sensitivity,provider_credit,ex
 /api/parts/[id]/alternates,GET,true,none,none,false,,false,false,false,true,none,false
 /api/parts/categories,GET,true,none,none,false,,false,false,false,true,none,false
 /api/parts/external-search,POST,false,none,caller-supplied-only,true,,false,false,false,false,observation-query,false
-/api/parts/search,POST,true,none,none,false,,false,false,false,true,none,true
+/api/parts/search,POST,true,none,none,true,,true,false,false,false,none,true
 /api/passive-policy,GET,false,none,caller-supplied-only,false,,false,false,false,false,none,false
 /api/passive-policy,POST,false,write,project-durable,false,,false,true,false,false,none,false
 /api/pcb-sync,GET,false,read-write,project-durable,false,,false,false,false,false,none,false
@@ -114,8 +114,8 @@ path,method,is_public,durable_access,project_data_sensitivity,provider_credit,ex
 /api/pcb/export/kicad-pcb,POST,true,none,caller-supplied-only,false,,false,false,false,true,none,false
 /api/pcb/footprints/[id],GET,true,none,none,false,,false,false,false,true,none,false
 /api/pcb/footprints/resolve,GET,true,none,none,false,,false,false,false,true,none,false
-/api/pcb/footprints/search,GET,true,none,none,false,,false,false,false,true,none,true
-/api/pcb/placement/preview,POST,true,none,none,false,,false,false,false,true,none,false
+/api/pcb/footprints/search,GET,true,none,none,true,,true,false,false,false,none,true
+/api/pcb/placement/preview,POST,true,none,none,false,,true,false,false,true,none,false
 /api/pcb/provider-exchange,POST,false,read,project-durable,false,,true,false,false,false,files,false
 /api/pcb/qualify,POST,false,read-write,project-durable,false,freerouting (java),true,true,true,false,none,false
 /api/pcb/release,POST,false,read-write,project-durable,false,,true,true,true,false,none,false

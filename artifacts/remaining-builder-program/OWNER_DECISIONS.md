@@ -2648,3 +2648,62 @@ Amendments to existing entries:
   - (i) The job's placement: `secret-scan` appended after every job, `production-smoke` included, so no cited line moves; it inherits `contents: read`; [B24-A2 review] security-3: it checks out the whole history (`fetch-depth: 0`) and, on a pull request, also scans every commit of it (base..head, the two SHAs passed as step environment).
   - (j) The suite names: `b24-a2-headers`, `b24-a2-origin-allowlist`, `b24-a2-secret-rotation`, `b24-a2-env-names`, `b24-a2-secret-scan` - the committed names (D17); the discovery section 7's `b24-a-*` were placeholders.
 - Owner confirmation pending.
+
+
+## OD-197 — rate limits and abuse controls, as applied (B24-A3, 2026-10-08)
+
+- **Default applied:**
+  - Per-process fixed windows (B20's `createFixedWindowLimiter`, unchanged), stated as per process: N instances allow N times as much, and a restart forgets every window. No shared store.
+  - The routes stay public: `POST /api/parts/search`, `GET /api/pcb/footprints/search`, `POST /api/pcb/placement/preview`, `POST /api/auth/signin`. Each search has a 300 / 60 s global window and a 60 / 60 s per-client window; the preview 10 and 3; sign-in 30 and 10; each limiter holds at most 10,000 keys.
+  - Keys are `["public", <slug>, "global"]` and `["public", <slug>, <client part>]`. The client part is `ip-<IPv4>`; an IPv4-mapped IPv6 address keys as its IPv4; any other IPv6 address keys by its /64 (`ip-<four groups>::`). Per-client keying applies only when `SIRKIT_TRUSTED_CLIENT_IP_HEADER` names `x-real-ip`, `cf-connecting-ip`, `true-client-ip` or `fly-client-ip` and that header carries exactly one IP literal. The variable is unset by default, and its value keys a window only.
+  - Taken after CSRF and before the media type and the body: per client first (only `limited` refuses there), then global (any refusal refuses). A refusal is 429 `PUBLIC_RATE_LIMITED` with Retry-After and no-store.
+  - Both searches go through the `embedding` meter (240 a minute; 3 failures open it for 60 s, a 429 for 60 s, `insufficient_quota` for 1 h). Their policy rows declare provider credit, the three public rows are `expensive`, and `abuseLimitViolations` refuses a gated row without a valid window.
+  - Every window and the meter read the real clock (`unfrozenNowMs`).
+  - "With the header unset, each window is one bucket shared by every caller. Any client can exhaust it: sign-in at 30/60 s locks every user out of sign-in for up to 60 s, and each search at 300/60 s refuses every user. This is the owner's trade-off against OD-197's alternative (require sign-in) and against configuring a trusted proxy header (LB-13)."
+  - Setting the header does not remove the lockout. The global window stays one bucket, so 3 keyed clients at their per-client limit lock everyone out of sign-in, 4 do so for the preview and 5 for a search. A caller with 10,000 distinct addresses or /64s in a minute can fill the per-client key map; this is INFERRED from the limiter's code. The header buys fairness below the cap.
+  - The owner's alternative: require sign-in on these routes. A3 does not.
+- **Evidence:** `abuse-controls.md` sections 1-9 and 21; `b24-a3-abuse-limits`, `-embedding-admission`, `-placement-bound`, `-credit-census`, `-signin-message`.
+- Owner confirmation pending.
+- [B24-A3b, 2026-10-08] Authenticated scope:
+  - One fixed window per (method, path) on each of the 40 authenticated provider-credit or expensive rows, keyed `[tenantId, projectId, principalId]` from the trusted context only.
+  - Limits: provider credit 60 / 60 s, expensive 50 / 60 s, `/api/chat` 60 / 60 s.
+  - Taken in `authorizeRequest` after membership and role, and in `agentStreamRoute` after its role check; chat reads its body first.
+  - Any refusal refuses: 429 `PRINCIPAL_RATE_LIMITED`.
+  - The existing meters (distributor quotas, the ngspice cap, the provider exchange's bounds and meter) are recorded beside the windows.
+  - The two authenticated embedding paths are bounded by their routes' windows.
+  - The gate covers every authenticated gated row (`credit_unlimited`, `expensive_unlimited`); the key set is exactly 43 rows plus sign-in.
+  - Q8: 0 LLM admissions on the flag-off chat path.
+
+**4. OD-174 amendment** (under its B23-A2 heading at `OWNER_DECISIONS.md:2035`; the question is at :2045-2046):
+
+- [B24-A3, 2026-10-08] The open question is answered by B24-A3 (OD-197; discovery 9.6 assigns it to A3). Both searches stay public. Their policy rows now declare `providerCredit: true` (`pub()` takes an optional `{ providerCredit }` and adds no key to `RoutePolicy`), and both, with the preview, are classified `expensive`. Each meets its public windows and the `embedding` meter. `publicHasCreditOrWrite` excuses public credit only on a reviewed `PUBLIC_MODEL_EGRESS` path with a valid `ABUSE_LIMITS` entry; this narrows it in place without loosening it, and the B16.0.2, B20-B2 and B20-B3 pins stay `[]`. `abuseLimitViolations` refuses such a path without a window. B16.0.1's invariants "provider-credit routes are NEVER public" and "public rows carry no credit" are narrowed in place to exactly the two metered searches. Requiring sign-in stays the owner's alternative. The B23 records that still call the question open go to B24-F (item 8).
+
+**5. OD-225** (the next free number at `b3b6b05`):
+
+
+## OD-225 — B24-A3: stated choices beyond its task text, as applied (B24-A3, 2026-10-08)
+
+- **Default applied:**
+  - (a) The numbers. Public windows as the task proposed. The meter is 240 a minute, with 3 failures, a 429 and `insufficient_quota` opening it for 60 s, 60 s and 1 h. Per-principal: provider credit 60 as proposed; expensive 50 and chat 60 instead of the proposed 10 and 20. Two suite files send 43 requests to one expensive row in one window, and one sends 37 chat runs. The browser spec sends 82 chat runs from one principal over its run. Counted 2026-10-07 with the windows off.
+  - (b) The header allow-list: `x-real-ip`, `cf-connecting-ip`, `true-client-ip`, `fly-client-ip`. Exactly one literal of at most 45 characters; unset by default (OD-190 names no platform).
+  - (c) Lexical fallback versus 429: the parts search falls back to its lexical search, shape unchanged. The footprint search has no fallback and answers 429 `EMBEDDING_ADMISSION_PAUSED`. The exact `Lib:Name` path never meets the meter.
+  - (d) The preview, reviewed 2026-10-08 and measured:
+    - Ceilings: `timeoutMs` ≤ 5,000 (absent means 5,000), `candidateCount` ≤ 2, `maxIterations` ≤ 400, `localRefinementPasses` ≤ 0, `gridNm` ≥ 100,000.
+    - 413 above 1,000,000 body bytes, 30 footprints, 600 pads, 128 pads in one footprint, 2,400 polygon-pad vertices, 300 nets, 100 tracks and vias, 8 zones, 512 zone vertices or 512 keepout vertices, or for any polygon outline.
+    - The task's proposal admitted a block of more than 900 s. Measured worst now: 1.5 s per request, about 15 s per minute per process.
+    - A polygon outline, or a board above 30 footprints, is refused on the public route only.
+  - (e) The B16.0.1 narrowing, through `reviewedMeteredPublicCredit`.
+  - (f) Window order: per client, then global; a global refusal has already used the client's per-client slot. The key prefix is `ip-`; IPv6 is keyed by /64 (review).
+  - (g) Embedding outcomes are classed by status and code only: a 429 is `rate_limited`; a 429 with code `insufficient_quota` is `insufficient_quota`; a 5xx, a 408, or an SDK error with no status is `failure`; another provider status is `neutral`; an error with no status at all (thrown before any request) is `neutral`. A late outcome recorded while the breaker is open is ignored.
+  - (h) Sign-in's `PUBLIC_RATE_LIMITED` message: "Too many sign-in attempts; try again in a minute."
+  - (i) The real clock for every window and the meter (review).
+  - (j) `public_signin_unlimited` (review).
+  - (k) The suite names `b24-a3-*`.
+- Owner confirmation pending.
+- [B24-A3b, 2026-10-08] The per-principal numbers (60 / 50 / chat 60), the keys (`[tenantId, projectId, principalId]`) and the enforcement sites (`authorizeRequest` after membership and role; `agentStreamRoute` after its role check), any refusal refusing.
+
+**6. README row:**
+
+| B24-A3 abuse controls (D24-8; OD-197, OD-174's question, OD-225; discovery 8 item 8) | `abuse-controls.md`; code `app/lib/auth/abuse-limits.ts`, `app/lib/embedding-admission.ts`, `app/lib/auth/{authorize,route-handlers,route-policy,route-resource-classification}.ts`, `app/lib/acquisition/admission-control.ts` (the `embedding` meter, appended), the parts, footprint-search and preview routes, `app/lib/pcb/footprint-search-service.ts`, `app/lib/fixture-runtime/clock.ts` (`unfrozenNowMs`), `app/signin/page.tsx`; suites `app/lib/qualification/__tests__/b24-a3-*` | done 2026-10-08 offline; review round of 14 findings closed (section 21); every window per process; browser jobs PROPOSED until the lead's runs; census 168 / 165 / 3 / 0, counts 47 / 36 / 9 / 27, 107 action records; a real proxy, several instances, Supabase's own sign-in limits and OpenAI's 429 and quota BLOCKED-LIVE-QUALIFICATION (LB-13, LB-1, LB-2) |
+
+**7. Ledger paragraph:**

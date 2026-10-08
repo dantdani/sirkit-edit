@@ -65,3 +65,14 @@ export function uninstallFixtureClock(): void {
 export function fixtureClockInstalled(): string | null {
   return (globalThis as Host)[MARKER]?.fixedAt ?? null;
 }
+
+/**
+ * [B24-A3 review, 2026-10-08] The wall clock this frozen clock does not freeze: the original `Date.now()` while the frozen clock is
+ * installed, `Date.now()` itself otherwise (a test's faked `Date` included). For counters over real time that mint no identity - the
+ * abuse windows and the embedding meter (OD-197) - so a fixture run's windows still roll over: with the frozen instant every window
+ * would be one budget for the whole run (the browser job's agent-execution spec sends 82 chat runs from one principal).
+ */
+export function unfrozenNowMs(): number {
+  const installed = (globalThis as Host)[MARKER];
+  return installed ? installed.original.now() : Date.now();
+}

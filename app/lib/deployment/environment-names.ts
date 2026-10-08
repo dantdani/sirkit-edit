@@ -99,7 +99,7 @@ const ROWS: readonly EnvironmentNameRow[] = [
   declared("SIRKIT_OCI_CLI_SHA256", "configuration", "app/lib/computation/runtime-profile.ts"),
   declared("SIRKIT_OPENAI_MODEL", "configuration", "app/lib/llm/openai-config.ts"),
   declared("SIRKIT_OPENAI_REASONING_EFFORT", "configuration", "app/lib/llm/openai-config.ts"),
-  declared("SIRKIT_ORCHESTRATION_ROLE_MODELS", "configuration", "app/lib/agent/orchestration/provider-policy.ts"),
+  declared("SIRKIT_ORCHESTRATION_ROLE_MODELS", "configuration", "app/lib/agent/orchestration/provider-policy.ts"), declared("SIRKIT_TRUSTED_CLIENT_IP_HEADER", "configuration", "app/lib/auth/abuse-limits.ts"), // [B24-A3, 2026-10-06] appended on this line, configuration by D16's map from A1's kind (OD-197)
   // ── flag ──
   declared("SIRKIT_ACQUISITION_DISABLED_SOURCES", "flag", "app/lib/acquisition/source-registry.ts"),
   declared("SIRKIT_ASSIGNMENT_QUEUE_STAGE6", "flag", "app/lib/assignment-queue/rollout.ts"),

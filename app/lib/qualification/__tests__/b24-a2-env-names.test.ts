@@ -288,15 +288,16 @@ describe("[B24-A2] .env.example parity (D24-4, OD-195)", () => {
     for (const row of ENVIRONMENT_NAMES.filter((candidate) => !DECLARED.has(candidate.class))) expect(five, row.name).toContain(`\`${row.name}\``);
     for (const [kind, image] of Object.entries(KIND_TO_CLASS)) expect(five, kind).toMatch(new RegExp(`\`${kind}\`[^\\n]*\`${image}\``));
     for (const fact of ["_PREVIOUS", "every name the code reads", "every name of a declared class", "SIRKIT_B24_BENCHMARK", "SIRKIT_JOB_STARTED_AT", "b24-a2-env-names", "NGSPICE_BIN"]) expect(five, fact).toContain(fact);
+    const total = /^(\d+) rows\.(.*)$/m.exec(five); expect(total, "the section states its row total").not.toBeNull(); expect(Number([...total![2]!.matchAll(/-> (\d+)/g)].map((move) => move[1]).pop() ?? total![1]), "the stated total (the last dated move, else the count) is the census's").toBe(ENVIRONMENT_NAMES.length); // [B24-A3 review, 2026-10-08] coverage-a2-page-stale-total: the table summed to 81 under "80 rows."
   });
 
   it("10. [B24-A2 review, 2026-10-06] regressions-3, coverage-5 (red on the page the review read): B24-A1's page states the inventory as the tree has it - section 3's count of names (49 at A1) and its count of secrets (3 at A1) each carry a dated B24-A2 note giving FLAG_INVENTORY's size and its secret count, naming the two *_PREVIOUS names, in place (no line of A1's page moves)", () => {
     const a1 = read("artifacts/ai-control-plane-b24/environments-and-deployment.md");
     const three = a1.slice(a1.indexOf(`${NEWLINE}## 3. `), a1.indexOf(`${NEWLINE}## 4. `));
     const secrets = FLAG_INVENTORY.filter((entry) => entry.kind === "secret").length;
-    expect([FLAG_INVENTORY.length, secrets]).toEqual([51, 5]);
+    expect([FLAG_INVENTORY.length, secrets]).toEqual([52, 5]); // [B24-A3, 2026-10-06] reviewed pin move: 51 -> 52, B24-A3's SIRKIT_TRUSTED_CLIENT_IP_HEADER (configuration); A2's note keeps its 49 -> 51 and A3's dated note on the same line gives 51 -> 52
     const notes = three.split(NEWLINE).filter((line) => line.includes("[B24-A2, 2026-10-06]"));
-    expect(notes.join(" ")).toContain(`49 -> ${FLAG_INVENTORY.length}`);
+    expect(notes.join(" ")).toContain("49 -> 51"); expect(three.split(NEWLINE).filter((line) => line.includes("[B24-A3, 2026-10-06]")).join(" ")).toContain(`51 -> ${FLAG_INVENTORY.length}`);
     expect(notes.join(" ")).toContain(`secret (3) -> secret (${secrets})`);
     for (const name of ["SIRKIT_MCP_TOKEN_SECRET_PREVIOUS", "SIRKIT_WORKFLOW_WORKER_SECRET_PREVIOUS"]) expect(notes.join(" "), name).toContain(`\`${name}\``);
     // in place: section 3 still opens on A1's line 99 and section 4 on A1's line 125
@@ -308,7 +309,7 @@ describe("[B24-A2] .env.example parity (D24-4, OD-195)", () => {
 /** The census by class (the page's section 5 table states the same numbers). */
 const CLASS_COUNTS: Readonly<Record<string, number>> = {
   secret: 14,
-  configuration: 27,
+  configuration: 28, // [B24-A3, 2026-10-06] reviewed pin move: 27 -> 28, SIRKIT_TRUSTED_CLIENT_IP_HEADER (D16 map from A1's configuration kind; OD-197)
   flag: 14,
   "rotation-previous": 3,
   fixture: 6,
