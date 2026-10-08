@@ -11,7 +11,7 @@
  */
 
 import postgres, { type Sql } from "postgres";
-import type { MigrationExecutor, MigrationStatementRunner } from "./runner";
+import type { MigrationExecutor, MigrationStatementRunner } from "./runner"; import { databaseTls } from "../connection-security"; // [B24-A4] D24-3, OD-192
 
 export interface PostgresExecutorOptions {
   /** Connection pool size; the runner needs one connection. */
@@ -29,7 +29,7 @@ export function createPostgresMigrationExecutor(url: string, options: PostgresEx
   const client = postgres(url, {
     prepare: false,
     max: options.max ?? 1,
-    ssl: url.includes("supabase.") ? "require" : undefined,
+    ssl: databaseTls(url), // [B24-A4] D24-3, OD-192: TLS for every non-loopback URL; a weaker sslmode off loopback is refused before any connection
     connect_timeout: 15,
     onnotice: () => {},
   });

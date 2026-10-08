@@ -4945,3 +4945,57 @@ control, tool or composition-root wiring was added. Live ordering stays BLOCKED-
     B24 suites 168; tsc 0; eslint 0 on 26 files; the default browser configuration 54 of 54 (4.9 min, `agent-execution`'s chat runs
     inside the new per-principal windows) and the orchestration configuration 4 of 4 (2.5 min); 31 rewritten evidence PNGs restored, all
     equal by blob hash.
+
+### B24-A4 - data layer: roles, row security, TLS, test isolation, rollback, recovery (2026-10-08 local; increment workflow + lead; this commit)
+
+- Test-first from `3cd7d6e`, A4a then A4b in one run.
+  - Pre-edit counterexamples on PGlite (page section 1):
+    - P1: the emulated `anon` and `authenticated` each read the seeded `bom_snapshots` row.
+    - P2: no rollback path; any flag fell through to an apply.
+    - P3: the five unscoped DELETEs emptied a foreign tenant's aggregate, its readiness row included.
+  - A4a's suites failed first: two failed to load, and row security had 7 of 8 red. A4b's failed after A4a was green (13 of 13).
+- A4a:
+  - 0031 (no policy, on 142 tables and the ledger);
+  - `.enableRLS()` on 142 declarations, and `verifyDefaultDenyRls`;
+  - the TLS rule at the five clients (drizzle-kit recorded as unsupported);
+  - the shared guard, with the eight suites awaiting it first;
+  - `schema-integrity` scoped to its run;
+  - the acceptance-driver check.
+- A4b:
+  - the reviewed rollback (`drizzle/rollback/`, classes, `--rollback --confirm`);
+  - the logical dump and restore;
+  - the connection-loss cases: the trusted context rejects and no handler runs; appends leave no partial row and retry exactly once.
+- Review round (2026-10-08): ten confirmed findings (one medium, nine low; two are one defect), fixed test-first. 9 of 46 cases were red first. The three test-strength findings were proven against seven deliberate breakages of the source, each restored by sha256. The fixes:
+  - the dump refuses a role that row security would empty;
+  - FORCE counts as hiding rows from an owner;
+  - `requireNoPublicTable` is checked before the claim;
+  - cleanup hooks run only once the target is admitted;
+  - the driver's first-`@` host reading;
+  - a wider migration guard and TLS census.
+- Gates green (page section 16).
+  - database-delivery: 20 files passed and 3 skipped; 179 tests passed and 12 skipped; 95 s locally, about 1.6 minutes of its 15-minute limit (OD-30; about 13.4 minutes of headroom; CI's runner is slower, INFERRED).
+  - Migrations 31 -> 32. Census, tool counts and action records unchanged.
+  - Live halves BLOCKED-LIVE-QUALIFICATION (LB-14).
+
+**9. LB-14** (append after LB-13 at `LIVE_BLOCKERS.md:19`; no LB-14 row or `liveBlockers` line exists at `3cd7d6e`):
+
+| LB-14 | Database platform: Data API exposure, roles, backup, PITR, failover, restart (OD-217; runbook B24-A `:1031`, `:1033`, `:1037`, B24-D `:1103`) | BLOCKED-LIVE-QUALIFICATION | B24-A4: offline PGlite proofs - 0031's default-deny row security against the emulated Data API grants (`b24-a4-rls-default-deny`), the TLS rule at every postgres-js client (`b24-a4-database-tls`), the shared test-data guard (`b24-a4-test-isolation`), the reviewed rollback of the newest migration (`b24-a4-rollback`), the logical dump and restore and the connection-loss cases (`b24-a4-restore`); `database-and-recovery.md` (0031's owner pre-apply step, the PROPOSED application role, the recovery runbook) - nothing applied to a live database | the owner supplies an isolated, disposable project, or the staging or production project's settings (Data API exposure), grants and role attributes and backup plan (schedule, PITR window), and runs 0031's pre-apply check on it (OD-191, OD-192, OD-194) |
+
+`PROGRAM_STATE.json` `liveBlockers` line: `"database platform (Data API exposure, roles, backup, PITR, failover, restart): BLOCKED-LIVE-QUALIFICATION (LB-14)"`
+
+**10. Superseded statements for B24-F** (A4 edits none of them; page section 13):
+- `drizzle/0027_project_membership.sql:7`, the header's "Rollback: see the DOWN section at the bottom of this file";
+- the commented DOWN sections at `drizzle/0027_project_membership.sql:57` and `drizzle/0028_bom_project_ownership.sql:62`;
+- the "FORWARD-ONLY" headers at `drizzle/0028_bom_project_ownership.sql:3`, `drizzle/0029_part_offers_mpn.sql:3` and `drizzle/0030_atomic_revision_status_events.sql:3`;
+- `artifacts/ai-control-plane-b16-0/migration-and-rollback.md:29-30`;
+- `artifacts/ai-control-plane-b16-closeout/migration-delivery-contract.md:43`, its command list;
+- none other from the review round.
+
+**11. Lead runs:**
+- No UI changed. The B17-A control-inventory generator showed no diff, so no browser run is needed.
+- No local production-mode step is needed: task A4 asks for none, and nothing ran `next build`, `next start` or `next dev`. `client.ts` imports the pure `connection-security.ts`, so the next CI run of `production-smoke` covers the build.
+- No step touched a live database, and no qualification marker was set.
+- Lead close (2026-10-08): the fast increment form (two merged review lenses with their skeptics, then the fix round; no post-fix
+  check stage). The lead's close (`b24/lead-close.sh a4 no`; no UI or served change, so no browser run - CI runs both configurations):
+  `app/lib/pcb` 977 passed, 4 skipped; B14.4 22; the confinement gates 375; the B24 suites 175; tsc 0; eslint 0 on 30 files. No real
+  database was contacted: every proof ran on PGlite in-process.

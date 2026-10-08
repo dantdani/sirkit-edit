@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { PostgresDurableWorkflowRepository } from "../server-repository";
 import { durableAggregateIdentity } from "../stable";
 import { databaseQualification } from "../../db/test-qualification";
+import { claimQualificationTarget } from "../../db/qualification-target";
 
 // B16-B item 5 (LB-4): opt-in via SIRKIT_DB_QUALIFICATION=1 + SIRKIT_DB_QUALIFICATION_URL — never .env.local, never DATABASE_URL.
 const databaseUrl = databaseQualification().url;
@@ -14,6 +15,7 @@ const owner = { aggregateType: "b06.owner.v1", aggregateKey: "same-key" };
 const effect = { owner, eventType: "mapping.invalidate", eventVersion: 1, topic: "mapping.invalidate", payload: { safe: true } };
 
 db("PostgreSQL durable tenant scope", () => {
+  beforeAll(async () => { await claimQualificationTarget(databaseUrl!, "tenant-scope"); }, 60_000); // [B24-A4] D24-12, OD-201: the shared guard, before the first database statement
   it("keeps identical aggregate keys, history, replay, and CAS isolated", async () => {
     const repository = new PostgresDurableWorkflowRepository(), at = "2026-07-20T12:00:00.000Z";
     await repository.commit({ scope: scopeA, scopeKey: "b06-same-scope-key", idempotencyKey: "b06-same-idempotency", operations: [{ ...owner, expectedRevision: 0, payload: { tenant: "a" } }], outbox: [effect], result: { tenant: "a" }, committedAt: at });

@@ -36,10 +36,10 @@ describe("B16-B §manifest — journal + registered migrations, refusing disagre
     expect(manifest.journal).toMatchObject({ version: "7", dialect: "postgresql", entryCount: 27 });
     // [B19-D I5b] reviewed pin move: 0029_part_offers_mpn is a new registered, forward-only migration
     // [B19-E E3] reviewed pin move: 0030_atomic_revision_status_events is a new registered, forward-only migration (append-only withdrawal)
-    expect(manifest.entries).toHaveLength(31);
-    expect(manifest.entries.map((entry) => entry.ordinal)).toEqual([...Array(31).keys()]);
-    expect(manifest.entries.slice(27).map((entry) => [entry.name, entry.source])).toEqual([["0027_project_membership", "registered"], ["0028_bom_project_ownership", "registered"], ["0029_part_offers_mpn", "registered"], ["0030_atomic_revision_status_events", "registered"]]);
-    expect(REGISTERED_POST_JOURNAL_MIGRATIONS).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn", "0030_atomic_revision_status_events"]);
+    expect(manifest.entries).toHaveLength(32); // [B24-A4, 2026-10-08] reviewed pin move: + 0031_rls_default_deny (default-deny row security, OD-192)
+    expect(manifest.entries.map((entry) => entry.ordinal)).toEqual([...Array(32).keys()]); // [B24-A4, 2026-10-08] reviewed pin move: + 0031_rls_default_deny (default-deny row security, OD-192)
+    expect(manifest.entries.slice(27).map((entry) => [entry.name, entry.source])).toEqual([["0027_project_membership", "registered"], ["0028_bom_project_ownership", "registered"], ["0029_part_offers_mpn", "registered"], ["0030_atomic_revision_status_events", "registered"], ["0031_rls_default_deny", "registered"]]); // [B24-A4, 2026-10-08] reviewed pin move: + 0031_rls_default_deny (default-deny row security, OD-192)
+    expect(REGISTERED_POST_JOURNAL_MIGRATIONS).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn", "0030_atomic_revision_status_events", "0031_rls_default_deny"]); // [B24-A4, 2026-10-08] reviewed pin move: + 0031_rls_default_deny (default-deny row security, OD-192)
     for (const entry of manifest.entries) {
       expect(entry.checksum).toMatch(/^sha256:[0-9a-f]{64}$/);
       expect(entry.statements.length).toBeGreaterThan(0);
@@ -101,7 +101,7 @@ describe("B16-B §clean / upgrade / replay / drift / interruption (disposable Po
     expect(before.tables.some((table) => table.name === "project_members")).toBe(false);
     expect(before.columns.some((column) => column.table === "bom_snapshots" && column.name === "tenant_id")).toBe(false);
     const upgrade = await migrateDatabase(upgraded, { manifest });
-    expect(upgrade.applied).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn", "0030_atomic_revision_status_events"]); // [B19-E E3] reviewed pin move: + 0030
+    expect(upgrade.applied).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn", "0030_atomic_revision_status_events", "0031_rls_default_deny"]); // [B19-E E3] reviewed pin move: + 0030; [B24-A4, 2026-10-08] reviewed pin move: + 0031_rls_default_deny (default-deny row security, OD-192)
     expect(upgrade.skipped).toHaveLength(27);
     expect(schemaFingerprint(await captureSchemaSnapshot(upgraded))).toBe(cleanPrint);
   }, 60_000);
@@ -116,7 +116,7 @@ describe("B16-B §clean / upgrade / replay / drift / interruption (disposable Po
     expect(second.ledger).toEqual(first.ledger);
     const status = await migrationStatus(db, manifest);
     expect(status).toMatchObject({ pending: [], drift: [], unknown: [], gap: false });
-    expect(status.applied).toHaveLength(31); // [B19-D I5b] 0029_part_offers_mpn; [B19-E E3] reviewed pin move: 0030_atomic_revision_status_events
+    expect(status.applied).toHaveLength(32); // [B19-D I5b] 0029_part_offers_mpn; [B19-E E3] reviewed pin move: 0030_atomic_revision_status_events; [B24-A4, 2026-10-08] reviewed pin move: + 0031_rls_default_deny (default-deny row security, OD-192)
   }, 60_000);
 
   it("checksum drift is refused BEFORE anything is applied (an edited 0027 after it was applied)", async () => {
@@ -144,12 +144,12 @@ describe("B16-B §clean / upgrade / replay / drift / interruption (disposable Po
     const status = await migrationStatus(db, manifest);
     expect(status.applied).toHaveLength(26);
     expect(status.applied.map((row) => row.name)).not.toContain(target.name);
-    expect(status.pending.map((entry) => entry.name)).toEqual([target.name, "0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn", "0030_atomic_revision_status_events"]); // [B19-E E3] reviewed pin move: + 0030
+    expect(status.pending.map((entry) => entry.name)).toEqual([target.name, "0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn", "0030_atomic_revision_status_events", "0031_rls_default_deny"]); // [B19-E E3] reviewed pin move: + 0030; [B24-A4, 2026-10-08] reviewed pin move: + 0031_rls_default_deny (default-deny row security, OD-192)
     const snapshot = await captureSchemaSnapshot(db);
     expect(snapshot.tables.some((table) => table.name === "parts_atomic_links")).toBe(false); // the first chunk was rolled back with the failed transaction
     expect(snapshot.tables.some((table) => table.name === "project_members")).toBe(false);
     const resumed = await migrateDatabase(db, { manifest });
-    expect(resumed.applied).toEqual([target.name, "0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn", "0030_atomic_revision_status_events"]); // [B19-E E3] reviewed pin move: + 0030
+    expect(resumed.applied).toEqual([target.name, "0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn", "0030_atomic_revision_status_events", "0031_rls_default_deny"]); // [B19-E E3] reviewed pin move: + 0030; [B24-A4, 2026-10-08] reviewed pin move: + 0031_rls_default_deny (default-deny row security, OD-192)
     expect((await migrationStatus(db, manifest)).pending).toEqual([]);
     expect((await captureSchemaSnapshot(db)).tables.some((table) => table.name === "parts_atomic_links")).toBe(true);
   }, 60_000);
@@ -173,7 +173,7 @@ describe("B16-B §clean / upgrade / replay / drift / interruption (disposable Po
       },
     });
     // [B19-D I5b] 0029 follows the raced 0028 and is applied by "us" as usual; [B19-E E3] reviewed pin move: so is 0030
-    expect(result.applied).toEqual(["0027_project_membership", "0029_part_offers_mpn", "0030_atomic_revision_status_events"]);
+    expect(result.applied).toEqual(["0027_project_membership", "0029_part_offers_mpn", "0030_atomic_revision_status_events", "0031_rls_default_deny"]); // [B24-A4, 2026-10-08] reviewed pin move: + 0031_rls_default_deny (default-deny row security, OD-192)
     expect(result.skipped).toContain("0028_bom_project_ownership");
     expect((await migrationStatus(db, manifest)).pending).toEqual([]);
   }, 60_000);
@@ -187,7 +187,7 @@ describe("B16-B §clean / upgrade / replay / drift / interruption (disposable Po
     await db.query(`DELETE FROM "${MIGRATION_LEDGER_TABLE}" WHERE name = $1`, ["9999_from_a_future_version"]);
     await db.query(`DELETE FROM "${MIGRATION_LEDGER_TABLE}" WHERE name = $1`, [manifest.entries[2]!.name]);
     await expect(migrateDatabase(db, { manifest })).rejects.toMatchObject({ code: "DB_MIGRATION_LEDGER_GAP" });
-    expect(reconcileLedger(manifest, [{ name: manifest.entries[0]!.name, checksum: manifest.entries[0]!.checksum, applied_at: "", statement_count: 1, runner_version: "x" }]).pending).toHaveLength(30); // [B19-D I5b] 0029_part_offers_mpn; [B19-E E3] reviewed pin move: 0030_atomic_revision_status_events
+    expect(reconcileLedger(manifest, [{ name: manifest.entries[0]!.name, checksum: manifest.entries[0]!.checksum, applied_at: "", statement_count: 1, runner_version: "x" }]).pending).toHaveLength(31); // [B19-D I5b] 0029_part_offers_mpn; [B19-E E3] reviewed pin move: 0030_atomic_revision_status_events; [B24-A4, 2026-10-08] reviewed pin move: + 0031_rls_default_deny (default-deny row security, OD-192)
   }, 60_000);
 
   it("dry run plans without applying", async () => {
@@ -226,7 +226,7 @@ describe("B16-B §baseline adoption — databases that pre-date the ledger (revi
     await expect(migrateDatabase(db, { manifest })).rejects.toThrow(/already exists/);
     const status = await migrationStatus(db, manifest);
     expect(status.applied).toHaveLength(0);
-    expect(status.pending).toHaveLength(31); // [B19-D I5b] 0029_part_offers_mpn; [B19-E E3] reviewed pin move: 0030_atomic_revision_status_events
+    expect(status.pending).toHaveLength(32); // [B19-D I5b] 0029_part_offers_mpn; [B19-E E3] reviewed pin move: 0030_atomic_revision_status_events; [B24-A4, 2026-10-08] reviewed pin move: + 0031_rls_default_deny (default-deny row security, OD-192)
     expect((await captureSchemaSnapshot(db)).tables.length).toBeGreaterThan(100);
   }, 120_000);
 
@@ -241,9 +241,9 @@ describe("B16-B §baseline adoption — databases that pre-date the ledger (revi
     const status = await migrationStatus(db, manifest);
     expect(status.applied.map((row) => row.name)).toEqual(manifest.entries.slice(0, 27).map((entry) => entry.name));
     expect(status.applied.every((row) => row.runner_version === BASELINE_RUNNER_VERSION)).toBe(true);
-    expect(status.pending.map((entry) => entry.name)).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn", "0030_atomic_revision_status_events"]); // [B19-E E3] reviewed pin move: + 0030
+    expect(status.pending.map((entry) => entry.name)).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn", "0030_atomic_revision_status_events", "0031_rls_default_deny"]); // [B19-E E3] reviewed pin move: + 0030; [B24-A4, 2026-10-08] reviewed pin move: + 0031_rls_default_deny (default-deny row security, OD-192)
     const upgrade = await migrateDatabase(db, { manifest });
-    expect(upgrade.applied).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn", "0030_atomic_revision_status_events"]); // [B19-E E3] reviewed pin move: + 0030
+    expect(upgrade.applied).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn", "0030_atomic_revision_status_events", "0031_rls_default_deny"]); // [B19-E E3] reviewed pin move: + 0030; [B24-A4, 2026-10-08] reviewed pin move: + 0031_rls_default_deny (default-deny row security, OD-192)
     const clean = await fresh();
     await migrateDatabase(clean, { manifest });
     expect(schemaFingerprint(await captureSchemaSnapshot(db))).toBe(schemaFingerprint(await captureSchemaSnapshot(clean)));

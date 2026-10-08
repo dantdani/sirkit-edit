@@ -13,6 +13,13 @@
  *                                             constraint/index divergences are printed, and only then
  *                                             are the ledger rows written (marked ADOPTED). Then run
  *                                             `db:migrate` normally.
+ *   pnpm run db:migrate -- --rollback <name> --confirm <ROLLBACK_CONFIRMATION> [--dry-run]
+ *                                             [B24-A4] OD-193: roll back the NEWEST applied migration by its reviewed
+ *                                             DOWN (drizzle/rollback/<name>.down.sql, bound to the forward checksum), in
+ *                                             one transaction with its ledger row; 0031 is lossless, 0027-0030 run only
+ *                                             while they would lose no row, 0000-0026 are forward-only (rollback means
+ *                                             restore). The operator types the confirmation; --dry-run plans only;
+ *                                             --rollback with --baseline refuses.
  *
  * The target is `DATABASE_URL` (loaded from `.env.local` ONLY here, in the
  * operator's CLI — never in tests). Platform prerequisites the migrations
@@ -27,6 +34,8 @@ import { adoptBaseline, BASELINE_CONFIRMATION, BaselineRefusal } from "../app/li
 import { loadMigrationManifest, truncateManifest } from "../app/lib/db/migrations/manifest";
 import { createPostgresMigrationExecutor } from "../app/lib/db/migrations/postgres-executor";
 import { checkMigrationPrerequisites, migrateDatabase, migrationStatus, MigrationRefusal } from "../app/lib/db/migrations/runner";
+import { parseMigrateArguments } from "../app/lib/db/migrations/cli-arguments";
+import { rollbackNewestMigration, RollbackRefusal } from "../app/lib/db/migrations/rollback";
 import { captureSchemaSnapshot } from "../app/lib/db/migrations/verify-schema";
 
 function redactedTarget(url: string): string {
@@ -44,10 +53,11 @@ function redactedError(message: string, url: string): string {
 }
 
 async function main(): Promise<number> {
-  const args = process.argv.slice(2);
-  const flags = new Set(args.filter((arg) => arg.startsWith("--")));
-  const baselineIndex = args.indexOf("--baseline");
-  const baselineThrough = baselineIndex >= 0 ? args[baselineIndex + 1] : undefined;
+  // [B24-A4] OD-193: the arguments are parsed (cli-arguments.ts, side-effect free) before .env.local is loaded or anything connects;
+  // an unknown flag now refuses instead of falling through to an apply
+  const parsed = parseMigrateArguments(process.argv.slice(2));
+  if (!parsed.ok) { process.stderr.write(`REFUSED ${parsed.code}: ${parsed.message} Nothing was changed.\n`); return 2; }
+  const command = parsed.command;
   loadEnvLocal();
   const url = process.env.DATABASE_URL;
   if (!url) { process.stderr.write("DATABASE_URL is not set (add it to .env.local or the environment). Nothing was changed.\n"); return 2; }
@@ -57,13 +67,13 @@ async function main(): Promise<number> {
   try {
     const prerequisites = await checkMigrationPrerequisites(executor);
     if (prerequisites.missing.length > 0) process.stdout.write(`prerequisites missing (provision them deliberately): ${prerequisites.missing.join(", ")}\n`);
-    if (flags.has("--status")) {
+    if (command.mode === "status") {
       const status = await migrationStatus(executor, manifest);
       process.stdout.write(`applied: ${status.applied.length}; pending: ${status.pending.map((entry) => entry.name).join(", ") || "none"}; drift: ${status.drift.length}; unknown: ${status.unknown.length}; gap: ${status.gap}\n`);
       return status.drift.length || status.unknown.length || status.gap ? 1 : 0;
     }
-    if (baselineIndex >= 0) {
-      if (!baselineThrough || baselineThrough.startsWith("--")) { process.stderr.write("--baseline needs the name of the last migration the database was built through.\n"); return 2; }
+    if (command.mode === "baseline") {
+      const baselineThrough = command.through;
       const index = manifest.entries.findIndex((entry) => entry.name === baselineThrough);
       if (index < 0) { process.stderr.write(`REFUSED DB_MIGRATION_BASELINE_UNKNOWN: ${baselineThrough}\n`); return 1; }
       // The expected catalog of the prefix — and of the full manifest, to know which tables are "later" — from a disposable instance.
@@ -86,11 +96,16 @@ async function main(): Promise<number> {
         await fullInstance.close();
       }
     }
-    const result = await migrateDatabase(executor, { manifest, dryRun: flags.has("--dry-run"), onApplied: (entry, count) => process.stdout.write(`applied ${entry.name} (${count} statements)\n`) });
+    if (command.mode === "rollback") {
+      const rolled = await rollbackNewestMigration(executor, { manifest, name: command.name, confirmation: command.confirmation, dryRun: command.dryRun });
+      process.stdout.write(`${rolled.dryRun ? "dry run: would roll back" : "rolled back"} ${rolled.name} (${rolled.class}, ${rolled.statements} DOWN statements); ledger ${rolled.ledger.length}\n`);
+      return 0;
+    }
+    const result = await migrateDatabase(executor, { manifest, dryRun: command.dryRun, onApplied: (entry, count) => process.stdout.write(`applied ${entry.name} (${count} statements)\n`) });
     process.stdout.write(`${result.dryRun ? "dry run: " : ""}applied ${result.applied.length}, already applied ${result.skipped.length}, ledger ${result.ledger.length}\n`);
     return 0;
   } catch (error) {
-    if (error instanceof MigrationRefusal || error instanceof BaselineRefusal) { process.stderr.write(`REFUSED ${error.message}\n`); return 1; }
+    if (error instanceof MigrationRefusal || error instanceof BaselineRefusal || error instanceof RollbackRefusal) { process.stderr.write(`REFUSED ${error.message}\n`); return 1; }
     process.stderr.write(`FAILED ${redactedError(error instanceof Error ? error.message : String(error), url)}\n`);
     return 1;
   } finally {

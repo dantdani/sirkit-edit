@@ -26,7 +26,7 @@ import { loadEnvLocal } from "../app/lib/load-env-local";
 
 loadEnvLocal();
 
-import postgres from "postgres";
+import postgres from "postgres"; import { databaseTls } from "../app/lib/db/connection-security"; // [B24-A4] D24-3, OD-192
 import { isGenericPart, looksLikeMpn, normalizeMpn } from "../app/lib/parts-normalization";
 
 // Small batches keep every UPDATE/SELECT well under the transaction pooler's
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
   // Dedicated, deliberately small pool so we never crowd the 15-client pooler.
   const sql = postgres(url, {
     prepare: false,
-    ssl: url.includes("supabase.") ? "require" : undefined,
+    ssl: databaseTls(url), // [B24-A4] D24-3, OD-192: TLS for every non-loopback URL
     connect_timeout: 15,
     max: 2,
     onnotice: () => {},

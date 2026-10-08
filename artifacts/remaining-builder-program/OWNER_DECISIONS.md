@@ -2707,3 +2707,94 @@ Amendments to existing entries:
 | B24-A3 abuse controls (D24-8; OD-197, OD-174's question, OD-225; discovery 8 item 8) | `abuse-controls.md`; code `app/lib/auth/abuse-limits.ts`, `app/lib/embedding-admission.ts`, `app/lib/auth/{authorize,route-handlers,route-policy,route-resource-classification}.ts`, `app/lib/acquisition/admission-control.ts` (the `embedding` meter, appended), the parts, footprint-search and preview routes, `app/lib/pcb/footprint-search-service.ts`, `app/lib/fixture-runtime/clock.ts` (`unfrozenNowMs`), `app/signin/page.tsx`; suites `app/lib/qualification/__tests__/b24-a3-*` | done 2026-10-08 offline; review round of 14 findings closed (section 21); every window per process; browser jobs PROPOSED until the lead's runs; census 168 / 165 / 3 / 0, counts 47 / 36 / 9 / 27, 107 action records; a real proxy, several instances, Supabase's own sign-in limits and OpenAI's 429 and quota BLOCKED-LIVE-QUALIFICATION (LB-13, LB-1, LB-2) |
 
 **7. Ledger paragraph:**
+
+
+## OD-191 — the main Supabase project and an isolated staging project, as applied (B24-A4, 2026-10-08)
+
+- **Default applied:**
+  - B24 treats the main Supabase project as production: no B24 test, script or run touches it (runbook `:1044`).
+  - The 2026-09-24 database run is recorded as "real-server qualification on a non-isolated project", not as staging (`database-and-recovery.md` section 10).
+  - Every DB-gated suite awaits the shared guard, which admits only a claimed or empty target (OD-201).
+  - Staging auth stays BLOCKED-LIVE-QUALIFICATION (LB-1) until an isolated `sirkit-auth-qualification-*` project and account exist. The database platform is LB-14.
+  - B24-E amends under this heading.
+- Owner confirmation pending.
+
+
+## OD-192 — least-privilege roles and RLS, as applied (B24-A4, 2026-10-08)
+
+- **Default applied:**
+  - `drizzle/0031_rls_default_deny.sql` enables row security with no policy on the 142 tables other than `project_members` and on `sirkit_schema_migrations`. It uses no FORCE, no role, no GRANT and no REVOKE.
+  - `.enableRLS()` is on the same 142 `schema.ts` declarations, and `verifyDefaultDenyRls` checks the result.
+  - The owner bypass is INFERRED for the real platform (LB-14).
+  - The owner's pre-apply step for 0031 is on the page (section 2.2). Its way back is the lossless `--rollback 0031_rls_default_deny`.
+  - The application role is PROPOSED only: BYPASSRLS, or one policy per table. The owner chooses, and the server keeps one `DATABASE_URL`.
+  - TLS is required for every non-loopback URL at the five postgres-js clients. A weaker sslmode is refused with `DB_TLS_REQUIRED`, and since the review round an unencoded `@` before a host list is refused with `DB_URL_MALFORMED`.
+  - drizzle-kit is recorded as an unsupported sixth client. Certificate verification against the platform's CA is not built (LB-14).
+- Owner confirmation pending.
+
+
+## OD-193 — migration rollback policy, as applied (B24-A4, 2026-10-08)
+
+- **Default applied, narrowed:**
+  - The DOWN SQL is in `drizzle/rollback/<name>.down.sql`, not as executable sections inside 0027-0030. Every byte of a forward file is in its checksum, and every non-comment chunk of it runs forward. 0027-0030 are byte-identical.
+  - Classes: 0031 lossless; 0027-0030 requires empty, refusing with `DB_ROLLBACK_DATA_PRESENT`; 0000-0026 forward-only, where rollback means restore.
+  - `pnpm run db:migrate -- --rollback <name> --confirm roll_back_newest_migration [--dry-run]` rolls back the newest applied migration only. It runs in one transaction with its ledger row, under the runner's lock.
+  - Proven apply -> rollback -> re-apply on PGlite in database-delivery. A real-server rollback is BLOCKED-LIVE-QUALIFICATION (LB-14).
+- Owner confirmation pending.
+
+
+## OD-194 — backup, restore, point-in-time recovery and failover evidence, as applied (B24-A4, 2026-10-08)
+
+- **Default applied:**
+  - An in-repository logical dump and restore (`app/lib/db/recovery/logical-dump.ts`, `sirkit.db-logical-dump.v1`), proven on PGlite with the 9.4 fixture. The restore refuses a target holding rows before any write, and verifies the fingerprint, counts and digests.
+  - Since the review round, a role that row security may hide rows from is refused with `DB_DUMP_ROWS_HIDDEN`.
+  - A recovery runbook (`database-and-recovery.md` section 8), and connection-loss cases that fail closed.
+  - `pg_dump`/`pg_restore`, the Supabase plan's backups, the PITR window and failover are BLOCKED-LIVE-QUALIFICATION (LB-14) and never claimed.
+- Owner confirmation pending.
+
+
+## OD-201 — the test-data guard, as applied (B24-A4, 2026-10-08)
+
+- **Default applied, narrowed:**
+  - One shared guard (`app/lib/db/qualification-target.ts`) admits a target only if it is already claimed or empty, and refuses before any write. The eight DB-gated suites await it first, pinned by `b24-a4-test-isolation`.
+  - `schema-integrity.test.ts` scopes every write and delete to its own run.
+  - The review round added two things: `b16-b-postgres-qualification` requires no `public` table at all, and cleanup hooks run statements only once the guard admitted the target.
+  - The acceptance driver's check is narrowed from "the server reports the fixture runtime or a disposable marker" to `--disposable-target`, a loopback base URL, and a catalog read that cannot reach a non-loopback database (OD-226). The server's own database is not checked, and stays BLOCKED-LIVE-QUALIFICATION (LB-14).
+- Owner confirmation pending.
+
+**4. OD-217 amendment** (under B24-A1's heading at `OWNER_DECISIONS.md:2599`):
+- [B24-A4, 2026-10-08] LB-14 applied. The row "database platform: Data API exposure, roles, backup, PITR, failover, restart" is appended after LB-13 in OD-217's vocabulary (BLOCKED-LIVE-QUALIFICATION), with its `PROGRAM_STATE.json` `liveBlockers` mirror. B24-B1 (LB-15..LB-17) and B24-E (the rest of OD-217) append next.
+
+**5. OD-226**, the next free number at `3cd7d6e`:
+
+
+## OD-226 — B24-A4: stated choices beyond its task text, as applied (B24-A4, 2026-10-08)
+
+- **Default applied:**
+  - (a) The claim marker is a singleton row in `sirkit_qualification.claim` (marker `sirkit.db-qualification-claim.v1`), outside `public`, written under `pg_advisory_xact_lock(hashtext('sirkit_qualification_claim'))`.
+  - (b) DOWN files sit outside the forward files (`drizzle/rollback/`). 0027-0030 each have a reviewed DOWN of class "requires empty":
+    - 0030: no `atomic_revision_status_events` row;
+    - 0029: every `part_offers.mpn` is NULL;
+    - 0028: no owned `bom_snapshots` or `bom_notifications` row;
+    - 0027: no `project_members` row.
+  - (c) The typed confirmation `roll_back_newest_migration`. The CLI never supplies it itself, unlike `--baseline`.
+  - (d) A weakened sslmode (`disable`, `allow`, `prefer`) off loopback is refused rather than upgraded. `verify-ca` is enforced as `verify-full`.
+  - (e) The in-repository logical dump, because no dump tool ships with the dependencies (OD-42).
+  - (f) The acceptance driver's check, narrowed from OD-201's server-reported marker to `--disposable-target`, a loopback base URL and a driver catalog read that cannot reach a non-loopback database. The server's own database is not checked (BLOCKED-LIVE-QUALIFICATION, LB-14).
+  - (g) The a/b split was kept in one task file and one workflow run, committed once by the lead (Lead decisions at launch).
+  - (h) Review round:
+    - `requireNoPublicTable`;
+    - `DB_DUMP_ROWS_HIDDEN`;
+    - FORCE counted as hiding rows from an owner without BYPASSRLS;
+    - cleanup hooks only once admitted;
+    - an unencoded `@` before a host list refused as `DB_URL_MALFORMED`.
+- Owner confirmation pending.
+
+**6. OD-30 amendment** (optional; A2 set the precedent):
+- [B24-A4, 2026-10-08] B24-A4 adds four PGlite suites to `database-delivery` (`deterministic-manufacturing.yml:303-306`). The list ran in 95 s locally (93.41 s, two workers; A4's four files 88.0 s of file time), about 1.6 minutes of the job's 15-minute limit, about 13.4 minutes of headroom. CI's time is recorded with its first run. The default applies.
+
+**7. README row:**
+
+| B24-A4 data layer: roles, row security, TLS, test isolation, rollback, recovery (D24-2, D24-3 and D24-7 offline, D24-12; OD-191, OD-192, OD-193, OD-194, OD-201, OD-217 in part (LB-14), OD-226) | `database-and-recovery.md`; code `drizzle/0031_rls_default_deny.sql`, `drizzle/rollback/0027..0031.down.sql`, `app/lib/db/{connection-security,qualification-target}.ts`, `app/lib/db/migrations/{rollback,cli-arguments}.ts`, `app/lib/db/recovery/logical-dump.ts`, `.enableRLS()` in `schema.ts`, `verifyDefaultDenyRls`, `scripts/db-migrate.ts` (`--rollback`), `scripts/e2e-prompt-to-gerber.ts` (`--disposable-target`); suites `app/lib/qualification/__tests__/b24-a4-database-tls.test.ts`, `app/lib/qualification/database/__tests__/b24-a4-*` | done 2026-10-08 offline on PGlite; review round of ten findings closed (section 18); migrations 31 -> 32; census 168 / 165 / 3 / 0, counts 47 / 36 / 9 / 27, 107 action records; the real project's Data API exposure, grants and roles, 0031's pre-apply check, certificate verification, backups, PITR, failover and a real-server rollback and restore BLOCKED-LIVE-QUALIFICATION (LB-14) |
+
+**8. Ledger paragraph:**

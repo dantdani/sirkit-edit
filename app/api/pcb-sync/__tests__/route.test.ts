@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { injectAuthorizedPrincipal, injectIdentity, resetInjectedIdentity } from "@/app/lib/auth/test-support";
 import { databaseQualification, withQualifiedDatabase } from "@/app/lib/db/test-qualification";
+import { claimQualificationTarget } from "@/app/lib/db/qualification-target";
 
 vi.mock("@/app/lib/footprint-resolver/__tests__/fixtures", async () => {
   const { InMemoryPhysicalBindingRepository, PhysicalBindingService } = await import("@/app/lib/physical-binding/repository");
@@ -250,6 +251,7 @@ describe("Stage 3 PCB synchronization API", () => {
 
   // B16-B item 5 (LB-4): opt-in via SIRKIT_DB_QUALIFICATION=1 + SIRKIT_DB_QUALIFICATION_URL — never .env.local, never DATABASE_URL.
   it.runIf(databaseQualification().enabled)("qualifies the same ready flow against isolated PostgreSQL", async () => {
+    await claimQualificationTarget(withQualifiedDatabase(), "pcb-sync-route"); // [B24-A4] D24-12, OD-201: the shared guard, before the first database statement
     process.env.DATABASE_URL = withQualifiedDatabase();
     const { PostgresDurableWorkflowRepository } = await import("@/app/lib/durable-workflow/server-repository");
     const result = await exerciseReadyFlow(new PostgresDurableWorkflowRepository()), committed = await result.harness.repository.getBoard({ tenantId: "tenant-1", projectId: "project-1", branchId: "main", boardId: "board-1" });

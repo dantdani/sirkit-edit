@@ -11,7 +11,7 @@
  *   6. POST /api/pcb/qualify   (placement + bundled FreeRouting + RC01/02/03)
  *   7. POST /api/pcb/release   (MFG01 verified release → deterministic ZIP)
  *
- * Usage: pnpm exec tsx scripts/e2e-prompt-to-gerber.ts [--project <id>] [--keep]
+ * Usage: pnpm exec tsx scripts/e2e-prompt-to-gerber.ts --disposable-target [--project <id>] [--keep]   ([B24-A4] refused without it)
  */
 
 import { loadEnvLocal } from "../app/lib/load-env-local";
@@ -21,7 +21,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { request as httpRequest } from "node:http";
 import { autoLayoutBuildValidated } from "../lib/build-auto-layout";
-import { getFullPartsByIds } from "../app/lib/parts-search";
+import { getFullPartsByIds } from "../app/lib/parts-search"; import { fixtureRuntimeEnabled } from "../app/lib/fixture-runtime/mode"; import { acceptanceDriverRefusal } from "../app/lib/db/qualification-target"; // [B24-A4] on this line so :29 stays
 import { buildPcbSyncPublicationGraph, buildNetlist } from "../app/lib/pcb/netlist-bridge";
 import type { CachedPart } from "../app/lib/parts-cache";
 import type { BuildLogicalNetlist, SchematicState } from "../lib/schematic-types";
@@ -104,6 +104,8 @@ async function post(path: string, body: unknown, extra: Record<string, string> =
 }
 
 async function main(): Promise<void> {
+  const refusal = acceptanceDriverRefusal(args, BASE, { fixtureRuntime: fixtureRuntimeEnabled(), databaseUrl: process.env.DATABASE_URL }); // [B24-A4] D24-12; OD-201 narrowed (OD-226): only a disposable target, before the first request and the catalog read
+  if (refusal) { console.error(`REFUSED ${refusal.code}: ${refusal.message}`); process.exit(2); }
   console.log(`R05-E2E01 acceptance run — project ${projectId}\n`);
 
   // ── 1. Live generation ────────────────────────────────────────────────────

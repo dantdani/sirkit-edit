@@ -385,6 +385,7 @@ handover text the lead pastes into the nine task files is in section 13.
 |---|---|---|---|
 | [B24-A2, 2026-10-06] | production-smoke | `:420` | 11 |
 | [B24-A2, 2026-10-06] | secret-scan | `:447` | 26 |
+| [B24-A4, 2026-10-08] | database-delivery | `:303` | 4 |
 
 ## 11. Gates
 

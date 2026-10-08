@@ -21,7 +21,7 @@
  * always-on test below pins that gating. Everything the live body records is
  * a status, a code, a cookie NAME, or a flag — never a value.
  */
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest"; import { databaseTls } from "../../db/connection-security"; // [B24-A4] D24-3, OD-192: the TLS rule, on this line so no line moves
 
 const FLAG = process.env.SIRKIT_LIVE_AUTH_QUALIFICATION === "1";
 const MARKER = process.env.SIRKIT_AUTH_QUALIFICATION_PROJECT ?? "";
@@ -195,7 +195,7 @@ describe.runIf(LIVE)("B16.1B §D — LIVE matrix against an ISOLATED Supabase pr
   it("membership canary (isolated DB only): active → revoked takes effect on the immediately following request", async () => {
     if (!DB_URL) { expect(DB_URL).toBe(""); return; } // documented as BLOCKED when absent
     const postgres = (await import("postgres")).default;
-    const sql = postgres(DB_URL, { max: 1, prepare: false, ssl: DB_URL.includes("supabase.") ? "require" : undefined, connect_timeout: 15, onnotice: () => {} });
+    const sql = postgres(DB_URL, { max: 1, prepare: false, ssl: databaseTls(DB_URL), /* [B24-A4] D24-3, OD-192 */ connect_timeout: 15, onnotice: () => {} });
     canary.sql = sql as unknown as typeof canary.sql;
     const users = await sql.unsafe(`SELECT id::text AS id FROM auth.users WHERE email = $1 LIMIT 1`, [EMAIL]) as unknown as Array<{ id: string }>;
     expect(users.length).toBe(1);

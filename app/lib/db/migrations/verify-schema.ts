@@ -153,3 +153,21 @@ export function verifyAtomicRevisionStatusEvents(snapshot: SchemaSnapshot): Sche
   has("atomic-status.index.revision-state-unique", /UNIQUE INDEX .* \(revision_id, to_state\)/.test(unique), unique || "missing");
   return rows;
 }
+
+/**
+ * [B24-A4] D24-3, OD-192: default-deny row security (migration 0031), evaluated against the catalog. Every `public` table in the
+ * snapshot has row security (the migration ledger, which the snapshot leaves out, is checked from pg_class by
+ * `b24-a4-rls-default-deny`); no table has it forced (the owning server role keeps its owner bypass); policies exist only on
+ * `project_members`; and `verifyMembershipAndOwnership` still holds, carried as one row.
+ */
+export function verifyDefaultDenyRls(snapshot: SchemaSnapshot): SchemaCriterion[] {
+  const rows: SchemaCriterion[] = [];
+  const has = (id: string, ok: boolean, detail: string) => rows.push({ id, ok, detail });
+  for (const table of snapshot.tables) has(`default-deny.rls.${table.name}`, table.rlsEnabled, `relrowsecurity=${String(table.rlsEnabled)}`);
+  for (const table of snapshot.tables) has(`default-deny.not-forced.${table.name}`, !table.rlsForced, `relforcerowsecurity=${String(table.rlsForced)}`);
+  const elsewhere = snapshot.policies.filter((policy) => policy.table !== "project_members").map((policy) => `${policy.table}.${policy.name}`);
+  has("default-deny.policies-only-on-project_members", elsewhere.length === 0, elsewhere.length === 0 ? "policies on project_members only" : `policies elsewhere: ${elsewhere.join(", ")}`);
+  const membership = verifyMembershipAndOwnership(snapshot).filter((row) => !row.ok).map((row) => row.id);
+  has("default-deny.membership-and-ownership", membership.length === 0, membership.length === 0 ? "verifyMembershipAndOwnership holds" : `failing: ${membership.join(", ")}`);
+  return rows;
+}

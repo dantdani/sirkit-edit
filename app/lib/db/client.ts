@@ -10,7 +10,7 @@
  */
 
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import postgres, { type Sql } from "postgres";
+import postgres, { type Sql } from "postgres"; import { databaseTls } from "./connection-security"; // [B24-A4] D24-3, OD-192: the TLS rule, on this line so no line moves
 import * as schema from "./schema";
 
 let sqlClient: Sql | null = null;
@@ -29,8 +29,8 @@ export function getSqlClient(): Sql {
   sqlClient = postgres(url, {
     // `prepare: false` keeps us compatible with Supabase's connection pooler.
     prepare: false,
-    // Supabase requires TLS; harmless for the direct connection too.
-    ssl: url.includes("supabase.") ? "require" : undefined,
+    // Supabase requires TLS; so does every other host off loopback (connection-security.ts).
+    ssl: databaseTls(url), // [B24-A4] D24-3, OD-192: TLS for every non-loopback URL (was: only a URL containing `supabase.`)
     // Fail fast with a real error instead of hanging on a cold/unreachable host.
     connect_timeout: 15,
     // Supabase's session-mode pooler caps concurrent clients (15 by default).
