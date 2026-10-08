@@ -88,7 +88,7 @@ describe("[B21 A] the orchestration import gate", () => {
     expect(B11_SCANNED_FILES.some((file) => file.startsWith(ORCHESTRATION_MODULE_PREFIX))).toBe(false);
     // RECORDED for this base: where a provider SDK is imported at all (the D21-32 chain runs through app/lib/embeddings.ts)
     const importers = [...production].filter(([path, source]) => moduleReferences(path, source).some((reference) => SDK_SPECIFIER.test(reference.specifier))).map(([path]) => path).sort();
-    expect(importers).toEqual(["app/lib/agent/adapters.ts", "app/lib/embeddings.ts", "app/lib/llm/anthropic-provider.ts", "app/lib/llm/openai-provider.ts", "app/lib/parts-search.ts"]);
+    expect(importers).toEqual(["app/lib/agent/adapters.ts", "app/lib/embeddings.ts", "app/lib/evaluation/live-contract-clients.ts", "app/lib/llm/anthropic-provider.ts", "app/lib/llm/openai-provider.ts", "app/lib/parts-search.ts"]); // [B24-B3, 2026-10-08] reviewed pin move: five -> six, + the maxRetries-0 clients of the record-only command's contract turns (scripts/run-b21-live-orchestration-evaluation.ts, OD-125, OD-216), reached only by that command
   });
 
   it("2. the whole runtime import closure of every orchestration module reaches no forbidden family and imports no provider SDK; the walk is not vacuous (it holds the digest, capture, redaction, exposure and durable-stable modules) and never enters the durable runtime, the database client or the schema", { timeout: 180_000 }, () => {

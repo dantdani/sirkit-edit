@@ -10,15 +10,15 @@
 //    (Errors, not totals — measured on KiCad 10: warnings are counted at
 //    different granularity across engines, e.g. one orphan track is TWO
 //    KiCad `track_dangling` warnings, and airwires live in a separate
-//    unconnected_items list. Error counts agree: the deliberate short.)
+//    unconnected_items list. Error counts agree: the deliberate short.) [B24-B3, 2026-10-08] D24-19, OD-209: step 1 now exports the routed demo (it exported an empty board, so the comparison could not run as titled) behind a NOT MEASURED positive control; with KICAD_CLI set to a path that does not exist each block fails NOT EXERCISED before any case body runs; recorded `not exercised` (LB-17).
 
-import { describe, it, expect } from "vitest";
+import { beforeAll, describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeKicadPcb, netlistFromBoard } from "../kicad/write-pcb";
-import { createEmptyBoard } from "../types";
+import { assertLiveResources, liveSuite, liveSuiteState } from "../../evaluation/live-suites"; // [B24-B3, 2026-10-08] in place of createEmptyBoard, which the first case no longer exports
 import { buildRoutedDemo } from "../demo/routed-demo";
 import { runDrc } from "../drc/run-drc";
 import { getPreset } from "../drc/presets";
@@ -27,7 +27,7 @@ const KICAD_CLI = process.env.KICAD_CLI;
 
 describe.skipIf(!KICAD_CLI)("kicad-cli oracle", () => {
   it("exported routed demo loads in KiCad and DRC error counts land within ±10 %", () => {
-    const board = createEmptyBoard();
+    const board = buildRoutedDemo(); // [B24-B3, 2026-10-08] was the empty board (createEmptyBoard), which has no short, so `kicadErrors > 0` could never hold
     const rules = getPreset("jlcpcb-2l").rules;
     const text = writeKicadPcb(board, netlistFromBoard(board), { drcRules: rules });
 
@@ -52,6 +52,7 @@ describe.skipIf(!KICAD_CLI)("kicad-cli oracle", () => {
       const kicadErrors = (report.violations ?? []).filter((v) => v.severity === "error").length;
 
       const ourErrors = runDrc(board, rules).violations.filter((v) => v.severity === "error").length;
+      expect(ourErrors, "NOT MEASURED: our DRC finds no error on the exported board, so the comparison below would observe nothing").toBeGreaterThan(0); // [B24-B3, 2026-10-08] the positive control, asserted first
       const tolerance = Math.max(1, Math.ceil(ourErrors * 0.1));
       expect(Math.abs(kicadErrors - ourErrors)).toBeLessThanOrEqual(tolerance);
       // Both engines must agree the demo board is not clean (the baked-in short).
@@ -60,6 +61,8 @@ describe.skipIf(!KICAD_CLI)("kicad-cli oracle", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  beforeAll(() => assertLiveResources("kicad-cli-oracle")); // [B24-B3, 2026-10-08] D24-19, OD-209: KICAD_CLI must be an existing absolute path, else NOT EXERCISED
 });
 
 // Stage 14 extension: real end-to-end fab bundle through kicad-cli.
@@ -85,11 +88,14 @@ describe.skipIf(!KICAD_CLI)("kicad-cli oracle — fab bundle", () => {
     expect(result.stats.posFiles.length).toBe(2);
     expect(result.zipBytes.byteLength).toBeGreaterThan(1000);
   }, 240_000);
+
+  beforeAll(() => assertLiveResources("kicad-cli-oracle")); // [B24-B3, 2026-10-08] D24-19, OD-209: the same gate in this block
 });
 
-// Always-on placeholder so the file reports as skipped-not-empty without KICAD_CLI.
+// Always-on placeholder so the file reports as skipped-not-empty without KICAD_CLI. [B24-B3, 2026-10-08] It asserts the gate's state (was an expect(true)).
 describe("kicad-cli oracle gating", () => {
   it("skips cleanly when KICAD_CLI is not set", () => {
-    expect(true).toBe(true);
+    const state = liveSuiteState(liveSuite("kicad-cli-oracle"), process.env);
+    expect(state.state === "not_exercised" && state.reason === "flag_unset").toBe(!KICAD_CLI);
   });
 });

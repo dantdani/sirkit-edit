@@ -365,7 +365,7 @@ describe("[B24-A1] the deployment configuration record (OD-199)", () => {
     expect((await runtimeBody()).body.embeddings).toEqual(deploymentConfiguration().embeddings);
   });
 
-  it("14. [B24-A1 review] coverage-4: every provider SDK client Sirkit builds is in the record by the code that builds it - the agent coordinator's and a specialist's, the llmRouter's, the embedding client and the parts-search reranker - each timeout and retries copied from its construction site and pinned here by reading that site (the agent clients also by the mocked SDK); these five sites are the only ones in production code, and a change to any client's options moves the digest", async () => {
+  it("14. [B24-A1 review] coverage-4: every provider SDK client Sirkit builds is in the record by the code that builds it - the agent coordinator's and a specialist's, the llmRouter's, the embedding client and the parts-search reranker - each timeout and retries copied from its construction site and pinned here by reading that site (the agent clients also by the mocked SDK); these five server sites and the record-only command's contract-turn clients (outside the record) are the only ones in production code, and a change to any client's options moves the digest", async () => { // [B24-B3 STOP, 2026-10-08] the lead's reviewed pin move (OD-230 (n)): the sixth site, app/lib/evaluation/live-contract-clients.ts, builds the record-only command's two contract-turn clients (OD-125, OD-216), which no server builds, so the deployment record states none of them; their options and their one importer are checked by b24-b3-model-in-loop case 5; title made truthful in place
     const productionSources = (dir: string): string[] => readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((entry) => {
       const path = `${dir}/${entry.name}`;
       if (entry.isDirectory()) return entry.name === "__tests__" || entry.name === "node_modules" || entry.name.startsWith(".") ? [] : productionSources(path);
@@ -375,7 +375,7 @@ describe("[B24-A1] the deployment configuration record (OD-199)", () => {
     const routerInRecord = (buildDeploymentConfiguration({}) as unknown as { providers: { openai: { clients?: { llmRouter?: unknown } } } }).providers.openai.clients?.llmRouter;
     expect(routerInRecord).toEqual({ timeoutMs: 600_000, maxRetries: 5 });
     const sites = ["app", "lib", "components", "scripts"].flatMap((dir) => productionSources(dir)).filter((path) => /new (?:OpenAI|Anthropic)\(/.test(read(path)));
-    expect(sites.sort()).toEqual(["app/lib/agent/adapters.ts", "app/lib/embeddings.ts", "app/lib/llm/anthropic-provider.ts", "app/lib/llm/openai-provider.ts", "app/lib/parts-search.ts"]);
+    expect(sites.sort()).toEqual(["app/lib/agent/adapters.ts", "app/lib/embeddings.ts", "app/lib/evaluation/live-contract-clients.ts", "app/lib/llm/anthropic-provider.ts", "app/lib/llm/openai-provider.ts", "app/lib/parts-search.ts"]); // [B24-B3 STOP, 2026-10-08] + the record-only command's contract-turn clients (the lead's reviewed move, OD-230 (n))
     /** each `new <sdk>({ ... })` object literal at a site: its keys and their expressions */
     const built = (path: string, sdk: "OpenAI" | "Anthropic"): Array<Record<string, string>> => [...read(path).matchAll(new RegExp(`new ${sdk}\\(\\{([^}]*)\\}\\)`, "g"))].map((match) => Object.fromEntries(match[1]!.split(",").map((part) => part.trim()).filter(Boolean).map((part) => {
       const colon = part.indexOf(":");

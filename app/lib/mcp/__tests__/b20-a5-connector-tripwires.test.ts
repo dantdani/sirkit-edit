@@ -2,7 +2,7 @@
  * [B20 A5] The tripwires that make "no provider-native connector is rendered, and no credential Sirkit holds reaches a
  * provider request" structural (OD-90, OD-45), over the whole production tree:
  *   T1 no production file carries the connector wire vocabulary;
- *   T2 exactly five production modules import a provider SDK at run time;
+ *   T2 exactly five production modules import a provider SDK at run time; [B24-B3, 2026-10-08] six since the record-only command's contract-turn clients (OD-125, OD-216);
  *   T3 none of those five reaches `app/lib/mcp/**` or the MCP bearer module through its runtime import closure;
  *   T4 the shape pins of the two new modules, the adapters' client types and every SDK client construction;
  *   T5/T6 the pages state what this increment delivered, and every citation on the new page resolves (S7);
@@ -69,7 +69,7 @@ function sdkImporters(files: FileMap): string[] {
 
 const SDK_FILES = [
   "app/lib/agent/adapters.ts",
-  "app/lib/embeddings.ts",
+  "app/lib/embeddings.ts", "app/lib/evaluation/live-contract-clients.ts", // [B24-B3, 2026-10-08] reviewed pin move: + the record-only command's maxRetries-0 contract-turn clients (OD-125, OD-216), on this line so no line moves
   "app/lib/llm/anthropic-provider.ts",
   "app/lib/llm/openai-provider.ts",
   "app/lib/parts-search.ts",
@@ -112,7 +112,7 @@ describe("[B20 A5] the connector tripwires (OD-90, OD-45)", () => {
     ]))).toEqual([]);
   });
 
-  it("T2. exactly five production modules import a provider SDK at run time, and a type-only import is not one of them", { timeout: 120_000 }, () => {
+  it("T2. exactly six production modules import a provider SDK at run time, and a type-only import is not one of them", { timeout: 120_000 }, () => { // [B24-B3, 2026-10-08] retitled in place: five -> six, + the record-only command's contract-turn clients (app/lib/evaluation/live-contract-clients.ts; OD-125)
     expect(sdkImporters(production)).toEqual([...SDK_FILES].sort());
 
     const synthetic: FileMap = new Map([
@@ -171,7 +171,7 @@ describe("[B20 A5] the connector tripwires (OD-90, OD-45)", () => {
       expect(adapters.split(pin).length - 1, pin).toBe(1);
     }
 
-    // every SDK client construction, by AST: exactly six, each with ONE object-literal argument of known option keys
+    // every SDK client construction, by AST: exactly eight, each with ONE object-literal argument of known option keys ([B24-B3, 2026-10-08] six -> eight: + the two maxRetries-0 clients of the record-only command's contract turns)
     const constructions: string[] = [];
     for (const file of SDK_FILES) {
       const source = production.get(file)!;
@@ -197,7 +197,7 @@ describe("[B20 A5] the connector tripwires (OD-90, OD-45)", () => {
       };
       visit(parsed);
     }
-    expect(constructions).toHaveLength(6);
+    expect(constructions).toHaveLength(8); // [B24-B3, 2026-10-08] reviewed pin move: 6 -> 8, app/lib/evaluation/live-contract-clients.ts's new OpenAI and new Anthropic (OD-125, OD-216)
   });
 
   it("T5. the pages state what A5 delivered: the closed refusal in order, the handled types, every suite's case count and the dated re-read (S7)", () => {

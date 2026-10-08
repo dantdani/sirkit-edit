@@ -295,9 +295,9 @@ describe("[B24-A2] .env.example parity (D24-4, OD-195)", () => {
     const a1 = read("artifacts/ai-control-plane-b24/environments-and-deployment.md");
     const three = a1.slice(a1.indexOf(`${NEWLINE}## 3. `), a1.indexOf(`${NEWLINE}## 4. `));
     const secrets = FLAG_INVENTORY.filter((entry) => entry.kind === "secret").length;
-    expect([FLAG_INVENTORY.length, secrets]).toEqual([52, 5]); // [B24-A3, 2026-10-06] reviewed pin move: 51 -> 52, B24-A3's SIRKIT_TRUSTED_CLIENT_IP_HEADER (configuration); A2's note keeps its 49 -> 51 and A3's dated note on the same line gives 51 -> 52
+    expect([FLAG_INVENTORY.length, secrets]).toEqual([62, 5]); // [B24-A3, 2026-10-06] reviewed pin move: 51 -> 52, B24-A3's SIRKIT_TRUSTED_CLIENT_IP_HEADER (configuration); A2's note keeps its 49 -> 51 and A3's dated note on the same line gives 51 -> 52; [B24-B3, 2026-10-08] reviewed pin move: 52 -> 62, the ten live-test-gate names of B24-B3's live-suite registry (OD-209)
     const notes = three.split(NEWLINE).filter((line) => line.includes("[B24-A2, 2026-10-06]"));
-    expect(notes.join(" ")).toContain("49 -> 51"); expect(three.split(NEWLINE).filter((line) => line.includes("[B24-A3, 2026-10-06]")).join(" ")).toContain(`51 -> ${FLAG_INVENTORY.length}`);
+    expect(notes.join(" ")).toContain("49 -> 51"); expect(three.split(NEWLINE).filter((line) => line.includes("[B24-A3, 2026-10-06]")).join(" ")).toContain("51 -> 52"); expect(three.split(NEWLINE).filter((line) => line.includes("[B24-B3, 2026-10-08]")).join(" ")).toContain(`52 -> ${FLAG_INVENTORY.length}`); // [B24-B3, 2026-10-08] reviewed pin move: A3's note is held to its own 51 -> 52 and the size now rides B24-B3's dated note (was `51 -> ${FLAG_INVENTORY.length}` on A3's)
     expect(notes.join(" ")).toContain(`secret (3) -> secret (${secrets})`);
     for (const name of ["SIRKIT_MCP_TOKEN_SECRET_PREVIOUS", "SIRKIT_WORKFLOW_WORKER_SECRET_PREVIOUS"]) expect(notes.join(" "), name).toContain(`\`${name}\``);
     // in place: section 3 still opens on A1's line 99 and section 4 on A1's line 125
@@ -313,7 +313,7 @@ const CLASS_COUNTS: Readonly<Record<string, number>> = {
   flag: 14,
   "rotation-previous": 3,
   fixture: 6,
-  "qualification-opt-in": 4,
+  "qualification-opt-in": 16, // [B24-B3, 2026-10-08] reviewed pin move: 4 -> 16, the twelve names B24-B3's live-suite registry reads (PCB_ASSIST_LIVE, SPICE_WORKER_LIVE and the ten live-test-gate names; D16, OD-209)
   platform: 8,
   "child-passthrough": 1,
   "not-an-environment-name": 3,

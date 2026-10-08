@@ -197,7 +197,7 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
       parity,
       suite(`${ENG}b18-c-explicit-grammars.test.ts`, ["derive EXACTLY the rotation the editor's own rotate command produces"], P2G_ENGINEERING),
     ]),
-    model_in_loop: blocked(["LB-2", "LB-7"], "Live evaluation: assist-live (opt-in on an Anthropic key) asks a real model for PCB edit arguments; INFERRED refused before any model call (it expects 200 where the route answers 400 or 401, D24-19), repaired in B24-B3 (OD-209); never run by B1 (LB-2, LB-7).", [
+    model_in_loop: blocked(["LB-2", "LB-7"], "Live evaluation: assist-live (opt-in on an Anthropic key) asks a real model for PCB edit arguments; repaired by B24-B3 (OD-209): it runs on its flag alone and fails NOT EXERCISED without its key, and its request carries an injected editor, the project selector and provider anthropic (before B24-B3 it was refused 400 before any model call and would have gone to OpenAI, D24-18, D24-19); not exercised (LB-2, LB-7).", [
       liveOptIn("app/api/pcb/edit/__tests__/assist-live.test.ts", ["POST /api/pcb/edit/assist (live Claude)"], P2G),
     ]),
     browser_e2e: notApplicable("Not applicable: arguments pass between the model and the server's tool gateway; the page renders only the result, and the fixture runtime's scripted agent sends fixed arguments (the live arguments are the model_in_loop row)."),
@@ -234,7 +234,7 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
     model_in_loop: blocked(["LB-7"], noLivePath("no live run lets a real model choose tiered tools under the gateway; the tier gate is proven against scripted adapters", "LB-7")),
     browser_e2e: inPart([spec(AGENT_SPEC, ["[B18-E E9] scenario 8 in the browser"])], "Gap: every browser run is local_dev (the fixture runtime's identity); production auth is LB-1, LB-13.", ["LB-1", "LB-13"]),
     database_backed: missing(NONE_PLANNED_IN_B24, `Missing evaluation: the execution-grant store (app/lib/execution-grant/store.ts, Tier 2 grants on the durable-workflow repository) on PostgreSQL; no PGlite suite evaluates it, and ${DB_GATED}.`),
-    external_provider_staging: blocked(["LB-1", "LB-13"], "Live evaluation: b16-1b-live-qualification (opt-in on two markers) signs in, reads the cookie and liveness and signs out against an isolated project; it passes with no database URL (D24-19, B24-B3's repair, OD-209) and never ran against an isolated project (LB-1); production auth on a hosted environment is LB-13.", [
+    external_provider_staging: blocked(["LB-1", "LB-13"], "Live evaluation: b16-1b-live-qualification (opt-in on its flag) signs in, reads the cookie and liveness and signs out against an isolated project; since B24-B3 (OD-209) it runs on its flag alone, fails NOT EXERCISED when the isolated-project marker or a qualification name is absent, and skips its membership canary without a database URL (it passed there before, D24-19); never ran against an isolated project (LB-1); production auth on a hosted environment is LB-13.", [
       liveOptIn("app/lib/auth/__tests__/b16-1b-live-qualification.test.ts", ["live qualification is OPT-IN and refuses to run without BOTH markers"], P2G),
     ]),
     physical_hardware: notApplicable(softwareOnly("the tier gate and its approvals")),
@@ -333,7 +333,7 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
       pglite("app/lib/atomic/__tests__/b19-e-atomic-publication-durable.test.ts", ["a revision-number collision is never silently dropped"]),
       pglite("app/lib/distributors/__tests__/b19-e-exact-mpn-offer-cache.test.ts", ["the newest servable offer of an exact MPN is served"]),
     ]),
-    external_provider_staging: blocked(["LB-15"], "Live evaluation: b19-e-live-contract (operator-run only) maps each admitted distributor's exact MPN against its live API; its early return when a source is not admitted (b19-e-live-contract.test.ts:34-37) passes without exercising the resource and is B24-B3's to repair (OD-209); never run by B1 (LB-15).", [
+    external_provider_staging: blocked(["LB-15"], "Live evaluation: b19-e-live-contract (operator-run only) maps each admitted distributor's exact MPN against its live API; since B24-B3 (OD-209) an absent credential name or a source that is not admitted fails NOT EXERCISED (the early return at b19-e-live-contract.test.ts:34-37 that passed is B24-B3's repair, D24-19); not exercised (LB-15).", [
       liveOptIn("app/lib/acquisition/__tests__/b19-e-live-contract.test.ts", ["[B19-E E6] live acquisition contract (operator-run only)"], P2G),
     ]),
     physical_hardware: notApplicable("Not applicable: authority is a catalog and binding decision; the assembled board is the manufacturing-release row."),
@@ -349,7 +349,7 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
     browser_e2e: inPart([spec(AGENT_SPEC, ["[B18-E E14] scenario 2 in the browser", "[B18-E E11] scenario 3 in the browser"])], "Gap: no routed board in a browser journey; the agent journey's placed board has no route recording, so the browser proves the via read, the truthful answer and that nothing changed (LB-8).", ["LB-8"]),
     database_backed: notApplicable("Not applicable: geometry edits are derived and checked on the in-memory board; the commit's store is the stale-revision-conflict row."),
     external_provider_staging: notApplicable("Not applicable: geometry is edited and checked in Sirkit's own board model; no external service is on its path."),
-    physical_hardware: blocked(["LB-17"], "Live evaluation: kicad-cli-oracle (opt-in on a local kicad-cli) loads the exported routed demo in KiCad and compares its DRC counts; INFERRED broken (an empty board against a count expectation, D24-19), repaired in B24-B3 (OD-209); never run by B1 (LB-17).", [
+    physical_hardware: blocked(["LB-17"], "Live evaluation: kicad-cli-oracle (opt-in on a local kicad-cli) loads the exported routed demo in KiCad and compares its DRC counts behind a NOT MEASURED positive control; repaired by B24-B3 (OD-209): its first case exported an empty board against a count expectation (D24-19), and a KICAD_CLI that names no existing file fails NOT EXERCISED; not exercised (LB-17).", [
       liveOptIn("app/lib/pcb/__tests__/kicad-cli-oracle.test.ts", ["exported routed demo loads in KiCad"], P2G),
     ]),
   },

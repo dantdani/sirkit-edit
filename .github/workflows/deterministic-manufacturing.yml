@@ -289,6 +289,7 @@ jobs:
           app/api/pcb/edit/__tests__/assist-live.test.ts
           app/lib/auth/__tests__/b16-1b-live-qualification.test.ts
           app/lib/pcb/__tests__/kicad-cli-oracle.test.ts
+          app/lib/spice/__tests__/worker-integration.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml
       - name: Upload evidence and diagnostics
         if: always()

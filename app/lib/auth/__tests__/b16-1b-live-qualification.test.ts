@@ -19,9 +19,9 @@
  *
  * Ordinary CI never sets these, so the live body is skipped there. The
  * always-on test below pins that gating. Everything the live body records is
- * a status, a code, a cookie NAME, or a flag — never a value.
+ * a status, a code, a cookie NAME, or a flag — never a value. [B24-B3, 2026-10-08] D24-19, OD-209: the live body runs on the flag alone; with it set and any other name above absent it FAILS `NOT EXERCISED` before any case body runs (never skips), and the canary is skipped, never passed, without its database URL.
  */
-import { afterAll, describe, expect, it } from "vitest"; import { databaseTls } from "../../db/connection-security"; // [B24-A4] D24-3, OD-192: the TLS rule, on this line so no line moves
+import { afterAll, beforeAll, describe, expect, it } from "vitest"; import { databaseTls } from "../../db/connection-security"; import { assertLiveResources, liveSuite, liveSuiteState } from "../../evaluation/live-suites"; // [B24-A4] D24-3, OD-192: the TLS rule, on this line so no line moves; [B24-B3, 2026-10-08] D24-19, OD-209: the resource gate and the registry's state, on this line too
 
 const FLAG = process.env.SIRKIT_LIVE_AUTH_QUALIFICATION === "1";
 const MARKER = process.env.SIRKIT_AUTH_QUALIFICATION_PROJECT ?? "";
@@ -36,19 +36,19 @@ const LIVE = FLAG && ISOLATED && BASE.length > 0 && EMAIL.length > 0 && PASSWORD
 const LIVE_TIMEOUT_MS = 60_000;
 
 describe("B16.1B §D — live qualification is OPT-IN and refuses to run without BOTH markers", () => {
-  it("without SIRKIT_LIVE_AUTH_QUALIFICATION=1 AND an isolated-project marker the live body is skipped", () => {
-    if (!FLAG || !ISOLATED) {
-      expect(LIVE).toBe(false);
-      const missing = [
-        !FLAG ? "SIRKIT_LIVE_AUTH_QUALIFICATION" : null,
-        !ISOLATED ? "SIRKIT_AUTH_QUALIFICATION_PROJECT (must start with sirkit-auth-qualification-)" : null,
-        BASE.length === 0 ? "SIRKIT_AUTH_QUALIFICATION_BASE_URL" : null,
-        EMAIL.length === 0 ? "SIRKIT_AUTH_QUALIFICATION_EMAIL" : null,
-        PASSWORD.length === 0 ? "SIRKIT_AUTH_QUALIFICATION_PASSWORD" : null,
-        PROJECT_ID.length === 0 ? "SIRKIT_AUTH_QUALIFICATION_PROJECT_ID" : null,
-      ].filter(Boolean);
-      console.log(`[b16-1b live] skipped — absent: ${missing.join(", ")}`);
+  it("without SIRKIT_LIVE_AUTH_QUALIFICATION=1 AND an isolated-project marker the live body is skipped", () => { // [B24-B3, 2026-10-08] title kept (no retitle): the body is skipped only without the flag; with the flag and no marker it now FAILS NOT EXERCISED
+    // [B24-B3, 2026-10-08] D24-19, OD-209: this case asserts the gate's state, by names only. The live block below runs on FLAG
+    // alone: with FLAG set and any resource absent its gate fails NOT EXERCISED before any case body runs (it never skips, so this
+    // case cannot stand in for it); without FLAG the state is flag_unset. The registry's resource check and this file's own LIVE
+    // must agree: a drift between them fails here.
+    const state = liveSuiteState(liveSuite("b16-1b-live-qualification"), process.env);
+    if (!FLAG) expect(state).toEqual({ state: "not_exercised", reason: "flag_unset" });
+    else expect(state.state === "requested", "the registry's resource check agrees with LIVE").toBe(LIVE);
+    if (state.state === "not_exercised") {
+      const missing = state.reason === "flag_unset" ? ["SIRKIT_LIVE_AUTH_QUALIFICATION"] : state.missing;
+      console.log(`[b16-1b live] not exercised — absent: ${missing.join(", ")}`);
     }
+    expect(ISOLATED || !LIVE).toBe(true);
     expect(typeof LIVE).toBe("boolean");
   });
 });
@@ -93,7 +93,7 @@ async function call(path: string, init: RequestInit & { jar?: Jar } = {}): Promi
   return { res, text, json };
 }
 
-describe.runIf(LIVE)("B16.1B §D — LIVE matrix against an ISOLATED Supabase project", () => {
+describe.runIf(FLAG)("B16.1B §D — LIVE matrix against an ISOLATED Supabase project", () => { // [B24-B3, 2026-10-08] D24-19, OD-209: on the flag alone (was LIVE, which folded in every resource and skipped silently)
   const jar = new Jar();
   let preSignoutJar: Jar | null = null;
   const canary = { sql: null as null | { end: (o?: { timeout?: number }) => Promise<void>; unsafe: (q: string, p?: unknown[]) => Promise<unknown[]> }, userId: "", projectId: `sirkit-auth-qualification-canary-${Date.now().toString(36)}`, inserted: false };
@@ -192,8 +192,8 @@ describe.runIf(LIVE)("B16.1B §D — LIVE matrix against an ISOLATED Supabase pr
     }
   }, LIVE_TIMEOUT_MS);
 
-  it("membership canary (isolated DB only): active → revoked takes effect on the immediately following request", async () => {
-    if (!DB_URL) { expect(DB_URL).toBe(""); return; } // documented as BLOCKED when absent
+  it.runIf(DB_URL !== "")("membership canary (isolated DB only): active → revoked takes effect on the immediately following request", async () => {
+    // [B24-B3, 2026-10-08] D24-19, OD-209: without SIRKIT_AUTH_QUALIFICATION_DATABASE_URL the canary is SKIPPED, never passed (this line was an early return that passed)
     const postgres = (await import("postgres")).default;
     const sql = postgres(DB_URL, { max: 1, prepare: false, ssl: databaseTls(DB_URL), /* [B24-A4] D24-3, OD-192 */ connect_timeout: 15, onnotice: () => {} });
     canary.sql = sql as unknown as typeof canary.sql;
@@ -228,4 +228,6 @@ describe.runIf(LIVE)("B16.1B §D — LIVE matrix against an ISOLATED Supabase pr
     const replay = await call("/api/pcb-sync", { headers: SEL(), jar: preSignoutJar });
     expect(replay.res.status).toBe(401); // a still-unexpired token from a revoked session is refused: session liveness, not token validity
   }, LIVE_TIMEOUT_MS);
+
+  beforeAll(() => assertLiveResources("b16-1b-live-qualification")); // [B24-B3, 2026-10-08] D24-19, OD-209: with the flag set and a resource absent this block fails NOT EXERCISED before any case body runs
 });

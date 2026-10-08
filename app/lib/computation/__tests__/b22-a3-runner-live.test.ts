@@ -12,7 +12,7 @@
  * USERPROFILE, which Node (libuv) adds to a win32 child whose environment lacks it. Only ngspice's own commands run (`op`, `tran`,
  * `write`, `echo`); no shell, no path outside the run directory, no network. A failure here is a finding, never a pass.
  */
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest"; import { assertLiveResources } from "../../evaluation/live-suites"; // [B24-B3, 2026-10-08] D24-19, OD-209: the resource gate, on this line so no line moves
 
 const LIVE = process.env.SIRKIT_B22_LIVE_RUNNER === "1";
 const NEWLINE = String.fromCharCode(10);
@@ -79,4 +79,6 @@ describe.runIf(LIVE)("[B22-A3] the diagnostic runner against the real pinned ngs
     const value = line.slice(line.indexOf("B22A3-PROFILE=") + "B22A3-PROFILE=".length).trim();
     console.info(`[B22-A3 live] echo line found: ${line !== ""}; expanded: ${value !== "" && !value.includes("$USERPROFILE")}; equals the server's USERPROFILE: ${server !== "" && value === server}; equals the run directory placeholder: ${value === "{runDir}"}`);
   });
+
+  beforeAll(() => assertLiveResources("b22-a3-runner-live")); // [B24-B3, 2026-10-08] D24-19, OD-209: with the flag set and the pin or the host absent this block fails NOT EXERCISED before any case body runs
 });

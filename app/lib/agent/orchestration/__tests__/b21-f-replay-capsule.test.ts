@@ -170,7 +170,7 @@ describe("[B21 F] the replay capsule v4: per-task step lists, scripted stalls, t
     }
   });
 
-  it("9. the matrix's model-in-loop column says what the record-only command CAN run: a row whose capsule the command runs is a live DAG run - or, when that capsule scripts a fault (a stall, a 429, hostile results), the DAG's shape only, the fault not reproduced; every other row has NO live path; and the command routes every turn to ONE provider, so it can produce no provider disagreement or fallback (LB-9 stays blocked on both)", async () => {
+  it("9. the matrix's model-in-loop column says what the record-only command CAN run: a row whose capsule the command runs is a live DAG run - or, when that capsule scripts a fault (a stall, a 429, hostile results), the DAG's shape only, the fault not reproduced; every other row has NO live path; and the command routes every turn to ONE provider, so it can produce no provider disagreement or fallback (LB-9 stays blocked on both)", async () => { // [B24-B3, 2026-10-08] still true of liveEvaluationCases, which routes every turn to one provider; SIRKIT_LIVE_ORCHESTRATION_PROVIDER `both` runs only the separate two-provider capsule, which cannot force a disagreement or a fallback (LB-9 stays blocked; OD-125, OD-216)
     const cases = buildOrchestrationEvaluationCases();
     const ran = new Set(cases.filter((entry) => (entry.capsule.tasks ?? []).length > 0).map((entry) => entry.caseId));
     for (const row of B21_F_CASES) {

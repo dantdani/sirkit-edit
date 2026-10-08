@@ -308,7 +308,7 @@ capsule key below the top level.]
   before API — OD-106's tripwire), BUILD_LOOP `app/lib/build-loop.ts`, API `app/api/`, and a provider SDK by bare specifier (`openai`,
   `@anthropic-ai/sdk`, any subpath) found on any closure member's VALUE imports — the closure walk never follows a bare specifier, so the
   SDK check reads each member's references. Case 1 proves every family resolves to real files today (no vacuous case) and RECORDS the
-  five SDK importers of the whole tree (`adapters.ts`, `embeddings.ts`, the two LLM providers, `parts-search.ts`).
+  five SDK importers of the whole tree (`adapters.ts`, `embeddings.ts`, the two LLM providers, `parts-search.ts`). [B24-B3, 2026-10-08] Six since B24-B3: + `app/lib/evaluation/live-contract-clients.ts`, the record-only command's maxRetries-0 contract-turn clients; case 1's pin moved in place (OD-125, OD-216).
 - **The walk** is `importClosure` (the B20 helper: static imports, re-exports, import-equals, dynamic imports and requires with static
   strings; case-folded resolution). **A type-only import is erased at run time and is deliberately NOT caught** (case 3 proves it, as
   B20-D3 does); every probe is an injected in-memory file under the orchestration prefix, never a file on disk, one per family plus a
