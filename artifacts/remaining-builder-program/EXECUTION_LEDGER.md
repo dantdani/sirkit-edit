@@ -4999,3 +4999,64 @@ control, tool or composition-root wiring was added. Live ordering stays BLOCKED-
   check stage). The lead's close (`b24/lead-close.sh a4 no`; no UI or served change, so no browser run - CI runs both configurations):
   `app/lib/pcb` 977 passed, 4 skipped; B14.4 22; the confinement gates 375; the B24 suites 175; tsc 0; eslint 0 on 30 files. No real
   database was contacted: every proof ran on PGlite in-process.
+
+### B24-B1 - the golden evaluation catalog (2026-10-08 local; increment workflow + lead; this commit)
+
+- Test-first from `72c1376`:
+  - Run 1, module absent: both suites failed to load (`Cannot find module '../../evaluation/golden-catalog'`).
+  - Run 2, module present, no fix, no artifacts, no page: 5 failed, 11 passed. These were catalog cases 5, 9, 10 and 11, and score-separation case 5.
+  - The stage-09 counterexample `evaluateRegressionResults([<no gates>], ["blocked_by_prerequisite"], "pull_request_correctness")` answered `{ state: "pass", reasons: [] }`.
+- The score lines, verbatim:
+  ```text
+  deterministic offline: incomplete - covered 18, in part 0, missing 1, blocked 0, failing 0, not applicable 0; outside pull-request CI 6; live blockers none
+  model-in-loop: BLOCKED-LIVE-QUALIFICATION - covered 0, in part 0, missing 0, blocked 19, failing 0, not applicable 0; outside pull-request CI 0; live blockers LB-2, LB-7, LB-9
+  browser E2E: incomplete - covered 8, in part 4, missing 4, blocked 0, failing 0, not applicable 3; outside pull-request CI 0; live blockers LB-1, LB-8, LB-13
+  database-backed: incomplete - covered 3, in part 0, missing 5, blocked 0, failing 0, not applicable 11; outside pull-request CI 0; live blockers none
+  external-provider staging: BLOCKED-LIVE-QUALIFICATION - covered 0, in part 0, missing 0, blocked 6, failing 0, not applicable 13; outside pull-request CI 0; live blockers LB-1, LB-11, LB-12, LB-13, LB-15, LB-16
+  physical-hardware validation: failing - covered 0, in part 0, missing 0, blocked 3, failing 1, not applicable 15; outside pull-request CI 0; live blockers LB-3, LB-5, LB-10, LB-17
+  ```
+- Review round (2026-10-08): nine confirmed findings (seven distinct), fixed test-first.
+  - 5 of 16 cases were red first.
+  - The four test-strength findings were proven against eleven deliberate breakages (eight in the helper, one in the module, two in the page), each restored by sha256.
+  - The real generator ran twice against a scratch register holding the three rows, with zero drift.
+- Gates green except case 5, which waits on the register rows:
+  - the qualification folder 190 of 191;
+  - orchestration 460;
+  - manufacturing providers 387;
+  - mcp 825;
+  - the small set 109;
+  - the import gates 29;
+  - benchmark:validate 63 packages;
+  - tsc 0, and eslint 0 on 7 files.
+- Census and counts unchanged. Every live row stays BLOCKED-LIVE-QUALIFICATION except the failing sandbox-escape physical row, which is recorded (LB-10).
+
+**8. Review `eval-catalog.md`** (417 lines). Pay particular attention to the artifacts bullet, section 15's live-row bullet and section 16.
+
+**9. After your record edits**, re-run:
+- `app/lib/mcp`: b20-a2-negotiation reads `OWNER_DECISIONS.md` and b20-a3-live-reread reads `EXECUTION_LEDGER.md`;
+- `app/lib/agent/orchestration/__tests__`: the page suites read `PROGRAM_STATE.json`;
+- `app/lib/qualification/__tests__`: case 5 reads the register.
+
+No browser run, no B17-A inventory run and no local production-mode run is needed: no UI, route or served change.
+
+**10. Commit and push.**
+- Stage these 11 files:
+  - `app/lib/benchmark/regression-policy.ts`
+  - `app/lib/manufacturing-providers/__tests__/b23-d-physical-evidence-contract.test.ts`
+  - `artifacts/ai-control-plane-b23/physical-evidence.md`
+  - `app/lib/evaluation/golden-catalog.ts`
+  - `app/lib/qualification/__tests__/_ci-admission.ts`
+  - `app/lib/qualification/__tests__/b24-b1-catalog.test.ts`
+  - `app/lib/qualification/__tests__/b24-b1-score-separation.test.ts`
+  - `artifacts/ai-control-plane-b24/eval-catalog.{csv,json,md}`
+  - `scripts/generate-b24-eval-catalog.ts`
+
+  Also stage your record files.
+- Commit as `Dandi Desta <dandidesta82@gmail.com>` with no AI trailer, run the staged-content secret scan, push, and never merge.
+- Lead close (2026-10-08): the fast increment form. The implementer left `b24-b1-catalog` case 5 red by design: it needs LB-15, LB-16
+  and LB-17 as rows of the lead-only register. The lead appended them (with their `PROGRAM_STATE.json` `liveBlockers` lines) in these
+  records, then ran the catalog generator twice: both runs printed "Wrote golden evaluation catalog 1.0.0 (114 rows)", and two more
+  after the rows were final did the same, with `eval-catalog.csv` sha256 `6d2b11868f02d082…fd97e` and `eval-catalog.json`
+  `8262dbe0da09afe5…d21c3` unchanged each time (the bytes the implementer rendered). The lead's close: pcb 977 passed, 4 skipped;
+  B14.4 22; confinement 375; `app/lib/qualification/__tests__` 191/191 (case 5 green with the rows); tsc 0; eslint 0 on the 7 code
+  files. No browser run: B1 changes no page or served behaviour.

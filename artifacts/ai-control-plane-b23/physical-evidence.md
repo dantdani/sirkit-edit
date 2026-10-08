@@ -219,7 +219,7 @@ No route, store, tool or form records, accepts or holds evidence (case 8, an AST
   `assembledProductEligibility`, and no exported binding, function or const, is named as a writer (shown to bite on an exported arrow
   `storeRecord`);
 - no production module imports it (the import gates' AST resolution over the whole root, an escaped specifier probe included);
-- no production file names its schema, its file name or any kind id; no route path, tool id or action record is about it.
+- no production file names its schema, its file name or any kind id; no route path, tool id or action record is about it. [B24-B1, 2026-10-08] Since B24-B1 one production file names the file name: the golden evaluation catalog (`app/lib/evaluation/golden-catalog.ts`) cites `physical-evidence.ts:44`, `:394` and `:484` and the B23-D suite's path, names neither the schema nor a kind id, and imports nothing from the module (`b23-d-physical-evidence-contract` case 8, a reviewed pin move).
 
 Evidence from a request body or browser state is therefore never accepted: nothing can carry it in. CONFIRMED
 

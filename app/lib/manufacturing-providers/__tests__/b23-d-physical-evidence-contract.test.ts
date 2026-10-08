@@ -718,7 +718,7 @@ describe("[B23-D] the physical-evidence contract (D23-13; OD-175)", () => {
     await yieldOnce();
     // nothing else names its schema or a kind id; no route file, component, tool, action record or route path is about it
     const holders = [...files].filter(([path, text]) => path !== MODULE && (text.includes(PHYSICAL_EVIDENCE_SCHEMA) || text.includes("physical-evidence") || RUNBOOK_ORDER.some((kind) => text.includes(kind)))).map(([path]) => path);
-    expect(holders).toEqual([]);
+    expect(holders).toEqual(["app/lib/evaluation/golden-catalog.ts"]); expect([...files.get("app/lib/evaluation/golden-catalog.ts")!.matchAll(/physical-evidence(?!\.ts:|-contract)/g)].length + [PHYSICAL_EVIDENCE_SCHEMA, ...RUNBOOK_ORDER].filter((name) => files.get("app/lib/evaluation/golden-catalog.ts")!.includes(name)).length).toBe(0); // [B24-B1, 2026-10-08] reviewed pin move (was []): the golden evaluation catalog (D24-14, OD-203) is the one citation holder, admitted by exact path - it names the B23-D suite path and physical-evidence.ts lines only (every "physical-evidence" is followed by ".ts:" or "-contract"), never the schema and never a kind id; the generator imports the catalog and spells neither
     const routes = listRouteFiles(ROOT).map((path) => relative(ROOT, path).split(sep).join("/"));
     expect(routes.length).toBeGreaterThan(100);
     expect(routes.filter((path) => /physical-evidence|hardware-evidence|evidence-record/i.test(path))).toEqual([]);
