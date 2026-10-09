@@ -40,7 +40,7 @@ proves this end-to-end with a sink that throws on every call.
 
 ## Retention — an explicit future owner decision
 
-B11 introduces **no durable retention**:
+B11 introduces **no durable retention**: [B24-C1, 2026-10-08] true of B11's code, and no longer of the production chat route (D24-20, OD-207): since B24-C1 the route binds a durable sink through `setAgentTraceSinkFactory` (`app/api/chat/trace-runtime.ts`), so each finalized, validated run trace is scheduled for a write to `agent.run-trace.v1` on the durable-workflow substrate (PostgreSQL in production, the fixture runtime's in-memory repository under the fixture runtime) after the recorder hands it over; the three bullets below - the run-local default factory, no database write in the trace path, the factory as a future injection point - describe B11's code and are kept as written. A replay still persists nothing. Retention duration, readers and access audit stay open (B24-C2, B24-C3; `artifacts/ai-control-plane-b24/observability-and-replay.md`).
 
 - `InMemoryTraceSink` is the reference implementation; the production
   route uses `createAgentTraceSink()`, whose default factory returns a

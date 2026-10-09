@@ -30,12 +30,12 @@ export class LLMRouter {
       }
       return Promise.reject(new LLMProviderError(request.provider, "missing_credentials"));
     }
-    return this.resolve(request.provider).generate(request);
+    return recordModelCall({ provider: request.provider, model: configuredModelOf(request.provider), kind: "generate", usage: generateUsage }, () => this.resolve(request.provider).generate(request)); // [B24-C1] D24-21, OD-207: one call record per provider call, after the fixture short-circuit
   }
 
   stream(request: LLMRequest): AsyncIterable<LLMChunk> {
     if (fixtureRuntimeEnabled()) throw new LLMProviderError(request.provider);
-    return this.resolve(request.provider).stream(request);
+    return recordModelStream({ provider: request.provider, model: configuredModelOf(request.provider), kind: "stream" }, () => this.resolve(request.provider).stream(request), streamUsage); // [B24-C1] one record when the iteration ends
   }
 
   supportsTools(provider: LLMProviderId): boolean {
@@ -48,3 +48,20 @@ export class LLMRouter {
 }
 
 export const llmRouter = new LLMRouter();
+
+// [B24-C1] D24-21, OD-207: the call-record seam and what a record keeps of an answer (its model and token counts, never its content),
+// appended after the last line - an import and a function declaration are hoisted, so no line cited in this file moves.
+import { recordModelCall, recordModelStream, type ModelCallUsage } from "../observability/llm-call-record";
+import { configuredOpenAIModel } from "./openai-config";
+import { configuredAnthropicModel } from "./anthropic-config";
+
+/** The model a failed call is recorded under: the configured one (`LLMRequest` carries no model; a success records the answer's). */
+function configuredModelOf(provider: LLMProviderId): string {
+  return provider === "openai" ? configuredOpenAIModel() : configuredAnthropicModel();
+}
+function generateUsage(response: LLMResponse): ModelCallUsage {
+  return { model: response.model, inputTokens: response.usage?.inputTokens, outputTokens: response.usage?.outputTokens };
+}
+function streamUsage(chunk: LLMChunk): ModelCallUsage | null {
+  return chunk.type === "done" ? generateUsage(chunk.response) : null;
+}

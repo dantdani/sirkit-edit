@@ -492,7 +492,7 @@ async function rerankParts(
   const list = rerankCandidatePayload(candidates);
 
   try {
-    const resp = await client.messages.create({
+    const resp = await recordedRerank(client, { // [B24-C1] D24-21, OD-207: the SDK call through the call-record seam (`recordedRerank`, at the end of this file)
       model: RERANK_MODEL,
       max_tokens: 256,
       system: RERANK_SYSTEM_PROMPT,
@@ -603,4 +603,17 @@ export async function fetchAlternatesForAI(
     matchReasons: Array.isArray(r.matchReasons) ? r.matchReasons : [],
     pinCount: Array.isArray(r.pins) ? r.pins.length : 0,
   }));
+}
+
+// [B24-C1] D24-21, OD-207: the rerank call through the call-record seam, appended after the last line - an import and a function
+// declaration are hoisted, so no line cited in this file moves. `rerankParts` obtains the client first: without a key there is no
+// call and no record. One record per SDK call; the SDK's own retries are not visible here.
+import { recordModelCall, type ModelCallUsage } from "@/app/lib/observability/llm-call-record";
+
+function recordedRerank(client: Anthropic, body: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message> {
+  return recordModelCall({ provider: "anthropic", model: RERANK_MODEL, kind: "rerank", usage: rerankUsage }, () => client.messages.create(body));
+}
+/** What a call record keeps of a rerank answer: its model and token counts, never its ranking. */
+function rerankUsage(message: Anthropic.Message): ModelCallUsage {
+  return { model: message.model, inputTokens: message.usage?.input_tokens, outputTokens: message.usage?.output_tokens };
 }

@@ -15,5 +15,6 @@ export default defineConfig({
     // Stage 17: .test.tsx files run component tests — they opt into jsdom
     // with a `// @vitest-environment jsdom` docblock; .test.ts stays node.
     include: ["app/**/__tests__/**/*.test.{ts,tsx}"],
+    setupFiles: ["./app/lib/qualification/__tests__/_database-env-guard.ts"], // [B24-C1 review, 2026-10-08] no suite reaches a database the shell names: an ambient DATABASE_URL is removed before every test file
   },
 });

@@ -47,10 +47,10 @@ export async function embedBatch(texts: string[]): Promise<number[][]> {
       `embedBatch received ${texts.length} texts; max is ${MAX_EMBED_BATCH_SIZE}. Use embedMany().`,
     );
   }
-  const res = await getOpenAIClient().embeddings.create({
+  const openai = getOpenAIClient(); const res = await recordModelCall({ provider: "openai", model: EMBEDDING_MODEL, kind: "embedding", usage: embeddingUsage }, () => openai.embeddings.create({ // [B24-C1] D24-21, OD-207: one call record per SDK call; the client comes first, so a missing key leaves no record
     model: EMBEDDING_MODEL,
     input: texts,
-  });
+  }));
   return res.data.map((d) => d.embedding);
 }
 
@@ -65,4 +65,13 @@ export async function embedMany(texts: string[]): Promise<number[][]> {
     out.push(...(await embedBatch(chunk)));
   }
   return out;
+}
+
+// [B24-C1] D24-21, OD-207: the call-record seam, appended after the last line - an import and a function declaration are hoisted, so
+// no line cited in this file moves.
+import { recordModelCall, type ModelCallUsage } from "./observability/llm-call-record";
+
+/** What a call record keeps of an embedding answer: its model and its prompt token count (an embedding reports no output tokens). */
+function embeddingUsage(response: { model?: unknown; usage?: { prompt_tokens?: unknown } }): ModelCallUsage {
+  return { model: response.model, inputTokens: response.usage?.prompt_tokens, outputTokens: null };
 }

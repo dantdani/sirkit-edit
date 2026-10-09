@@ -10,4 +10,9 @@ export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   const { installFixtureClock } = await import("./app/lib/fixture-runtime/clock");
   installFixtureClock();
+  // [B24-C1] D24-21, OD-207: bind the LLM call record's durable sink, after the fixture clock (the record's times read it). The
+  // repository is resolved at write time, so this builds no database client; the sink registry is on globalThis, which the route
+  // bundles share with this one.
+  const { bindDurableLlmCallRecordSink } = await import("./app/lib/observability/llm-call-record-runtime");
+  bindDurableLlmCallRecordSink();
 }

@@ -37,7 +37,7 @@ import type { ReplacementPinFactsRole } from "@/app/lib/engineering/replacement-
 import { pcbBoardInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID, PCB_BOARD_HIERARCHY_PATH } from "@/app/lib/pcb/board-identity";
 import { engineeringDigest } from "@/app/lib/engineering/stable";
 import { agentRunTraceDigest, validateAgentRunTrace } from "@/app/lib/agent/trace";
-import { AgentTraceRecorder, createAgentTraceSink } from "@/app/lib/agent/trace-recorder";
+import { AgentTraceRecorder, createAgentTraceSink } from "@/app/lib/agent/trace-recorder"; import "./trace-runtime"; // [B24-C1] D24-20, OD-207: the durable run-trace sink, bound when ./trace-runtime is evaluated (appended in place: route.ts keeps its 562 lines and no cited line moves)
 import { resolveFreeroutingRuntime } from "@/app/lib/pcb/autoroute/runtime";
 import { resolveAgentAutonomyRepository } from "@/app/lib/agent/autonomy-store";
 import { createExecutionGrantMinter } from "@/app/lib/execution-grant/mint";
