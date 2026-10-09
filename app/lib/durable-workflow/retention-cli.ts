@@ -10,7 +10,7 @@
  *                                                    (stricter than OD-202's production-only confirmation, a stated choice), and a digest that no longer
  *                                                    matches - time passed, a head moved, a row landed - refuses and deletes nothing
  *
- * The flags are CLOSED: any other flag (B24-C3's `--read` included, until C3 adds it by review, D12), a stray word, a repeated flag or a
+ * The flags are CLOSED: any other flag (`--read` included: the wrapper dispatches it to B24-C3's read mode before this parser, D12), a stray word, a repeated flag or a
  * malformed value exits 2 BEFORE any repository call and deletes nothing. In a production runtime (A1's `staging`/`production` profile, or
  * `NODE_ENV=production`) the header says so. The CLI never prints `DATABASE_URL`'s value, a payload or a salt: counts, cutoffs and digests
  * only. No package.json script and no environment variable name it (stated choices, OD-232).

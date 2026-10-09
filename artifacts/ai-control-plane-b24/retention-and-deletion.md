@@ -135,7 +135,7 @@ on this page is the B24-C2 working tree's unless it names another tree.
   prints it.
 - **What it never prints:** the database URL's value, a payload, a salt or a key - counts, cutoffs and digests only (case 7 stubs a fake
   connection string and asserts its absence from every line). The target is the process's database URL as the operator exported it, through
-  `getDb()` alone; the wrapper loads no `.env.local`. No package.json script and no environment variable name the CLI (a stated choice).
+  `getDb()` alone; the wrapper loads no `.env.local`. No package.json script and no environment variable name the CLI (a stated choice). [B24-C3, 2026-10-09] The wrapper now loads `.env.local` for its READ mode only (`--read`; `scripts/db-migrate.ts`'s order: the arguments parse first), and constructs the PostgreSQL durable-workflow repository for that mode (D11); the purge mode still loads none and constructs none (`observability-and-replay.md` part 3).
 
 ## 5. The redaction authority on the three stores (D24-25; **CONFIRMED**, `b24-c2-redaction`)
 

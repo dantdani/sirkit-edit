@@ -837,3 +837,553 @@ amendment; the next free number at `4ec18eb` is OD-232 (the headings end at OD-2
 ### OD-209 amendment
 
 - [B24-C2, 2026-10-08] Cost, as applied: recorded usage is priced through the one schema `sirkit.live-price-table.v1`, its validator `livePriceTableProblems` and the `procurement.ts` decimal helpers (lead decision D1) by `priceUsage` in `app/lib/evaluation/model-price-table.ts`, whose one table constant `MODEL_PRICE_TABLE: LivePriceTable | null` is pinned `null`: every run's attribution is `unpriced` with a closed reason (`no_owner_price_table`, `model_not_in_table`, `usage_out_of_range`) until the owner supplies a table that passes the validator, by a reviewed change; a priced answer is decimal text in per-million units with the table's version and currency, never a float, never zero for "unpriced"; the money cap stays OD-216's; C1's call records are never stored priced.
+
+# B24-C3 - Observability and replay, part 3: the read mode and the recorded limits
+
+Base `600d1ba` (B24-C2 committed) on `chapter/b24-production-qualification`; written 2026-10-09 (local). Labels: **CONFIRMED** only for what a
+named case executed or a cited line reads; **INFERRED** where the code shows a consequence as far as code can; **RECORDED** for a stated
+limit; **UNKNOWN** where nothing here can tell; **BLOCKED-LIVE-QUALIFICATION** for every step that needs a real database, a host or an owner
+resource. Every citation of this part is in section 41 and resolves on its line (`b24-c3-recorded-limits` 11). No reserved file was edited.
+
+## 31. What B24-C3 is
+
+- **The read mode (D24-26, OD-211).** B24-C2's purge CLI gains `--read`: `scripts/retention-purge.ts --read --kind <kind> --tenant <id>
+  --project <id> --branch <id> [--run <runId>] [--limit <1..100>] [--acknowledge-unaudited-read]` reads one kind's records of one scope,
+  each through its own store's verified reader, over a read-only adapter of the durable-workflow repository, and writes ONE JSON document
+  (`sirkit.trace-read-export.v1`) to stdout. The pure core is `app/lib/observability/trace-read.ts` (C39-C46), beside C1's stores and inside
+  their approved-importer root (lead decision D11: no importer list moved); the CLI's dispatch is the script's (C47-C49). No route, MCP tool,
+  agent tool or UI reads a stored trace; no access record is written (`accessAudit: "not_recorded"`, OD-111 stands).
+- **The recorded limits (D24-24 as recorded, OD-210; the rest of D24-26).** Each limit the program states about approvals, settlement,
+  the ledger, replay and the in-process rings is a pin on the code (section 34, `b24-c3-recorded-limits`), with its strength shown over an
+  injected in-memory variant of the file it pins - never a file edited on disk.
+- **Code:** `app/lib/observability/trace-read.ts` (new), the `--read` dispatch in `scripts/retention-purge.ts` (its dispatcher `main` takes
+  its seams as overrides and ends the database client after a read; section 33), one database-delivery line
+  (`deterministic-manufacturing.yml:342`, C50), one in-place comment on `app/lib/durable-workflow/retention-cli.ts:13`. No reader was added
+  to a C1 or C2 store: each already had a digest-verified one (C61-C64). No change to the nine B11-scanned files, to `tool-invocation.ts`, to
+  the MCP trace modules, to a journal, a grant module or a route; no migration (32), no census, tool-count, classification or flag move; no
+  dependency (OD-42); no UI control (no B17-A run needed).
+- **Suites** (section 40): `b24-c3-trace-read` (10), `b24-c3-recorded-limits` (11) under A1's directory filter, `b24-c3-trace-read-pglite`
+  (4) in A4's PGlite folder with its explicit database-delivery entry (lead decision D17).
+- **Review round (2026-10-09).** The adversarial review's eleven confirmed findings are closed test-first in this tree (section 39's review
+  rows): the dispatcher is driven, not only read as text (`b24-c3-trace-read-pglite` 4); the deadline is on the whole read; a withheld
+  document counts every collected record; the client is ended after a read; `TRACE_READ_HEAD_MISMATCH` and `TRACE_READ_FAILED` are reached;
+  the Tier 1 pin sees quoted and computed keys, assignment statements and calls naming the property; the no-access-audit filters show their
+  strength; the two limits of the read mode's access control are recorded (section 36); OD-233 (i) is reworded; the hand check that stood in
+  for the pre-edit run of the B22/B23 page suites is recorded as a deviation (section 39).
+
+## 32. The pre-edit counterexample (red first; **CONFIRMED**)
+
+- **D24-26 at `600d1ba`.** With C1's store written, no operator path returned a trace: the one operator CLI, `scripts/retention-purge.ts`
+  at HEAD, contained no `--read` (`git show HEAD:scripts/retention-purge.ts`: 0 occurrences) and its parser refused the flag as unknown
+  (`b24-c2-retention` 5, `RETENTION_ARGUMENT_UNKNOWN`, green at HEAD). With the core set aside, `b24-c3-trace-read` and
+  `b24-c3-trace-read-pglite` fail to load: `Cannot find module '@/app/lib/observability/trace-read'` - 2 files failed, no tests, 1.52 s
+  (`c3-01-red-core-absent.log`).
+- **The limits suite before part 3 existed:** `b24-c3-recorded-limits` 1 failed (11, the page) / 10 passed, 21.18 s
+  (`c3-02-red-limits-no-page.log`). Cases 1-10 are green on the base because they pin true facts; each shows its strength inside the case by
+  turning red over an injected variant - a route importing a journal or the replay capsule, a stubbed write row for `policyFor`, a second
+  `attestation` literal, a moved `session.runId`, a key list naming a run, a ring constant moved, an injected caller of a sink setter.
+
+## 33. The read mode (D24-26, OD-211; **CONFIRMED** in memory and on PGlite)
+
+**The four kinds** (C40), each read through its store's own verified reader - digest recomputed, document re-validated (C61-C64, C66,
+C67) - and nothing else: `run-trace` (`agent.run-trace.v1`, C1), `run-trace-attribution` (`agent.run-trace-attribution.v1`, C2),
+`llm-call-record` (`llm.call-record.v1`, C1), `specialist-trace` (`agent.orchestration-trace.v1`, B21-E2b, C65). Any other `--kind` is
+`read_kind_unknown` before any repository call (`b24-c3-trace-read` 8): the orchestration run record (C68) and the resume record (C69, which
+holds the coordinator's answer of up to 60,000 characters, C70), the grants and their index (C71, C72, with the 240-character instruction
+excerpt, C73), the autonomy setting (C74), the provider exchange (C75) and the computation evidence (C76) are not traces or hold text, and
+the core imports no store of theirs (its runtime imports are exactly the four stores' modules, the redaction authority, the call record's
+key shapes and `durable-workflow/stable`; case 8).
+
+**Read-only by construction** (`b24-c3-trace-read` 2; the PGlite suite 2). The core receives `DurableWorkflowRepository` (C52) behind
+`readOnlyTraceRepository` (C45): `listHeads`, `history`, `loadHead` and `loadRecord` pass through under the deadline (the SELECT-only methods
+of the PostgreSQL repository, C55, C56); `commit`, `claimOutbox`, `completeOutbox` and `failOutbox` reject `TRACE_READ_WRITE_REFUSED`;
+`getReplay` (C53) and `listOutbox` (C54) reject `TRACE_READ_METHOD_REFUSED` - they would hand out replay results and outbox payloads of every
+aggregate type in the scope. A counting Proxy over the in-memory repository sees exactly `{listHeads, history, loadHead}` across the four
+kinds and a `--run` read; the repository's heads and outbox are byte-identical after every read; on PGlite every base table of the public
+schema (enumerated at run time from `information_schema.tables`, the four durable tables among them) keeps its row count and row digest
+after a read, a refused read and a read that meets a corrupt row. The core's runtime closure holds no retention module, and its source names
+no purge. No database-level read-only session is used (a stated choice, OD-233).
+
+**Inputs.** The closed flags: `--read`, `--kind`, `--tenant`, `--project`, `--branch` (validated by `canonicalDurableScope`, C57, and
+read as the substrate stores them), an optional `--run`, `--limit` and `--acknowledge-unaudited-read`. `--limit` is per mode (lead decision
+D12): with `--read` 1..100 aggregates, default 20 (C41); without `--read` the purge's 1..10000, default 1,000, untouched. Each refusal has
+its own code before any repository call, before `.env.local` is loaded and before any repository is opened (`b24-c3-trace-read` 6): an
+unknown flag (`read_argument_unknown`), a stray word, a repeated flag (`read_argument_repeated`), a missing value or a missing required
+flag (`read_argument_missing`), a malformed `--limit` or `--run` or a value that is secret-shaped or over 512 characters
+(`read_argument_malformed`, the value never echoed), a scope the substrate would refuse (`read_scope_invalid`), an unknown kind
+(`read_kind_unknown`), and any of C2's purge-only flags - `--apply`, `--confirm`, `--as-of` (C44, pinned equal to `RETENTION_CLI_FLAGS`
+less `--limit`) - beside `--read` (`read_arguments_conflict`). `--run` selects one run-id-keyed aggregate - `run-trace` by its run id,
+`specialist-trace` by its per-task run id `<parentRunId>:<index>-<role>` - and is `read_run_unsupported` for the two kinds keyed by a
+trace id or a call id (list them; each record carries its run id) and for a coordinator run id on a specialist trace (a stated choice,
+OD-233). Without `--read` the read flags stay unknown to the purge parser, which refuses them as it refuses any other flag.
+
+**Verification and the read policy** (C58; `b24-c3-trace-read` 3, 4, 5). The heads of the kind in the scope are listed (at most
+`--limit`, by aggregate key), and each is read back through its store - `history` for the run-id-keyed kinds, `load` for the others - which
+recomputes the record digest and the document digest and re-validates the document (C66, C67 and C1's, C2's validators). A head whose
+payload names no selector or another aggregate's key is `corrupt` `TRACE_READ_KEY_MISMATCH`; a chain whose last record is not the head is
+`corrupt` `TRACE_READ_HEAD_MISMATCH` (C81; case 4 edits the listing's revision and then its digest alone, the chain untouched, for every
+kind); a store's refusal is `corrupt` with the store's own bounded code (`AGENT_RUN_TRACE_MISMATCH`, `AGENT_RUN_TRACE_ATTRIBUTION_MISMATCH`,
+`LLM_CALL_RECORD_MISMATCH`, `AGENT_ORCHESTRATION_TRACE_MISMATCH`; anything else `TRACE_READ_FAILED`, C82 - case 4 makes a store's own reader
+throw a bare object with no code and then an Error with a free-text message, and neither value is printed; the same bare throw from the
+REPOSITORY is the adapter's `read_unavailable`). A `corrupt` entry carries its key, revision, status and code and nothing of the row: no
+payload, no thrown message, no stack (case 4 plants a digest, a payload, a key and a type edit behind a Proxy for every kind; the PGlite
+suite edits a payload in SQL). Another scope's records are
+never listed, and a record of scope B kept under scope A's own key with consistent digests is `corrupt` by the store's own scope check
+(case 3). A `--run` read of an absent aggregate is `absent` `TRACE_READ_ABSENT`, exit 0.
+
+**No secret** (C59, C60; `b24-c3-trace-read` 5). A record whose rendering the redaction authority's `containsSecretShapedText` or the call
+record's key-shape rule flags (a PEM marker among those shapes) is `withheld` `TRACE_READ_SECRET_SHAPED` and never printed; the whole
+document is checked again before it is written, and a rendering that still carries a shape is withheld whole (one `withheld` entry keyed by
+the kind, `omitted` every record collected - kept and dropped by the cap, C84). Case 5 reaches that branch: two records each clean alone
+whose compact renderings together match the redaction authority's credential-in-URL pattern (C90: `scheme://` ends one record's last
+warning, an `@` before any whitespace opens the next, and `JSON.stringify` emits no whitespace between them) are withheld whole with exit 1
+and nothing of either printed; in the other order both are read; with the cap dropping a third record first, `omitted` is three, not the
+two the check saw. **INFERRED:** that pattern crosses record boundaries, so benign content of that shape withholds the document whole -
+over-withholding, the policy's safe side (section 36). **RECORDED:** the B11 trace validator does not know the PEM marker (a warning carrying one is admitted by `validateAgentRunTrace`
+and kept by C1's store), so the withholding is what keeps it off the operator's screen; a key-shaped value never reaches `ok` in any kind - the
+validators refuse it on write and on read (`corrupt`) - and the stdout of every case is clear of secret shapes.
+
+**Export** (the closed keys C80; `b24-c3-trace-read` 1, 6). One JSON document on stdout, no file write; its closed keys in order: `schema`
+(`sirkit.trace-read-export.v1`), `generatedAt`, `target` (host:port/database only), `scope`, `kind`, `accessAudit` (`not_recorded`),
+`records` (key, revision, recordDigest, document - the verified stored record), `refused` (key, revision, status, code), `truncated`,
+`omitted`. The output is capped at 1 MiB UTF-8 (C42): whole records are dropped from the end, never cut (60 run traces of 250 steps, 1.5 MB,
+read at `--limit 100`: the kept records are the first n heads, each whole and equal to its stored digest). The WHOLE read has a 30 s
+deadline from its first repository call (C42, C83, C85), and so has each repository call within it; on expiry, or on a driver error at the
+repository's opening or after the first repository call, the export is still one JSON document with one `refused` entry keyed by the kind,
+status `unavailable`, code `read_unavailable`, and no driver text (a fake clock: a hanging first call, and a repository answering every
+statement after 20 s - the listing, then the one chain, 40 s in all - are each still pending at 29 999 ms and `read_unavailable` at 30 000
+ms; an injected throwing repository whose message carries a user:password URL). **Exit codes** (C43): 0 every record `ok` or `absent`; 1 any
+record `corrupt` or `withheld`; 2 refused before reading; 3 `read_unavailable`.
+
+**Production runtime** (`b24-c3-trace-read` 7; the PGlite suite 2). Under the purge's predicate (A1's `staging` or `production` profile,
+or `NODE_ENV=production`, evaluated after `.env.local` is loaded) the read is refused `read_production_unacknowledged` with zero repository
+calls; with `--acknowledge-unaudited-read` it reads and the export states `accessAudit: "not_recorded"` (OD-211; OD-111 stands).
+
+**The CLI wrapper** (C47-C49; `b24-c3-trace-read` 9, 10). `scripts/retention-purge.ts` dispatches on `selectsTraceRead(argv)` - any
+`--read` - before the purge parser sees the arguments; the purge mode's behaviour is unchanged (the same `runRetentionCli` call with the same
+port, clock, writers and production predicate, now reached through the dispatcher, the predicate evaluated when the dispatcher runs). The
+read mode follows `scripts/db-migrate.ts` (C77-C79): the arguments parse first, `.env.local` is loaded only here (`loadEnvLocal`, handed to
+the core as its loader; the purge mode never calls it), a missing `DATABASE_URL` exits 2 naming the variable only, the target is printed as
+host:port/database, and no driver text is ever printed - stronger than `db-migrate.ts`'s redaction of the URL's user and password, which it
+therefore never needs. The wrapper constructs `PostgresDurableWorkflowRepository` for the read mode (C48; the constructor census is now
+exactly `durable-workflow/runtime.ts` and this script, D11) and hands it to the core's read-only adapter; the core itself reads nothing of
+the process environment and imports no provider SDK, no durable runtime, no database client and no schema (case 10). The script exports its
+dispatcher `main` (argv, env, overrides; C86), whose seams - the loader of `.env.local`, the two writers, `repositoryFor`, the purge port,
+the clock, the production predicate and the client's close - default to the operator's real ones, and calls it on its last line only when
+it is the entry module (C49; the guard's pattern, C88, admits the script's path with or without a suffix, since `tsx scripts/retention-purge`
+resolves `argv[1]` without one). `b24-c3-trace-read-pglite` 4 imports and DRIVES the dispatcher over PGlite with the loader, the writers,
+the port and the close stubbed and the repository its real default: `--read` reaches the read runner and the PostgreSQL repository and
+never the retention port (the loader called once, `close(true)` once); a purge argv (`--limit 1`) runs C2's dry run through the port (the
+inventory read, never a purge) and never the loader; `--read` beside `--apply` is refused before the loader (`close(false)`); a read flag
+without `--read` is the purge parser's `RETENTION_ARGUMENT_UNKNOWN`; every table is identical throughout. Case 9 pins `runTraceReadCli`
+with `env: {}`, a stub loader that records its one call and a `repositoryFor` that throws a driver error carrying a fake user:password URL;
+case 10 pins the script's text and closure and the guard's pattern parsed from the source. After the read mode, when a repository was
+opened, the dispatcher ends the process's database client (`getSqlClient().end({ timeout: 5 })`, C87, C89): a deadline leaves a statement
+pending on its socket - the client's `connect_timeout` and `idle_timeout` (C91, C92) bound connecting and idle sockets only - which would
+otherwise keep the process alive until the server answered; the close is pinned by the PGlite case's stub and by text, and its effect on a
+live socket is UNKNOWN (section 36).
+
+## 34. The recorded limits (D24-24 as recorded, OD-210; D24-26; **CONFIRMED** by the pin, **INFERRED** where marked)
+
+Each limit below is a fact the code holds at `600d1ba` plus B24-C3, cited in section 41 and pinned by the named case of
+`b24-c3-recorded-limits`; the case turns red when the fact changes and, inside itself, over an injected variant of the file it pins.
+
+| limit | the fact, with its citations | pinning case |
+|---|---|---|
+| Tier 2 approvals are browser-only: the approved-mutation and approved-PCB-mutation journals are IndexedDB stores imported by the PCB editor component and in no route's runtime closure | the two journal stores (C1, C2) and the Tier 1 grant journal (C3, C4) are in the runtime closure of no `app/api/**/route.ts`, each pinned by exact path; the three `-journal-idb.ts` files on disk are exactly those | `b24-c3-recorded-limits` 1 |
+| The server's two apply-time checks write nothing: POST /api/pcb/apply-authorization and POST /api/replacement-authority are authenticated-read rows with no write authority | `policyFor` (C7) answers `authenticated-read`, `authoritativeWrite: false`, no release, transfer or spend flag for both rows (C5, C6); the apply-authorization route's one runtime import is the canonical wrapper (C8) and it states it performs no mutation (C9); the replacement route is READ/PROVE ONLY (C10) | `b24-c3-recorded-limits` 2, 3 |
+| No server record ties a Tier 2 apply to a run (INFERRED: the pins show it as far as code can - the journals are browser-side, the server checks are reads) | C1, C2, C5-C10 together; nothing under `app/api/` imports a journal, and the two checks hold no write | `b24-c3-recorded-limits` 1, 2, 3 |
+| Tier 1 settlement is browser-attested: the server records what the browser reports, marked so | under `app/lib/execution-grant/` the only string literal assigned to an `attestation` property - as an object-literal member with a plain, quoted or computed key, or by an assignment statement to `.attestation` / `["attestation"]`, with no call naming the property by string (`defineProperty`, `Reflect.set`) - is "browser-attested" (C11); the only other `attestation:` copies an existing settlement's field (C12); `SettleRequest.settlement` omits the field (C13); the settlement type's literal (C14); the behavioural pins exist (C20, C21) | `b24-c3-recorded-limits` 4, 6 |
+| The Tier 1 grant is server-held and bound to the run - the limit is the OUTCOME's attestation, not a missing run-bound record | `ExecutionGrantSession.runId` (C15) is set from the run context at mint (C16) under a mint idempotency key on the run and the call (C17), and the browser-side parser requires it (C18, C19) | `b24-c3-recorded-limits` 5 |
+| The grant's browser journal is the browser's; the server holds only the grant record and its browser-attested settlement | `agent-execution-journal-idb.ts` (C3, importer C4) is in no route closure | `b24-c3-recorded-limits` 6 |
+| Tier 3: the exchange ledger names the committer but no run | `committedBy` (C22); the closed attempt key list carries no run id (C23) | `b24-c3-recorded-limits` 7 |
+| Replay covers authored capsules only; live traces are digest-only, so a stored trace cannot be replayed | `replay-capsule.ts` is in no route closure, and its runtime importers are the two evaluation modules and the B11 generator (C24-C26); `trace.ts` states that digest-only traces cannot reconstruct model output and the capsule is never persisted from live runs (C27, C28) | `b24-c3-recorded-limits` 8 |
+| MCP request and read traces and B05's read traces die with their process or instance | the request ring holds 1,000 per process (C29, C30), the read ring 1,000 (C31, C32), B05's read trace 500 per `ReadToolInvocationService` (C33, C34) - one instance per gateway (C37) and per MCP read path (C38); no production caller of either sink setter (C35, C36); `tool-invocation.ts` imports nothing under `durable-workflow/` | `b24-c3-recorded-limits` 9 |
+| No access audit: who read a stored trace is not recorded (OD-211; OD-111 stands) | the export states `accessAudit: "not_recorded"` (C39); the core's closure holds no retention module; no access-audit store exists (the three filters shown over an injected retention import in the core and an injected access-audit store); case 2 of the read suite proves no write | `b24-c3-recorded-limits` 10 |
+
+## 35. Live: BLOCKED-LIVE-QUALIFICATION
+
+- **LB-14** (the database platform): the read mode never ran against "the main Supabase project" (OD-191), a staging or a production
+  database, and never will by the builder; its only runs are `b24-c3-trace-read`'s (in memory) and `b24-c3-trace-read-pglite`'s (a
+  disposable in-process PostgreSQL). Whether a production server's `listHeads` order, its jsonb round trip and its statement timeouts behave
+  as PGlite's is UNKNOWN until an operator runs the read against an owner-supplied disposable project (the lead's, never the builder's).
+- **LB-13** (staging and production; OD-190): the read mode is an operator's process, not a hosted one; in a production runtime it refuses
+  without the acknowledgement. What a real host's `.env.local` and `DATABASE_URL` hold is the operator's; nothing here reads them in a test.
+- **No live call** was made: no provider, no model, no host contacted; every record read was written by its own store inside the test process.
+
+## 36. What stays open (**INFERRED**, low)
+
+- `--run` names a run-id-keyed aggregate only; an attribution is found by listing the scope (at most 100 heads per read) and reading its
+  `runId` - a scope with more attributions than the limit needs more than one read, and the listing is by aggregate key, not by time.
+- The 1 MiB cap drops whole records from the end of the listing order (by aggregate key): which records survive is deterministic, not
+  "the newest".
+- The withholding rule is the redaction authority plus the call record's key shapes; a shape neither knows is not withheld (the B11
+  validators keep such text out of every stored kind but a run trace's warnings, which hold at most 32 sanitized lines of 300 characters).
+- `redactedTraceReadTarget` prints the URL's pathname as the database name; a path with more than one segment prints as given (no secret
+  rides in a path the operator wrote).
+- The PGlite suite's second case snapshots every table by `string_agg(t::text)`; a table with a non-deterministic row text (none today) would
+  need an order of its own.
+- **Authorization is the database credential alone** (review round). `--tenant`, `--project` and `--branch` are the operator's assertions:
+  the core canonicalizes them (C98) and the repository filters rows by exactly that scope (C95) over the process's one connection; no
+  membership, role or policy module is in the core's closure (`b24-c3-trace-read` 10), and the durable tables' row security has no policy
+  and no FORCE, so the owning role bypasses it (C96, C97). Whoever holds `DATABASE_URL` reads any tenant's traces, and the export carries no
+  operator identity (`accessAudit: "not_recorded"`). The alternative - a membership check against the scope, or OD-192's application role -
+  is the owner's (OD-211 as applied, section 42).
+- **The production refusal keys on the runtime, not on the target** (review round). The predicate is `NODE_ENV` (C93) or the declared profile
+  `SIRKIT_DEPLOYMENT_ENV` (C94), never the database the URL names: a development-profile shell whose `.env.local` names a production database
+  reads without `--acknowledge-unaudited-read`. OD-191's rule is the operator's, not the code's.
+- **Over-withholding** (review round). The whole-document check applies the redaction authority's credential-in-URL pattern (C90) to compact
+  JSON, where `[^\s@]*` crosses record boundaries: a URL at the end of one record and an `@` before any whitespace in the next withhold the
+  document whole though each record alone is `ok` (case 5 shows it). The safe side of B16-A's policy; the operator narrows the read
+  (`--run`, `--limit`) to see the records.
+- **The read's wall clock** (review round). The deadline bounds the whole read, so a server answering each statement in 29 s completes one
+  listing at most before `read_unavailable`; `--limit` and `--run` are the operator's levers, and a larger read is several reads.
+- **The entry guard's live behaviour** (review round; UNKNOWN). No builder run ever executed the script as the entry module (OD-191): the
+  guard's pattern (C88) is pinned parsed from the source over the script's path with and without a suffix, vitest's own entry, another
+  script, a backup copy and an empty `argv[1]`; what a given loader puts in `process.argv[1]` is the lead's run (section 42).
+- **The client's close** (review round; UNKNOWN live). `getSqlClient().end({ timeout: 5 })` (C87) never ran against a socket; postgres.js
+  documents that pending queries are rejected and connections destroyed at the timeout. The purge mode ends no client: its process lives
+  until its idle sockets close (`idle_timeout: 20`, C92) - B24-C2's behaviour, unchanged here (INFERRED).
+
+## 37. Superseded statements, handed to B24-F
+
+Each is left as written and listed for B24-F's one table at closeout commit 1/2 (lead decision D5; file:line at `600d1ba` plus this
+change):
+
+- `app/lib/agent/trace-recorder.ts:41-45` (B11-scanned, hash-pinned; recorded by C1 in section 10): "Durable retention, retention duration,
+  and operator access are EXPLICIT FUTURE OWNER DECISIONS" - operator access now exists through the read mode (OD-211), retention through
+  C2's purge (OD-202); the module still introduces neither.
+- `artifacts/ai-control-plane-b11/redaction-and-retention-policy.md:52-57` (C1's dated note sits at `:43`, covering `:45-50`; the lines
+  `:52-57` are the "future owner decisions" bullets on readers and access audit): readers exist (the read mode); the access audit stays
+  deferred and stated.
+- `app/api/chat/attribution-runtime.ts:18`, "(D11: the one PostgreSQL repository construction site stays `durable-workflow/runtime.ts`)" -
+  since B24-C3 the sites are two: the runtime's and the purge CLI's read mode (the chat runtimes still construct none).
+- `artifacts/remaining-builder-program/OWNER_DECISIONS.md` OD-232 (g) "the wrapper loads no `.env.local`" and (h) "the one construction
+  site stays `durable-workflow/runtime.ts`" (the lead's file; the amendment is drafted in section 42).
+- `artifacts/ai-control-plane-b24/retention-and-deletion.md:138`, "the wrapper loads no `.env.local`" - carries this task's dated note in
+  place.
+- `artifacts/ai-control-plane-b24/discovery.md:385-386` and `:752-755` (the lead's file): "written and never read by any route, UI or MCP
+  tool" stays true; "Stored traces have no reader, no export" does not (the closure clause in section 42 records it).
+
+## 38. Pins moved, and why (each in place, with a dated `[B24-C3, 2026-10-09]` note)
+
+| pin | move | why |
+|---|---|---|
+| `.github/workflows/deterministic-manufacturing.yml:342` | one database-delivery line, `app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts`, after C2's entry (`:341`), above `--reporter=dot` | the PGlite suite, admitted file by file (OD-222; `b19-e-ci-job-scope`) |
+| B21 C49, C93, C94 (`artifacts/ai-control-plane-b21/evaluation-matrix.md:1139, :1183, :1184`; `b21-f-page` 6) | `:373` -> `:374`, `:376` -> `:377`, `:385` -> `:386`, each with `re-pinned +1` naming the entry at `:342` | the inserted line moves every later workflow line +1 (lead decision D8) |
+| `artifacts/ai-control-plane-b24/environments-and-deployment.md` section 10 | one row appended to the insertion table (task `[B24-C3, 2026-10-09]`, job `database-delivery`, first line `:342`, count 1) | A1's insertion-table protocol; no earlier row and no number of sections 10 and 14 moved |
+| `artifacts/ai-control-plane-b24/ci-admission.md:185` | the browser job's `timeout-minutes: 30` citation `:359` -> `:360`, earlier notes kept | the same +1 (re-derived by anchor) |
+| `b24-c2-retention` 5 (`--read` refused) | retitled in place: `--read` is refused by the PURGE parser alone; the wrapper dispatches it to the read mode before that parser, and `--read` beside a purge flag is refused there (`b24-c3-trace-read` 6); the assertions on `runRetentionCli` hold unchanged, so does `--limit`'s purge range | lead decision D12 |
+| `b24-c2-retention` 1 (`:193`, the script's specifiers) | the filter now expects exactly `../app/lib/load-env-local`; no postgres, pglite or disposable specifier joins | the read mode's loader lives in the wrapper (D12) |
+| `b24-c2-retention` 7 (`:338-339`, the script's text) | the script constructs `PostgresDurableWorkflowRepository` for `repositoryFor` and names `loadEnvLocal` exactly twice (the import and the hand-over); it still never names `DATABASE_URL` | D11, D12 |
+| `b24-c1-durable-trace` 11, `b24-c1-llm-call-record` 12, `b24-c2-attribution` 12 (the constructor census) | each expects `["app/lib/durable-workflow/runtime.ts", "scripts/retention-purge.ts"]` (sorted), the two C1 titles restated in place | D11: the CLI is the planned second constructor; `b24-c3-trace-read` 10 pins the pair |
+| `app/lib/durable-workflow/retention-cli.ts:13` | the header's parenthesis restated in place (one line kept) | the comment said `--read` was refused until C3 adds it |
+| `artifacts/ai-control-plane-b24/retention-and-deletion.md:138` | a dated note appended on the line | the wrapper now loads `.env.local` for the read mode |
+| `b24-c3-trace-read` 10 (this task's own text pin of the entry guard; review round) | the guard's pattern is `/retention-purge(?:\.[cm]?[jt]s)?$/` - the suffix optional - and the CLI's runtime specifiers gain `../app/lib/db/client` | `tsx scripts/retention-purge` resolves `argv[1]` without a suffix; the client is ended after a read (section 33) |
+
+**Not moved:** B23's C64 (`dfm-quote-flow.md:537`, `:335`) and its prose citation (`dfm-quote-flow.md:269`, `:335`), B23's C14 and C46
+(`:227`) and B22's C76 (`:226`) sit above the inserted line (checked by hand before and after: `:226` `app/lib/computation/__tests__`, `:227`
+`app/lib/manufacturing-providers/__tests__`, `:335` the B23 PGlite entry); `b23-a-provider-admission` case 8 (lead decision D6: the suites sit
+under `app/lib/qualification/`, an admitted root; `trace-read.ts` and the script never name the provider directory); C1's approved-importer
+gates (D11: the core is under `app/lib/observability/`); the nine B11 hashes; the census 168 / 165 / 3 / 0; the tool counts 47 / 36 / 9 / 27;
+the action records 107; the migrations 32; the six SDK importers; the B01 CSV; the B17 inventory; `package.json`; the chat route's 562 lines.
+
+## 39. Test-first record and gates (2026-10-09; **CONFIRMED**)
+
+| step | what ran | result |
+|---|---|---|
+| red, core absent | `b24-c3-trace-read`, `b24-c3-trace-read-pglite` with `trace-read.ts` set aside | 2 files failed to load (`Cannot find module`), no tests, 1.52 s |
+| red, page absent | `b24-c3-recorded-limits` before part 3 | 1 failed (11) / 10 passed, 21.18 s |
+| first green attempt | the two read suites with the core and the dispatch | 5 failed / 8 passed, 27.31 s - every failure the suites' own: the unit helper opened a fresh repository where the seeded one was meant (four cases), and the PGlite scope assertion used a tenant id that is a prefix of the other scope's; both fixed in the tests |
+| green | the two read suites | 2 files, 13 / 13, 29.50 s |
+| pins before the move | `b24-c1-durable-trace`, `b24-c1-llm-call-record`, `b24-c2-attribution`, `b24-c2-retention` on the new tree, unmodified | 5 failed / 68 passed, 35.62 s - exactly the five predicted pins: the three constructor-census assertions (`+ scripts/retention-purge.ts`), the script's `load-env` specifier (`:193`) and the script's constructor text (`:338`) |
+| pins after the move | the same four suites | 4 files, 73 / 73, 44.76 s |
+| gate (a) | the three C3 suites with every C1 and C2 suite (11 files, the three PGlite ones included) | 125 / 125, 64.49 s, exit 0 |
+| gate (b) | `app/lib/qualification/__tests__` (33 files) | 347 passed, 3 skipped (350), 83.70 s, exit 0 |
+| gate (c) | `app/lib/agent/__tests__` (36 files; B11.5 case 12's write-primitive scan among them) | 415 / 415, 38.32 s, exit 0 |
+| gate (d) | `app/lib/agent/orchestration/__tests__` (49 files: the B21 import gates, `b21-e2b-trace-attribution`'s sha pins, `b21-f-page` with the moved C49, C93, C94, `b21-closeout-statements`) | 460 / 460, 63.64 s, exit 0 |
+| gates (e), (f) | `app/lib/durable-workflow/__tests__`, `app/lib/execution-grant/__tests__` (5 files) | 4 files passed, 1 skipped; 23 passed, 2 skipped (25), 3.59 s, exit 0 |
+| gate (g) | `app/lib/engineering/__tests__` (99 files) | 1107 / 1107, 70.26 s, exit 0 |
+| gates (h), (i) | `app/lib/mcp` (with `b20-b4-process-gate` and the counts 47 / 36 / 9 / 27) and `b14-4-ast-import-gates` (46 files) | 847 / 847, 137.24 s, exit 0 - no AST gate timed out |
+| gates (j), (k), (l) | `app/lib/auth/__tests__`, `app/api/__tests__` (the census 168 / 165 / 3 / 0), `b18-b-execution-grant-route`, `b19-e-ci-job-scope` (70 files) | 1559 passed, 9 skipped (1568), 90.57 s, exit 0 |
+| gates (m), (n) | `app/lib/computation/__tests__`, `app/lib/manufacturing-providers/__tests__` (57 files: `b22-closeout-statements`, `b23-closeout-statements`, `b22-a1-page` 5, `b23-b-dfm-quote-flow-page` 3, `b23-d-physical-evidence-contract` 9, `b23-a-provider-admission` 8, `b23-a-tier3-vocabulary`'s 107 action records) | 55 files passed, 2 skipped; 687 passed, 18 skipped (705), 181.24 s, exit 0 |
+| gate (o) | the database-delivery list exactly as CI selects it (26 files; the junit reporter flags omitted so nothing is written into the repository; no `DATABASE_URL`) | 23 files passed, 3 skipped; 194 passed, 12 skipped (206), 145.35 s, exit 0 |
+| tsc | `tsc --noEmit -p tsconfig.json` | exit 0, no output |
+| eslint | the eleven changed `.ts` files (the core, the script, `retention-cli.ts`, the fixtures, the three C3 suites, the four moved suites) | exit 0, no output |
+| generators | `generate-agent-artifacts`, `generate-b16-0-2-artifacts`, `generate-b17-control-inventory`, `generate-b11-artifacts`, `generate-action-toolability-matrix`, one after another under the lock | each exit 0; `git status` afterwards names only this task's files - zero drift (47 registered / 36 exposed tools, 107 action records, 631 controls on 63 surfaces, B11 19 / 19 cases and 61 / 61 checks) |
+| by hand | the workflow lines the unmoved citations name | `:226` `app/lib/computation/__tests__` (B22 C76), `:227` `app/lib/manufacturing-providers/__tests__` (B23 C14, C46), `:335` the B23 PGlite entry (C64 and `dfm-quote-flow.md:269`), `:342` the new entry, `:360` `timeout-minutes: 30`, `:374`, `:377`, `:386` the browser job's three steps; `drizzle/` holds 32 migrations; every changed file is LF (`git ls-files --eol`: `w/lf`) with no control byte |
+| final | `b21-closeout-statements`, `b22-closeout-statements`, `b23-closeout-statements`, `b24-c1-durable-trace` (its page case 13) and the three C3 suites on this page as finished (7 files) | 67 / 67, 42.80 s, exit 0; the five page-reading suites re-run once more after this row was written (the last line of this table is the re-run's record) |
+| final, re-run | the three closeout tripwires, `b24-c1-durable-trace` and `b24-c3-recorded-limits` after this table's last two rows were written | see the increment report: the page cannot carry its own last run; the lead's close records it |
+
+The B24-C3 suites, every other suite that reads a file this task changed, the gates the task names, tsc, eslint and the generators were
+each run after the edits and are green; a timed-out AST gate did not occur, so no re-run alone was needed. The final run - the three
+closeout tripwires, `b24-c1-durable-trace` (its page case 13) and the three C3 suites on this finished page - is recorded in the last row.
+
+The gate sets of the task, each one vitest at a time under the lock, every runner process stopped after it, are recorded in the rows below
+as they ran (the exact counts and exit codes; a timed-out AST gate is re-run alone and both runs recorded).
+
+**Deviation, RECORDED (review finding security-7):** the task's "run before and after the workflow edit" for `app/lib/computation/__tests__`
+and `app/lib/manufacturing-providers/__tests__` was met after the edit only (gates (m), (n), 687 passed); before the edit the three anchors
+the unmoved citations name were checked by hand (`:226` `app/lib/computation/__tests__`, `:227` `app/lib/manufacturing-providers/__tests__`,
+`:335` the B23 PGlite entry; the insertion is at `:342`, below all three). No pre-edit run log exists (`c3-01` to `c3-21`: only `c3-15` names
+the B22/B23 page suites), so the ledger cannot show those four suites green at `600d1ba` from this task's own runs; the lead's two options
+are in section 42.
+
+### Review round (2026-10-09; **CONFIRMED**)
+
+| step | what ran | result |
+|---|---|---|
+| baseline | the seven suites that read the files this round edits (`b24-c1-durable-trace`, `b24-c1-llm-call-record`, `b24-c2-attribution`, `b24-c2-retention`, the three C3 suites), unmodified | 7 files, 97 / 97, 67.17 s, exit 0 (`c3fix-00`) |
+| counterexample (correctness-1) | the dispatch inverted on disk (`if (!selectsTraceRead(argv))`, sha256 `f5c186…`); `b24-c2-retention`, `b24-c3-trace-read`, `b24-c3-trace-read-pglite` | 3 files, 20 / 20, 24.51 s, exit 0 - every pin on the dispatcher was text; the script restored to its sha256 `27de51…` (`c3fix-01`) |
+| red | the extended unit suites on the unfixed code (the old visitor restored for the run) | 2 files, 4 failed / 17 passed, 25.88 s, exit 1: limits 4 (a computed-key `attestation` literal invisible to the object-literal visitor), read 5 (`omitted` 2 where 3 records were collected), read 6 (the slow repository still pending at 30 000 ms), read 10 (the CLI's specifiers); read 4 and limits 10 green, as coverage-only findings (`c3fix-02`) |
+| green | the three C3 suites after the fixes | 3 files, 24 / 25, 28.40 s: only 11 (the page) red, on the four citations the edits moved (C46-C49), re-derived in section 41 (`c3fix-03`) |
+| breakage proofs | four sources broken on disk at once - `settle.ts` + a computed-key `attestation` literal; `app/lib/observability/access-audit-store.ts` created (`aggregateType: "agent.access-audit.v1"`) and a retention import appended to the core; the head comparison reduced to the revision; the dispatch inverted - then every source restored byte-for-byte (`sha256sum -c`: OK, OK, OK; the file removed) | 3 files, 8 failed / 17 passed, 28.19 s, exit 1, each red the intended one: limits 4, limits 10, read 4 (the head-only digest tamper admitted), pglite 4 (the `--read` argv ran the dry run), and read 2, 8, 10 and limits 11 as the same breakages' side effects (the retention import in the core's closure and specifiers; C47's anchor) (`c3fix-04`) |
+| green, final | the three C3 suites on the restored sources and this page, with `b21-closeout-statements`, `b23-closeout-statements` and `b24-c1-durable-trace` (its page case) | 6 files, 59 / 59, 43.28 s, exit 0 (`c3fix-05`); `b22-closeout-statements` (under `app/lib/computation/__tests__`) ran green in gate (m) below and in the last row |
+| gate (a), re-run | the three C3 suites with every C1 and C2 suite (11 files) | 126 / 126, 72.32 s, exit 0 (one case more than C3's 125: the PGlite suite's 4) |
+| gate (b), re-run | `app/lib/qualification/__tests__` (33 files) | 347 passed, 3 skipped (350), 91.30 s, exit 0 |
+| gate (c), re-run | `app/lib/agent/__tests__` (36 files; B11.5 case 12's write-primitive scan: no C3 suite spells one) | 415 / 415, 36.97 s, exit 0 |
+| gate (d), re-run | `app/lib/agent/orchestration/__tests__` (49 files) | 460 / 460, 61.94 s, exit 0 |
+| gates (e), (f), re-run | `app/lib/durable-workflow/__tests__`, `app/lib/execution-grant/__tests__` (5 files) | 4 files passed, 1 skipped; 23 passed, 2 skipped (25), 3.61 s, exit 0 |
+| gate (g), re-run | `app/lib/engineering/__tests__` (99 files) | 1107 / 1107, 69.67 s, exit 0 |
+| gates (h), (i), re-run | `app/lib/mcp` and `b14-4-ast-import-gates` (46 files) | 847 / 847, 124.69 s, exit 0; no AST gate timed out |
+| gates (j), (k), (l), re-run | `app/lib/auth/__tests__`, `app/api/__tests__`, `b18-b-execution-grant-route`, `b19-e-ci-job-scope` (70 files) | 1559 passed, 9 skipped (1568), 90.37 s, exit 0 |
+| gates (m), (n), re-run | `app/lib/computation/__tests__`, `app/lib/manufacturing-providers/__tests__` (57 files) | 55 files passed, 2 skipped; 687 passed, 18 skipped (705), 180.83 s, exit 0 |
+| gate (o), re-run | the database-delivery list exactly as CI selects it (26 files; no junit reporter; `DATABASE_URL` unset for the run) | 23 files passed, 3 skipped; 195 passed, 12 skipped (207), 133.64 s, exit 0 (one more than C3's 194: the PGlite suite's 4) |
+| tsc, re-run | `tsc --noEmit -p tsconfig.json` | first run exit 2: two TS2322 in `b24-c3-trace-read` 5 (`readTraceExport`'s `bounds` was typed `Partial<typeof TRACE_READ_BOUNDS>`, whose members are literal types, so a computed cap was refused); the option type widened in place to `{ maxOutputBytes?: number; readDeadlineMs?: number }` (no line moved); second run exit 0, no output |
+| eslint, re-run | the eleven changed `.ts` files | exit 0, no output |
+| generators, re-run | `generate-agent-artifacts`, `generate-b16-0-2-artifacts`, `generate-b17-control-inventory`, `generate-b11-artifacts`, `generate-action-toolability-matrix`, one after another under the lock | each exit 0 (47 registered / 36 exposed tools; the B16.0.2 CSV; 631 controls on 63 surfaces; B11 19 / 19 cases, 61 / 61 checks; 107 action records, 154 route coverage entries); `git status` afterwards names exactly the baseline's seventeen files - zero drift |
+| by hand | every changed file | LF with no control byte (a PCRE scan for CR and for C0 bytes); the sources restored after the breakage proofs verified by `sha256sum -c` |
+| final, re-run | the three C3 suites, the three closeout tripwires and `b24-c1-durable-trace` after this table was written | see the increment report: the page cannot carry its own last run |
+
+## 40. Suites
+
+| suite | `it(` | what it covers |
+|---|---|---|
+| `app/lib/qualification/__tests__/b24-c3-trace-read.test.ts` | 10 | the four kinds through their own stores; the counting Proxy and the adapter's refusals; scope isolation; corrupt digest, payload, key, type, the head-only tamper (`TRACE_READ_HEAD_MISMATCH`) and a store reader's own throw (`TRACE_READ_FAILED`); the PEM marker withheld, the key shape never `ok`, the whole-document withholding and its `omitted`; refusals, bounds, the 1 MiB cap, the whole-read deadline and the driver error; the production acknowledgement; the excluded kinds; the CLI with `env: {}`; the import gates (no auth module in the core), the constructor census and the guard's pattern |
+| `app/lib/qualification/__tests__/b24-c3-recorded-limits.test.ts` | 11 | one case per limit of section 34, each with its injected variant (case 4's over quoted and computed keys, assignment statements and calls naming the property; case 10's over a retention import and an access-audit store); the page's limits and citations |
+| `app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts` | 4 | the round trip over PostgreSQL; every public base table identical before and after a read, a refused read and a corrupt read; a payload changed in SQL `corrupt`; a foreign scope never returned; the script's dispatcher driven over PGlite (the read mode, the purge mode's dry run, the two refusals, the production predicate, the client's close) |
+
+The two unit suites ride A1's directory filter (`:228`) with no explicit entry; the PGlite suite is admitted by one explicit database-delivery
+entry (C50) and is under no prompt-to-gerber filter (`b19-e-ci-job-scope`, `CHAPTERS` C51). Locally the three take about 30 s together.
+The fixtures (`_b24-c3-fixtures.ts`, not a test file) build every record through its own producer: B11's recorder, B24-C2's collector,
+B24-C1's closed call record, B21-E2b's cascade.
+
+## 41. Citations
+
+Each row resolves on the line it names (`b24-c3-recorded-limits` 11): the anchor is a substring of that line at this commit.
+
+| id | file | line | anchor |
+|---|---|---|---|
+| C1 | `app/components/pcb/PcbEditor.tsx` | 60 | `approved-pcb-mutation-journal-idb` |
+| C2 | `app/lib/engineering/approved-mutation-journal.ts` | 49 | `(approved-mutation-journal-idb.ts),` |
+| C3 | `app/lib/engineering/agent-execution-journal.ts` | 2 | `[B18-B] The DURABLE agent-execution journal` |
+| C4 | `app/components/pcb/PcbEditor.tsx` | 63 | `agent-execution-journal-idb` |
+| C5 | `app/lib/auth/route-policy.ts` | 107 | `read("/api/replacement-authority", ["POST"]` |
+| C6 | `app/lib/auth/route-policy.ts` | 111 | `read("/api/pcb/apply-authorization", ["POST"]` |
+| C7 | `app/lib/auth/route-policy.ts` | 313 | `export function policyFor(pathname: string, method: string)` |
+| C8 | `app/api/pcb/apply-authorization/route.ts` | 26 | `import { selectorEnvelopeJsonRoute } from "@/app/lib/auth/route-handlers";` |
+| C9 | `app/api/pcb/apply-authorization/route.ts` | 10 | `It performs NO mutation, holds NO apply/commit authority` |
+| C10 | `app/api/replacement-authority/route.ts` | 5 | `READ/PROVE ONLY.` |
+| C11 | `app/lib/execution-grant/settle.ts` | 58 | `attestation: "browser-attested"` |
+| C12 | `app/lib/execution-grant/store.ts` | 175 | `attestation: transition.settlement.attestation` |
+| C13 | `app/lib/execution-grant/settle.ts` | 18 | `settlement: Omit<ExecutionGrantSettlement, "attestation"` |
+| C14 | `app/lib/engineering/execution-grant.ts` | 192 | `attestation: "browser-attested";` |
+| C15 | `app/lib/engineering/execution-grant.ts` | 114 | `lineageId: string; runId: string;` |
+| C16 | `app/lib/execution-grant/mint.ts` | 175 | `session: { ...request.session, runId: ctx.runId },` |
+| C17 | `app/lib/execution-grant/mint.ts` | 186 | `grant-mint:${ctx.runId}:${request.origin.callId}` |
+| C18 | `app/lib/engineering/execution-grant.ts` | 367 | `export function parsePublicExecutionGrant(raw: unknown)` |
+| C19 | `app/lib/engineering/execution-grant.ts` | 379 | `!str(session.runId)) return null;` |
+| C20 | `app/api/agent/__tests__/b18-b-execution-grant-route.test.ts` | 206 | `attestation: "browser-attested"` |
+| C21 | `app/lib/execution-grant/__tests__/b18-b-mint-consume-decisions.test.ts` | 268 | `attestation: "browser-attested"` |
+| C22 | `app/lib/manufacturing-providers/exchange-ledger.ts` | 62 | `readonly committedBy: string;` |
+| C23 | `app/lib/manufacturing-providers/exchange-ledger.ts` | 179 | `const ATTEMPT_KEYS = ["idempotencyKey", "planId", "planDigest", "providerIdempotencyKey", "requestDigest", "committedBy",` |
+| C24 | `app/lib/agent/evaluation.ts` | 13 | `from "./replay-capsule";` |
+| C25 | `app/lib/agent/evaluation-cases.ts` | 18 | `from "./replay-capsule";` |
+| C26 | `scripts/generate-b11-artifacts.ts` | 18 | `from "../app/lib/agent/replay-capsule";` |
+| C27 | `app/lib/agent/trace.ts` | 11 | `Digest-only traces deliberately CANNOT reconstruct model output` |
+| C28 | `app/lib/agent/trace.ts` | 13 | `which is never persisted from live runs.` |
+| C29 | `app/lib/mcp/server/request-trace.ts` | 15 | `export const MCP_SERVER_TRACE_RING_MAX = 1000;` |
+| C30 | `app/lib/mcp/server/request-trace.ts` | 117 | `while (ring.length > MCP_SERVER_TRACE_RING_MAX) ring.shift();` |
+| C31 | `app/lib/mcp/server/read-trace.ts` | 15 | `export const MCP_READ_TRACE_RING_MAX = 1_000;` |
+| C32 | `app/lib/mcp/server/read-trace.ts` | 212 | `while (ring.length > MCP_READ_TRACE_RING_MAX) ring.shift();` |
+| C33 | `app/lib/engineering/tool-invocation.ts` | 204 | `this.maxTraces = options?.maxTraces ?? 500;` |
+| C34 | `app/lib/engineering/tool-invocation.ts` | 442 | `if (this.traceLog.length > this.maxTraces) this.traceLog.shift();` |
+| C35 | `app/lib/mcp/server/request-trace.ts` | 124 | `export function setMcpServerTraceSinkFactory(` |
+| C36 | `app/lib/mcp/server/read-trace.ts` | 219 | `export function setMcpReadTraceSinkFactory(` |
+| C37 | `app/lib/agent/gateway.ts` | 493 | `new ReadToolInvocationService(registry)` |
+| C38 | `app/lib/mcp/server/read-call.ts` | 235 | `service = new ReadToolInvocationService(registry, { now: () => Date.now() });` |
+| C39 | `app/lib/observability/trace-read.ts` | 60 | `export const TRACE_READ_ACCESS_AUDIT = "not_recorded" as const;` |
+| C40 | `app/lib/observability/trace-read.ts` | 41 | `export const TRACE_READ_KINDS = Object.freeze(["run-trace", "run-trace-attribution", "llm-call-record", "specialist-trace"] as const);` |
+| C41 | `app/lib/observability/trace-read.ts` | 52 | `export const TRACE_READ_LIMITS = Object.freeze({ default: 20, max: 100 });` |
+| C42 | `app/lib/observability/trace-read.ts` | 53 | `export const TRACE_READ_BOUNDS = Object.freeze({ maxOutputBytes: 1_048_576, readDeadlineMs: 30_000 });` |
+| C43 | `app/lib/observability/trace-read.ts` | 54 | `export const TRACE_READ_EXIT = Object.freeze({ ok: 0, failed: 1, refused: 2, unavailable: 3 });` |
+| C44 | `app/lib/observability/trace-read.ts` | 57 | `export const TRACE_READ_PURGE_ONLY_FLAGS = Object.freeze(["--apply", "--confirm", "--as-of"] as const);` |
+| C45 | `app/lib/observability/trace-read.ts` | 204 | `export function readOnlyTraceRepository(` |
+| C46 | `app/lib/observability/trace-read.ts` | 360 | `export async function runTraceReadCli(deps: TraceReadCliDeps): Promise<number> {` |
+| C47 | `scripts/retention-purge.ts` | 75 | `if (selectsTraceRead(argv)) {` |
+| C48 | `scripts/retention-purge.ts` | 65 | `repositoryFor: () => new PostgresDurableWorkflowRepository()` |
+| C49 | `scripts/retention-purge.ts` | 88 | `if (ENTRY_MODULE) void main(process.argv.slice(2), process.env)` |
+| C50 | `.github/workflows/deterministic-manufacturing.yml` | 342 | `app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts` |
+| C51 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 54 | `const CHAPTERS = ["b19-", "b20-", "b21-", "b22-", "b23-", "b24-"] as const;` |
+| C52 | `app/lib/durable-workflow/types.ts` | 45 | `export interface DurableWorkflowRepository {` |
+| C53 | `app/lib/durable-workflow/types.ts` | 50 | `getReplay<TResult extends object = object>(` |
+| C54 | `app/lib/durable-workflow/types.ts` | 55 | `listOutbox(input?:` |
+| C55 | `app/lib/durable-workflow/server-repository.ts` | 14 | `async loadHead<T extends object = object>(value: DurableAggregateIdentity)` |
+| C56 | `app/lib/durable-workflow/server-repository.ts` | 17 | `async history<T extends object = object>(value: DurableAggregateIdentity)` |
+| C57 | `app/lib/durable-workflow/stable.ts` | 18 | `export function canonicalDurableScope(scope: DurableWorkflowScope)` |
+| C58 | `app/api/pcb-sync/manufacturing-summary.ts` | 11 | `[B16-A F12] ONE read policy for every durable subject.` |
+| C59 | `app/lib/agent/redaction.ts` | 67 | `export function containsSecretShapedText(text: string): boolean {` |
+| C60 | `app/lib/observability/llm-call-record.ts` | 124 | `export const secretShaped = (value: string): boolean =>` |
+| C61 | `app/lib/observability/run-trace-store.ts` | 150 | `async history(scope: DurableWorkflowScope, runId: string): Promise<RunTraceRecordEntry[]> {` |
+| C62 | `app/lib/observability/run-trace-attribution.ts` | 314 | `async load(scope: DurableWorkflowScope, traceId: string)` |
+| C63 | `app/lib/observability/llm-call-record-store.ts` | 117 | `async load(scope: DurableWorkflowScope, callId: string)` |
+| C64 | `app/lib/agent/orchestration/trace-attribution.ts` | 309 | `async history(scope: DurableWorkflowScope, runId: string): Promise<OrchestrationTraceRecordEntry[]> {` |
+| C65 | `app/lib/agent/orchestration/trace-attribution.ts` | 254 | `export const ORCHESTRATION_TRACE_AGGREGATE_TYPE = "agent.orchestration-trace.v1" as const;` |
+| C66 | `app/lib/agent/trace.ts` | 406 | `export function validateAgentRunTrace(untrusted: unknown): string[] {` |
+| C67 | `app/lib/agent/orchestration/trace-attribution.ts` | 204 | `export function validateOrchestrationTrace(untrusted: unknown): string[] {` |
+| C68 | `app/lib/agent/orchestration/store.ts` | 37 | `export const ORCHESTRATION_AGGREGATE_TYPE = "agent.orchestration-run.v1" as const;` |
+| C69 | `app/lib/agent/orchestration/store.ts` | 383 | `export const ORCHESTRATION_RESUME_AGGREGATE_TYPE = "agent.orchestration-resume.v1" as const;` |
+| C70 | `app/lib/agent/orchestration/store.ts` | 398 | `maxAnswerChars: 60_000` |
+| C71 | `app/lib/engineering/execution-grant.ts` | 26 | `export const EXECUTION_GRANT_AGGREGATE_TYPE = "agent.execution-grant.v1" as const;` |
+| C72 | `app/lib/engineering/execution-grant.ts` | 27 | `export const EXECUTION_GRANT_INDEX_AGGREGATE_TYPE = "agent.execution-grant-index.v1" as const;` |
+| C73 | `app/lib/engineering/execution-grant.ts` | 88 | `export const MAX_INSTRUCTION_EXCERPT = 240;` |
+| C74 | `app/lib/agent/autonomy-store.ts` | 27 | `export const AUTONOMY_AGGREGATE_TYPE = "agent.autonomy-settings.v1";` |
+| C75 | `app/lib/manufacturing-providers/exchange-ledger.ts` | 43 | `export const PROVIDER_EXCHANGE_AGGREGATE_TYPE = "mfg.provider-exchange.v1" as const;` |
+| C76 | `app/lib/computation/evidence-store.ts` | 35 | `export const COMPUTATION_EVIDENCE_AGGREGATE_TYPE = "computation.evidence.v1" as const;` |
+| C77 | `scripts/db-migrate.ts` | 41 | `function redactedTarget(url: string): string {` |
+| C78 | `scripts/db-migrate.ts` | 61 | `loadEnvLocal();` |
+| C79 | `scripts/db-migrate.ts` | 63 | `DATABASE_URL is not set (add it to .env.local or the environment)` |
+| C80 | `app/lib/observability/trace-read.ts` | 62 | `export const TRACE_READ_EXPORT_KEYS = Object.freeze(["schema", "generatedAt", "target", "scope", "kind", "accessAudit", "records", "refused", "truncated", "omitted"] as const);` |
+| C81 | `app/lib/observability/trace-read.ts` | 307 | `TRACE_READ_ENTRY_CODES.headMismatch` |
+| C82 | `app/lib/observability/trace-read.ts` | 262 | `return TRACE_READ_ENTRY_CODES.failed;` |
+| C83 | `app/lib/observability/trace-read.ts` | 331 | `const collected = await withDeadline(() => collect(` |
+| C84 | `app/lib/observability/trace-read.ts` | 332 | `const collectedCount = collected.records.length;` |
+| C85 | `app/lib/observability/trace-read.ts` | 192 | `function withDeadline<T>(work: () => Promise<T>, deadlineMs: number): Promise<T> {` |
+| C86 | `scripts/retention-purge.ts` | 73 | `overrides: Partial<RetentionPurgeDeps> = {}): Promise<number> {` |
+| C87 | `scripts/retention-purge.ts` | 69 | `close: async (opened) => { if (opened) await getSqlClient().end({ timeout: 5 }); },` |
+| C88 | `scripts/retention-purge.ts` | 87 | `const ENTRY_MODULE = /retention-purge(?:\.[cm]?[jt]s)?$/.test(process.argv[1] ?? "");` |
+| C89 | `scripts/retention-purge.ts` | 80 | `try { await deps.close(opened); } catch {` |
+| C90 | `app/lib/agent/redaction.ts` | 32 | `:\/\/[^\s@]*@(?:[^\s@]*@)*/gi,` |
+| C91 | `app/lib/db/client.ts` | 35 | `connect_timeout: 15,` |
+| C92 | `app/lib/db/client.ts` | 42 | `idle_timeout: 20,` |
+| C93 | `app/lib/auth/mode.ts` | 23 | `return environment.NODE_ENV === "production";` |
+| C94 | `app/lib/auth/deployment-profile.ts` | 21 | `export const DEPLOYMENT_PROFILE_ENV = "SIRKIT_DEPLOYMENT_ENV";` |
+| C95 | `app/lib/durable-workflow/server-repository.ts` | 9 | `function scopeWhere(scope: DurableWorkflowScope, table:` |
+| C96 | `drizzle/0031_rls_default_deny.sql` | 172 | `ALTER TABLE "durable_workflow_heads" ENABLE ROW LEVEL SECURITY;` |
+| C97 | `drizzle/0031_rls_default_deny.sql` | 15 | `nothing here forces one (the owner bypass; INFERRED for the real platform, LB-14).` |
+| C98 | `app/lib/observability/trace-read.ts` | 171 | `scope = canonicalDurableScope({ tenantId: values.get("--tenant")!` |
+| C99 | `app/lib/observability/trace-read.ts` | 369 | `if (deps.productionRuntime() && !command.acknowledge) return refuse("read_production_unacknowledged",` |
+
+## 42. For the lead
+
+Every text below is written out in full for a reserved file. Nothing here was written to `OWNER_DECISIONS.md`, `EXECUTION_LEDGER.md`,
+`PROGRAM_STATE.json`, `LIVE_BLOCKERS.md`, `discovery.md` or the B24 `README.md`. No OD-210 and no OD-211 heading exists at `600d1ba`
+(`grep '^## OD-21[01]' OWNER_DECISIONS.md` finds none), so each entry below is its one heading; the headings end at OD-232 (`:2972`), so the
+next free number is OD-233, one entry for every C3 choice beyond the drafts; OD-232 takes a dated amendment for its (g) and (h).
+
+### Closure clauses (each one dated line under its defect in `discovery.md`)
+
+- [B24-C3, 2026-10-09] D24-24: closed AS RECORDED by B24-C3 (OD-210 applied: nothing is built, the limitation is pinned): Tier 2 approvals stay browser-only - the approved-mutation and approved-PCB-mutation IndexedDB journals are imported by the PCB editor and reach no `app/api/**/route.ts` closure (pinned by exact path), the server's two apply-time checks (`POST /api/pcb/apply-authorization`, `POST /api/replacement-authority`) are authenticated-read rows with `authoritativeWrite: false` and the apply-authorization route's one runtime import is the canonical wrapper - so no server record ties a Tier 2 apply to a run (INFERRED, as far as code can show); Tier 1 settlement stays browser-attested, structurally (under `app/lib/execution-grant/` the only `attestation` literal is "browser-attested", `settle.ts:58`, the only other `attestation:` copies a stored settlement, `store.ts:175`, and `SettleRequest.settlement` omits the field), while the grant itself is server-held and bound to the run (`session.runId` set from the run context at mint, `mint.ts:175`, required by the browser-side parser) - the limit is the outcome's attestation, not a missing run-bound record; Tier 3's exchange ledger names `committedBy` and no run; each pinned by `b24-c3-recorded-limits` 1-7 with an injected variant turning each pin red; `observability-and-replay.md` part 3.
+- [B24-C3, 2026-10-09] D24-26: closed offline by B24-C3 (OD-211 applied; OD-233): stored traces have a reader and an export - B24-C2's purge CLI's `--read` mode (`scripts/retention-purge.ts`, the pure core `app/lib/observability/trace-read.ts`) reads one of four closed kinds (`run-trace`, `run-trace-attribution`, `llm-call-record`, `specialist-trace`) of one scope, each record through its store's digest-verified reader, over a read-only adapter of the durable-workflow repository (`listHeads`, `history`, `loadHead`, `loadRecord` only; every write and `getReplay`/`listOutbox` refused), as one JSON document on stdout under B16-A's read policy (`ok`/`absent`/`corrupt`/`withheld` with closed codes, never a payload, a message or a stack), a 1 MiB cap dropping whole records, a 30 s deadline on the whole read and on each repository call within it, `--limit` 1..100 default 20, and a production runtime refusing without `--acknowledge-unaudited-read`; the access audit stays deferred and stated (`accessAudit: "not_recorded"`, OD-111); the MCP and B05 rings (1,000; 1,000; 500) still die with their process or instance and replay still covers authored capsules only, each pinned (`b24-c3-recorded-limits` 8, 9, 10); proven in memory (`b24-c3-trace-read`) and on PGlite (`b24-c3-trace-read-pglite`); a read against a real store is BLOCKED-LIVE-QUALIFICATION (LB-14; LB-13 for production); `observability-and-replay.md` part 3.
+
+### Section 10 amendment (for `discovery.md`)
+
+- [B24-C3, 2026-10-09] B24-C3 landed the read mode of the purge CLI (D24-26; OD-211 applied; OD-233) and the recorded limits (D24-24 as recorded; OD-210 applied) in one run (lead decision D21); one workflow line (database-delivery `:342`); suites `b24-c3-trace-read`, `b24-c3-recorded-limits`, `b24-c3-trace-read-pglite` (section 7 wrote `b24-c-trace-read`; lead decision D17). Where the discovery and the code disagreed at `f663d71` (each re-read at `600d1ba`): D24-24 names one journal and one server check where the code has two of each (two Tier 2 IndexedDB journals plus the Tier 1 grant journal; two read-only server checks, both `read(...)` rows); the Tier 1 grant is server-held and run-bound (`session.runId`), the settlement alone browser-attested; section 2.5's "specialist trace store written only" was too strong - `DurableOrchestrationTraceStore.history` is digest-verified and had no production caller until this read mode; the rings are 1,000 per process for each MCP trace and 500 per `ReadToolInvocationService` instance. Pins moved by review, each in place with a dated note: the constructor census of `b24-c1-durable-trace` 11, `b24-c1-llm-call-record` 12 and `b24-c2-attribution` 12 (+ `scripts/retention-purge.ts`, D11); `b24-c2-retention` 1 (the script's `load-env-local` specifier), 5 (`--read` refused by the purge parser alone) and 7 (the script's constructor and loader text) (D12); B21's C49, C93, C94 (+1); `ci-admission.md:185` (+1); A1's insertion-table row; `retention-cli.ts:13` and `retention-and-deletion.md:138` (dated notes). The adversarial review's eleven confirmed findings were closed test-first in the same commit: the dispatcher is driven over PGlite (`b24-c3-trace-read-pglite` 4), the 30 s deadline is on the whole read, a withheld document's `omitted` counts every collected record, the database client is ended after a read, `TRACE_READ_HEAD_MISMATCH` and `TRACE_READ_FAILED` are reached, the Tier 1 pin reads quoted and computed keys, assignment statements and calls naming the property, the no-access-audit filters show their strength, the two limits of the read mode's access control are recorded (the credential is the only authorization; the production refusal keys on the runtime, not the target), OD-233 (i) is reworded, and the hand check that stood in for the pre-edit run of the B22/B23 page suites is recorded as a deviation. No migration (32), no census, tool-count, classification or flag move; no new dependency. `observability-and-replay.md` part 3.
+
+## OD-210 — A server-side record of Tier 2 approvals, as applied (B24-C3, 2026-10-09)
+
+- Not built in B24: a server-side record of Tier 2 approvals changes the approval flow (the browser's prepare-before-commit journals and the server's read-only apply-time checks), which is out of B24's scope. Recorded as a limitation and PINNED: `b24-c3-recorded-limits` 1-3 go red when a route's runtime closure reaches an approved-mutation IndexedDB journal, when either apply-time check gains write authority or when the apply-authorization route gains a second runtime import.
+- The Tier 1 settlement stays browser-attested, stated and pinned structurally (`b24-c3-recorded-limits` 4: the one `attestation` literal under `app/lib/execution-grant/` is "browser-attested"; the settle request carries no such field); the grant itself is server-held and bound to the run (`session.runId` set at mint, `b24-c3-recorded-limits` 5), so the limitation is the outcome's attestation, not a missing run-bound record.
+- Tier 3's exchange ledger names its committer and no run (`b24-c3-recorded-limits` 7); nothing of it moves.
+- The alternative - a server-held Tier 2 approval record written by the apply-time check and tied to the run - is the owner's, outside B24.
+
+## OD-211 — Who may read stored traces, as applied (B24-C3, 2026-10-09)
+
+- No new route, MCP tool, agent tool or UI reads a stored trace (pinned: `trace-read.ts` and `scripts/retention-purge.ts` are in no route, MCP server, loop, gateway or orchestration closure, `b24-c3-trace-read` 10). Operator access is the purge CLI's read mode only: `scripts/retention-purge.ts --read --kind <kind> --tenant <id> --project <id> --branch <id> [--run <runId>] [--limit <1..100>] [--acknowledge-unaudited-read]`, over the pure core `app/lib/observability/trace-read.ts`, which the CLI alone imports.
+- The read is read-only by construction (a read-only adapter over the durable-workflow repository: four SELECT-only methods, every write and `getReplay`/`listOutbox` refused), reads four closed kinds through their stores' digest-verified readers, prints one JSON document on stdout under B16-A's read policy, withholds any secret-shaped rendering, caps the output at 1 MiB (whole records dropped), bounds every repository call by 30 s and refuses in a production runtime without `--acknowledge-unaudited-read`.
+- The access audit is deferred and stated: the export says `accessAudit: "not_recorded"` and no access record is written (OD-111 stands). The alternative (an access-audit aggregate the read mode writes) is the owner's.
+- The scope flags (`--tenant`, `--project`, `--branch`) are the operator's unauthenticated assertions: the database credential is the only authorization, so a `DATABASE_URL` holder reads any tenant's traces (the core has no auth module in its closure, the repository filters by the asserted scope over the process's one connection, and the durable tables' row security has no policy and no FORCE, which the owning role bypasses), and the export carries no operator identity. The alternative - a membership check against the scope, or OD-192's application role - is the owner's.
+- The production refusal keys on the runtime's declared profile (`SIRKIT_DEPLOYMENT_ENV` staging or production) or `NODE_ENV=production`, never on the database the URL names: a development-profile process whose `.env.local` names a production database reads without the acknowledgement. OD-191's rule is the operator's, not the code's.
+- Never run by the builder against a live database (OD-191, LB-14): proven in memory and on PGlite only.
+
+## OD-233 — B24-C3: stated choices beyond its task text, as applied (B24-C3, 2026-10-09)
+
+- (a) The readable kinds are exactly `run-trace`, `run-trace-attribution`, `llm-call-record` and `specialist-trace`; every other aggregate type - the orchestration run and resume records (the latter holds up to 60,000 characters of the coordinator's answer), the grants and their index (the 240-character instruction excerpt), the autonomy setting, the provider exchange, the computation evidence, the trace salt - is `read_kind_unknown` with zero repository calls, and the core imports no store of theirs.
+- (b) A production runtime (the purge's predicate: A1's `staging` or `production` profile, or `NODE_ENV=production`) refuses without `--acknowledge-unaudited-read` (`read_production_unacknowledged`); with it the read proceeds and the export states `accessAudit: "not_recorded"`.
+- (c) `--limit` is per mode: 1..100 aggregates, default 20, with `--read`; the purge's 1..10000, default 1,000, untouched (lead decision D12). The output is capped at 1 MiB UTF-8 by dropping whole records from the end (`truncated`, `omitted`); the WHOLE read has a 30 s deadline from its first repository call, and so has each repository call within it (a read of n aggregates is bounded by the one deadline, not by n of them). Exit codes: 0 every record `ok` or `absent`; 1 any `corrupt` or `withheld`; 2 refused before reading; 3 `read_unavailable` (a deadline, or a driver error at the repository's opening or after the first repository call), the export still one JSON document with the code and no driver text.
+- (d) The export goes to stdout only; nothing is written to a file, and the CLI prints no driver text at all (stronger than `db-migrate.ts`'s redaction of the URL's user and password).
+- (e) No database-level read-only session or role is used: the writes are refused by the adapter (`TRACE_READ_WRITE_REFUSED`; `getReplay`/`listOutbox` `TRACE_READ_METHOD_REFUSED`) and the no-write property is proven on PGlite over every base table of the public schema. The alternative (a read-only database role for the operator, OD-192's application role) is the owner's.
+- (f) `--run` selects one run-id-keyed aggregate (`run-trace` by run id; `specialist-trace` by its per-task run id) and is refused `read_run_unsupported` for the kinds keyed by a trace id or a call id and for a coordinator run id on a specialist trace: the operator lists the scope and reads each record's run id.
+- (g) A read that does not complete is one `refused` entry keyed by the kind, status `unavailable`, code `read_unavailable`, inside the closed keys; a `--run` read of a missing aggregate is `absent` `TRACE_READ_ABSENT` (exit 0); a head whose payload names another aggregate is `TRACE_READ_KEY_MISMATCH`, a chain whose last record is not the head `TRACE_READ_HEAD_MISMATCH`, a store reader's throw with no bounded code `TRACE_READ_FAILED` (each reached by `b24-c3-trace-read` 4), and a store's refusal carries the store's own bounded code.
+- (h) The withholding rule is the redaction authority's `containsSecretShapedText` plus the call record's `secretShaped` (the PEM marker and the other key shapes B24-A2's scan knows), applied to each record's rendering and again to the whole document; a whole-document hit withholds every record behind one `withheld` entry keyed by the kind, `omitted` counting every collected record (kept and dropped by the cap). The credential-in-URL pattern crosses record boundaries in compact JSON, so benign content of that shape is over-withheld: the policy's safe side, stated.
+- (i) The wrapper loads `.env.local` for the read mode only (`scripts/db-migrate.ts`'s order: the arguments parse first), constructs `PostgresDurableWorkflowRepository` for that mode (D11: the constructor census is now the durable runtime and this script) and runs its dispatcher only when it is the entry module (`process.argv[1]` names it, with or without a suffix); the dispatcher `main` (argv, env, overrides) takes its seams - the loader, the writers, `repositoryFor`, the purge port, the clock, the production predicate and the client's close - as overrides defaulting to the operator's real ones, so a suite imports and drives it (`b24-c3-trace-read-pglite` 4). The purge mode's behaviour is unchanged: the same `runRetentionCli` call with the same port, clock, writers and production predicate, now reached through the dispatcher and the entry guard, the predicate evaluated when the dispatcher runs (the invocation lines were re-authored; the purge parser, port and runner are B24-C2's).
+- (j) The specialist trace's aggregate key formula is restated in the core (`specialistTraceAggregateKey`) because the orchestration store's key function is module-local; `b24-c3-trace-read` 1 pins the two equal on a stored head.
+- (k) Pins moved in place by review beyond the task's list: the constructor census of `b24-c1-durable-trace` 11, `b24-c1-llm-call-record` 12 and `b24-c2-attribution` 12; `b24-c2-retention` 1 and 7 (the script's loader specifier and text); `retention-cli.ts:13`; `retention-and-deletion.md:138`.
+- (l) After the read mode, when a repository was opened, the dispatcher ends the process's database client (`getSqlClient().end({ timeout: 5 })`): a deadline leaves a statement pending on its socket, which would otherwise keep the process alive until the server answered. Pinned by the PGlite case's stub (`close(true)` after a read, `close(false)` after a refusal, no close after the purge mode) and by text; its effect on a live socket is UNKNOWN (LB-14). The purge mode ends no client (B24-C2's behaviour, unchanged).
+- (m) The entry guard's pattern is `/retention-purge(?:\.[cm]?[jt]s)?$/` - the script's path with or without a suffix (`tsx scripts/retention-purge` resolves `argv[1]` without one), never vitest's entry, another script or a backup copy - pinned parsed from the source (`b24-c3-trace-read` 10). Its live behaviour under a given loader is UNKNOWN until the lead's run.
+- (n) The Tier 1 structural pin reads every assignment of an `attestation` property under `app/lib/execution-grant/`: object-literal members with a plain, quoted or computed key, assignment statements to `.attestation` or `["attestation"]`, and any call naming the property by string (`Object.defineProperty`, `Reflect.set`), the last class refused whatever its value; a read of the property is no assignment.
+
+### OD-232 amendment
+
+- [B24-C3, 2026-10-09] (g) and (h), as amended by B24-C3 (OD-211, OD-233): the wrapper `scripts/retention-purge.ts` now loads `.env.local` for its READ mode only (the purge mode still loads none) and constructs `PostgresDurableWorkflowRepository` for that mode, so the one construction site besides `durable-workflow/runtime.ts` is the CLI (D11 as B24-C3's task planned it); the retention port and the chat runtimes still construct none.
+
+### The LB-14 note
+
+- [B24-C3, 2026-10-09] LB-14 note: B24-C3's read mode (`scripts/retention-purge.ts --read`, `runTraceReadCli`) never ran against a live database and never will by the builder: its only runs are `b24-c3-trace-read`'s (in memory) and `b24-c3-trace-read-pglite`'s on a disposable in-process PostgreSQL (the four kinds round-trip; every public base table identical before and after a read, a refused read and a corrupt read; a payload edited in SQL `corrupt`; a foreign scope never returned). A production server's listing order, jsonb round trip and statement timeouts under the read's 30 s deadline stay UNKNOWN until an operator runs it against an owner-supplied disposable project.
+
+### The README row
+
+| B24-C3 readers and recorded limits (D24-24 as recorded, D24-26; OD-210, OD-211, OD-233) | `observability-and-replay.md` (part 3); code `app/lib/observability/trace-read.ts` (new), `scripts/retention-purge.ts` (the `--read` dispatch; its dispatcher driven over PGlite), in place `app/lib/durable-workflow/retention-cli.ts:13`; workflow `deterministic-manufacturing.yml:342`; suites `b24-c3-trace-read` (10), `b24-c3-recorded-limits` (11), `b24-c3-trace-read-pglite` (4) | done 2026-10-09 offline, the review round's eleven findings closed in-tree; the read against a real store BLOCKED-LIVE-QUALIFICATION (LB-14, LB-13); census 168 / 165 / 3 / 0, counts 47 / 36 / 9 / 27, 107 action records, 32 migrations; `accessAudit: "not_recorded"` |
+
+### The ledger paragraph
+
+### B24-C3 - readers and recorded limits (2026-10-09 local; increment workflow + lead; this commit)
+
+Test-first on `chapter/b24-production-qualification` from `600d1ba`, one run (D21). Red first: with the core set aside, `b24-c3-trace-read`
+and `b24-c3-trace-read-pglite` failed to load (2 files, no tests), and the one operator CLI at HEAD held no `--read` (C2's parser refused it
+as unknown, `b24-c2-retention` 5); `b24-c3-recorded-limits` ran 1 failed (the page) / 10 passed before part 3 existed, each code-fact case
+red over its injected variant inside the case. `app/lib/observability/trace-read.ts` is the pure core: a read-only adapter over the
+durable-workflow repository (`listHeads`, `history`, `loadHead`, `loadRecord` under a 30 s deadline; every write and `getReplay`/`listOutbox`
+refused), the four closed kinds (`run-trace`, `run-trace-attribution`, `llm-call-record`, `specialist-trace`) read through their stores'
+digest-verified readers, B16-A's `ok`/`absent`/`corrupt`/`withheld` policy with closed codes and no payload, message or stack, the redaction
+authority's and the call record's secret shapes over each record and again over the whole document, a 1 MiB cap dropping whole records, the
+exit codes 0/1/2/3 and the production acknowledgement; `scripts/retention-purge.ts` gains the `--read` dispatch (`.env.local` loaded for the
+read mode only, `DATABASE_URL` named only, the target as host:port/database, no driver text, the PostgreSQL repository constructed here - D11's
+second site - and the dispatcher called only as the entry module); no reader was added to a C1 or C2 store (each had one). One
+database-delivery line (`:342`) moved B21's C49, C93, C94 and `ci-admission.md:185` +1 in place with A1's insertion-table row; pins moved in
+place with dated notes: the constructor census of `b24-c1-durable-trace` 11, `b24-c1-llm-call-record` 12 and `b24-c2-attribution` 12 (+ the
+CLI, D11), `b24-c2-retention` 1, 5 and 7 (the script's loader and constructor text, `--read` refused by the purge parser alone, D12),
+`retention-cli.ts:13`, `retention-and-deletion.md:138` - the four suites red before the move (5 failed / 68 passed, exactly the five pins) and
+green after (73 / 73). Suites `b24-c3-trace-read` (10), `b24-c3-recorded-limits` (11), `b24-c3-trace-read-pglite` (4): 25 / 25 (the first
+green attempt 5 failed / 8 passed on the suites' own helper bugs, fixed in the tests). The adversarial review's eleven confirmed findings
+were closed test-first in this tree (section 39, review round): the inverted dispatch left every pin green (the counterexample, 20 / 20),
+the extended suites went red on the unfixed code (4 failed / 17 passed), four sources were broken on disk at once and each intended case
+went red (8 failed / 17 passed), every source restored byte-for-byte by sha256; the fixes - the dispatcher `main` (argv, env, overrides)
+driven over PGlite, the whole-read deadline, the withheld document's `omitted`, the client's close, `TRACE_READ_HEAD_MISMATCH` and
+`TRACE_READ_FAILED` reached, the Tier 1 pin over quoted and computed keys, assignment statements and calls, the no-access-audit variants,
+the entry guard's suffix-optional pattern - and the records (the two limits of the read mode's access control, OD-233 (i) reworded, the
+pre-edit hand check as a deviation); the gate sets on the final tree, re-run after the review round
+(`observability-and-replay.md` section 39): C1-C3 126; qualification 347 + 3; agent 415; orchestration 460; durable and grant 23 + 2;
+engineering 1107; mcp and B14.4 847; auth, api and B19-E 1559 + 9; computation and manufacturing 687 + 18; database-delivery 195 + 12; tsc 0
+(after one in-place type widening in the core); eslint 0 on 11 files; five generators zero drift. The limits of D24-24 are recorded and pinned (OD-210), the read mode is OD-211 as applied,
+the choices beyond the drafts OD-233. Census 168 / 165 / 3 / 0, counts 47 / 36 / 9 / 27, 107 action records, 32 migrations unchanged; no new
+dependency; no UI control; every live step BLOCKED-LIVE-QUALIFICATION (LB-14, LB-13).
+
+### The lead's runs (not run by the builder)
+
+- **CI on the pushed commit:** prompt-to-gerber's duration against its 25-minute limit (C3's two unit suites ride A1's directory filter;
+  locally about 25 s together) - within five minutes of the limit, STOP (OD-30; the split is B24-D1's); database-delivery against its 15
+  (one more PGlite file, about 3 s locally).
+- **The B17-A browser suite:** not needed - C3 changes no UI and no control (`generate-b17-control-inventory`: no drift, section 39).
+- **The entry guard's positive branch** (review finding security-5; the builder never runs the script as the entry module, OD-191): in a
+  fresh worktree with NO `.env*` file and no `DATABASE_URL` in the shell, `pnpm exec tsx scripts/retention-purge.ts --read --kind run-trace
+  --tenant t --project p --branch b` must exit 2 with the one stderr line `REFUSED read_database_url_missing: DATABASE_URL is not set (add it
+  to .env.local or the environment). - nothing was read.` and nothing on stdout; the same without the suffix (`scripts/retention-purge`)
+  by the suffix-optional guard; and a bare `pnpm exec tsx scripts/retention-purge.ts --kind run-trace` must exit 2 with `REFUSED
+  RETENTION_ARGUMENT_UNKNOWN`. Each refusal is before any repository, so nothing is contacted. Record the three exit codes against section
+  36's guard line (UNKNOWN until then).
+- **The pre-edit run of the B22/B23 page suites** (review finding security-7; section 39's deviation note): either accept the hand check -
+  the three anchors `:226`, `:227`, `:335` verified unmoved before and after the insertion at `:342` - and keep the note as the record, or run
+  `b22-a1-page`, `b23-b-dfm-quote-flow-page`, `b23-d-physical-evidence-contract` and `b23-a-provider-admission` once at `600d1ba` (the
+  lead's `git stash`, never the builder's) and add their counts to the note.
+- **Never run** `scripts/retention-purge.ts --read` against any database (OD-191, OD-211, LB-14).

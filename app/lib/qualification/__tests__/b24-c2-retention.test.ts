@@ -12,7 +12,7 @@
  *  2. allowlist-only: the purgeable rows are exactly the five day-counted classes; nothing else is ever queried or deleted;
  *  3. the planner's cutoffs on an injected clock, the per-run limit across types, the digest over exactly the set to delete;
  *  4. the CLI: dry run by default (nothing deleted), `--apply` without or with a stale `--confirm` refused;
- *  5. the closed flags: `--read` refused (B24-C3 moves this case by review, D12), an unknown flag, a repeated flag, a malformed value, each
+ *  5. the closed flags: `--read` refused by the purge parser alone ([B24-C3, 2026-10-09] moved by review, D12: the wrapper dispatches `--read` to the read mode before this parser sees it), an unknown flag, a repeated flag, a malformed value, each
  *     before any repository call;
  *  6. a dry run then an apply at the same `--as-of` matches and deletes exactly the plan; an apply at a later `--as-of` is refused; an
  *     `--as-of` after the clock's now is refused;
@@ -190,7 +190,7 @@ describe("[B24-C2] the retention policy and the aggregate census (D24-13, OD-202
       expect(closure, file).not.toContain("app/api/chat/route.ts");
     }
     expect([...runtimeDeclarationSpecifiers("app/lib/durable-workflow/retention.ts", map.get("app/lib/durable-workflow/retention.ts")!)].filter((specifier) => /postgres|pglite|disposable/i.test(specifier))).toEqual([]);
-    expect([...runtimeDeclarationSpecifiers("scripts/retention-purge.ts", map.get("scripts/retention-purge.ts")!)].filter((specifier) => /postgres|pglite|disposable|load-env/i.test(specifier))).toEqual([]);
+    expect([...runtimeDeclarationSpecifiers("scripts/retention-purge.ts", map.get("scripts/retention-purge.ts")!)].filter((specifier) => /postgres|pglite|disposable|load-env/i.test(specifier))).toEqual(["../app/lib/load-env-local"]); // [B24-C3, 2026-10-09] reviewed pin move (D12): the wrapper loads .env.local for its READ mode only (db-migrate's order, handed to the read runner as its loader); the purge mode never calls it, and no postgres, pglite or disposable specifier joins; was []
     expect(importClosure(map, ["app/api/chat/route.ts"]).has("app/lib/durable-workflow/retention.ts")).toBe(false); // no retention module in the chat route's closure
     expect(map.get("app/lib/durable-workflow/index.ts")!).toContain('export * from "./retention";');
     // the moduleReferences helper is exercised (the census is not vacuous on an unresolvable specifier)
@@ -266,7 +266,7 @@ describe("[B24-C2] the purge CLI (OD-202; dry run by default, confirmation alway
     expect(stale.out.some((line) => line.startsWith("planDigest: "))).toBe(true); // the current digest is printed, so the operator can confirm it
   });
 
-  it("5. the closed flags: --read (B24-C3 moves this case by review, D12), an unknown flag, a stray word, a repeated flag, a malformed --limit or --as-of, --confirm without --apply and --apply without --as-of are each refused with exit 2 BEFORE any repository call", async () => {
+  it("5. the closed flags: --read is refused by the PURGE parser alone ([B24-C3, 2026-10-09] reviewed pin move, D12: scripts/retention-purge.ts dispatches --read to the read mode before this parser sees it, and --read beside a purge flag is refused there before any repository call, b24-c3-trace-read 6), an unknown flag, a stray word, a repeated flag, a malformed --limit or --as-of, --confirm without --apply and --apply without --as-of are each refused with exit 2 BEFORE any repository call", async () => {
     expect([...RETENTION_CLI_FLAGS]).toEqual(["--apply", "--confirm", "--limit", "--as-of"]);
     for (const [argv, code] of [
       [["--read"], "RETENTION_ARGUMENT_UNKNOWN"], [["--read", "run-1"], "RETENTION_ARGUMENT_UNKNOWN"], [["--force"], "RETENTION_ARGUMENT_UNKNOWN"], [["apply"], "RETENTION_ARGUMENT_UNKNOWN"],
@@ -335,9 +335,9 @@ describe("[B24-C2] the purge CLI (OD-202; dry run by default, confirmation alway
     const script = read("scripts/retention-purge.ts");
     expect(script).toContain("runRetentionCli(");
     expect(script).toContain("new PostgresRetentionPort()");
-    expect(script).not.toMatch(/new\s+PostgresDurableWorkflowRepository\s*\(/);
+    expect(script).toMatch(/repositoryFor: \(\) => new PostgresDurableWorkflowRepository\(\)/); // [B24-C3, 2026-10-09] reviewed pin move (D11): the read mode's repository, constructed in the wrapper only and handed to the read-only adapter; was not.toMatch
     expect(script).not.toContain("DATABASE_URL");
-    expect(script).not.toContain("loadEnvLocal");
+    expect(script.match(/loadEnvLocal/g)).toHaveLength(2); // [B24-C3, 2026-10-09] reviewed pin move (D12): imported and handed to the read runner only (`loadEnv: loadEnvLocal`); the purge mode still loads no .env.local; was not.toContain
     expect(read("package.json")).not.toContain("retention-purge"); // no package.json script
     expect(read(".env.example")).not.toMatch(/RETENTION/); // no environment name
   });

@@ -620,7 +620,7 @@ describe("[B24-C2] the hash pins and the import gates", () => {
     expect(importersOf(map, STORE).filter((file) => file !== TRACE_RUNTIME && !file.startsWith("app/lib/observability/"))).toEqual([]);
     for (const pure of [ATTRIBUTION_STORE, SALT_STORE, COLLECTOR]) expect(importersOf(map, pure).filter((file) => file !== ATTRIBUTION_RUNTIME && !file.startsWith("app/lib/observability/")), pure).toEqual([]);
     expect(importersOf(map, PRICE_TABLE)).toEqual([ATTRIBUTION_RUNTIME]);
-    expect([...map].filter(([, source]) => /new\s+PostgresDurableWorkflowRepository\s*\(/.test(source)).map(([path]) => path)).toEqual(["app/lib/durable-workflow/runtime.ts"]); // D11: neither runtime constructs one
+    expect([...map].filter(([, source]) => /new\s+PostgresDurableWorkflowRepository\s*\(/.test(source)).map(([path]) => path).sort()).toEqual(["app/lib/durable-workflow/runtime.ts", "scripts/retention-purge.ts"]); // D11: neither runtime constructs one [B24-C3, 2026-10-09] reviewed pin move: + the purge CLI, whose read mode constructs the PostgreSQL repository for its read-only adapter (b24-c3-trace-read 10 pins the pair); was the durable runtime alone
     const route = read(ROUTE).split(NEWLINE);
     expect(route.length - 1).toBe(562);
     expect(route.flatMap((line, index) => (line.includes("[B21 E4]") ? [index + 1] : []))).toEqual([35, 504, 507]);

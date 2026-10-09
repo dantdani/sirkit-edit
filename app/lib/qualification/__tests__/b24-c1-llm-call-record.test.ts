@@ -714,7 +714,7 @@ describe("[B24-C1] the census and the import gates (section 7)", () => {
     expect(importers).toEqual(["app/lib/agent/adapters.ts", "app/lib/embeddings.ts", "app/lib/evaluation/live-contract-clients.ts", "app/lib/llm/anthropic-provider.ts", "app/lib/llm/openai-provider.ts", "app/lib/parts-search.ts"]);
   });
 
-  it("12. the import gates: the seam is pure (node:async_hooks, node:crypto, ../llm/types, ../llm/errors); each call-point module's closure is its a405db9 closure plus the seam, llm/errors and llm/types only, and holds no durable runtime, server repository, call-record store or runtime; the seam's importers are the four call points and app/lib/observability/; the store's are the runtime and app/lib/observability/; the runtime's one production importer is instrumentation.ts; no module constructs a PostgreSQL repository but the durable runtime; an injected store import in a call point is caught, a type-only import is not", { timeout: 180_000 }, async () => {
+  it("12. the import gates: the seam is pure (node:async_hooks, node:crypto, ../llm/types, ../llm/errors); each call-point module's closure is its a405db9 closure plus the seam, llm/errors and llm/types only, and holds no durable runtime, server repository, call-record store or runtime; the seam's importers are the four call points and app/lib/observability/; the store's are the runtime and app/lib/observability/; the runtime's one production importer is instrumentation.ts; no module constructs a PostgreSQL repository but the durable runtime and the purge CLI's read mode ([B24-C3, 2026-10-09] reviewed pin move, D11); an injected store import in a call point is caught, a type-only import is not", { timeout: 180_000 }, async () => {
     const map = files();
     expect([...runtimeDeclarationSpecifiers(SEAM, map.get(SEAM)!)].sort()).toEqual(["../llm/errors", "../llm/types", "node:async_hooks", "node:crypto"]);
     expect([...runtimeDeclarationSpecifiers(CALL_STORE, map.get(CALL_STORE)!)].sort()).toEqual(["../durable-workflow/stable", "../engineering/stable", "./llm-call-record"]);
@@ -729,7 +729,7 @@ describe("[B24-C1] the census and the import gates (section 7)", () => {
     expect(importersOf(map, CALL_STORE).filter((file) => !file.startsWith("app/lib/observability/"))).toEqual([]);
     expect(importersOf(map, CALL_STORE)).toContain(CALL_RUNTIME);
     expect(importersOf(map, CALL_RUNTIME)).toEqual(["instrumentation.ts"]);
-    expect([...map].filter(([, source]) => /new\s+PostgresDurableWorkflowRepository\s*\(/.test(source)).map(([path]) => path)).toEqual(["app/lib/durable-workflow/runtime.ts"]);
+    expect([...map].filter(([, source]) => /new\s+PostgresDurableWorkflowRepository\s*\(/.test(source)).map(([path]) => path).sort()).toEqual(["app/lib/durable-workflow/runtime.ts", "scripts/retention-purge.ts"]); // [B24-C3, 2026-10-09] reviewed pin move (D11): + the purge CLI, whose read mode constructs the PostgreSQL repository for its read-only adapter (b24-c3-trace-read 10 pins the pair); was the durable runtime alone
     const probe = (path: string, append: string): FileMap => new Map(map).set(path, `${map.get(path)!}\n${append}\n`);
     const router = "app/lib/llm/router.ts";
     const caught = importClosure(probe(router, 'import { DurableLlmCallRecordStore } from "../observability/llm-call-record-store";\nexport const b24c1Probe = DurableLlmCallRecordStore;'), [router]);

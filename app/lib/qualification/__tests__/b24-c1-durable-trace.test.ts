@@ -466,7 +466,7 @@ function importersOf(map: FileMap, target: string): string[] {
 const reached = (map: FileMap, entry: string): string[] => { const closure = importClosure(map, [entry]); return NEVER.filter((never) => closure.has(never)).map((never) => closure.get(never)!.join(" -> ")); };
 
 describe("[B24-C1] the import gate: durable reach stays at the composition root (section 7)", () => {
-  it("11. the closures of the loop, the gateway, the trace contract, the recorder and the store reach none of the durable runtime, the server repository, the database client or trace-runtime; trace-runtime's one importer is the chat route (its line 40) and the store's are trace-runtime and app/lib/observability/ only; their runtime imports are exactly the reviewed ones; the one PostgreSQL repository construction is the durable runtime's; an injected loop-side import of trace-runtime and a store-side import of the durable runtime are caught with their chains, a type-only import is not", { timeout: 180_000 }, async () => {
+  it("11. the closures of the loop, the gateway, the trace contract, the recorder and the store reach none of the durable runtime, the server repository, the database client or trace-runtime; trace-runtime's one importer is the chat route (its line 40) and the store's are trace-runtime and app/lib/observability/ only; their runtime imports are exactly the reviewed ones; the PostgreSQL repository constructions are the durable runtime's and the purge CLI's ([B24-C3, 2026-10-09] reviewed pin move, D11: was the durable runtime's alone); an injected loop-side import of trace-runtime and a store-side import of the durable runtime are caught with their chains, a type-only import is not", { timeout: 180_000 }, async () => {
     const map = files();
     for (const entry of PURE_ENTRIES) {
       expect(map.has(entry), entry).toBe(true);
@@ -485,7 +485,7 @@ describe("[B24-C1] the import gate: durable reach stays at the composition root 
     expect(read(ROUTE).split(NEWLINE)[39]).toContain('import "./trace-runtime";');
     expect([...runtimeDeclarationSpecifiers(STORE, map.get(STORE)!)].sort()).toEqual(["../agent/trace", "../durable-workflow/stable", "../engineering/stable"]);
     expect([...runtimeDeclarationSpecifiers(TRACE_RUNTIME, map.get(TRACE_RUNTIME)!)].sort()).toEqual(["@/app/lib/agent/trace-recorder", "@/app/lib/durable-workflow/runtime", "@/app/lib/observability/run-trace-store"]);
-    expect([...map].filter(([, source]) => /new\s+PostgresDurableWorkflowRepository\s*\(/.test(source)).map(([path]) => path)).toEqual(["app/lib/durable-workflow/runtime.ts"]);
+    expect([...map].filter(([, source]) => /new\s+PostgresDurableWorkflowRepository\s*\(/.test(source)).map(([path]) => path).sort()).toEqual(["app/lib/durable-workflow/runtime.ts", "scripts/retention-purge.ts"]); // [B24-C3, 2026-10-09] reviewed pin move (D11): + the purge CLI, whose read mode constructs the PostgreSQL repository for its read-only adapter (b24-c3-trace-read 10 pins the pair); was the durable runtime alone
     // the probes
     const loop = "app/lib/agent/loop.ts";
     const probe = (path: string, append: string): FileMap => new Map(map).set(path, `${map.get(path)!}${NEWLINE}${append}${NEWLINE}`);
