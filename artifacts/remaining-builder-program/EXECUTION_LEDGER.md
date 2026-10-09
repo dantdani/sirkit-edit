@@ -5171,3 +5171,12 @@ Test-first on `chapter/b24-production-qualification` from `600d1ba`, one run (D2
   as-of, limit 1000, runtime non-production) and failed closed with the text-free `FAILED RETENTION_RUN_FAILED: the run stopped; an
   aggregate is deleted whole or not at all, so nothing is left partial.`, exit 1 - no URL, credential or driver text on either stream
   (CONFIRMED; logs `c3-guard-{a,b,c}.{stdout,stderr}`). The worktree was removed afterwards.
+- B24-C3 fix (2026-10-09, the lead): B24-C3's CI run (37905772899) was red on the `secret-scan` job alone - B24-A2's tree scan
+  reported `app/lib/qualification/__tests__/b24-c3-trace-read.test.ts:75 connection-string-password`: the fake connection string was
+  a template literal assigned to `FAKE_URL`, the exact source shape the rule reads (a `postgres://user:pass@` literal under a name
+  ending in `_URL`); the lead's local commit scan had flagged the same line and the lead had allowed it by review, which CI's scanner
+  does not. Fixed in the test only: the constant is `FAKE_CONNECTION`, assembled from joined fragments at run time (B16-B: a test
+  never spells a gate form); the scanner is the check - red before (one hit), green after (exit 0, the eight allowlisted lines
+  unchanged); `b24-c3-trace-read`, `b24-c3-recorded-limits` and `b24-a2-secret-scan` 39/39; eslint 0; tsc 0. No allowlist entry, no
+  scanner change. The same run put prompt-to-gerber at 21 min 33 s of 25 (headroom 3 min 27 s) and page-browser-e2e at 21 min 25 s of
+  30; the other jobs were green.

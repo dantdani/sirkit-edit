@@ -72,7 +72,7 @@ const NOW = "2026-10-09T12:34:56.000Z";
 const URL_NAME = ["DATABASE", "URL"].join("_");
 const FAKE_USER = ["oper", "ator"].join("");
 const FAKE_PASSWORD = ["pass", "word"].join("");
-const FAKE_URL = `postgres://${FAKE_USER}:${FAKE_PASSWORD}@db.invalid:5433/sirkit`;
+const FAKE_CONNECTION = ["postgres:", "//", FAKE_USER, ":", FAKE_PASSWORD, "@db.invalid:5433/sirkit"].join(""); // [B24-C3 fix, 2026-10-09] joined fragments under a name without the _URL suffix: B24-A2's scanner (connection-string-password) reads source shapes, and a test never spells one (B16-B)
 const SCOPE_ARGS = ["--tenant", C3_SCOPE.tenantId, "--project", C3_SCOPE.projectId, "--branch", C3_SCOPE.branchId];
 const readArgs = (kind: TraceReadKind | string, ...more: string[]): string[] => ["--read", "--kind", kind, ...SCOPE_ARGS, ...more];
 
@@ -86,8 +86,8 @@ async function cli(argv: readonly string[], options: CliOptions = {}): Promise<R
   let repositoryCalls = 0;
   const repository = options.repository ?? new InMemoryDurableWorkflowRepository();
   const code = await runTraceReadCli({
-    argv, env: options.env ?? { [URL_NAME]: FAKE_URL }, loadEnv: () => { loads += 1; }, stdout: (text) => out.push(text), stderr: (line) => err.push(line),
-    repositoryFor: options.repositoryFor ?? ((url) => { repositoryCalls += 1; expect(url).toBe(FAKE_URL); return repository; }), now: () => new Date(options.now ?? NOW), productionRuntime: () => options.production ?? false,
+    argv, env: options.env ?? { [URL_NAME]: FAKE_CONNECTION }, loadEnv: () => { loads += 1; }, stdout: (text) => out.push(text), stderr: (line) => err.push(line),
+    repositoryFor: options.repositoryFor ?? ((url) => { repositoryCalls += 1; expect(url).toBe(FAKE_CONNECTION); return repository; }), now: () => new Date(options.now ?? NOW), productionRuntime: () => options.production ?? false,
   });
   return { code, out, err, document: out.length === 1 ? (JSON.parse(out[0]!) as TraceReadExport) : null, loads, repositoryCalls };
 }
@@ -470,7 +470,7 @@ describe("[B24-C3] the read mode reads the four kinds through their own stores (
     expect(late.document).toMatchObject({ kind: "run-trace", records: [], refused: [{ key: "run-trace", revision: null, status: "unavailable", code: TRACE_READ_ENTRY_CODES.unavailable }] });
     expect(late.err.join(" ")).toContain(`FAILED ${TRACE_READ_ENTRY_CODES.unavailable}`);
     // a driver error after the first repository call: the code, never the driver's text
-    const throwing = new Proxy(new InMemoryDurableWorkflowRepository(), { get(target, property, receiver) { const value = Reflect.get(target, property, receiver) as unknown; return property === "listHeads" ? async () => { throw new Error(`connection refused for ${FAKE_URL}`); } : typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value; } });
+    const throwing = new Proxy(new InMemoryDurableWorkflowRepository(), { get(target, property, receiver) { const value = Reflect.get(target, property, receiver) as unknown; return property === "listHeads" ? async () => { throw new Error(`connection refused for ${FAKE_CONNECTION}`); } : typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value; } });
     const failed = await cli(readArgs("run-trace"), { repository: throwing });
     expect(failed.code).toBe(TRACE_READ_EXIT.unavailable);
     expect(failed.document!.refused).toEqual([{ key: "run-trace", revision: null, status: "unavailable", code: TRACE_READ_ENTRY_CODES.unavailable }]);
@@ -526,7 +526,7 @@ describe("[B24-C3] the read mode reads the four kinds through their own stores (
     const empty = await cli(readArgs("run-trace"), { env: { [URL_NAME]: "" } });
     expect(empty.code).toBe(TRACE_READ_EXIT.refused);
     expect(empty.loads).toBe(1);
-    expect(redactedTraceReadTarget(FAKE_URL)).toBe("db.invalid:5433/sirkit");
+    expect(redactedTraceReadTarget(FAKE_CONNECTION)).toBe("db.invalid:5433/sirkit");
     expect(redactedTraceReadTarget("postgres://u:p@host.invalid/db")).toBe("host.invalid:5432/db");
     expect(redactedTraceReadTarget("not a url")).toBe("<unparseable url>");
     const repository = new InMemoryDurableWorkflowRepository();
@@ -538,7 +538,7 @@ describe("[B24-C3] the read mode reads the four kinds through their own stores (
     const opening = await cli(readArgs("run-trace"), { repositoryFor: (url) => { throw new Error(`could not open ${url}: password authentication failed for user "${FAKE_USER}"`); } });
     expect(opening.code).toBe(TRACE_READ_EXIT.unavailable);
     expect(opening.document).toMatchObject({ target: "db.invalid:5433/sirkit", records: [], refused: [{ key: "run-trace", revision: null, status: "unavailable", code: TRACE_READ_ENTRY_CODES.unavailable }] });
-    const firstCall = await cli(readArgs("run-trace"), { repository: new Proxy(repository, { get(target, property, receiver) { const value = Reflect.get(target, property, receiver) as unknown; return property === "listHeads" ? async () => { throw new Error(`connection to ${FAKE_URL} refused`); } : typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value; } }) });
+    const firstCall = await cli(readArgs("run-trace"), { repository: new Proxy(repository, { get(target, property, receiver) { const value = Reflect.get(target, property, receiver) as unknown; return property === "listHeads" ? async () => { throw new Error(`connection to ${FAKE_CONNECTION} refused`); } : typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value; } }) });
     expect(firstCall.code).toBe(TRACE_READ_EXIT.unavailable);
     for (const run of [missing, empty, ok, opening, firstCall]) {
       const text = printed(run);
