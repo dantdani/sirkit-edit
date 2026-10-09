@@ -282,7 +282,7 @@ The allowlist: `PATH`, `Path`, `PATHEXT`, `SystemRoot`, `SystemDrive`, `WINDIR`,
 
 - **Red (CONFIRMED):** with `b22-` added to `CHAPTERS` first, the guard `b19-e-ci-job-scope` failed 1 / passed 11 of 12 - its
   `it.each(CHAPTERS)` case listed the six `b22-a1` suites as admitted by no filter.
-- **Fix:** one directory filter `app/lib/computation/__tests__` in `prompt-to-gerber` (workflow `:226`, after SEC-1's entry), and
+- **Fix:** one directory filter `app/lib/computation/__tests__` in `prompt-to-gerber` (workflow `:226`, after SEC-1's entry; [B24-D0, 2026-10-09] the line stays, but since OD-30's split prompt-to-gerber excludes it (`--exclude 'app/lib/computation/__tests__/**'`, `:301`) and the suites run in the appended `agent-boundary-suites` job - `ci-split.md`), and
   `b22-` in `CHAPTERS` (`b19-e-ci-job-scope.test.ts:54`, in place, its comment extended on the line above). No `it(` was added to the
   guard, so B21's `b21-a-page` case 4 pin (8 blocks) stands; a run prints 8 + 4 = 12 tests. No `b22-` suite starts PGlite; no
   explicit entry duplicates the filter (the guard's redundancy rule). The review added no suite file, so the filter is unchanged.

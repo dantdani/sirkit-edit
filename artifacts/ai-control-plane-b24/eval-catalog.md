@@ -327,7 +327,7 @@ sits outside its own job, or when a vitest step has no `--reporter` line or no f
   stage-09 and stage-08 files, `stage10:test` step and its `if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'`;
 - `package.json`: `"stage10:test": "vitest run app/lib/engineering/__tests__"`; `vitest.config.ts`: the include pattern.
 
-The closed job set is `prompt-to-gerber`, `database-delivery`, `benchmark-core`, `benchmark-nightly` and `page-browser-e2e`,
+The closed job set is `prompt-to-gerber`, `database-delivery`, `benchmark-core`, `benchmark-nightly` and `page-browser-e2e`, [B24-D0, 2026-10-09] and, since OD-30's split, `agent-boundary-suites` (the links under `app/lib/mcp` and `app/lib/computation/__tests__` record it; `ci-split.md` section 5),
 re-derived at `72c1376`: B24-A1's `production-smoke` and B24-A2's `secret-scan` jobs run no test file, so no link derives them (a
 later suite in a new job extends the set by a reviewed edit of case 4). Every `app/lib/engineering/__tests__` suite runs in
 `benchmark-core` on pull request through `stage10:test`. Nine linked files run in no pull-request job - B24-B2 flips them by admitting

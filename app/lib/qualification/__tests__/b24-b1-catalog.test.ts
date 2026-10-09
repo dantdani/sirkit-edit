@@ -263,7 +263,10 @@ describe("[B24-B1] the golden catalog (D24-14, OD-203)", () => {
     const wrong = allLinks().filter((entry) => JSON.stringify(entry.ciJobs) !== JSON.stringify(admission.jobsOf(entry.path))).map((entry) => `${entry.path}: recorded ${entry.ciJobs.join("+") || "none"}, derived ${admission.jobsOf(entry.path).join("+") || "none"}`);
     expect(wrong).toEqual([]);
     // the closed job set holds every job a link can be derived into (production-smoke and secret-scan run no test file)
-    expect(new Set(allLinks().flatMap((entry) => entry.ciJobs))).toEqual(new Set(CATALOG_CI_JOBS));
+    expect(new Set(allLinks().flatMap((entry) => entry.ciJobs))).toEqual(new Set(CATALOG_CI_JOBS)); // [B24-D0, 2026-10-09] reviewed pin move: agent-boundary-suites joined the set (OD-30's split; the links under app/lib/mcp and app/lib/computation/__tests__ record it)
+    expect(admission.jobsOf("app/lib/mcp/__tests__/b20-a2-tool-discovery.test.ts")).toEqual(["agent-boundary-suites"]); // [B24-D0, 2026-10-09]
+    expect(admission.jobsOf("app/lib/computation/__tests__/b22-d-adversarial-live.test.ts")).toEqual(["agent-boundary-suites"]); // [B24-D0, 2026-10-09]
+    expect(admission.jobsOf("app/api/mcp/__tests__/b20-d2-never-reachable-sweep.test.ts")).toEqual(["prompt-to-gerber"]); // [B24-D0, 2026-10-09] app/api/mcp/__tests__ stays
     // the derivation: the two-filter line `app/api/pcb/qualify app/api/pcb/release` is two filters, as the shell splits the folded step
     expect(admission.filters["prompt-to-gerber"]).toEqual(expect.arrayContaining(["app/api/pcb/qualify", "app/api/pcb/release", "app/lib/qualification/__tests__"]));
     expect(admission.jobsOf("app/api/pcb/release/__tests__/release-human-only.test.ts")).toEqual(["prompt-to-gerber"]);
@@ -287,6 +290,7 @@ describe("[B24-B1] the golden catalog (D24-14, OD-203)", () => {
       [".github/workflows/deterministic-manufacturing.yml", CI_ADMISSION_ANCHORS.promptToGerber],
       [".github/workflows/deterministic-manufacturing.yml", CI_ADMISSION_ANCHORS.databaseDelivery],
       [".github/workflows/deterministic-manufacturing.yml", CI_ADMISSION_ANCHORS.pageBrowser],
+      [".github/workflows/deterministic-manufacturing.yml", CI_ADMISSION_ANCHORS.agentBoundary], // [B24-D0, 2026-10-09] the sixth job key (OD-30's split)
       [".github/workflows/deterministic-manufacturing.yml", CI_ADMISSION_ANCHORS.playwrightRun],
       [".github/workflows/deterministic-manufacturing.yml", CI_ADMISSION_ANCHORS.orchestrationRun],
       [".github/workflows/deterministic-manufacturing.yml", CI_ADMISSION_ANCHORS.trigger],

@@ -391,6 +391,8 @@ handover text the lead pastes into the nine task files is in section 13.
 | [B24-C1, 2026-10-08] | database-delivery | `:340` | 1 |
 | [B24-C2, 2026-10-08] | database-delivery | `:341` | 1 |
 | [B24-C3, 2026-10-09] | database-delivery | `:342` | 1 |
+| [B24-D0, 2026-10-09] | prompt-to-gerber | `:293` | 38 |
+| [B24-D0, 2026-10-09] | agent-boundary-suites | `:551` | 66 |
 
 ## 11. Gates
 

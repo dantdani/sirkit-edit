@@ -8,7 +8,7 @@
  * (restated, not imported) and a Supabase secret-key shape. No rule matches its own statement. The allowlist holds exact paths, a
  * rule, the sha256 of the line and a reason; globs and directories are refused; a stale entry and a changed line fail (the stale
  * check in tree mode only). `scripts/scan-secrets.ts` is a thin shell: it lists files (tree mode, `--staged`, `--history <range>`)
- * through read-only git calls and prints the lines. The CI job `secret-scan` is the workflow's last job.
+ * through read-only git calls and prints the lines. The CI job `secret-scan` follows production-smoke; [B24-D0, 2026-10-09] it was the workflow's last job until B24-D0 appended `agent-boundary-suites` after it (OD-30's split).
  *
  * A marker planted in a temporary directory would never reach a scan that enumerates `git ls-files`, so these cases drive the pure
  * function with injected entries, every marker and key-shaped fake assembled at run time (the `b21-e3-resume-record.test.ts:223`
@@ -180,14 +180,15 @@ describe("[B24-A2] the scanner (D24-4, OD-195)", () => {
     expect(runSecretScan({ entries: [], allowlist: [entry], mode: "history" }).exitCode).toBe(0);
   });
 
-  it("(c) the CI job: the workflow's last job is secret-scan, declares no permissions (it inherits contents: read), checks out, sets up pnpm and node 24, installs, then runs pnpm exec tsx scripts/scan-secrets.ts; the file still has exactly two lines containing `playwright test` (b21-f-page.test.ts:259-267)", () => {
+  it("(c) the CI job: secret-scan follows production-smoke and precedes the appended agent-boundary-suites ([B24-D0, 2026-10-09] was: the workflow's last job is secret-scan), declares no permissions (it inherits contents: read), checks out, sets up pnpm and node 24, installs, then runs pnpm exec tsx scripts/scan-secrets.ts; the file still has exactly two lines containing `playwright test` (b21-f-page.test.ts:259-267)", () => { // [B24-D0, 2026-10-09] reviewed pin move: secret-scan follows production-smoke and precedes B24-D0's appended agent-boundary-suites (OD-30's split); the job is found by content and read to the next header; [B24-D0 review, 2026-10-09] correctness-5: the title retitled in place to what the body pins
     const all = read(WORKFLOW).split(NEWLINE);
     const jobsAt = all.indexOf("jobs:");
     const headers = all.flatMap((line, index) => (index > jobsAt && /^ {2}[a-z][a-z0-9-]*:$/.test(line) ? [index] : []));
-    const last = headers[headers.length - 1]!;
-    expect(all[last]).toBe("  secret-scan:");
-    expect(headers.map((index) => all[index]!.trim())).toEqual(["prompt-to-gerber:", "database-delivery:", "page-browser-e2e:", "production-smoke:", "secret-scan:"]);
-    const job = all.slice(last).join(NEWLINE);
+    const last = all.indexOf("  secret-scan:");
+    expect(headers).toContain(last);
+    expect(headers.map((index) => all[index]!.trim())).toEqual(["prompt-to-gerber:", "database-delivery:", "page-browser-e2e:", "production-smoke:", "secret-scan:", "agent-boundary-suites:"]);
+    expect(headers[headers.indexOf(last) - 1]).toBe(all.indexOf("  production-smoke:"));
+    const job = all.slice(last, headers[headers.indexOf(last) + 1]).join(NEWLINE);
     expect(job).not.toMatch(/permissions:/);
     expect(job).toMatch(/^ {4}runs-on: ubuntu-latest$/m);
     const steps = job.split(NEWLINE).filter((line) => /^ {6}- /.test(line)).map((line) => line.trim());

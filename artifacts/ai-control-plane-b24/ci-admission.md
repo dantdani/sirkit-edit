@@ -80,16 +80,16 @@ registered twice, and no third reader exists). CONFIRMED
    process and carry no skip gate (plain `describe(` at `:57`, `:25`/`:76`, `:117`): each exists, no job of either workflow selects
    it, no catalog row links it, and `placement-routing` x `physical_hardware` is blocked on LB-3.
 3. **(c) The named D24-15 list.** The 23 B09-B11 suites (closed: the files on the tree are exactly these), the four B16.0 byte pins,
-   `pin-pad-mapping` and the five footprint-resolver suites: each selected by exactly one prompt-to-gerber filter, none starting
+   `pin-pad-mapping` and the five footprint-resolver suites: each selected by exactly one prompt-to-gerber filter ([B24-D0, 2026-10-09] superseded in part: 25 of these - the B09-B11 suites but `b09-loop-safety` and `b11-trace-replay-evaluation`, the four B16.0 pins - are excluded from prompt-to-gerber at `deterministic-manufacturing.yml:306-330` and run in the appended `agent-boundary-suites` job, each selected there by exactly one positional filter; `b24-b2-ci-admission` 3 moved in place, `ci-split.md` section 4), none starting
    PGlite, and no `app/lib/agent/__tests__` directory filter (it would make fifteen explicit entries redundant,
-   `b19-e-ci-job-scope.test.ts:236-240`).
+   `b19-e-ci-job-scope.test.ts:247-251`; [B24-D0, 2026-10-09] was `:236-240`).
 4. **(c, live) The three opt-in live suites:** each a catalogued `live_opt_in` link, each selected by exactly one prompt-to-gerber
    filter, each gated (`describe.skipIf`/`describe.runIf`) on its flag - `PCB_ASSIST_LIVE`, `SIRKIT_LIVE_AUTH_QUALIFICATION`,
    `KICAD_CLI` - which neither workflow names.
 5. **(d) The corpus suite:** on benchmark-nightly's vitest step, whose `env` is exactly `{ SIRKIT_B24_CORPUS_NIGHTLY: "1" }`; the
    one workflow line naming the flag is that entry, under the nightly job's schedule-and-dispatch condition; benchmark-core's step
    has no `env`; the deterministic workflow never names the flag; prompt-to-gerber selects the suite, where it skips.
-6. **Detector parity:** the helper's detector answers B19-E's own detector fixtures (`b19-e-ci-job-scope.test.ts:106-124`) as B19-E's
+6. **Detector parity:** the helper's detector answers B19-E's own detector fixtures (`b19-e-ci-job-scope.test.ts:107-125`; [B24-D0, 2026-10-09] was `:106-124`) as B19-E's
    does, and finds B19-E's and B23's PGlite suites on the tree.
 7. **The helper's `env` reader bites:** an `env:` with no entry, a stray line under the step and a doubled key each throw
    `CI_ANCHOR`; a step without `env` reads `{}`; an unquoted value reads the same.
@@ -182,12 +182,12 @@ benchmark-nightly (`benchmark.yml`): `app/lib/qualification/__tests__/b24-b2-cor
 | job | limit | before | B2 adds | estimate after | headroom |
 |---|---|---|---|---|---|
 | prompt-to-gerber | 25 min (`deterministic-manufacturing.yml:26`) | 17 min 54 s (RECORDED: run 37747294504 at `72c1376`, the lead's read-only reading) | the 36 suites: 45 s local wall (vitest Duration 43.81 s); B2's suites about 5 s | about 18 min 44 s (INFERRED) | about 6 min 16 s |
-| page-browser-e2e | 30 min (`:360`; [B24-C3, 2026-10-09] was `:359` before B24-C3's database-delivery entry at `:342`; [B24-C2, 2026-10-08] was `:358` before B24-C2's database-delivery entry at `:341`; [B24-C1, 2026-10-08] was `:357` before B24-C1's database-delivery entry at `:340`; [B24-B3, 2026-10-08] was `:356` before B24-B3's prompt-to-gerber entry at `:292`; was `:324`) | 23 min 41 s (RECORDED, same run) | one test, three chat runs (two board reads and the order turn) | about 24 min 10 s (INFERRED: 17 chat runs took 39.6 s in B18-C's recorded run) | about 5 min 50 s |
+| page-browser-e2e | 30 min (`:398`; [B24-D0, 2026-10-09] was `:360` before B24-D0's 38 prompt-to-gerber `--exclude` lines at `:293-330`; [B24-C3, 2026-10-09] was `:359` before B24-C3's database-delivery entry at `:342`; [B24-C2, 2026-10-08] was `:358` before B24-C2's database-delivery entry at `:341`; [B24-C1, 2026-10-08] was `:357` before B24-C1's database-delivery entry at `:340`; [B24-B3, 2026-10-08] was `:356` before B24-B3's prompt-to-gerber entry at `:292`; was `:324`) | 23 min 41 s (RECORDED, same run) | one test, three chat runs (two board reads and the order turn) | about 24 min 10 s (INFERRED: 17 chat runs took 39.6 s in B18-C's recorded run) | about 5 min 50 s |
 | benchmark-nightly | 90 min (`benchmark.yml:50`) | no reading (schedule and dispatch only) | the corpus suite: 6.5 s local (section 7) | UNKNOWN until its first scheduled run | - |
 | database-delivery | 15 min | 3 min 38 s (RECORDED) | nothing | unchanged | - |
 
 The lead's time rule: an estimate over 20 minutes would have sent the 36 suites to a new `agent-boundary-suites` job. The estimate is
-about 18 min 44 s, so they ride prompt-to-gerber (OD-204's default); no new job, and no `timeout-minutes` changed. B24-B1's two suites
+about 18 min 44 s, so they ride prompt-to-gerber (OD-204's default); no new job, and no `timeout-minutes` changed. [B24-D0, 2026-10-09] Superseded: OD-30's line was crossed at B24-C2's run (20 min 37 s of 25; 21 min 33 s at C3's), and B24-D0 moved 25 of the 36 (the B09-B11 suites but `b09-loop-safety` and `b11-trace-replay-evaluation`, the four B16.0 pins) with 13 other items to the appended `agent-boundary-suites` job by `--exclude` lines (`ci-split.md` section 4); still no `timeout-minutes` changed. B24-B1's two suites
 landed after `72c1376`, so the 17 min 54 s excludes them (about 1 s locally). CI's runner is slower than this machine: the real
 after-figures are the lead's reading of the first CI run after the push, the baseline for every later B24 suite on this job (B24-C1 to
 B24-F) and for B24-D1's headroom steps. page-browser-e2e's estimate sits close to OD-30's five-minute line: the lead's whole browser
@@ -359,10 +359,10 @@ Scores, per class: deterministic offline `failing` (power-ground) with one link 
 ## 13. The section 5 obligations now pinned in CI
 
 - `:1088` (no hidden reasoning, redaction, replay never mutates): `b11-trace-replay-evaluation.test.ts:82` and
-  `b11-1-trace-integrity.test.ts:445-448` now run in prompt-to-gerber (`:278`, `:270`). CONFIRMED
+  `b11-1-trace-integrity.test.ts:445-448` now run in prompt-to-gerber (`:278`, `:270`). CONFIRMED; [B24-D0, 2026-10-09] superseded in part: `:270` (the integrity suite) is excluded from prompt-to-gerber at `:315` and runs in the appended `agent-boundary-suites` job; `:278` stays
 - `:158` (CSRF, identity, membership, bounded readers, one terminal event): the B11.1 route finalization suite
-  (`app/api/chat/__tests__/b11-1-route-finalization.test.ts`, `:282`) and the B16.0 gates (`:283-286`). CONFIRMED
-- `trace.ts:5-13` (no keys, raw bodies, reasoning or continuation state in a trace): the B11.1 integrity suite (`:270`). CONFIRMED
+  (`app/api/chat/__tests__/b11-1-route-finalization.test.ts`, `:282`) and the B16.0 gates (`:283-286`). CONFIRMED; [B24-D0, 2026-10-09] superseded: the route finalization suite (`:282`, excluded at `:326`) and the four B16.0 gates (`:283-286`, excluded at `:327-330`) run in the appended `agent-boundary-suites` job
+- `trace.ts:5-13` (no keys, raw bodies, reasoning or continuation state in a trace): the B11.1 integrity suite (`:270`). CONFIRMED; [B24-D0, 2026-10-09] superseded: excluded at `:315`, it runs in `agent-boundary-suites`
 
 ## 14. Pins moved, and what stayed put
 

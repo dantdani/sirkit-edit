@@ -83,6 +83,7 @@ export interface ScenarioMapFacts {
 const P2G = ["prompt-to-gerber"];
 const CORE = ["benchmark-core", "benchmark-nightly"];
 const P2G_CORE = ["prompt-to-gerber", "benchmark-core", "benchmark-nightly"];
+const AGENT_BOUNDARY = ["agent-boundary-suites"]; // [B24-D0, 2026-10-09] OD-30's split: the suites under app/lib/mcp and app/lib/computation/__tests__ (ci-split.md)
 const BROWSER = ["page-browser-e2e"];
 const NONE: readonly string[] = [];
 const ENG = "app/lib/engineering/__tests__/";
@@ -97,7 +98,7 @@ const B21F = "app/lib/agent/orchestration/__tests__/b21-f-evaluation.test.ts";
 const offline = (path: string, refs: readonly string[], ciJobs: readonly string[]): ScenarioEvidence => ({ class: "deterministic_offline", path, refs, ciJobs });
 const browser = (path: string, refs: readonly string[]): ScenarioEvidence => ({ class: "browser_e2e", path, refs, ciJobs: BROWSER });
 const record = (evalClass: EvalClass, path: string, refs: readonly string[]): ScenarioEvidence => ({ class: evalClass, path, refs, ciJobs: NONE });
-const live = (evalClass: EvalClass, path: string, refs: readonly string[]): ScenarioEvidence => ({ class: evalClass, path, refs, ciJobs: P2G });
+const live = (evalClass: EvalClass, path: string, refs: readonly string[], ciJobs: readonly string[] = P2G): ScenarioEvidence => ({ class: evalClass, path, refs, ciJobs }); // [B24-D0, 2026-10-09] the job is a parameter (default P2G)
 
 type Reading = Omit<ScenarioRow, "n" | "runbookLine" | "scenario">;
 const READINGS: readonly Reading[] = [
@@ -218,7 +219,7 @@ const READINGS: readonly Reading[] = [
       offline(B21F, ["9", "10"], P2G),
       offline(`${ENG}b18-e-scenario-7.test.ts`, ["scenario 7f: the server refuses the tender"], P2G_CORE),
       offline("app/components/pcb/__tests__/snapshot-conflict-dialog.test.tsx", ["names both revisions and offers refresh / rebase / not now"], P2G),
-      offline("app/lib/computation/__tests__/b22-a3-diagnostic-runner.test.ts", ["6", "7", "8"], P2G),
+      offline("app/lib/computation/__tests__/b22-a3-diagnostic-runner.test.ts", ["6", "7", "8"], AGENT_BOUNDARY), // [B24-D0, 2026-10-09] was P2G
     ],
     missing: "process-failure cleanup (a tree kill and kill_unconfirmed) is delivered for the diagnostic ngspice runner only, while FreeRouting and kicad-cli still kill only the direct child (D24-31); a revoked membership is proven in integration only, and the browser proves a role change",
     decisions: ["OD-27", "OD-145"], blockers: [],
@@ -246,8 +247,8 @@ const READINGS: readonly Reading[] = [
   { // 15
     standing: "demonstrated offline only",
     evidence: [
-      offline("app/lib/mcp/__tests__/b20-a2-tool-discovery.test.ts", ["[B20 A2] one page on the wire"], P2G),
-      offline("app/lib/mcp/__tests__/b20-d1-malicious-server.test.ts", ["the malicious external server, composed"], P2G),
+      offline("app/lib/mcp/__tests__/b20-a2-tool-discovery.test.ts", ["[B20 A2] one page on the wire"], AGENT_BOUNDARY), // [B24-D0, 2026-10-09] the two: was P2G
+      offline("app/lib/mcp/__tests__/b20-d1-malicious-server.test.ts", ["the malicious external server, composed"], AGENT_BOUNDARY),
     ],
     missing: "every external MCP read runs against fake servers: the external MCP allowlist is empty and no live external contract exists (LB-16)",
     decisions: ["OD-48", "OD-102"], blockers: ["LB-16"],
@@ -255,9 +256,9 @@ const READINGS: readonly Reading[] = [
   { // 16
     standing: "in part",
     evidence: [
-      offline("app/lib/mcp/server/__tests__/b20-c1-three-way-parity.test.ts", ["registry, providers and MCP render one tool three ways"], P2G),
-      offline("app/lib/mcp/server/__tests__/b20-b3-read-call.test.ts", ["2"], P2G),
-      offline("app/lib/mcp/server/__tests__/b20-b4-withhold-proposals.test.ts", ["1"], P2G),
+      offline("app/lib/mcp/server/__tests__/b20-c1-three-way-parity.test.ts", ["registry, providers and MCP render one tool three ways"], AGENT_BOUNDARY), // [B24-D0, 2026-10-09] the three: was P2G
+      offline("app/lib/mcp/server/__tests__/b20-b3-read-call.test.ts", ["2"], AGENT_BOUNDARY),
+      offline("app/lib/mcp/server/__tests__/b20-b4-withhold-proposals.test.ts", ["1"], AGENT_BOUNDARY),
     ],
     missing: "the reads are exposed over MCP with native parity, but every proposal is withheld from MCP and placement over MCP is not offered, so no propose tool is exposed",
     decisions: ["OD-82", "OD-87"], blockers: [],
@@ -275,8 +276,8 @@ const READINGS: readonly Reading[] = [
     standing: "blocked",
     evidence: [
       record("physical_hardware", "artifacts/ai-control-plane-b22/final-verdict.md", [":3 **Verdict: PARTIAL.**", ":17 SANDBOX STATUS: production runner BLOCKED"]),
-      offline("app/lib/computation/__tests__/b22-a2-blocked-runner.test.ts", ["1"], P2G),
-      live("physical_hardware", "app/lib/computation/__tests__/b22-d-adversarial-live.test.ts", ["4"]),
+      offline("app/lib/computation/__tests__/b22-a2-blocked-runner.test.ts", ["1"], AGENT_BOUNDARY), // [B24-D0, 2026-10-09] the two: was P2G
+      live("physical_hardware", "app/lib/computation/__tests__/b22-d-adversarial-live.test.ts", ["4"], AGENT_BOUNDARY),
     ],
     missing: "the production simulation runner is BLOCKED with no qualified isolation boundary (LB-10); the diagnostic runner's one live adversarial run recorded case 4 NOT CONTAINED",
     decisions: ["OD-134"], blockers: ["LB-10"],

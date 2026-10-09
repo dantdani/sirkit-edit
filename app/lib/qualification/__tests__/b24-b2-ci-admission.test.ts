@@ -16,7 +16,7 @@
  *     skipping itself without its flag, which neither workflow sets (OD-222);
  *  5. (d) the corpus suite rides benchmark-nightly's vitest step, whose env sets SIRKIT_B24_CORPUS_NIGHTLY "1"; benchmark-core and
  *     the deterministic workflow never name the flag, and prompt-to-gerber selects the suite, where it skips;
- *  6. detector parity: the helper's PGlite detector over B19-E's own detector fixtures (b19-e-ci-job-scope.test.ts:106-124);
+ *  6. detector parity: the helper's PGlite detector over B19-E's own detector fixtures (b19-e-ci-job-scope.test.ts:107-125; [B24-D0, 2026-10-09] was :106-124);
  *  7. the helper's env reader bites: an `env:` with no entry, a stray line under the step and a doubled key each throw CI_ANCHOR;
  *  8. [B24-B2 review, 2026-10-08] (a, browser) the quote-order browser link asserts its own turn: E9's earlier turn leaves the same
  *     refusal line, labelled note and nothing-changed label in the serial spec's page, so the order case counts each before it sends
@@ -28,6 +28,10 @@
  * line said "cases 1, 3, 4 and 5"; b2-red-1-ci-admission-corpus records case 7 red too (b0af256's nightly step has no env block).
  * Cases 8 and 9 failed first on the reviewed tree (b2fix-red-1). Files are read as text; nothing is written to disk and no process
  * is started.
+ * [B24-D0, 2026-10-09] Reviewed pin moves (OD-30's split, ci-split.md): in cases 3 and 4 "exactly one prompt-to-gerber filter" became
+ * "exactly one positional filter of the one job that runs it - prompt-to-gerber net of its `--exclude` lines, or the appended
+ * `agent-boundary-suites`"; the 25 moved names (the B09-B11 suites but `b09-loop-safety` and `b11-trace-replay-evaluation`, the four
+ * B16.0 pins) run in agent-boundary-suites, the other 11 and the three live suites in prompt-to-gerber.
  */
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -137,14 +141,20 @@ describe("[B24-B2] CI admission (D24-15, OD-204)", () => {
     expect(readdirSync(join(ROOT, RESOLVER)).filter((name) => /\.test\.tsx?$/.test(name)).map((name) => `${RESOLVER}${name}`).sort()).toEqual(FOOTPRINT_PIN.slice(1));
     const named = [...B09_B11, ...B16_0_PINS, ...FOOTPRINT_PIN];
     expect(named).toHaveLength(33);
-    const filters = ciAdmission().filters["prompt-to-gerber"];
-    const off = named.filter((path) => !isFile(path) || filters.filter((filter) => path.includes(filter)).length !== 1 || startsPglite(path));
+    const admission = ciAdmission();
+    // [B24-D0, 2026-10-09] reviewed pin move (OD-30's split): each name runs in exactly one of prompt-to-gerber (net of its exclusions) and agent-boundary-suites, selected there by exactly one positional filter
+    const runsIn = (path: string): ("prompt-to-gerber" | "agent-boundary-suites")[] => admission.jobsOf(path).filter((job): job is "prompt-to-gerber" | "agent-boundary-suites" => job === "prompt-to-gerber" || job === "agent-boundary-suites");
+    const off = named.filter((path) => !isFile(path) || runsIn(path).length !== 1 || admission.filters[runsIn(path)[0]!].filter((filter) => path.includes(filter)).length !== 1 || startsPglite(path));
     expect(off).toEqual([]);
-    expect(filters).not.toContain("app/lib/agent/__tests__");
+    const moved = [...B09_B11.filter((path) => !path.endsWith("b09-loop-safety.test.ts") && !path.endsWith("b11-trace-replay-evaluation.test.ts")), ...B16_0_PINS];
+    expect(moved).toHaveLength(25);
+    expect(named.filter((path) => runsIn(path)[0] === "agent-boundary-suites").sort()).toEqual([...moved].sort());
+    for (const job of ["prompt-to-gerber", "agent-boundary-suites"] as const) expect(admission.filters[job]).not.toContain("app/lib/agent/__tests__");
   });
 
   it("4. (c, live) the three catalogued opt-in live suites are each selected by exactly one prompt-to-gerber filter, skip themselves without their flag, and neither workflow sets the flag (OD-222)", () => {
-    const filters = ciAdmission().filters["prompt-to-gerber"];
+    const admission = ciAdmission();
+    const filters = admission.filters["prompt-to-gerber"];
     const linkedLive = new Set(catalogRows().flatMap((row) => row.links.filter((entry) => entry.kind === "live_opt_in").map((entry) => entry.path)));
     const workflows = [read(DETERMINISTIC), read(BENCHMARK)];
     for (const [path, flag] of LIVE_SKIPPING) {
@@ -154,6 +164,7 @@ describe("[B24-B2] CI admission (D24-15, OD-204)", () => {
       expect(source, `${path} reads ${flag}`).toContain(`process.env.${flag}`);
       expect(startsPglite(path), path).toBe(false);
       expect(filters.filter((filter) => path.includes(filter)), path).toHaveLength(1);
+      expect(admission.jobsOf(path), path).toEqual(["prompt-to-gerber"]); // [B24-D0, 2026-10-09] net of the exclusions: the three stay in prompt-to-gerber (OD-30's split)
       for (const workflow of workflows) expect(workflow.includes(flag), `a workflow names ${flag}`).toBe(false);
     }
     expect(LIVE_SKIPPING.length + B09_B11.length + B16_0_PINS.length + FOOTPRINT_PIN.length).toBe(36);
@@ -178,7 +189,7 @@ describe("[B24-B2] CI admission (D24-15, OD-204)", () => {
   });
 
   it("6. detector parity: the helper's PGlite detector answers B19-E's detector fixtures as B19-E's does", () => {
-    // B19-E's fixtures (b19-e-ci-job-scope.test.ts:106-124), specifiers assembled at run time so this file never reads as starting PostgreSQL
+    // B19-E's fixtures (b19-e-ci-job-scope.test.ts:107-125; [B24-D0, 2026-10-09] was :106-124), specifiers assembled at run time so this file never reads as starting PostgreSQL
     const DISPOSABLE = ["disposable", "postgres"].join("-");
     const PGLITE = ["@electric-sql", "pglite"].join("/");
     const files: Record<string, string> = {

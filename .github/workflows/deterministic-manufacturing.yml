@@ -290,6 +290,44 @@ jobs:
           app/lib/auth/__tests__/b16-1b-live-qualification.test.ts
           app/lib/pcb/__tests__/kicad-cli-oracle.test.ts
           app/lib/spice/__tests__/worker-integration.test.ts
+          --exclude 'app/lib/project/__tests__/b18-b-import-gates.test.ts'
+          --exclude 'app/lib/distributors/__tests__/b19-distributor-egress.test.ts'
+          --exclude 'app/lib/mcp/**'
+          --exclude 'app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts'
+          --exclude 'app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts'
+          --exclude 'app/lib/distributors/__tests__/b19-connector-policy.test.ts'
+          --exclude 'app/lib/distributors/__tests__/b19-d-exact-mpn-connectors.test.ts'
+          --exclude 'app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx'
+          --exclude 'app/lib/computation/__tests__/**'
+          --exclude 'app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts'
+          --exclude 'app/lib/engineering/__tests__/b18-c-result-contract.test.ts'
+          --exclude 'app/lib/engineering/__tests__/b18-c-review-3.test.ts'
+          --exclude 'app/lib/engineering/__tests__/b18-c-review-fixes.test.ts'
+          --exclude 'app/lib/agent/__tests__/b09-1-boundary.test.ts'
+          --exclude 'app/lib/agent/__tests__/b09-1-recovery.test.tsx'
+          --exclude 'app/lib/agent/__tests__/b09-2-closure.test.ts'
+          --exclude 'app/lib/agent/__tests__/b09-2-recovery.test.tsx'
+          --exclude 'app/lib/agent/__tests__/b09-3-closure.test.ts'
+          --exclude 'app/lib/agent/__tests__/b09-proposals.test.ts'
+          --exclude 'app/lib/agent/__tests__/b09-provider-contracts.test.ts'
+          --exclude 'app/lib/agent/__tests__/b10-1-strict-mode-publisher.test.tsx'
+          --exclude 'app/lib/agent/__tests__/b10-editor-context.test.ts'
+          --exclude 'app/lib/agent/__tests__/b11-1-trace-integrity.test.ts'
+          --exclude 'app/lib/agent/__tests__/b11-2-replay-context.test.ts'
+          --exclude 'app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts'
+          --exclude 'app/lib/agent/__tests__/b11-4-capture-ownership.test.ts'
+          --exclude 'app/lib/agent/__tests__/b11-4-no-execution.test.ts'
+          --exclude 'app/lib/agent/__tests__/b11-5-capture-exactness.test.ts'
+          --exclude 'app/lib/agent/__tests__/b11-6-projection-ownership.test.ts'
+          --exclude 'app/lib/agent/__tests__/b11-7-primitive-discipline.test.ts'
+          --exclude 'app/api/chat/__tests__/b10-1-request-boundary.test.ts'
+          --exclude 'app/api/chat/__tests__/b10-2-closure.test.ts'
+          --exclude 'app/api/chat/__tests__/b10-chat-boundary.test.ts'
+          --exclude 'app/api/chat/__tests__/b11-1-route-finalization.test.ts'
+          --exclude 'app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts'
+          --exclude 'app/lib/auth/__tests__/b16-0-2-gates.test.ts'
+          --exclude 'app/api/__tests__/b16-0-auth-route-coverage.test.ts'
+          --exclude 'app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts'
           --reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml
       - name: Upload evidence and diagnostics
         if: always()
@@ -510,3 +548,69 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: pnpm exec tsx scripts/scan-secrets.ts --history "$BASE_SHA..$HEAD_SHA"
+
+  # [B24-D0] OD-30: prompt-to-gerber came within five minutes of its limit (20 min 37 s of 25 at B24-C2's run, 21 min 33 s at
+  # B24-C3's), so its heaviest database-free suites - option 2 of ci-split.md section 3, 42.8 % of the measured local testcase time -
+  # run here instead, excluded above by `--exclude` lines. The same setup steps; no environment variable, secret, database or browser.
+  agent-boundary-suites:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: >-
+          pnpm exec vitest run
+          app/lib/project/__tests__/b18-b-import-gates.test.ts
+          app/lib/distributors/__tests__/b19-distributor-egress.test.ts
+          app/lib/mcp
+          app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts
+          app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts
+          app/lib/distributors/__tests__/b19-connector-policy.test.ts
+          app/lib/distributors/__tests__/b19-d-exact-mpn-connectors.test.ts
+          app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx
+          app/lib/computation/__tests__
+          app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts
+          app/lib/engineering/__tests__/b18-c-result-contract.test.ts
+          app/lib/engineering/__tests__/b18-c-review-3.test.ts
+          app/lib/engineering/__tests__/b18-c-review-fixes.test.ts
+          app/lib/agent/__tests__/b09-1-boundary.test.ts
+          app/lib/agent/__tests__/b09-1-recovery.test.tsx
+          app/lib/agent/__tests__/b09-2-closure.test.ts
+          app/lib/agent/__tests__/b09-2-recovery.test.tsx
+          app/lib/agent/__tests__/b09-3-closure.test.ts
+          app/lib/agent/__tests__/b09-proposals.test.ts
+          app/lib/agent/__tests__/b09-provider-contracts.test.ts
+          app/lib/agent/__tests__/b10-1-strict-mode-publisher.test.tsx
+          app/lib/agent/__tests__/b10-editor-context.test.ts
+          app/lib/agent/__tests__/b11-1-trace-integrity.test.ts
+          app/lib/agent/__tests__/b11-2-replay-context.test.ts
+          app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts
+          app/lib/agent/__tests__/b11-4-capture-ownership.test.ts
+          app/lib/agent/__tests__/b11-4-no-execution.test.ts
+          app/lib/agent/__tests__/b11-5-capture-exactness.test.ts
+          app/lib/agent/__tests__/b11-6-projection-ownership.test.ts
+          app/lib/agent/__tests__/b11-7-primitive-discipline.test.ts
+          app/api/chat/__tests__/b10-1-request-boundary.test.ts
+          app/api/chat/__tests__/b10-2-closure.test.ts
+          app/api/chat/__tests__/b10-chat-boundary.test.ts
+          app/api/chat/__tests__/b11-1-route-finalization.test.ts
+          app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts
+          app/lib/auth/__tests__/b16-0-2-gates.test.ts
+          app/api/__tests__/b16-0-auth-route-coverage.test.ts
+          app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts
+          --reporter=dot --reporter=junit --outputFile=vitest-agent-boundary-suites.xml
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-boundary-suites-diagnostics
+          path: vitest-agent-boundary-suites.xml
+          if-no-files-found: ignore
+          retention-days: 14

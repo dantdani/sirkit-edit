@@ -18,11 +18,16 @@
  * [B24-B2, 2026-10-08] Extended in place (D24-15, OD-204; no second reader): each benchmark job's one-line vitest step may carry an
  * `env` block (the nightly step's `SIRKIT_B24_CORPUS_NIGHTLY: "1"`), returned as `stepEnv`; an `env:` with no entry, an entry
  * outside one, or a doubled key throws CI_ANCHOR.
+ * [B24-D0, 2026-10-09] Extended in place (OD-30's split, ci-split.md; no second reader): a folded vitest step may end, right before
+ * its `--reporter` line, in `--exclude '<pattern>'` lines - each a quoted `<dir>/**` or test-file path that some positional filter
+ * touches - returned as `excludes`; a job runs a path only when a positional filter selects it and no exclude leaves it out. A bare,
+ * unquoted or mis-shaped exclude, another flag, or a positional filter after an exclude throws CI_ANCHOR. The job key
+ * `agent-boundary-suites` is a sixth anchor and a sixth job id.
  */
 import { readFileSync } from "node:fs";
 import { join, posix } from "node:path";
 
-export const CI_JOB_IDS = ["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "page-browser-e2e"] as const;
+export const CI_JOB_IDS = ["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "page-browser-e2e", "agent-boundary-suites"] as const; // [B24-D0, 2026-10-09] + agent-boundary-suites (OD-30's split)
 export type CiJobId = (typeof CI_JOB_IDS)[number];
 
 const NEWLINE = String.fromCharCode(10);
@@ -40,6 +45,7 @@ export const CI_ADMISSION_ANCHORS = Object.freeze({
   promptToGerber: "  prompt-to-gerber:",
   databaseDelivery: "  database-delivery:",
   pageBrowser: "  page-browser-e2e:",
+  agentBoundary: "  agent-boundary-suites:", // [B24-D0, 2026-10-09] the appended job (OD-30's split)
   vitestStep: "pnpm exec vitest run",
   playwrightRun: "- run: pnpm exec playwright test",
   orchestrationRun: "run: pnpm exec playwright test -c playwright.orchestration.config.ts",
@@ -86,16 +92,36 @@ function jobBlock(lines: readonly string[], key: string, file: string): readonly
   }
   return [start, end];
 }
-/** The positional filters of a job's folded `pnpm exec vitest run` step, split as the shell splits them. */
-function foldedVitestFilters(lines: readonly string[], key: string, file: string): string[] {
+/** A folded vitest step as read: its positional filters and, [B24-D0] since OD-30's split, its `--exclude` patterns. */
+interface FoldedStep { readonly filters: readonly string[]; readonly excludes: readonly string[] }
+/** The positional filters of a job's folded `pnpm exec vitest run` step, split as the shell splits them, and [B24-D0, 2026-10-09] its
+ *  `--exclude '<pattern>'` lines after them (OD-30's split): each a quoted `<dir>/**` or test-file path some positional filter
+ *  touches; another flag, a bare, unquoted or mis-shaped exclude, or a positional filter after an exclude throws CI_ANCHOR. */
+function foldedVitestStep(lines: readonly string[], key: string, file: string): FoldedStep {
   const [start, end] = jobBlock(lines, key, file);
   const run = onlyLine(lines, CI_ADMISSION_ANCHORS.vitestStep, file, false, start, end);
   const filters: string[] = [];
-  let index = run + 1;
-  for (; index < end && !/--reporter/.test(lines[index]!); index += 1) filters.push(...lines[index]!.trim().split(/\s+/).filter(Boolean));
-  if (index >= end) fail(`${file}: ${key.trim()}'s vitest step has no --reporter line`);
+  const excludes: string[] = [];
+  let reporter = run + 1;
+  while (reporter < end && !/--reporter/.test(lines[reporter]!)) reporter += 1;
+  if (reporter >= end) fail(`${file}: ${key.trim()}'s vitest step has no --reporter line`);
+  for (let index = run + 1; index < reporter; index += 1) {
+    const line = lines[index]!.trim();
+    if (!line.startsWith("--")) {
+      if (excludes.length > 0) fail(`${file}: ${key.trim()}'s vitest step has a positional filter after an --exclude: "${line}"`);
+      filters.push(...line.split(/\s+/).filter(Boolean));
+      continue;
+    }
+    const exclude = /^--exclude '([^'\s]+)'$/.exec(line);
+    if (exclude === null) fail(`${file}: ${key.trim()}'s vitest step has a flag that is not --exclude '<pattern>': "${line}"`);
+    const pattern = exclude![1]!;
+    const item = pattern.endsWith("/**") ? pattern.slice(0, -3) : pattern;
+    if (pattern.endsWith("/**") ? /\.tsx?$/.test(item) : !/\.test\.tsx?$/.test(item)) fail(`${file}: ${key.trim()}'s vitest step has an --exclude that is neither <dir>/** nor a test file: "${pattern}"`);
+    if (!filters.some((filter) => item.includes(filter) || filter.includes(item))) fail(`${file}: ${key.trim()}'s vitest step has an --exclude no positional filter selects: "${pattern}"`);
+    excludes.push(pattern);
+  }
   if (filters.length === 0) fail(`${file}: ${key.trim()}'s vitest step has no filter`);
-  return filters;
+  return { filters, excludes };
 }
 /** The filters of a one-line `pnpm exec vitest run <files> --reporter...` step inside a job. */
 function inlineVitestFilters(lines: readonly string[], start: number, end: number, file: string, key: string): string[] {
@@ -132,8 +158,10 @@ function inlineStepEnv(lines: readonly string[], start: number, end: number, fil
 export interface CiAdmission {
   /** The jobs that run `path` (repository-relative), in CI_JOB_IDS order. */
   readonly jobsOf: (path: string) => CiJobId[];
-  /** The filters each vitest job applies, as derived (for the page and the bite checks). */
-  readonly filters: Readonly<Record<"prompt-to-gerber" | "database-delivery" | "benchmark-core" | "benchmark-nightly", readonly string[]>>;
+  /** The positional filters each vitest job applies, as derived (for the page and the bite checks). */
+  readonly filters: Readonly<Record<"prompt-to-gerber" | "database-delivery" | "benchmark-core" | "benchmark-nightly" | "agent-boundary-suites", readonly string[]>>;
+  /** [B24-D0] The `--exclude` patterns of each folded vitest job, in order ([] when the step has none). */
+  readonly excludes: Readonly<Record<"prompt-to-gerber" | "database-delivery" | "agent-boundary-suites", readonly string[]>>;
   /** [B24-B2] The `env` block of each benchmark job's vitest step, values unquoted ({} when the step has none). */
   readonly stepEnv: Readonly<Record<"benchmark-core" | "benchmark-nightly", Readonly<Record<string, string>>>>;
 }
@@ -142,8 +170,9 @@ export interface CiAdmission {
 export function ciAdmission(read: RepoReader = readRepoText): CiAdmission {
   const deterministic = read(DETERMINISTIC).split(NEWLINE);
   onlyLine(deterministic, CI_ADMISSION_ANCHORS.trigger, DETERMINISTIC, false);
-  const promptToGerber = foldedVitestFilters(deterministic, CI_ADMISSION_ANCHORS.promptToGerber, DETERMINISTIC);
-  const databaseDelivery = foldedVitestFilters(deterministic, CI_ADMISSION_ANCHORS.databaseDelivery, DETERMINISTIC);
+  const promptToGerber = foldedVitestStep(deterministic, CI_ADMISSION_ANCHORS.promptToGerber, DETERMINISTIC);
+  const databaseDelivery = foldedVitestStep(deterministic, CI_ADMISSION_ANCHORS.databaseDelivery, DETERMINISTIC);
+  const agentBoundary = foldedVitestStep(deterministic, CI_ADMISSION_ANCHORS.agentBoundary, DETERMINISTIC); // [B24-D0, 2026-10-09]
   const [browserStart, browserEnd] = jobBlock(deterministic, CI_ADMISSION_ANCHORS.pageBrowser, DETERMINISTIC);
   const playwrightRun = onlyLine(deterministic, CI_ADMISSION_ANCHORS.playwrightRun, DETERMINISTIC, false);
   const orchestrationRun = onlyLine(deterministic, CI_ADMISSION_ANCHORS.orchestrationRun, DETERMINISTIC, false);
@@ -182,20 +211,29 @@ export function ciAdmission(read: RepoReader = readRepoText): CiAdmission {
   onlyLine(vitestConfig, CI_ADMISSION_ANCHORS.vitestInclude, VITEST_CONFIG, false);
   const vitestCollects = (path: string): boolean => path.startsWith("app/") && path.includes("/__tests__/") && /\.test\.tsx?$/.test(path);
   const contains = (filters: readonly string[], path: string): boolean => filters.some((filter) => path.includes(filter));
+  // [B24-D0, 2026-10-09] vitest's exclude for the two admitted shapes: `<dir>/**` every path under the directory, a file path that file
+  const excludedBy = (pattern: string, path: string): boolean => (pattern.endsWith("/**") ? path.startsWith(pattern.slice(0, -2)) : path === pattern);
+  const runs = (step: FoldedStep, path: string): boolean => contains(step.filters, path) && !step.excludes.some((pattern) => excludedBy(pattern, path));
 
   const jobsOf = (path: string): CiJobId[] => {
     const normal = posix.normalize(path);
     const jobs = new Set<CiJobId>();
     if (vitestCollects(normal)) {
-      if (contains(promptToGerber, normal)) jobs.add("prompt-to-gerber");
-      if (contains(databaseDelivery, normal)) jobs.add("database-delivery");
+      if (runs(promptToGerber, normal)) jobs.add("prompt-to-gerber");
+      if (runs(databaseDelivery, normal)) jobs.add("database-delivery");
+      if (runs(agentBoundary, normal)) jobs.add("agent-boundary-suites"); // [B24-D0, 2026-10-09]
       if (contains(core, normal)) jobs.add("benchmark-core");
       if (contains(nightly, normal)) jobs.add("benchmark-nightly");
     }
     if (/^e2e\/[^/]+\.spec\.ts$/.test(normal) || /^e2e-orchestration\/[^/]+\.spec\.ts$/.test(normal)) jobs.add("page-browser-e2e");
     return CI_JOB_IDS.filter((job) => jobs.has(job));
   };
-  return Object.freeze({ jobsOf, filters: Object.freeze({ "prompt-to-gerber": promptToGerber, "database-delivery": databaseDelivery, "benchmark-core": core, "benchmark-nightly": nightly }), stepEnv });
+  return Object.freeze({
+    jobsOf,
+    filters: Object.freeze({ "prompt-to-gerber": promptToGerber.filters, "database-delivery": databaseDelivery.filters, "benchmark-core": core, "benchmark-nightly": nightly, "agent-boundary-suites": agentBoundary.filters }),
+    excludes: Object.freeze({ "prompt-to-gerber": promptToGerber.excludes, "database-delivery": databaseDelivery.excludes, "agent-boundary-suites": agentBoundary.excludes }), // [B24-D0, 2026-10-09]
+    stepEnv,
+  });
 }
 
 // ── B19-E's PGlite detector, re-implemented (b19-e-ci-job-scope.test.ts; never imported) ─────────────────────────────────────────

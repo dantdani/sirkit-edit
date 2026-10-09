@@ -251,7 +251,7 @@ RECORDED. Each is a place the gates above do not reach.
 ## Evidence
 
 Four suites, all under the `app/lib/mcp` directory filter of the prompt-to-gerber job
-(`.github/workflows/deterministic-manufacturing.yml:131` (`app/lib/mcp`)), so no workflow entry was added.
+(`.github/workflows/deterministic-manufacturing.yml:131` (`app/lib/mcp`)), so no workflow entry was added. [B24-D0, 2026-10-09] Since OD-30's split the filter line stays at `:131` (`app/lib/mcp`) while prompt-to-gerber excludes it and the four suites run in the appended `agent-boundary-suites` job (ci-split.md).
 
 - `app/lib/mcp/__tests__/b20-a5-provider-connector-policy.test.ts` — 10 cases
 - `app/lib/mcp/__tests__/b20-a5-provider-request-shape.test.ts` — 4 cases

@@ -361,7 +361,7 @@ Each is left as written by B24-C1 and listed for B24-F's one table at closeout c
 | pin | move | why |
 |---|---|---|
 | `app/api/chat/route.ts:40` | `import "./trace-runtime";` appended in place after the recorder's import, with a dated tag; 562 lines kept, `[B21 E4]` markers at 35, 504, 507 kept | the binding's one edge (C1a) |
-| `.github/workflows/deterministic-manufacturing.yml:340` | one database-delivery line, `app/lib/qualification/database/__tests__/b24-c1-durable-records-pglite.test.ts`, after B24-A4's last PGlite entry (`:339`) | the PGlite suite, admitted file by file (OD-222) |
+| `.github/workflows/deterministic-manufacturing.yml:378` | one database-delivery line, `app/lib/qualification/database/__tests__/b24-c1-durable-records-pglite.test.ts`, after B24-A4's last PGlite entry (`:377`; [B24-D0, 2026-10-09] was `:340` after `:339` before B24-D0's 38 prompt-to-gerber `--exclude` lines at `:293-330`) | the PGlite suite, admitted file by file (OD-222) |
 | B21 C49, C93, C94 (`artifacts/ai-control-plane-b21/evaluation-matrix.md:1139, :1183, :1184`; `b21-f-page` 6) | `:371` -> `:372`, `:374` -> `:375`, `:383` -> `:384`, each with `[B24-C1, 2026-10-08] re-pinned +1` naming the entry at `:340` | the inserted line moves every later workflow line +1 (D8) |
 | `artifacts/ai-control-plane-b24/environments-and-deployment.md` section 10 | one row appended to the insertion table (task `[B24-C1, 2026-10-08]`, job `database-delivery`, first line `:340`, count 1) | A1's insertion-table protocol; no earlier row and no number of sections 10 and 14 moved (`b24-a1-environment-profile` 14, 16, 17 green) |
 | `artifacts/ai-control-plane-b24/ci-admission.md:185` | the browser job's `timeout-minutes: 30` citation `:357` -> `:358`, with `[B24-C1, 2026-10-08] was \`:357\``, earlier notes kept | the same +1 (re-derived by anchor) |
@@ -523,7 +523,7 @@ dated `### OD-207 amendment` under it. The next free number at `a405db9` is OD-2
 
 ### The README row
 
-| B24-C1 durable traces (D24-20, D24-21; OD-207, OD-231) | `observability-and-replay.md` (part 1); code `app/lib/observability/{run-trace-store,llm-call-record,llm-call-record-store,llm-call-record-runtime}.ts`, `app/api/chat/trace-runtime.ts`, in place `app/api/chat/route.ts:40`, `app/lib/auth/route-handlers.ts` (six lines), `app/lib/llm/router.ts`, `app/lib/embeddings.ts`, `app/lib/parts-search.ts`, `instrumentation.ts`; workflow `deterministic-manufacturing.yml:340`; suites `b24-c1-durable-trace` (16), `b24-c1-durable-records-pglite` (6), `b24-c1-llm-call-record` (14 `it(` and one `it.each`, 36 tests) | done 2026-10-08 offline, two review rounds; the real database platform BLOCKED-LIVE-QUALIFICATION (LB-14), a scheduled write on a serverless host (LB-13), live usage shapes (LB-2, LB-7, LB-9); census 168 / 165 / 3 / 0, counts 47 / 36 / 9 / 27, 107 action records, 32 migrations |
+| B24-C1 durable traces (D24-20, D24-21; OD-207, OD-231) | `observability-and-replay.md` (part 1); code `app/lib/observability/{run-trace-store,llm-call-record,llm-call-record-store,llm-call-record-runtime}.ts`, `app/api/chat/trace-runtime.ts`, in place `app/api/chat/route.ts:40`, `app/lib/auth/route-handlers.ts` (six lines), `app/lib/llm/router.ts`, `app/lib/embeddings.ts`, `app/lib/parts-search.ts`, `instrumentation.ts`; workflow `deterministic-manufacturing.yml:378` ([B24-D0, 2026-10-09] was `:340` before B24-D0's 38 prompt-to-gerber `--exclude` lines at `:293-330`); suites `b24-c1-durable-trace` (16), `b24-c1-durable-records-pglite` (6), `b24-c1-llm-call-record` (14 `it(` and one `it.each`, 36 tests) | done 2026-10-08 offline, two review rounds; the real database platform BLOCKED-LIVE-QUALIFICATION (LB-14), a scheduled write on a serverless host (LB-13), live usage shapes (LB-2, LB-7, LB-9); census 168 / 165 / 3 / 0, counts 47 / 36 / 9 / 27, 107 action records, 32 migrations |
 
 ### The ledger paragraph
 
@@ -858,7 +858,7 @@ resource. Every citation of this part is in section 41 and resolves on its line 
   injected in-memory variant of the file it pins - never a file edited on disk.
 - **Code:** `app/lib/observability/trace-read.ts` (new), the `--read` dispatch in `scripts/retention-purge.ts` (its dispatcher `main` takes
   its seams as overrides and ends the database client after a read; section 33), one database-delivery line
-  (`deterministic-manufacturing.yml:342`, C50), one in-place comment on `app/lib/durable-workflow/retention-cli.ts:13`. No reader was added
+  (`deterministic-manufacturing.yml:380`, C50; [B24-D0, 2026-10-09] was `:342` before B24-D0's 38 prompt-to-gerber `--exclude` lines at `:293-330`), one in-place comment on `app/lib/durable-workflow/retention-cli.ts:13`. No reader was added
   to a C1 or C2 store: each already had a digest-verified one (C61-C64). No change to the nine B11-scanned files, to `tool-invocation.ts`, to
   the MCP trace modules, to a journal, a grant module or a route; no migration (32), no census, tool-count, classification or flag move; no
   dependency (OD-42); no UI control (no B17-A run needed).
@@ -1069,7 +1069,7 @@ change):
 
 | pin | move | why |
 |---|---|---|
-| `.github/workflows/deterministic-manufacturing.yml:342` | one database-delivery line, `app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts`, after C2's entry (`:341`), above `--reporter=dot` | the PGlite suite, admitted file by file (OD-222; `b19-e-ci-job-scope`) |
+| `.github/workflows/deterministic-manufacturing.yml:380` | one database-delivery line, `app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts`, after C2's entry (`:379`; [B24-D0, 2026-10-09] was `:342` after `:341` before B24-D0's 38 prompt-to-gerber `--exclude` lines at `:293-330`), above `--reporter=dot` | the PGlite suite, admitted file by file (OD-222; `b19-e-ci-job-scope`) |
 | B21 C49, C93, C94 (`artifacts/ai-control-plane-b21/evaluation-matrix.md:1139, :1183, :1184`; `b21-f-page` 6) | `:373` -> `:374`, `:376` -> `:377`, `:385` -> `:386`, each with `re-pinned +1` naming the entry at `:342` | the inserted line moves every later workflow line +1 (lead decision D8) |
 | `artifacts/ai-control-plane-b24/environments-and-deployment.md` section 10 | one row appended to the insertion table (task `[B24-C3, 2026-10-09]`, job `database-delivery`, first line `:342`, count 1) | A1's insertion-table protocol; no earlier row and no number of sections 10 and 14 moved |
 | `artifacts/ai-control-plane-b24/ci-admission.md:185` | the browser job's `timeout-minutes: 30` citation `:359` -> `:360`, earlier notes kept | the same +1 (re-derived by anchor) |
@@ -1223,7 +1223,7 @@ Each row resolves on the line it names (`b24-c3-recorded-limits` 11): the anchor
 | C47 | `scripts/retention-purge.ts` | 75 | `if (selectsTraceRead(argv)) {` |
 | C48 | `scripts/retention-purge.ts` | 65 | `repositoryFor: () => new PostgresDurableWorkflowRepository()` |
 | C49 | `scripts/retention-purge.ts` | 88 | `if (ENTRY_MODULE) void main(process.argv.slice(2), process.env)` |
-| C50 | `.github/workflows/deterministic-manufacturing.yml` | 342 | `app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts` |
+| C50 | `.github/workflows/deterministic-manufacturing.yml` | 380 | `app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts` |
 | C51 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 54 | `const CHAPTERS = ["b19-", "b20-", "b21-", "b22-", "b23-", "b24-"] as const;` |
 | C52 | `app/lib/durable-workflow/types.ts` | 45 | `export interface DurableWorkflowRepository {` |
 | C53 | `app/lib/durable-workflow/types.ts` | 50 | `getReplay<TResult extends object = object>(` |
@@ -1333,7 +1333,7 @@ next free number is OD-233, one entry for every C3 choice beyond the drafts; OD-
 
 ### The README row
 
-| B24-C3 readers and recorded limits (D24-24 as recorded, D24-26; OD-210, OD-211, OD-233) | `observability-and-replay.md` (part 3); code `app/lib/observability/trace-read.ts` (new), `scripts/retention-purge.ts` (the `--read` dispatch; its dispatcher driven over PGlite), in place `app/lib/durable-workflow/retention-cli.ts:13`; workflow `deterministic-manufacturing.yml:342`; suites `b24-c3-trace-read` (10), `b24-c3-recorded-limits` (11), `b24-c3-trace-read-pglite` (4) | done 2026-10-09 offline, the review round's eleven findings closed in-tree; the read against a real store BLOCKED-LIVE-QUALIFICATION (LB-14, LB-13); census 168 / 165 / 3 / 0, counts 47 / 36 / 9 / 27, 107 action records, 32 migrations; `accessAudit: "not_recorded"` |
+| B24-C3 readers and recorded limits (D24-24 as recorded, D24-26; OD-210, OD-211, OD-233) | `observability-and-replay.md` (part 3); code `app/lib/observability/trace-read.ts` (new), `scripts/retention-purge.ts` (the `--read` dispatch; its dispatcher driven over PGlite), in place `app/lib/durable-workflow/retention-cli.ts:13`; workflow `deterministic-manufacturing.yml:380` ([B24-D0, 2026-10-09] was `:342` before B24-D0's 38 prompt-to-gerber `--exclude` lines at `:293-330`); suites `b24-c3-trace-read` (10), `b24-c3-recorded-limits` (11), `b24-c3-trace-read-pglite` (4) | done 2026-10-09 offline, the review round's eleven findings closed in-tree; the read against a real store BLOCKED-LIVE-QUALIFICATION (LB-14, LB-13); census 168 / 165 / 3 / 0, counts 47 / 36 / 9 / 27, 107 action records, 32 migrations; `accessAudit: "not_recorded"` |
 
 ### The ledger paragraph
 

@@ -80,10 +80,10 @@ export type EvalState = (typeof EVAL_STATES)[number];
 export const LINK_KINDS = ["suite", "spec", "pglite", "live_opt_in"] as const;
 export type LinkKind = (typeof LINK_KINDS)[number];
 /** The CI jobs a link can run in, recorded exactly as `b24-b1-catalog` case 4 derives them (a new job extends this by review). */
-export const CATALOG_CI_JOBS = ["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "page-browser-e2e"] as const;
+export const CATALOG_CI_JOBS = ["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "page-browser-e2e", "agent-boundary-suites"] as const; // [B24-D0, 2026-10-09] + agent-boundary-suites (OD-30's split, ci-split.md)
 export type CatalogCiJob = (typeof CATALOG_CI_JOBS)[number];
 /** The jobs that run on a pull request (benchmark-nightly runs on schedule and dispatch only). */
-export const PULL_REQUEST_CI_JOBS: readonly CatalogCiJob[] = Object.freeze(["prompt-to-gerber", "database-delivery", "benchmark-core", "page-browser-e2e"]);
+export const PULL_REQUEST_CI_JOBS: readonly CatalogCiJob[] = Object.freeze(["prompt-to-gerber", "database-delivery", "benchmark-core", "page-browser-e2e", "agent-boundary-suites"]); // [B24-D0, 2026-10-09] the appended job runs on every pull request too
 /** The owner of a missing row no B24 increment plans. */
 export const NONE_PLANNED_IN_B24 = "none planned in B24" as const;
 
@@ -126,7 +126,7 @@ const ENGINEERING: readonly CatalogCiJob[] = ["benchmark-core", "benchmark-night
 const P2G_ENGINEERING: readonly CatalogCiJob[] = ["prompt-to-gerber", "benchmark-core", "benchmark-nightly"];
 const NIGHTLY: readonly CatalogCiJob[] = ["benchmark-nightly"];
 const BROWSER: readonly CatalogCiJob[] = ["page-browser-e2e"];
-// [B24-B2, 2026-10-08] NO_JOB removed: since B24-B2 every catalogued suite runs in a CI job (D24-15, OD-204; b24-b2-ci-admission).
+const AGENT_BOUNDARY: readonly CatalogCiJob[] = ["agent-boundary-suites"]; // [B24-D0, 2026-10-09] OD-30's split: the suites under app/lib/mcp and app/lib/computation/__tests__ (ci-split.md). [B24-B2, 2026-10-08] NO_JOB removed: since B24-B2 every catalogued suite runs in a CI job (D24-15, OD-204; b24-b2-ci-admission).
 
 const link = (path: string, kind: LinkKind, refs: readonly string[], ciJobs: readonly CatalogCiJob[], ids: { readonly b11?: readonly string[]; readonly b21f?: readonly string[] } = {}): EvalLink =>
   Object.freeze({ path, kind, refs: Object.freeze([...refs]), ...(ids.b11 ? { b11Cases: Object.freeze([...ids.b11]) } : {}), ...(ids.b21f ? { b21FCases: Object.freeze([...ids.b21f]) } : {}), ciJobs: Object.freeze([...ciJobs]) });
@@ -152,7 +152,7 @@ const b11 = (...ids: readonly string[]): EvalLink => link(`${AGENT}b11-trace-rep
 /** B21-F's runbook evaluations: one case each in b21-f-evaluation. */
 const b21f = (cases: Readonly<Record<string, string>>): EvalLink => link(`${ORCH}b21-f-evaluation.test.ts`, "suite", Object.values(cases), P2G, { b21f: Object.keys(cases) });
 const acceptancePipeline = suite(ACCEPTANCE_PIPELINE, ["B16.1C fresh-browser prompt-to-Gerber (deterministic, credit-free)"], P2G);
-const parity = suite("app/lib/mcp/server/__tests__/b20-c1-three-way-parity.test.ts", ["registry, providers and MCP render one tool three ways"], P2G);
+const parity = suite("app/lib/mcp/server/__tests__/b20-c1-three-way-parity.test.ts", ["registry, providers and MCP render one tool three ways"], AGENT_BOUNDARY); // [B24-D0, 2026-10-09] was P2G
 const viaFacts = suite(`${ENG}b18-e-via-facts.test.ts`, ["the bounded via read answers what a via plan needs"], P2G_ENGINEERING);
 
 interface Cell {
@@ -184,7 +184,7 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
       b11("e02-schematic-only", "e03-valid-board", "e06c-selection-valid", "e09-mutation-not-exposed"),
       suite(`${ENG}b04-tool-registry.test.ts`, ["registry validation (fail closed)"], ENGINEERING),
       suite(`${ENG}b17-f-agent-exposure.test.ts`, ["the intentional exposure set is derived, reviewed and exact"], P2G_ENGINEERING),
-      suite("app/lib/mcp/__tests__/b20-a2-tool-discovery.test.ts", ["[B20 A2] one page on the wire"], P2G),
+      suite("app/lib/mcp/__tests__/b20-a2-tool-discovery.test.ts", ["[B20 A2] one page on the wire"], AGENT_BOUNDARY), // [B24-D0, 2026-10-09] was P2G
     ], "B11's e02, e03, e06c and e09 replay in b11-trace-replay-evaluation, which runs in prompt-to-gerber since B24-B2 (D24-15, OD-204)."),
     model_in_loop: blocked(["LB-7"], noLivePath("no live run lets a real model discover and choose Sirkit's tools; the record-only command runs four task-graph capsules only", "LB-7")),
     browser_e2e: notApplicable("Not applicable: the run's toolset is built on the server and the choice of tool is the model's; the page renders only results, and the fixture runtime's scripted agent chooses by script, so no browser journey evaluates either (the live choice is the model_in_loop row)."),
@@ -422,7 +422,7 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
       suite("app/lib/pcb/__tests__/b19-d-kicad-emit-injection.test.ts", ["a hostile pad type or net id never becomes structure"], P2G),
       suite("app/lib/llm/__tests__/b19-d-compose-instructions-escaping.test.ts", ["section delimiters cannot be forged from inside a section"], P2G),
       suite(`${AGENT}b19-d-tool-result-hygiene.test.ts`, ["tool results are cleaned before the model sees them"], P2G),
-      suite("app/lib/mcp/__tests__/b20-d1-malicious-server.test.ts", ["the malicious external server, composed"], P2G),
+      suite("app/lib/mcp/__tests__/b20-d1-malicious-server.test.ts", ["the malicious external server, composed"], AGENT_BOUNDARY), // [B24-D0, 2026-10-09] was P2G
       b21f({ F11: "11" }),
     ]),
     model_in_loop: blocked(["LB-7", "LB-9"], shapeOnly("F11", "LB-7, LB-9")),
@@ -434,10 +434,10 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
   "sandbox-escape": {
     deterministic_offline: covered([
       suite("app/lib/spice/__tests__/sec-1-deck-injection.test.ts", ["the Studio compiler writes is one line, or the deck is refused"], P2G),
-      suite(`${COMPUTATION}b22-a1-model-screen.test.ts`, ["the model screen reads exactly the text the deck emits"], P2G),
-      suite(`${COMPUTATION}b22-a1-secret-env.test.ts`, ["kicad-cli gets an explicit environment, never the inherited one"], P2G),
-      suite(`${COMPUTATION}b22-a1-diagnostic-bounds.test.ts`, ["one constant decides the diagnostic bounds"], P2G),
-      suite(`${COMPUTATION}b22-d-adversarial.test.ts`, ["1", "3"], P2G),
+      suite(`${COMPUTATION}b22-a1-model-screen.test.ts`, ["the model screen reads exactly the text the deck emits"], AGENT_BOUNDARY), // [B24-D0, 2026-10-09] the four: was P2G
+      suite(`${COMPUTATION}b22-a1-secret-env.test.ts`, ["kicad-cli gets an explicit environment, never the inherited one"], AGENT_BOUNDARY),
+      suite(`${COMPUTATION}b22-a1-diagnostic-bounds.test.ts`, ["one constant decides the diagnostic bounds"], AGENT_BOUNDARY),
+      suite(`${COMPUTATION}b22-d-adversarial.test.ts`, ["1", "3"], AGENT_BOUNDARY),
     ]),
     model_in_loop: blocked(["LB-7"], noLivePath("no live run has a real model write a hostile deck; the runner's live result is the physical_hardware row", "LB-7")),
     browser_e2e: notApplicable("Not applicable: an escape attempt targets the server's diagnostic runner process; the page only submits a deck to the route, which the route suites screen (b19-d-deck-injection, sec-1-deck-injection)."),
@@ -445,7 +445,7 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
     external_provider_staging: notApplicable("Not applicable: the diagnostic runner is a local process; no external service is on its path."),
     physical_hardware: {
       state: "failing",
-      links: [liveOptIn(`${COMPUTATION}b22-d-adversarial-live.test.ts`, ["4"], P2G)],
+      links: [liveOptIn(`${COMPUTATION}b22-d-adversarial-live.test.ts`, ["4"], AGENT_BOUNDARY)], // [B24-D0, 2026-10-09] was P2G
       liveBlockers: ["LB-10"],
       recordedResult: {
         source: "artifacts/ai-control-plane-b22/adversarial-matrix.md:327, :335",

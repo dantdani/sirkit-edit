@@ -640,7 +640,7 @@ describe("[B24-A1] the page environments-and-deployment.md", () => {
     const planned = simulate(remaining);
     expect(lineCount(planned.workflow) - lineCount(lines(WORKFLOW))).toBe(remaining.reduce((sum, step) => sum + step.lines.length, 0));
     expect(insertionRowsOf(planned.page)).toHaveLength(insertionTable(read(PAGE)).rows.length + remaining.length);
-    expect(insertionRowsOf(planned.page)).toHaveLength(13);
+    expect(insertionRowsOf(planned.page)).toHaveLength(15); // [B24-D0, 2026-10-09] reviewed pin move (the lead's): D0's two real rows (the exclusions, the appended job) beside the 13 planned groups (OD-30's split)
     expect(jobOrderProblems(planned.workflow)).toEqual([]); // A2's appended job (task-A2.md:340) follows production-smoke
     expect(shiftTableProblems(planned.page, planned.workflow)).toEqual([]);
     expect(sectionFourteenWorkflowProblems(planned.page, planned.workflow)).toEqual([]);
