@@ -32,7 +32,7 @@ import { resolveComponentAuthoritySource } from "./component-authority-runtime";
 import { DEFAULT_PIN_FACTS_DEADLINE_MS, loadRunReplacementPinFacts, resolveReplacementPinFactsSource } from "./replacement-facts-runtime";
 import { resolveExternalAcquisitionPort } from "./external-acquisition-runtime"; // [B19-E E6] the one approved acquisition boundary
 import { resolveMcpObservationPort } from "./mcp-observation-runtime"; // [B20 A4] the one approved MCP client boundary
-import { chatResumeBodyKeyAdmitted, emitRefusedRun, pausedFirstTurn, planChatRun, productionSpecialistProviders, resolveChatResume, resumeChatRun, routerFactsOf, runOrchestratedChat } from "./orchestration-runtime"; // [B21 B] the one orchestration seam (flag-gated; off, every message is single); [B21 E1] + its provider layer; [B21 E3] + the route-level resume; [B21 E4] + the first turn behind the breaker
+import { chatResumeBodyKeyAdmitted, emitRefusedRun, pausedFirstTurn, planChatRun, productionSpecialistProviders, resolveChatResume, resumeChatRun, routerFactsOf, runOrchestratedChat } from "./orchestration-runtime"; import { beginRunAttribution } from "./attribution-runtime"; // [B24-C2] D24-22, D24-23, OD-208, OD-209: the run's attribution (in place: route.ts keeps its 562 lines and no cited line moves); [B21 B] the one orchestration seam (flag-gated; off, every message is single); [B21 E1] + its provider layer; [B21 E3] + the route-level resume; [B21 E4] + the first turn behind the breaker
 import type { ReplacementPinFactsRole } from "@/app/lib/engineering/replacement-pin-facts";
 import { pcbBoardInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID, PCB_BOARD_HIERARCHY_PATH } from "@/app/lib/pcb/board-identity";
 import { engineeringDigest } from "@/app/lib/engineering/stable";
@@ -395,7 +395,7 @@ export const POST = agentStreamRoute(
   // path: production cancellable reads (DATABASE_URL-gated), each wrapped in
   // the abort/deadline settlement machine bound to THIS request's signal.
   const replacementFactsSource = resolveReplacementPinFactsSource();
-  const gateway = createAgentToolGateway(registry, {
+  const attribution = beginRunAttribution({ registry, context: runContext, provider, budget: DEFAULT_AGENT_BUDGET }); const gateway = createAgentToolGateway(registry, { readService: attribution.readService, // [B24-C2] OD-208: the run's passive attribution; its read service is the gateway's (the same class, injected here so the run's reads can be attributed)
     ...(executionGrants ? { executionGrants } : {}),
     // [B18-C] pinned into every grant's origin; the dispatch refuses without it.
     promptVersion: AGENT_SYSTEM_PROMPT_VERSION,
@@ -424,7 +424,7 @@ export const POST = agentStreamRoute(
   // [B21 B] deterministic policy BEFORE any model judgment (OD-110): the router runs only under SIRKIT_ORCHESTRATION_ENABLED=1;
   // off, every message is `single` and nothing below changes. A refused plan never invokes the adapter.
   const plan = planChatRun(userMessage, routerFactsOf(runContext));
-  const adapter = agentAdapterFor(provider);
+  const adapter = attribution.observeAdapter(agentAdapterFor(provider)); // [B24-C2] OD-208: the coordinator's adapter, observed for its steps' provider request ids (a dag plan's follow-up turn runs on this same adapter); every step passes through unchanged
   // [B11] every run produces ONE bounded, redacted, provider-neutral trace.
   // Identity is frozen at construction; the recorder observes normalized
   // events only and can never alter authorization or the run outcome.
@@ -434,7 +434,7 @@ export const POST = agentStreamRoute(
   }
   // [B11.1] a failing sink factory can never abort the request: it falls
   // back to an isolated in-memory sink and is classified on the trace.
-  const traceSink = createAgentTraceSink();
+  const traceSink = attribution.wrapSink(createAgentTraceSink()); // [B24-C2] OD-208, OD-209: C1's sink, wrapped - every appended event timed on a monotonic clock by its seq, the validated document captured at complete; the recorder and the trace contract are not edited
   const traceRecorder = new AgentTraceRecorder({
     runId,
     traceId: `trace-${randomUUID()}`,
@@ -460,7 +460,7 @@ export const POST = agentStreamRoute(
       if (traceRecorder.isFinalized) return;
       if (!traceRecorder.hasTerminal) traceRecorder.recordTerminal(outcome, failureReason);
       const trace = traceRecorder.finalize({ outcome, failureReason });
-      if (validateAgentRunTrace(trace).length === 0) void agentRunTraceDigest(trace);
+      if (validateAgentRunTrace(trace).length === 0) void agentRunTraceDigest(trace); attribution.record({ planKind: plan.kind, scope: requestScope, trusted: { principalId: context.principalId, role: context.actor.role, membershipRevision: context.membershipRevision, authClass: context.authMethod, correlationId: context.correlationId }, userMessage }); // [B24-C2] OD-208, OD-209: ONE scheduled write of the attribution (the validated trace the sink received, by digest); passive, idempotent, after the recorder's hand-over
     } catch { /* tracing is passive */ }
   };
   const abort = new AbortController();
@@ -483,7 +483,7 @@ export const POST = agentStreamRoute(
       // the route keeps its own so no later path (outer catch, finally) can
       // append a second terminal to the stream.
       let streamTerminalEmitted = false;
-      const emit = (event: AgentRunEvent): void => {
+      const emit = (event: AgentRunEvent): void => { attribution.observeEmit(event); // [B24-C2] OD-208: the first text_delta's offset, the tool_refused classes and the answer's digest are observed here, passively; the event is unchanged
         const terminal = event.type === "run_completed" || event.type === "run_failed";
         if (terminal && streamTerminalEmitted) return;
         if (terminal) streamTerminalEmitted = true;

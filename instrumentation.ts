@@ -15,4 +15,13 @@ export async function register(): Promise<void> {
   // bundles share with this one.
   const { bindDurableLlmCallRecordSink } = await import("./app/lib/observability/llm-call-record-runtime");
   bindDurableLlmCallRecordSink();
+  // [B24-C2] OD-199, OD-208: publish A1's deployment configuration digest for the attribution documents of this process. The record is
+  // built here (once, at start-up) because the chat route may not import it: it digests the provider registry, which must stay out
+  // of the chat closure (b19-d's FORBIDDEN list). A record that cannot be built publishes nothing: the attribution then carries null
+  // and the closed diagnostic, and start-up is never blocked.
+  try {
+    const { deploymentConfiguration } = await import("./app/lib/deployment/configuration");
+    const { publishDeploymentConfigurationDigest } = await import("./app/lib/observability/deployment-configuration-digest");
+    publishDeploymentConfigurationDigest(deploymentConfiguration().digest);
+  } catch { /* the attribution records deployment_configuration_unavailable */ }
 }

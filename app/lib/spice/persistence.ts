@@ -1,6 +1,6 @@
 "use client";
 
-import { assertProjectShape } from "./project";
+import { assertProjectShape, loadAiAuditLog } from "./project"; // [B24-C2] D24-25: the audit log's redaction, caps and bound, applied again on load
 import type { RunRecord, SimulationProject } from "./types";
 
 const PROJECT_KEY = "sirkit:spice-studio:project:v1";
@@ -37,6 +37,7 @@ export function loadStudioProject(): SimulationProject | null {
   try {
     const parsed = JSON.parse(raw) as unknown;
     assertProjectShape(parsed);
+    parsed.aiAuditLog = loadAiAuditLog(parsed.aiAuditLog); // [B24-C2] D24-25: a stored log is redacted, capped and bounded on load, as on every write (a pre-redaction entry included)
     return parsed;
   } catch (error) {
     console.warn("[spice-studio] Ignoring invalid saved project", error);

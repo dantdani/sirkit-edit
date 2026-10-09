@@ -564,3 +564,276 @@ migration, census, tool-count, classification or flag move; every live step BLOC
   filter; locally they take about 60 s together under load) - within five minutes of the limit, STOP (OD-30); database-delivery against
   its 15 (one more PGlite file, about 4 s locally); `production-smoke` green.
 - **The B17-A browser suite:** not needed - C1 changes no UI and no control (`generate-b17-control-inventory`: no drift).
+
+# B24-C2 - Observability and replay, part 2: attribution, cost and latency
+
+Base: `4ec18eb` on `chapter/b24-production-qualification` (B24-A1..A4, B1, B2, B3 and C1 committed). B24-C2 closes D24-22 and D24-23
+offline (this part; runbook `:1076` "request and trusted context references;", `:1080` "tool discovery/calls/results;", `:1084`
+"retries/cancellation/errors;", `:1085` "token/cost/latency budgets;", `:1086` "final user-visible result."; `:1088` "Do not store hidden
+reasoning. Redact secrets and sensitive source content."; OD-208 applied, OD-209's cost half amended, OD-232 the choices beyond them) and
+D24-13 and D24-25 (`retention-and-deletion.md`). It was delivered in one workflow run in two tagged halves for one commit by the lead
+(lead decision D21): B24-C2a, this part; B24-C2b, retention and redaction. Every line number below is the B24-C2 working tree's unless it
+names another tree. The labels are part 1's.
+
+## 19. What B24-C2a is
+
+- **What it is.** One sibling record per validated run trace, written ONCE after the recorder has handed the trace to C1's sink and
+  never read by any route, tool or page (readers are B24-C3's, OD-211): `agent.run-trace-attribution.v1`
+  (`app/lib/observability/run-trace-attribution.ts`), the document `sirkit.agent-run-trace-attribution.v1`, keyed by trace id in the run's
+  scope, bound to the stored trace by `traceDigest` (`agentRunTraceDigest`). It says who asked (the trusted context by digest and closed
+  class), what was asked (a salted message digest and the character count), what was discovered (the toolset digest and count) and read
+  (per read, the source revision and the consumed resources' ids and digests), what was refused before it ran (the closed classes), what
+  the user saw (a salted answer digest and the count), the provider's request ids, the budget, the cost through the one price table and the
+  latency on a monotonic clock. Beside it, one `agent.trace-salt.v1` per scope (`trace-salt.ts`), created once by compare-and-set.
+- **What it is not.** No route, agent or MCP tool, action record, UI control, environment name or flag, migration or dependency (OD-42):
+  the census stays 168 / 165 / 3 / 0, the tool counts 47 / 36 / 9 / 27, the action records 107, the migrations 32 (both aggregates ride the
+  durable-workflow tables), the classification CSV byte-identical, `.env.example` unchanged, the nine B11-scanned files at their hashes.
+  No text field of any kind: every value is a digest, an id matching a pattern, a closed class, a count or a bounded number, and
+  `findSecretShapedPath` runs over the whole document (`b24-c2-attribution` 2). Nothing in `trace.ts` or `trace-recorder.ts` moved.
+- **What the builder did not run.** No `next dev`, `next build`, `next start` or Playwright; no database but PGlite in the test process;
+  no provider, model, host or account. Every live half is **BLOCKED-LIVE-QUALIFICATION** (section 25).
+
+## 20. The pre-edit counterexamples (red first; **CONFIRMED**)
+
+- **C2a.** `b24-c2-attribution` and `b24-c2-cost` failed to load on `4ec18eb` ("Cannot find module `@/app/lib/observability/trace-salt`",
+  "Cannot find module `@/app/lib/evaluation/model-price-table`"; exit 1, 2.66 s). Their behavioural counterexamples are the cases themselves:
+  case 1 (no attribution exists for a completed chat request under the fixture runtime) and case 7 (an `AgentStep` carries no request id)
+  cannot pass on `4ec18eb`'s adapters and route.
+- **C2b.** `b24-c2-retention` and `b24-c2-retention-pglite` failed to load (no policy, no port); `b24-c2-redaction` ran 2 / 10 on
+  `4ec18eb`'s three stores (exit 1, 2.96 s): a secret-shaped instruction was stored in the grant's excerpt as typed, a key fragment survived
+  the 240 cut, U+200B was kept, 501 edits left 501 audit entries, a 501-entry stored project loaded whole, a 29,000-character change set was
+  stored, and the provider's `detail` and log line carried the key (`retention-and-deletion.md` section 1).
+
+## 21. The attribution document (D24-22, OD-208; **CONFIRMED** in memory)
+
+- **Where and when.** One aggregate per trace id, `durableWorkflowId("agent-run-trace-attribution", { ...scope, traceId })`, written at
+  revision 0 by compare-and-set with `outbox: []` under the idempotency key `run-trace-attribution:<traceId>` (a replay writes nothing;
+  the same trace id again answers `replayed`), validated before persist, the record digest and the document digest re-verified on load
+  (`AGENT_RUN_TRACE_ATTRIBUTION_MISMATCH`, one closed error). The write is scheduled from the route's `finalizeTrace`
+  (`app/api/chat/route.ts:463`, in place) after the recorder's hand-over, through the composition root `app/api/chat/attribution-runtime.ts`
+  (beside C1's `trace-runtime.ts`; its one production importer is the route, on its line 35): the repository is `getDurableWorkflowRepository()`
+  resolved at write time (PostgreSQL in production, the fixture runtime's in-memory repository under the fixture runtime), the pending writes
+  bounded at 64, every failure counted by a closed class - `trace_unavailable`, `store_unavailable`, `refused`, `write_failed`, `dropped` -
+  and nothing about the write can change the stream, the terminal or the run (`b24-c2-attribution` 10: a throwing store factory, B21-B's
+  recorded stream digest unchanged).
+- **The closed keys**, in order: `schema`, `runId`, `traceId`, `traceDigest`, `scope`, `trustedContext` (`correlationId`, `role`,
+  `membershipRevision`, `authClass`, `principalRef`), `request` (`messageDigest`, `messageChars`), `plan` (`kind`: `single`, `dag`,
+  `refused`), `toolset` (`declarationsDigest`, `toolCount`; null for a refused plan), `reads` (`canonicalRevisionDigest`, `count`, `withheld`,
+  `entries[]` of `sourceRevisionDigest`, `resources[]` of `resourceId`, `sourceVersion`, `contentDigest`, and `resourcesWithheld`),
+  `refusedCalls` (the six `tool_refused` statuses of `loop.ts` - `unknown_tool`, `budget_exhausted`, `invalid_input`, `repeated_call`,
+  `proposal_exists`, `execution_exists` - plus `other`), `provider` (`requestIds`, `requestIdsWithheld`, `retryCeiling`, `sdkRetriesObserved`),
+  `answer` (`digest`, `chars`, `outcome`; null when nothing was answered), `deploymentConfigurationDigest`, `budget` (the six fields),
+  `cost`, `latency` (`clock`, `firstTextOffsetMs`, `terminalOffsetMs`, `eventOffsets[]` of `seq`, `offsetMs`) and `diagnostics` (the closed
+  pair `salt_unavailable`, `deployment_configuration_unavailable`). An unknown key, a text value, a reasoning-shaped key and an unsalted
+  digest where a salted one belongs are refused and nothing is written (case 2).
+- **The salt (OD-232, a stated choice: per scope, finer than OD-208's per tenant).** One random 32-byte salt per (tenant, project, branch),
+  kept as `agent.trace-salt.v1` (`saltHex`, created once by compare-and-set under one idempotency key per scope); two concurrent first runs
+  converge on one salt (the loser meets the winner's replay or the moved head and reads it back; case 9, the store and two parallel chat
+  requests). The digests are `sd1-` + HMAC-SHA256(salt, domain NUL text) with the domains `principal`, `message` and `answer`, so equal
+  texts in different roles never share a digest. The salt is never logged and never written into a trace or an attribution; when it cannot
+  be resolved the digests are null and the diagnostic is `salt_unavailable` - an unsalted digest is never written (cases 3, 10). Deleting a
+  scope's salt crypto-shreds every salted digest written under it (`retention-and-deletion.md`).
+- **The sources.** `trustedContext` from the route's trusted context only (`principalId` salted, `role`, `membershipRevision`,
+  `authClass` = `AuthMethod`, `correlationId` as a bounded id); `request` from `userMessage`; `plan.kind` from `planChatRun`
+  (`route.ts:426`); `toolset` from `buildRunToolset(...).declarations` on the run's registry and context, recomputed at record time (the
+  loop's own derivation; a refused plan has none); `reads` from a `ReadToolInvocationService` the composition root constructs and the route
+  injects through the gateway's existing `readService` option (`route.ts:398`; `gateway.ts` unchanged), at most 64 reads of 64 resources
+  each, the rest counted (case 4); `refusedCalls` and the first `text_delta` and `run_completed` from the route's `emit` (`route.ts:486`);
+  `provider.requestIds` from the coordinator adapter, observed in place (`route.ts:427`): each resolved step's `providerRequestId` - the
+  SDK's `_request_id`, which both installed SDKs type `_request_id?: string | null` on a parsed response (`@anthropic-ai/sdk` 0.98.0 and
+  `openai` 6.48.0, `internal/parse.d.ts:14`; INFERRED from the declarations, no live call) and which the two adapter normalizers set in
+  place (`adapters.ts:88, :190`; [B24-C2 review, 2026-10-09] re-derived by anchor: the `usage:` lines, not the `model:` lines below them) only when the response carries one, as the optional `providerRequestId` of `AgentStep` (`contracts.ts:233`)
+  - at most 2 x `maxModelSteps` (12), each matching `^[A-Za-z0-9_-]{1,128}$` and free of a secret shape, the excess and the withheld
+  counted in `requestIdsWithheld` (cases 4, 7). A dag plan's follow-up turn runs on the same observed adapter under the same budget
+  (`orchestration-runtime.ts` keeps `...rest` and wraps `deps.adapter`), so its ids are counted and no specialist id is (case 14, B21-E3's
+  scenario 17: the first turn's and the follow-up's ids, none withheld). `retryCeiling` is the coordinator adapter's configured value,
+  `COORDINATOR_SDK_RETRY_CEILING` (`adapters.ts`, appended): OpenAI `2` (`maxRetries: number = 2`), Anthropic `"sdk_default"` (`maxRetries`
+  passed only when given); `sdkRetriesObserved` is always `"unknown"` - 9.5 item 33 stays UNKNOWN, stated, never guessed (case 8). `answer`
+  is the salted digest and the length of `run_completed.finalText` with the trace's terminal outcome; a refused plan answers its refusal
+  text (`emitRefusedRun`), so its answer is that text's digest (case 5b).
+- **The deployment configuration digest (OD-199).** A1's record digests the provider registry among its inputs, so the chat route may not
+  import it: the B19-D chat-closure tripwire and `b23-a-tier3-vocabulary` 7 keep `app/lib/manufacturing-providers/` out of the route's
+  closure (case 12 pins that `app/lib/deployment/configuration.ts` is not in it). `instrumentation.ts` therefore builds the record once at
+  start-up, after the fixture clock and C1's binding, and publishes its digest on a `globalThis` slot
+  (`app/lib/observability/deployment-configuration-digest.ts`; a record that cannot be built publishes nothing and never blocks start-up);
+  the attribution reads the published digest, or carries null with `deployment_configuration_unavailable` (case 13: unpublished, then
+  `register()` under the nodejs runtime publishes exactly `deploymentConfiguration().digest`). The call records carry no digest (OD-231 (j)):
+  one place, never both.
+- **Recording is passive and total.** The collector (`run-attribution-collector.ts`) never throws into the stream, the recorder or the
+  adapter and changes no event, step or document; a throwing inner sink still throws to the recorder, which classifies it (case 6).
+  `record` is idempotent across the route's three `finalizeTrace` paths. Specialist traces are attributed by B21-E's per-task record
+  (`trace-attribution.ts`), stated, not rebuilt. The trace's own `argsDigest` and `outputDigest` stay unsalted (B11's open question,
+  `redaction-and-retention-policy.md:52-57`; salting them would be a pin move on `trace.ts`).
+
+## 22. Budgets, cost and latency (D24-23, OD-209's cost half; **CONFIRMED**)
+
+- **`budget`.** The run's `AgentRunBudget` snapshot: the six fields of `request.budget`, which is `DEFAULT_AGENT_BUDGET`
+  (`contracts.ts:181-188`, `route.ts:508`): `maxModelSteps` 6, `maxToolCalls` 10, `perToolTimeoutMs` 15,000, `runDeadlineMs` 120,000,
+  `maxIdenticalCalls` 2, `executionSettlementTimeoutMs` (case 1).
+- **One price table (lead decision D1).** `app/lib/evaluation/model-price-table.ts`, beside B3's `live-spend.ts` (OD-232: the one table
+  sits beside the one schema), declares `MODEL_PRICE_TABLE: LivePriceTable | null = null` - no owner table has been supplied; a test pins the
+  null (`b24-c2-cost` 1, 5) - and `priceUsage({ provider, model, usage }, table)`, which prices through B3's `livePriceTableProblems` and the
+  `procurement.ts` decimal helpers: `costMicrounits = addDecimal(multiplyDecimalByInteger(inputPerMillion, inputTokens),
+  multiplyDecimalByInteger(outputPerMillion, outputTokens))` - a price per million tokens times a token count is the cost in millionths of the
+  currency, the per-million units B3 compares in, so there is no division and no rounding; no `Number(`, `parseFloat` or `parseInt` touches
+  money (source check, case 4). It answers `{ status: "unpriced", reason }` with the closed reasons `no_owner_price_table` (no table, or a
+  table the validator refuses: never used to price), `model_not_in_table` (the model matched exactly: never a prefix, never another provider's
+  model, never a default price) and `usage_out_of_range` (a token count that is not a safe integer in 0..100,000,000, `multiplyDecimalByInteger`'s
+  range) - never a throw, never zero (runbook `:147`; a zero cost is a priced zero against a table) - or `{ status: "priced",
+  priceTableVersion, currency, costMicrounits }` (cases 2, 3: `"20"` for 10 in and 5 out at 1 and 2 per million; `"525.3"` for 1234 in and
+  567 out at 0.15 and 0.60). No second schema, validator, table constant or money cap exists: no `sirkit.model` + `-price-table` name under
+  `app/` or `scripts/` (case 4, the needle joined). The route prices the trace's `terminal.usage` at write time with `trace.provider` and
+  `trace.model` and passes the result in; C1's call records keep their token counts and are never stored priced (C3's read mode prints
+  tokens as stored); OD-107's "reported, not priced" stays true until the owner supplies a table.
+- **`latency`.** `{ clock: "monotonic", firstTextOffsetMs, terminalOffsetMs, eventOffsets: [{ seq, offsetMs }] }` on an injected monotonic
+  clock (`performance.now` in production), measured where OD-208 asked: at the sink's `append` (C1's sink wrapped at `route.ts:437`, one
+  entry per appended trace event keyed by its `seq`, at most `TRACE_BOUNDS.maxEvents` = 256, non-decreasing) and at the first `text_delta`
+  seen by `emit`; `terminalOffsetMs` is the trace's terminal event's offset; never inside `trace.ts` or `trace-recorder.ts` (case 6: offsets
+  10, 30, 40, 50, 90 on a stepped clock; a 300-step run keeps exactly 256).
+
+## 23. What is not recorded (**CONFIRMED** where a case names it; otherwise **INFERRED**)
+
+- The SDK's own retries: `sdkRetriesObserved` is `"unknown"` by contract (D24-22's UNKNOWN, 9.5 item 33). One record per run, however many
+  HTTP requests the SDK made; the request ids are the responses' ids as the SDK surfaced them.
+- Specialist turns: attributed by B21-E's per-task record, not here; their request ids are not collected (the specialist adapters are
+  `agentAdapterForRole`'s, not the observed coordinator adapter).
+- Tier 2 approvals: browser-local (OD-210; B24-C3 records the limitation).
+- Reads beyond 64, resources beyond 64 per read, request ids beyond 2 x `maxModelSteps`: counted, not kept.
+- A run that dies before finalization, a request refused before the recorder, a trace the recorder never hands to a sink, a replay: no
+  attribution, as part 1 states for the trace (section 6).
+- Content of any kind: no prompt, answer, query, tool argument, provider message or principal id - only their digests or counts.
+
+## 24. The import gates and the pins (**CONFIRMED**, `b24-c2-attribution` 11, 12; the gate sets of section 28)
+
+- The attribution store's runtime imports are exactly `../agent/trace`, `../durable-workflow/stable`, `../engineering/stable`; the salt
+  store's `../durable-workflow/stable`, `node:crypto`; the price table's `../release-engineering/procurement`, `./live-spend`. The closures of
+  the attribution store, the salt store, the collector, the digest slot, the price table, C1's run-trace store, the loop, the gateway, the
+  trace contract and the recorder reach no provider SDK specifier and none of `durable-workflow/runtime.ts`, `server-repository.ts`,
+  `db/client.ts`, `db/schema.ts`, `trace-runtime.ts` or `attribution-runtime.ts`, so B24-C3's trace-read core can verify through the stores
+  (D11). C1's gates hold unmoved: `trace-runtime.ts` keeps its three runtime specifiers and its one production importer (the route, line 40,
+  as C1 left it); `run-trace-store.ts`'s importers are `trace-runtime.ts` and `app/lib/observability/`; the one `PostgresDurableWorkflowRepository`
+  construction stays `durable-workflow/runtime.ts` (neither composition root nor the retention port constructs one: D11, prefer neither).
+  The route keeps its 562 lines and B21-E4's markers at 35, 504 and 507; every C2 edit is in place on the lines C1 left (35, 398, 427, 437,
+  463, 486).
+- The nine B11-scanned files hash to B21-E2b's `SCANNED_AT_HEAD`, read from its source (lead decision D20; case 11 holds no hash of its own).
+- **Two reviewed pin moves, each in place with a dated `[B24-C2, 2026-10-08]` note:** `b24-c1-llm-call-record` 12's `SEAM_CLOSURE` gains
+  `app/lib/agent/redaction.ts` (reached through `llm/errors.ts`, which now runs the provider's message through the redaction authority; the
+  module imports nothing, so no closure grows beyond it); `b21-e1-stop-reasons` 1's `AgentStep` field list gains `providerRequestId?`
+  (folded onto the `model` line after a doc comment, so no cited line of `contracts.ts` moves; E1's `stop?` stays the one field E1 added).
+  Neither was listed in the task's "pins this change could move"; both are listed here and in the ledger text.
+- The workflow line (database-delivery `:341`) moved B21's C49, C93 and C94 (`:372` -> `:373`, `:375` -> `:376`, `:384` -> `:385`;
+  `b21-f-page` 6), `ci-admission.md:185` (`:358` -> `:359`) and added A1's insertion-table row (`b24-a1-environment-profile` 14, 16, 17 green);
+  B23's C64 and its prose citation cite `:335`, above the line, and did not move.
+
+## 25. Live: BLOCKED-LIVE-QUALIFICATION
+
+- **LB-14** (the database platform): no attribution, salt or purge touched the real database platform or any staging or production database;
+  every database proof ran on PGlite in the test process (`b24-c2-retention-pglite`), every other suite with `DATABASE_URL` unset or emptied
+  (vitest's guard). The purge CLI, its dry run included, never ran against a live database and never will by the builder (OD-191, OD-202).
+- **LB-13** (staging and production): the attribution's write is scheduled after the response, as C1's; whether a serverless platform keeps
+  it alive is UNKNOWN until the owner names the platform (OD-190). `instrumentation.ts` now also builds A1's record at start-up; its first
+  production build is `production-smoke`'s CI run on this commit (the lead's; section 30).
+- **LB-2, LB-7, LB-9** (live models): the request ids, their shapes and the SDKs' retry behaviour were observed on fakes only; a live
+  provider's `_request_id` is INFERRED from the SDK declarations and never seen.
+
+## 26. What stays open (**INFERRED**, low)
+
+- The salt record is a durable row like any other: an operator with database write access can read it and recompute a digest from a
+  guessed text (a dictionary attack on the message digests); the salt's purpose is to stop correlation across scopes and the casual reading
+  of a digest, not to resist an insider with the row. Deleting the salt crypto-shreds the digests; no key management exists in the product
+  (OD-42).
+- `deploymentConfigurationDigest` is null wherever `register()` did not run (a test process, a worker without instrumentation): the
+  diagnostic says so; nothing else changes.
+- The toolset digest is recomputed at record time from the same registry and context the loop used; a context that changed between the two
+  computations (none does today: `runContext` is frozen for the run) would digest differently.
+- The B11 trace's `argsDigest` and `outputDigest` stay unsalted (B11's open question); salting them is a `trace.ts` pin move for the owner.
+- Under the fixture runtime every attribution's `at` is the frozen instant, as every durable time there (part 1, section 12).
+
+## 27. Superseded statements, handed to B24-F (file:line at C2's commit)
+
+- `app/lib/observability/llm-call-record.ts:1-20` and part 1's section 4: "never ... a provider request id (OD-208, B24-C2)" - still true
+  of the call record; the run's request ids are now kept on the attribution, not the call record (stated here, not edited).
+- Part 1's section 11 (`observability-and-replay.md:296-304`), "Retention and deletion ... nothing purges either aggregate" and
+  "Attribution, cost and principal ... no request digest, principal digest, budget, per-event offset, provider request id or cost is
+  recorded" - true of C1's tree, superseded by this increment (left as written; this part is the record).
+- `artifacts/remaining-builder-program/OWNER_DECISIONS.md`, OD-209's "B24-C2 amends this entry when it prices recorded usage" - amended in
+  this commit (the lead's file; the dated amendment is in section 30).
+- `artifacts/ai-control-plane-b24/discovery.md:951` (the lead's file), OD-202's "MCP traces 90 days" and "answer text 30 days", and `:952`
+  OD-208's "per-tenant salted" - restated by `retention-and-deletion.md` and section 21 (the MCP and B05 traces are rings, so process
+  lifetime; the resume record is deleted whole; the salt is per scope).
+- `app/lib/agent/trace-recorder.ts:41-45` and `:108-109` stay as part 1's section 10 records them (B11-scanned, not edited).
+
+## 28. Test-first record and gates (2026-10-08; **CONFIRMED**)
+
+Every run went through the lock script (two workers), `DATABASE_URL` unset in the shell and emptied by vitest's guard; no browser spec ran.
+"files" is passed (+ skipped) of the total; "tests" likewise. Logs are kept outside the repository (`scratchpad/b24/logs/c2-*.log`).
+
+| step | what ran | result |
+|---|---|---|
+| baseline, `4ec18eb` | the 15 pinned suites C2 touches (`b24-c1-llm-call-record`, `b24-c1-durable-trace`, `b21-e1/e3/e4/f-page`, `b23-b-dfm-quote-flow-page`, `b23-a-tier3-vocabulary`, `b23-a-provider-admission`, `b23-b-egress-import-gate`, `b24-a1-environment-profile`, `errors.test`, `b22-c-ai-evidence`, `b19-e-ci-job-scope`, `b19-d-external-text-injection-route`) | 15 files, 182 / 182, exit 0 (46.1 s) |
+| C2a red | `b24-c2-attribution`, `b24-c2-cost` | 2 files failed to load (no `trace-salt`, no `model-price-table`); exit 1 (2.7 s) |
+| C2a green, three runs | the same, after the modules, the route, the adapters, the contract and `instrumentation.ts` | 13 / 19 then 15 / 19 then 18 / 19: every red the suite's own expectation (the `local_dev` principal is the project admin; a Tier 3 refusal is `run_completed` with no step; the D11 regex matched a docblock that spelled the constructor - reworded; the retry ceiling made a closed class; the membership revision's form; C1's store factory bound in the test; the composition root names the aggregates); the last red awaited C2b's policy |
+| C2b red | `b24-c2-retention`, `b24-c2-redaction`, `b24-c2-retention-pglite` | 2 files failed to load; redaction 2 / 10 (section 20); exit 1 (3.0 s) |
+| C2b green, two runs | the five C2 suites | 36 / 41 (the straddling fixture began inside a token, so the design-text rule rightly kept it; `request-run` on a made-up plan; the ellipsis cut may split the replacement token; the census regex ran across lines and missed the resume record; the script's docblock spelled the variable - each the suite's own), then **5 files, 41 / 41, exit 0 (23.5 s)** |
+| tsc | `--noEmit -p tsconfig.json` | exit 2 (six: the auth class union, two literal-typed parameters, the hostile sink's type, the variable fixture) then **exit 0** |
+| eslint | the 25 changed TypeScript files | exit 1 (a loop variable named `module`) then **exit 0** |
+| `app/lib/qualification` (every B24 suite, the PGlite ones included) | 37 files | 36 / 37 (A1's flag census: two imports at the top of `spice/project.ts` moved its cited `:72`; hoisted to the end) then **37; 375 + 3, exit 0 (137.9 s)** |
+| `app/api/chat/__tests__`, `app/lib/llm/__tests__`, `app/lib/computation/__tests__` (`b22-closeout-statements`, `b22-c-ai-evidence`), `b19-e-ci-job-scope` | 59 files | **57 + 2; 488 + 18, exit 0 (73.5 s)** |
+| `app/lib/agent/orchestration/__tests__` (the hash pins, the import gates, the B21 pages, `b21-closeout-statements`) | 49 files | 48 / 49 (`b21-e1-stop-reasons` 1: the `AgentStep` field pin; moved in place, section 24) then, with `app/lib/manufacturing-providers/__tests__` (`b23-closeout-statements`, `b23-a-provider-admission` 8, `b23-b-dfm-quote-flow-page` 3): **30 files; 393, exit 0 (130.3 s)**; the other 48 orchestration files 459 / 459 in the first run |
+| `app/lib/agent/__tests__` (B09-B11, `b11-5-capture-exactness`), `app/lib/execution-grant/__tests__`, `app/api/agent/__tests__`, `app/lib/durable-workflow/__tests__`, `app/lib/fixture-runtime`, `app/lib/spice/__tests__`, `b18-c-granted-execution-dialog`, `b18-d-granted-execution-card` | 54 files | **52 + 2; 763 + 5, exit 0 (45.1 s)** |
+| `app/lib/auth/__tests__`, `app/api/__tests__` (the census 168 / 165 / 3 / 0) | 68 files | **68; 1538 + 9, exit 0 (88.6 s)** |
+| `app/lib/mcp`, `app/api/mcp/__tests__` (the tool counts 47 / 36 / 9 / 27, the process gate) | 52 files | **52; 920, exit 0 (114.5 s)** |
+| `app/lib/engineering/__tests__`, `app/lib/project/__tests__` (`b14-4-ast-import-gates`) | 136 files | **136; 1401, exit 0 (156.9 s)**, no worker timeout |
+| the database-delivery list (the workflow's `:322-341`: `app/lib/db` and 19 files) | 25 files | 21 + 3 / 25 (B16-B's env tripwire: the retention suite read `process.env.DATABASE_URL` bare; now a constant) then the two files **33 / 33, exit 0 (25.0 s)**; the other 23 files 189 + 12 in the first run |
+| generators | `generate-agent-artifacts` (36 of 47 tools), `generate-b16-0-2-artifacts`, `generate-b17-control-inventory` (631 controls, 63 surfaces), `generate-b11-artifacts` (19 / 19, 61 / 61), `generate-action-toolability-matrix` (107 records, 154 entries) | each exit 0; the tree's hash (`git diff` and every untracked file) `9a5d0ca8...` identical before and after, 30 status entries: **zero drift** |
+| control bytes and line endings | every changed or new file | none holds a control byte or a CR |
+| the closeout tripwires and the page suites | `b21-closeout-statements`, `b22-closeout-statements`, `b23-closeout-statements`, `b24-c1-durable-trace` 13, `b24-a1-environment-profile`, the five C2 suites, after both pages were written | recorded in the increment report (a page cannot carry the result of the run that reads its final text; the C1 precedent) |
+| review round, 2026-10-09 (test-first) | `b24-c2-redaction` with case 5's fourth bound, case 6's pre-redaction stored entry and the new case 11 on the unfixed stores | **red** 3 / 11 (5: the bounds held three keys; 6: a stored key-bearing reason loaded as typed; 11: the evidence `signal` stored as typed), exit 1 (2.5 s); after the fix **11 / 11, exit 0** (2.5 s) |
+| review round, 2026-10-09 (test strength) | `b24-c2-retention-pglite` with the new case 6, against the port with its three `head_moved` throws deleted (`retention.ts:201, :203, :206`), then against the port restored byte for byte (sha256 `431e9dfc…ac53e` before and after) | mutated: **5 / 6** - case 6 red at its `applyRetention` assertion (deleted aggregates 3, records 4, replays 5; `head_moved` 0), cases 1-5 green, so the five earlier cases did not reach the guards; restored: **6 / 6, exit 0** (3.5 s). A first mutated run failed for the wrong reason (the suite had not imported `applyRetention`, a `ReferenceError`) and does not count; the import was added and the proof re-run |
+| review round, 2026-10-09 (gates) | the C2 gate sets, tsc, eslint and the five generators on the final tree | in the increment report (the same precedent) |
+
+Not run by the builder: both Playwright configs, `next build`, `next start`, `next dev` and CI (section 30). The B17-A browser suite is not
+needed: C2 changes no UI and no control (`generate-b17-control-inventory`: no drift).
+
+## 29. Suites
+
+| suite | it( | cases |
+|---|---|---|
+| `app/lib/qualification/__tests__/b24-c2-attribution.test.ts` | 14 | the fixture-runtime counterexample with the closed keys, the budget and the unpriced cost; the Tier 3-refused plan; the dag run's request ids and an unknown-tool refusal; the one salt; passive failure; the published digest; the validator and the store; `salt_unavailable`; the bounds; the monotonic clock; the real adapters' `_request_id`; the retry ceiling; the B11 hashes (D20); the import gates and the route's lines |
+| `app/lib/qualification/__tests__/b24-c2-cost.test.ts` | 5 | unpriced without a table; exact decimal text; the refused table, the unknown model, the range; one schema; the pins |
+| `app/lib/qualification/__tests__/b24-c2-retention.test.ts` | 7 | the policy rows and the aggregate census (34 types); allowlist-only; the planner's cutoffs, limit and digest; the CLI's dry run and refusals; the closed flags; dry run then apply; the output rule and the modules' imports |
+| `app/lib/qualification/__tests__/b24-c2-redaction.test.ts` | 11 | the grant excerpt (four); the SPICE audit log (five: the bound, the load with a pre-redaction entry, the change set, B22-C's fields, the evidence references - [B24-C2 review, 2026-10-09] case 11 added, case 6 extended); the provider detail (two) |
+| `app/lib/qualification/database/__tests__/b24-c2-retention-pglite.test.ts` | 6 | the dry run; the apply; the kept and fresh rows; the completed outbox and the deferred keys; `mixed_commit`, `outbox_in_flight` and the moved set; `head_moved` by the port itself ([B24-C2 review, 2026-10-09] case 6 added: the moved head, the moved record set, the grown replay set) |
+
+The four non-PGlite suites ride prompt-to-gerber's `app/lib/qualification/__tests__` filter (OD-222); the PGlite suite is admitted to
+database-delivery by its one line (`:341`), outside every prompt-to-gerber filter (`b19-e-ci-job-scope` green). Slowest cases: `b24-c2-attribution` 12
+(13.4 s, the closures; limit 180 s), `b24-c2-retention` 1 (9.2 s, the census; limit 120 s); every case over 1.5 s declares its own timeout.
+
+## 30. For the lead (B24-C2a's share; B24-C2b's is on `retention-and-deletion.md`)
+
+Every text below is written out in full for a reserved file. Nothing here was written to `OWNER_DECISIONS.md`, `EXECUTION_LEDGER.md`,
+`PROGRAM_STATE.json`, `LIVE_BLOCKERS.md`, `discovery.md` or the B24 `README.md`. No OD-208 heading exists at `4ec18eb` (`grep '^## OD-208'`
+finds none), so the entry below is its one heading; OD-209's heading is B3's (`OWNER_DECISIONS.md:2903`), so its cost half is a dated
+amendment; the next free number at `4ec18eb` is OD-232 (the headings end at OD-231, `:2946`), one entry for every C2 choice (on
+`retention-and-deletion.md`).
+
+### Closure clauses (each one dated line under its defect in `discovery.md`)
+
+- [B24-C2, 2026-10-08] D24-22: closed offline by B24-C2 (OD-208 applied; OD-232): every validated run trace gets one `sirkit.agent-run-trace-attribution.v1` beside it (`agent.run-trace-attribution.v1`, `app/lib/observability/run-trace-attribution.ts`), keyed by trace id in the run's scope and bound to the stored trace by digest, written once by compare-and-set from the chat composition root (`app/api/chat/attribution-runtime.ts`, imported in place on `route.ts:35`) after the recorder's hand-over: who asked (the trusted context by closed class and a per-scope salted principal digest, `agent.trace-salt.v1`), what was asked (a salted message digest and the count), the discovered toolset digest, at most 64 reads' source revisions and consumed resources, the refused-call classes, the provider request ids (the SDKs' `_request_id`, at most 2 x maxModelSteps, bounded), the retry ceiling with the SDK's retries stated UNKNOWN, a salted answer digest and A1's deployment configuration digest published by `instrumentation.ts`; no text field, `findSecretShapedPath` over the document, no edit to a B11-scanned file; proven through the production chat POST in memory (`b24-c2-attribution`); the real database platform is BLOCKED-LIVE-QUALIFICATION (LB-14), live request ids LB-2, LB-7, LB-9; `observability-and-replay.md` part 2.
+- [B24-C2, 2026-10-08] D24-23: closed offline by B24-C2 (OD-209's cost half amended; lead decision D1): the attribution carries the run's budget (`DEFAULT_AGENT_BUDGET`'s six fields), its cost through the program's one price table (`app/lib/evaluation/model-price-table.ts`: `MODEL_PRICE_TABLE: LivePriceTable | null = null`, `priceUsage` over B3's `sirkit.live-price-table.v1` validator and the `procurement.ts` decimal helpers - decimal text in per-million units, no division, no float; "unpriced" with a closed reason until the owner supplies a table, never zero) and its latency on a monotonic clock (one offset per appended trace event by seq, at most 256, the first text delta and the terminal) measured at C1's sink and the route's emit, never inside `trace.ts` or `trace-recorder.ts`; C1's call records stay token counts, never priced (`b24-c2-cost`, `b24-c2-attribution` 1, 6); `observability-and-replay.md` part 2.
+
+### Section 10 amendment (for `discovery.md`)
+
+- [B24-C2, 2026-10-08] B24-C2 landed attribution, cost and latency (D24-22, D24-23; OD-208 applied, OD-209's cost half amended) and retention and redaction (D24-13, D24-25; OD-202 applied) in one run, C2a then C2b (OD-232 the choices beyond the drafts); one workflow line (database-delivery `:341`); suites `b24-c2-attribution`, `b24-c2-cost`, `b24-c2-retention`, `b24-c2-redaction`, `b24-c2-retention-pglite` (section 7 wrote `b24-c-*`; `CHAPTERS`' `b24-` admits both). Pins the plan did not name, each moved in place with a dated note: `b24-c1-llm-call-record` 12's `SEAM_CLOSURE` (+ `app/lib/agent/redaction.ts`, reached through `llm/errors.ts`), `b21-e1-stop-reasons` 1's `AgentStep` field list (+ `providerRequestId?`), `ci-admission.md:185` (+1). The census the task named as 30 types at `f663d71` is 34 at C2 (C1's two, C2's two); OD-202's "MCP traces 90 days" and "answer text 30 days" and OD-208's per-tenant salt are restated (process lifetime for the rings; the resume record deleted whole; the salt per scope). No migration (32), no census, tool-count, classification or flag move. `observability-and-replay.md` part 2, `retention-and-deletion.md`.
+
+## OD-208 — Trace attribution additions, as applied (B24-C2, 2026-10-08)
+
+- A sibling `agent.run-trace-attribution.v1` per validated trace (`sirkit.agent-run-trace-attribution.v1`, `app/lib/observability/run-trace-attribution.ts`), keyed by trace id in the run's scope and bound to the stored trace by `agentRunTraceDigest`; never inside `trace.ts` (no B11-scanned file edited, OD-113's hashes unchanged). Written once by compare-and-set at revision 0 with no outbox effect, idempotent per trace id, validated before persist, re-verified on load (`AGENT_RUN_TRACE_ATTRIBUTION_MISMATCH`).
+- Its values are digests, ids matching a pattern, closed classes, counts and bounded numbers - no text field - with `findSecretShapedPath` over the whole document: the trusted context (correlation id, role, membership revision, auth class) with a salted principal digest; a salted user-message digest and its character count; the plan kind; the discovered toolset digest and count; at most 64 reads' source revisions and consumed resources' ids and digests; the refused-call classes (the six `tool_refused` statuses plus `other`); the provider request ids as bounded strings (at most 2 x maxModelSteps, the rest counted), the configured retry ceiling and `sdkRetriesObserved: "unknown"`; a salted answer digest and count with the terminal outcome; A1's deployment configuration digest (one place: the call records carry none); the budget, the cost and the latency (OD-209).
+- The salt is one random 32-byte value per scope (tenant, project, branch) - finer than this decision's per-tenant draft, OD-232 - kept as `agent.trace-salt.v1`, created once by compare-and-set, never logged, never written into a trace or an attribution; unavailable, the digests are null with the closed diagnostic `salt_unavailable`, never unsalted.
+- Recording is passive: the write is scheduled from the chat route's finalization through `app/api/chat/attribution-runtime.ts` (the route's one new import, in place on its line 35), every failure counted by a closed class, the stream and the terminal unchanged (B21-B's recorded digest). Specialist traces stay attributed by B21-E's per-task record. The SDK's own retries stay UNKNOWN, stated.
+- Readers are B24-C3's (OD-211); retention 90 days through OD-202's purge; live request ids BLOCKED-LIVE-QUALIFICATION (LB-2, LB-7, LB-9).
+
+### OD-209 amendment
+
+- [B24-C2, 2026-10-08] Cost, as applied: recorded usage is priced through the one schema `sirkit.live-price-table.v1`, its validator `livePriceTableProblems` and the `procurement.ts` decimal helpers (lead decision D1) by `priceUsage` in `app/lib/evaluation/model-price-table.ts`, whose one table constant `MODEL_PRICE_TABLE: LivePriceTable | null` is pinned `null`: every run's attribution is `unpriced` with a closed reason (`no_owner_price_table`, `model_not_in_table`, `usage_out_of_range`) until the owner supplies a table that passes the validator, by a reviewed change; a priced answer is decimal text in per-million units with the table's version and currency, never a float, never zero for "unpriced"; the money cap stays OD-216's; C1's call records are never stored priced.

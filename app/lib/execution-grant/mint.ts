@@ -13,7 +13,7 @@
  * the principal's earlier live grant for that editor. Unavailable storage
  * mints nothing (never a preview record either).
  */
-import { renderUnknownError } from "../agent/redaction"; // [B19-D I5e row 30]
+import { renderUnknownError, sanitizeModelBoundText } from "../agent/redaction"; // [B19-D I5e row 30]; [B24-C2] D24-25: the token-anchored redactor for the instruction excerpt (in place: no cited line moves)
 import { randomBytes } from "node:crypto";
 import type { AgentAutonomySetting } from "../engineering/permission-tiers";
 import { decideAgentExecution } from "../engineering/permission-tiers";
@@ -178,7 +178,7 @@ export function createExecutionGrantMinter(ctx: MinterContext): ExecutionGrantMi
           targets: structuredClone(plan.targets),
           base: structuredClone(request.base),
           proposal: { operations: structuredClone(plan.operations), operationsDigest: plan.operationsDigest, operationCount: plan.operationCount, preview: structuredClone(plan.preview), previewDigest: plan.previewDigest, expectedPcbRevisionAfter: plan.expectedPcbRevisionAfter, ...(replay ? { replay } : {}) },
-          instruction: { userMessageDigest, excerpt: proof.excerpt.slice(0, MAX_INSTRUCTION_EXCERPT), explicit: { proven: proof.proven && decision === "execute_explicit", grammarId: proof.grammarId, grammarVersion: proof.grammarVersion, coverage: proof.proven && decision === "execute_explicit" ? "whole-message" : "unproven", derivedOperationsDigest: proof.derivedOperationsDigest } },
+          instruction: { userMessageDigest, excerpt: sanitizeModelBoundText(ctx.userMessage.replace(/\s+/g, " ").trim()).slice(0, MAX_INSTRUCTION_EXCERPT), /* [B24-C2] D24-25: redact first (the token-anchored rule keeps design text such as desk-lamp-controller; a key straddling the cut is redacted whole), then cut; a control or format character becomes a space (OD-232); explicit-request.ts's proof still reads the whole message */ explicit: { proven: proof.proven && decision === "execute_explicit", grammarId: proof.grammarId, grammarVersion: proof.grammarVersion, coverage: proof.proven && decision === "execute_explicit" ? "whole-message" : "unproven", derivedOperationsDigest: proof.derivedOperationsDigest } },
           issuedAt, expiresAt: new Date(issuedMs + ttlMs).toISOString(), ttlMs,
         };
         const nonce = random();

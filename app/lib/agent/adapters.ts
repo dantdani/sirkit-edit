@@ -85,7 +85,7 @@ function normalizeOpenAIStep(response: OpenAIResponse, state: OpenAIContinuation
     text: response.output_text ?? "",
     toolCalls,
     stopReason: response.status ?? null, stop: openAIStepStop(response, items), // [B21 E1] D21-21, derived here, from the judged list
-    usage: { inputTokens: response.usage?.input_tokens, outputTokens: response.usage?.output_tokens },
+    usage: { inputTokens: response.usage?.input_tokens, outputTokens: response.usage?.output_tokens }, ...providerRequestIdOf(response), // [B24-C2] OD-208: the SDK's `_request_id`, absent when the response carries none (in place: no cited line moves)
     model: response.model,
     continuation: {
       provider: "openai",
@@ -187,7 +187,7 @@ function normalizeAnthropicStep(message: AnthropicMessage, state: AnthropicConti
     text,
     toolCalls,
     stopReason: message.stop_reason, stop: anthropicStepStop(message.stop_reason), // [B21 E1] D21-21
-    usage: { inputTokens: message.usage.input_tokens, outputTokens: message.usage.output_tokens },
+    usage: { inputTokens: message.usage.input_tokens, outputTokens: message.usage.output_tokens }, ...providerRequestIdOf(message), // [B24-C2] OD-208: the SDK's `_request_id`, absent when the message carries none (in place: no cited line moves)
     model: message.model,
     continuation: {
       provider: "anthropic",
@@ -333,3 +333,20 @@ import type { StepStop } from "./contracts";
 import type { SpecialistRole } from "./orchestration/contracts";
 import { configuredAnthropicModel } from "../llm/anthropic-config";
 import { sendableAnthropicModel } from "../llm/anthropic-model-guard"; // [B24-A1] on its own line at the end (an import is hoisted): no cited line moves
+
+// ─── [B24-C2] OD-208: the provider's request id, and the coordinator adapter's retry ceiling (D24-22) ─────────────────────────────
+// Appended on purpose (a function declaration is hoisted): no line the B18..B24 pages cite in this file moves.
+
+/** The SDK's `_request_id` (both installed SDKs type it `_request_id?: string | null` on a parsed response, internal/parse.d.ts), as the
+ *  optional `providerRequestId` of an AgentStep: ABSENT when the response carries none, so every fake-client expectation holds; a
+ *  non-string, an empty or an unbounded value is absent too. The step's consumer (the chat route's attribution collector) applies the
+ *  bounded id rule and the secret-shape rule; nothing here is logged. */
+function providerRequestIdOf(response: unknown): { providerRequestId?: string } {
+  const id = response !== null && typeof response === "object" ? (response as { _request_id?: unknown })._request_id : undefined;
+  return typeof id === "string" && id.length > 0 && id.length <= 512 ? { providerRequestId: id } : {};
+}
+
+/** The coordinator adapter's SDK retry ceiling, by provider, as the constructors above configure it: OpenAI `maxRetries: number = 2`
+ *  (agentAdapterFor passes none, so the default), Anthropic `maxRetries?: number` passed only when given - the coordinator's client uses
+ *  the SDK default, recorded as `"sdk_default"` rather than guessed. How many retries the SDK made stays UNKNOWN (9.5 item 33). */
+export const COORDINATOR_SDK_RETRY_CEILING = Object.freeze({ openai: 2, anthropic: "sdk_default" } as const);
