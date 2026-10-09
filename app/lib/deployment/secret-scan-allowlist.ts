@@ -1,9 +1,9 @@
 /**
  * [B24-A2] D24-4, OD-195 - the secret scan's reviewed allowlist (secret-scan.ts): exact paths, never a glob or a directory; each entry
  * a rule, the sha256 of the line's text (never the text) and a reason. Every entry is a test sentinel that a redaction or denylist
- * test feeds its own classifier - read in its test before it was added here, characterised by its length only and never printed. An
- * edited line hits again; a line that no longer hits makes its entry stale, and the tree-mode scan fails until the entry goes.
- * A real secret is never allowlisted: it is reported to the lead as `path:line rule` and rotated by the owner (LB-13).
+ * test feeds its own classifier - read in its test before it was added here, characterised by its length only and never printed ([B24-A2F, 2026-10-09] except the one entry marked `historyOnly: true`, the last of the array: B24-C3's test fake as committed at ba4f562, which no test at HEAD reads since aaa6a1b rewrote it, so it holds in the pull request's history alone). An
+ * edited line hits again; a line that no longer hits makes its entry stale, and the tree-mode scan fails until the entry goes - except an entry marked `historyOnly: true` ([B24-A2F, 2026-10-09]: its line was rewritten by the commit its reason names and exists only in the pull request's history,
+ * so it allowlists the history scan alone, is never stale, and its line back in the tree is a finding; secret-scan.ts, the end of the file). A real secret is never allowlisted: it is reported to the lead as `path:line rule` and rotated by the owner (LB-13).
  */
 import type { SecretScanAllowlistEntry } from "./secret-scan";
 
@@ -56,5 +56,15 @@ export const SECRET_SCAN_ALLOWLIST: readonly SecretScanAllowlistEntry[] = Object
     rule: "connection-string-password",
     sha256: "960457ace48b1f8763d0e094812288600a3743899247f06a8befab7848026623",
     reason: "B16-B's database-qualification fixture ENV_LOCAL_STYLE_URL: a pooler URL shaped like an owner's .env.local value, for a project named deadtenant that does not resolve, with a placeholder password; the qualification must refuse it without its marker",
+  },
+  // [B24-A2F, 2026-10-09] the history-only kind (secret-scan.ts, the end of the file): the one line B24-C3's commit carried and the
+  // lead's fix rewrote, which the pull request's history scan still reads; the digest verified by the lead and by this increment
+  // against `git show ba4f562:<path> | sed -n 75p` piped into sha256, the line never printed; neither used nor stale in tree mode
+  {
+    path: "app/lib/qualification/__tests__/b24-c3-trace-read.test.ts",
+    rule: "connection-string-password",
+    sha256: "8bbe84aef14181902a233659797cf030bfd89aceb5f844542df7aee61e584a01",
+    historyOnly: true as const,
+    reason: "B24-C3's fake connection string as committed at ba4f562:75 - a template literal assigned to FAKE_URL, user and password assembled from joined fragments, host db.invalid, no credential - matched by shape only; replaced at aaa6a1b by joined fragments under FAKE_CONNECTION, so it exists only in the pull request's history",
   },
 ].map((entry) => Object.freeze(entry as SecretScanAllowlistEntry)));

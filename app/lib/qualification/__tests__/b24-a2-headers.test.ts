@@ -236,7 +236,7 @@ describe("[B24-A2] the page edge-security.md, its header half", () => {
   it("8. the page's sections are in order; every citation of section 14 is on the line it names, numbered in order; every suite row of section 10 carries its real it( count", () => {
     const page = read(PAGE);
     const titles = [...page.matchAll(/^## (\d+)\. /gm)].map((match) => Number(match[1]));
-    expect(titles).toEqual(Array.from({ length: 15 }, (_, index) => index));
+    expect(titles).toEqual(Array.from({ length: 16 }, (_, index) => index)); // [B24-A2F, 2026-10-09] reviewed pin move, 15 -> 16: section 15 (the history-only allowlist entries) appended at the end of the page
     const citations = [...section(page, 14).matchAll(/^\| (C\d+) \| `([^`]+)` \| (\d+) \| `(.+)` \|$/gm)];
     expect(citations.length).toBeGreaterThanOrEqual(25);
     expect(citations.map((row) => row[1])).toEqual(citations.map((_, index) => `C${index + 1}`));
@@ -366,5 +366,34 @@ describe("[B24-A2 review, 2026-10-06] production-smoke's probes and the page's r
     for (const gate of RECORDED_GATES) expect(ten, gate).toMatch(new RegExp(`^\\| \`${escapeRegExp(gate)}\` \\| [^${NEWLINE}]+ \\| exit \\d+ \\|$`, "m"));
     const six = section(read(PAGE), 6);
     expect(six).toMatch(/section 10/);
+  });
+
+  it("13. [B24-A2F review, 2026-10-09] section 15 is checked as section 14 is, every problem listed in one run: its citations continue section 14's numbering and each sits on the line it names (security-2); the helper range it cites in secret-scan.ts runs from the dated header comment to the file's last line, the helper's closing brace (correctness-2, security-4); the design judgement that a history-only entry is not a second way to allowlist a real secret sits in the INFERRED paragraph and under no CONFIRMED (security-3)", () => {
+    const page = read(PAGE);
+    const row = /^\| (C\d+) \| `([^`]+)` \| (\d+) \| `(.+)` \|$/gm;
+    const fourteen = [...section(page, 14).matchAll(row)];
+    const fifteen = section(page, 15);
+    const citations = [...fifteen.matchAll(row)];
+    const problems: string[] = [];
+    if (citations.length < 7) problems.push(`section 15 holds ${citations.length} citations`);
+    citations.forEach((cited, index) => { if (cited[1] !== `C${fourteen.length + index + 1}`) problems.push(`${cited[1]} out of order (C${fourteen.length + index + 1} expected)`); });
+    for (const cited of citations) if (!(lines(cited[2]!)[Number(cited[3]) - 1] ?? "").includes(cited[4]!.replaceAll("\\|", "|"))) problems.push(`${cited[1]} ${cited[2]}:${cited[3]} does not hold its anchor`);
+    // the helper range: the dated header comment through the file's last line (the trailing line break makes one empty element)
+    const range = /declared at the end of `secret-scan\.ts` \(`:(\d+)-(\d+)`/.exec(fifteen);
+    const scanner = lines("app/lib/deployment/secret-scan.ts");
+    const last = scanner.length - (scanner[scanner.length - 1] === "" ? 1 : 0);
+    if (range === null) problems.push("section 15 cites no helper range in secret-scan.ts");
+    else {
+      if (!(scanner[Number(range[1]) - 1] ?? "").startsWith("// ── [B24-A2F, 2026-10-09] The history-only allowlist entries")) problems.push(`secret-scan.ts:${range[1]} is not the dated header comment`);
+      if (Number(range[2]) !== last || scanner[last - 1] !== "}") problems.push(`secret-scan.ts:${range[2]} is not the file's last line, the helper's closing brace (:${last})`);
+    }
+    // the design judgement: in the paragraph labelled INFERRED, in no paragraph carrying a CONFIRMED (the page wraps its prose, so a paragraph is read with its line breaks as spaces)
+    const judgement = fifteen.split(`${NEWLINE}${NEWLINE}`).filter((paragraph) => paragraph.replaceAll(NEWLINE, " ").includes("not a second way to allowlist a real secret"));
+    if (judgement.length !== 1) problems.push(`the judgement sits in ${judgement.length} paragraphs`);
+    for (const paragraph of judgement) {
+      if (!paragraph.startsWith("**What stays open** (**INFERRED**)")) problems.push("the judgement sits outside the INFERRED paragraph");
+      if (paragraph.includes("**CONFIRMED**")) problems.push("the judgement's paragraph carries a CONFIRMED");
+    }
+    expect(problems).toEqual([]);
   });
 });

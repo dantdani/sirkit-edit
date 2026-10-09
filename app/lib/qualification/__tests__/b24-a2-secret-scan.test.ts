@@ -13,7 +13,7 @@
  * A marker planted in a temporary directory would never reach a scan that enumerates `git ls-files`, so these cases drive the pure
  * function with injected entries, every marker and key-shaped fake assembled at run time (the `b21-e3-resume-record.test.ts:223`
  * precedent); git is an injected fake. Failing first on 1b2c08c: the module, the script and the job do not exist (page section 8).
- * Nothing is written to disk and no process is started.
+ * Nothing is written to disk and no process is started. [B24-A2F, 2026-10-09] The history-only allowlist entries are the last describe block (one line here: ci-split.md cites case (c) at :183 and :187).
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -200,7 +200,7 @@ describe("[B24-A2] the scanner (D24-4, OD-195)", () => {
     expect(all.filter((line) => line.includes("playwright test"))).toHaveLength(2);
   });
 
-  it("(d) scanning the scanner, its allowlist, the script, this suite and the page gives zero hits with no allowlist entry; the allowlist is exactly the six sentinel lines of the task's Lead note 2 and, since the review round, the two connection-string fakes, each holding in the tree", () => {
+  it("(d) scanning the scanner, its allowlist, the script, this suite and the page gives zero hits with no allowlist entry; the allowlist is exactly the six sentinel lines of the task's Lead note 2 and, since the review round, the two connection-string fakes, each holding in the tree; [B24-A2F, 2026-10-09] and a ninth, history-only entry for the fake B24-C3 committed and the lead's fix rewrote, which holds in history only (cases l-q)", () => {
     const own = ["app/lib/deployment/secret-scan.ts", "app/lib/deployment/secret-scan-allowlist.ts", "scripts/scan-secrets.ts", "app/lib/qualification/__tests__/b24-a2-secret-scan.test.ts", PAGE];
     const clean = runSecretScan({ entries: own.map((path) => ({ path, text: read(path) })), allowlist: [], mode: "staged" });
     expect(clean).toMatchObject({ exitCode: 0, lines: [] });
@@ -215,10 +215,12 @@ describe("[B24-A2] the scanner (D24-4, OD-195)", () => {
       "app/lib/agent/__tests__/b11-trace-replay-evaluation.test.ts anthropic-key-shape",
       "app/api/__tests__/b16-0-12-tranche-parity.test.ts connection-string-password",
       "app/lib/db/__tests__/b16-b-database-qualification.test.ts connection-string-password",
+      "app/lib/qualification/__tests__/b24-c3-trace-read.test.ts connection-string-password", // [B24-A2F, 2026-10-09] reviewed pin move, eight -> nine: the history-only entry for the fake B24-C3 committed at ba4f562:75 and the lead's fix rewrote (aaa6a1b)
     ]);
     expect(allowlistProblems(SECRET_SCAN_ALLOWLIST)).toEqual([]);
     for (const entry of SECRET_SCAN_ALLOWLIST) expect(entry.reason.length, entry.path).toBeGreaterThan(40);
-    // over the files the allowlist names, tree mode passes: every entry holds its line, nothing else hits
+    // over the files the allowlist names, tree mode passes: every ordinary entry holds its line, nothing else hits ([B24-A2F, 2026-10-09]
+    // the ninth, history-only, is neither used nor stale, so the count stays 8)
     const files = [...new Set(SECRET_SCAN_ALLOWLIST.map((entry) => entry.path))];
     const named = runSecretScan({ entries: files.map((path) => ({ path, text: read(path) })), allowlist: SECRET_SCAN_ALLOWLIST });
     expect(named).toMatchObject({ exitCode: 0, lines: [], allowlisted: 8 });
@@ -512,5 +514,111 @@ describe("[B24-A2 review, 2026-10-06] the scan's review round", () => {
     for (const fact of ["NUL byte", "UTF-16", "byte-order mark", "unscanned", "nothing scanned", "`connection-string-password`", "fetch-depth: 0", "`pnpm exec tsx scripts/scan-secrets.ts --history \"$BASE_SHA..$HEAD_SHA\"`", "`pnpm exec tsx scripts/scan-secrets.ts --history origin/<branch>..HEAD`"]) expect(six, fact).toContain(fact);
     expect(six).not.toMatch(/skipped and counted, never scanned|the binary entries \(a\s+NUL byte\)/);
     expect(runSecretScan({ entries: [{ path: PAGE, text: page }], allowlist: [], mode: "staged" }).lines).toEqual([]);
+  });
+});
+
+// ── [B24-A2F, 2026-10-09] the history-only allowlist entries (the lead's corrective increment; OD-195 amended): a line that hit at
+// one commit and was rewritten by a later one stays in the history CI's pull-request step scans (`--history "$BASE_SHA..$HEAD_SHA"`),
+// and an ordinary entry for it is stale in tree mode. The shape below is B24-C3's as committed at `ba4f562:75` - a template literal
+// assigned to a `_URL` name, user and password from joined fragments, host db.invalid - assembled at run time here as everywhere;
+// nothing is written and no process is started (the real scanner's tree and history runs are recorded on the page, section 15). ──
+
+/** B24-C3's rewritten shape, assembled: no line of this file matches the connection-string rule. */
+const HISTORY_LINE = `const ${["FAKE", "URL"].join("_")} = \`${["postgres:", "//", "oper", "ator"].join("")}:${["pass", "word"].join("")}@db.invalid:5433/sirkit\`;`;
+const C3_TEST = "app/lib/qualification/__tests__/b24-c3-trace-read.test.ts";
+const HISTORY_ONLY: SecretScanAllowlistEntry = { path: C3_TEST, rule: "connection-string-password", sha256: lineDigest(HISTORY_LINE), historyOnly: true, reason: "a fake connection string committed once and replaced at 0123abc by joined fragments, so it exists only in history" };
+const ORDINARY: SecretScanAllowlistEntry = { path: HISTORY_ONLY.path, rule: HISTORY_ONLY.rule, sha256: HISTORY_ONLY.sha256, reason: HISTORY_ONLY.reason };
+const USERINFO = ["oper", "ator", ":", "pass", "word"].join(""); // the rule id itself ends in the word password, so the text is checked by its userinfo
+
+describe("[B24-A2F, 2026-10-09] the history-only allowlist entries (OD-195 amended)", () => {
+  it("(l) red first on b3a4f2d (the entry was stale): in tree mode a history-only entry whose line hits nowhere is not stale - exit 0, nothing allowlisted, no line; the same entry without the mark is stale as before; a path absent from the tree is no stale failure either", () => {
+    const tree = [{ path: C3_TEST, text: ["// the fake is assembled from joined fragments now", "export {};"].join(NEWLINE) }];
+    expect(runSecretScan({ entries: tree, allowlist: [HISTORY_ONLY] })).toMatchObject({ exitCode: 0, lines: [], allowlisted: 0 });
+    const stale = runSecretScan({ entries: tree, allowlist: [ORDINARY] });
+    expect(stale.exitCode).toBe(1);
+    expect(stale.lines).toEqual([`allowlist: entry 1 (${C3_TEST} connection-string-password) is stale: no line of that file hits with that digest`]);
+    expect(runSecretScan({ entries: [{ path: "app/other.ts", text: "export {};" }], allowlist: [HISTORY_ONLY] })).toMatchObject({ exitCode: 0, lines: [] });
+  });
+
+  it("(m) red first on b3a4f2d (the hit was allowlisted): a tree line hitting a history-only entry's path, rule and digest is reported, never allowlisted - the line was declared gone, so its return is a finding: exit 1, the `path:line rule` line, allowlisted 0, no stale line, the text absent; the ordinary entry allowlists the same line as before", () => {
+    const back = [{ path: C3_TEST, text: ["// the fake came back", HISTORY_LINE].join(NEWLINE) }];
+    const result = runSecretScan({ entries: back, allowlist: [HISTORY_ONLY] });
+    expect(result).toMatchObject({ exitCode: 1, lines: [`${C3_TEST}:2 connection-string-password`], allowlisted: 0 });
+    expect(JSON.stringify(result)).not.toContain(USERINFO);
+    expect(runSecretScan({ entries: back, allowlist: [ORDINARY] })).toMatchObject({ exitCode: 0, lines: [], allowlisted: 1 });
+  });
+
+  it("(n) in --history mode a history-only entry allowlists the hit exactly as an ordinary one (same path, rule and digest: exit 0, allowlisted 1, the match counted), through the pure scan and the command with an injected git; red first on b3a4f2d in its last assertion, where the same allowlist left the tree scan red (stale) - the kind's whole point", () => {
+    const commit = oid("d");
+    const blob = ["// as committed", HISTORY_LINE].join(NEWLINE);
+    expect(runSecretScan({ entries: [{ path: `${commit}:${C3_TEST}`, text: blob }], allowlist: [HISTORY_ONLY], mode: "history" })).toMatchObject({ exitCode: 0, lines: [], allowlisted: 1 });
+    const io = fakeGit({ "rev-list --reverse 57c3b29..HEAD --": `${commit}${NEWLINE}`, [`diff-tree -r -m --root --no-renames --no-abbrev -z ${commit}`]: z(commit, ...record("A", oid("6"), C3_TEST)), [`blob ${oid("6")}`]: blob });
+    const command = runSecretScanCommand(["--history", "57c3b29..HEAD"], io, [HISTORY_ONLY, ...SECRET_SCAN_ALLOWLIST]);
+    expect(command).toMatchObject({ exitCode: 0, lines: [], allowlisted: 1, entries: 1 });
+    expect(JSON.stringify(command)).not.toContain(USERINFO);
+    expect(runSecretScan({ entries: [{ path: C3_TEST, text: "export {};" }], allowlist: [HISTORY_ONLY] })).toMatchObject({ exitCode: 0, lines: [] });
+  });
+
+  it("(o) red first on b3a4f2d (the staged line was allowlisted): in --staged mode a history-only entry never allowlists - the line is about to enter the tree, so it is reported (exit 1, allowlisted 0), through the pure scan and the command; an ordinary entry still allowlists it", () => {
+    const staged = [{ path: C3_TEST, text: HISTORY_LINE }];
+    expect(runSecretScan({ entries: staged, allowlist: [HISTORY_ONLY], mode: "staged" })).toMatchObject({ exitCode: 1, lines: [`${C3_TEST}:1 connection-string-password`], allowlisted: 0 });
+    expect(runSecretScan({ entries: staged, allowlist: [ORDINARY], mode: "staged" })).toMatchObject({ exitCode: 0, lines: [], allowlisted: 1 });
+    const io = fakeGit({ "diff --cached --raw -z --no-renames --no-abbrev": z(...record("M", oid("8"), C3_TEST)), [`blob ${oid("8")}`]: HISTORY_LINE });
+    expect(runSecretScanCommand(["--staged"], io, [HISTORY_ONLY])).toMatchObject({ exitCode: 1, lines: [`${C3_TEST}:1 connection-string-password`], allowlisted: 0 });
+  });
+
+  it("(p) red first on b3a4f2d (every reason passed): allowlistProblems refuses a history-only entry whose reason names no replacing commit (a 7-40 hex id), or says neither replaced nor rewritten, or whose mark is not true - each named by its entry, never by the line - and an unusable allowlist fails the run in every mode; the good entry, a rewritten one and every ordinary entry pass", () => {
+    expect(allowlistProblems([HISTORY_ONLY])).toEqual([]);
+    expect(allowlistProblems([{ ...HISTORY_ONLY, reason: "a fake connection string committed once and rewritten at 0123abc4567 by joined fragments; it exists only in history" }])).toEqual([]);
+    const noId = { ...HISTORY_ONLY, reason: "a fake connection string committed once and replaced by joined fragments, so it exists only in history" };
+    const noWord = { ...HISTORY_ONLY, reason: "a fake connection string committed once and taken out at 0123abc, so it exists only in history" };
+    const notTrue = { ...HISTORY_ONLY, historyOnly: false as never };
+    for (const [name, entry] of [["no id", noId], ["no word", noWord], ["not true", notTrue]] as const) {
+      const problems = allowlistProblems([entry]);
+      expect(problems.length, name).toBeGreaterThan(0);
+      for (const problem of problems) expect(problem, name).toMatch(/^entry 1 \(app\/lib\/qualification\/__tests__\/b24-c3-trace-read\.test\.ts\): /);
+      for (const mode of ["tree", "staged", "history"] as const) expect(runSecretScan({ entries: [], allowlist: [entry], mode }).exitCode, `${name} ${mode}`).toBe(1);
+    }
+    expect(allowlistProblems([{ ...HISTORY_ONLY, reason: "a fake connection string committed once; it exists only in history now" }])).toHaveLength(2);
+    expect(allowlistProblems([ORDINARY, { ...ORDINARY, sha256: lineDigest("x"), reason: noId.reason }])).toEqual([]);
+  });
+
+  it("(q) red first on b3a4f2d (eight entries): the committed allowlist's ninth entry is history-only - B24-C3's test path, the connection-string rule, the lead's 64-hex digest over the line as committed at ba4f562, a reason naming ba4f562:75 and aaa6a1b and saying replaced; no line of that file at HEAD carries the digest, so tree mode over it is green with nothing allowlisted and nothing stale, and the eight ordinary entries carry no mark", () => {
+    expect(SECRET_SCAN_ALLOWLIST).toHaveLength(9);
+    const ninth = SECRET_SCAN_ALLOWLIST[8]!;
+    expect(ninth).toMatchObject({ path: C3_TEST, rule: "connection-string-password", historyOnly: true });
+    expect(ninth.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(ninth.sha256).toBe("8bbe84aef14181902a233659797cf030bfd89aceb5f844542df7aee61e584a01");
+    for (const word of ["ba4f562:75", "aaa6a1b", "replaced", ["FAKE", "URL"].join("_"), ["FAKE", "CONNECTION"].join("_"), "db.invalid", "no credential"]) expect(ninth.reason).toContain(word);
+    expect(SECRET_SCAN_ALLOWLIST.slice(0, 8).every((entry) => entry.historyOnly === undefined)).toBe(true);
+    expect(allowlistProblems(SECRET_SCAN_ALLOWLIST)).toEqual([]);
+    const current = read(C3_TEST);
+    expect(current.split(NEWLINE).map((raw) => lineDigest(raw.endsWith(CR) ? raw.slice(0, -1) : raw))).not.toContain(ninth.sha256);
+    expect(runSecretScan({ entries: [{ path: C3_TEST, text: current }], allowlist: [ninth] })).toMatchObject({ exitCode: 0, lines: [], allowlisted: 0 });
+    expect(runSecretScan({ entries: [{ path: C3_TEST, text: current }], allowlist: [], mode: "staged" }).lines).toEqual([]);
+  });
+
+  it("(r) [B24-A2F review, 2026-10-09] security-1, red first on the review's tree: the allowlist module's header amends the sentence the ninth entry falsifies - `Every entry is a test sentinel ... read in its test` (its :3-4) carries the dated history-only exception on those lines, the stale sentence (:5-6) keeps its own, and the header stays seven lines (the import on :8), so C26 :10, C31 :50 and C42 :67 hold", () => {
+    const header = read("app/lib/deployment/secret-scan-allowlist.ts").split(NEWLINE).map((raw) => (raw.endsWith(CR) ? raw.slice(0, -1) : raw));
+    expect(header[0]).toBe("/**");
+    expect(header[6]).toBe(" */");
+    expect(header[7]).toMatch(/^import type \{ SecretScanAllowlistEntry \}/);
+    expect(header[2]).toContain("Every entry is a test sentinel");
+    expect(header[3]).toContain("read in its test before it was added here");
+    const sentinel = header.slice(2, 4).join(" ");
+    for (const fact of ["[B24-A2F, 2026-10-09]", "historyOnly: true", "history"]) expect(sentinel, fact).toContain(fact);
+    const stale = header.slice(4, 6).join(" ");
+    for (const fact of ["makes its entry stale", "except an entry marked `historyOnly: true`", "[B24-A2F, 2026-10-09]", "(LB-13)"]) expect(stale, fact).toContain(fact);
+    expect(header[66]).toBe("    historyOnly: true as const,");
+  });
+
+  it("(s) [B24-A2F review, 2026-10-09] security-3, green at launch - the kind's limit pinned as the page records it (section 15, INFERRED): in --history mode a history-only entry matches its path, rule and digest under every commit of the range, no commit compared, exactly as an ordinary entry does; the id its reason names is checked for shape only, so a numeral of seven digits passes; a `commit` field compared against the `<commit>:` prefix is the lead's choice, not this increment's", () => {
+    const range = [oid("a"), oid("b")].map((commit) => ({ path: `${commit}:${C3_TEST}`, text: ["// as committed", HISTORY_LINE].join(NEWLINE) }));
+    expect(runSecretScan({ entries: range, allowlist: [HISTORY_ONLY], mode: "history" })).toMatchObject({ exitCode: 0, lines: [], allowlisted: 2 });
+    expect(runSecretScan({ entries: range, allowlist: [ORDINARY], mode: "history" })).toMatchObject({ exitCode: 0, lines: [], allowlisted: 2 });
+    expect(HISTORY_ONLY.reason).not.toMatch(/a{7}|b{7}/); // the reason names neither commit of the range, and the entry matched under both
+    expect(allowlistProblems([{ ...HISTORY_ONLY, reason: "a fake connection string committed once and replaced at 1234567 by joined fragments, so it exists only in history" }])).toEqual([]);
+    // the tree-mode half of the limit is case (l): neither commit's blob is in the tree, so the entry is never stale there
+    expect(runSecretScan({ entries: [{ path: C3_TEST, text: "export {};" }], allowlist: [HISTORY_ONLY] })).toMatchObject({ exitCode: 0, lines: [], allowlisted: 0 });
   });
 });

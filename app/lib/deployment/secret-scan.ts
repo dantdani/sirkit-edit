@@ -13,7 +13,7 @@
  *
  * The allowlist holds exact paths, never a glob or a directory: a path, a rule, the sha256 of the line's text and a reason. A hit is
  * allowlisted only on the same path, rule and line digest, so an edited line hits again. In tree mode an entry whose line no longer
- * hits fails as stale; a `--staged` or `--history` run sees part of the tree, so it skips that check.
+ * hits fails as stale; a `--staged` or `--history` run sees part of the tree, so it skips that check. [B24-A2F, 2026-10-09] An entry marked `historyOnly` is the one exception, stated at the end of this file.
  *
  * The file listing is the script's (`scripts/scan-secrets.ts`, the only file that runs git): `collectSecretScanEntries` asks an
  * injected git for read-only answers - `ls-files` (tree mode), `diff --cached` (the staged blobs), `rev-list` and `diff-tree` then
@@ -67,7 +67,7 @@ export interface SecretScanAllowlistEntry {
   readonly rule: SecretScanRuleId;
   /** sha256 (hex) of the line's text, without its line break */
   readonly sha256: string;
-  readonly reason: string;
+  readonly reason: string; /** [B24-A2F, 2026-10-09] the line exists only in history (a later commit rewrote it): the kind stated at the end of this file */ readonly historyOnly?: true;
 }
 export interface SecretScanResult {
   readonly lines: readonly string[];
@@ -105,7 +105,7 @@ export function allowlistProblems(allowlist: readonly SecretScanAllowlistEntry[]
     if (path.length === 0 || GLOB.test(path) || path.endsWith("/") || path.startsWith("/") || path.includes("\\") || !segments.every((segment) => SEGMENT.test(segment) && segment !== "." && segment !== "..")) problems.push(`${at}: not one exact file path (a glob, a directory, an absolute or climbing path is refused)`);
     if (!(SECRET_SCAN_RULE_IDS as readonly string[]).includes(entry.rule)) problems.push(`${at}: unknown rule`);
     if (typeof entry.sha256 !== "string" || !DIGEST.test(entry.sha256)) problems.push(`${at}: the line digest is not a sha256`);
-    if (typeof entry.reason !== "string" || entry.reason.trim().length < 30) problems.push(`${at}: no reason`);
+    if (typeof entry.reason !== "string" || entry.reason.trim().length < 30) problems.push(`${at}: no reason`); else problems.push(...historyOnlyProblems(entry, at)); // [B24-A2F, 2026-10-09] a history-only entry's reason names the commit that rewrote its line
     const key = `${path} ${entry.rule} ${entry.sha256}`;
     if (seen.has(key)) problems.push(`${at}: duplicate`);
     seen.add(key);
@@ -147,7 +147,7 @@ export function runSecretScan(input: { readonly entries: readonly SecretScanEntr
       if (rules.length === 0) return;
       const digest = lineDigest(line);
       for (const rule of rules) {
-        const at = usable.findIndex((allowed) => allowed.path === allowPath && allowed.rule === rule.id && allowed.sha256 === digest);
+        const at = usable.findIndex((allowed) => allowed.path === allowPath && allowed.rule === rule.id && allowed.sha256 === digest && (mode === "history" || allowed.historyOnly !== true)); // [B24-A2F, 2026-10-09] a history-only entry allowlists in history mode only: its line back in the tree or the index is a finding
         if (at >= 0) {
           used.add(at);
           allowlisted += 1;
@@ -159,7 +159,7 @@ export function runSecretScan(input: { readonly entries: readonly SecretScanEntr
   }
   if (mode === "tree") {
     usable.forEach((allowed, index) => {
-      if (used.has(index)) return;
+      if (used.has(index) || allowed.historyOnly === true) return; // [B24-A2F, 2026-10-09] a history-only entry's line was declared gone: never stale
       lines.push(`allowlist: entry ${index + 1} (${allowed.path} ${allowed.rule}) is stale: ${scanned.has(allowed.path) ? "no line of that file hits with that digest" : "that path is no file of the tree"}`);
     });
   }
@@ -379,4 +379,28 @@ export function runSecretScanCommand(argv: readonly string[], io: SecretScanIo, 
   const result = runSecretScan({ entries: collected.entries, allowlist, mode: command.mode });
   const nothing = collected.nothing === undefined ? null : Object.freeze([...result.lines, `nothing scanned: ${collected.nothing}`]);
   return { ...result, ...(nothing === null ? {} : { lines: nothing, exitCode: 1 as const }), mode: command.mode, entries: collected.entries.length, unreadable: collected.unreadable, refusal: null };
+}
+
+// ── [B24-A2F, 2026-10-09] The history-only allowlist entries ─────────────────────────────────────────────────────────────────────
+// A line that hit at one commit and was rewritten by a later one stays in the history that CI's pull-request step scans
+// (`--history "$BASE_SHA..$HEAD_SHA"`; B24-C3's fake at `ba4f562:75`, rewritten at `aaa6a1b`), and an ordinary entry for it would be
+// stale in tree mode. An entry marked `historyOnly: true` is exempt from the stale check; in `--history` mode it allowlists exactly as
+// an ordinary entry (same path, rule and digest; the match is counted); in tree or `--staged` mode a line hitting with its path, rule
+// and digest is REPORTED, never allowlisted - the line was declared gone, so its return is a finding. Its reason must name the
+// replacing commit (a 7-40 hex id) and say "replaced" or "rewritten", or the allowlist is unusable, as for any malformed entry.
+// Nothing else changes: an ordinary entry keeps its behaviour, no rule changes and no history is rewritten.
+
+/** A commit id as a word of 7 to 40 hex characters, and the word that says the line went. */
+const REPLACING_COMMIT = /\b[0-9a-f]{7,40}\b/;
+const REPLACED_OR_REWRITTEN = /\b(?:replaced|rewritten)\b/i;
+
+/** Every reason a history-only entry cannot be used (an ordinary entry has none): the mark set to anything but `true`, a reason naming
+ *  no replacing commit, a reason with neither word. The answers name the entry, never a line. */
+function historyOnlyProblems(entry: SecretScanAllowlistEntry, at: string): string[] {
+  if (entry.historyOnly === undefined) return [];
+  if (entry.historyOnly !== true) return [`${at}: historyOnly is set but not true`];
+  const problems: string[] = [];
+  if (!REPLACING_COMMIT.test(entry.reason)) problems.push(`${at}: a history-only entry's reason names no replacing commit (a 7-40 hex id)`);
+  if (!REPLACED_OR_REWRITTEN.test(entry.reason)) problems.push(`${at}: a history-only entry's reason says neither "replaced" nor "rewritten"`);
+  return problems;
 }

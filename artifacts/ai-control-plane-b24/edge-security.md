@@ -254,7 +254,7 @@ climbing path is refused - each with a rule, the sha256 of the line's text and a
 entry whose line no longer hits fails as stale (a `--staged` or `--history` run sees part of the tree, so it skips that check). An
 entry holds one path and one rule: the same line copied to another path, or hitting another rule, is a hit ([B24-A2 review]
 tests-3, case b2). It holds the six test sentinels of the task's Lead note 2 and, since the review round, the two test fakes the
-connection-string rule hits (C31), each read in its test first and characterised by length only:
+connection-string rule hits (C31), each read in its test first and characterised by length only ([B24-A2F, 2026-10-09] and a ninth entry of the history-only kind, exempt from the stale check and allowlisting the history scan alone, for `app/lib/qualification/__tests__/b24-c3-trace-read.test.ts` as committed at `ba4f562:75` and rewritten at `aaa6a1b`: section 15):
 
 | path | rule | reason |
 |---|---|---|
@@ -401,13 +401,13 @@ B11-scanned files; the pinned release bytes. No workflow line any page cites mov
 
 ## 10. Gates
 
-| suite | `it(` |
+| suite | `it(` ([B24-A2F, 2026-10-09] `b24-a2-secret-scan` 18 -> 24: section 15's six cases, l-q; [B24-A2F review, 2026-10-09] `b24-a2-headers` 12 -> 13 and `b24-a2-secret-scan` 24 -> 26: the review round's cases 13, r and s) |
 |---|---|
-| `app/lib/qualification/__tests__/b24-a2-headers.test.ts` | 12 |
+| `app/lib/qualification/__tests__/b24-a2-headers.test.ts` | 13 |
 | `app/lib/qualification/__tests__/b24-a2-origin-allowlist.test.ts` | 7 |
 | `app/lib/qualification/__tests__/b24-a2-secret-rotation.test.ts` | 11 |
 | `app/lib/qualification/__tests__/b24-a2-env-names.test.ts` | 10 |
-| `app/lib/qualification/__tests__/b24-a2-secret-scan.test.ts` | 18 |
+| `app/lib/qualification/__tests__/b24-a2-secret-scan.test.ts` | 26 |
 
 [B24-A2 review, 2026-10-06] coverage-3: the gate runs of the review round's final tree, every vitest run through the lock script
 (two workers, one at a time), tsc, eslint, the generators and the scans through the heavy-job script; **CONFIRMED** by execution:
@@ -690,3 +690,174 @@ Case 17 also calls `simulate(PLANNED)` and stays green either way; switching it 
 | C34 | `app/lib/deployment/secret-scan.ts` | 357 | `if (commits.length === 0) return { entries: [], unreadable: 0, nothing: "the range holds no commit" };` |
 | C35 | `.env.example` | 122 | `# After a suspected leak, rotate without it: never put a leaked value in a _PREVIOUS name.` |
 | C36 | `app/lib/deployment/configuration.ts` | 72 | `const FLAG_STATE_KINDS: readonly FlagKind[] = Object.freeze(["enable-flag", "disable-switch", "rollout-stage", "shadow"]` |
+
+## 15. [B24-A2F, 2026-10-09] The secret scan's history-only allowlist entries (the lead's corrective increment)
+
+**Why.** CI's `secret-scan` job runs the tree scan on every event and, on a pull request, the history scan over every commit of it
+(section 6, `--history "$BASE_SHA..$HEAD_SHA"`). B24-C3's commit `ba4f562` carried, at
+`app/lib/qualification/__tests__/b24-c3-trace-read.test.ts:75`, a fake connection string in the one source shape the
+`connection-string-password` rule reads (a template literal assigned to a name ending in `_URL`; host `db.invalid`; user and password
+assembled from joined fragments; no credential), so the tree scan was red at `ba4f562` (run 37905772899; this and the next run attribution are the lead's reading of CI, recorded in the ledger's B24-C3 fix note and B24-D0 lead close - [B24-A2F review, 2026-10-09] correctness-2: this increment read no CI run). The lead's fix `aaa6a1b`
+rewrote the line as joined fragments under `FAKE_CONNECTION`, which made the tree scan green and left the pull request's history scan
+red (run 37912316237): the blob as committed at `ba4f562` is still in the range the step reads, history is not rewritten (runbook
+2.4), and an ordinary allowlist entry for a line that exists only in history is stale in tree mode (`runSecretScan`'s stale check,
+C25's tail). Re-read at `b3a4f2d` and reproduced offline (the counterexample below): **CONFIRMED**. The scanner had a design gap for
+a fake sentinel that was later rewritten; this increment closes it without changing a rule, removing an entry or rewriting history.
+It closes no defect and writes no OD entry, LB row or closure clause (the lead's decisions at launch).
+
+**The kind** (`SecretScanAllowlistEntry.historyOnly?: true`, C37; every judgement in the pure `runSecretScan`):
+- tree mode: a history-only entry is exempt from the stale check (C40); a tree line that hits with its path, rule and digest is
+  reported as `path:line rule`, never allowlisted (C39) - the line was declared gone, so its return is a finding;
+- `--staged` mode: a history-only entry never allowlists (C39; a staged line is about to enter the tree);
+- `--history` mode: a history-only entry allowlists exactly as an ordinary entry - the same `<path>`, rule and line digest - and the
+  match is counted (C39);
+- `allowlistProblems`: a history-only entry's reason must name the replacing commit as a 7-40 hex id and say `replaced` or
+  `rewritten` (C38, C41), or the allowlist is unusable and every mode exits 1, as for any malformed entry; a mark that is present and
+  not `true` is refused the same way.
+
+Nothing else changes: an ordinary entry keeps today's behaviour (cases b, b2, e2, e4 and d unchanged in their assertions),
+`SECRET_SCAN_RULE_IDS` and every pattern are byte-identical (case a's pins), the script and the workflow are untouched, no rule is
+weakened. The helper and its two patterns are declared at the end of `secret-scan.ts` (`:384-406`; [B24-A2F review, 2026-10-09] correctness-2, security-4: was `:384-405`, one line short of the helper's closing brace; `b24-a2-headers` 13 checks the range), so every line this page and
+`ci-split.md:523` cite in it (`:34`, `:117`, `:145`, `:280`, `:325`, `:353`, `:357`) holds; the five in-place edits sit on `:16`,
+`:70`, `:108`, `:150` and `:162`, each tagged. **CONFIRMED** (read at those lines; `b24-a2-secret-scan` l-p).
+
+**The entry** (`secret-scan-allowlist.ts:60-69`, C42, appended at the end of the array; C26 `:10` and C31 `:50` hold): path
+`app/lib/qualification/__tests__/b24-c3-trace-read.test.ts`, rule `connection-string-password`, sha256
+`8bbe84aef14181902a233659797cf030bfd89aceb5f844542df7aee61e584a01`, `historyOnly: true`, the reason naming `ba4f562:75` and
+`aaa6a1b` and the word `replaced`. The digest is the module's own `lineDigest` rule (sha256 over the UTF-8 text of the line without
+its line break) over the line as committed: the lead computed it, and this increment re-derived it from
+`git show ba4f562:<path> | sed -n 75p` piped into a sha256 digest - the two equal, the line never printed, the blob LF (0 CR bytes).
+No line of the file at `b3a4f2d` carries the digest (case q computes every line's), so in tree mode the entry is neither used nor
+stale. **CONFIRMED**.
+
+**Test-first** (`b24-a2-secret-scan`, 18 -> 24 cases, 26 after the review round below (r, s); the new describe block at `:533-624`, every fake assembled at run time, nothing
+written, no process). Red first at `b3a4f2d` with the extended suite against the unchanged scanner and allowlist, 7 failed of 24
+(`a2f-03-red-secret-scan`): (d) the pinned shape list, 8 rows where 9 are pinned; (l) the history-only entry reported `is stale: no
+line of that file hits with that digest`; (m) the returned line allowlisted (exit 0, allowlisted 1) where exit 1 is pinned; (n) its
+last assertion, the same allowlist stale over the tree; (o) the staged line allowlisted; (p) `allowlistProblems` answered `[]` for a
+reason naming no commit; (q) eight entries where nine are pinned. After the module and allowlist edits, 22 of 24 with (g) red - the
+page's section 6 did not yet name the ninth path - and (m) red on this increment's own assertion (the rule id ends in the word the
+case looked for; the assertion now checks the fake's userinfo), then 24 of 24 (`a2f-08-green-secret-scan`). **CONFIRMED**.
+
+**The real scanner** (the script through the heavy-job lock, git objects only, no network; every count from its summary line):
+
+| run | result | exit |
+|---|---|---|
+| `pnpm exec tsx scripts/scan-secrets.ts` (tree mode, this working tree) | 4,127 entries, 0 oversized, 0 unscanned, 0 listed paths not a regular file, **8 allowlisted**, no hit: the eight ordinary entries used, the ninth neither used nor stale (A2's run of section 10: 4,034 entries, 8 allowlisted) | 0 |
+| `pnpm exec tsx scripts/scan-secrets.ts --history 57c3b29..HEAD` (the pull request's range at `b3a4f2d`: 13 commits, `8664964` to `b3a4f2d`) | 396 entries, 0 oversized, 0 unscanned, **1 allowlisted**, no hit (A2's run of section 10 over the then two commits: 63 entries) | 0 |
+| the counterexample: the same history run with the eight ordinary entries only (a scratchpad script calling `runSecretScanCommand` with `SECRET_SCAN_ALLOWLIST` filtered of its history-only entry - the allowlist as it stood before this increment, for which an ordinary entry's behaviour is unchanged) | 396 entries, 0 allowlisted, exactly one line: `ba4f5623e95efe8cd8c5151f8c3adb12c8097d46:app/lib/qualification/__tests__/b24-c3-trace-read.test.ts:75 connection-string-password` - the hit CI's history step reported | 1 |
+
+So the one allowlisted line of the history run is that hit, and nothing else in the range hits: **CONFIRMED** by execution. CI's two
+`secret-scan` steps after the push are the lead's reading; until then the clearing of the pull request's check is **PROPOSED** (the
+local history run over the same range is the whole of what the step runs, on the same script and allowlist).
+
+**What stays as it was.** The nine rules and their patterns; the eight ordinary entries, each still read in its test; the script
+(`scripts/scan-secrets.ts`, C27 and C32 hold); the `secret-scan` job and its two steps (no `.github` edit; cases c and k unchanged);
+the counts at `b3a4f2d`, re-measured by their own pins before any edit: 168 / 165 / 3 / 0 (`b16-1c-invariant-tripwires`),
+47 / 36 / 9 / 27 (`b22-b-exposure` 1), 107 action records (`b23-a-tier3-vocabulary`), 32 migrations (`b16-b-migrations`), the
+SDK-importer pins (`b21-a-import-gates` 1, `b24-a1-configuration` 14), all green (`a2f-00-baseline-qualification`,
+`a2f-01-count-pins`); no route, flag, environment name or agent tool added; no history rewritten, no force-push, nothing live. What
+a history-only entry does is pinned: it allowlists one exact line digest in the history scan alone (n), its reason must name a
+replacing commit (p), and the line's return to the tree or the index is reported, never hidden (m, o); the judgement built on that
+stands under "What stays open" below ([B24-A2F review, 2026-10-09] security-3: moved out of this paragraph). **CONFIRMED**.
+
+**Review round** ([B24-A2F review, 2026-10-09]; four findings, each low, each closed in-tree test-first; the three page readers'
+baseline first, `a2f-18`: 3 files, 48 passed). `b24-a2-headers` 13 and `b24-a2-secret-scan` (r) red first on the review's tree
+(`a2f-19`: 3 failed, 36 passed of 39; (s) green at launch, a pin of the kind's limit): 13 listed its three problems in one run -
+`secret-scan.ts:405 is not the file's last line, the helper's closing brace (:406)`, `the judgement sits outside the INFERRED
+paragraph`, `the judgement's paragraph carries a CONFIRMED` - and no anchor problem (C37-C43 held); (r) found no `[B24-A2F,
+2026-10-09]` on the allowlist header's `:3-4`; 8 read 13 `it(` where the cell said 12. The fixes: correctness-2 and security-4, the
+helper range on this page `:384-405` -> `:384-406` in place (the drafted records carry `:384-406` too) and a pointer beside the two
+run ids naming them the lead's reading (the CONFIRMED at the end of that paragraph was already scoped to the offline reproduction);
+security-1, the allowlist header's "every entry" sentence amended on its own `:4`, the header still seven lines, the pin row below
+corrected to `:4-6`; security-2, case 13 appended to `b24-a2-headers` (section 15's citations checked as section 14's are, C37
+onward, plus the helper range and the judgement's label), proved against a deliberate breakage of `secret-scan.ts` (one line
+inserted before `historyOnlyProblems`, `a2f-21`) and the module restored byte for byte (sha256 equal before and after); security-3,
+the "not a second way" judgement moved under INFERRED with its limit pinned by (s), the `commit` field drafted for the lead as
+PROPOSED. Then green (`a2f-20b`; `a2f-20` was red on this page's own wrapping of the judgement phrase over a line break, after which
+case 13 reads a paragraph with its line breaks as spaces and the phrase was re-wrapped), the gates below. **CONFIRMED** by execution.
+
+**Pins moved, every one in place with a dated note, none loosened:**
+
+| pin | move |
+|---|---|
+| `b24-a2-secret-scan` (d): the allowlist's pinned shape (the `SECRET_SCAN_ALLOWLIST` path and rule list) and the case title | eight -> nine rows, the ninth `app/lib/qualification/__tests__/b24-c3-trace-read.test.ts connection-string-password`, dated; the tree-mode count stays 8 (the comment beside it says why) |
+| `b24-a2-secret-scan`, the header | one dated sentence appended on the existing line after "no process is started" - on that line and no new one, because `ci-split.md` C25 and C40 cite case (c) at `:183` and `:187` (the first draft added a line and `b24-d0-ci-split` 4 caught it, `a2f-11`); the sentence B24-D0 pins is untouched |
+| this page, section 6 (`:257`) | the dated clause naming the ninth entry and its kind, appended inside the line, so no line of this page before this section moves (`scenario-map.md:422` cites `:523`; `ci-split.md:485` cites `:542`) |
+| this page, section 10's `it(` table (`:410`) | 18 -> 24, the real count (`b24-a2-headers` 8 reads the cell as a number and compares it with the suite's `it(` count, so the dated note sits in the table's header row, `:404`) |
+| `b24-a2-headers` 8, the page's section count | 15 -> 16, in place, dated: this section is the page's sixteenth (`a2f-11` caught the pin; the case's citation check over section 14 and its `it(` check over section 10 are unchanged and green) |
+| `secret-scan.ts:16`; `secret-scan-allowlist.ts:4-6` ([B24-A2F review, 2026-10-09] security-1: this row said `:5-6` while the "every entry" sentence stood unamended; its exception now sits on `:4`, the sentence's own second line, pinned by `b24-a2-secret-scan` r) | the statements "an entry whose line no longer hits fails as stale" (`secret-scan.ts:16`; `secret-scan-allowlist.ts:5-6`) and "every entry is a test sentinel ... read in its test" (`secret-scan-allowlist.ts:3-4`, the exception on `:4`) each amended in place with the dated exception; both files keep every cited line and the allowlist header its seven |
+| this page, section 10's `it(` table (`:406`, `:410`) | [B24-A2F review, 2026-10-09] 12 -> 13 (`b24-a2-headers`, case 13) and 24 -> 26 (`b24-a2-secret-scan`, r and s), the real counts, each in place; the header row's note (`:404`) extended |
+| this page, `:720` and this section's "What stays as it was" | [B24-A2F review, 2026-10-09] the helper range `:384-405` -> `:384-406` in place with its note; the judgement sentence moved from the CONFIRMED paragraph to "What stays open" (INFERRED); no line before this section moved |
+
+**What stays open** (**INFERRED**): a history-only entry stays in the allowlist for as long as the commit it covers is in a range a
+history scan reads - after the B24 merge, `--history main` (the closeout's `SECRETS EXPOSED` run, section 6) still reads `ba4f562`,
+so the entry is permanent unless history is rewritten, which the runbook forbids. Nothing checks that a history-only entry's
+replacing commit is an ancestor of HEAD: the id is checked for shape only, because the pure module runs no git of its own by design.
+[B24-A2F review, 2026-10-09] security-3, the judgement and its limit: that a history-only entry is
+not a second way to allowlist a real secret - it allowlists one exact line digest in the history scan alone, its reason must name
+a replacing commit, and the line's return to the tree or the index is reported, never hidden (cases m-p) - is a design judgement,
+so it stands here and under no CONFIRMED. Its limit, pinned by `b24-a2-secret-scan` (s): in `--history` mode the entry matches
+its path, rule and digest under
+every commit of the range (C39 compares no commit; `:142` strips the `<commit>:` prefix), exactly as an ordinary entry does, and the
+id its reason names is checked for shape only (`REPLACING_COMMIT`, `:394`; a seven-digit numeral passes), so the kind's one new
+power is the tree-mode stale exemption; for the committed entry the only line its digest can ever cover is the known fake, so
+today's exposure is nil. An optional `commit` field on a history-only entry, compared in history mode against the `<commit>:` prefix
+(the full id or a prefix of it) so that the entry exempts one blob under one commit and a reintroduction elsewhere in the range is
+reported, with the id the reason names required to equal it, is a choice beyond this task: drafted for the lead as **PROPOSED**
+(the next free number at `b3a4f2d` is OD-234), not applied; (s) is the pin that would move with it, by review.
+
+**Citations** (this increment's; C1-C36 above hold; [B24-A2F review, 2026-10-09] C37 onward are checked on their lines by
+`b24-a2-headers` 13 as C1-C36 are by 8, numbered on from section 14's last):
+
+| # | file | line | anchor |
+|---|---|---|---|
+| C37 | `app/lib/deployment/secret-scan.ts` | 70 | `readonly historyOnly?: true;` |
+| C38 | `app/lib/deployment/secret-scan.ts` | 108 | `else problems.push(...historyOnlyProblems(entry, at));` |
+| C39 | `app/lib/deployment/secret-scan.ts` | 150 | `&& (mode === "history" \|\| allowed.historyOnly !== true));` |
+| C40 | `app/lib/deployment/secret-scan.ts` | 162 | `if (used.has(index) \|\| allowed.historyOnly === true) return;` |
+| C41 | `app/lib/deployment/secret-scan.ts` | 399 | `function historyOnlyProblems(` |
+| C42 | `app/lib/deployment/secret-scan-allowlist.ts` | 67 | `historyOnly: true as const,` |
+| C43 | `app/lib/qualification/__tests__/b24-a2-secret-scan.test.ts` | 533 | `describe("[B24-A2F, 2026-10-09] the history-only allowlist entries` |
+| C44 | `app/lib/qualification/__tests__/b24-a2-headers.test.ts` | 371 | `it("13. [B24-A2F review, 2026-10-09] section 15 is checked as section 14 is` |
+| C45 | `app/lib/qualification/__tests__/b24-a2-secret-scan.test.ts` | 601 | `it("(r) [B24-A2F review, 2026-10-09] security-1, red first on the review's tree` |
+| C46 | `app/lib/qualification/__tests__/b24-a2-secret-scan.test.ts` | 615 | `it("(s) [B24-A2F review, 2026-10-09] security-3, green at launch` |
+
+**Gates** (every vitest run through the lock script, two workers, one job at a time; tsc, eslint and the scanner through the heavy-job
+script; the logs under the scratchpad's `b24/logs/a2f-*`; **CONFIRMED** by execution):
+
+| gate | result | exit |
+|---|---|---|
+| baseline before any edit: `app/lib/qualification/__tests__` (`a2f-00`) | 34 files, 359 passed, 3 skipped (362); 147.7 s | 0 |
+| the count pins at `b3a4f2d` (`a2f-01`): `b16-1c-invariant-tripwires`, `b22-b-exposure`, `action-registry`, `b23-a-tier3-vocabulary`, `b21-a-import-gates`, `b16-b-migrations` | 6 files, 57 passed (168 / 165 / 3 / 0; 47 / 36 / 9 / 27; 107; 32; the SDK-importer pins) | 0 |
+| baseline: the three closeout tripwires (`a2f-02`) | 3 files, 27 passed | 0 |
+| `b24-a2-secret-scan` red first (`a2f-03`), the extended suite on the unchanged scanner and allowlist | 7 failed, 17 passed (24): d, l, m, n, o, p, q | 1 |
+| `b24-a2-secret-scan` after the module and allowlist edits (`a2f-04`) | 2 failed, 22 passed: g (the page did not yet name the ninth path), m (the increment's own assertion, corrected) | 1 |
+| `pnpm exec tsx scripts/scan-secrets.ts` (`a2f-05`) | 4,127 entries, 0 oversized, 0 unscanned, 0 unreadable, 8 allowlisted, no hit | 0 |
+| `pnpm exec tsx scripts/scan-secrets.ts --history 57c3b29..HEAD` (`a2f-06`) | 13 commits, 396 entries, 0 oversized, 0 unscanned, 1 allowlisted, no hit | 0 |
+| the counterexample: the same history run with the eight ordinary entries only (`a2f-07`) | 396 entries, 0 allowlisted, one line: `ba4f562…:app/lib/qualification/__tests__/b24-c3-trace-read.test.ts:75 connection-string-password` | 1 |
+| `b24-a2-secret-scan` green (`a2f-08`) | 24 passed (24) | 0 |
+| `tsc --noEmit -p tsconfig.json` (`a2f-09`; again after the last .ts edit, `a2f-14`) | 0 errors, both runs | 0 |
+| `eslint` on the changed .ts files (`a2f-10`, three files; `a2f-15`, the four with `b24-a2-headers`) | 0 problems, both runs | 0 |
+| `app/lib/qualification/__tests__` after every edit (`a2f-11`) | 2 failed, 363 passed, 3 skipped (368): `b24-a2-headers` 8 (the page's section count 15, and the `it(` cell read as a number) and `b24-d0-ci-split` 4 (`ci-split.md` C25 and C40 cite `b24-a2-secret-scan.test.ts:187` and `:183`; the first header edit had added a line) - the three pins handled in place (the table above) | 1 |
+| `app/lib/qualification/__tests__` after the pin fixes (`a2f-12`) | 34 files, 365 passed, 3 skipped (368); 174.6 s | 0 |
+| the three closeout tripwires over this page (`a2f-13`) | 3 files, 27 passed | 0 |
+| `app/lib/agent/__tests__/b11-5-capture-exactness.test.ts` (`a2f-16`) | 18 passed (no new test file spells a write primitive) | 0 |
+| [B24-A2F review, 2026-10-09] the three page readers before any edit of the round (`a2f-18`): `b24-a2-headers`, `b24-a2-secret-scan`, `b24-d0-ci-split` | 3 files, 48 passed (12, 24, 12) | 0 |
+| the review round red first (`a2f-19`): the two extended suites on the review's tree | 3 failed, 36 passed (39): `b24-a2-headers` 13 (its three problems listed, no anchor problem), `b24-a2-secret-scan` (r) (no `[B24-A2F, 2026-10-09]` on the allowlist header's `:3-4`), `b24-a2-headers` 8 (the `it(` cell 12 where the suite has 13); (s) green at launch | 1 |
+| the three page readers after the fixes (`a2f-20`) | 1 failed, 50 passed (51): case 13 found the judgement in 0 paragraphs - this page's own wrapping had split the phrase over a line break; the case now reads a paragraph with its line breaks as spaces, and the phrase was re-wrapped | 1 |
+| the three page readers again (`a2f-20b`) | 3 files, 51 passed (13, 26, 12) | 0 |
+| the test-strength proof of case 13 (`a2f-21`): one blank line inserted before `historyOnlyProblems` (`secret-scan.ts:399`), `b24-a2-headers` alone, the module restored from a copy and its sha256 compared | 1 failed, 12 passed (13): `C41 app/lib/deployment/secret-scan.ts:399 does not hold its anchor` and `secret-scan.ts:406 is not the file's last line, the helper's closing brace (:407)`; restored, sha256 `40f8f006…1960fc` before and after | 1 |
+| `tsc --noEmit -p tsconfig.json` (`a2f-22`) | 0 errors | 0 |
+| `eslint` on the three changed .ts files (`a2f-23`: the allowlist module, `b24-a2-headers`, `b24-a2-secret-scan`) | 0 problems | 0 |
+| `pnpm exec tsx scripts/scan-secrets.ts` (`a2f-24`) | 4,127 entries, 0 oversized, 0 unscanned, 0 listed paths not a regular file, 8 allowlisted, no hit - the counts of `a2f-05` | 0 |
+| `pnpm exec tsx scripts/scan-secrets.ts --history 57c3b29..HEAD` (`a2f-25`) | 396 entries, 0 oversized, 0 unscanned, 1 allowlisted, no hit - the counts of `a2f-06` | 0 |
+| `app/lib/qualification/__tests__` (`a2f-26`) | 34 files, 368 passed, 3 skipped (371: `a2f-12`'s 368 and the round's three cases); 165.6 s | 0 |
+| the three closeout tripwires over this page (`a2f-27`) | 3 files, 27 passed | 0 |
+| `app/lib/agent/__tests__/b11-5-capture-exactness.test.ts` (`a2f-28`) | 18 passed (the two extended suites spell no write primitive) | 0 |
+
+The page suites (`b24-a2-headers`, `b24-a2-secret-scan`, `b24-d0-ci-split`) and the three tripwires were re-run on the final page,
+after this table, and reported to the lead with their counts ([B24-A2F review, 2026-10-09] and again after the review round's rows
+above, `a2f-29`, reported the same way). No browser run and no `next build`, `next start` or `next dev`: A2F
+changes two modules, two suites and this page; no UI, no route, no workflow line. CI's two `secret-scan` steps after the push are the
+lead's reading.
