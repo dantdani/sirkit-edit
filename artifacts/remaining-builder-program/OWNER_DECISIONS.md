@@ -1984,6 +1984,7 @@ Amendments to existing entries:
   operation's names LB-12. `PROGRAM_STATE.json` `liveBlockers` mirrors LB-5, LB-11 and LB-12; LB-4, LB-6, LB-7 and LB-8 stay unmirrored
   (discovery 9.6).
 - Owner confirmation pending.
+- [B24-E, 2026-10-10] OD-179 note: its choice that "LB-4, LB-6, LB-7 and LB-8 stay unmirrored" (`OWNER_DECISIONS.md:1984-1985`) is reversed by OD-217 as applied by B24-E: the mirror holds every register row, one string per row; B23's copy carries B24-E's dated note (`artifacts/ai-control-plane-b23/unknowns-and-owner-decisions.md:49`).
 
 ## OD-180 — CI admission for B23 suites, as applied (B23-A1, 2026-10-02)
 
@@ -2613,7 +2614,7 @@ Amendments to existing entries:
 - Owner confirmation pending.
 - [B24-A4, 2026-10-08] LB-14 applied. The row "database platform: Data API exposure, roles, backup, PITR, failover, restart" is appended after LB-13 in OD-217's vocabulary (BLOCKED-LIVE-QUALIFICATION), with its `PROGRAM_STATE.json` `liveBlockers` mirror. B24-B1 (LB-15..LB-17) and B24-E (the rest of OD-217) append next.
 - [B24-B2 lead, 2026-10-08] Records repair: B24-A3's, B24-A4's and B24-B1's records copied their reports' later sections into this file (inside OD-197, OD-225, OD-201, OD-226 and OD-227). The README-row copies and the report headings were removed (README.md holds the rows), and three amendments that had landed only there now stand under their own headings: B24-A3's under OD-174 (B23-A2), B24-A4's LB-14 line under OD-217 and B24-A4's database-delivery time under OD-30.
-
+- [B24-E, 2026-10-10] Applied in full (D24-33): every classification cell takes one of the three forms - LB-2 and LB-5 BLOCKED-LIVE-QUALIFICATION, LB-3 BLOCKED-LIVE-QUALIFICATION for CI and qualified platforms, LB-4 QUALIFIED (2026-09-24, migrations and the nine DB-gated suites on two empty databases of a non-isolated server, the PostgreSQL 17.6 server of the main Supabase project) with isolated staging BLOCKED-LIVE-QUALIFICATION (LB-14) - each old wording kept in its cell as `[B24-E, 2026-10-10] was "<old>" (OD-217)`; LB-4's stale check clause noted; dated notes on LB-1, LB-2, LB-5, LB-7, LB-9 and LB-13..LB-17; no row added or renumbered; `PROGRAM_STATE.json` `liveBlockers` mirrors every row as `LB-<n>: <form>: <check>` in id order; pinned by `b24-e-register` (10); qualification-matrix.md part 3.
 
 ## OD-223 — B24-A1: stated choices beyond its task text, as applied (B24-A1, 2026-10-06)
 
@@ -2720,7 +2721,7 @@ Amendments to existing entries:
   - Staging auth stays BLOCKED-LIVE-QUALIFICATION (LB-1) until an isolated `sirkit-auth-qualification-*` project and account exist. The database platform is LB-14.
   - B24-E amends under this heading.
 - Owner confirmation pending.
-
+- [B24-E, 2026-10-10] Applied to the production-auth harness (D24-34 offline): `PRODUCTION_AUTH_STAGING_TARGETS` (`app/lib/deployment/production-auth-target.ts:42`) is the reviewed staging list and is EMPTY - no isolated `sirkit-auth-qualification-*` project exists - so `playwright.production-auth.config.ts` throws `PRODUCTION_AUTH_NOT_EXERCISED` before anything is built or started; one reviewed entry for an isolated project the owner names, never the main project, unblocks a run with its account and database; the harness requires `SIRKIT_AUTH_QUALIFICATION_DATABASE_URL` naming the listed project - refusing a URL with a second "@" or a postgres.js host list, on which postgres.js and the WHATWG parser read different hosts (review security-3) - and maps it to the server's `DATABASE_URL`, never the developer's; the server listens on 127.0.0.1 alone (review security-4); the run stays BLOCKED-LIVE-QUALIFICATION (LB-1, LB-13).
 
 ## OD-192 — least-privilege roles and RLS, as applied (B24-A4, 2026-10-08)
 
@@ -3132,3 +3133,50 @@ Under the existing OD-217 heading (`:2599`), append:
 - (k) Focus returns to the prompt after a chat run only when the run was sent from the prompt (`chatFocusReturnRef`, set on `app/page.tsx:4466`), no pointer was pressed since (the root's `onPointerDownCapture`, `:6046`, a passive observer outside B17-A's attribute list) and focus is on `body`, polling up to 30 frames (`:4809`); all in place (review round).
 - (l) The suites spell their budgets as numeric literals so B24-D1's threshold census records them.
 - (m) A WCAG row whose only cases are browser-spec cases reads PROPOSED until the lead's green run flips `BROWSER_SPECS_EXECUTED` (review round); flipped by the lead after the green runs (2026-10-10).
+
+
+## OD-218 — fabrication and physical evidence, as applied (B24-E, 2026-10-10)
+
+- **Default applied:** no fabrication, upload or order; no evidence store, recording route or wired review port; items 6 (fabrication) and 7 stay BLOCKED-LIVE-QUALIFICATION (LB-5); qualification-matrix.md Q7, Q8 record B23-D's offline block (`physical-evidence.ts:330`, `:454`, `:484`; `action-registry.ts:118`). No owner answer existed at `6e4e1bb`.
+- When the owner approves fabrication and names who inspects and tests, the store, the session-derived recording route and the wired review port are their own increment, not B24-E's (OD-239 (f)); a pass needs a human-reviewed record, never a fixture.
+- Owner confirmation pending.
+
+
+## OD-219 — the rule-profile expiry, as applied (B24-E, 2026-10-10)
+
+- **Default applied (recorded):** the jlcpcb-2l evidence retrieved 2026-09-09 is valid through 2027-09-09 (`rule-profile.ts:33-37`, `:48`, `:114`; the registry's copy `provider-registry.ts:185`); a real-clock release is refused from 2027-09-10T00:00:00.000Z UTC (`release/route.ts:185-186`); pinned by `b24-e-register` 9 and 10; the frozen-clock CI identity is unaffected; renewal is an owner action and a reviewed code change (registry row, date pins, the fixture clock `expected-identities.json:3`, INFERRED the release identity); every provider observation and exchange goes stale at the expiry (OD-168). Nothing renewed or moved.
+- Owner confirmation pending.
+
+
+## OD-238 — B24-Ea: stated choices beyond its task text, as applied (B24-E, 2026-10-10)
+
+- **Default applied:**
+  - (a) Item 1 left to B24-B3b: no opt-in suite, spend guard, price table, contract turns or command edit (OD-102, OD-125); Q1 cites B3b's command and the one table.
+  - (b) The database URL is required and names the listed project (`db.<ref>.supabase.co`, or a `*.pooler.supabase.com` host with the user `postgres.<ref>`) and becomes the server's `DATABASE_URL`; a URL with a second "@" before the first "/" or "?", or a comma in postgres.js's percent-decoded host, is refused `database_url_not_target` (review security-3: postgres.js 3.4.9 and the WHATWG parser would read different hosts); the three Supabase names are set (the URL and the publishable key the resolver's, selected as `mode.ts:65`; the anon key empty); a Supabase secret key or a service-role JWT is refused as `publishable_key_secret`, because `next build` inlines public variables.
+  - (c) The server's environment blanks every `secret` and `rotation-previous` census name but `DATABASE_URL`, plus the six fixture names, `SIRKIT_MCP_ENABLED`, `SIRKIT_TRUSTED_CLIENT_IP_HEADER` (review security-4) and the qualification email, password and database URL (a superset of the task's list; `@next/env` loads only undefined names, confirmed by reading).
+  - (d) Trace, screenshot and video off; the list reporter alone; its own output folder; the server's stdout and stderr not echoed. After the review (correctness-1, security-1), three layers keep both credentials out of every artifact:
+    - no harness call types a value: each credential is the argument of one bounded page evaluation in `e2e-production-auth/sign-in-form.ts`, because Playwright 1.63 titles fill and type steps with the value and logs `fill("<value>")` into a failed action's call log;
+    - every form step is bounded, with a worst case of 100 s, 20 s inside the 120 s test timeout, so test 1's `finally` clears both fields before the test is torn down; `actionTimeout` 15 s and `navigationTimeout` 30 s are a backstop;
+    - a ready config sets `PLAYWRIGHT_NO_COPY_PROMPT=1` in the runner and every worker, so Playwright writes no failure page snapshot.
+  - (e) The fixed loopback origin `http://127.0.0.1:3102`; readiness on `/api/health`; a 600 s server budget; the task's command plus `--hostname 127.0.0.1` (review security-4: `next start` listens on 0.0.0.0 unless told), a recorded departure from the task's verbatim command.
+  - (f) A config that throws `PRODUCTION_AUTH_NOT_EXERCISED: <codes> (<names>)` unless ready; the shape as plain data in the pure module; the ready answer's values non-enumerable; fifteen closed refusal codes reported together in a fixed order; the selector rule a pinned copy of `ID_PATTERN`; a project ref of twenty lower-case letters or digits (INFERRED).
+  - (g) `SIRKIT_AUTH_QUALIFICATION_TENANT_ID`: one inventory row (`live-test-gate`) and one census row (`qualification-opt-in`), by review.
+  - (h) Sign-out through the page's request context with the page's Origin; database failures reported by error code only; the canary client takes `databaseTls`.
+- Owner confirmation pending.
+
+
+## OD-239 — B24-Eb: stated choices beyond its task text, as applied (B24-E, 2026-10-10)
+
+- **Default applied:**
+  - (a) Cell form: the cell starts with one form; the old wording stays in the cell; every `6e4e1bb` cell stays its prefix (pinned by digest).
+  - (b) Mirror string `LB-<n>: <form>: <check, short>`, the BLOCKED qualifier dropped from the form.
+  - (c) The matrix: ten columns, Q1..Q15 (Q14 is MCP's passing offline row; Q15 is multi-agent with scope `—`); State strictly one form; agreement and NOT APPLICABLE rules; the sandbox rule; classes taken from B1's catalog rows for Q4, Q11, Q13; R05's 2026-07-29 live runs recorded on Q1.
+  - (d) The vocabulary: 22 forms in twelve kinds, each with claimed examples and a negated or conditional non-claim; the scope adds `e2e-production-auth/`. After the review (correctness-2, security-2), a negation or condition admits a statement only where it governs it:
+    - a verb negation or modal directly before the claim's verb;
+    - or, directly before the claim's first word with only articles, auxiliaries and the like between: a negation, a negated reporting verb, "if", "unless" or "whether", or a time word followed by a present or perfect verb. A time word followed by a simple past dates a claim, as B23's lead decided.
+    - A negation of a shape the rule does not parse is admitted only by a reviewed exact text, counted and held unparsed. There is one: `artifacts/footprint-binding-remediation/r03-b10d-u01-report.md:80`.
+  - (e) Triage: allow-list only true, recorded runs (one entry, Q9); in-place notes within the ten-note budget (eight: B22's and B23's tables, every LB-4 row, the B23-D page); four finds left for the closeout by exact text; the register's retired vocabulary is scanned too; a note admits only the statement it supersedes (review correctness-3).
+  - (f) Item 7's departure from discovery section 7: when OD-218 is answered, the store, the recording route and the port are their own increment; B24-E stops there.
+  - (g) The register and mirror drafted for the lead (D14) and checked by the suite's own functions before application.
+  - (h) C41's anchor narrowed (`physical-evidence.md:746`), noted on `:271`.
+- Owner confirmation pending.

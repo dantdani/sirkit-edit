@@ -169,10 +169,10 @@ Other UNKNOWN / BLOCKED items the increments recorded:
 | LB | check | classification | B22's relation |
 |---|---|---|---|
 | LB-1 | Production Supabase authentication browser E2E | BLOCKED-LIVE-QUALIFICATION | unchanged |
-| LB-2 | Real LLM provider turn (OpenAI / Anthropic) | UNKNOWN | unchanged; B22 called no provider (every suite offline; the browser runs under the fixture runtime) |
-| LB-3 | Live routing in CI | local-only | unchanged; its "a container profile (B22)" is not met - B22 delivered only `freerouting-local-diagnostic`, a diagnostic profile with no OS limit that no runner executes (OD-148: the containers belong to LB-3/LB-10) |
-| LB-4 | Database-backed tests | dead external resource | unchanged; the evidence aggregate has no route binding and no migration (OD-141) |
-| LB-5 | Physical fabrication | not attempted | unchanged |
+| LB-2 | Real LLM provider turn (OpenAI / Anthropic) | UNKNOWN [superseded 2026-10-10 by B24-E (D24-33, OD-217): BLOCKED-LIVE-QUALIFICATION in OD-217's form; a live run needs credits, an owner price table and a money cap (OD-216)] | unchanged; B22 called no provider (every suite offline; the browser runs under the fixture runtime) |
+| LB-3 | Live routing in CI | local-only [superseded 2026-10-10 by B24-E (D24-33, OD-217): BLOCKED-LIVE-QUALIFICATION for CI and qualified platforms in OD-217's form] | unchanged; its "a container profile (B22)" is not met - B22 delivered only `freerouting-local-diagnostic`, a diagnostic profile with no OS limit that no runner executes (OD-148: the containers belong to LB-3/LB-10) |
+| LB-4 | Database-backed tests | dead external resource [superseded 2026-10-10 by B24-E (D24-33, OD-217): LB-4 is QUALIFIED (2026-09-24, migrations and the nine DB-gated suites on two empty databases of a non-isolated server, the PostgreSQL 17.6 server of the main Supabase project) in OD-217's form; isolated staging stays BLOCKED-LIVE-QUALIFICATION (LB-14)] | unchanged; the evidence aggregate has no route binding and no migration (OD-141) |
+| LB-5 | Physical fabrication | not attempted [superseded 2026-10-10 by B24-E (D24-33, OD-217): BLOCKED-LIVE-QUALIFICATION in OD-217's form; nothing records physical evidence until the owner answers OD-218] | unchanged |
 | LB-6 | Local container PostgreSQL | BLOCKED-LIVE-QUALIFICATION | unchanged; the lead's 2026-10-01 probe again reached no Docker engine |
 | LB-7 | A real model's chat execution | BLOCKED-LIVE-QUALIFICATION | unchanged |
 | LB-8 | A routed board in a browser journey | BLOCKED-LIVE-QUALIFICATION | unchanged |

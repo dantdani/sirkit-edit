@@ -64,3 +64,5 @@ next-env.d.ts
 # [B21 F2] the orchestration browser proof's own config (playwright.orchestration.config.ts) writes its own folders
 /playwright-report-orchestration/
 /test-results-orchestration/
+# [B24-E] the production-auth harness (playwright.production-auth.config.ts) writes only its output folder: its list reporter writes no report
+/test-results-production-auth/

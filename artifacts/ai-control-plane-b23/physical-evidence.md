@@ -268,7 +268,7 @@ there (a missing pin, not a code defect; section 9).
 
 ## 8. Live: BLOCKED-LIVE-QUALIFICATION (LB-5)
 
-No board has been fabricated, assembled, inspected or tested for Sirkit; LB-5 (C41) stays "not attempted" and unblocks on owner approval
+No board has been fabricated, assembled, inspected or tested for Sirkit; LB-5 (C41) stays "not attempted" [superseded 2026-10-10 by B24-E (D24-33, OD-217): LB-5 is BLOCKED-LIVE-QUALIFICATION in OD-217's form, and B24-E built nothing for it (OD-218's default): the store, the session-derived recording route and the wired review port are their own increment once the owner answers OD-218; C41's anchor is the row's first two cells, its third cell taking OD-217's form] and unblocks on owner approval
 and hardware (B24-E). Recording physical evidence needs a reviewed store, a route that derives the reviewer from the session, and the
 review port, all B24-E's; none is in B23. **BLOCKED-LIVE-QUALIFICATION**. The assembly-data authority (exact approved MPN, population
 variant, BOM, placement, paste) is not in B23 either: qualification seals only `bare_pcb`. RECORDED
@@ -743,7 +743,7 @@ every row.
 | C38 | `app/lib/release-engineering/types.ts` | 67 | `export interface PhysicalValidationEvidence {` |
 | C39 | `app/lib/release-engineering/types.ts` | 58 | `export interface ScopedException { exceptionId: string; kind: "deviation" \| "waiver";` |
 | C40 | `app/lib/engineering/__tests__/b17-a-control-inventory.test.ts` | 63 | `if (record.status === "missing") expect(reached.has(record.id) \|\| routed.has(record.id)` |
-| C41 | `artifacts/remaining-builder-program/LIVE_BLOCKERS.md` | 11 | `\| LB-5 \| Physical fabrication, assembly, incoming inspection, functional test \| not attempted \|` |
+| C41 | `artifacts/remaining-builder-program/LIVE_BLOCKERS.md` | 11 | `\| LB-5 \| Physical fabrication, assembly, incoming inspection, functional test \|` |
 | C42 | `app/lib/workflow/prompt-to-gerber/__tests__/fixtures/expected-identities.json` | 15 | `"releaseId": "mfg-release-45b3b7efbc85dc3a8ecd233c906384cd",` |
 | C43 | `app/lib/workflow/prompt-to-gerber/__tests__/fixtures/expected-identities.json` | 17 | `"archiveSha256": "997664c0b9a87c4d3a65e64eeb90b98159b2ad6ad8806e4ebea748a592ac6dcc",` |
 | C44 | `app/lib/workflow/prompt-to-gerber/__tests__/acceptance-pipeline.test.ts` | 421 | `expect({ releaseId: manifestBody.releaseId, filename, archiveSha256: archiveSha, archiveByteLength: bytes.byteLength` |

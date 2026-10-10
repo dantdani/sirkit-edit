@@ -5351,3 +5351,50 @@ Test-first on `chapter/b24-production-qualification` from `1fe719e`: two runs, t
   page-browser-e2e's default step with the skip value 55 passed (5.4 min), `page-browser-e2e-b24`'s run line 13 passed (4.1 min:
   `multi-tab` 3, `crash-recovery` 2, `keyboard-and-focus` 5 with case 4's focus on the prompt, `minimum-width` 3), the orchestration
   configuration 4 passed (2.6 min), each exit 0; evidence PNGs restored by blob hash, 0 mismatched.
+
+### B24-E - live and physical gates: the production-auth harness, the register, the matrix, the statement tripwire (2026-10-10 local; increment workflow + lead; this commit)
+
+- **Test-first.**
+  - `e-red-1`: the Ea suite does not load (module absent), exit 1.
+  - `e-red-2`: the register and statements suites are red before the notes, matrix and drafts, exit 1.
+  - `e-ea-1` and `e-ea-2`: the census and page pins red, then moved in place.
+- **Delivered.** The harness offline (part 1); the matrix Q1..Q15 (part 2); the register and mirror drafts, applied by the lead; eight in-place notes; four closeout finds; C41 narrowed (part 3).
+- **E's LB notes.** LB-1, LB-2, LB-5, LB-7, LB-9 and LB-13..LB-17; no row added.
+- **Review round.** Eight confirmed findings (correctness-1..4, security-1..4) were fixed test-first.
+  - `e-fix-red-1`: config suite cases 1, 4, 6 and 8 red; statements case 3 red with twelve problems; exit 1.
+  - `e-fix-green-2`: 15 of 15.
+  - The fixes:
+    - new `sign-in-form.ts`: credentials go in as evaluation arguments, every step is bounded, worst case 100 s against 120 s;
+    - `actionTimeout` and `navigationTimeout` set;
+    - `PRODUCTION_AUTH_RUNNER_ENV` (`PLAYWRIGHT_NO_COPY_PROMPT=1`);
+    - `--hostname 127.0.0.1` and a blank `SIRKIT_TRUSTED_CLIENT_IP_HEADER`;
+    - the database-URL rule for a second "@" or a postgres.js host list;
+    - thirteen single-rule resolver inputs in case 1;
+    - the tripwire's local negation rule with one reviewed negation;
+    - a note admits only its own statement.
+  - Breakages `e-fix-break-1`..`-6` were each caught and restored by sha256.
+  - The review's declarations stand at the module's end, so every cited line holds; one interim run (`e-fix-gate-1`) caught a moved owner line.
+- **Gates.** The qualification folder: 483 passed, 15 skipped, 5 register reds until the drafts are applied. Every other gate exit 0; tsc 0; eslint 0 on 14 files; generators zero drift; secret rules 0 hits.
+- **Strength.** Three deliberate breakages before the review and the review's own, each restored by sha256.
+- **Stop conditions.** None hit.
+- Lead close (2026-10-10): the fast increment form, one run (wf_6b80c88e-c12: implementer, four review lenses, a skeptic each, one
+  fix round). The review raised nine findings; eight were confirmed (none above medium after verification) and all eight were fixed
+  test-first with planted breakages restored by sha256 - among them the sign-in password reaching Playwright's `error-context.md`
+  when test 1 timed out before its `finally` (the credentials now go in through `evaluate`, every step is bounded, the snapshot is
+  switched off for the harness's runner), and the statement tripwire admitting a positive claim whenever a negating word stood
+  earlier in its sentence. The lead's decisions: (1) the builder drafted `LIVE_BLOCKERS.md` and `PROGRAM_STATE.json` (the lead's
+  files) under OD-217's vocabulary; the lead checked that the drafts change only the LB-1, 2, 3, 4, 5, 7, 9 and 13-17 rows and only
+  `liveBlockers`, copied them in (sha256 `9ad5bdef...` and `ffae5bef...`, as the report states), and `b24-e-register` then passed 10
+  of 10 with B1's catalog, B3's scenario map and live-suite honesty and B23-D's physical-evidence contract (7 files, 68 tests); the
+  records below add only what the drafts did not hold. (2) Nothing live ran: the production-auth harness
+  (`playwright.production-auth.config.ts`, `e2e-production-auth/`) refuses to start without a reviewed isolated target and
+  `PRODUCTION_AUTH_STAGING_TARGETS` is empty (OD-191), so every live and physical row of `qualification-matrix.md` stays
+  BLOCKED-LIVE-QUALIFICATION with its LB ids; E changes no application UI, so no browser run was needed, and the harness is outside
+  both browser configurations' test directories. (3) B24-D4's CI run (38076687384 on `6e4e1bb`) was green in every job -
+  page-browser-e2e 21 min 47 s of 30 (headroom 8 min 13 s), page-browser-e2e-b24 6 min 20 s of 20 (13 min 40 s; `multi-tab` 2 and
+  `keyboard-and-focus` 4 green there), prompt-to-gerber 9 min 26 s, agent-boundary-suites 4 min 55 s - so `lastGreenSha` is
+  `6e4e1bb`. (4) Four statements the tripwire found in older pages (`ai-control-plane-b21/unknowns-and-owner-decisions.md:155, :156,
+  :158`, `ai-control-plane-b18/unknowns-and-owner-decisions.md:12`) are left for the closeout's notes, as the task says. The lead's
+  close: on the final tree with the drafts applied: pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification 488 passed,
+  15 skipped; tsc 0; eslint 0 on the 14 changed TypeScript files; the four B24 generators run twice with zero drift (only
+  `threshold-census.csv` moves, E's five rows).

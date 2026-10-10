@@ -394,7 +394,7 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
     expect(first).toBeGreaterThan(0);
     const paragraph = edge.slice(first, edge.indexOf("", first)).join(" ");
     expect(paragraph).toContain("`SIRKIT_AUTH_MODE` is `configuration`, declared: it is honoured only outside production (`mode.ts:36-41`) but it is a deployment knob, never a fixture.");
-    expect(edge[first]).toContain(`[B24-D4, ${DATE}] 97 -> 98: + \`${SKIP_ENV}\` (\`platform\`, the row above). \`SIRKIT_AUTH_MODE\` is`);
+    expect(edge[first]).toContain(`[B24-D4, ${DATE}] 97 -> 98: + \`${SKIP_ENV}\` (\`platform\`, the row above). `); expect(edge[first].indexOf(`[B24-D4, ${DATE}] 97 -> 98: `)).toBeLessThan(edge[first].indexOf("`SIRKIT_AUTH_MODE` is")); // [B24-E, 2026-10-10] reviewed pin move: D4's note is held to its own text and to standing before the SIRKIT_AUTH_MODE sentence (was: directly before it); B24-E's "98 -> 99" note now stands between them, the last move on the line, where b24-a2-env-names 9 reads the total
     // the OD-30 steps' lines, read off the workflow
     const workflow = lines(WORKFLOW);
     const lineOf = (needle: string): number => {
