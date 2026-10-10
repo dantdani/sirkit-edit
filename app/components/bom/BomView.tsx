@@ -18,7 +18,7 @@
 
 import { lineCurrency, lineUnitPrice } from "@/app/lib/bom/line-price"; // [B19-D I5b review]
 import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type {
   SchematicState,
   SchComponent,
@@ -39,6 +39,7 @@ import { SOURCE_IDS, SOURCE_REGISTRY } from "@/app/lib/acquisition/source-regist
 import { offerFreshness, sourceLabel, utcMinute } from "@/app/lib/acquisition/source-labels"; // [B19-E E1]
 import type { Change } from "@/app/lib/snapshots";
 import { changeToNotification, type NotificationSeverity } from "@/app/lib/notifications";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"; // [B24-D3] OD-215: the four BOM dialogs on the shared dialog
 
 type Props = (
   | { state: SchematicState }
@@ -422,6 +423,8 @@ export function BomView(props: Props) {
   // [B19-E E1] after a distributor import file downloads: stays until dismissed, so the upload link stays reachable
   const [exportNotice, setExportNotice] = useState<{ dist: CartDistributor; mpnOnly: number } | null>(null);
   const [worksheetOpen, setWorksheetOpen] = useState(false);
+  // [B24-D3] the worksheet returns focus to its "Export for distributor ▾" trigger: the menu item that opens it unmounts on open
+  const exportTriggerRef = useRef<HTMLButtonElement | null>(null);
   // [B19-E E1] a refetch that got no answer: the last result stays, offers past their expiry are not shown
   const [offline, setOffline] = useState(false);
   // [B19-E E1-C review] the pricing choice and design the shown result was for, its arrival and the server clock offset
@@ -880,6 +883,7 @@ export function BomView(props: Props) {
         {/* Export-for-distributor dropdown: files only — nothing is sent and no order is placed */}
         <div className="relative">
           <button
+            ref={exportTriggerRef}
             onClick={() => setExportMenuOpen((v) => !v)}
             disabled={!result || fileExporting}
             className="text-xs px-2 h-7 rounded border border-zinc-800 text-zinc-300 hover:bg-zinc-800 transition disabled:opacity-50"
@@ -1333,6 +1337,7 @@ export function BomView(props: Props) {
       {worksheetOpen && (
         <SourcingWorksheetModal
           busy={fileExporting}
+          finalFocus={exportTriggerRef}
           onGenerate={generateWorksheet}
           onClose={() => setWorksheetOpen(false)}
         />
@@ -1371,10 +1376,13 @@ function alternatesDrawerLabel(row: BomRow): string {
 /** [B19-E E1] A sourcing worksheet to review with a buyer or a contract manufacturer — not verified procurement, never an order. */
 function SourcingWorksheetModal({
   busy,
+  finalFocus,
   onGenerate,
   onClose,
 }: {
   busy: boolean;
+  /** [B24-D3] where focus returns when the worksheet closes (its opener's menu item is gone by then). */
+  finalFocus: RefObject<HTMLButtonElement | null>;
   onGenerate: (form: { title: string; buildQuantity: number; notes: string }) => void;
   onClose: () => void;
 }) {
@@ -1386,10 +1394,11 @@ function SourcingWorksheetModal({
   const canGenerate = title.trim() !== "" && !busy;
 
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-[380px] max-w-full rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl p-4">
-        <div className="text-sm font-medium text-zinc-100 mb-1">Sourcing worksheet (CSV, unverified)</div>
+    // [B24-D3] OD-215: the shared dialog (Base UI) names it by its heading, moves focus inside, closes on Escape and returns
+    // focus to the "Export for distributor ▾" trigger; its default Close joins the form's Cancel.
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent finalFocus={finalFocus} className="block w-[380px] max-w-[calc(100%-2rem)] sm:max-w-[380px] rounded-lg border border-zinc-700 bg-zinc-950 p-4 text-zinc-100 shadow-2xl ring-0">
+        <DialogTitle className="text-sm font-medium text-zinc-100 mb-1 pr-8">Sourcing worksheet (CSV, unverified)</DialogTitle>
         <div className="text-[11px] text-zinc-500 mb-3">
           Priced from cached offers, each with its source and when it was observed. Not verified procurement; no order is placed.
         </div>
@@ -1439,8 +1448,8 @@ function SourcingWorksheetModal({
             {busy ? "Generating…" : "Generate worksheet"}
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1503,6 +1512,10 @@ function DiffView({
 
 // ─── Snapshot history panel ─────────────────────────────────────────────────--
 
+/** [B24-D3] The BOM drawers on the shared dialog: a right-hand sheet over the viewport (DialogContent's centring overridden by
+ *  className only; its width is added per drawer). */
+const BOM_DRAWER_CLASS = "top-0 right-0 left-auto h-full max-h-full max-w-full translate-x-0 translate-y-0 rounded-none border-l border-zinc-800 bg-zinc-950 p-0 text-zinc-100 ring-0 shadow-2xl flex flex-col gap-0";
+
 function HistoryPanel({
   snapshots,
   onViewDiff,
@@ -1513,14 +1526,12 @@ function HistoryPanel({
   onClose: () => void;
 }) {
   return (
-    <div className="absolute inset-0 z-20 flex" role="dialog" aria-modal="true">
-      <div className="flex-1 bg-black/50" onClick={onClose} />
-      <div className="w-[380px] max-w-full h-full bg-zinc-950 border-l border-zinc-800 flex flex-col shadow-2xl">
-        <div className="flex items-center gap-2 px-4 h-12 border-b border-zinc-800 shrink-0">
-          <div className="text-sm text-zinc-200 font-medium">Snapshot history</div>
-          <button onClick={onClose} className="ml-auto text-zinc-500 hover:text-zinc-200 text-lg leading-none">
-            ✕
-          </button>
+    // [B24-D3] OD-215: on the shared dialog (named by its heading, focus inside, Escape, focus back to History); its default Close
+    // replaces the drawer's "✕"; positioned by className only, so through the portal it now covers the viewport, not the BOM pane.
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className={`${BOM_DRAWER_CLASS} w-[380px] sm:max-w-[380px]`}>
+        <div className="flex items-center gap-2 pl-4 pr-12 h-12 border-b border-zinc-800 shrink-0">
+          <DialogTitle className="text-sm text-zinc-200 font-medium">Snapshot history</DialogTitle>
         </div>
         <div className="flex-1 overflow-auto p-3 space-y-2">
           {snapshots.length === 0 ? (
@@ -1555,8 +1566,8 @@ function HistoryPanel({
             ))
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1574,19 +1585,17 @@ function NotificationsDrawer({
   onClose: () => void;
 }) {
   return (
-    <div className="absolute inset-0 z-20 flex" role="dialog" aria-modal="true">
-      <div className="flex-1 bg-black/50" onClick={onClose} />
-      <div className="w-[380px] max-w-full h-full bg-zinc-950 border-l border-zinc-800 flex flex-col shadow-2xl">
-        <div className="flex items-center gap-2 px-4 h-12 border-b border-zinc-800 shrink-0">
-          <div className="text-sm text-zinc-200 font-medium">Notifications</div>
+    // [B24-D3] OD-215: on the shared dialog (named by its heading, focus inside, Escape, focus back to the bell); its default Close
+    // replaces the drawer's "✕"; positioned by className only, so through the portal it now covers the viewport, not the BOM pane.
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className={`${BOM_DRAWER_CLASS} w-[380px] sm:max-w-[380px]`}>
+        <div className="flex items-center gap-2 pl-4 pr-12 h-12 border-b border-zinc-800 shrink-0">
+          <DialogTitle className="text-sm text-zinc-200 font-medium">Notifications</DialogTitle>
           <button
             onClick={onMarkAllRead}
             className="ml-auto text-[11px] px-2 h-6 rounded border border-zinc-800 text-zinc-300 hover:bg-zinc-800"
           >
             Mark all as read
-          </button>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 text-lg leading-none">
-            ✕
           </button>
         </div>
         <div className="flex-1 overflow-auto p-3 space-y-2">
@@ -1618,8 +1627,8 @@ function NotificationsDrawer({
             })
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1689,20 +1698,13 @@ function AlternatesDrawer({
   );
 
   return (
-    <div className="absolute inset-0 z-20 flex" role="dialog" aria-modal="true">
-      {/* Backdrop */}
-      <div className="flex-1 bg-black/50" onClick={onClose} />
-      {/* Panel */}
-      <div className="w-[420px] max-w-full h-full bg-zinc-950 border-l border-zinc-800 flex flex-col shadow-2xl">
-        <div className="flex items-center gap-2 px-4 h-12 border-b border-zinc-800 shrink-0">
-          <div className="text-sm text-zinc-200 font-medium truncate">Alternates for {sourceLabel}</div>
-          <button
-            onClick={onClose}
-            className="ml-auto text-zinc-500 hover:text-zinc-200 text-lg leading-none"
-            title="Close"
-          >
-            ✕
-          </button>
+    // [B24-D3] OD-215: on the shared dialog (named by its heading, focus inside, Escape, focus back to the row's alternates control);
+    // its overlay replaces the backdrop and its default Close the "✕"; positioned by className only, so through the portal it now
+    // covers the viewport, not the BOM pane.
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className={`${BOM_DRAWER_CLASS} w-[420px] sm:max-w-[420px]`}>
+        <div className="flex items-center gap-2 pl-4 pr-12 h-12 border-b border-zinc-800 shrink-0">
+          <DialogTitle className="text-sm text-zinc-200 font-medium truncate">Alternates for {sourceLabel}</DialogTitle>
         </div>
 
         {/* Kind filter */}
@@ -1733,8 +1735,8 @@ function AlternatesDrawer({
             />
           ))}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

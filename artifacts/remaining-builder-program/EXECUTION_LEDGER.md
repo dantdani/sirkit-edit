@@ -5278,3 +5278,45 @@ Test-first on `chapter/b24-production-qualification` from `3d5f225`, one run (D2
   min) and the whole default configuration 60 passed (6.2 min); free memory fell to 1,247 MB with `next dev` at 2,301 MB and the
   worker at 500 MB (INFERRED: memory pressure on this 16 GB machine; cause UNKNOWN, recorded, never called a flake; CI's
   page-browser-e2e is the independent check); evidence PNGs restored by blob hash, 0 mismatched.
+
+### B24-D3 - Accessibility and responsive scope (2026-10-10 local; increment workflow + lead; this commit)
+
+Test-first on `chapter/b24-production-qualification` from `3773c6a`, one run (D3a and D3b together, lead decision D21). Red first: `b24-d3-accessible-names` failed to load (`d3-red-1-accessible-names`); with the rule in place, 7 failed of 10, case 2 listing six in-scope unnamed sites (`d3-red-2-accessible-names`, recorded on the page); `b24-d3-bom-dialogs` 16 failed of 16 (`d3-red-1-bom-dialogs`); a `finalFocus` mutation turned the worksheet's case 3 red. Review round (2026-10-10): six confirmed findings, each reproduced first and fixed:
+- the out-of-scope ratchet let a new unnamed site through after regeneration (case 3 now holds a frozen key list and the post-D3 pin of 102; the generator reads its baseline from the repository path and refuses a missing one unless `--bootstrap`);
+- the focus return took focus from a pointer person (new case 11, a model run of the page's code; the return limited in place to a run sent from the prompt with no pointer press since);
+- BOM case 4 could not see a "✕" return (the strengthened case and an AST check in case 5);
+- More checks was named by its glyph (an `aria-label` in place, and the backdrop's closer found by its accessible name);
+- three WCAG rows read "tested" on unrun browser cases (now PROPOSED, enforced by case 10).
+
+Gates on the final tree are the review round's, as listed above and in `accessibility.md` section 9. Pins moved: B17-A summary and CSV (631 -> 628 sites, click -7, dialog +4) and the B01 fingerprint, both in D3's build; the census and its summary; the threshold census (+3 rows; D3 row counts budget 10, yield 5); `b24-d0-ci-split` 1 and 7. OD-30: the D3 CI run's prompt-to-gerber and page-browser-e2e durations against 25 and 30 minutes are the lead's reading (UNKNOWN here). History, RECORDED: prompt-to-gerber 13 min 10 s and page-browser-e2e 16 min 24 s at `b3a4f2d`. D3 adds two unit suites (about 5 s locally) and two browser specs (one bootstrap).
+- Lead close (2026-10-10): the fast increment form, one run (wf_fceac3ff-e1a: implementer, four review lenses, a skeptic each, one
+  fix round; six findings confirmed, one medium, all fixed test-first). The lead's decisions: (1) B24-D2's CI red (run 38049453257 on
+  `3773c6a`, page-browser-e2e: 56 passed, 2 failed, 2 did not run; every other job green) is fixed inside this commit, as D2 fixed
+  D1's: `crash-recovery` (a)'s premise failed on CI's runner - the server logged the tender 105 ms before the reopened page's first
+  request, so the never-answered route did not hold it past the close, the grant was consumed and the product truthfully said
+  "Interrupted" - and the hold is now a local sink that never answers (every assertion kept; green alone, no tender in (a)'s server
+  log); `multi-tab` case 2 (B's conflict notice not visible in 30 s) was not reproduced in any local run, 4x CPU-throttled included,
+  so its expectation is unchanged and its failure now prints the state that tells the causes apart (cause UNKNOWN, never called a
+  flake; CI's run of this commit is the check); `performance-and-reliability.md` section 29 records both. (2) The lead's browser
+  runs: the two new specs red on `3773c6a`'s code (the eight product files D3 changed put back for one run and restored by sha256:
+  `keyboard-and-focus` 1 red, 2-5 not reached in serial mode, INFERRED red; `minimum-width` 3 red, 1-2 green by design); the first
+  default run on the D3 tree failed `keyboard-and-focus` 1 at the builder's unmeasured bound of 80 Tab presses, and a measuring run
+  (spec restored byte-identical) found 95 presses from AI Chat to the prompt, every stop visibly focused - the bound is now 120 from
+  that measurement (in place, dated), and the path is recorded as a 2.4.3 / 2.4.1 gap (opening the chat does not move focus into it;
+  no skip link), not fixed: the fix is an `app/page.tsx` change outside D3's code list. (3) With both specs green the lead made the
+  review round's reviewed move: `BROWSER_SPECS_EXECUTED` true, rows 2.1.1, 2.4.3 and 2.4.7 tested in part, the browser labels that
+  ran CONFIRMED with the runs named on `accessibility.md` section 5, C60's anchor moved; the records the builder drafted as PROPOSED
+  were rewritten to what ran. (4) `BomView.tsx`'s four `react-hooks/set-state-in-effect` errors exist at `3773c6a` (lines 472, 575,
+  601, 1667; D3's dialog move shifted them to 475, 578, 604, 1676; the lead's lint of `3773c6a`'s bytes, restored by sha256), so they
+  are pre-existing lint debt with `page.tsx`'s 14 and `PcbEditor.tsx:1422`. (5) A1's production-smoke build was not run locally (it
+  starts `next build`); CI's production-smoke job is the check, and it was green on `3773c6a`. (6) OD-30: page-browser-e2e ran 21 min
+  46 s of 30 on D2's run (headroom 8 min 23 s by D1's step, with two failed cases' waits and two cases not run); D3's two specs take
+  about 2 min locally (keyboard 111 s, minimum width 2 s), so its CI headroom may fall under five minutes (INFERRED). D3's CI run
+  measures it; if the headroom step reports under five minutes, the lead proposes and lands a split of page-browser-e2e before B24-E
+  (OD-30: never a raised timeout). The lead's close: on the final tree: pcb 977 passed, 4 skipped; B14.4 22; confinement 375;
+  qualification 448 passed, 15 skipped (before the flag flip), then the two D3 suites and the B21, B22 and B23 closeout scanners 54
+  of 54 after it; tsc 0; eslint the 18 known pre-existing errors only (`page.tsx`'s 14, `BomView.tsx`'s 4), 0 on the two D2 specs;
+  browser: the orchestration configuration 4 passed on the D3 product code; the default configuration on the final bytes 65 passed
+  with every D3 case (`keyboard-and-focus` 1-5, `minimum-width` 1-3) and both `crash-recovery` cases, `multi-tab` case 1 ending in a
+  Playwright worker-process crash (0xC0000409, no assertion failed; its third on this machine, INFERRED memory pressure late in a
+  full run) and its 2 later cases not run, then `multi-tab` alone 3 of 3; evidence PNGs restored by blob hash, 0 mismatched.

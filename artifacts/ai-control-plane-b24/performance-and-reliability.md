@@ -1840,3 +1840,22 @@ Test-first on `chapter/b24-production-qualification` from `3d5f225`, one run (D2
 | D2-C71 | `app/lib/project/execution-display.ts` | 238 | `"in-flight-elsewhere": "In progress in another tab — when the editor loaded this project, another open tab of this project was carrying this change forward` |
 | D2-C72 | `app/page.tsx` | 6460 | `pageProject={() => projectRef.current?.id ?? null}` |
 | D2-C73 | `app/components/pcb/PcbEditor.tsx` | 1688 | `pageProject, restoredGrants: restoredExecutionGrants })` |
+
+## 29. B24-D2's CI record (the lead, in B24-D3's commit)
+
+- [B24-D2 CI fix, 2026-10-10] CI run 38049453257 on `3773c6a` (page-browser-e2e, 21 min 46 s of 30; its headroom step 8 min 23 s):
+  56 passed, 2 failed, 2 did not run. Every other job was green.
+- `crash-recovery` (a) failed "it says not started": the reopened entry read "Interrupted" because the server HAD consumed the grant.
+  The server log shows the tender (`POST /api/agent/execution-grant 200`) 105 ms before the reopened page's first request: the route
+  handler that never answered did not hold the request past the page's close on CI's runner (no such request in (a)'s local server
+  logs). The product answered truthfully; the spec's premise failed. Fixed in the spec, every assertion kept: the tender now goes to a
+  local sink that accepts the connection and never answers (`sinkTender`, appended; the hold's line edited in place), so nothing a
+  close releases reaches the server. Green alone (`d2ci-crash-1`, 2 of 2, no tender in (a)'s server log) and in the default
+  configuration on B24-D3's tree.
+- `multi-tab` case 2 failed: B's conflict notice was not visible within 30 s; no later assertion ran and the run kept no state the log
+  shows. Not reproduced: green in every local run (alone, in the default configuration, and once with both pages' CPU throttled 4x,
+  `d2ci-multitab-throttle4`, the spec restored byte-identical). Cause UNKNOWN; never called a flake. The expectation is unchanged; on
+  its failure the spec now prints B's selection, focus, save status and texts, the stored copy's R3 and token, and the conflict
+  record's R3 before rethrowing (`explainNoConflict`, appended), so CI's next failure says which cause held.
+- A Playwright worker-process crash (0xC0000409, no assertion failed) ended `multi-tab` case 1 once more in B24-D3's final default
+  run on this machine (the third in that case); the spec alone passed 3 of 3 after it (B24-D3's ledger entry).

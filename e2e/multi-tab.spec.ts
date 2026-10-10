@@ -222,7 +222,7 @@ test("2. the working copy: A edits, then B (loaded before that edit) edits - B's
   await expect.poll(async () => r3x((await storedProject(pageA)).pcbWorking?.board), { timeout: 30_000 }).not.toBe(x0);
   const xa = r3x((await storedProject(pageA)).pcbWorking?.board)!;
   await nudge(pageB, "R3", 2);
-  await expect(pageB.getByText(WORKING_COPY_CONFLICT).first()).toBeVisible({ timeout: 30_000 });
+  await expect(pageB.getByText(WORKING_COPY_CONFLICT).first()).toBeVisible({ timeout: 30_000 }).catch(async (error: unknown) => { await explainNoConflict(xa); throw error; }); // [B24-D2 CI fix, 2026-10-10] the same expectation; on its failure the state is printed first
   await expect(pageB.getByTestId("pcb-save-status")).toBeVisible();
   const after = await storedProject(pageB);
   expect(r3x(after.pcbWorking?.board), "A's copy is not replaced").toBe(xa);
@@ -280,4 +280,18 @@ async function nextSyncCall(page: Page, operation: string): Promise<{ status: nu
     try { return (candidate.request().postDataJSON() as { operation?: unknown }).operation === operation; } catch { return false; }
   }, { timeout: 90_000 });
   return { status: response.status(), body: (await response.json().catch(() => ({}))) as Record<string, unknown> };
+}
+
+/** [B24-D2 CI fix, 2026-10-10] CI run 38049453257 (`3773c6a`) failed case 2 here (B's conflict notice not visible in 30 s) and kept
+ *  nothing that says why; it passed every local run, 4x CPU-throttled included. Never an assertion: printed to the run's output before
+ *  the expectation's own error is rethrown - B's selection, its focus, its save status and any toast it shows; R3 in the stored working
+ *  copy (A's position is `xa`) and in the conflict record, and the copy's write token. Declared last so no line above moves. */
+async function explainNoConflict(xa: number): Promise<void> {
+  const stored = await storedProject(pageB);
+  const view = JSON.parse((await pageB.getByTestId("pcb-editor").getAttribute("data-view").catch(() => null)) ?? "{}") as { selection?: unknown };
+  const saveStatus = await pageB.getByTestId("pcb-save-status").innerText({ timeout: 1_000 }).catch(() => "(no save status)");
+  const focus = await pageB.evaluate(() => { const active = document.activeElement as HTMLElement | null; return active ? `${active.tagName}${active.getAttribute("data-testid") ? `[data-testid=${active.getAttribute("data-testid")}]` : ""}` : "(none)"; });
+  const toasts = await pageB.getByText(/Another tab|autosave|could not|refused|conflict/i).allInnerTexts().catch(() => [] as string[]);
+  const working = stored.pcbWorking as (StoredProject["pcbWorking"] & { writeId?: unknown; updatedAt?: unknown }) | undefined;
+  console.log(`[B24-D2 CI fix] case 2, no conflict notice on B: ${JSON.stringify({ xa, storedWorkingR3: r3x(stored.pcbWorking?.board), storedWorkingToken: working?.writeId ?? null, storedWorkingUpdatedAt: working?.updatedAt ?? null, conflictR3: r3x(stored.pcbWorkingConflict?.board), conflictReason: stored.pcbWorkingConflict?.reason ?? null, bSelection: view.selection ?? null, bFocus: focus, bSaveStatus: saveStatus, bTexts: toasts.map((text) => text.slice(0, 200)).slice(0, 6) })}`);
 }

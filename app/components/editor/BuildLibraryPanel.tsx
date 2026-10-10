@@ -487,7 +487,7 @@ export function BuildLibraryPanel({
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search this category…"
+              placeholder="Search this category…" aria-label="Search this category"
               className="pl-7 h-8 border-zinc-800 bg-zinc-900 text-xs"
             />
           </div>

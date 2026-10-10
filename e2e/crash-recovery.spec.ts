@@ -7,7 +7,7 @@
  *  (a) Before the server: the tender is held before it reaches the server; the page is closed (`runBeforeUnload: false`) and a new
  *      page of the same context opened. Nothing was applied (R3 where it was, read from the editor's own chat snapshot), the entry
  *      does not show as committed, and the server's grant was never consumed. [B24-D2B reviews, 2026-10-10] If the reopened page shows the entry (an entry
- *      it lost is not judged here), it reads not started and open (`outcome_unknown`: the grant is still issued, and another open tab could hold its card), never "awaiting the editor's result" and never "Not made".
+ *      it lost is not judged here), it reads not started and open (`outcome_unknown`: the grant is still issued, and another open tab could hold its card), never "awaiting the editor's result" and never "Not made". [B24-D2 CI fix, 2026-10-10] The hold is a sink (`sinkTender`): CI run 38049453257 showed a never-answered route released by the page close and the tender consumed on the server; the sink accepts the connection and never answers, so a close releases nothing to the server.
  *  (b) After the server: the tender reaches the server and the grant is consumed (`route.fetch()`), and the page closes before the
  *      response arrives. On reopen the editor's recovery sweep (`recoverGrantedExecutionsForEditor`; its notice "AI execution
  *      recovery: ...") settles it by B18's recovery contract (`b18-c-recovery-inflight`; [B24-D2B] `b24-d2-crash-recovery` for the notice): the change is never
@@ -161,7 +161,7 @@ test.afterAll(async ({}, testInfo) => {
 test("(a) before the server: the tender is held before it reaches the server and the page closes; on reopen nothing was applied, the entry is not committed, and the server never consumed the grant", async () => {
   const x0 = await r3x();
   const never = new Promise<void>(() => undefined);
-  const { grantId } = await confirmHeldMove(async () => { await never; });
+  const { grantId } = await confirmHeldMove(async (route) => { await sinkTender(route); await never; }); // [B24-D2 CI fix, 2026-10-10] held at a sink, never at the route alone
   await crashAndReopen();
   expect(await r3x(), "nothing was applied").toBe(x0);
   const entry = page.locator(`[data-testid="chat-execution-entry"][data-grant-id="${grantId}"]`);
@@ -232,3 +232,26 @@ async function entryRecord(grantId: unknown): Promise<{ grantId: string; state: 
   const shown = (await entry.count()) > 0;
   return { grantId, state: shown ? await entry.getAttribute("data-state") : null, text: shown ? (await entry.innerText()).slice(0, 600) : "", serverGrant: (await serverGrant(grantId)).status };
 }
+
+/** [B24-D2 CI fix, 2026-10-10] (a)'s hold. A route handler that never answers does not hold a request past its page: CI run
+ *  38049453257 (`3773c6a`) logged the tender reaching the server (`POST /api/agent/execution-grant 200`) 105 ms before the reopened
+ *  page's first request, with the grant then consumed, so the premise "held before it reaches the server" failed and the product
+ *  answered, truthfully, for a consumed grant. The tender is sent instead to a local sink that accepts the connection and never
+ *  answers or forwards (Playwright's `route.continue` with another URL, invisible to the page): the page still waits for the answer
+ *  when it closes, and nothing a close releases can reach the server. The sink is closed after the run. Declared last so no line above moves. */
+const sinkSockets = new Set<import("node:net").Socket>();
+let sinkServer: import("node:net").Server | null = null;
+async function sinkTender(route: Route): Promise<void> {
+  if (!sinkServer) {
+    const { createServer } = await import("node:net");
+    const server = createServer((socket) => { sinkSockets.add(socket); socket.on("error", () => undefined); socket.on("close", () => sinkSockets.delete(socket)); });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    sinkServer = server;
+  }
+  const address = sinkServer.address() as import("node:net").AddressInfo;
+  await route.continue({ url: `http://127.0.0.1:${address.port}${new URL(route.request().url()).pathname}` });
+}
+test.afterAll(async () => {
+  for (const socket of sinkSockets) socket.destroy();
+  if (sinkServer) await new Promise<void>((resolve) => sinkServer!.close(() => resolve()));
+});

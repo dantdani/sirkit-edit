@@ -5,6 +5,7 @@ import { LocalDevIdentityBanner } from "./components/auth/LocalDevIdentityBanner
 import { resolveAuthMode } from "./lib/auth/mode";
 
 import { fixtureRuntimeEnabled } from "./lib/fixture-runtime/mode";
+import { MIN_WIDTH_NOTICE } from "./lib/accessibility/statements";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -35,6 +36,9 @@ export default function RootLayout({
             [B16.0.2 §H] the mode comes from the SERVER resolver (this is a
             server component), never from NEXT_PUBLIC_SIRKIT_AUTH_MODE. */}
         <LocalDevIdentityBanner authMode={resolveAuthMode(process.env)} fixtureRuntime={fixtureRuntimeEnabled(process.env)} />
+        {/* [B24-D3] OD-215: the editor is desktop only. Below EDITOR_MIN_WIDTH_PX (1,280) this notice shows; at or above it, it is
+            hidden. CSS only (Tailwind's max-[1280px] variant): no script, no listener, no control. */}
+        <div data-testid="min-width-notice" className="hidden max-[1280px]:block w-full bg-zinc-800 text-zinc-100 text-[11px] text-center py-0.5 px-2">{MIN_WIDTH_NOTICE}</div>
         {children}
       </body>
     </html>

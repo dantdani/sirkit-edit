@@ -168,7 +168,7 @@ export function ProviderExchangePanel(props: ProviderExchangePanelProps) {
         </div>
       )}
       {exchange.result && (
-        <div className="mt-1 rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-red-200" data-testid="p2g-provider-result">
+        <div role="alert" className="mt-1 rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-red-200" data-testid="p2g-provider-result">
           <span className="font-medium">{exchange.result.code}</span>{exchange.result.refusal ? ` (${exchange.result.refusal})` : ""} - {exchange.result.message}
           {exchange.result.correlationId && <span className="ml-2 text-red-300/80">(correlation {exchange.result.correlationId})</span>}
         </div>

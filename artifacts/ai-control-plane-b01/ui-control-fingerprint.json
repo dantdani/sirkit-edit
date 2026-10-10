@@ -10,6 +10,7 @@
       "Apply bounded support-part fixes via a validated edit",
       "Close",
       "Close pane",
+      "Conversation with the assistant",
       "Delete",
       "Delete \"*\"",
       "Delete project *",
@@ -21,6 +22,7 @@
       "Ignore these suggestions",
       "Independent domain model designs the same request and diffs it (slow, ~1–2 min)",
       "Junction — mark a wire crossing as connected",
+      "Message to the assistant",
       "More checks",
       "Move mode (M)",
       "Net label — name a net; same-name labels connect electrically",
@@ -36,6 +38,7 @@
       "Revision history / checkpoints",
       "Save project file",
       "Save project to a local .sirkit.json file",
+      "Schematic drawing: pointer-only, not readable by assistive technology. From the keyboard, use Go to component in the schematic toolbar to select a component by its reference designator.",
       "Select",
       "Sheet size — also sets the KiCad export page",
       "Stop the assistant's run",
@@ -100,7 +103,9 @@
       "Send to fab",
       "Zoom to violation"
     ],
-    "app/components/pcb/DrcPanel.tsx": [],
+    "app/components/pcb/DrcPanel.tsx": [
+      "DRC rule preset"
+    ],
     "app/components/pcb/BoardRepairPanel.tsx": [
       "PCB repair execution mode"
     ],
@@ -134,11 +139,11 @@
       "Close",
       "Close evidence review",
       "Distributor search query",
-      "Place with the part's published exact atomic revision (a reviewer still binds it)"
+      "Place with the part's published exact atomic revision (a reviewer still binds it)",
+      "Search this category"
     ],
     "app/components/bom/BomView.tsx": [
       "Bypass the cache and re-fetch live pricing from all selected sources",
-      "Close",
       "Dismiss",
       "Open distributor product page",
       "Open the component review to preview the successor and rebind (a reviewer's act)",
