@@ -455,8 +455,8 @@ describe("[B21 closeout] the standing single-agent statements are superseded in 
 
   it("10. [B21 closeout-1 fix] the closeout page records every B21 export with no production caller and why it stays (D21-36's other half): each is still exported by its module, referenced by no other production source, and used in its own module only as the record says - a test seam, test oracle, documentary table or type name only at its declaration, a vocabulary only through `typeof`", () => {
     const rows = [...section(read(PAGE), "## 3. ").matchAll(EXPORT_ROW)].map((match) => ({ module: match[1]!, name: match[2]!, kind: match[3]!, why: match[4]!.trim() }));
-    expect(rows).toHaveLength(34);
-    expect(new Set(rows.map((row) => row.name)).size).toBe(34);
+    expect(rows).toHaveLength(31); // [B24-Fa, 2026-10-10] reviewed pin move (OD-220, OD-240): 34 -> 31 - MERGE_RULES, FULL_CIRCUIT_TRIM and ROUTER_RULES are read since B24-F by scripts/generate-b24-maps.ts (the agent graph), a production caller, so their three rows on closeout-statements.md section 3.2 carry a dated in-place note and no longer parse as a row
+    expect(new Set(rows.map((row) => row.name)).size).toBe(31); // [B24-Fa, 2026-10-10] reviewed pin move (OD-220, OD-240): 34 -> 31, the same three rows
     const production = productionSources().map((path) => [path, stripComments(read(path))] as const);
     const problems: string[] = [];
     for (const row of rows) {

@@ -5398,3 +5398,67 @@ Test-first on `chapter/b24-production-qualification` from `1fe719e`: two runs, t
   close: on the final tree with the drafts applied: pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification 488 passed,
   15 skipped; tsc 0; eslint 0 on the 14 changed TypeScript files; the four B24 generators run twice with zero drift (only
   `threshold-census.csv` moves, E's five rows).
+
+### B24-F - final product verdict artifacts: the derived maps, the registers, the reports and the verdict (2026-10-10 local; increment workflow + lead; this commit)
+
+- **Delivered.**
+  - Fa (D24-37; D24-38 in part): the generator and its six maps. `b24-f-maps` (10) and `b24-f-generator-inventory` (6).
+  - Fb (D24-39, D24-40 in part): eleven written pages. `b24-f-registers` (6) and `b24-f-verdict-lines` (11).
+  - The reviewed pin moves: B21's three export rows (34 -> 31), `b24-d0-ci-split` 1 and 7 (487 -> 491), the threshold census (311 -> 315 rows).
+- **Review round.** Twelve confirmed findings, all low after verification, each fixed test-first:
+  - correctness-1..7 and 11;
+  - security-1..4.
+  - `ffix-red-1` was red as expected: 11 cases across the four suites, exit 1.
+  - Pre-edit counterexamples:
+    - the old commit rule accepted two swapped commits and a planted `deadbee` (`old-commit-rule.out`);
+    - the old physical rule passed "...passed on all boards; no regressions" (`old-physical-rule.out`).
+  - `ffix-break-run` used four deliberate breakages, each caught, then restored by sha256 with zero drift:
+    - the generator's setting override dropped (maps case 6);
+    - one record per site (maps case 5);
+    - the detector's for-of rule disabled (inventory cases 3 and 6);
+    - case 8 reverted to twelve unbudgeted walks (maps case 2).
+  - The fixes:
+    - the inventory is derived from the test files: 46 suites added, classes unchanged;
+    - `role_permitted` beside the decision;
+    - the coverage row space is pinned;
+    - the setting is built independently;
+    - one walk, with a budget, in maps case 8;
+    - commits bound to their own increment by a record;
+    - D24-3 closed in part;
+    - the frozen lines are never noted in place;
+    - E's four discovery rows take E's own page as source;
+    - the discovery is cited at `58c0834`'s numbering;
+    - bare and continued citations resolve;
+    - the physical rule needs the negation on the completion word itself.
+- **Gates** (all through the lock; no DATABASE_URL):
+  - The qualification folder: 520 passed, 15 skipped, 1 red. The red is `b24-f-registers` 4, which waits for this commit's OD append.
+  - The engineering, auth, MCP, CI-scope and lead-record suites: 17 files, 244 passed.
+  - The closeout tripwires, the provider gates and B14.2-B14.4: 12 files, 144 passed.
+  - `app/api/__tests__` and `app/lib/agent/__tests__`: 63 files, 1474 passed.
+  - The database-delivery list as CI runs it: 24 files passed, 3 skipped; 196 tests passed, 12 skipped.
+  - tsc 0. eslint 0 on the nine changed TypeScript files.
+  - All 28 generators exit 0 with zero drift; the maps and census generators were run twice, byte-identical. `gen-demo-fixtures` rewrites its file with CRLF; the content is identical, and the file was restored to its LF bytes (sha256 equal to HEAD).
+- **Prompt-to-gerber.** F's four suites add about 39 s locally (maps 37 s). CI's last reading was 9 min 26 s of 25, so the job stays well clear of OD-30's five-minute line.
+- **Stop conditions.** None hit.
+- Lead close (2026-10-10): the fast increment form, one run (wf_5af2a8f6-d97: implementer, four review lenses, a skeptic each, one
+  fix round; Fa and Fb together, lead decision D21). The review raised sixteen findings; twelve were confirmed (all low after
+  verification) and fixed test-first with planted breakages restored by sha256 - among them the commit check that accepted any hash
+  anywhere in the ledger (now bound to the closing increment's own clause or paragraph), the permission matrix that omitted the role
+  gate (708 rows), the coverage-matrix case that checked presence instead of the row space, and four of B24-E's superseded-statement
+  rows that named B24-D4's ledger as their source; four were refuted (among them that scope 4 should read BLOCKED: Q1's recorded live
+  runs carry E's `failing` marker, so the shared sandbox rule computes NOT READY, and the verdict states what is computed). The
+  lead's decisions: (1) the two pin moves the task did not list - `b24-d0-ci-split` 1 and 7 (the set-aside pattern gains `f`; 487 ->
+  491 files) and four new `threshold-census.csv` rows for the Fa suites' budgets and yields - are the same reviewed moves B24-D3, D4
+  and E made for their new suites, and stand; (2) the four OD entries were appended from the review round's verbatim drafts
+  (`f-od-drafts-v2.md`, sha256 `411194c4...`), each heading equal to its draft, in the order OD-220, OD-240, OD-221, OD-241, OD-220's
+  register half a dated line under its own heading; (3) `b24-f-registers` 6 simulated F's four closure lines on top of a discovery
+  that, once the lead applied them, already held them, and so counted nine where it expected four - a defect of the case, not of the
+  records - fixed in place with a dated note (the count is now the tree's post-base lines plus the four simulated), then 6 of 6 with
+  `b20-a2-negotiation`, `b20-a3-live-reread` and `b21-d-page` (4 files, 59 tests); (4) `PROGRAM_STATE.json`'s `nextAction` names the
+  closeout's two commits, the merge after green CI and the final program report; (5) B24-E's CI run (38086426338 on `58c0834`) was
+  green in every job - page-browser-e2e 15 min 31 s of 30, page-browser-e2e-b24 7 min 06 s of 20, prompt-to-gerber 14 min 04 s of 25,
+  agent-boundary-suites 5 min 54 s of 20 - so `lastGreenSha` is `58c0834`; (6) F's superseded-statement table cites discovery at
+  `58c0834`'s numbering, which does not count lines starting `- [B24-F` or `- [B24-closeout`, so the closeout's discovery lines carry
+  the `[B24-closeout, <date>]` tag. The lead's close: on the final tree with the records applied: pcb 977 passed, 4 skipped; B14.4
+  22; confinement 375; qualification 521 passed, 15 skipped; F's four suites with the record readers 59 of 59 after the case-6 fix;
+  tsc 0; eslint 0 on the 9 changed TypeScript files.
