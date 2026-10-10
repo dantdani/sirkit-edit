@@ -399,6 +399,7 @@ handover text the lead pastes into the nine task files is in section 13.
 | [B24-D1, 2026-10-09] | page-browser-e2e | `:432` | 2 |
 | [B24-D1, 2026-10-09] | agent-boundary-suites | `:565` | 1 |
 | [B24-D1, 2026-10-09] | agent-boundary-suites | `:624` | 2 |
+| [B24-D2, 2026-10-09] | database-delivery | `:384` | 1 |
 
 ## 11. Gates
 

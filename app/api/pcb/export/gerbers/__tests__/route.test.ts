@@ -144,4 +144,15 @@ describe("POST /api/pcb/export/gerbers Stage 3 release policy", () => {
     expect((await POST(request({ board, fabPresetId: "nope" }))).status).toBe(400);
     expect(buildFabBundleMock).not.toHaveBeenCalled();
   });
+
+  it("[B24-D2 review, 2026-10-09] says whether a timed-out kicad-cli's kill was confirmed (D24-31): an unconfirmed kill, a possible orphan, is reported, never folded into a plain failure", async () => {
+    for (const killConfirmed of [false, true]) {
+      buildFabBundleMock.mockRejectedValue(new KicadCliError("timeout", "kicad-cli timed out during gerbers", "", killConfirmed));
+      const response = await POST(request({ board, netlist, fabPresetId: "jlcpcb-2l", releaseMode: "engineering", waiverReason: "Controlled fixture export" }));
+      expect(response.status).toBe(500);
+      expect(await response.json()).toMatchObject({ error: "kicad-cli-failed", killConfirmed });
+    }
+    buildFabBundleMock.mockRejectedValue(new KicadCliError("cli-missing", "kicad-cli not found", "ENOENT"));
+    expect(await (await POST(request({ board, netlist, fabPresetId: "jlcpcb-2l", releaseMode: "engineering", waiverReason: "Controlled fixture export" }))).json()).not.toHaveProperty("killConfirmed");
+  });
 });

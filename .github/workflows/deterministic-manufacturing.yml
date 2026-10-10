@@ -381,6 +381,7 @@ jobs:
           app/lib/qualification/database/__tests__/b24-c1-durable-records-pglite.test.ts
           app/lib/qualification/database/__tests__/b24-c2-retention-pglite.test.ts
           app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts
+          app/lib/qualification/database/__tests__/b24-d2-restart-pglite.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-database-delivery.xml
       - name: Upload diagnostics
         if: failure()

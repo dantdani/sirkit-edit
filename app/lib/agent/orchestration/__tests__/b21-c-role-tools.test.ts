@@ -60,7 +60,7 @@ describe("[B21 C] the per-role tool allowlist", () => {
     for (const role of SPECIALIST_ROLES) expect(Object.isFrozen(INTENTIONAL_ROLE_TOOL_IDS[role]), role).toBe(true);
   });
 
-  it("2. every specialist row is a sorted, duplicate-free subset of the exposure list (33 when written; 36 since B22-B) within the A4L bound (32 = the contracts' bound), every id an active exposed descriptor the structural gate permits; no row holds a granted execution, a view control or a never-exposed / Tier 3 id; a proposal only in a proposing role's row; the coordinator's row IS INTENTIONAL_AGENT_EXPOSED_TOOL_IDS (identity, 36 ids since B22-B; 33 when written); the cost/latency router has none; the table equals OD-120's proposal; every id carries its reason as data; roleAllowedToolIds answers the row and nothing for an unknown role", () => { // [B22 closeout, 2026-10-02] retitled (D22-16): 36 since B22-B (OD-139); assertions unchanged
+  it("2. every specialist row is a sorted, duplicate-free subset of the exposure list (33 when written; 36 since B22-B) within the A4L bound (32 = the contracts' bound), every id an active exposed descriptor the structural gate permits; no row holds a granted execution, a view control or a never-exposed / Tier 3 id; a proposal only in a proposing role's row; the coordinator's row IS INTENTIONAL_AGENT_EXPOSED_TOOL_IDS (identity, 36 ids since B22-B; 33 when written); the cost/latency router has none; the table equals OD-120's proposal; every id carries its reason as data; roleAllowedToolIds answers the row and nothing for an unknown role", () => { // [B24-D2, 2026-10-09] 37 since B24-D2 (+ the paged board read, OD-213); the coordinator's count below moved, no specialist row did; [B22 closeout, 2026-10-02] retitled (D22-16): 36 since B22-B (OD-139); assertions unchanged
     expect(MAX_ROLE_TOOL_IDS).toBe(32);
     expect(MAX_ROLE_TOOL_IDS).toBe(ORCHESTRATION_BOUNDS.maxAllowedToolIds);
     for (const role of SPECIALISTS) {
@@ -90,7 +90,7 @@ describe("[B21 C] the per-role tool allowlist", () => {
     expect(PROPOSING_ROLES).toEqual(["coordinator", "circuit-topology", "schematic", "pcb-placement-routing"]);
     expect(INTENTIONAL_ROLE_TOOL_IDS["cost-latency-router"]).toEqual([]);
     expect(INTENTIONAL_ROLE_TOOL_IDS.coordinator).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS);
-    expect(INTENTIONAL_ROLE_TOOL_IDS.coordinator).toHaveLength(36); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads (the row IS the exposure list)
+    expect(INTENTIONAL_ROLE_TOOL_IDS.coordinator).toHaveLength(37); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads (the row IS the exposure list); [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; no specialist row moves
     expect(roleAllowedToolIds("coordinator")).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS);
     expect(roleAllowedToolIds("not-a-role")).toEqual([]);
     expect(Object.isFrozen(roleAllowedToolIds("not-a-role"))).toBe(true);

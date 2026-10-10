@@ -28,7 +28,7 @@ export { INTENTIONAL_MCP_EXPOSED_TOOL_IDS, MCP_WITHHELD_TOOL_IDS };
  * The closed exclusion reasons, in precedence order (the first that applies is THE reason): the never-lists first, then the
  * agent set, then the classes, side effects and bindings MCP cannot serve, then the reviewed decision. The first eleven are the
  * structural rule; `withheld` and `not_mcp_reviewed` apply only to a descriptor the structural rule admits. [B22-B] `computation` (OD-139) is a never-list of its own: every `sirkit.computation.*` descriptor and every `bound-computation` binding, exposed or not.
- * `not_read_or_propose`, `side_effects`, `not_servable` and `not_mcp_reviewed` carry no production id ([B20 B3] `withheld` two; [B20 B4] seven).
+ * `not_read_or_propose`, `side_effects`, `not_servable` and `not_mcp_reviewed` carry no production id ([B20 B3] `withheld` two; [B20 B4] seven; [B24-D2, 2026-10-09] eight since B24-D2: + the paged board read, withheld by choice, OD-235).
  */
 export const MCP_EXCLUSION_REASONS = Object.freeze([
   "tier3",

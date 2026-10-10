@@ -35,9 +35,13 @@ export const LATENCY_BASELINE_MINIMUM_RUNS = 3;
 /** The fixed first-answer delay of the stream workload's fake provider (OD-234). */
 export const STREAM_PROVIDER_DELAY_MS = 250;
 
-export const LATENCY_SUITES = Object.freeze(["b24-d1-latency", "b24-d1-latency-workflow"] as const);
+export const LATENCY_SUITES = Object.freeze(["b24-d1-latency", "b24-d1-latency-workflow", "b24-d2-memory"] as const); // [B24-D2, 2026-10-09] + b24-d2-memory (OD-212's memory half)
 export type LatencySuite = (typeof LATENCY_SUITES)[number];
-export const LATENCY_FAMILIES = Object.freeze(["view", "read", "edit", "stream", "workflow", "moved"] as const);
+export const LATENCY_FAMILIES = Object.freeze(["view", "read", "edit", "stream", "workflow", "moved", "memory"] as const); // [B24-D2, 2026-10-09] + memory
+/** [B24-D2, 2026-10-09] The unit a metric's samples, quantiles, baseline values and floor are in: milliseconds for B24-D1's families, MiB (2^20 bytes)
+ *  for B24-D2's memory family. The evaluation is unit-free (the same band and floor rule); only the reading of the numbers differs. */
+export const LATENCY_UNITS = Object.freeze(["ms", "MiB"] as const);
+export type LatencyUnit = (typeof LATENCY_UNITS)[number];
 export type LatencyFamily = (typeof LATENCY_FAMILIES)[number];
 
 export interface LatencyMetric {
@@ -49,10 +53,24 @@ export interface LatencyMetric {
   readonly samples: number;
   /** the increment that added the metric */
   readonly addedBy: string;
+  /** [B24-D2, 2026-10-09] the unit of every number this metric carries */
+  readonly unit: LatencyUnit;
+  /** [B24-D2, 2026-10-09] the floor, in `unit`: a regression must also exceed the baseline by this much (the baseline budget's `floorMs` carries it) */
+  readonly floor: number;
 }
 
 const metric = (metricId: string, family: LatencyFamily, suite: LatencySuite, workload: string, warmups: number, samples: number): LatencyMetric =>
-  Object.freeze({ metricId, family, suite, workload, warmups, samples, addedBy: "B24-D1" });
+  Object.freeze({ metricId, family, suite, workload, warmups, samples, addedBy: "B24-D1", unit: "ms" as const, floor: LATENCY_FLOOR_MS });
+/** [B24-D2, 2026-10-09] D24-29, OD-212's memory half: a memory metric of b24-d2-memory - a heapUsed or rss delta in MiB with its floor in MiB, the
+ *  same warm-ups and sample count for every memory metric (at least LATENCY_P95_MINIMUM_SAMPLES, so the p95 is gated too). */
+export const MEMORY_WARMUPS = 2;
+export const MEMORY_SAMPLES = 30;
+const memoryMetric = (metricId: string, workload: string, floor: number): LatencyMetric =>
+  Object.freeze({ metricId, family: "memory" as const, suite: "b24-d2-memory" as const, workload, warmups: MEMORY_WARMUPS, samples: MEMORY_SAMPLES, addedBy: "B24-D2", unit: "MiB" as const, floor });
+/** [B24-D2, 2026-10-09] The memory floors (OD-235): heapUsed 1 MiB, rss 8 MiB - an rss delta moves in whole pages the allocator maps and the OS trims
+ *  (measured locally 2026-10-09: about half the rss deltas negative, single samples to 66 MiB), so its floor is wider. */
+export const MEMORY_HEAP_FLOOR_MIB = 1;
+export const MEMORY_RSS_FLOOR_MIB = 8;
 
 /** The closed catalogue (runbook :1094-1097 and the moved bounds). The counts are OD-234's stated choice. */
 export const LATENCY_METRICS: readonly LatencyMetric[] = Object.freeze([
@@ -73,6 +91,14 @@ export const LATENCY_METRICS: readonly LatencyMetric[] = Object.freeze([
   metric("moved.pcb-sync-aggregate-500-components", "moved", "b24-d1-latency", "pcb-sync performance-resilience case 2: one preflight aggregating a 500-component blocked design in two batches, no board created", 1, 10),
   // [B24-D1 review, 2026-10-09] found by the census once it followed a helper-returned timing; the B19 pattern's quadratic scan (1,371 ms, the B20 page) sat under the 2,000 ms bound, so it disproved nothing
   metric("moved.redaction-linear-200-scrubs", "moved", "b24-d1-latency", "b20-a1-redaction-linear (linear time) case 1: 200 scrubVendorText scrubs of a 4,000-character 'a.' leaf with a word boundary at every letter (the scrubbed output stays asserted)", 1, 10),
+  // [B24-D2, 2026-10-09] D24-29, OD-212's memory half: gc() before each sample, the delta of process.memoryUsage() across one run with its result held;
+  // a negative delta (the collector ran during the run) is recorded as 0 and counted by the suite
+  memoryMetric("memory.board-inspect-routed-heap", "heapUsed delta: board-inspect's snapshot (buildAIPcbSnapshot) of each recorded ROUTED board of e2e/fixtures/blinker-route-fixture.json, both built per sample", MEMORY_HEAP_FLOOR_MIB),
+  memoryMetric("memory.board-inspect-routed-rss", "rss delta: the same run as memory.board-inspect-routed-heap", MEMORY_RSS_FLOOR_MIB),
+  memoryMetric("memory.board-pages-routed-heap", "heapUsed delta: the full paged read (buildBoardPage, sirkit.pcb.board-page-inspect) of each recorded ROUTED board by every enabled copper layer and every net, following nextCursor to the last page; both boards whole per sample", MEMORY_HEAP_FLOOR_MIB),
+  memoryMetric("memory.board-pages-routed-rss", "rss delta: the same run as memory.board-pages-routed-heap", MEMORY_RSS_FLOOR_MIB),
+  memoryMetric("memory.board-inspect-placed-heap", "heapUsed delta: board-inspect's snapshot of the placed golden board (buildAutonomousGoldenBoard, 15 footprints, no track), as a reference", MEMORY_HEAP_FLOOR_MIB),
+  memoryMetric("memory.board-inspect-placed-rss", "rss delta: the same run as memory.board-inspect-placed-heap", MEMORY_RSS_FLOOR_MIB),
 ]);
 
 export function latencyMetric(metricId: string): LatencyMetric {
@@ -96,7 +122,7 @@ export interface LatencyEnvironment {
 
 export interface LatencyMetricResult {
   readonly metricId: string;
-  /** the sorted sample vector, milliseconds */
+  /** the sorted sample vector, in the metric's unit ([B24-D2, 2026-10-09] milliseconds, or MiB for the memory family) */
   readonly samples: readonly number[];
   readonly p50: number;
   readonly p95: number;
@@ -168,7 +194,7 @@ export function latencyResultsProblems(value: unknown): string[] {
 // ── the baseline document ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** The stage-09 budget shape plus the floor; never a `maximumP95` (OD-212). */
-export type LatencyBudget = Pick<RegressionBudget, "practicalRegression" | "noiseBand" | "direction" | "failureAction"> & { readonly floorMs: number };
+export type LatencyBudget = Pick<RegressionBudget, "practicalRegression" | "noiseBand" | "direction" | "failureAction"> & { /** [B24-D2, 2026-10-09] in the metric's unit (the name predates the unit field: MiB for a memory metric) */ readonly floorMs: number };
 
 export interface LatencyBaselineMetric {
   readonly metricId: string;
@@ -198,8 +224,8 @@ export interface LatencyBaselineDocument {
   readonly versions: readonly LatencyBaselineVersion[];
 }
 
-export function defaultLatencyBudget(noiseBand: number = LATENCY_NOISE_BAND_MINIMUM): LatencyBudget {
-  return { practicalRegression: LATENCY_PRACTICAL_REGRESSION, noiseBand: Math.max(LATENCY_NOISE_BAND_MINIMUM, noiseBand), direction: "lower_is_better", failureAction: "block", floorMs: LATENCY_FLOOR_MS };
+export function defaultLatencyBudget(noiseBand: number = LATENCY_NOISE_BAND_MINIMUM, floor: number = LATENCY_FLOOR_MS): LatencyBudget { // [B24-D2, 2026-10-09] + the metric's floor (B24-D1's 1 ms by default)
+  return { practicalRegression: LATENCY_PRACTICAL_REGRESSION, noiseBand: Math.max(LATENCY_NOISE_BAND_MINIMUM, noiseBand), direction: "lower_is_better", failureAction: "block", floorMs: floor };
 }
 
 /** The noise band: max(0.20, the relative p95 spread over at least LATENCY_BASELINE_MINIMUM_RUNS runner runs). */
@@ -213,7 +239,7 @@ export function noiseBandFromRuns(p95s: readonly number[]): number {
 
 /** Version 1: every catalogued metric declared with the default budget and no runner value. */
 export function declaredLatencyBaseline(recordedAt: string): LatencyBaselineVersion {
-  return { version: 1, policyVersion: LATENCY_POLICY_VERSION, recordedAt, declaredWithoutValues: true, runIds: [], metrics: LATENCY_METRICS.map((entry) => ({ metricId: entry.metricId, p50: null, p95: null, runIds: [], budget: defaultLatencyBudget() })), changeRecords: [] };
+  return { version: 1, policyVersion: LATENCY_POLICY_VERSION, recordedAt, declaredWithoutValues: true, runIds: [], metrics: LATENCY_METRICS.map((entry) => ({ metricId: entry.metricId, p50: null, p95: null, runIds: [], budget: defaultLatencyBudget(LATENCY_NOISE_BAND_MINIMUM, entry.floor) })), changeRecords: [] };
 }
 
 function budgetProblems(budget: unknown, id: string): string[] {
@@ -373,11 +399,11 @@ const ms = (value: number | null | undefined): string => (value === null || valu
 /** The gate's table (markdown): one row per catalogued metric, every state visible, nothing passing silently. */
 export function renderLatencyTable(evaluation: LatencyEvaluation): string {
   const lines = [
-    `| metric | samples | p50 ms | p95 ms | baseline p50 | baseline p95 | state |`,
-    `|---|---|---|---|---|---|---|`,
+    `| metric | unit | samples | p50 | p95 | baseline p50 | baseline p95 | state |`, // [B24-D2, 2026-10-09] the unit column: ms, or MiB for the memory family
+    `|---|---|---|---|---|---|---|---|`,
     ...evaluation.verdicts.map((verdict) => {
       const reasons = verdict.reasons.filter((reason) => reason !== BASELINE_MISSING_NOTE);
-      return `| \`${verdict.metricId}\` | ${verdict.measured?.samples ?? 0} | ${ms(verdict.measured?.p50)} | ${ms(verdict.measured?.p95)} | ${ms(verdict.baseline?.p50)} | ${ms(verdict.baseline?.p95)} | ${latencyVerdictLabel(verdict)}${reasons.length ? ` (${reasons.join("; ")})` : ""} |`;
+      return `| \`${verdict.metricId}\` | ${latencyMetric(verdict.metricId).unit} | ${verdict.measured?.samples ?? 0} | ${ms(verdict.measured?.p50)} | ${ms(verdict.measured?.p95)} | ${ms(verdict.baseline?.p50)} | ${ms(verdict.baseline?.p95)} | ${latencyVerdictLabel(verdict)}${reasons.length ? ` (${reasons.join("; ")})` : ""} |`;
     }),
     ``,
     `Policy ${evaluation.policyVersion}; baseline version ${evaluation.baselineVersion}${evaluation.declaredWithoutValues ? " (declared without values)" : ""}; ${evaluation.blocking ? "BLOCKING" : "not blocking"}.`,
@@ -395,7 +421,7 @@ export function proposeLatencyBaseline(input: { runs: ReadonlyArray<{ runId: str
     if (measured.length < LATENCY_BASELINE_MINIMUM_RUNS) throw new Error(`LATENCY_BASELINE_METRIC_UNMEASURED: ${entry.metricId} in ${measured.length} runs`);
     const p50s = measured.map((item) => item.result.p50);
     const p95s = measured.map((item) => item.result.p95);
-    return { metricId: entry.metricId, p50: quantile(p50s, 0.5)!, p95: quantile(p95s, 0.5)!, runIds: measured.map((item) => item.runId), budget: defaultLatencyBudget(noiseBandFromRuns(p95s)) };
+    return { metricId: entry.metricId, p50: quantile(p50s, 0.5)!, p95: quantile(p95s, 0.5)!, runIds: measured.map((item) => item.runId), budget: defaultLatencyBudget(noiseBandFromRuns(p95s), entry.floor) };
   });
   return { version: latest.version + 1, policyVersion: LATENCY_POLICY_VERSION, recordedAt: input.recordedAt, declaredWithoutValues: false, runIds: input.runs.map((run) => run.runId), metrics, changeRecords: [] };
 }

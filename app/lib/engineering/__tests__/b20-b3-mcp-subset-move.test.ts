@@ -29,7 +29,7 @@ const descriptor = (toolId: string): ToolDescriptor => registry.get(toolId)!;
  * where the board is absent, a reason checked first).
  */
 const A4_ADDITION = "sirkit.mcp.observation-read";
-const B22B_ADDITIONS = ["sirkit.computation.analytical-equation", "sirkit.computation.artifact-compare", "sirkit.computation.artifact-parse", "sirkit.computation.circuit-analysis", "sirkit.computation.layout-experiment"]; const baseRegistry = new ToolRegistry(SIRKIT_TOOL_CATALOG.filter((item) => item.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(item.toolId))); // [B22-B, 2026-10-01] reviewed pin move: the base also leaves out B22-B's five named computations, so B3's base pins stand
+const B22B_ADDITIONS = ["sirkit.computation.analytical-equation", "sirkit.computation.artifact-compare", "sirkit.computation.artifact-parse", "sirkit.computation.circuit-analysis", "sirkit.computation.layout-experiment"]; const B24D2_ADDITION = "sirkit.pcb.board-page-inspect"; const baseRegistry = new ToolRegistry(SIRKIT_TOOL_CATALOG.filter((item) => item.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(item.toolId) && item.toolId !== B24D2_ADDITION)); // [B22-B, 2026-10-01] reviewed pin move: the base also leaves out B22-B's five named computations, so B3's base pins stand; [B24-D2, 2026-10-09] and B24-D2's paged board read (OD-213), left out of the base the same way: it is offered wherever via-inspect is (case 5)
 const NEWLINE = String.fromCharCode(10);
 const read = (path: string): string => readFileSync(resolve(process.cwd(), path), "utf8").replaceAll(`${String.fromCharCode(13)}${NEWLINE}`, NEWLINE);
 
@@ -40,7 +40,7 @@ const SERVED_READS = [
 const PROPOSALS = ["sirkit.pcb.propose-bounded-edit", "sirkit.placement.propose", "sirkit.routing.propose", "sirkit.schematic.propose-component-replacement", "sirkit.schematic.propose-tier1-edit"];
 const WITHHELD_READS = ["sirkit.project.history-inspect", "sirkit.schematic.inspect"];
 // [B20 B4] pin move (OD-82, OD-87): the five proposals are withheld too
-const WITHHELD = [...WITHHELD_READS, ...PROPOSALS].sort();
+const WITHHELD = [...WITHHELD_READS, ...PROPOSALS, B24D2_ADDITION].sort(); // [B24-D2, 2026-10-09] pin move (OD-235): a third withheld category beside B3's reads and B4's proposals - B24-D2's paged board read, servable from durable state (unlike WITHHELD_READS, case 3) and withheld by choice
 const WIDENED = ["sirkit.project.canonical-revision-inspect", "sirkit.pcb.board-inspect", "sirkit.pcb.mechanical-inspect", "sirkit.pcb.via-inspect", "sirkit.validation.drc-run", "sirkit.validation.connectivity-verify"];
 const WIDENED_NOTE = "B20-B3: durable-server-board declared (served over MCP from the durable board)";
 
@@ -91,7 +91,7 @@ function servableFromDurableState(item: ToolDescriptor): boolean {
 }
 
 describe("[B20 B3] F — the reviewed MCP subset move", () => {
-  it("1. exactly 9 exposed ids and 7 withheld ids, sorted and frozen, each withheld id with its reason comment; the report is clean with count 9", () => {
+  it("1. exactly 9 exposed ids and 7 withheld ids, sorted and frozen, each withheld id with its reason comment; the report is clean with count 9", () => { // [B24-D2, 2026-10-09] eight withheld since B24-D2 (+ the paged board read, OD-235); assertions over WITHHELD
     // [B20 B4] pin move: 14 exposed / 2 withheld -> 9 / 7 (the five proposals withheld, OD-82, OD-87)
     expect([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS]).toEqual([...SERVED_READS]);
     expect([...MCP_WITHHELD_TOOL_IDS]).toEqual(WITHHELD);
@@ -112,7 +112,7 @@ describe("[B20 B3] F — the reviewed MCP subset move", () => {
   });
 
   it("3. each withheld read fails that rule", () => {
-    for (const id of WITHHELD_READS) expect(servableFromDurableState(descriptor(id)), id).toBe(false);
+    for (const id of WITHHELD_READS) expect(servableFromDurableState(descriptor(id)), id).toBe(false); expect(servableFromDurableState(descriptor(B24D2_ADDITION))).toBe(true); // [B24-D2, 2026-10-09] the third withheld category is excluded from this rule: B24-D2's paged board read IS servable from durable state and is withheld by choice (OD-235)
   });
 
   it("4. the six widened descriptors carry exactly the new authority at their base version; every other field and every other descriptor equals its base pin", () => {
@@ -123,7 +123,7 @@ describe("[B20 B3] F — the reviewed MCP subset move", () => {
       expect(item.versionNotes?.endsWith(WIDENED_NOTE), id).toBe(true);
     }
     expect(baseRegistry.list()).toHaveLength(BASE.count);
-    expect(registry.list().map((item) => item.toolId).filter((id) => !baseRegistry.get(id))).toEqual([...B22B_ADDITIONS, A4_ADDITION].sort()); // [B20 A4]; [B22-B, 2026-10-01] reviewed pin move (OD-139): + the five named computations, left out of the base like A4's addition
+    expect(registry.list().map((item) => item.toolId).filter((id) => !baseRegistry.get(id))).toEqual([...B22B_ADDITIONS, A4_ADDITION, B24D2_ADDITION].sort()); // [B24-D2, 2026-10-09] + the paged board read // [B20 A4]; [B22-B, 2026-10-01] reviewed pin move (OD-139): + the five named computations, left out of the base like A4's addition
     expect(engineeringDigest(Object.fromEntries(baseRegistry.list().map((item) => [`${item.toolId}@${item.version}`, engineeringDigest(strip(item))])))).toBe(BASE.strippedAll);
     expect(engineeringDigest(Object.fromEntries(baseRegistry.list().filter((item) => !WIDENED.includes(item.toolId)).map((item) => [`${item.toolId}@${item.version}`, engineeringDigest(item)])))).toBe(BASE.untouchedFull);
     // pcb.revision-inspect and readiness-inspect already declared it; the withheld reads keep their own authority
@@ -131,17 +131,17 @@ describe("[B20 B3] F — the reviewed MCP subset move", () => {
     expect([...descriptor("sirkit.schematic.inspect").requiredAuthority]).toEqual(["local-working-copy"]);
   });
 
-  it("5. the agent set is still B3's 32 without A4's one addition and B22-B's three named computation reads (33 with A4's, 36 with both) and assistant-agent discovery under the B04 contexts is byte-equal to the base pins (B22-B's five descriptors excluded under every context)", () => { // [B22 closeout, 2026-10-02] retitled (D22-16): 36 since B22-B (OD-139); assertions unchanged
+  it("5. the agent set is still B3's 32 without A4's one addition and B22-B's three named computation reads (33 with A4's, 36 with both) and assistant-agent discovery under the B04 contexts is byte-equal to the base pins (B22-B's five descriptors excluded under every context)", () => { // [B24-D2, 2026-10-09] 37 with B24-D2's paged board read too, left out of the base and offered wherever via-inspect is // [B22 closeout, 2026-10-02] retitled (D22-16): 36 since B22-B (OD-139); assertions unchanged
     // [B20 A4] pin move: 32 + the external tool read (33); B3's 32 are unchanged
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => id !== A4_ADDITION && !B22B_ADDITIONS.includes(id))).toHaveLength(32);
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(36); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => id !== A4_ADDITION && !B22B_ADDITIONS.includes(id) && id !== B24D2_ADDITION)).toHaveLength(32);
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(37); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read
     const actual = Object.fromEntries(Object.entries(AGENT_CONTEXTS).map(([name, overrides]) => [name, identityOf(discoverTools(baseRegistry, editorContext(overrides)))]));
     expect(actual).toEqual(BASE.discovery);
     for (const overrides of Object.values(AGENT_CONTEXTS)) {
       const base = discoverTools(baseRegistry, editorContext(overrides));
       const now = discoverTools(registry, editorContext(overrides));
-      expect(now.included).toEqual(base.included);
-      expect(now.excluded.filter((entry) => entry.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(entry.toolId))).toEqual(base.excluded); expect(B22B_ADDITIONS.every((id) => now.excluded.some((entry) => entry.toolId === id) && !now.included.some((item) => item.toolId === id))).toBe(true); // [B22-B] no context here carries the computation-engine authority: each computation is excluded, never included
+      expect(now.included.filter((entry) => entry.toolId !== B24D2_ADDITION)).toEqual(base.included); expect(now.included.some((entry) => entry.toolId === B24D2_ADDITION)).toBe(now.included.some((entry) => entry.toolId === "sirkit.pcb.via-inspect")); // [B24-D2, 2026-10-09] the paged board read is the one addition, offered wherever via-inspect is
+      expect(now.excluded.filter((entry) => entry.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(entry.toolId) && entry.toolId !== B24D2_ADDITION)).toEqual(base.excluded); expect(B22B_ADDITIONS.every((id) => now.excluded.some((entry) => entry.toolId === id) && !now.included.some((item) => item.toolId === id))).toBe(true); // [B22-B] no context here carries the computation-engine authority: each computation is excluded, never included
       // no context here carries the external-mcp-observation authority; agentNoBoard also lacks the board, a reason checked first
       const expected = overrides.projectState !== undefined && !overrides.projectState.includes("board-present") ? "project_state_missing" : "authority_missing";
       expect(now.excluded.filter((entry) => entry.toolId === A4_ADDITION).map((entry) => entry.reason)).toEqual([expected]);
@@ -163,7 +163,7 @@ describe("[B20 B3] F — the reviewed MCP subset move", () => {
     for (const id of WITHHELD) expect(included).not.toContain(id);
   });
 
-  it("7. mcp-tool-manifest.csv and .json byte-equal the renderers: 9 rows exposed, the 7 withheld rows with reason withheld", () => {
+  it("7. mcp-tool-manifest.csv and .json byte-equal the renderers: 9 rows exposed, the 7 withheld rows with reason withheld", () => { // [B24-D2, 2026-10-09] the 8 withheld rows since B24-D2 (OD-235)
     expect(read("artifacts/ai-control-plane-b20/mcp-tool-manifest.csv")).toBe(renderMcpToolManifestCsv(registry));
     expect(read("artifacts/ai-control-plane-b20/mcp-tool-manifest.json")).toBe(renderMcpToolManifestJson(registry));
     const rows = renderMcpToolManifestCsv(registry).split(NEWLINE).slice(1, -1).map((row) => row.split(","));

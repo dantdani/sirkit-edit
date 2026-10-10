@@ -42,7 +42,7 @@ function checkCli(result: RunKicadCliResult, step: string): asserts result is Ex
     throw new KicadCliError("cli-missing", `kicad-cli not found (set KICAD_CLI or add it to PATH) — ${step}`, result.stderr);
   }
   if (result.error === "timeout") {
-    throw new KicadCliError("timeout", `kicad-cli timed out during ${step}`, result.stderr);
+    throw new KicadCliError("timeout", `kicad-cli timed out during ${step}`, result.stderr, result.killConfirmed); // [B24-D2 review, 2026-10-09] D24-31: the kill confirmation travels with the error
   }
   throw new KicadCliError("cli-failed", `kicad-cli failed during ${step}`, result.stderr);
 }

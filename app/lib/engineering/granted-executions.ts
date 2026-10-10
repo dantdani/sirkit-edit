@@ -573,9 +573,9 @@ export interface GrantedExecutionRecoveryInput {
   now?: () => number;
   signal?: AbortSignal;
   /** [B18-C I10b] the in-memory claim registry the page's ritual uses (default: the same module registry). */
-  registry?: GrantedExecutionRegistry;
+  registry?: GrantedExecutionRegistry; /** [B24-D2B review 3, 2026-10-10] the grants the page's restored, unsettled chat entries name (read once the work list is done): each one the work list did not hold gets the journal's record of its end (`recordedEnds`) */ restoredGrants?: () => readonly string[]; /** [B24-D2B review 4, 2026-10-10] the project the page shows now, read when the sweep starts: once it names another, the page has left the project this sweep started for, and the sweep returns no result and asks about no restored grant (`projectKeptBy`) */ pageProject?: () => string | null;
 }
-export interface GrantedExecutionRecoveryResult { grantId: string; state: AgentExecutionJournalEntry["state"]; action: "adopted-and-settled" | "abandoned-not-committed" | "settled-from-receipt" | "left-in-flight" | "left-issued" | "refused-poisoned" | "unavailable"; detail: string }
+export interface GrantedExecutionRecoveryResult { grantId: string; /** [B24-D2B review 3] null: no journal entry was read for it */ state: AgentExecutionJournalEntry["state"] | null; action: "adopted-and-settled" | "abandoned-not-committed" | "settled-from-receipt" | "left-in-flight" | "left-issued" | "refused-poisoned" | "unavailable" | /** [B24-D2B review 3] a restored entry's grant outside the work list (`recordedEnds`) */ "recorded-committed" | "recorded-not-committed" | "recorded-unverified" | "unrecorded" | /** [B24-D2B review 4] another page of the profile moved the entry while this sweep read it: left to it (`heldNow`) */ "in-flight-elsewhere"; detail: string; /** [B24-D2B, 2026-10-10] THIS page's own ritual holds the grant (B18-C I10b): never a notice */ heldHere?: true; /** [B24-D2B review 4, 2026-10-10] why an `unavailable` result lasts: the canonical lineage was reopened after the grant (not a read that may succeed later) */ cause?: "lineage-reopened" }
 
 /**
  * The hydration sweep (§4.6): finish what a crash interrupted, keyed by the
@@ -587,43 +587,43 @@ export interface GrantedExecutionRecoveryResult { grantId: string; state: AgentE
 export async function recoverGrantedExecutions(input: GrantedExecutionRecoveryInput): Promise<GrantedExecutionRecoveryResult[]> {
   const now = input.now ?? (() => Date.now());
   const registry = input.registry ?? grantedExecutionRegistry;
-  const results: GrantedExecutionRecoveryResult[] = [];
+  const results: GrantedExecutionRecoveryResult[] = []; const onProject = projectKeptBy(input.pageProject); // [B24-D2B review 4, 2026-10-10] the project the page showed when this sweep started
   const session = canonicalSessionFor(input.history);
   const pending = await input.journal.pending();
-  if (!pending.ok || !session) return [{ grantId: "-", state: "prepared", action: "unavailable", detail: pending.ok ? "no canonical session" : `journal ${pending.reason}` }];
+  if (!pending.ok || !session) return !onProject() ? [] : [{ grantId: "-", state: "prepared", action: "unavailable", detail: pending.ok ? "no canonical session" : `journal ${pending.reason}` }, ...[...new Set(input.restoredGrants?.() ?? [])].map((grantId): GrantedExecutionRecoveryResult => ({ grantId, state: null, action: "unavailable", detail: "the sweep could not run; no record was read" }))]; // [B24-D2B review 3] a restored entry asked about is told so
   for (const entry of pending.entries) {
-    const push = (action: GrantedExecutionRecoveryResult["action"], detail: string): void => { results.push({ grantId: entry.grantId, state: entry.state, action, detail }); };
+    const push = (action: GrantedExecutionRecoveryResult["action"], detail: string, heldHere = false): void => { results.push({ grantId: entry.grantId, state: entry.state, action, detail, ...(heldHere ? { heldHere: true as const } : {}) }); };
     const claim = registry.claim(entry.identityKey);
-    if (!claim.ok && claim.code === "already-in-flight") { push("left-in-flight", "this page is executing the grant right now; its own ritual settles it"); continue; }
+    if (!claim.ok && claim.code === "already-in-flight") { push("left-in-flight", "this page is executing the grant right now; its own ritual settles it", true); continue; }
     try {
       const evidence = await session.durableIdempotencyEvidence(entry.grantId);
       if (evidence.kind === "unavailable" || evidence.kind === "corrupt") { push("unavailable", `canonical evidence ${evidence.kind}`); continue; }
       if (entry.state === "receipt-finalized" && entry.receipt) {
         // The commit is finalized locally; only the server's report is missing — re-send it from the receipt (idempotent on the server).
-        const settled = await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: committedSettlement(entry.receipt, null, null, undoEligibleFor(input.history, entry.receipt.transactionId)), signal: input.signal, journal: input.journal });
+        if (!await stillAsRead(input, entry, results)) continue; const settled = await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: committedSettlement(entry.receipt, null, null, undoEligibleFor(input.history, entry.receipt.transactionId)), signal: input.signal, journal: input.journal }); // [B24-D2B review 4] never on an entry another page moved since the read
         push("settled-from-receipt", settled ? "settled committed from the finalized receipt" : "settle failed; retry later"); continue;
       }
       if (entry.state === "prepared") {
         if (evidence.kind === "found") {
-          await input.journal.poison(entry.identityKey);
+          if (!await sweepWrite(input, entry, () => input.journal.poison(entry.identityKey), results)) continue; // [B24-D2B review 4] made only on the entry as read; else what holds
           await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: POISONED, signal: input.signal });
           push("refused-poisoned", "a transaction exists for a grant that was never consumed"); continue;
         }
         const remote = await input.transport.get(input.scope, entry.grantId, input.signal);
-        if (!remote.ok) { push(remote.status === 404 ? "abandoned-not-committed" : "unavailable", remote.message); if (remote.status === 404) await input.journal.abandon(entry.identityKey, "grant unknown to the server"); continue; }
+        if (!remote.ok) { if (remote.status !== 404) push("unavailable", remote.message); else if (await sweepWrite(input, entry, () => input.journal.abandon(entry.identityKey, "grant unknown to the server"), results)) push("abandoned-not-committed", remote.message); continue; } // [B24-D2B review 4] the close reported only once it is made
         const status = remote.body.grant.state.status;
         if (status === "issued") { push("left-issued", "the grant is still issued; re-tender or cancel it"); continue; }
         if (status === "consumed" && remote.body.grant.state.consumption?.attemptId === entry.attemptId) {
-          await input.journal.markConsumed(entry.identityKey, { consumedAt: Date.parse(remote.body.grant.state.consumption.consumedAt) });
+          const consumedAt = Date.parse(remote.body.grant.state.consumption.consumedAt); if (!await sweepWrite(input, entry, () => input.journal.markConsumed(entry.identityKey, { consumedAt }), results)) continue; // [B24-D2B review 4] a page that heard the answer moved it: left to that page
           push("left-in-flight", "the server consumed this attempt; the commit window is open"); continue;
         }
-        await input.journal.abandon(entry.identityKey, `server state ${status}`); push("abandoned-not-committed", `the grant is ${status} on the server`); continue;
+        if (await sweepWrite(input, entry, () => input.journal.abandon(entry.identityKey, `server state ${status}`), results)) push("abandoned-not-committed", `the grant is ${status} on the server`); continue; // [B24-D2B review 4] never "not made" over a close the journal refused (another tab committed it)
       }
       if (evidence.kind === "found") {
-        const adopted = await adoptProvenCommit({ journal: input.journal, entry, evidence: evidence.record, now: now(), liveRevisionAfter: liveRevisionAfterFor(session, input.history, evidence.record.transactionId) });
+        if (!await stillAsRead(input, entry, results)) continue; const adopted = await adoptProvenCommit({ journal: input.journal, entry, evidence: evidence.record, now: now(), liveRevisionAfter: liveRevisionAfterFor(session, input.history, evidence.record.transactionId) }); // [B24-D2B review 4] never adopts an entry another page moved since the read
         if (!adopted.ok) {
-          if (adopted.kind === "journal") { push("unavailable", `${adopted.detail}; the proven commit stays pending`); continue; }
-          await input.journal.poison(entry.identityKey);
+          if (adopted.kind === "journal") { results.push(await heldNow(input, entry, await input.journal.lookup(entry.identityKey), `${adopted.detail}; the proven commit stays pending`, true)); continue; } // [B24-D2B review 4] a recorded end answered as such; else left pending
+          if (!await sweepWrite(input, entry, () => input.journal.poison(entry.identityKey), results)) continue;
           await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: POISONED, signal: input.signal });
           push("refused-poisoned", adopted.detail); continue;
         }
@@ -632,7 +632,7 @@ export async function recoverGrantedExecutions(input: GrantedExecutionRecoveryIn
       }
       // grant-consumed / committed / adopted with NO canonical evidence.
       if (entry.state !== "grant-consumed") {
-        await input.journal.poison(entry.identityKey);
+        if (!await sweepWrite(input, entry, () => input.journal.poison(entry.identityKey), results)) continue; // [B24-D2B review 4] made only on the entry as read; else what holds
         await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: POISONED, signal: input.signal });
         push("refused-poisoned", "the journal claims a commit the canonical history cannot prove"); continue;
       }
@@ -642,14 +642,14 @@ export async function recoverGrantedExecutions(input: GrantedExecutionRecoveryIn
       // the board — and, for a relative family, reopen the auto-execute path for the same instruction. When the ledger's
       // lineage is no longer the one this grant was prepared under, the honest answer is that it cannot tell.
       if (evidence.kind === "absent" && evidence.lineageId !== null && evidence.lineageId !== entry.lineageId) {
-        push("unavailable", "the editor's canonical lineage was reopened after this grant, so the ledger can neither prove nor disprove its commit; left pending");
+        results.push({ grantId: entry.grantId, state: entry.state, action: "unavailable", detail: "the editor's canonical lineage was reopened after this grant, so the ledger can neither prove nor disprove its commit; left pending", cause: "lineage-reopened" }); // [B24-D2B review 4, 2026-10-10] a lasting condition, named: never "retries on the next load"
         continue;
       }
       const remote = await input.transport.get(input.scope, entry.grantId, input.signal);
       const deadline = remote.ok && remote.body.grant.state.consumption ? Date.parse(remote.body.grant.state.consumption.commitDeadline) : (entry.consumedAt ?? entry.preparedAt) + 60_000;
       if (now() > deadline + GRANT_SETTLE_GRACE_MS || (remote.ok && remote.body.grant.state.status !== "consumed")) {
-        await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: NOT_COMMITTED("recovery"), signal: input.signal });
-        await input.journal.abandon(entry.identityKey, "recovery: no canonical evidence after the commit window");
+        if (!await stillAsRead(input, entry, results)) continue; await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: NOT_COMMITTED("recovery"), signal: input.signal }); // [B24-D2B review 4] never settles a grant another page moved since the read
+        if (!await sweepWrite(input, entry, () => input.journal.abandon(entry.identityKey, "recovery: no canonical evidence after the commit window"), results)) continue; // [B24-D2B review 4] never "not made" over a close the journal refused
         push("abandoned-not-committed", "no canonical evidence after the commit window; settled not committed"); continue;
       }
       push("left-in-flight", "the commit window is still open");
@@ -657,7 +657,121 @@ export async function recoverGrantedExecutions(input: GrantedExecutionRecoveryIn
       if (claim.ok) registry.release(entry.identityKey);
     }
   }
-  return results;
+  if (!onProject()) return []; const answered = input.restoredGrants ? [...results, ...await recordedEnds(input.journal, input.restoredGrants(), results)] : results; return onProject() ? answered : []; // [B24-D2B review 3, 2026-10-10] OD-214: and every restored entry the work list did not name; [B24-D2B review 4] only while the page shows the project this sweep started for
 }
 
 export type { CanonicalEditorSession };
+
+/**
+ * [B24-D2B, 2026-10-10] The editor's recovery notice for one sweep's results, or null (moved here from PcbEditor's hydration sweep,
+ * `PcbEditor.tsx:1691-1692`, so the notice is a tested function of the sweep's results). The four settled actions as before, and a
+ * grant left in flight that no ritual of THIS page holds (OD-214: never lost without a notice): the server consumed it for a page
+ * that never heard the answer (a crash, a closed tab) or for another tab, no commit is proven and its commit window is open. The
+ * reopened page names it instead of showing the entry's pre-crash state alone (`b24-d2-crash-recovery`; the browser's
+ * `e2e/crash-recovery.spec.ts` (b)); a sweep after the window settles it, abandoned or adopted, named again. An execution this page's
+ * own ritual holds (`heldHere`, B18-C I10b) is never a notice. [B24-D2B review] Named as what it is, `interrupted`, never by the raw word.
+ */
+export function executionRecoveryNotice(results: readonly GrantedExecutionRecoveryResult[]): string | null {
+  const notable = results.filter((result) => result.action === "adopted-and-settled" || result.action === "abandoned-not-committed" || result.action === "settled-from-receipt" || result.action === "refused-poisoned" || (result.action === "left-in-flight" && result.heldHere !== true));
+  return notable.length > 0 ? `AI execution recovery: ${notable.map((result) => `${result.grantId.slice(0, 12)}… ${result.action === "left-in-flight" ? INTERRUPTED_NOTICE_ITEM : result.action}`).join("; ")}.` : null;
+}
+
+/** [B24-D2B review, 2026-10-10] A grant left in flight that no ritual of this page holds, in the notice: B18's `left-in-flight` reads "still
+ *  in progress" (execution-display.ts), false once the page running it is gone; the chat entry carries the full sentence and next step
+ *  (chat-run-view.ts `recoveryDisplayAction`, `restoredEntryRecovery`). */
+const INTERRUPTED_NOTICE_ITEM = "interrupted (not running in this page; no change from it is recorded on this board)";
+
+/**
+ * [B24-D2B review 3, 2026-10-10] D24-30, OD-214: what the profile's journal records for each grant a restored, unsettled chat entry
+ * names (`restoredGrants`, the page's) that the sweep's work list did not hold. The work list holds unfinished entries only
+ * (`pending()`), so a grant finished since the entry was saved - committed, closed or poisoned, by another tab of the profile or by an
+ * earlier sweep - was never named again, and the restored entry kept a sentence an earlier load wrote (a tab's autosave writes the
+ * whole project record, its chat included; the last writer wins). Each grant once: `settled` (committed, the server holds its report),
+ * `abandoned` (closed without a commit) and `poisoned` (a commit that could not be verified) are recorded ends; no entry at all is
+ * `unrecorded` (never journaled in this profile, or aged out of its bounded document); an unreadable journal is `unavailable`. An
+ * unfinished entry outside the work list was prepared after the sweep read the journal: the next load names it. Read-only: no claim,
+ * no journal write, no server call.
+ */
+async function recordedEnds(journal: AgentExecutionJournal, asked: readonly string[], named: readonly GrantedExecutionRecoveryResult[]): Promise<GrantedExecutionRecoveryResult[]> {
+  const results: GrantedExecutionRecoveryResult[] = [];
+  const seen = new Set(named.map((result) => result.grantId));
+  for (const grantId of asked) {
+    if (seen.has(grantId)) continue;
+    seen.add(grantId);
+    const found = await journal.lookupByGrant(grantId);
+    if (found.kind === "absent") results.push({ grantId, state: null, action: "unrecorded", detail: "the journal holds no entry for this grant" });
+    else if (found.kind !== "entry") results.push({ grantId, state: null, action: "unavailable", detail: `journal ${found.kind}` });
+    else if (found.entry.state === "settled") results.push({ grantId, state: "settled", action: "recorded-committed", detail: "the journal records it committed, its report held by the server" });
+    else if (found.entry.state === "abandoned") results.push({ grantId, state: "abandoned", action: "recorded-not-committed", detail: `the journal records it closed without a commit (${found.entry.abandonReason ?? "no reason"})` });
+    else if (found.entry.state === "poisoned") results.push({ grantId, state: "poisoned", action: "recorded-unverified", detail: "the journal records a commit that could not be verified" });
+  }
+  return results;
+}
+
+// ─── [B24-D2B review 4, 2026-10-10] D24-30, OD-214: the sweep's writes on an entry another tab moved, and the project it answers for ────
+// Appended on purpose: function declarations and type aliases are hoisted, so no line cited above moves.
+
+type JournalLookup = Awaited<ReturnType<AgentExecutionJournal["lookup"]>>;
+type JournalWrite = Awaited<ReturnType<AgentExecutionJournal["abandon"]>>;
+
+/**
+ * [B24-D2B review 4, 2026-10-10] The sweep acts on ONE reading of the journal (`pending()`), and the journal is the browser profile's,
+ * shared by its tabs, while the claim registry is the page's: another tab's ritual (or its sweep) may move an entry after this sweep read
+ * it. So before each write the entry is read again, and the sweep writes only while the entry still holds the state it read. True when
+ * the caller may write; false when the entry moved (or cannot be read): what holds is pushed instead (`heldNow`), never the result the
+ * write would have meant - B once closed a grant "not made" (its close refused, ignored) after tab A had committed and settled it, and
+ * poisoned A's entry while A was recording its commit (`b24-d2-crash-recovery` 7, 8).
+ */
+async function stillAsRead(input: GrantedExecutionRecoveryInput, entry: AgentExecutionJournalEntry, results: GrantedExecutionRecoveryResult[]): Promise<boolean> {
+  const fresh = await input.journal.lookup(entry.identityKey);
+  if (fresh.kind === "entry" && fresh.entry.state === entry.state) return true;
+  results.push(await heldNow(input, entry, fresh, `the journal entry moved after this sweep read it (${entry.state})`));
+  return false;
+}
+
+/** [B24-D2B review 4, 2026-10-10] One journal write of the sweep, made only on the entry as it read it (`stillAsRead`); a write refused
+ *  anyway (moved in between, or the store failed) is answered with what holds. True when the write was made. */
+async function sweepWrite(input: GrantedExecutionRecoveryInput, entry: AgentExecutionJournalEntry, write: () => Promise<JournalWrite>, results: GrantedExecutionRecoveryResult[]): Promise<boolean> {
+  if (!await stillAsRead(input, entry, results)) return false;
+  const written = await write();
+  if (written.ok) return true;
+  results.push(await heldNow(input, entry, await input.journal.lookup(entry.identityKey), `the journal refused the sweep's write (${written.reason})`));
+  return false;
+}
+
+/**
+ * [B24-D2B review 4, 2026-10-10] What holds for a grant whose entry the sweep did not write, from the journal read again and, for an
+ * entry still open, the server: a recorded end is reported as `recordedEnds` reports it (settled: committed; abandoned: closed; poisoned:
+ * unverifiable; gone: unrecorded); an entry that did not move (the store refused the write), or one the sweep's own adoption left open
+ * (`pendingIfOpen`), stays pending as `unavailable`; an entry another page moved and has not finished is `in-flight-elsewhere` - unless
+ * the server already holds its committed report. Never a terminal "not made" the records contradict. Read-only.
+ */
+async function heldNow(input: GrantedExecutionRecoveryInput, entry: AgentExecutionJournalEntry, fresh: JournalLookup, why: string, pendingIfOpen = false): Promise<GrantedExecutionRecoveryResult> {
+  const grantId = entry.grantId;
+  if (fresh.kind === "unavailable" || fresh.kind === "corrupt") return { grantId, state: entry.state, action: "unavailable", detail: `${why}; the journal was ${fresh.kind} when read again` };
+  if (fresh.kind === "absent") return { grantId, state: null, action: "unrecorded", detail: `${why}; the journal holds no entry for this grant any more` };
+  const state = fresh.entry.state;
+  if (state === "settled") return { grantId, state, action: "recorded-committed", detail: `${why}; the journal records it committed, its report held by the server` };
+  if (state === "abandoned") return { grantId, state, action: "recorded-not-committed", detail: `${why}; the journal records it closed without a commit (${fresh.entry.abandonReason ?? "no reason"})` };
+  if (state === "poisoned") return { grantId, state, action: "recorded-unverified", detail: `${why}; the journal records a commit that could not be verified` };
+  if (pendingIfOpen || state === entry.state) return { grantId, state, action: "unavailable", detail: `${why}; left pending` };
+  const remote = await input.transport.get(input.scope, grantId, input.signal);
+  if (!remote.ok) return { grantId, state, action: "unavailable", detail: `${why}; the server's record could not be read (${remote.message})` };
+  const server = remote.body.grant.state;
+  if (server.status === "settled" && server.settlement?.outcome === "committed") return { grantId, state, action: "recorded-committed", detail: `${why}; the server holds its committed report` };
+  return { grantId, state, action: "in-flight-elsewhere", detail: `${why}: another page of this profile moved it to ${state} (the server: ${server.status}); left to it` };
+}
+
+/**
+ * [B24-D2B review 4, 2026-10-10] D24-30, OD-214: the editor's load sweep answers only for the project the page showed when the sweep
+ * started. PcbEditor is remounted per project (`page.tsx` keys it by the project id), but a sweep in flight runs on, and the page's
+ * callbacks read the chat the page shows NOW: a stale sweep could ask the old project's journal about the new project's restored entries,
+ * and the page would write its answers into them (the sweep's part shown by `b24-d2-crash-recovery` 9; the page's, INFERRED from
+ * `page.tsx:6460`). `pageProject` (the page's) is read at the start; once it names another project, the sweep asks
+ * about no restored grant and returns no result - its work on its own project's journal and server stands. Without it, always kept.
+ */
+function projectKeptBy(pageProject: (() => string | null) | undefined): () => boolean {
+  if (!pageProject) return () => true;
+  const startedFor = pageProject();
+  return () => pageProject() === startedFor;
+}

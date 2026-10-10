@@ -316,6 +316,15 @@ export const ACTIVATED_READ_BINDINGS: readonly ActivatedReadBinding[] = Object.f
       };
     },
   },
+  {
+    // [B24-D2, 2026-10-09] D24-29, OD-213: the BOUNDED, PAGED board read - one layer, one net or one region of board-inspect's own
+    // snapshot, a page at a time within the model's result budget (app/lib/pcb/ai/board-pages.ts); the import is at the END of this file.
+    bindingId: "read.board-page", bindingVersion: "1.0.0", kind: "read",
+    toolId: "sirkit.pcb.board-page-inspect",
+    module: "app/lib/pcb/ai/board-pages.ts", symbol: "buildBoardPage",
+    requiredResources: ["canonical-state"],
+    invoke: (args, resources) => ({ page: buildBoardPage(resources.canonicalState.pcb, args) as unknown as Record<string, unknown> }),
+  },
 ] satisfies readonly ActivatedReadBinding[]);
 
 // ─── Resolver (allowlist-only; deny by default) ──────────────────────────────
@@ -352,3 +361,6 @@ export function resolveReadBinding(
   }
   return { state: "resolved", binding: entry };
 }
+
+// [B24-D2, 2026-10-09] the paged board read's builder, imported at the END (imports are hoisted) so no cited line above moves
+import { buildBoardPage } from "../pcb/ai/board-pages";

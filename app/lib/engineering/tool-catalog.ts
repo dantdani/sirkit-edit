@@ -1057,7 +1057,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     timeoutMs: 5_000,
     sourceEvidence: ["app/lib/pcb/dimensions/commands.ts", "app/lib/pcb/dimensions/geometry.ts", "app/components/pcb/hooks/useDimensionTool.ts", "app/components/pcb/inspectors/DimensionInspector.tsx", "app/lib/engineering/operations.ts", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
     versionNotes: "1.2.0 (B18-C I7): bound and agent-exposed as a reviewed granted execution (confirmation-only: no explicit grammar); re-tiered reversible per the runbook's PCB Tier 1 list (OD-13); deterministic add ids; an update never moves the measured points. 1.1.0 (B09.1): reconciled with B08 truth — implemented and active, no tool adapter.",
-  }, ...COMPUTATION_TOOL_DESCRIPTORS, // [B22-B] the five named computations (OD-139), from computation-tool-descriptors.ts
+  }, ...COMPUTATION_TOOL_DESCRIPTORS, boardPageInspectDescriptor(), // [B22-B] the five named computations (OD-139), from computation-tool-descriptors.ts; [B24-D2, 2026-10-09] the bounded paged board read (OD-213), its declaration at the END of this file
 ] satisfies readonly ToolDescriptor[]);
 
 let cached: ToolRegistry | null = null;
@@ -1070,3 +1070,34 @@ export function sirkitToolRegistry(): ToolRegistry {
 
 // [B22-B] the five named computation descriptors, on their own line at the END (imports are hoisted): no line of this catalog moves
 import { COMPUTATION_TOOL_DESCRIPTORS } from "./computation-tool-descriptors";
+
+/**
+ * [B24-D2, 2026-10-09] D24-29, OD-213: the BOUNDED, PAGED board read, declared at the END (a function declaration is hoisted, and
+ * readDefaults, obj and OWNER above are initialized before the catalog calls it), so no line of this catalog moves. board-inspect's
+ * whole snapshot does not fit in one tool result on a routed board; this read pages one layer, one net or one region of the same
+ * snapshot (app/lib/pcb/ai/board-pages.ts), modelled on sirkit.pcb.via-inspect: the same owning command, roles, project state and
+ * authority, so it is discovered wherever via-inspect is.
+ */
+function boardPageInspectDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.pcb.board-page-inspect", version: "1.0.0",
+    agentExposed: true,
+    owningCommandId: "pcb.board-repair",
+    title: "Inspect one page of the board",
+    description: "Read the board ONE selection at a time, in pages, in millimetres. Name exactly one selector: an enabled copper layer (`layer`, e.g. copperTop), one net by the board's own name (`netName`, matched exactly; case and surrounding space forgiven), or a flat region (`xMinMm`, `yMinMm`, `xMaxMm`, `yMaxMm`); for a later page pass the previous page's `nextCursor` as `cursor`. Each page gives the board revision, the true count per kind for the whole selection and whole items exactly as board-inspect states them (nets, footprints, pads, tracks, vias, zones, keepouts); `nextCursor` is null on the last page. Use it where board-inspect is too large for one result (a routed board). A wrong selector or a stale cursor gets a closed refusal code; nothing is guessed or changed.",
+    category: "pcb", operationClass: "read",
+    // [B09.1] length bounds live in server-side input validation (B05 DEFAULT_INPUT_LIMITS), never in wire schemas.
+    inputSchema: obj({ layer: { type: "string" }, netName: { type: "string" }, xMinMm: { type: "number" }, yMinMm: { type: "number" }, xMaxMm: { type: "number" }, yMaxMm: { type: "number" }, cursor: { type: "string" } }),
+    outputSchema: obj({ page: { type: "object" } }, ["page"]),
+    requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy", "durable-server-board"],
+    binding: { status: "bound-read", module: "app/lib/pcb/ai/board-pages.ts", symbol: "buildBoardPage", notes: "Pure builder over the verified canonical board through buildAIPcbSnapshot (board-inspect's own projections); no session state, no timing, no authority." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 10_000,
+    validationStrategy: "server-side: exactly one selector (layer, netName, or all four region bounds in mm, minimum not above maximum) and an optional cursor, under the B05 input limits; no bounds in the wire schema",
+    verificationStrategy: "derived from the canonical board revision through buildAIPcbSnapshot; membership by layer (footprints with a pad on it, pads with copper on it, tracks on it, vias whose span includes it, zones on it, keepouts listing it), by net (the net, footprints with a pad on it, its pads, tracks, vias and zones) or by region (footprint body bounds, pad and via positions, track segments, zone and keepout polygon bounding boxes meeting the rectangle); kinds in a fixed order, ids by code point; each page's result within BOARD_PAGE_MAX_RESULT_CHARS, and following nextCursor visits every selected item once; an item larger than a whole page is refused by kind and id (item_over_budget), never truncated; a cursor from another revision or selector is refused (stale_cursor)",
+    sourceEvidence: ["app/lib/pcb/ai/board-pages.ts", "app/lib/pcb/ai/snapshot.ts", "app/lib/engineering/tool-bindings-readonly.ts"],
+    versionNotes: "1.0.0 (B24-D2): first exposure, reviewed in `agent-exposure.ts` (OD-213); withheld from MCP by a reviewed choice in `mcp-exposure-review.ts` although it is servable from the durable board. It states nothing board-inspect does not already state; it exists because board-inspect's whole snapshot does not fit in one tool result on a routed board.",
+  };
+}

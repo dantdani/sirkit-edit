@@ -183,7 +183,7 @@ export function createFreeroutingPassExecutor(input: { runtimeInfo: FreeroutingR
       dsnDigest: sha256(dsnText),
       dsnSourceRevision: dsn.integrity?.sourceRevision,
       router: { ...routerEvidence, timeoutMs: remainingMs },
-      processStatus: result.processStatus,
+      processStatus: result.processStatus, ...(!result.ok && result.killConfirmed !== undefined ? { killConfirmed: result.killConfirmed } : {}), // [B24-D2 review, 2026-10-09] D24-31: the runner's kill confirmation, carried into the attempt record
       outputFileStatus: result.outputFileStatus,
       parserStatus: "not-run" as const,
       semanticStatus: "not-run" as const,

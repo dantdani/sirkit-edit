@@ -195,6 +195,19 @@ const GATES: readonly NonLiveGateEntry[] = [
     recorded: { state: "not exercised", reason: "no run of benchmark-latency is recorded since B24-D1 appended the job (its first CI run is the lead's reading)" },
     localRun: { date: "2026-10-09", log: "d1-green-latency-workflow-flagged", result: "green: 1 of 1, eleven replays verified against the pinned identities (the lead re-reads the log for the timings)" },
   },
+  // [B24-D2, 2026-10-09] D24-29, OD-212's memory half (lead decision D2): the memory suite, kind non-live, on the same flag in the same
+  // vitest step of benchmark-latency (which passes --expose-gc to its workers); no catalog class, no LB; a reviewed append (b24-b3-live-
+  // suite-honesty case 10's list and scenario-map.md section 3's table move with it)
+  {
+    id: "b24-d2-memory",
+    path: "app/lib/qualification/__tests__/b24-d2-memory.test.ts",
+    kind: "non-live",
+    flag: { name: "SIRKIT_B24_BENCHMARK", kind: "exact-1", read: (env) => env.SIRKIT_B24_BENCHMARK },
+    job: { workflow: ".github/workflows/benchmark.yml", id: "benchmark-latency" },
+    resources: [],
+    recorded: { state: "not exercised", reason: "no run of benchmark-latency is recorded since B24-D2 added the suite to its vitest step (its first CI run is the lead's reading)" },
+    localRun: { date: "2026-10-09", log: "d2-green-memory-flagged", result: "green: 4 of 4, the six memory metrics measured with gc exposed (the lead re-reads the log for the figures)" },
+  },
 ];
 
 const freezeResources = (resources: readonly LiveResource[]): readonly LiveResource[] => Object.freeze(resources.map((resource) => Object.freeze(resource.check === "oneOf" ? { ...resource, names: Object.freeze([...resource.names]) } : { ...resource })));

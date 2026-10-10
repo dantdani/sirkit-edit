@@ -82,12 +82,12 @@ const REPORTER_NEW = `          --reporter=dot --reporter=junit --outputFile=vit
 /** The first `--exclude` line (the first run's C2, the `--reporter` line, before the insertion) and the appended job's first line.
  *  [B24-D1, 2026-10-09] reviewed pin move: A1's insertion rows keep D0's numbers (`:293`, `:551`, 66 lines: the frozen row values,
  *  carried through later rows); the tree's lines moved +1 and +6 under B24-D1's OD-30 steps (prompt-to-gerber's start step at `:32`
- *  and its headroom step at `:344-345`, page-browser-e2e's at `:405` and `:432-433`), and the job gained its own three lines. */
+ *  and its headroom step at `:344-345`, page-browser-e2e's at `:405` and `:432-433`), and the job gained its own three lines. [B24-D2, 2026-10-09] the job's first line +1 more, under B24-D2's database-delivery entry at `:384`; A1's rows are unchanged. */
 const FIRST_EXCLUDE_ROW = 293;
 const JOB_FIRST_LINE_ROW = 551;
 const JOB_LINES_AT_D0 = 66;
 const FIRST_EXCLUDE = 294;
-const JOB_FIRST_LINE = 557;
+const JOB_FIRST_LINE = 558; // [B24-D2, 2026-10-09] was 557 (B24-D2's database-delivery entry at `:384`)
 /** B24-C2's prompt-to-gerber run, 20 min 37 s, the numerator of CI's ratio (task-D0 "What D0 delivers" 6). */
 const CI_SECONDS = 1237;
 /** The lead's set (page section 3, option 2), in prompt-to-gerber's order: B24-B2's 25 unlinked named suites, the 11 unheld files of
@@ -286,7 +286,7 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     const filters = ciAdmission().filters["prompt-to-gerber"];
     expect(filters).toHaveLength(242);
     // this suite joined the qualification filter's selection after the measurement ran, so it is the one file set aside
-    expect(measured.map((row) => row.file).sort()).toEqual(positional(filters).filter((file) => file !== SELF && !/\/b24-d1-[a-z-]+\.test\.ts$/.test(file))); // [B24-D1, 2026-10-09] reviewed pin move: B24-D1's four suites joined the qualification filter's selection after the measurement ran, set aside with this one
+    expect(measured.map((row) => row.file).sort()).toEqual(positional(filters).filter((file) => file !== SELF && !/\/b24-d[12]-[a-z-]+\.test\.ts$/.test(file))); // [B24-D1, 2026-10-09] reviewed pin move: B24-D1's four suites joined the qualification filter's selection after the measurement ran, set aside with this one; [B24-D2, 2026-10-09] reviewed pin move: B24-D2's four suites in app/lib/qualification/__tests__ (board-read, memory, process-cleanup, working-copy) set aside the same way
     expect(measured).toHaveLength(471);
     const totals = measured.reduce((all, row) => ({ tests: all.tests + row.tests, failures: all.failures + row.failures, errors: all.errors + row.errors, skipped: all.skipped + row.skipped }), { tests: 0, failures: 0, errors: 0, skipped: 0 });
     expect(totals).toEqual({ tests: 5430, failures: 0, errors: 0, skipped: 42 });
@@ -498,7 +498,7 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     expect(ALL_TESTS.filter((file) => admission.jobsOf(file).includes("database-delivery") && admission.jobsOf(file).includes(NEW_JOB))).toEqual([]);
     for (const file of positional(["app/lib/workflow/prompt-to-gerber/__tests__"])) expect(promptToGerber, file).toContain(file);
     expect(promptToGerber).toContain(SELF);
-    expect(promptToGerber).toHaveLength(476 - MOVED_FILES); // [B24-D1, 2026-10-09] reviewed pin move: 472 -> 476, B24-D1's four suites in app/lib/qualification/__tests__ (two of them skipped there, gated by SIRKIT_B24_BENCHMARK)
+    expect(promptToGerber).toHaveLength(481 - MOVED_FILES); // [B24-D1, 2026-10-09] reviewed pin move: 472 -> 476, B24-D1's four suites in app/lib/qualification/__tests__ (two of them skipped there, gated by SIRKIT_B24_BENCHMARK); [B24-D2, 2026-10-09] reviewed pin move: 476 -> 480, B24-D2's four suites in app/lib/qualification/__tests__ (board-read, memory, process-cleanup, working-copy; the memory suite skipped there, gated by SIRKIT_B24_BENCHMARK); [B24-D2B, 2026-10-10] reviewed pin move: 480 -> 481, b24-d2-crash-recovery (the crash notice's unit proof)
   });
 
   it("8. (iv) the page's moved-set table equals the xml's figures per item - its workflow line, files, testcase time and share - and in total", () => {
@@ -539,7 +539,7 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     const d0 = rows.indexOf(mine[0]!);
     expect(rows.slice(d0, d0 + 2)).toEqual(mine);
     const later = rows.slice(d0 + 2); // [B24-D1, 2026-10-09] D1's rows, each on a line after D0's or above them (the carry moves D0's lines)
-    expect(later.map((row) => [row[1], row[3], Number(row[4]), Number(row[5])])).toEqual([["B24-D1", "prompt-to-gerber", 32, 1], ["B24-D1", "prompt-to-gerber", 344, 2], ["B24-D1", "page-browser-e2e", 405, 1], ["B24-D1", "page-browser-e2e", 432, 2], ["B24-D1", "agent-boundary-suites", 565, 1], ["B24-D1", "agent-boundary-suites", 624, 2]]);
+    expect(later.map((row) => [row[1], row[3], Number(row[4]), Number(row[5])])).toEqual([["B24-D1", "prompt-to-gerber", 32, 1], ["B24-D1", "prompt-to-gerber", 344, 2], ["B24-D1", "page-browser-e2e", 405, 1], ["B24-D1", "page-browser-e2e", 432, 2], ["B24-D1", "agent-boundary-suites", 565, 1], ["B24-D1", "agent-boundary-suites", 624, 2], ["B24-D2", "database-delivery", 384, 1]]); // [B24-D2, 2026-10-09] reviewed pin move: + B24-D2's database-delivery row (the handover's rule (1))
     const workflow = lines(WORKFLOW);
     const jobLines = lineCount(workflow) - JOB_FIRST_LINE + 1;
     expect(jobLines).toBe(JOB_LINES_AT_D0 + 3); // [B24-D1, 2026-10-09] the job gained its start step and its two headroom lines
@@ -569,7 +569,7 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     const onLine = (line: number, anchor: string): void => expect(workflow[line - 1] ?? "", `${WORKFLOW}:${line}`).toContain(anchor);
     // B21's C49, C93, C94 (b21-f-page 6)
     const matrix = lines("artifacts/ai-control-plane-b21/evaluation-matrix.md");
-    for (const [id, line, anchor] of [["C49", 416, "- run: pnpm exec playwright test"], ["C93", 419, "run: pnpm exec playwright test -c playwright.orchestration.config.ts"], ["C94", 428, "playwright-report-orchestration"]] as const) { // [B24-D1, 2026-10-09] reviewed pin move: +4 (B24-D1's OD-30 steps at `:32`, `:344-345` and `:405`); D0's note stays on each row
+    for (const [id, line, anchor] of [["C49", 417, "- run: pnpm exec playwright test"], ["C93", 420, "run: pnpm exec playwright test -c playwright.orchestration.config.ts"], ["C94", 429, "playwright-report-orchestration"]] as const) { // [B24-D1, 2026-10-09] reviewed pin move: +4 (B24-D1's OD-30 steps at `:32`, `:344-345` and `:405`); D0's note stays on each row; [B24-D2, 2026-10-09] reviewed pin move: +1 more (B24-D2's database-delivery entry at `:384`)
       const row = matrix.find((candidate) => candidate.startsWith(`| ${id} |`))!;
       expect(row, id).toContain(`| ${id} | \`${WORKFLOW}\` | ${line} | — | \`${anchor}\` |`);
       expect(row, id).toContain(`${note} re-pinned +38`);
@@ -584,7 +584,7 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     onLine(376, pglite);
     // B24's pages: ci-admission.md's limit line, C1-C3's database-delivery rows and C50, A4's workflow lines
     holds("artifacts/ai-control-plane-b24/ci-admission.md", `| page-browser-e2e | 30 min (\`:398\`; ${note} was \`:360\` before B24-D0's 38 prompt-to-gerber \`--exclude\` lines at \`:293-330\`;`);
-    onLine(401, "timeout-minutes: 30"); // [B24-D1, 2026-10-09] reviewed pin move: +3 (the page line keeps D0's text and carries D1's note)
+    onLine(402, "timeout-minutes: 30"); // [B24-D1, 2026-10-09] reviewed pin move: +3 (the page line keeps D0's text and carries D1's note); [B24-D2, 2026-10-09] +1 more (B24-D2's database-delivery entry at `:384`; the page line carries D2's note)
     holds("artifacts/ai-control-plane-b24/observability-and-replay.md", `| \`${WORKFLOW}:378\` | one database-delivery line, \`app/lib/qualification/database/__tests__/b24-c1-durable-records-pglite.test.ts\`, after B24-A4's last PGlite entry (\`:377\`; ${note}`);
     holds("artifacts/ai-control-plane-b24/observability-and-replay.md", `(\`deterministic-manufacturing.yml:380\`, C50; ${note}`);
     holds("artifacts/ai-control-plane-b24/observability-and-replay.md", `| \`${WORKFLOW}:380\` | one database-delivery line, \`app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts\`, after C2's entry (\`:379\`; ${note}`);

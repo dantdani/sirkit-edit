@@ -593,9 +593,9 @@ Test-first on `chapter/b24-production-qualification`, two runs. The first run (f
 | C9 | `.github/workflows/deterministic-manufacturing.yml` | 296 | `--exclude 'app/lib/mcp/**'` |
 | C10 | `.github/workflows/deterministic-manufacturing.yml` | 302 | `--exclude 'app/lib/computation/__tests__/**'` |
 | C11 | `.github/workflows/deterministic-manufacturing.yml` | 331 | `--exclude 'app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts'` |
-| C12 | `.github/workflows/deterministic-manufacturing.yml` | 561 | `agent-boundary-suites:` |
-| C13 | `.github/workflows/deterministic-manufacturing.yml` | 615 | `--outputFile=vitest-agent-boundary-suites.xml` |
-| C14 | `.github/workflows/deterministic-manufacturing.yml` | 620 | `name: agent-boundary-suites-diagnostics` |
+| C12 | `.github/workflows/deterministic-manufacturing.yml` | 562 | `agent-boundary-suites:` |
+| C13 | `.github/workflows/deterministic-manufacturing.yml` | 616 | `--outputFile=vitest-agent-boundary-suites.xml` |
+| C14 | `.github/workflows/deterministic-manufacturing.yml` | 621 | `name: agent-boundary-suites-diagnostics` |
 | C15 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 253 | `it("[B24-D0, 2026-10-09] OD-30's split:` |
 | C16 | `app/lib/qualification/__tests__/_ci-admission.ts` | 101 | `function foldedVitestStep(lines: readonly string[], key: string, file: string): FoldedStep {` |
 | C17 | `app/lib/qualification/__tests__/_ci-admission.ts` | 220 | `const runs = (step: FoldedStep, path: string): boolean =>` |
@@ -635,4 +635,4 @@ Test-first on `chapter/b24-production-qualification`, two runs. The first run (f
 
 - [B24-D1 lead, 2026-10-09] C24's anchor re-pinned in place, `toHaveLength(15)` -> `toHaveLength(17)`: the lead's reviewed move of A1 case 16 after B24-D1's six insertion rows (A1 planned four groups for D1; lead decision D19 added agent-boundary-suites's two).
 
-[B24-D1, 2026-10-09] C2-C14 re-pinned in place after B24-D1's OD-30 steps (prompt-to-gerber's start step at `:32`, +1 from `:32`; its headroom step at `:344-345`, +2 more from `:343`; page-browser-e2e's start and headroom steps at `:405` and `:432-433`, +1 and +2 more from `:402` and `:428`; agent-boundary-suites's start step at `:565`, +1 more from `:559`); C45-C47 stand on their lines, which keep their text with a dated note. [B24-D1, 2026-10-09] C16 and C17 re-pinned 100 -> 101 and 216 -> 220 (`_ci-admission.ts` gained the benchmark-latency job's id, anchor, filter, env and jobsOf lines before them); C48 re-pinned 590 -> 607 (the dated pin moves in cases 1, 5, 7, 10 and 11 of this suite, above case 12).
+[B24-D1, 2026-10-09] C2-C14 re-pinned in place after B24-D1's OD-30 steps (prompt-to-gerber's start step at `:32`, +1 from `:32`; its headroom step at `:344-345`, +2 more from `:343`; page-browser-e2e's start and headroom steps at `:405` and `:432-433`, +1 and +2 more from `:402` and `:428`; agent-boundary-suites's start step at `:565`, +1 more from `:559`); C45-C47 stand on their lines, which keep their text with a dated note. [B24-D1, 2026-10-09] C16 and C17 re-pinned 100 -> 101 and 216 -> 220 (`_ci-admission.ts` gained the benchmark-latency job's id, anchor, filter, env and jobsOf lines before them); C48 re-pinned 590 -> 607 (the dated pin moves in cases 1, 5, 7, 10 and 11 of this suite, above case 12). [B24-D2, 2026-10-09] C12-C14 re-pinned +1 in place after B24-D2's database-delivery entry at `:384` (the rows carry no note cell; this line holds the note).

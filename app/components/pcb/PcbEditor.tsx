@@ -35,7 +35,7 @@ import type { EditorContextBridge } from "@/app/lib/agent/editor-context-bridge"
 import { useEditorContextPublisher } from "@/app/lib/agent/use-editor-context-publisher"; // B10.1
 import { projectAgentNetlist } from "@/app/lib/agent/netlist-validation"; // B10.1
 import { schematicStateDigest } from "@/app/lib/engineering/schematic-model"; // B10
-import { ensureCurrentProjectScope, loadCurrentProjectScope, loadPcbSnapshotRevision, loadStageEvidence, loadWorkingCopy, normalizeBoardForEditor, saveAuthoritativeBoardCache, saveCurrentManufacturingRelease, savePcbSnapshotRevision, saveStageEvidence, saveWorkingCopy, stashWorkingConflict } from "@/app/lib/pcb/board-persistence";
+import { ensureCurrentProjectScope, loadCurrentProjectScope, loadPcbSnapshotRevision, loadStageEvidence, loadWorkingCopy, normalizeBoardForEditor, saveAuthoritativeBoardCache, saveCurrentManufacturingRelease, savePcbSnapshotRevision, saveStageEvidence, saveWorkingCopy, stashWorkingConflict, WORKING_COPY_CONFLICT, WORKING_COPY_CONFLICT_TOAST, rememberStoredWorkingCopy } from "@/app/lib/pcb/board-persistence";
 import { pcbBoardInstanceId, pcbDesignInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID } from "@/app/lib/pcb/board-identity";
 import { checkpointStore } from "@/app/lib/project/checkpoints";
 import type { AiRequestOwnership } from "@/app/lib/ai-preferences";
@@ -62,7 +62,7 @@ import { approveAndApplyPcbEdit } from "@/app/lib/project/pcb-edit-approval-cont
 import { createPcbApplyReauthorizer } from "@/app/lib/project/pcb-apply-reauthorization";
 import { IndexedDbAgentExecutionJournalStore } from "@/app/lib/engineering/agent-execution-journal-idb"; // [B18-B]
 import { AgentExecutionJournal } from "@/app/lib/engineering/agent-execution-journal"; // [B18-B]
-import { cancelGrantedExecution, recoverGrantedExecutionsForEditor, refusalKeepsPreviewCard, tenderConfirmedExecution, tenderExplicitExecution, type CancelRetirementReason, type GrantedExecutionOutcome, type GrantedExecutionRecoveryResult } from "@/app/lib/project/granted-execution-controller.internal"; // [B18-B]; [B18-D I4] report types
+import { cancelGrantedExecution, executionRecoveryNotice, recoverGrantedExecutionsForEditor, refusalKeepsPreviewCard, tenderConfirmedExecution, tenderExplicitExecution, type CancelRetirementReason, type GrantedExecutionOutcome, type GrantedExecutionRecoveryResult } from "@/app/lib/project/granted-execution-controller.internal"; // [B18-B]; [B18-D I4] report types
 import { verifyPublicGrantCoherence, type ExecutionDecisionMode, type PublicExecutionGrant } from "@/app/lib/engineering/execution-grant"; // [B18-B]
 import { GrantedExecutionDialog } from "./GrantedExecutionDialog"; // [B18-B]
 import { isPcbEditProposalExpired, verifySealedPcbEditProposalIntegrity, type SealedPcbEditProposal } from "@/app/lib/pcb/proposal/sealed-pcb-edit-proposal";
@@ -319,7 +319,7 @@ export default function PcbEditor({
   onExecutionGrantSettled,
   onExecutionGrantProgress,
   onExecutionGrantAttemptRefused,
-  onExecutionRecovery,
+  onExecutionRecovery, restoredExecutionGrants, pageProject,
 }: {
   schematic: SchematicState;
   /** R06: false while the editor is mounted but hidden (another workspace
@@ -368,7 +368,7 @@ export default function PcbEditor({
    *  chat's entry leaves "executing" and says the attempt was not made. Display only. */
   onExecutionGrantAttemptRefused?: (grantId: string, refusal: { code: string; message: string }) => void;
   /** [B18-D I4] what the hydration sweep did (display only; the sweep's own notice stays). */
-  onExecutionRecovery?: (results: GrantedExecutionRecoveryResult[]) => void;
+  onExecutionRecovery?: (results: GrantedExecutionRecoveryResult[]) => void; /** [B24-D2B review 3, 2026-10-10] the grants the page's restored, unsettled chat entries name: the sweep reads the journal's record of each (display only) */ restoredExecutionGrants?: () => readonly string[]; /** [B24-D2B review 4, 2026-10-10] the project the page shows now: the load sweep's results reach the page only while it shows the project it showed when the sweep started (display only) */ pageProject?: () => string | null;
   /** [B15.3 §J] the page-owned transition interlock accessor — the apply
    *  acquires its commit lease at the serialized position. */
   currentInterlock?: () => ProjectCommitInterlock | null;
@@ -599,11 +599,11 @@ export default function PcbEditor({
     if (init.demo) return;
     const onRestore = () => {
       const board = consumePendingBoardRestore();
-      if (board) adoptBoardLifecycle("checkpoint-restore", board);
+      if (board) { if (init.scope) rememberStoredWorkingCopy(init.scope.projectId); adoptBoardLifecycle("checkpoint-restore", board); } // [B24-D2 review, 2026-10-09] page.tsx persisted the restored copy first: it is this tab's own from here
     };
     window.addEventListener(BOARD_RESTORE_EVENT, onRestore);
     return () => window.removeEventListener(BOARD_RESTORE_EVENT, onRestore);
-  }, [init.demo, adoptBoardLifecycle]);
+  }, [init.demo, init.scope, adoptBoardLifecycle]);
 
   useEffect(() => {
     if (init.demo || !client || !syncIdentity) return;
@@ -626,7 +626,7 @@ export default function PcbEditor({
           saveAuthoritativeBoardCache(loaded.value.record);
           setAuthoritativeRecord(loaded.value.record);
         }
-        adoptBoardLifecycle("checkpoint-restore", restored);
+        rememberStoredWorkingCopy(syncIdentity.projectId); adoptBoardLifecycle("checkpoint-restore", restored); // [B24-D2 review, 2026-10-09] the restored copy page.tsx persisted is this tab's own from here
         return;
       }
       const working = loadWorkingCopy(syncIdentity.projectId);
@@ -1095,9 +1095,9 @@ export default function PcbEditor({
       // the canonical head (a legacy-path edit clears it — reload then derives
       // a fresh lineage from the board instead of trusting a stale claim).
       const canonicalHead = canonicalSessionFor(editorRuntime.getHistory())?.headMetadataFor(board) ?? null;
-      const ok = saveWorkingCopy(syncIdentity.projectId, board, base, canonicalHead);
+      const saved = saveWorkingCopy(syncIdentity.projectId, board, base, canonicalHead), ok = saved === true; // [B24-D2, 2026-10-09] D24-30, OD-214: another tab's newer copy refuses this save (compare-before-write); this board is kept as the conflict record
       setBoardSaveState(ok ? "saved" : "error");
-      if (!ok) setToast("PCB autosave FAILED: browser storage write failed (quota exceeded or unavailable). Your latest board changes are not saved.");
+      if (saved === WORKING_COPY_CONFLICT) setToast(WORKING_COPY_CONFLICT_TOAST); else if (!ok) setToast("PCB autosave FAILED: browser storage write failed (quota exceeded or unavailable). Your latest board changes are not saved.");
       // Section 8: routing evidence names an exact board revision — when the
       // board content moved past it, the routing (and any release) is stale.
       const evidence = loadStageEvidence(syncIdentity.projectId);
@@ -1489,7 +1489,7 @@ export default function PcbEditor({
           if (!settledHistory || !settledBoard) return false;
           const base = authorityRef.current ? { revision: authorityRef.current.revision, digest: authorityRef.current.digest } : null;
           const canonicalHead = canonicalSessionFor(settledHistory)?.headMetadataFor(settledBoard) ?? null;
-          return saveWorkingCopy(syncIdentity.projectId, settledBoard, base, canonicalHead);
+          return saveWorkingCopy(syncIdentity.projectId, settledBoard, base, canonicalHead) === true; // [B24-D2, 2026-10-09] a save refused for another tab's copy is not a settled autosave
         },
       });
       if (outcome.ok) {
@@ -1615,7 +1615,7 @@ export default function PcbEditor({
           if (!settledHistory || !settledBoard) return false;
           const base = authorityRef.current ? { revision: authorityRef.current.revision, digest: authorityRef.current.digest } : null;
           const canonicalHead = canonicalSessionFor(settledHistory)?.headMetadataFor(settledBoard) ?? null;
-          return saveWorkingCopy(syncIdentity.projectId, settledBoard, base, canonicalHead);
+          return saveWorkingCopy(syncIdentity.projectId, settledBoard, base, canonicalHead) === true; // [B24-D2, 2026-10-09] a save refused for another tab's copy is not a settled autosave
         },
       };
       const outcome = mode === "confirm" ? await tenderConfirmedExecution(deps) : await tenderExplicitExecution(deps);
@@ -1685,14 +1685,14 @@ export default function PcbEditor({
     if (executionRecoveryRef.current === key) return;
     executionRecoveryRef.current = key;
     const journal = new AgentExecutionJournal(executionJournalStoreRef.current!, { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId, boardInstanceId: pcbBoardInstanceId(syncIdentity.projectId), editor: "pcb" });
-    void recoverGrantedExecutionsForEditor({ journal, history: liveHistory, scope: { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId } })
+    void recoverGrantedExecutionsForEditor({ journal, history: liveHistory, scope: { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId }, pageProject, restoredGrants: restoredExecutionGrants }) // [B24-D2B review 3] every editor load re-derives the page's restored, unsettled entries; [B24-D2B review 4] for the project the page showed when it started
       .then((results) => {
         onExecutionRecovery?.(results); // [B18-D I4] display only
-        const notable = results.filter((result) => result.action === "adopted-and-settled" || result.action === "abandoned-not-committed" || result.action === "settled-from-receipt" || result.action === "refused-poisoned");
-        if (notable.length > 0) setToast(`AI execution recovery: ${notable.map((result) => `${result.grantId.slice(0, 12)}… ${result.action}`).join("; ")}.`);
+        const notice = executionRecoveryNotice(results); // [B24-D2B, 2026-10-10] the sweep's notice, a tested function of its results (OD-214)
+        if (notice !== null) setToast(notice);
       })
       .catch(() => undefined);
-  }, [init.demo, syncIdentity, editorRuntime, state.board, lifecycleGeneration, onExecutionRecovery]);
+  }, [init.demo, syncIdentity, editorRuntime, state.board, lifecycleGeneration, onExecutionRecovery, restoredExecutionGrants, pageProject]);
   const liveReadiness = liveReadinessReport ? readinessViewModel(liveReadinessReport) : undefined;
 
   // ── Stage 15: 3D preview panel ──────────────────────────────────────────────

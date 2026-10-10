@@ -247,7 +247,7 @@ describe("[B24-D1] the threshold census (D24-28, OD-212)", () => {
     expect(CENSUS_CSV_HEADER.split(",")).not.toContain("line");
   });
 
-  it("6. the wait rows the CI selects at the commit: 26 vi.waitFor calls in 12 files, 24 at the 1,000 ms default, two explicit 15 s timeouts; one more outside CI (b14-1)", { timeout: 120_000 }, async () => {
+  it("6. the wait rows the CI selects at the commit: 26 vi.waitFor calls in 12 files, 24 at the 1,000 ms default, two explicit 15 s timeouts; one more outside CI (b14-1)", { timeout: 120_000 }, async () => { // [B24-D2, 2026-10-09] reviewed pin move: 30 calls in 13 files since B24-D2 - b24-d2-process-cleanup's four, each with an explicit timeout (the 15 s pair unchanged)
     const scan = await census();
     const waits = scan.rows.filter((row) => row.kind === "wait");
     const inCi = waits.filter((row) => row.ci.length > 0);
@@ -263,9 +263,9 @@ describe("[B24-D1] the threshold census (D24-28, OD-212)", () => {
       ["app/lib/qualification/__tests__/b24-a3-embedding-admission.test.ts", 1, 1, null],
       ["app/lib/qualification/__tests__/b24-c1-durable-trace.test.ts", 4, 4, null],
       ["app/lib/qualification/__tests__/b24-c1-llm-call-record.test.ts", 1, 1, null],
-      ["app/lib/qualification/__tests__/b24-c2-attribution.test.ts", 1, 0, 15_000],
+      ["app/lib/qualification/__tests__/b24-c2-attribution.test.ts", 1, 0, 15_000], ["app/lib/qualification/__tests__/b24-d2-process-cleanup.test.ts", 4, 0, 7_000], // [B24-D2, 2026-10-09] + the process cleanup's four polls (5 s, 5 s, 7 s and the confirm wait)
     ]);
-    expect([inCi.reduce((sum, row) => sum + (row.count ?? 0), 0), inCi.reduce((sum, row) => sum + (row.defaults ?? 0), 0)]).toEqual([26, 24]);
+    expect([inCi.reduce((sum, row) => sum + (row.count ?? 0), 0), inCi.reduce((sum, row) => sum + (row.defaults ?? 0), 0)]).toEqual([30, 24]); // [B24-D2, 2026-10-09] 26 -> 30 (+ b24-d2-process-cleanup's four, none at the default)
     expect(waits.filter((row) => row.ci.length === 0).map((row) => [row.file, row.count])).toEqual([["app/lib/project/__tests__/b14-1-production-integration.test.tsx", 1]]);
   });
 

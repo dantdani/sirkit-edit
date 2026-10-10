@@ -183,10 +183,10 @@ full suite; no real process started.
   case 4, INFERRED); the runner refuses the read only. The `lstat`-then-`open` window on the raw file and the check-then-`mkdtemp` window
   on the root are open to such a process; the runner is no boundary against one. With no POSIX profile, a root owned by another user is
   not checked (owner and mode would be the POSIX guard).
-- **Descendant reach of `taskkill /T`** stays **INFERRED**: a benign deck starts no descendant (live case 2 checks the known pids only).
+- **Descendant reach of `taskkill /T`** stays **INFERRED**: a benign deck starts no descendant (live case 2 checks the known pids only). [B24-D2, 2026-10-09] for a node process tree only: B24-D2's real-process case (`b24-d2-process-cleanup` case 7, local win32 run 2026-10-09) saw taskkill /T end a detached grandchild the direct kill had left alive; ngspice's own descendants stay INFERRED.
 - **FreeRouting and kicad-cli** keep a direct-child SIGKILL and resolve before the child's exit (`runner.ts`, `kicad-cli-runner.ts`;
   D22-9's other half, assigned B22-B/D). Not changed here: it is not small (both runners' timing, their callers' cleanup of the files
-  the process may still hold, and their suites); recorded for the lead (section 8).
+  the process may still hold, and their suites); recorded for the lead (section 8). [B24-D2, 2026-10-09] superseded: B24-D2 gives both the tree kill (`app/lib/pcb/process-tree.ts`, OD-145's method) and a run that settles on the child's exit or after the 5,000 ms confirm wait (`killConfirmed`), test-first at their fake seams and with one real node process tree (`b24-d2-process-cleanup`); the live Java and kicad-cli orphan runs stay BLOCKED-LIVE-QUALIFICATION (LB-3, LB-17).
 - **`/api/simulate`'s own deck screen** (`assertNetlistSafe`) does not pin the `write` target; the target is the fixed server name
   (`rawOutputPath: "result.raw"`, pinned by `b16-0-24-tranche17-confinement-gate`) and no caller field reaches that line (B19-D's field
   screen); case 1 pins the deck it writes.
@@ -244,7 +244,7 @@ All on the final tree, each set under the lock with its exit code captured (`d-g
    caller's cleanup can remove files the process still holds, and a descendant is never killed. Their profiles already record the
    deviations (`direct-child-kill`, `terminal-before-exit`; `b22-a2-runtime-profile` case 13). Proposed: a follow-up giving both the
    diagnostic runner's kill semantics (`killDiagnosticProcessTree`, terminal after the close or `kill_unconfirmed`), test-first at
-   their fake seams. Not done here: not small, and outside the seams this increment names.
+   their fake seams. Not done here: not small, and outside the seams this increment names. [B24-D2, 2026-10-09] done by B24-D2 as proposed: `app/lib/pcb/process-tree.ts` (the killer's spawn passed in, so no new spawner), both runners spawn detached except on win32 and settle after the close or the 5,000 ms confirm wait (`killConfirmed`); `b24-d2-process-cleanup`.
 3. **The fab archive reader** (`validate-package.ts` `extractAndValidateReleaseArchive`) inflates each entry whole before checking
    the 64 MiB total; a decompression bomb would be inflated into memory first. It reads only the archive `release-gate.ts` just built,
    never an upload, and is not a named computation, so it is outside B22-D's archive item; a per-entry bound read from the archive's

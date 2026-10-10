@@ -8,8 +8,8 @@ that wrote it (OD-95): change the code and regenerate, never this page.
 ## 1. Identity
 
 - Report schema: `sirkit.mcp-provider-parity.v1`.
-- Registry digest `eng1-e0641e224aa61a63`; listing digest (B1's, role-independent: the manifest identity) `eng1-5eb4d189308a007c`.
-- 47 registry descriptors, 36 agent-exposed, 9 MCP-exposed, 27 agent-only.
+- Registry digest `eng1-a0270c5feaa2c1c4`; listing digest (B1's, role-independent: the manifest identity) `eng1-8a3159295efd1508`.
+- 48 registry descriptors, 37 agent-exposed, 9 MCP-exposed, 28 agent-only.
 
 ## 2. The MCP-exposed tools, leg by leg
 
@@ -60,6 +60,7 @@ members: object nodes of the declared output schema with no `properties` of thei
 | `sirkit.parts.evidence-read` | 1.0.0 | `sirkit_parts_evidence-read` | `external_read` |
 | `sirkit.parts.external-search` | 1.0.0 | `sirkit_parts_external-search` | `external_read` |
 | `sirkit.pcb.arrange` | 1.1.1 | `sirkit_pcb_arrange` | `granted_execution` |
+| `sirkit.pcb.board-page-inspect` | 1.0.0 | `sirkit_pcb_board-page-inspect` | `withheld` |
 | `sirkit.pcb.dimension` | 1.2.0 | `sirkit_pcb_dimension` | `granted_execution` |
 | `sirkit.pcb.move-footprint` | 1.1.1 | `sirkit_pcb_move-footprint` | `granted_execution` |
 | `sirkit.pcb.propose-bounded-edit` | 1.0.0 | `sirkit_pcb_propose-bounded-edit` | `withheld` |
@@ -106,6 +107,6 @@ detail, so a directive-shaped id is never echoed back.
 - Rules: `length`, `characters`, `secret-shape`, `marker`, `directive-phrase`, `reserved-name`, `schema-bounds`, `unreadable`, `annotation-field`.
 - Bounds: `idMaxChars` 128, `titleMaxChars` 120, `descriptionMaxChars` 1000, `schemaTextMaxChars` 500, `schemaMaxStrings` 512, `schemaMaxDepth` 64, `schemaMaxNodes` 4096.
 - Characters: U+0020 to U+007E, plus `U+2013`, `U+2014`, `U+2018`, `U+2019`, `U+201C`, `U+201D`, `U+2026`, `U+00B0`, `U+00B1`, `U+00B5`, `U+00D7`, `U+2192`, `U+2212`, `U+2260`, `U+2264`, `U+2265`. Everything else — line breaks, tabs, format and bidirectional characters, no-break space, other scripts, astral characters and lone surrogates — is refused.
-- Measured today over the 47 registry descriptors, with the gate's OWN collector: longest title 56, longest description 844, longest schema text 264, most judged schema strings on one descriptor 100.
+- Measured today over the 48 registry descriptors, with the gate's OWN collector: longest title 56, longest description 844, longest schema text 264, most judged schema strings on one descriptor 100.
 - A descriptor carrying its own `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` or `annotations` key is invalid (OD-100): MCP annotations stay derived from Sirkit's classification alone.
 - Stated limit: `TOOL_REGISTRY_INVALID` still echoes the refused descriptor's `id@version` — the refused id included — its `owningCommandId` and its view command ids, as it did before C3. That message is a build-time refusal on the server, never model-bound text; the MCP renderer's own refusal carries neither the id nor the text.

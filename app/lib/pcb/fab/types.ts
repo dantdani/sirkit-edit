@@ -85,12 +85,12 @@ export interface BundleResult {
 /** kicad-cli missing/failed/timed out → HTTP 500. */
 export class KicadCliError extends Error {
   readonly kind: "cli-missing" | "cli-failed" | "timeout";
-  readonly stderr: string;
+  readonly stderr: string; readonly killConfirmed?: boolean; // [B24-D2 review, 2026-10-09] D24-31: a timeout only - false when the killed run's exit was not observed within the confirm wait (a possible orphan)
 
-  constructor(kind: KicadCliError["kind"], message: string, stderr = "") {
+  constructor(kind: KicadCliError["kind"], message: string, stderr = "", killConfirmed?: boolean) {
     super(message);
     this.name = "KicadCliError";
     this.kind = kind;
-    this.stderr = stderr;
+    this.stderr = stderr; if (killConfirmed !== undefined) this.killConfirmed = killConfirmed;
   }
 }

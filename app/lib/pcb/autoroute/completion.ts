@@ -57,7 +57,7 @@ export interface AutorouteBoundaryEvidence {
     maxPasses: number;
     timeoutMs: number;
   };
-  processStatus?: "not-started" | "exit-success" | "exit-nonzero" | "timeout" | "cancelled" | "spawn-failed";
+  processStatus?: "not-started" | "exit-success" | "exit-nonzero" | "timeout" | "cancelled" | "spawn-failed"; killConfirmed?: boolean; // [B24-D2 review, 2026-10-09] D24-31: a killed run only (timeout, cancelled) - false when no exit was observed within the confirm wait (a possible orphan)
   outputFileStatus?: "not-checked" | "missing" | "empty" | "nonempty";
   sesDigest?: string;
   sesByteLength?: number;

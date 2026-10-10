@@ -55,7 +55,7 @@ const MCP_PROPOSALS = [
   "sirkit.schematic.propose-component-replacement",
   "sirkit.schematic.propose-tier1-edit",
 ];
-const MCP_WITHHELD = ["sirkit.project.history-inspect", "sirkit.schematic.inspect", ...MCP_PROPOSALS].sort();
+const MCP_WITHHELD = ["sirkit.project.history-inspect", "sirkit.schematic.inspect", ...MCP_PROPOSALS, "sirkit.pcb.board-page-inspect"].sort(); // [B24-D2, 2026-10-09] pin move (OD-235): a third withheld category beside B3's two reads and B4's five proposals - B24-D2's paged board read, servable from durable state and withheld by choice (7 -> 8)
 
 /** One row per closed reason with the registry ids that carry it (the production registry at B1). */
 const EXCLUDED_BY_REASON: Record<McpExclusionReason, readonly string[]> = {
@@ -70,7 +70,7 @@ const EXCLUDED_BY_REASON: Record<McpExclusionReason, readonly string[]> = {
   external_read: ["sirkit.mcp.observation-read", "sirkit.parts.evidence-read", "sirkit.parts.external-search"],
   view_state_read: ["sirkit.selection.inspect", "sirkit.view.read-state"],
   not_servable: [],
-  withheld: MCP_WITHHELD, // [B20 B3] pin move (OD-69): the two reads that need browser-only state; [B20 B4] and the five proposals
+  withheld: MCP_WITHHELD, // [B20 B3] pin move (OD-69): the two reads that need browser-only state; [B20 B4] and the five proposals; [B24-D2, 2026-10-09] and the paged board read (OD-235)
   not_mcp_reviewed: [],
 };
 
@@ -191,12 +191,12 @@ describe("[B20 B1] the MCP exposure subset — reviewed list, structural rule, c
     }
   });
 
-  it("the MCP set is a subset of the agent set; the 27 agent tools it leaves out (24 when written, before B22-B's three named computation reads) are the granted executions, the external reads, the open-editor tools, the seven withheld tools and the three computation reads (reason `computation`)", () => { // [B22 closeout, 2026-10-02] retitled (D22-16): 27 since B22-B (OD-139); assertions unchanged
+  it("the MCP set is a subset of the agent set; the 27 agent tools it leaves out (24 when written, before B22-B's three named computation reads) are the granted executions, the external reads, the open-editor tools, the seven withheld tools and the three computation reads (reason `computation`)", () => { // [B24-D2, 2026-10-09] 28 since B24-D2 and eight withheld tools: + the paged board read, withheld by choice (OD-235); the count below moved; [B22 closeout, 2026-10-02] retitled (D22-16): 27 since B22-B (OD-139); assertions unchanged
     for (const id of INTENTIONAL_MCP_EXPOSED_TOOL_IDS) expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, id).toContain(id);
     const left = INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => !INTENTIONAL_MCP_EXPOSED_TOOL_IDS.includes(id));
     // [B20 B3] pin move: 16 -> 18 (the two withheld reads); [B20 B4] 18 -> 23 (the five withheld proposals); [B20 A4] 23 -> 24
     // (the external tool read, an external read) - the merge of the two tracks, so both moves apply
-    expect(left).toHaveLength(27); // [B22-B, 2026-10-01] pin move (OD-139): 24 -> 27, the three named computation reads (reason `computation`)
+    expect(left).toHaveLength(28); // [B22-B, 2026-10-01] pin move (OD-139): 24 -> 27, the three named computation reads (reason `computation`); [B24-D2, 2026-10-09] pin move (OD-235): 27 -> 28, the paged board read (reason `withheld`)
     const reasons = new Set(left.map((id) => mcpExclusionReason(descriptor(id))));
     expect([...reasons].sort()).toEqual(["computation", "external_read", "granted_execution", "view_session", "view_state_read", "withheld"]);
     // D20-2 / D20-33: every granted execution and every grant-only tool is excluded, whatever else it is
@@ -334,7 +334,7 @@ describe("[B20 B1] the MCP exposure subset — reviewed list, structural rule, c
 
   it("a reviewed REMOVAL is a list move: via-inspect moved to the withheld list, with no descriptor change, gives a clean report, an 8-tool listing, the channel excluding it, and an unchanged agent path", () => {
     // [B20 B3] pin move: the simulated move is now via-inspect on top of B3's real withholding (14 -> 13, withheld 2 -> 3);
-    // [B20 B4] pin move: and on top of B4's (9 -> 8, withheld 7 -> 8)
+    // [B20 B4] pin move: and on top of B4's (9 -> 8, withheld 7 -> 8); [B24-D2, 2026-10-09] and on top of B24-D2's (withheld 8 -> 9; the listing stays 8)
     const movedRegistry = moved.catalog.sirkitToolRegistry();
     expect(movedRegistry.digest()).toBe(registry.digest()); // the registry, and every descriptor in it, is untouched
     expect(moved.exposure.INTENTIONAL_MCP_EXPOSED_TOOL_IDS).toHaveLength(8);
@@ -499,8 +499,8 @@ describe("[B20 B1] the deny-by-default discovery channel mcp", () => {
   // the base leaves them out too, and each is pinned: the three reads are offered only on assistant-agent (the only channel on which
   // the computation-engine authority counts; every context here claims every authority), the two dormant requests on none.
   const A4_ADDITION = "sirkit.mcp.observation-read";
-  const B22B_ADDITIONS = ["sirkit.computation.analytical-equation", "sirkit.computation.artifact-compare", "sirkit.computation.artifact-parse", "sirkit.computation.circuit-analysis", "sirkit.computation.layout-experiment"]; const B22B_READS = B22B_ADDITIONS.slice(0, 3);
-  const baseRegistry = new ToolRegistry(SIRKIT_TOOL_CATALOG.filter((item) => item.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(item.toolId)));
+  const B22B_ADDITIONS = ["sirkit.computation.analytical-equation", "sirkit.computation.artifact-compare", "sirkit.computation.artifact-parse", "sirkit.computation.circuit-analysis", "sirkit.computation.layout-experiment"]; const B22B_READS = B22B_ADDITIONS.slice(0, 3); const B24D2_ADDITION = "sirkit.pcb.board-page-inspect"; // [B24-D2, 2026-10-09] NOT a pin move, by the same technique: B24-D2 ADDED one descriptor, the paged board read (OD-213); the base leaves it out, and it is pinned to be offered exactly where via-inspect is
+  const baseRegistry = new ToolRegistry(SIRKIT_TOOL_CATALOG.filter((item) => item.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(item.toolId) && item.toolId !== B24D2_ADDITION));
   it("every existing channel is unchanged: interactive-ui, assistant-agent, automation and api byte-match the pre-B1 pins under three contexts, and A4's one descriptor and B22-B's five named computations are the only difference (the three reads offered on assistant-agent only, the two requests on no channel)", () => { // [B22 closeout, 2026-10-02] retitled (D22-16): B22-B's five additions (OD-139); assertions unchanged
     const PINS: Record<string, Record<string, string>> = {
       "interactive-ui": { permissive: "eng1-c15d068f466d4bf6", viewer: "eng1-68f97b000530aadb", schematicEditor: "eng1-3ede31afeec8fb9e" },
@@ -508,7 +508,7 @@ describe("[B20 B1] the deny-by-default discovery channel mcp", () => {
       automation: { permissive: "eng1-9da9e74cb28c312f", viewer: "eng1-b6488d3009f3d103", schematicEditor: "eng1-9596049a79cbbc65" },
       api: { permissive: "eng1-697b17f01c6ec323", viewer: "eng1-ad045717a321fd7e", schematicEditor: "eng1-d63980106046feab" },
     };
-    expect(registry.list().map((item) => item.toolId).filter((id) => !baseRegistry.get(id))).toEqual([...B22B_ADDITIONS, A4_ADDITION].sort());
+    expect(registry.list().map((item) => item.toolId).filter((id) => !baseRegistry.get(id))).toEqual([...B22B_ADDITIONS, A4_ADDITION, B24D2_ADDITION].sort()); // [B24-D2, 2026-10-09] + the paged board read
     const actual: Record<string, Record<string, string>> = {};
     for (const channel of ["interactive-ui", "assistant-agent", "automation", "api"] as const) {
       actual[channel] = {};
@@ -521,8 +521,8 @@ describe("[B20 B1] the deny-by-default discovery channel mcp", () => {
         // the whole registry differs from the base by that ONE descriptor and nothing else [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): and by B22-B's five named computations: the three reads offered on assistant-agent only, the two requests on no channel]: it is offered on the
         // assistant-agent channel (the only channel on which its authority counts) and excluded `authority_missing` on
         // every other, and every other tool's inclusion, exclusion and reason is byte-identical to the base
-        expect(result.included.filter((entry) => entry.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(entry.toolId)), `${channel}/${name} included`).toEqual(base.included);
-        expect(result.excluded.filter((entry) => entry.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(entry.toolId)), `${channel}/${name} excluded`).toEqual(base.excluded);
+        expect(result.included.filter((entry) => entry.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(entry.toolId) && entry.toolId !== B24D2_ADDITION), `${channel}/${name} included`).toEqual(base.included);
+        expect(result.excluded.filter((entry) => entry.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(entry.toolId) && entry.toolId !== B24D2_ADDITION), `${channel}/${name} excluded`).toEqual(base.excluded); const fate = (id: string): string => (result.included.some((entry) => entry.toolId === id) ? "included" : result.excluded.find((entry) => entry.toolId === id)?.reason ?? "unreported"); expect(fate(B24D2_ADDITION), `${channel}/${name} B24-D2`).toBe(fate("sirkit.pcb.via-inspect")); // [B24-D2, 2026-10-09] the paged board read is offered wherever via-inspect is, and withheld for the same reason where it is not
         for (const id of B22B_ADDITIONS) expect([result.included.some((entry) => entry.toolId === id), result.excluded.some((entry) => entry.toolId === id)], `${channel}/${name} ${id}`).toEqual(channel === "assistant-agent" && B22B_READS.includes(id) ? [true, false] : [false, true]);
         const added = result.included.filter((entry) => entry.toolId === A4_ADDITION).map(() => "included");
         const reasons = result.excluded.filter((entry) => entry.toolId === A4_ADDITION).map((entry) => entry.reason);

@@ -218,11 +218,11 @@ const READINGS: readonly Reading[] = [
       browser(AGENT_SPEC, ["B18-D I9 Stop", "[B18-E E9b] a stale base (7b)"]),
       offline(B21F, ["9", "10"], P2G),
       offline(`${ENG}b18-e-scenario-7.test.ts`, ["scenario 7f: the server refuses the tender"], P2G_CORE),
-      offline("app/components/pcb/__tests__/snapshot-conflict-dialog.test.tsx", ["names both revisions and offers refresh / rebase / not now"], P2G),
+      offline("app/components/pcb/__tests__/snapshot-conflict-dialog.test.tsx", ["names both revisions and offers refresh / rebase / not now"], P2G), offline("app/lib/qualification/__tests__/b24-d2-process-cleanup.test.ts", ["1", "2", "4", "5", "7", "8"], P2G), // [B24-D2, 2026-10-09] FreeRouting and kicad-cli: the tree kill, the confirmed exit and one real node process tree (D24-31); [B24-D2 review, 2026-10-09] + 8: an unconfirmed kill reported in the attempt evidence and the bundle error
       offline("app/lib/computation/__tests__/b22-a3-diagnostic-runner.test.ts", ["6", "7", "8"], AGENT_BOUNDARY), // [B24-D0, 2026-10-09] was P2G
     ],
-    missing: "process-failure cleanup (a tree kill and kill_unconfirmed) is delivered for the diagnostic ngspice runner only, while FreeRouting and kicad-cli still kill only the direct child (D24-31); a revoked membership is proven in integration only, and the browser proves a role change",
-    decisions: ["OD-27", "OD-145"], blockers: [],
+    missing: "process-failure cleanup (a tree kill, and an exit confirmed or reported unconfirmed) is evaluated offline for the diagnostic ngspice runner, FreeRouting and kicad-cli (D24-31), but the live Java and kicad-cli orphan runs are BLOCKED (LB-3, LB-17), a revoked membership is proven in integration only, and the browser proves a role change", // [B24-D2, 2026-10-09] was "delivered for the diagnostic ngspice runner only, while FreeRouting and kicad-cli still kill only the direct child (D24-31)": B24-D2 gives both runners the tree kill offline (b24-d2-process-cleanup), and the live orphan runs are LB-3 and LB-17
+    decisions: ["OD-27", "OD-145"], blockers: ["LB-3", "LB-17"], // [B24-D2, 2026-10-09] was blockers: [] (the live Java and kicad-cli orphan runs)
   },
   { // 13
     standing: "demonstrated",

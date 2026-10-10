@@ -2,6 +2,7 @@ tool_id,binding_id,binding_version,kind,module,symbol,descriptor_match,required_
 sirkit.component-authority.inspect,read.component-authority,1.1.0,read,app/lib/engineering/component-authority.ts,inspectComponentAuthority,true,canonical-state;component-authority-records,
 sirkit.manufacturing.readiness-inspect,read.readiness,1.1.0,read,app/lib/pcb/readiness/evaluate.ts,evaluatePcbFabricationReadiness,true,canonical-state;fab-preset;drc-preset,netlist
 sirkit.pcb.board-inspect,read.board-snapshot,1.1.0,read,app/lib/pcb/ai/snapshot.ts,buildAIPcbSnapshot,true,canonical-state,
+sirkit.pcb.board-page-inspect,read.board-page,1.0.0,read,app/lib/pcb/ai/board-pages.ts,buildBoardPage,true,canonical-state,
 sirkit.pcb.mechanical-inspect,read.board-mechanical,1.0.0,read,app/lib/pcb/ai/mechanical.ts,buildMechanicalSnapshot,true,canonical-state,
 sirkit.pcb.revision-inspect,read.pcb-revision,1.1.0,read,app/lib/pcb/revision.ts,pcbRevisionId,true,canonical-state,
 sirkit.pcb.via-inspect,read.board-vias,1.0.0,read,app/lib/pcb/ai/vias.ts,buildViaSnapshot,true,canonical-state,

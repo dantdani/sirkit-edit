@@ -59,7 +59,7 @@ describe("[B20 C3] T — the first-party descriptor text gate", () => {
   it("T1. every production descriptor passes, and the measured maxima are inside their bounds", () => {
     // [B20 merge] pin move: the A track's A4 adds one agent-exposed descriptor (sirkit.mcp.observation-read), so the
     // registry is 42 and the agent set 33; the MCP subset is unchanged at 9 (B4 withheld every proposal)
-    expect(SIRKIT_TOOL_CATALOG).toHaveLength(47); // [B22-B, 2026-10-01] pin move (OD-139): + the five named computation descriptors
+    expect(SIRKIT_TOOL_CATALOG).toHaveLength(48); // [B22-B, 2026-10-01] pin move (OD-139): + the five named computation descriptors; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read
     const offenders = SIRKIT_TOOL_CATALOG.filter((item) => firstPartyTextIssues(item).length > 0 || annotationFieldIssues(item).length > 0).map((item) => item.toolId);
     expect(offenders).toEqual([]);
     const maxima = SIRKIT_TOOL_CATALOG.reduce((worst, item) => {

@@ -95,7 +95,7 @@ function results(ms: number | ((metricId: string) => number), overrides: Partial
 }
 /** A runner baseline version: every metric at p50/p95 `ms`, the default budget. */
 function runnerVersion(version: number, ms: number, policyVersion = LATENCY_POLICY_VERSION, extra: Partial<LatencyBaselineVersion> = {}): LatencyBaselineVersion {
-  return { version, policyVersion, recordedAt: "2026-10-09T00:00:00.000Z", declaredWithoutValues: false, runIds: ["r1", "r2", "r3"], metrics: LATENCY_METRICS.map((entry) => ({ metricId: entry.metricId, p50: ms, p95: ms * 1.1, runIds: ["r1", "r2", "r3"], budget: defaultLatencyBudget() })), changeRecords: [], ...extra };
+  return { version, policyVersion, recordedAt: "2026-10-09T00:00:00.000Z", declaredWithoutValues: false, runIds: ["r1", "r2", "r3"], metrics: LATENCY_METRICS.map((entry) => ({ metricId: entry.metricId, p50: ms, p95: ms * 1.1, runIds: ["r1", "r2", "r3"], budget: defaultLatencyBudget(LATENCY_NOISE_BAND_MINIMUM, entry.floor) })), changeRecords: [], ...extra }; // [B24-D2, 2026-10-09] each metric's own floor, as proposeLatencyBaseline gives it
 }
 const withValues = (ms: number): LatencyBaselineDocument => ({ schema: LATENCY_BASELINE_SCHEMA, versions: [declaredLatencyBaseline("2026-10-09T00:00:00.000Z"), runnerVersion(2, ms)] });
 const stateOf = (document: LatencyBaselineDocument, run: LatencyResultsDocument[], metricId: string) => evaluateLatency(run, document).verdicts.find((verdict) => verdict.metricId === metricId)!;
@@ -117,22 +117,22 @@ const headroomLines = (job: string): string[] => [`      - if: always() # [B24-D
 const WHOLE_FLAG = new RegExp(`(?<![A-Z0-9_])${BENCHMARK_FLAG_ENV}(?![A-Z0-9_])`);
 
 describe("[B24-D1] the latency policy, the writer's confinement, the headroom core and the CI shape (D24-27, D24-28, OD-212, OD-30)", () => {
-  it("1. the catalogue is closed: unique ids, closed families and suites, OD-234's counts (view/read 20 and 200, edit 3 and 30, stream 5 and 50, workflow 1 and 10, every moved workload 1 and 10), each added by B24-D1", () => {
+  it("1. the catalogue is closed: unique ids, closed families and suites, OD-234's counts (view/read 20 and 200, edit 3 and 30, stream 5 and 50, workflow 1 and 10, every moved workload 1 and 10), each added by B24-D1", () => { // [B24-D2, 2026-10-09] reviewed pin move (OD-212's memory half, OD-235): + the six memory metrics of b24-d2-memory (family memory, unit MiB, a floor each, 2 warm-ups and 30 samples), added by B24-D2; the unit and floor fields checked for every entry
     expect(new Set(LATENCY_METRICS.map((entry) => entry.metricId)).size).toBe(LATENCY_METRICS.length);
-    expect(LATENCY_METRICS.length).toBe(16); // [B24-D1 review, 2026-10-09] was 15: + moved.redaction-linear-200-scrubs (the bound the first census scan missed)
+    expect(LATENCY_METRICS.length).toBe(22); // [B24-D1 review, 2026-10-09] was 15: + moved.redaction-linear-200-scrubs (the bound the first census scan missed); [B24-D2, 2026-10-09] 16 -> 22: + the six memory metrics
     for (const entry of LATENCY_METRICS) {
       expect(LATENCY_FAMILIES, entry.metricId).toContain(entry.family);
       expect(LATENCY_SUITES, entry.metricId).toContain(entry.suite);
       expect(entry.metricId.startsWith(`${entry.family}.`), entry.metricId).toBe(true);
-      expect(entry.addedBy).toBe("B24-D1");
+      expect(entry.addedBy).toBe(entry.family === "memory" ? "B24-D2" : "B24-D1"); // [B24-D2, 2026-10-09] the memory family is B24-D2's
       expect(entry.workload.length).toBeGreaterThan(20);
-      const counts = { view: [20, 200], read: [20, 200], edit: [3, 30], stream: [5, 50], workflow: [1, 10], moved: [1, 10] }[entry.family];
-      expect([entry.warmups, entry.samples], entry.metricId).toEqual(counts);
-      expect(entry.family === "workflow" ? "b24-d1-latency-workflow" : "b24-d1-latency").toBe(entry.suite);
+      const counts = { view: [20, 200], read: [20, 200], edit: [3, 30], stream: [5, 50], workflow: [1, 10], moved: [1, 10], memory: [2, 30] }[entry.family]; // [B24-D2, 2026-10-09] + memory: 2 warm-ups, 30 samples
+      expect([entry.warmups, entry.samples], entry.metricId).toEqual(counts); expect([entry.unit, entry.floor], entry.metricId).toEqual(entry.family !== "memory" ? ["ms", LATENCY_FLOOR_MS] : ["MiB", entry.metricId.endsWith("-rss") ? 8 : 1]); // [B24-D2, 2026-10-09] the unit and the floor (OD-235): ms and 1 ms for B24-D1's; MiB and 1 MiB (heapUsed) or 8 MiB (rss) for the memory family
+      expect(entry.family === "workflow" ? "b24-d1-latency-workflow" : entry.family === "memory" ? "b24-d2-memory" : "b24-d1-latency").toBe(entry.suite); // [B24-D2, 2026-10-09] + b24-d2-memory
     }
     expect(LATENCY_METRICS.filter((entry) => entry.family === "moved").map((entry) => entry.metricId)).toEqual(["moved.observation-normalizer-huge-text", "moved.observation-normalizer-many-blocks", "moved.observation-normalizer-pathological-marks", "moved.observation-normalizer-structured-budget", "moved.pcb-sync-preflight-small-fixture", "moved.pcb-sync-aggregate-500-components", "moved.redaction-linear-200-scrubs"]); // [B24-D1 review, 2026-10-09] + the seventh
     expect([LATENCY_PRACTICAL_REGRESSION, LATENCY_NOISE_BAND_MINIMUM, LATENCY_FLOOR_MS, LATENCY_P95_MINIMUM_SAMPLES]).toEqual([0.1, 0.2, 1, 20]);
-    expect(defaultLatencyBudget()).toEqual({ practicalRegression: 0.1, noiseBand: 0.2, direction: "lower_is_better", failureAction: "block", floorMs: 1 });
+    expect(defaultLatencyBudget()).toEqual({ practicalRegression: 0.1, noiseBand: 0.2, direction: "lower_is_better", failureAction: "block", floorMs: 1 }); expect(defaultLatencyBudget(0.35, 8)).toMatchObject({ noiseBand: 0.35, floorMs: 8 }); // [B24-D2, 2026-10-09] the floor follows the metric (its unit's)
     expect(defaultLatencyBudget(0.35).noiseBand).toBe(0.35);
     expect(defaultLatencyBudget(0.05).noiseBand).toBe(0.2);
     expect(noiseBandFromRuns([100, 110, 130])).toBeCloseTo(Math.max(0.2, 30 / 110), 10);
@@ -287,12 +287,12 @@ describe("[B24-D1] the latency policy, the writer's confinement, the headroom co
     for (const entry of committed.versions[0]!.metrics) expect(entry.budget, entry.metricId).toEqual(defaultLatencyBudget());
     expect(committed.versions.map((version) => version.version)).toEqual(committed.versions.map((_, index) => index + 1));
     const latest = latestLatencyBaseline(committed);
-    expect(latest.metrics.map((entry) => entry.metricId)).toEqual(LATENCY_METRICS.map((entry) => entry.metricId));
+    expect(latest.metrics.map((entry) => entry.metricId)).toEqual(LATENCY_METRICS.filter((entry) => latest.version > 1 || entry.addedBy === "B24-D1").map((entry) => entry.metricId)); // [B24-D2, 2026-10-09] reviewed pin move: v1 predates B24-D2's memory metrics - a new metric has no baseline (baseline_missing, BLOCKED under v1, lead decision D3) until the lead's runner version proposes every catalogued metric
     // [B24-D1 review, 2026-10-09] the latest version is declared only when it is v1; a runner version's band is the measured spread, at least the minimum
     // (OD-234), so its budget is checked by shape and never by equality with the default - the lead's records commit lands green (review security-3)
     expect(latest.declaredWithoutValues).toBe(latest.version === 1);
     for (const entry of latest.metrics) {
-      expect(entry.budget, entry.metricId).toMatchObject({ practicalRegression: LATENCY_PRACTICAL_REGRESSION, direction: "lower_is_better", failureAction: "block", floorMs: LATENCY_FLOOR_MS });
+      expect(entry.budget, entry.metricId).toMatchObject({ practicalRegression: LATENCY_PRACTICAL_REGRESSION, direction: "lower_is_better", failureAction: "block", floorMs: latencyMetric(entry.metricId).floor }); // [B24-D2, 2026-10-09] each metric's own floor (1 ms for B24-D1's; 1 or 8 MiB for the memory family)
       expect(entry.budget.noiseBand, entry.metricId).toBeGreaterThanOrEqual(LATENCY_NOISE_BAND_MINIMUM);
       expect("maximumP95" in entry.budget).toBe(false);
       if (!latest.declaredWithoutValues) {
@@ -376,7 +376,7 @@ describe("[B24-D1] the latency policy, the writer's confinement, the headroom co
       "      - uses: pnpm/action-setup@v4",
       "      - uses: actions/setup-node@v4",
       "      - run: pnpm install --frozen-lockfile",
-      `      - run: pnpm exec vitest run app/lib/qualification/__tests__/b24-d1-latency.test.ts app/lib/qualification/__tests__/b24-d1-latency-workflow.test.ts --no-file-parallelism --reporter=dot --reporter=junit --outputFile=vitest-${JOB}.xml`,
+      `      - run: pnpm exec vitest run app/lib/qualification/__tests__/b24-d1-latency.test.ts app/lib/qualification/__tests__/b24-d1-latency-workflow.test.ts app/lib/qualification/__tests__/b24-d2-memory.test.ts --no-file-parallelism --poolOptions.forks.execArgv=--expose-gc --poolOptions.forks.execArgv=--expose-gc --reporter=dot --reporter=junit --outputFile=vitest-${JOB}.xml`, // [B24-D2, 2026-10-09] reviewed pin move (OD-212's memory half): + b24-d2-memory, and --expose-gc to this step's workers only, named twice (one value is spread into characters by the forks pool)
       "      - if: success() || failure()",
       "      - if: success() || failure()",
       `      - if: success() || failure() # [B24-D1] OD-30: ${JOB}'s headroom (reports only)`,
@@ -392,7 +392,7 @@ describe("[B24-D1] the latency policy, the writer's confinement, the headroom co
     expect(admission.stepEnv[JOB]).toEqual({ [BENCHMARK_FLAG_ENV]: "1" });
     expect(admission.stepEnv["benchmark-core"]).toEqual({});
     expect(Object.hasOwn(admission.stepEnv["benchmark-nightly"], BENCHMARK_FLAG_ENV)).toBe(false);
-    expect(admission.filters[JOB]).toEqual(["app/lib/qualification/__tests__/b24-d1-latency.test.ts", "app/lib/qualification/__tests__/b24-d1-latency-workflow.test.ts"]);
+    expect(admission.filters[JOB]).toEqual(["app/lib/qualification/__tests__/b24-d1-latency.test.ts", "app/lib/qualification/__tests__/b24-d1-latency-workflow.test.ts", "app/lib/qualification/__tests__/b24-d2-memory.test.ts"]); expect(admission.jobsOf("app/lib/qualification/__tests__/b24-d2-memory.test.ts")).toEqual(["prompt-to-gerber", JOB]); // [B24-D2, 2026-10-09] + the memory suite
     expect(admission.jobsOf("app/lib/qualification/__tests__/b24-d1-latency.test.ts")).toEqual(["prompt-to-gerber", JOB]);
     expect(admission.jobsOf("app/lib/qualification/__tests__/b24-d1-latency-workflow.test.ts")).toEqual(["prompt-to-gerber", JOB]);
     expect(admission.jobsOf("app/lib/qualification/__tests__/b24-d1-latency-policy.test.ts")).toEqual(["prompt-to-gerber"]);
@@ -416,7 +416,7 @@ describe("[B24-D1] the latency policy, the writer's confinement, the headroom co
     expect(gate).toContain("const widening = baselineWideningProblems(document as LatencyBaselineDocument);");
     expect(gate).toContain("if (widening.length > 0) throw new Error(`LATENCY_BASELINE_UNREVIEWED_WIDENING: ${widening.join(\", \")}`);");
     // the two entries are registered as non-live gates of this job (B24-B3's registry; honesty case 10 holds the rest)
-    expect(NON_LIVE_GATES.filter((entry) => entry.job.id === JOB).map((entry) => [entry.id, entry.kind, entry.flag.name, entry.job.workflow])).toEqual([["b24-d1-latency", "non-live", BENCHMARK_FLAG_ENV, BENCHMARK], ["b24-d1-latency-workflow", "non-live", BENCHMARK_FLAG_ENV, BENCHMARK]]);
+    expect(NON_LIVE_GATES.filter((entry) => entry.job.id === JOB).map((entry) => [entry.id, entry.kind, entry.flag.name, entry.job.workflow])).toEqual([["b24-d1-latency", "non-live", BENCHMARK_FLAG_ENV, BENCHMARK], ["b24-d1-latency-workflow", "non-live", BENCHMARK_FLAG_ENV, BENCHMARK], ["b24-d2-memory", "non-live", BENCHMARK_FLAG_ENV, BENCHMARK]]); // [B24-D2, 2026-10-09] + the memory suite (lead decision D2)
     // [B24-D1 review, 2026-10-09] honesty case 10's title still names B3's single gate; its id list moved by review, so its it( line carries the dated note (review correctness-6)
     expect(read("app/lib/qualification/__tests__/b24-b3-live-suite-honesty.test.ts")).toMatch(/^  it\("10\. NON_LIVE_GATES \(lead decision D2\) holds exactly b24-b2-corpus-nightly:[^\n]*\(\) => \{ \/\/ \[B24-D1, 2026-10-09\] [^\n]*b24-d1-latency[^\n]*$/m);
   });

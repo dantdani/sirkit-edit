@@ -452,6 +452,15 @@ describe("B11.5 §D — every B11.4 closure is preserved", () => {
         && !source.split("\n").some((line) =>
           /(?:writeFileSync|mkdirSync|rmSync|appendFileSync|unlinkSync|cpSync|rmdirSync|createWriteStream|symlinkSync|linkSync)\s*\(/.test(line)
           && !/\b(?:scratch|runDir)\b/.test(line)),
+      // [B24-D2 review, 2026-10-09] B24-D2's process-cleanup suite removes its OS temp scratch roots
+      // `mkdtempSync(join(tmpdir(), "sirkit-b24-d2-proc-"))` (`scratch`, collected and removed as `root`) and nothing else; its real
+      // process tree's child writes its pid file inside `scratch` with a primitive named at run time. EVERY write-primitive line must be
+      // rooted at one of them, or the admission lapses.
+      "b24-d2-process-cleanup.test.ts": (source) =>
+        source.includes('mkdtempSync(join(tmpdir(), "sirkit-b24-d2-proc-"))')
+        && !source.split("\n").some((line) =>
+          /(?:writeFileSync|mkdirSync|rmSync|appendFileSync|unlinkSync|cpSync|rmdirSync|createWriteStream|symlinkSync|linkSync)\s*\(/.test(line)
+          && !/\b(?:scratch|root)\b/.test(line)),
     };
 
     const offenders: string[] = [];

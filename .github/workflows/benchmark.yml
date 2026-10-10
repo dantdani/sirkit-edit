@@ -90,6 +90,9 @@ jobs:
   # decision D3); unmeasured, sample_shortfall and a regression always do. Every trigger of the workflow runs it (no if:). The results
   # go outside the repository; route-bench runs unchanged as its own step (its two absolute budgets stay, OD-234's question). The
   # gate, route-bench and headroom steps each run after an earlier red step and fail on their own; nothing is retried.
+  # [B24-D2] D24-29, OD-212's memory half: b24-d2-memory rides the same vitest step and flag. --expose-gc goes to this step's workers
+  # only, named twice on purpose: vitest's CLI hands ONE value to the forks pool as a string, which it spreads into characters (the
+  # worker hangs; measured locally 2026-10-09), and two make the array the pool expects. No vitest.config.ts change.
   benchmark-latency:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -107,7 +110,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run app/lib/qualification/__tests__/b24-d1-latency.test.ts app/lib/qualification/__tests__/b24-d1-latency-workflow.test.ts --no-file-parallelism --reporter=dot --reporter=junit --outputFile=vitest-benchmark-latency.xml
+      - run: pnpm exec vitest run app/lib/qualification/__tests__/b24-d1-latency.test.ts app/lib/qualification/__tests__/b24-d1-latency-workflow.test.ts app/lib/qualification/__tests__/b24-d2-memory.test.ts --no-file-parallelism --poolOptions.forks.execArgv=--expose-gc --poolOptions.forks.execArgv=--expose-gc --reporter=dot --reporter=junit --outputFile=vitest-benchmark-latency.xml
         env:
           SIRKIT_B24_BENCHMARK: "1"
       - if: success() || failure()

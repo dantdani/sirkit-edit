@@ -277,7 +277,7 @@ export const POST = authenticatedJsonRoute({ maxBytes: MAX_BODY_BYTES, deadlineM
         {
           error: e.kind === "cli-missing" ? "kicad-cli-missing" : "kicad-cli-failed",
           message: e.message,
-          stderr: e.stderr.slice(-4000) || undefined,
+          stderr: e.stderr.slice(-4000) || undefined, ...(e.killConfirmed !== undefined ? { killConfirmed: e.killConfirmed } : {}), // [B24-D2 review, 2026-10-09] D24-31: an unconfirmed kill (a possible orphan) is said, never folded into a plain failure
         },
         { status: 500 },
       );

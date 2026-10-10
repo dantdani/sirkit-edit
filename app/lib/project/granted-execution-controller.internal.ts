@@ -50,3 +50,5 @@ export async function cancelGrantedExecution(input: { grant: PublicExecutionGran
 export function recoverGrantedExecutionsForEditor(input: Omit<GrantedExecutionRecoveryInput, "transport"> & { transport?: ExecutionGrantTransport }): Promise<GrantedExecutionRecoveryResult[]> {
   return recoverGrantedExecutions({ ...input, transport: input.transport ?? createExecutionGrantTransport() });
 }
+
+export { executionRecoveryNotice } from "../engineering/granted-executions"; // [B24-D2B, 2026-10-10] the editor's recovery notice, from the sweep's results (OD-214)

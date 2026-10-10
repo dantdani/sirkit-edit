@@ -18,7 +18,7 @@
  * Scope: every file vitest includes (vitest.config.ts: app/**+/__tests__/*.test.ts(x)), each marked with the CI jobs that select it
  * (the positional-substring rule of b19-e-ci-job-scope, net of prompt-to-gerber's `--exclude` lines since B24-D0; benchmark-core is
  * the stage-09 file plus `stage10:test`'s directory, benchmark-nightly adds the stage-08 file and the corpus suite). The two
- * benchmark-latency suites are excluded. `classifyThresholdCensus` joins the rows to the hand classification
+ * benchmark-latency suites are excluded ([B24-D2, 2026-10-09] three: + b24-d2-memory). `classifyThresholdCensus` joins the rows to the hand classification
  * (threshold-classification.ts): a CI `elapsed` row without a classification fails, so does a classification without a row, a
  * `performance` row left in CI, a moved marker naming an uncatalogued metric, a moved marker with no classification, and a kept row
  * that records nothing it disproves. The walk is async and yields between files; it reads files and never writes.
@@ -42,7 +42,7 @@ export const VI_WAIT_FOR_DEFAULT_MS = 1_000;
 export const CENSUS_JOBS = Object.freeze(["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "agent-boundary-suites"] as const);
 export type CensusJob = (typeof CENSUS_JOBS)[number];
 /** The two suites the benchmark-latency job runs: outside the census by design (their budgets are the job's). */
-export const CENSUS_EXCLUDED_FILES = Object.freeze(["app/lib/qualification/__tests__/b24-d1-latency.test.ts", "app/lib/qualification/__tests__/b24-d1-latency-workflow.test.ts"]);
+export const CENSUS_EXCLUDED_FILES = Object.freeze(["app/lib/qualification/__tests__/b24-d1-latency.test.ts", "app/lib/qualification/__tests__/b24-d1-latency-workflow.test.ts", "app/lib/qualification/__tests__/b24-d2-memory.test.ts"]); // [B24-D2, 2026-10-09] + the memory suite, the third benchmark-latency suite (its budgets are the job's too)
 const MOVED_PREFIX = ["// [B24-D1, ", "] performance bound moved to b24-d1-latency "].join("<date>");
 /** The marker a moved bound carries, assembled so this file's own text never reads as one. */
 export const MOVED_MARKER = new RegExp(`^${MOVED_PREFIX.replace("<date>", "(\\d{4}-\\d{2}-\\d{2})").replace(/[[\]]/g, (c) => `\\${c}`)}(\\S+) \\(OD-212\\)$`);

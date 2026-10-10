@@ -99,7 +99,7 @@ offline, all passing; the two opt-in live suites' 18 skipped). The final validat
   (OD-159); the placement engine has no worker entry (F1 open).
 - **FreeRouting and kicad-cli** still use direct-child kills and settle before exit (D22-9's other half), keep host environment
   allowlists with HOME, USERPROFILE and APPDATA, and have profiles no runner executes or digest-checks (D22-2, D22-5); FreeRouting still
-  runs in the shared temporary directory (D22-8); the fab archive reader inflates each entry before its total check.
+  runs in the shared temporary directory (D22-8); the fab archive reader inflates each entry before its total check. [B24-D2, 2026-10-09] D22-9's other half closed offline: both runners now end the whole tree (`app/lib/pcb/process-tree.ts`, OD-145's method) and settle on the exit or after the 5,000 ms confirm wait (`b24-d2-process-cleanup`); the host allowlists, the shared temp directory and the archive reader stand as written; the live Java and kicad-cli orphan runs are BLOCKED-LIVE-QUALIFICATION (LB-3, LB-17).
 - **CD-10 has no execution path** (D22-19 in part): its independent deck validator exists but no CD-10 path calls it, and the
   authoritative corpus has no golden outputs; execute still takes its lowering manifest and content digests from the body (D22-6 in
   part, latent behind the 409); `/api/simulate` keeps its own deck screen beside the Studio's (no one deck validator spans both; D22-4

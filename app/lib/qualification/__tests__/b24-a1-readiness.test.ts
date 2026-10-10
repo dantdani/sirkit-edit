@@ -292,7 +292,7 @@ describe("[B24-A1] health and readiness (D24-9, OD-198)", () => {
     expect(read("artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv").split(NEWLINE)[106]).toMatch(/^manufacturing\.provider-order,1,manufacturing,/);
   });
 
-  it("9. the census moves once, by these two route files: 168 route methods = 165 canonical + 3 factories + 0 raw; the agent-tool counts stay 47 / 36", { timeout: 120_000 }, () => {
+  it("9. the census moves once, by these two route files: 168 route methods = 165 canonical + 3 factories + 0 raw; the agent-tool counts stay 47 / 36", { timeout: 120_000 }, () => { // [B24-D2, 2026-10-09] the agent-tool counts are 48 / 37 since B24-D2's paged board read (OD-213), moved by review below; the route census stays
     let total = 0, canonical = 0, factories = 0, raw = 0;
     for (const file of listRouteFiles(ROOT)) {
       const src = readFileSync(file, "utf8");
@@ -304,9 +304,9 @@ describe("[B24-A1] health and readiness (D24-9, OD-198)", () => {
     }
     expect({ total, canonical, factories, raw }).toEqual({ total: 168, canonical: 165, factories: 3, raw: 0 });
     for (const path of ["app/api/health/route.ts", "app/api/ready/route.ts"]) expect(classifyRouteMethodForm(read(path), "GET", join(ROOT, path), ROOT).form, path).toBe("canonical-wrapper");
-    expect(sirkitToolRegistry().list()).toHaveLength(47);
+    expect(sirkitToolRegistry().list()).toHaveLength(48); // [B24-D2, 2026-10-09] reviewed pin move (OD-213): + the paged board read, a tool and not a route (the census above is unchanged)
     expect(sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed)).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(36);
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(37); // [B24-D2, 2026-10-09] reviewed pin move (OD-213): + the paged board read
   });
 
   it("10. /api/ready reports the deployment configuration's digest, built once per process: the same digest on every call, the record's; [B24-A1 review] regressions-1 / tests-3: with DATABASE_URL in the process (as a shell export puts it) the route's probe is the suite's guard port, never the database client", async () => {

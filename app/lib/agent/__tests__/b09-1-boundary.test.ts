@@ -283,7 +283,7 @@ describe("B09.1 §4 — fail-closed strict wire subset", () => {
     const toolset = buildRunToolset(registry, assembly.context, (message) => warnings.push(message));
     expect(toolset.declarations.some((declaration) => declaration.toolId === "sirkit.schematic.future-bad")).toBe(false);
     expect(warnings.some((message) => message.includes("sirkit.schematic.future-bad"))).toBe(true);
-    expect(toolset.declarations).toHaveLength(12); // B18-E E13: + the bounded via read; B18-E E11: + the bounded mechanical read; B10: selection.inspect needs the selection-snapshot resource, absent in this fixture context; B17-F: + placement/routing proposals (board only); view tools need a captured view context, absent here
+    expect(toolset.declarations).toHaveLength(13); // [B24-D2, 2026-10-09] was 12: + the bounded paged board read (sirkit.pcb.board-page-inspect, OD-213; board only, as the via read); B18-E E13: + the bounded via read; B18-E E11: + the bounded mechanical read; B10: selection.inspect needs the selection-snapshot resource, absent in this fixture context; B17-F: + placement/routing proposals (board only); view tools need a captured view context, absent here
   });
 });
 

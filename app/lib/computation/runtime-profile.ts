@@ -437,7 +437,7 @@ function ngspiceOci(read: ServerSettingReader): ProfileBody {
 function kicadCli(read: ServerSettingReader): ProfileBody {
   return {
     profileId: "kicad-cli-local-diagnostic",
-    revision: 1,
+    revision: 2, // [B24-D2, 2026-10-09] revision 2: the runner's tree kill (app/lib/pcb/process-tree.ts, OD-145) and a result that waits for the exit or the confirm wait - an immutable profile changes only by revision
     providerRevisionId: "unbound",
     simulatorVersion: "kicad-cli (version UNKNOWN)",
     operatingSystemAndArchitecture: "win32-x64",
@@ -488,9 +488,9 @@ function kicadCli(read: ServerSettingReader): ProfileBody {
       environment: { mode: "host-allowlist", keys: ["PATH", "Path", "PATHEXT", "SystemRoot", "SystemDrive", "WINDIR", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "HOME", "LANG", "LD_LIBRARY_PATH", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "KICAD_CONFIG_HOME"], plus: ["NODE_ENV"] },
       wallClock: "60 s per invocation (CLI_TIMEOUT_MS)",
       outputBound: "each stream held to twice 64 KiB and returned within 64 KiB; gerber and drill files read through the 64 MiB bounded reader (B22-A1)",
-      kill: "SIGKILL of the direct child on timeout; the result resolves before the process exits (D22-9)",
+      kill: "on timeout, the tree kill (app/lib/pcb/process-tree.ts, OD-145's method: taskkill /PID /T /F under the checked Windows directory on win32, SIGKILL to the detached child's process group on POSIX); the result waits for the child's close or the 5,000 ms confirm wait (killConfirmed) - B24-D2 (D22-9's FreeRouting and kicad-cli half)",
       cwd: "the per-build mkdtemp directory (sirkit-fab-), removed in finally",
-      deviations: [...LOCAL_DEVIATIONS, "terminal-before-exit", "caller-influenced-argv"],
+      deviations: [...LOCAL_DEVIATIONS.filter((deviation) => deviation !== "direct-child-kill"), "caller-influenced-argv"], // [B24-D2, 2026-10-09] - direct-child-kill and terminal-before-exit: the runner's tree kill waits for the exit
     },
   };
 }
@@ -498,7 +498,7 @@ function kicadCli(read: ServerSettingReader): ProfileBody {
 function freerouting(read: ServerSettingReader): ProfileBody {
   return {
     profileId: "freerouting-local-diagnostic",
-    revision: 1,
+    revision: 2, // [B24-D2, 2026-10-09] revision 2: the runner's tree kill (app/lib/pcb/process-tree.ts, OD-145) and a result that waits for the exit or the confirm wait - an immutable profile changes only by revision
     providerRevisionId: "unbound",
     simulatorVersion: "freerouting-2.2.4",
     operatingSystemAndArchitecture: "win32-x64",
@@ -546,9 +546,9 @@ function freerouting(read: ServerSettingReader): ProfileBody {
       environment: { mode: "host-allowlist", keys: ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "HOME", "LANG"], plus: ["NODE_ENV"] },
       wallClock: "300 s default (runner.ts); the autoroute route and the pass executor pass their own deadline",
       outputBound: "the joined diagnostics within 64 KiB, stderr keeping its own share; the session file read through the 64 MiB bounded reader (B22-A1)",
-      kill: "SIGKILL of the direct child on abort and on timeout; the result resolves before the process exits (D22-9)",
+      kill: "on abort and on timeout, the tree kill (app/lib/pcb/process-tree.ts, OD-145's method: taskkill /PID /T /F under the checked Windows directory on win32, SIGKILL to the detached child's process group on POSIX); the result waits for the child's close or the 5,000 ms confirm wait (killConfirmed), and the temporary files are removed after it - B24-D2 (D22-9's FreeRouting and kicad-cli half)",
       cwd: "the shared OS temp directory, with uuid-named input and output files there (D22-8)",
-      deviations: [...LOCAL_DEVIATIONS, "terminal-before-exit", "shared-temp-cwd", "caller-influenced-argv"],
+      deviations: [...LOCAL_DEVIATIONS.filter((deviation) => deviation !== "direct-child-kill"), "shared-temp-cwd", "caller-influenced-argv"], // [B24-D2, 2026-10-09] - direct-child-kill and terminal-before-exit: the runner's tree kill waits for the exit
     },
   };
 }
