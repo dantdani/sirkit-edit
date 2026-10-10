@@ -28,7 +28,7 @@ them are `ba4f562`'s, as they were read).
   expected) was not enough margin against a seven-minute runner variance once C3's run read 21 min 33 s (headroom 3 min 27 s).
   **RECORDED** (task-D0, "The lead's decision after the measurement"; recorded by the lead under OD-30, no new OD number).
 - **What D0 did (the split).** By insertions only - no existing workflow line removed, reordered or edited: 38 `--exclude '<pattern>'`
-  lines inserted before prompt-to-gerber's `--reporter` line (`deterministic-manufacturing.yml:293-330`, C8-C11; the `--reporter`
+  lines inserted before prompt-to-gerber's `--reporter` line (`deterministic-manufacturing.yml:293-330`; [B24-D1, 2026-10-09] now `:294-331` after B24-D1's prompt-to-gerber start step at `:32`; C8-C11; the `--reporter`
   line is now `:331`, C2) and the job `agent-boundary-suites` appended at the end (`:551-616`: one blank line, three comment lines,
   the job at `:555`, C12-C14) with `timeout-minutes: 20`, prompt-to-gerber's checkout, pnpm, node and install steps verbatim, one
   folded vitest step listing exactly the 38 items in prompt-to-gerber's order with the reporter line last, and an `if: always()`
@@ -52,7 +52,7 @@ them are `ba4f562`'s, as they were read).
 ## 1. The measurement
 
 One local run of prompt-to-gerber's own vitest selection, read from the step's folded scalar (first entry after `pnpm exec vitest run`
-to the line before `--reporter`, `deterministic-manufacturing.yml:52-292`; the line `app/api/pcb/qualify app/api/pcb/release` splits as
+to the line before `--reporter`, `deterministic-manufacturing.yml:52-292` ([B24-D1, 2026-10-09] now `:53-293`); the line `app/api/pcb/qualify app/api/pcb/release` splits as
 the shell splits it): 242 entries, 21 of them directory filters. Through the lead's runner (two workers, the global lock), with
 `--reporter=dot --reporter=junit --outputFile=...` (the dot reporter added beside the junit one the task named, so the log carries
 vitest's own summary as CI's does): started 04:48:26, ended 04:59:41 local on 2026-10-09; vitest `Duration 670.97s (transform 23.11s,
@@ -232,46 +232,46 @@ line of `agent-boundary-suites` (`:570-607`); the first column is the item's own
 
 | line | item | files | testcase time (s) | share |
 |---|---|---|---|---|
-| `:98` | `app/lib/project/__tests__/b18-b-import-gates.test.ts` | 1 | 29.52 | 3.2 % |
-| `:125` | `app/lib/distributors/__tests__/b19-distributor-egress.test.ts` | 1 | 2.63 | 0.3 % |
-| `:131` | `app/lib/mcp` | 45 | 181.28 | 19.5 % |
-| `:136` | `app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts` | 1 | 3.94 | 0.4 % |
-| `:138` | `app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts` | 1 | 5.29 | 0.6 % |
-| `:154` | `app/lib/distributors/__tests__/b19-connector-policy.test.ts` | 1 | 5.58 | 0.6 % |
-| `:161` | `app/lib/distributors/__tests__/b19-d-exact-mpn-connectors.test.ts` | 1 | 3.50 | 0.4 % |
-| `:207` | `app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx` | 1 | 2.31 | 0.2 % |
-| `:226` | `app/lib/computation/__tests__` | 28 | 51.02 | 5.5 % |
-| `:229` | `app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts` | 1 | 10.39 | 1.1 % |
-| `:252` | `app/lib/engineering/__tests__/b18-c-result-contract.test.ts` | 1 | 2.27 | 0.2 % |
-| `:254` | `app/lib/engineering/__tests__/b18-c-review-3.test.ts` | 1 | 5.34 | 0.6 % |
-| `:255` | `app/lib/engineering/__tests__/b18-c-review-fixes.test.ts` | 1 | 2.04 | 0.2 % |
-| `:260` | `app/lib/agent/__tests__/b09-1-boundary.test.ts` | 1 | 0.67 | 0.1 % |
-| `:261` | `app/lib/agent/__tests__/b09-1-recovery.test.tsx` | 1 | 0.00 | 0.0 % |
-| `:262` | `app/lib/agent/__tests__/b09-2-closure.test.ts` | 1 | 0.12 | 0.0 % |
-| `:263` | `app/lib/agent/__tests__/b09-2-recovery.test.tsx` | 1 | 0.00 | 0.0 % |
-| `:264` | `app/lib/agent/__tests__/b09-3-closure.test.ts` | 1 | 0.24 | 0.0 % |
-| `:266` | `app/lib/agent/__tests__/b09-proposals.test.ts` | 1 | 0.07 | 0.0 % |
-| `:267` | `app/lib/agent/__tests__/b09-provider-contracts.test.ts` | 1 | 0.00 | 0.0 % |
-| `:268` | `app/lib/agent/__tests__/b10-1-strict-mode-publisher.test.tsx` | 1 | 0.03 | 0.0 % |
-| `:269` | `app/lib/agent/__tests__/b10-editor-context.test.ts` | 1 | 0.12 | 0.0 % |
-| `:270` | `app/lib/agent/__tests__/b11-1-trace-integrity.test.ts` | 1 | 0.77 | 0.1 % |
-| `:271` | `app/lib/agent/__tests__/b11-2-replay-context.test.ts` | 1 | 1.01 | 0.1 % |
-| `:272` | `app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts` | 1 | 24.90 | 2.7 % |
-| `:273` | `app/lib/agent/__tests__/b11-4-capture-ownership.test.ts` | 1 | 0.98 | 0.1 % |
-| `:274` | `app/lib/agent/__tests__/b11-4-no-execution.test.ts` | 1 | 0.46 | 0.0 % |
-| `:275` | `app/lib/agent/__tests__/b11-5-capture-exactness.test.ts` | 1 | 1.01 | 0.1 % |
-| `:276` | `app/lib/agent/__tests__/b11-6-projection-ownership.test.ts` | 1 | 0.59 | 0.1 % |
-| `:277` | `app/lib/agent/__tests__/b11-7-primitive-discipline.test.ts` | 1 | 0.60 | 0.1 % |
-| `:279` | `app/api/chat/__tests__/b10-1-request-boundary.test.ts` | 1 | 0.03 | 0.0 % |
-| `:280` | `app/api/chat/__tests__/b10-2-closure.test.ts` | 1 | 0.12 | 0.0 % |
-| `:281` | `app/api/chat/__tests__/b10-chat-boundary.test.ts` | 1 | 0.09 | 0.0 % |
-| `:282` | `app/api/chat/__tests__/b11-1-route-finalization.test.ts` | 1 | 0.15 | 0.0 % |
-| `:283` | `app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts` | 1 | 33.50 | 3.6 % |
-| `:284` | `app/lib/auth/__tests__/b16-0-2-gates.test.ts` | 1 | 27.43 | 2.9 % |
-| `:285` | `app/api/__tests__/b16-0-auth-route-coverage.test.ts` | 1 | 0.02 | 0.0 % |
-| `:286` | `app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts` | 1 | 0.80 | 0.1 % |
+| `:99` | `app/lib/project/__tests__/b18-b-import-gates.test.ts` | 1 | 29.52 | 3.2 % |
+| `:126` | `app/lib/distributors/__tests__/b19-distributor-egress.test.ts` | 1 | 2.63 | 0.3 % |
+| `:132` | `app/lib/mcp` | 45 | 181.28 | 19.5 % |
+| `:137` | `app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts` | 1 | 3.94 | 0.4 % |
+| `:139` | `app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts` | 1 | 5.29 | 0.6 % |
+| `:155` | `app/lib/distributors/__tests__/b19-connector-policy.test.ts` | 1 | 5.58 | 0.6 % |
+| `:162` | `app/lib/distributors/__tests__/b19-d-exact-mpn-connectors.test.ts` | 1 | 3.50 | 0.4 % |
+| `:208` | `app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx` | 1 | 2.31 | 0.2 % |
+| `:227` | `app/lib/computation/__tests__` | 28 | 51.02 | 5.5 % |
+| `:230` | `app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts` | 1 | 10.39 | 1.1 % |
+| `:253` | `app/lib/engineering/__tests__/b18-c-result-contract.test.ts` | 1 | 2.27 | 0.2 % |
+| `:255` | `app/lib/engineering/__tests__/b18-c-review-3.test.ts` | 1 | 5.34 | 0.6 % |
+| `:256` | `app/lib/engineering/__tests__/b18-c-review-fixes.test.ts` | 1 | 2.04 | 0.2 % |
+| `:261` | `app/lib/agent/__tests__/b09-1-boundary.test.ts` | 1 | 0.67 | 0.1 % |
+| `:262` | `app/lib/agent/__tests__/b09-1-recovery.test.tsx` | 1 | 0.00 | 0.0 % |
+| `:263` | `app/lib/agent/__tests__/b09-2-closure.test.ts` | 1 | 0.12 | 0.0 % |
+| `:264` | `app/lib/agent/__tests__/b09-2-recovery.test.tsx` | 1 | 0.00 | 0.0 % |
+| `:265` | `app/lib/agent/__tests__/b09-3-closure.test.ts` | 1 | 0.24 | 0.0 % |
+| `:267` | `app/lib/agent/__tests__/b09-proposals.test.ts` | 1 | 0.07 | 0.0 % |
+| `:268` | `app/lib/agent/__tests__/b09-provider-contracts.test.ts` | 1 | 0.00 | 0.0 % |
+| `:269` | `app/lib/agent/__tests__/b10-1-strict-mode-publisher.test.tsx` | 1 | 0.03 | 0.0 % |
+| `:270` | `app/lib/agent/__tests__/b10-editor-context.test.ts` | 1 | 0.12 | 0.0 % |
+| `:271` | `app/lib/agent/__tests__/b11-1-trace-integrity.test.ts` | 1 | 0.77 | 0.1 % |
+| `:272` | `app/lib/agent/__tests__/b11-2-replay-context.test.ts` | 1 | 1.01 | 0.1 % |
+| `:273` | `app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts` | 1 | 24.90 | 2.7 % |
+| `:274` | `app/lib/agent/__tests__/b11-4-capture-ownership.test.ts` | 1 | 0.98 | 0.1 % |
+| `:275` | `app/lib/agent/__tests__/b11-4-no-execution.test.ts` | 1 | 0.46 | 0.0 % |
+| `:276` | `app/lib/agent/__tests__/b11-5-capture-exactness.test.ts` | 1 | 1.01 | 0.1 % |
+| `:277` | `app/lib/agent/__tests__/b11-6-projection-ownership.test.ts` | 1 | 0.59 | 0.1 % |
+| `:278` | `app/lib/agent/__tests__/b11-7-primitive-discipline.test.ts` | 1 | 0.60 | 0.1 % |
+| `:280` | `app/api/chat/__tests__/b10-1-request-boundary.test.ts` | 1 | 0.03 | 0.0 % |
+| `:281` | `app/api/chat/__tests__/b10-2-closure.test.ts` | 1 | 0.12 | 0.0 % |
+| `:282` | `app/api/chat/__tests__/b10-chat-boundary.test.ts` | 1 | 0.09 | 0.0 % |
+| `:283` | `app/api/chat/__tests__/b11-1-route-finalization.test.ts` | 1 | 0.15 | 0.0 % |
+| `:284` | `app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts` | 1 | 33.50 | 3.6 % |
+| `:285` | `app/lib/auth/__tests__/b16-0-2-gates.test.ts` | 1 | 27.43 | 2.9 % |
+| `:286` | `app/api/__tests__/b16-0-auth-route-coverage.test.ts` | 1 | 0.02 | 0.0 % |
+| `:287` | `app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts` | 1 | 0.80 | 0.1 % |
 
-The moved set: **398.84 s** of the measured 931.21 s (42.8 %), 109 files, 38 items - the task's "at least 40 %" holds
+The moved set: **398.84 s** of the measured 931.21 s (42.8 %), 109 files, 38 items - the task's "at least 40 %" holds [B24-D1, 2026-10-09] the first column (each item's positional line in prompt-to-gerber) moved +1 after B24-D1's prompt-to-gerber start step at `:32`; `b24-d0-ci-split` 8 derives it from the tree.
 (`b24-d0-ci-split` 9). Every moved file is database-free (no suite under the two filters or among the 36 imports
 `app/lib/db/disposable-postgres`, by the guard's detector and the helper's: `b19-e-ci-job-scope`, `b24-d0-ci-split` 7). The opt-in
 live suites under the moved filters (`b22-a3-runner-live`, `b22-d-adversarial-live`, under `app/lib/computation/__tests__`) move with
@@ -286,7 +286,7 @@ the xml and the tree).
 suite and B19-E's explicit expectations, and this suite. The 242 positional lines are untouched; the step's folded scalar gained only
 the 38 `--exclude` lines (a `#` would have been a shell comment and swallowed every later argument, so nothing was commented out).
 
-**The new job** (`deterministic-manufacturing.yml:551-616`): one blank line (`:551`), three `  # [B24-D0]` comment lines
+**The new job** (`deterministic-manufacturing.yml:551-616`; [B24-D1, 2026-10-09] the block is `:557-625` after B24-D1's OD-30 steps: every number in this paragraph moves +6 up to `:558` and +7 from `:559` on, the job's start step sits at `:565` after `steps:` and its headroom step at `:624-625`): one blank line (`:551`), three `  # [B24-D0]` comment lines
 (`:552-554`), `agent-boundary-suites:` (`:555`, C12), `runs-on: ubuntu-latest`, `timeout-minutes: 20`, prompt-to-gerber's nine
 checkout, pnpm, node and install lines verbatim (`:559-567`), `- run: >-` with `pnpm exec vitest run` (`:568-569`), the 38 items
 (`:570-607`), `--reporter=dot --reporter=junit --outputFile=vitest-agent-boundary-suites.xml` last (`:608`, C13), and `Upload
@@ -485,7 +485,7 @@ Each carries a dated `[B24-D0, 2026-10-09]` note on its own line:
 - `edge-security.md:542` (B24-A2, (i)): "`secret-scan` appended after every job ... so no cited line moves" - D0 appended
   `agent-boundary-suites` after it; secret-scan is the last job no more.
 - `artifacts/ai-control-plane-b22/deck-and-secret-corrections.md:285` (B22-A1): "one directory filter `app/lib/computation/__tests__`
-  in `prompt-to-gerber` (workflow `:226` ...)" - the line stays at `:226`, prompt-to-gerber excludes it (`:301`) and the suites run in
+  in `prompt-to-gerber` (workflow `:226` ...)" - the line stays at `:226`, prompt-to-gerber excludes it (`:301`) and the suites run in ([B24-D1, 2026-10-09] `:227` and `:302` after B24-D1's prompt-to-gerber start step at `:32`)
   the new job.
 - `artifacts/ai-control-plane-b20/mcp-client-boundary.md:41` and `mcp-provider-connectors.md:254` (B20): "`app/lib/mcp` is a
   `prompt-to-gerber` directory filter", "all under the `app/lib/mcp` directory filter of the prompt-to-gerber job" - the filter line
@@ -583,29 +583,29 @@ Test-first on `chapter/b24-production-qualification`, two runs. The first run (f
 | id | file | line | anchor |
 |---|---|---|---|
 | C1 | `.github/workflows/deterministic-manufacturing.yml` | 26 | `timeout-minutes: 25` |
-| C2 | `.github/workflows/deterministic-manufacturing.yml` | 331 | `--reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml` |
-| C3 | `.github/workflows/deterministic-manufacturing.yml` | 227 | `app/lib/manufacturing-providers/__tests__` |
-| C4 | `.github/workflows/deterministic-manufacturing.yml` | 131 | `app/lib/mcp` |
-| C5 | `.github/workflows/deterministic-manufacturing.yml` | 228 | `app/lib/qualification/__tests__` |
-| C6 | `.github/workflows/deterministic-manufacturing.yml` | 132 | `app/lib/agent/orchestration/__tests__` |
-| C7 | `.github/workflows/deterministic-manufacturing.yml` | 226 | `app/lib/computation/__tests__` |
-| C8 | `.github/workflows/deterministic-manufacturing.yml` | 293 | `--exclude 'app/lib/project/__tests__/b18-b-import-gates.test.ts'` |
-| C9 | `.github/workflows/deterministic-manufacturing.yml` | 295 | `--exclude 'app/lib/mcp/**'` |
-| C10 | `.github/workflows/deterministic-manufacturing.yml` | 301 | `--exclude 'app/lib/computation/__tests__/**'` |
-| C11 | `.github/workflows/deterministic-manufacturing.yml` | 330 | `--exclude 'app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts'` |
-| C12 | `.github/workflows/deterministic-manufacturing.yml` | 555 | `agent-boundary-suites:` |
-| C13 | `.github/workflows/deterministic-manufacturing.yml` | 608 | `--outputFile=vitest-agent-boundary-suites.xml` |
-| C14 | `.github/workflows/deterministic-manufacturing.yml` | 613 | `name: agent-boundary-suites-diagnostics` |
+| C2 | `.github/workflows/deterministic-manufacturing.yml` | 332 | `--reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml` |
+| C3 | `.github/workflows/deterministic-manufacturing.yml` | 228 | `app/lib/manufacturing-providers/__tests__` |
+| C4 | `.github/workflows/deterministic-manufacturing.yml` | 132 | `app/lib/mcp` |
+| C5 | `.github/workflows/deterministic-manufacturing.yml` | 229 | `app/lib/qualification/__tests__` |
+| C6 | `.github/workflows/deterministic-manufacturing.yml` | 133 | `app/lib/agent/orchestration/__tests__` |
+| C7 | `.github/workflows/deterministic-manufacturing.yml` | 227 | `app/lib/computation/__tests__` |
+| C8 | `.github/workflows/deterministic-manufacturing.yml` | 294 | `--exclude 'app/lib/project/__tests__/b18-b-import-gates.test.ts'` |
+| C9 | `.github/workflows/deterministic-manufacturing.yml` | 296 | `--exclude 'app/lib/mcp/**'` |
+| C10 | `.github/workflows/deterministic-manufacturing.yml` | 302 | `--exclude 'app/lib/computation/__tests__/**'` |
+| C11 | `.github/workflows/deterministic-manufacturing.yml` | 331 | `--exclude 'app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts'` |
+| C12 | `.github/workflows/deterministic-manufacturing.yml` | 561 | `agent-boundary-suites:` |
+| C13 | `.github/workflows/deterministic-manufacturing.yml` | 615 | `--outputFile=vitest-agent-boundary-suites.xml` |
+| C14 | `.github/workflows/deterministic-manufacturing.yml` | 620 | `name: agent-boundary-suites-diagnostics` |
 | C15 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 253 | `it("[B24-D0, 2026-10-09] OD-30's split:` |
-| C16 | `app/lib/qualification/__tests__/_ci-admission.ts` | 100 | `function foldedVitestStep(lines: readonly string[], key: string, file: string): FoldedStep {` |
-| C17 | `app/lib/qualification/__tests__/_ci-admission.ts` | 216 | `const runs = (step: FoldedStep, path: string): boolean =>` |
+| C16 | `app/lib/qualification/__tests__/_ci-admission.ts` | 101 | `function foldedVitestStep(lines: readonly string[], key: string, file: string): FoldedStep {` |
+| C17 | `app/lib/qualification/__tests__/_ci-admission.ts` | 220 | `const runs = (step: FoldedStep, path: string): boolean =>` |
 | C18 | `app/lib/evaluation/golden-catalog.ts` | 83 | `export const CATALOG_CI_JOBS = ["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "page-browser-e2e", "agent-boundary-suites"] as const;` |
 | C19 | `app/lib/evaluation/golden-catalog.ts` | 86 | `export const PULL_REQUEST_CI_JOBS: readonly CatalogCiJob[] = Object.freeze(["prompt-to-gerber", "database-delivery", "benchmark-core", "page-browser-e2e", "agent-boundary-suites"]);` |
 | C20 | `app/lib/evaluation/scenario-map.ts` | 86 | `const AGENT_BOUNDARY = ["agent-boundary-suites"];` |
 | C21 | `app/lib/evaluation/scenario-map.ts` | 402 | `export function recordedCiJobsOf(rows: readonly ScenarioRow[]): (path: string) => readonly string[] {` |
 | C22 | `app/lib/qualification/__tests__/b24-b2-ci-admission.test.ts` | 146 | `const runsIn = (path: string)` |
 | C23 | `app/lib/qualification/__tests__/b24-b1-catalog.test.ts` | 293 | `CI_ADMISSION_ANCHORS.agentBoundary]` |
-| C24 | `app/lib/qualification/__tests__/b24-a1-environment-profile.test.ts` | 643 | `expect(insertionRowsOf(planned.page)).toHaveLength(15);` |
+| C24 | `app/lib/qualification/__tests__/b24-a1-environment-profile.test.ts` | 643 | `expect(insertionRowsOf(planned.page)).toHaveLength(17);` |
 | C25 | `app/lib/qualification/__tests__/b24-a2-secret-scan.test.ts` | 187 | `const last = all.indexOf("  secret-scan:");` |
 | C26 | `artifacts/remaining-builder-program/OWNER_DECISIONS.md` | 104 | `## OD-30 — CI time (B18-E, 2026-09-11)` |
 | C27 | `artifacts/remaining-builder-program/OWNER_DECISIONS.md` | 112 | `- [B24-C2 lead, 2026-10-09] B24-C1's CI run (37872711743 at` |
@@ -629,6 +629,10 @@ Test-first on `chapter/b24-production-qualification`, two runs. The first run (f
 | C45 | `artifacts/ai-control-plane-b24/observability-and-replay.md` | 526 | `deterministic-manufacturing.yml:378` |
 | C46 | `artifacts/ai-control-plane-b24/observability-and-replay.md` | 1336 | `deterministic-manufacturing.yml:380` |
 | C47 | `artifacts/ai-control-plane-b24/retention-and-deletion.md` | 274 | `deterministic-manufacturing.yml:379` |
-| C48 | `app/lib/qualification/__tests__/b24-d0-ci-split.test.ts` | 590 | `it("12. [B24-D0 review, 2026-10-09] the review round` |
+| C48 | `app/lib/qualification/__tests__/b24-d0-ci-split.test.ts` | 607 | `it("12. [B24-D0 review, 2026-10-09] the review round` |
 | C49 | `app/lib/deployment/secret-scan.ts` | 34 | `export const SECRET_SCAN_RULES: readonly SecretScanRule[] = Object.freeze([` |
 | C50 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 95 | `describe("[B19-E E2 review] CI job scope", () => {` |
+
+- [B24-D1 lead, 2026-10-09] C24's anchor re-pinned in place, `toHaveLength(15)` -> `toHaveLength(17)`: the lead's reviewed move of A1 case 16 after B24-D1's six insertion rows (A1 planned four groups for D1; lead decision D19 added agent-boundary-suites's two).
+
+[B24-D1, 2026-10-09] C2-C14 re-pinned in place after B24-D1's OD-30 steps (prompt-to-gerber's start step at `:32`, +1 from `:32`; its headroom step at `:344-345`, +2 more from `:343`; page-browser-e2e's start and headroom steps at `:405` and `:432-433`, +1 and +2 more from `:402` and `:428`; agent-boundary-suites's start step at `:565`, +1 more from `:559`); C45-C47 stand on their lines, which keep their text with a dated note. [B24-D1, 2026-10-09] C16 and C17 re-pinned 100 -> 101 and 216 -> 220 (`_ci-admission.ts` gained the benchmark-latency job's id, anchor, filter, env and jobsOf lines before them); C48 re-pinned 590 -> 607 (the dated pin moves in cases 1, 5, 7, 10 and 11 of this suite, above case 12).

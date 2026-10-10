@@ -222,13 +222,13 @@ describe("[B24-A2] the environment-name census (D24-4, OD-195)", () => {
     expect(FLAG_INVENTORY.some((entry) => entry.name === "KICAD_HTTP_LIBRARY_TOKEN_PREVIOUS")).toBe(false);
   });
 
-  it("5. the census by class, counted (the page states the same counts); B24-D1's three names are no rows yet (no file reads them at A2's tree), and the classes they will take - qualification-opt-in and platform through live-test-gate and tooling - are undeclared, so they need no new class and no .env.example line", () => {
+  it("5. the census by class, counted (the page states the same counts); B24-D1's three names are no rows yet (no file reads them at A2's tree), and the classes they will take - qualification-opt-in and platform through live-test-gate and tooling - are undeclared, so they need no new class and no .env.example line; [B24-D1, 2026-10-09] reviewed pin move: landed - the three are read and are rows (qualification-opt-in and platform, D16), and GITHUB_STEP_SUMMARY with them (platform)", () => {
     const counts = Object.fromEntries(ENVIRONMENT_NAME_CLASSES.map((name) => [name, ENVIRONMENT_NAMES.filter((row) => row.class === name).length]));
     expect(counts).toEqual(CLASS_COUNTS);
     expect(ENVIRONMENT_NAMES).toHaveLength(Object.values(CLASS_COUNTS).reduce((sum, count) => sum + count, 0));
-    for (const name of ["SIRKIT_B24_BENCHMARK", "SIRKIT_B24_BENCHMARK_DIR", "SIRKIT_JOB_STARTED_AT"]) {
-      expect(scan.hits.has(name), name).toBe(false);
-      expect(ROWS.has(name), name).toBe(false);
+    for (const name of ["SIRKIT_B24_BENCHMARK", "SIRKIT_B24_BENCHMARK_DIR", "SIRKIT_JOB_STARTED_AT", "GITHUB_STEP_SUMMARY"]) { // [B24-D1, 2026-10-09] reviewed pin move: read and rows since B24-D1 (was: neither, at A2's tree)
+      expect(scan.hits.has(name), name).toBe(true);
+      expect(ROWS.get(name)?.class, name).toBe(name === "SIRKIT_B24_BENCHMARK" ? "qualification-opt-in" : "platform");
     }
     expect(DECLARED.has(KIND_TO_CLASS["live-test-gate"])).toBe(false);
     expect(DECLARED.has(KIND_TO_CLASS.tooling)).toBe(false);
@@ -295,9 +295,9 @@ describe("[B24-A2] .env.example parity (D24-4, OD-195)", () => {
     const a1 = read("artifacts/ai-control-plane-b24/environments-and-deployment.md");
     const three = a1.slice(a1.indexOf(`${NEWLINE}## 3. `), a1.indexOf(`${NEWLINE}## 4. `));
     const secrets = FLAG_INVENTORY.filter((entry) => entry.kind === "secret").length;
-    expect([FLAG_INVENTORY.length, secrets]).toEqual([62, 5]); // [B24-A3, 2026-10-06] reviewed pin move: 51 -> 52, B24-A3's SIRKIT_TRUSTED_CLIENT_IP_HEADER (configuration); A2's note keeps its 49 -> 51 and A3's dated note on the same line gives 51 -> 52; [B24-B3, 2026-10-08] reviewed pin move: 52 -> 62, the ten live-test-gate names of B24-B3's live-suite registry (OD-209)
+    expect([FLAG_INVENTORY.length, secrets]).toEqual([65, 5]); // [B24-A3, 2026-10-06] reviewed pin move: 51 -> 52, B24-A3's SIRKIT_TRUSTED_CLIENT_IP_HEADER (configuration); A2's note keeps its 49 -> 51 and A3's dated note on the same line gives 51 -> 52; [B24-B3, 2026-10-08] reviewed pin move: 52 -> 62, the ten live-test-gate names of B24-B3's live-suite registry (OD-209); [B24-D1, 2026-10-09] reviewed pin move: 62 -> 65, B24-D1's SIRKIT_B24_BENCHMARK (live-test-gate), SIRKIT_B24_BENCHMARK_DIR and SIRKIT_JOB_STARTED_AT (tooling) (OD-212, OD-30)
     const notes = three.split(NEWLINE).filter((line) => line.includes("[B24-A2, 2026-10-06]"));
-    expect(notes.join(" ")).toContain("49 -> 51"); expect(three.split(NEWLINE).filter((line) => line.includes("[B24-A3, 2026-10-06]")).join(" ")).toContain("51 -> 52"); expect(three.split(NEWLINE).filter((line) => line.includes("[B24-B3, 2026-10-08]")).join(" ")).toContain(`52 -> ${FLAG_INVENTORY.length}`); // [B24-B3, 2026-10-08] reviewed pin move: A3's note is held to its own 51 -> 52 and the size now rides B24-B3's dated note (was `51 -> ${FLAG_INVENTORY.length}` on A3's)
+    expect(notes.join(" ")).toContain("49 -> 51"); expect(three.split(NEWLINE).filter((line) => line.includes("[B24-A3, 2026-10-06]")).join(" ")).toContain("51 -> 52"); expect(three.split(NEWLINE).filter((line) => line.includes("[B24-B3, 2026-10-08]")).join(" ")).toContain("52 -> 62"); expect(three.split(NEWLINE).filter((line) => line.includes("[B24-D1, 2026-10-09]")).join(" ")).toContain(`62 -> ${FLAG_INVENTORY.length}`); // [B24-B3, 2026-10-08] reviewed pin move: A3's note is held to its own 51 -> 52 and the size now rides B24-B3's dated note (was `51 -> ${FLAG_INVENTORY.length}` on A3's); [B24-D1, 2026-10-09] reviewed pin move: B3's note is held to its own 52 -> 62 and the size now rides B24-D1's dated note
     expect(notes.join(" ")).toContain(`secret (3) -> secret (${secrets})`);
     for (const name of ["SIRKIT_MCP_TOKEN_SECRET_PREVIOUS", "SIRKIT_WORKFLOW_WORKER_SECRET_PREVIOUS"]) expect(notes.join(" "), name).toContain(`\`${name}\``);
     // in place: section 3 still opens on A1's line 99 and section 4 on A1's line 125
@@ -313,8 +313,8 @@ const CLASS_COUNTS: Readonly<Record<string, number>> = {
   flag: 14,
   "rotation-previous": 3,
   fixture: 6,
-  "qualification-opt-in": 16, // [B24-B3, 2026-10-08] reviewed pin move: 4 -> 16, the twelve names B24-B3's live-suite registry reads (PCB_ASSIST_LIVE, SPICE_WORKER_LIVE and the ten live-test-gate names; D16, OD-209)
-  platform: 8,
+  "qualification-opt-in": 17, // [B24-B3, 2026-10-08] reviewed pin move: 4 -> 16, the twelve names B24-B3's live-suite registry reads (PCB_ASSIST_LIVE, SPICE_WORKER_LIVE and the ten live-test-gate names; D16, OD-209); [B24-D1, 2026-10-09] reviewed pin move: 16 -> 17, SIRKIT_B24_BENCHMARK (D16: live-test-gate -> qualification-opt-in; OD-212)
+  platform: 11, // [B24-D1, 2026-10-09] reviewed pin move: 8 -> 11, SIRKIT_B24_BENCHMARK_DIR and SIRKIT_JOB_STARTED_AT (D16: tooling -> platform; OD-212, OD-30) and GITHUB_STEP_SUMMARY (the runner's step-summary path B24-D1's headroom script and latency gate append to; platform, no inventory entry)
   "child-passthrough": 1,
   "not-an-environment-name": 3,
 };

@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B24",
-  "currentCheckpoint": "B24-A2F committed on chapter/b24-production-qualification (records in the ledger)",
+  "currentCheckpoint": "B24-D1 committed on chapter/b24-production-qualification (records in the ledger)",
   "status": "in_progress",
   "baseSha": "57c3b29",
   "branch": "chapter/b24-production-qualification",
-  "lastGreenSha": "b3a4f2d",
+  "lastGreenSha": "6acae24",
   "pullRequest": "draft PR (chapter/b24-production-qualification -> main) opened after the discovery commit; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
@@ -25,6 +25,6 @@
     "kicad-cli live oracle (the exported routed demo loaded and DRC-checked by a real kicad-cli): BLOCKED-LIVE-QUALIFICATION (LB-17)"
   ],
   "nextAction": "the next B24 increment in order (A1..A4, B1..B3, C1..C3, D1..D3, E, F), then the closeout and the final program report",
-  "updatedAt": "2026-10-09T09:22:39-04:00",
+  "updatedAt": "2026-10-09T20:36:50-04:00",
   "previousChapter": "B23 merged normally into main as 57c3b29 (PR #14, 2026-10-06) after green CI on f663d71; verdict PARTIAL (no provider admitted, LB-11; ordering visibly disabled, its contract tested offline only, LB-12; physical evidence defined, none exists, LB-5; no agent can release, transfer or spend; census 166/163/3/0, counts 47/36/9/27)"
 }

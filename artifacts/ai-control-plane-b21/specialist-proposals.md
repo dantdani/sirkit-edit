@@ -597,7 +597,7 @@ the base, for the reader (none of them changed in D2).
 | C47 | `app/api/chat/route.ts` | 397 | — | `const replacementFactsSource = resolveReplacementPinFactsSource();` | D21-37: the pin-facts reads, the coordinator's gateway only |
 | C48 | `app/lib/engineering/replacement-proposal-assembler.ts` | 263 | — | `return blocked("current-pin-authority-unavailable",` | D21-37: without them the replacement seal blocks |
 | C49 | `app/lib/agent/gateway.ts` | 392 | — | `currentPinFacts = await this.replacementPinFacts(instance.atomicPartRevisionId, "current");` | D21-37: the gateway reads them only when injected |
-| C50 | `.github/workflows/deterministic-manufacturing.yml` | 147 | — | `app/api/chat/__tests__/b21-d2-chat-proposals.test.ts` | the one explicit CI entry |
+| C50 | `.github/workflows/deterministic-manufacturing.yml` | 148 | — | `app/api/chat/__tests__/b21-d2-chat-proposals.test.ts` | the one explicit CI entry [B24-D1, 2026-10-09] re-pinned +1: B24-D1's prompt-to-gerber start step at `:32` (OD-30) |
 | C51 | `app/lib/agent/loop.ts` | 454 | — | `refuse("proposal_exists", proposalIssued ?` | the loop's own single-flight: a second proposal in one run is refused `proposal_exists` (unchanged) |
 | C52 | `app/api/chat/orchestration-runtime.ts` | 172 | — | `export const ORCHESTRATION_TRACE_LINES_MAX = 12;` | the orchestration trace cap an always-recorded line passes |
 | C53 | `app/lib/agent/orchestration/scheduler.ts` | 109 | — | `artifactHeld?: boolean;` | [fix] the coordinator run's fact: its own turn already handed the human an artifact (OD-122) |

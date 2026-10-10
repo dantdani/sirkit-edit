@@ -16,6 +16,7 @@ import { executeCircuitKnowledgeBenchmark } from "@/app/lib/circuit-knowledge/be
 import { executeComponentSelectionBenchmark } from "@/app/lib/component-selection/benchmark";
 import { executeCalculationBenchmark } from "@/app/lib/calculation/benchmark";
 import { executeSchematicCompilerBenchmark } from "@/app/lib/schematic-compiler/benchmark";
+import { executeCircuitVerificationBenchmark } from "@/app/lib/circuit-verification/benchmark"; // [B24-D1] D24-41: the CD-9 executor
 import { executeModelSimulationBenchmark } from "@/app/lib/model-simulation/benchmark";
 import { executeFirmwareBringUpBenchmark } from "@/app/lib/firmware-bringup/benchmark";
 import { executeReleaseEngineeringBenchmark } from "@/app/lib/release-engineering/benchmark";
@@ -165,6 +166,10 @@ export const builtinBenchmarkExecutor: BenchmarkExecutor = async (input) => {
     case "schematic_compiler_authority":
     case "schematic_compiler_scale":
       return base(executeSchematicCompilerBenchmark(op));
+    case "circuit_verification_manifest": // [B24-D1] D24-41 (OD-204): CD-9 beside CD-8 and CD-10; every value derived from the CD-9 modules
+    case "circuit_verification_authority":
+    case "circuit_verification_scale":
+      return base(executeCircuitVerificationBenchmark(op));
     case "model_simulation_manifest":
     case "model_simulation_authority":
     case "model_simulation_scale":

@@ -698,7 +698,7 @@ in its file - and, for every production file E3 changed, it is on the line state
 | C112 | `app/page.tsx` | 4524 | — | `const streamRunId = res.headers.get("X-Sirkit-Run-Id");` | the run id the route issued - in place |
 | C113 | `app/page.tsx` | 4544 | — | `resumeObservation = observeChatResume(resumeObservation, event);` | beside the run view - in place |
 | C114 | `app/page.tsx` | 4741 | — | `if (resumable) appendActivityStep(logId, chatResumeOfferLine(resumable.runId, resumable.provider), "done");` | the offer, a run-log line - in place |
-| C115 | `.github/workflows/deterministic-manufacturing.yml` | 151 | — | `app/api/chat/__tests__/b21-e3-chat-resume.test.ts` | the route suite's one explicit entry |
+| C115 | `.github/workflows/deterministic-manufacturing.yml` | 152 | — | `app/api/chat/__tests__/b21-e3-chat-resume.test.ts` | the route suite's one explicit entry [B24-D1, 2026-10-09] re-pinned +1: B24-D1's prompt-to-gerber start step at `:32` (OD-30) |
 | C116 | `app/api/chat/route.ts` | 14 | — | `No silent cross-provider fallback exists;` | the route header stands |
 | C117 | `app/page.tsx` | 4470 | — | `lastAiRetryRef.current = () => void send(text);` | the Retry IS `send(text)` (unchanged) |
 | C118 | `app/api/chat/route.ts` | 331 | — | `const authority = await loadRunComponentAuthority(source, {` | the authority loaded for THIS request (unchanged) |

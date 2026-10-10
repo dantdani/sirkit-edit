@@ -1,0 +1,31 @@
+{
+  "schema": "sirkit.latency-baseline.v1",
+  "versions": [
+    {
+      "version": 1,
+      "policyVersion": "sirkit.latency-policy/1.0.0",
+      "recordedAt": "2026-10-09T00:00:00.000Z",
+      "declaredWithoutValues": true,
+      "runIds": [],
+      "metrics": [
+        { "metricId": "view.pcb-fit-board", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } },
+        { "metricId": "view.pcb-pan-to-component", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } },
+        { "metricId": "read.selection-inspect", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } },
+        { "metricId": "read.via-inspect", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } },
+        { "metricId": "edit.granted-move-footprint", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } },
+        { "metricId": "stream.first-event-ms", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } },
+        { "metricId": "stream.silent-gap-ms", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } },
+        { "metricId": "stream.completion-ms", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } },
+        { "metricId": "workflow.publish-preflight-apply-qualify-ms", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } },
+        { "metricId": "moved.observation-normalizer-huge-text", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } },
+        { "metricId": "moved.observation-normalizer-many-blocks", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } },
+        { "metricId": "moved.observation-normalizer-pathological-marks", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } },
+        { "metricId": "moved.observation-normalizer-structured-budget", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } },
+        { "metricId": "moved.pcb-sync-preflight-small-fixture", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } },
+        { "metricId": "moved.pcb-sync-aggregate-500-components", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } },
+        { "metricId": "moved.redaction-linear-200-scrubs", "p50": null, "p95": null, "runIds": [], "budget": { "practicalRegression": 0.1, "noiseBand": 0.2, "direction": "lower_is_better", "failureAction": "block", "floorMs": 1 } }
+      ],
+      "changeRecords": []
+    }
+  ]
+}

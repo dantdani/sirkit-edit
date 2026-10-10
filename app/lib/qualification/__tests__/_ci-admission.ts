@@ -27,7 +27,7 @@
 import { readFileSync } from "node:fs";
 import { join, posix } from "node:path";
 
-export const CI_JOB_IDS = ["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "page-browser-e2e", "agent-boundary-suites"] as const; // [B24-D0, 2026-10-09] + agent-boundary-suites (OD-30's split)
+export const CI_JOB_IDS = ["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "page-browser-e2e", "agent-boundary-suites", "benchmark-latency"] as const; // [B24-D0, 2026-10-09] + agent-boundary-suites (OD-30's split); [B24-D1, 2026-10-09] + benchmark-latency (OD-212: the appended benchmark job, its one-line vitest step and its env; no stage10 step)
 export type CiJobId = (typeof CI_JOB_IDS)[number];
 
 const NEWLINE = String.fromCharCode(10);
@@ -54,6 +54,7 @@ export const CI_ADMISSION_ANCHORS = Object.freeze({
   testMatch: "testMatch: /.*\\.spec\\.ts/,",
   benchmarkCore: "  benchmark-core:",
   benchmarkNightly: "  benchmark-nightly:",
+  benchmarkLatency: "  benchmark-latency:", // [B24-D1, 2026-10-09] the appended latency job (OD-212)
   nightlyCondition: "if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'",
   stage10Step: "- run: pnpm run stage10:test -- ",
   stage10Script: '"stage10:test": "vitest run app/lib/engineering/__tests__",',
@@ -159,11 +160,11 @@ export interface CiAdmission {
   /** The jobs that run `path` (repository-relative), in CI_JOB_IDS order. */
   readonly jobsOf: (path: string) => CiJobId[];
   /** The positional filters each vitest job applies, as derived (for the page and the bite checks). */
-  readonly filters: Readonly<Record<"prompt-to-gerber" | "database-delivery" | "benchmark-core" | "benchmark-nightly" | "agent-boundary-suites", readonly string[]>>;
+  readonly filters: Readonly<Record<"prompt-to-gerber" | "database-delivery" | "benchmark-core" | "benchmark-nightly" | "agent-boundary-suites" | "benchmark-latency", readonly string[]>>; // [B24-D1, 2026-10-09] + benchmark-latency
   /** [B24-D0] The `--exclude` patterns of each folded vitest job, in order ([] when the step has none). */
   readonly excludes: Readonly<Record<"prompt-to-gerber" | "database-delivery" | "agent-boundary-suites", readonly string[]>>;
   /** [B24-B2] The `env` block of each benchmark job's vitest step, values unquoted ({} when the step has none). */
-  readonly stepEnv: Readonly<Record<"benchmark-core" | "benchmark-nightly", Readonly<Record<string, string>>>>;
+  readonly stepEnv: Readonly<Record<"benchmark-core" | "benchmark-nightly" | "benchmark-latency", Readonly<Record<string, string>>>>; // [B24-D1, 2026-10-09] + benchmark-latency (its vitest step's env holds SIRKIT_B24_BENCHMARK)
 }
 
 /** Derive the admission from the workflows; throws CI_ANCHOR when any anchor is absent or appears twice. */
@@ -202,7 +203,10 @@ export function ciAdmission(read: RepoReader = readRepoText): CiAdmission {
     const [start, end] = jobBlock(benchmark, key, BENCHMARK);
     return Object.freeze(inlineStepEnv(benchmark, start, end, BENCHMARK, key));
   };
-  const stepEnv = Object.freeze({ "benchmark-core": stepEnvOf(CI_ADMISSION_ANCHORS.benchmarkCore), "benchmark-nightly": stepEnvOf(CI_ADMISSION_ANCHORS.benchmarkNightly) });
+  // [B24-D1, 2026-10-09] the latency job: one inline vitest step (two files), no stage10 step; its env carries the benchmark flag
+  const [latencyStart, latencyEnd] = jobBlock(benchmark, CI_ADMISSION_ANCHORS.benchmarkLatency, BENCHMARK);
+  const latency = inlineVitestFilters(benchmark, latencyStart, latencyEnd, BENCHMARK, CI_ADMISSION_ANCHORS.benchmarkLatency);
+  const stepEnv = Object.freeze({ "benchmark-core": stepEnvOf(CI_ADMISSION_ANCHORS.benchmarkCore), "benchmark-nightly": stepEnvOf(CI_ADMISSION_ANCHORS.benchmarkNightly), "benchmark-latency": stepEnvOf(CI_ADMISSION_ANCHORS.benchmarkLatency) });
   const [nightlyStart, nightlyEnd] = jobBlock(benchmark, CI_ADMISSION_ANCHORS.benchmarkNightly, BENCHMARK);
   const condition = onlyLine(benchmark, CI_ADMISSION_ANCHORS.nightlyCondition, BENCHMARK, false);
   if (condition < nightlyStart || condition >= nightlyEnd) fail(`${BENCHMARK}: the schedule-and-dispatch condition is outside benchmark-nightly`);
@@ -224,13 +228,14 @@ export function ciAdmission(read: RepoReader = readRepoText): CiAdmission {
       if (runs(agentBoundary, normal)) jobs.add("agent-boundary-suites"); // [B24-D0, 2026-10-09]
       if (contains(core, normal)) jobs.add("benchmark-core");
       if (contains(nightly, normal)) jobs.add("benchmark-nightly");
+      if (contains(latency, normal)) jobs.add("benchmark-latency"); // [B24-D1, 2026-10-09]
     }
     if (/^e2e\/[^/]+\.spec\.ts$/.test(normal) || /^e2e-orchestration\/[^/]+\.spec\.ts$/.test(normal)) jobs.add("page-browser-e2e");
     return CI_JOB_IDS.filter((job) => jobs.has(job));
   };
   return Object.freeze({
     jobsOf,
-    filters: Object.freeze({ "prompt-to-gerber": promptToGerber.filters, "database-delivery": databaseDelivery.filters, "benchmark-core": core, "benchmark-nightly": nightly, "agent-boundary-suites": agentBoundary.filters }),
+    filters: Object.freeze({ "prompt-to-gerber": promptToGerber.filters, "database-delivery": databaseDelivery.filters, "benchmark-core": core, "benchmark-nightly": nightly, "agent-boundary-suites": agentBoundary.filters, "benchmark-latency": latency }), // [B24-D1, 2026-10-09] + benchmark-latency
     excludes: Object.freeze({ "prompt-to-gerber": promptToGerber.excludes, "database-delivery": databaseDelivery.excludes, "agent-boundary-suites": agentBoundary.excludes }), // [B24-D0, 2026-10-09]
     stepEnv,
   });

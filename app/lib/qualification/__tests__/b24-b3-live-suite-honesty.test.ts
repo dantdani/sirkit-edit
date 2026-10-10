@@ -250,8 +250,8 @@ describe("[B24-B3] the opt-in live suites' census and their registry (D24-19, OD
     expect(unclassified).toEqual([]);
     const byKind = (kind: GateKind): Gate[] => gates.filter((gate) => kindOf(gate, gates, census.sources) === kind);
     const count = (kind: GateKind): [number, number] => [byKind(kind).length, new Set(byKind(kind).map((gate) => gate.file)).size];
-    expect({ live: count("live"), database: count("database"), protectedOriginal: count("protected-original"), nonLive: count("non-live") }).toEqual({ live: [9, 7], database: [8, 7], protectedOriginal: [1, 1], nonLive: [1, 1] });
-    expect([gates.length, new Set(gates.map((gate) => gate.file)).size]).toEqual([19, 16]);
+    expect({ live: count("live"), database: count("database"), protectedOriginal: count("protected-original"), nonLive: count("non-live") }).toEqual({ live: [9, 7], database: [8, 7], protectedOriginal: [1, 1], nonLive: [3, 3] }); // [B24-D1, 2026-10-09] reviewed pin move: nonLive 1 -> 3, the two latency benchmark gates (b24-d1-latency, b24-d1-latency-workflow; lead decision D2, OD-212)
+    expect([gates.length, new Set(gates.map((gate) => gate.file)).size]).toEqual([21, 18]); // [B24-D1, 2026-10-09] reviewed pin move: 19 in 16 -> 21 in 18
     // every registered entry's file holds at least one gate, and the database kind includes the second-database case inside its block
     for (const entry of ENTRIES) expect(gates.some((gate) => gate.file === entry.path), entry.id).toBe(true);
     expect(byKind("database").map((gate) => gate.file)).toEqual(expect.arrayContaining(["app/lib/db/__tests__/b16-b-postgres-qualification.test.ts", "app/lib/durable-workflow/__tests__/tenant-scope.test.ts", "app/lib/physical-binding/__tests__/schema-integrity.test.ts"]));
@@ -470,9 +470,9 @@ describe("[B24-B3] the opt-in live suites' census and their registry (D24-19, OD
     for (const entry of ENTRIES) expect(three, entry.id).toContain(`\`${entry.path}\``);
   });
 
-  it("10. NON_LIVE_GATES (lead decision D2) holds exactly b24-b2-corpus-nightly: its kind is closed, it carries no catalog class and no LB id, and only the job it names sets its flag - to exactly \"1\" - in the vitest step that selects it (benchmark-nightly, schedule and dispatch only); every other job that selects it leaves the flag unset; its local run is a note, never the recorded state", () => {
+  it("10. NON_LIVE_GATES (lead decision D2) holds exactly b24-b2-corpus-nightly: its kind is closed, it carries no catalog class and no LB id, and only the job it names sets its flag - to exactly \"1\" - in the vitest step that selects it (benchmark-nightly, schedule and dispatch only); every other job that selects it leaves the flag unset; its local run is a note, never the recorded state", () => { // [B24-D1, 2026-10-09] + the two latency benchmark gates b24-d1-latency and b24-d1-latency-workflow (benchmark-latency, every trigger; lead decision D2, OD-212): the title keeps B3's text, the pinned list below moved by review
     // B24-D1 and B24-D2 move this pinned list by a reviewed edit when they append their entries
-    expect(NON_LIVE_GATES.map((entry) => entry.id)).toEqual(["b24-b2-corpus-nightly"]);
+    expect(NON_LIVE_GATES.map((entry) => entry.id)).toEqual(["b24-b2-corpus-nightly", "b24-d1-latency", "b24-d1-latency-workflow"]); // [B24-D1, 2026-10-09] reviewed pin move: + the two latency benchmark gates (lead decision D2, OD-212)
     expect([...NON_LIVE_GATE_KINDS]).toEqual(["scheduled-benchmark", "non-live"]);
     const admission = ciAdmission();
     for (const entry of NON_LIVE_GATES) {
@@ -486,11 +486,20 @@ describe("[B24-B3] the opt-in live suites' census and their registry (D24-19, OD
       expect(stepEnv[entry.job.id]?.[entry.flag.name], entry.id).toBe("1");
       for (const [job, env] of Object.entries(stepEnv)) if (job !== entry.job.id) expect(Object.hasOwn(env, entry.flag.name), `${entry.id} ${job}`).toBe(false);
       expect(read(DETERMINISTIC)).not.toContain(entry.flag.name);
-      expect(read(BENCHMARK).split(NEWLINE).filter((line) => line.includes(entry.flag.name))).toHaveLength(1);
+      // [B24-D1, 2026-10-09] reviewed pin move: the flag as a whole name (SIRKIT_B24_BENCHMARK_DIR, the latency job's directory variable, carries it as a prefix on three lines)
+      const wholeName = new RegExp(`(?<![A-Z0-9_])${entry.flag.name}(?![A-Z0-9_])`);
+      expect(read(BENCHMARK).split(NEWLINE).filter((line) => wholeName.test(line))).toHaveLength(1);
       if (entry.kind === "scheduled-benchmark") expect(entry.job.id).toBe("benchmark-nightly");
+      if (entry.kind === "non-live") expect(entry.job.id, entry.id).toBe("benchmark-latency"); // [B24-D1, 2026-10-09] the job that also runs on pull_request
       expect(entry.recorded.state, entry.id).toBe("not exercised");
-      expect(entry.localRun).toMatchObject({ date: "2026-10-08", log: "b2-corpus-flagged-2" });
-      expect(entry.localRun!.result).toMatch(/^red/);
+      // [B24-D1, 2026-10-09] reviewed pin move: each gate's measured local run is its own (B2's red corpus run; D1's green latency runs)
+      if (entry.id === "b24-b2-corpus-nightly") {
+        expect(entry.localRun).toMatchObject({ date: "2026-10-08", log: "b2-corpus-flagged-2" });
+        expect(entry.localRun!.result).toMatch(/^red/);
+      } else {
+        expect(entry.localRun, entry.id).toMatchObject({ date: "2026-10-09", log: entry.id === "b24-d1-latency" ? "d1-green-latency-flagged" : "d1-green-latency-workflow-flagged" });
+        expect(entry.localRun!.result, entry.id).toMatch(/^green/);
+      }
     }
   });
 });

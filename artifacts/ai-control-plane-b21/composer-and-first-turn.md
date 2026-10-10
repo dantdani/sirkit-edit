@@ -513,8 +513,8 @@ added by the review fixes ([B21 E4 fix]).
 | C30 | `app/lib/ai-preferences.ts` | 193 | — | `export const PROVIDER_FAILURES_WITHOUT_RETRY = Object.freeze(` | the failures without Retry, unchanged |
 | C31 | `app/lib/ai-preferences.ts` | 190 | — | `since D21-39 a request whose coordinator provider is paused ends with it` | its comment, corrected in place |
 | C32 | `app/lib/agent/run-consumer.ts` | 73 | — | `export function providerRetryOffered(reason: string): boolean {` | the card's Retry rule, unchanged |
-| C33 | `.github/workflows/deterministic-manufacturing.yml` | 152 | — | `app/api/chat/__tests__/b21-e4-chat-first-turn.test.ts` | the route suite's one explicit CI entry |
-| C34 | `.github/workflows/deterministic-manufacturing.yml` | 153 | — | `app/lib/project/__tests__/b21-e4-composer-routing.test.ts` | the composer suite's one explicit CI entry |
+| C33 | `.github/workflows/deterministic-manufacturing.yml` | 153 | — | `app/api/chat/__tests__/b21-e4-chat-first-turn.test.ts` | the route suite's one explicit CI entry [B24-D1, 2026-10-09] re-pinned +1: B24-D1's prompt-to-gerber start step at `:32` (OD-30) |
+| C34 | `.github/workflows/deterministic-manufacturing.yml` | 154 | — | `app/lib/project/__tests__/b21-e4-composer-routing.test.ts` | the composer suite's one explicit CI entry [B24-D1, 2026-10-09] re-pinned +1: B24-D1's prompt-to-gerber start step at `:32` (OD-30) |
 | C35 | `app/lib/agent/orchestration/scheduler.ts` | 494 | — | `if (routing?.kind === "coordinator-paused") { stop = "provider_paused";` | a resumed request's specialists consult the breaker (E1) |
 | C36 | `app/api/chat/route.ts` | 14 | — | `No silent cross-provider fallback exists;` | the route header stands: a gated request never switches provider |
 | C37 | `app/api/chat/orchestration-runtime.ts` | 850 | — | `function halfOpenTrialInFlight(pause: AdmissionPause, at: number): boolean {` | [B21 E4 fix: regressions-1] a half-open breaker's trial in flight is the metered calls' pause, never the first turn's |

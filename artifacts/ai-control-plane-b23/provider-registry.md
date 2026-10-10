@@ -299,7 +299,7 @@ As of this increment's working tree on `3806cba`; the anchor text is the check, 
 | C11 | `app/lib/manufacturing-providers/provider-admission.ts` | 54 | `if (tierRank(entry.tier) >= tierRank("dfm_quote_transfer")) {` |
 | C12 | `app/lib/manufacturing-providers/cd12-projection.ts` | 28 | `export function toProcurementProviderDescriptor(row: ProviderRow): ProcurementProviderDescriptor {` |
 | C13 | `scripts/generate-b23-provider-registry.ts` | 23 | `await writeFile(resolve(outDir, "provider-registry.csv"), renderProviderRegistryCsv(), "utf8");` |
-| C14 | `.github/workflows/deterministic-manufacturing.yml` | 227 | `app/lib/manufacturing-providers/__tests__` |
+| C14 | `.github/workflows/deterministic-manufacturing.yml` | 228 | `app/lib/manufacturing-providers/__tests__` |
 | C15 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 54 | `const CHAPTERS = ["b19-", "b20-", "b21-", "b22-", "b23-", "b24-"] as const;` [B24-A1, 2026-10-06] re-pinned in place: B24-A1 appended `"b24-"` to this line (OD-222); `"b23-"` stands where B23-A1 put it |
 | C16 | `app/lib/pcb/fab/rule-profile.ts` | 30 | `export const QUALIFIED_RULE_PROFILE_IDS` |
 | C17 | `app/lib/release-engineering/providers.ts` | 8 | `export function createProviderDescriptor(` |
@@ -356,3 +356,5 @@ retired.
   this module is a registry change, where a same-line comment note is not (the closeout's choice, recorded for the owner).
 - `renderProviderRegistryCsv`'s `rows` parameter: no caller passes it (the generator and case 15 both call the render bare); it is
   dropped in that same reviewed revision.
+
+[B24-D1, 2026-10-09] C14 re-pinned `:227` -> `:228` in place: B24-D1's prompt-to-gerber start step at `:32` (OD-30); no suite resolves C14, checked by hand (the line holds `app/lib/manufacturing-providers/__tests__`).

@@ -172,6 +172,29 @@ const GATES: readonly NonLiveGateEntry[] = [
     recorded: { state: "not exercised", reason: "no scheduled or dispatched run of benchmark-nightly is recorded since B24-B2 admitted the suite" },
     localRun: { date: "2026-10-08", log: "b2-corpus-flagged-2", result: "red: 51 passed, 2 blocked, 5 failing of 58 - the three CD-9 packages fail correctness (D24-41, owned by B24-D1)" },
   },
+  // [B24-D1, 2026-10-09] D24-27, D24-28, OD-212 (lead decision D2): the two latency benchmark suites, kind non-live (the job also runs on
+  // pull_request), armed by SIRKIT_B24_BENCHMARK exactly "1" in benchmark-latency's vitest step env only; no catalog class, no LB; a
+  // reviewed append (b24-b3-live-suite-honesty case 10's list moves with it)
+  {
+    id: "b24-d1-latency",
+    path: "app/lib/qualification/__tests__/b24-d1-latency.test.ts",
+    kind: "non-live",
+    flag: { name: "SIRKIT_B24_BENCHMARK", kind: "exact-1", read: (env) => env.SIRKIT_B24_BENCHMARK },
+    job: { workflow: ".github/workflows/benchmark.yml", id: "benchmark-latency" },
+    resources: [],
+    recorded: { state: "not exercised", reason: "no run of benchmark-latency is recorded since B24-D1 appended the job (its first CI run is the lead's reading)" },
+    localRun: { date: "2026-10-09", log: "d1-green-latency-flagged", result: "green: 6 of 6, every catalogued metric measured and verified (the lead re-reads the log for the counts)" },
+  },
+  {
+    id: "b24-d1-latency-workflow",
+    path: "app/lib/qualification/__tests__/b24-d1-latency-workflow.test.ts",
+    kind: "non-live",
+    flag: { name: "SIRKIT_B24_BENCHMARK", kind: "exact-1", read: (env) => env.SIRKIT_B24_BENCHMARK },
+    job: { workflow: ".github/workflows/benchmark.yml", id: "benchmark-latency" },
+    resources: [],
+    recorded: { state: "not exercised", reason: "no run of benchmark-latency is recorded since B24-D1 appended the job (its first CI run is the lead's reading)" },
+    localRun: { date: "2026-10-09", log: "d1-green-latency-workflow-flagged", result: "green: 1 of 1, eleven replays verified against the pinned identities (the lead re-reads the log for the timings)" },
+  },
 ];
 
 const freezeResources = (resources: readonly LiveResource[]): readonly LiveResource[] => Object.freeze(resources.map((resource) => Object.freeze(resource.check === "oneOf" ? { ...resource, names: Object.freeze([...resource.names]) } : { ...resource })));

@@ -7,14 +7,14 @@ import { PcbSynchronizationService } from "../service";
 import { authoritativeSnapshotDigest } from "../stable";
 import { preflightRequest, readyHarness, snapshot } from "./fixtures";
 
-describe("Stage 3 performance and resilience budgets", () => {
-  it("preflights and applies the small exact new-board fixture within a generous CI budget", async () => {
+describe("Stage 3 performance and resilience budgets", () => { // [B24-D1, 2026-10-09] the two performance bounds moved to b24-d1-latency (OD-212); the resilience cases and every correctness assertion stay
+  it("preflights and applies the small exact new-board fixture within a generous CI budget", async () => { // [B24-D1, 2026-10-09] its performance bound is the metric moved.pcb-sync-preflight-small-fixture of b24-d1-latency (OD-212)
     const harness = await readyHarness();
     const started = performance.now();
     const result = await harness.service.preflight(preflightRequest());
     const elapsed = performance.now() - started;
     expect(result.status).toBe("ready_to_apply");
-    expect(elapsed).toBeLessThan(2_000);
+    void elapsed; // [B24-D1, 2026-10-09] performance bound moved to b24-d1-latency moved.pcb-sync-preflight-small-fixture (OD-212)
   });
 
   it("aggregates a 500-component blocked design completely without creating a board", async () => {
@@ -41,7 +41,7 @@ describe("Stage 3 performance and resilience budgets", () => {
     expect(result.components.map((item) => item.componentInstanceId)).toEqual([...ids].sort());
     expect(result.trace.length).toBeLessThanOrEqual(8_192);
     expect(JSON.stringify(result).length).toBeLessThan(8_000_000);
-    expect(elapsed).toBeLessThan(10_000);
+    void elapsed; // [B24-D1, 2026-10-09] performance bound moved to b24-d1-latency moved.pcb-sync-aggregate-500-components (OD-212)
     expect(await repository.getBoard({ tenantId: "tenant-1", projectId: "project-1", branchId: "main", boardId: "board-1" })).toBeNull();
   }, 15_000);
 

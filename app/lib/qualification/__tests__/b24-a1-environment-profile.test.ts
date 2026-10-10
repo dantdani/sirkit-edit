@@ -640,7 +640,7 @@ describe("[B24-A1] the page environments-and-deployment.md", () => {
     const planned = simulate(remaining);
     expect(lineCount(planned.workflow) - lineCount(lines(WORKFLOW))).toBe(remaining.reduce((sum, step) => sum + step.lines.length, 0));
     expect(insertionRowsOf(planned.page)).toHaveLength(insertionTable(read(PAGE)).rows.length + remaining.length);
-    expect(insertionRowsOf(planned.page)).toHaveLength(15); // [B24-D0, 2026-10-09] reviewed pin move (the lead's): D0's two real rows (the exclusions, the appended job) beside the 13 planned groups (OD-30's split)
+    expect(insertionRowsOf(planned.page)).toHaveLength(17); // [B24-D1, 2026-10-09] reviewed pin move (the lead's): D1's six real rows where A1 planned four groups (lead decision D19 added agent-boundary-suites's two), +2 on D0's 15; [B24-D0, 2026-10-09] reviewed pin move (the lead's): D0's two real rows (the exclusions, the appended job) beside the 13 planned groups (OD-30's split)
     expect(jobOrderProblems(planned.workflow)).toEqual([]); // A2's appended job (task-A2.md:340) follows production-smoke
     expect(shiftTableProblems(planned.page, planned.workflow)).toEqual([]);
     expect(sectionFourteenWorkflowProblems(planned.page, planned.workflow)).toEqual([]);
@@ -662,19 +662,26 @@ describe("[B24-A1] the page environments-and-deployment.md", () => {
     expect(shiftTableProblems(replaceRow(c1, c1.replace("| database-delivery |", "| prompt-to-gerber |")), planned.workflow).join(" "), "a wrong job").toMatch(/not in prompt-to-gerber/);
     expect(shiftTableProblems(withInsertionRow(planned.page, "| `:300` | 1 | [B24-C9, 2026-10-07] the review round's form |"), planned.workflow).join(" "), "the old form").toMatch(/malformed insertion row/);
     // a task that followed its own text instead: every number of this page moved in place, no row appended
-    const unrecorded = rows.reduce((page, row) => page.replace(`${row}${NEWLINE}`, ""), planned.page);
+    // [B24-D1 lead, 2026-10-09] reviewed move (the lead's): the probes below move a column of A1's shift table in place, so the plan they
+    // run on must move at least one of its rows; once the remaining plan has none (after D1 landed, D2's row sits below every row),
+    // SYNTHETIC_INSERTION joins it - the counts and the row probes above stay on `remaining` alone
+    const shiftRowsMove = (steps: readonly PlannedInsertion[]): boolean => { const sim = simulate(steps); return [...section(read(PAGE), SECTIONS[10]).matchAll(/^\| `:(\d+)(?:-(\d+))?` \| `:(\d+)/gm)].some((row) => sim.lineOf(Number(row[3])) !== Number(row[3])); };
+    const probePlan = shiftRowsMove(remaining) ? remaining : [...remaining, SYNTHETIC_INSERTION];
+    const mover = probePlan === remaining ? planned : simulate(probePlan);
+    expect(shiftRowsMove(probePlan), "the probe plan moves a shift-table row").toBe(true);
+    const unrecorded = insertionRowsOf(mover.page).reduce((page, row) => page.replace(`${row}${NEWLINE}`, ""), mover.page);
     const cell = (start: number, end: number | undefined): string => `\`:${start}${end === undefined ? "" : `-${end}`}\``;
     const moveColumns = (page: string, both: boolean): string => page.replace(/^\| `:(\d+)(?:-(\d+))?` \| `:(\d+)(?:-(\d+))?` \|/gm, (_, oldStart: string, oldEnd: string | undefined, newStart: string, newEnd: string | undefined) => {
-      const [start, end] = [planned.lineOf(Number(newStart)), newEnd === undefined ? undefined : planned.lineOf(Number(newEnd))];
+      const [start, end] = [mover.lineOf(Number(newStart)), newEnd === undefined ? undefined : mover.lineOf(Number(newEnd))];
       const old = both ? cell(start - 1, end === undefined ? undefined : end - 1) : cell(Number(oldStart), oldEnd === undefined ? undefined : Number(oldEnd));
       return `| ${old} | ${cell(start, end)} |`;
     });
     expect(moveColumns(unrecorded, false)).not.toBe(unrecorded);
-    expect(shiftTableProblems(moveColumns(unrecorded, false), planned.workflow).join(" "), "the new column moved in place").toMatch(/the new start is not A1's shift/);
-    expect(shiftTableProblems(moveColumns(unrecorded, true), planned.workflow).join(" "), "both columns moved in place").toMatch(/the old column is not A1's frozen table/);
-    const c35 = /^\| C35 \| `[^`]+` \| (\d+) \|/m.exec(planned.page)!;
-    const doubled = planned.page.replace(c35[0], c35[0].replace(`| ${c35[1]} |`, `| ${planned.lineOf(Number(c35[1]))} |`));
-    expect(sectionFourteenWorkflowProblems(doubled, planned.workflow), "C35 moved in place as well as recorded").not.toEqual([]);
+    expect(shiftTableProblems(moveColumns(unrecorded, false), mover.workflow).join(" "), "the new column moved in place").toMatch(/the new start is not A1's shift/);
+    expect(shiftTableProblems(moveColumns(unrecorded, true), mover.workflow).join(" "), "both columns moved in place").toMatch(/the old column is not A1's frozen table/);
+    const c35 = /^\| C35 \| `[^`]+` \| (\d+) \|/m.exec(mover.page)!;
+    const doubled = mover.page.replace(c35[0], c35[0].replace(`| ${c35[1]} |`, `| ${mover.lineOf(Number(c35[1]))} |`));
+    expect(sectionFourteenWorkflowProblems(doubled, mover.workflow), "C35 moved in place as well as recorded").not.toEqual([]);
   });
 
   it("17. [B24-A1 review] regressions-3: every earlier page's citation of a workflow line A1's filter line moved stands on its line with a dated A1 note - B23's dfm-quote-flow.md prose citation of the PGlite entry and its C64, B21's C49, C93 and C94 - and section 10 names each citer; [B24-A1 check, 2026-10-06] the prose citation is resolved by its content at HEAD (the line holding the PGlite entry), and its line carries a dated note from A1 and from every task whose recorded insertion rows moved the entry - no fixed line number or note text", () => {
@@ -689,7 +696,7 @@ describe("[B24-A1] the page environments-and-deployment.md", () => {
     const remaining = stillPlanned();
     const entryOf = (workflow: readonly string[]): number => workflow.findIndex((line) => line.includes(PGLITE));
     const moversIn = (steps: readonly PlannedInsertion[]): Set<string> => new Set(steps.filter((_, index) => entryOf(simulate(steps.slice(0, index + 1)).workflow) !== entryOf(simulate(steps.slice(0, index)).workflow)).map((step) => step.task));
-    const synthetic: PlannedInsertion = { task: "B24-A9", job: "prompt-to-gerber", after: beforeLineHolding("--outputFile=vitest-deterministic-manufacturing.xml"), lines: ["          app/lib/simulated/__tests__/b24-a9-synthetic-mover.test.ts"] };
+    const synthetic = SYNTHETIC_INSERTION; // [B24-D1 lead, 2026-10-09] shared with case 16 (declared at the end of the file)
     const probe = moversIn(remaining).size > 0 ? remaining : [...remaining, synthetic];
     const movers = moversIn(probe);
     expect(movers.size).toBeGreaterThan(0);
@@ -782,3 +789,8 @@ describe("[B24-A1] the page environments-and-deployment.md", () => {
 // [B24-A1 lead, 2026-10-06] the "no secrets. reference" guard of case 11 (the check round's new issue): a GitHub `${{ ... secrets. ... }}`
 // expression, never a file name - the old /\bsecrets\./ also matched B24-A2's planned `scripts/scan-secrets.ts` step (case 16, red first)
 const SECRETS_REFERENCE = /\$\{\{[^}]*\bsecrets\./;
+
+/** [B24-D1 lead, 2026-10-09] reviewed move (the lead's): the synthetic insertion cases 16 and 17 add to their probe plans once the tasks
+ *  still to land move no line they probe - after B24-D1 landed, D2's one database-delivery row sits below every row of A1's shift table
+ *  and below the PGlite entry. B24-A9 is no task: it inserts one simulated file at the top of prompt-to-gerber's list. */
+const SYNTHETIC_INSERTION: PlannedInsertion = { task: "B24-A9", job: "prompt-to-gerber", after: beforeLineHolding("app/lib/workflow/prompt-to-gerber/__tests__"), lines: ["          app/lib/simulated/__tests__/b24-a9-synthetic-mover.test.ts"] }; // before prompt-to-gerber's first positional filter, so every later line moves - the shift table's rows, section 14's lines and the PGlite entry alike

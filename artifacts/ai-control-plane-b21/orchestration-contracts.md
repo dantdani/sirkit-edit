@@ -635,7 +635,7 @@ review the lines are as of the corrected modules.
 | C36 | `app/lib/agent/trace.ts` | 153 | — | `declaredNames: ReadonlySet<string> = EMPTY_NAME_SET,` | the B11.3 declared-name rule the artifact exemption mirrors |
 | C37 | `app/lib/engineering/execution-grant.ts` | 79 | — | `export const GRANT_PREVIEW_TTL_MS = 10 * 60 * 1000;` | grants expire; their records are not purged |
 | C38 | `app/lib/mcp/server/__tests__/b20-d3-authority-import-gates.test.ts` | 55 | — | `const APPROVAL_PREFIXES = ["app/lib/engineering/approved-", "app/lib/engineering/agent-execution-journal"];` | the prefix-family gate this one mirrors |
-| C39 | `.github/workflows/deterministic-manufacturing.yml` | 132 | — | `app/lib/agent/orchestration/__tests__` | the one directory filter |
+| C39 | `.github/workflows/deterministic-manufacturing.yml` | 133 | — | `app/lib/agent/orchestration/__tests__` | the one directory filter [B24-D1, 2026-10-09] re-pinned +1: B24-D1's prompt-to-gerber start step at `:32` (OD-30) |
 | C40 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 54 | — | `const CHAPTERS = [` | the guard's chapter list (anchored on its head: the next chapter extends the members) |
 | C41 | `app/lib/agent/orchestration/tripwires.ts` | 9 | — | `export const B11_SCANNED_FILES = Object.freeze([` | the nine files, named only here |
 | C42 | `app/lib/agent/orchestration/tripwires.ts` | 22 | — | `export const ORCHESTRATION_IDENTIFIER_PATTERN = ` | the identifier pattern |

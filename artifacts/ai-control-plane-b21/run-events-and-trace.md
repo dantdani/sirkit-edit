@@ -940,7 +940,7 @@ lines current in E2b's tree; `b21-e2b-page.test.ts` case 5 checks them for every
 | C48 | `app/lib/agent/redaction.ts` | 20 | — | `/sk-[A-Za-z0-9_-]{8,}/g, // OpenAI-style keys` | the UNANCHORED key prefix the diagnostics keep: it matches task-1-... |
 | C49 | `app/lib/agent/redaction.ts` | 44 | — | `const MODEL_BOUND_SECRET_PATTERNS: readonly RegExp[]` | the anchored variant (B19-D), for model-bound text only |
 | C50 | `app/lib/agent/trace-recorder.ts` | 586 | — | `if (issues.length > 0) {` | an invalid trace is classified and never handed to a sink |
-| C51 | `.github/workflows/deterministic-manufacturing.yml` | 150 | — | `app/api/chat/__tests__/b21-e2-chat-events.test.ts` | the route suite's one explicit CI entry |
+| C51 | `.github/workflows/deterministic-manufacturing.yml` | 151 | — | `app/api/chat/__tests__/b21-e2-chat-events.test.ts` | the route suite's one explicit CI entry [B24-D1, 2026-10-09] re-pinned +1: B24-D1's prompt-to-gerber start step at `:32` (OD-30) |
 | C52 | `app/lib/agent/orchestration/run-events.ts` | 117 | — | `export function notRunAgainEvent(` | [fix] a re-run promised and withheld: the same outcome, final (runsAgain false) |
 | C53 | `app/lib/agent/orchestration/scheduler.ts` | 395 | — | `const settle = (why: SchedulerStop): void => { if (open) report(notRunAgainEvent(open, why)); };` | [fix] the scheduler closes an open promise with the stop that withheld it |
 | C54 | `app/lib/agent/orchestration/scheduler.ts` | 451 | — | `for (const task of tasks) { settle(stop);` | [fix] the previous task's withheld re-run closed before anything of the next |

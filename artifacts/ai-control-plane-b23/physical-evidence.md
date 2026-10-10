@@ -748,7 +748,7 @@ every row.
 | C43 | `app/lib/workflow/prompt-to-gerber/__tests__/fixtures/expected-identities.json` | 17 | `"archiveSha256": "997664c0b9a87c4d3a65e64eeb90b98159b2ad6ad8806e4ebea748a592ac6dcc",` |
 | C44 | `app/lib/workflow/prompt-to-gerber/__tests__/acceptance-pipeline.test.ts` | 421 | `expect({ releaseId: manifestBody.releaseId, filename, archiveSha256: archiveSha, archiveByteLength: bytes.byteLength` |
 | C45 | `app/lib/pcb/__tests__/manufacturing-release-gate.test.ts` | 150 | `rejects.toMatchObject({ code: "MFG_ASSEMBLY_AUTHORITY_UNAVAILABLE" });` |
-| C46 | `.github/workflows/deterministic-manufacturing.yml` | 227 | `app/lib/manufacturing-providers/__tests__` |
+| C46 | `.github/workflows/deterministic-manufacturing.yml` | 228 | `app/lib/manufacturing-providers/__tests__` |
 | C47 | `app/lib/pcb/fab/release-gate.ts` | 272 | `"No manufacturer upload/order has been performed. External board-house DFM and physical prototype review remain mandatory.",` |
 | C48 | `lib/persistence.ts` | 622 | `export function saveProjectReleaseEngineeringProgram(id: string, releaseEngineeringProgram: ReleaseEngineeringProjectState): boolean {` |
 | C49 | `lib/persistence.ts` | 628 | `try { localStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(updated)); return true; } catch { return false; }` |
@@ -794,3 +794,5 @@ nothing creates a record. It is recorded whole and not retired; the table is in 
 One export in it is named nowhere, not even by a test: `ServerDerivedHumanReview`, the shape a review port's answer takes (section 3).
 The reviewed change that wires a port would type the port's answer with it; until then the validator checks the same keys through
 `PHYSICAL_EVIDENCE_REVIEW_KEYS`. It is recorded with its module, not retired (PROPOSED for that change).
+
+[B24-D1, 2026-10-09] C46 re-pinned `:227` -> `:228` in place: B24-D1's prompt-to-gerber start step at `:32` (OD-30); `b23-d-physical-evidence-contract` case 9 resolves it.

@@ -443,7 +443,7 @@ Each is left as written by A4 (Lead note 1) and handed to B24-F for its one tabl
 
 - 0031: `app/lib/db/__tests__/b16-b-migrations.test.ts:39, :40, :41, :42, :104, :119, :147, :152, :176, :190, :229, :244, :246` (the
   migration count 31 -> 32 at `:39`) and `b16-b-postgres-qualification.test.ts:78`.
-- The workflow: four database-delivery entries at `deterministic-manufacturing.yml:374-377`, after B23's PGlite entry (`:373`, unmoved); [B24-D0, 2026-10-09] were `:303-306` and `:302` at A4's tree, carried +32 by B24-B2's prompt-to-gerber entries, +1 by B24-B3's and +38 by B24-D0's `--exclude` lines at `:293-330` (no earlier task moved this line; no suite pins it);
+- The workflow: four database-delivery entries at `deterministic-manufacturing.yml:374-377`, after B23's PGlite entry (`:373`, unmoved); [B24-D0, 2026-10-09] were `:303-306` and `:302` at A4's tree, carried +32 by B24-B2's prompt-to-gerber entries, +1 by B24-B3's and +38 by B24-D0's `--exclude` lines at `:293-330` (no earlier task moved this line; no suite pins it); [B24-D1, 2026-10-09] now `:377-380` after B23's entry at `:376`, after B24-D1's OD-30 steps at `:32` and `:344-345`;
   one row appended to `environments-and-deployment.md` section 10's insertion table (`| [B24-A4, 2026-10-08] | database-delivery |
   `:303` | 4 |`); B21's C49, C93 and C94 moved +4 (`:334` -> `:338`, `:337` -> `:341`, `:346` -> `:350`) in
   `evaluation-matrix.md`. B23's C64 and its prose citation of the PGlite entry do not move (A4 appends after `:302`).
@@ -472,7 +472,7 @@ Every row below is the review round's re-run over the final tree (`b24/logs/a4fi
 | the 21 generators | each exit 0, no drift: the tree's status and diff hash identical before and after |
 | `drizzle-kit export` (spawned by `b16-b-schema-parity`) | green, 30 recorded differences unchanged (`onlyInPush=6 onlyInMigrations=16 changed=8`) |
 
-Database-delivery's limit is `timeout-minutes: 15` (`deterministic-manufacturing.yml:346`; [B24-D0, 2026-10-09] was `:275` at A4's tree, carried +32 by B24-B2, +1 by B24-B3 and +38 by B24-D0's `--exclude` lines at `:293-330`). Locally the list takes 95 s; CI's runner is
+Database-delivery's limit is `timeout-minutes: 15` (`deterministic-manufacturing.yml:346`; [B24-D0, 2026-10-09] was `:275` at A4's tree, carried +32 by B24-B2, +1 by B24-B3 and +38 by B24-D0's `--exclude` lines at `:293-330`; [B24-D1, 2026-10-09] now `:349` after B24-D1's OD-30 steps at `:32` and `:344-345`). Locally the list takes 95 s; CI's runner is
 slower (INFERRED: twice as long would still leave the job well under its limit).
 
 ## 17. Suites

@@ -326,7 +326,7 @@ describe("[B20 A4] 6.1 the observation normalizer", () => {
     expect(JSON.stringify(shapes)).not.toContain(skKey);
   });
 
-  it("6. enormous content is bounded before any work and within pinned times", () => {
+  it("6. enormous content is bounded before any work and within pinned times", () => { // [B24-D1, 2026-10-09] performance bounds moved to b24-d1-latency (OD-212)
     const tail = ["tail", "sentinel", "4c1"].join("-");
     const big = `${"a".repeat(5_000_000 - tail.length)}${tail}`;
     expect(big).toHaveLength(5_000_000);
@@ -335,12 +335,12 @@ describe("[B20 A4] 6.1 the observation normalizer", () => {
     const hugeMs = performance.now() - started;
     expect(huge.content.blocks[0]).toMatchObject({ rawChars: 5_000_000, disposition: "text" });
     expect(JSON.stringify(huge)).not.toContain(tail);
-    expect(hugeMs).toBeLessThan(3_000);
+    void hugeMs; // [B24-D1, 2026-10-09] performance bound moved to b24-d1-latency moved.observation-normalizer-huge-text (OD-212)
 
     const many = Array.from({ length: 100_000 }, () => text(BENIGN));
     started = performance.now();
     const counted = observe(world, { content: many });
-    expect(performance.now() - started).toBeLessThan(5_000);
+    void (performance.now() - started); // [B24-D1, 2026-10-09] performance bound moved to b24-d1-latency moved.observation-normalizer-many-blocks (OD-212)
     expect(counted.content).toMatchObject({ blocksRead: 16, blocksNotRead: 99_984 });
     expect(counted.content.blocks).toHaveLength(1);
     expect(counted.content.blocks[0]!.repeats).toBe(16);
@@ -351,7 +351,7 @@ describe("[B20 A4] 6.1 the observation normalizer", () => {
     const pathological = observe(world, { content: Array.from({ length: 16 }, (_unused, index) => text(`${index}${marks}`)) });
     const marksMs = performance.now() - started;
     expect(pathological.content.blocksRead).toBe(16);
-    expect(marksMs).toBeLessThan(10_000);
+    void marksMs; // [B24-D1, 2026-10-09] performance bound moved to b24-d1-latency moved.observation-normalizer-pathological-marks (OD-212)
 
     // the structured half: the budget is charged BEFORE any NFC, so 1 998 leaves past it are never normalised at all
     const normalize = String.prototype.normalize;
@@ -367,7 +367,7 @@ describe("[B20 A4] 6.1 the observation normalizer", () => {
     vi.restoreAllMocks();
     expect(budget.structured.state).toBe("withheld_budget");
     expect(nfcChars).toBe(0);
-    expect(budgetMs).toBeLessThan(5_000);
+    void budgetMs; // [B24-D1, 2026-10-09] performance bound moved to b24-d1-latency moved.observation-normalizer-structured-budget (OD-212)
 
     // depth: past the structured bound (8) it is `unsafe`; past the hash copy's 32 levels the whole result is refused — both
     // iteratively, with no stack overflow at 2 000 levels

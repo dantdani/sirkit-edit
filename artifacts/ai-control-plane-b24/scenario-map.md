@@ -116,9 +116,11 @@ absent while <flag> is set`. Names only, never a value. **CONFIRMED** (`b24-b3-l
 | gate | kind | flag (kind) | job | resources | recorded |
 |---|---|---|---|---|---|
 | `b24-b2-corpus-nightly` | `scheduled-benchmark` | `SIRKIT_B24_CORPUS_NIGHTLY` (exact-1) | `.github/workflows/benchmark.yml` `benchmark-nightly` | (none) | not exercised |
+| `b24-d1-latency` | `non-live` | `SIRKIT_B24_BENCHMARK` (exact-1) | `.github/workflows/benchmark.yml` `benchmark-latency` | (none) | not exercised |
+| `b24-d1-latency-workflow` | `non-live` | `SIRKIT_B24_BENCHMARK` (exact-1) | `.github/workflows/benchmark.yml` `benchmark-latency` | (none) | not exercised |
 
 B24-D1 and B24-D2 append their suites to `NON_LIVE_GATES` by a reviewed edit, each with a dated note, and move
-`b24-b3-live-suite-honesty` case 10's pinned list with it.
+`b24-b3-live-suite-honesty` case 10's pinned list with it. [B24-D1, 2026-10-09] B24-D1 appended its two (the last two rows above, kind `non-live`: the job also runs on pull_request; lead decision D2, OD-212) and moved case 10 and case 1's census count in place; B24-D2 is to follow. The files: `b24-d1-latency` is `app/lib/qualification/__tests__/b24-d1-latency.test.ts`; `b24-d1-latency-workflow` is `app/lib/qualification/__tests__/b24-d1-latency-workflow.test.ts`.
 
 The files: `assist-live` is `app/api/pcb/edit/__tests__/assist-live.test.ts`; `b19-e-live-contract` is
 `app/lib/acquisition/__tests__/b19-e-live-contract.test.ts`; `b16-1b-live-qualification` is
@@ -134,7 +136,7 @@ The files: `assist-live` is `app/api/pcb/edit/__tests__/assist-live.test.ts`; `b
 once (vitest runs the hook before the cases wherever it sits, and no case body runs after it throws); no early `return` is guarded by one
 of its resources; a case whose observation could be vacuous asserts its positive control first and fails `NOT MEASURED`; and a CI job
 selects it and skips it (OD-222). `worker-integration` was the one live suite no job selected: B24-B3 admits it with one explicit
-prompt-to-gerber line (`deterministic-manufacturing.yml:292`). A non-live gate obeys the same flag-only and no-early-return rule; with no
+prompt-to-gerber line (`deterministic-manufacturing.yml:292`; [B24-D1, 2026-10-09] now `:293` after B24-D1's prompt-to-gerber start step at `:32`). A non-live gate obeys the same flag-only and no-early-return rule; with no
 resource it needs no gate, so B24-B2's corpus suite is not edited. **CONFIRMED** (honesty 2, 10).
 
 **The census.** Every line-start `describe|it|test` `.runIf(`/`.skipIf(` gate under `app`, `lib`, `components`, `e2e`,
@@ -142,7 +144,7 @@ resource it needs no gate, so B24-B2's corpus suite is not edited. **CONFIRMED**
 `f663d71` and the canary's new `it.runIf`), a database-qualification gate (8 in 7, the second-database case inside its block included;
 B24-A4's guard owns that class, OD-201, and B24-B3 changes nothing there - with `SIRKIT_DB_QUALIFICATION=1` and no URL such a suite still
 skips, `test-qualification.ts:72-75`), the protected-original check (1), and a registered non-live gate (1, B24-B2's corpus suite): 19
-gates in 16 files (17 in 15 at `f663d71`, 18 in 16 at `4738aa3`). A gate of any other kind fails the census. **CONFIRMED** (honesty 1).
+gates in 16 files (17 in 15 at `f663d71`, 18 in 16 at `4738aa3`; [B24-D1, 2026-10-09] 21 in 18 after B24-D1: the two latency benchmark gates, kind `non-live`). A gate of any other kind fails the census. **CONFIRMED** (honesty 1).
 
 **The seven repairs.**
 - `assist-live`: on `PCB_ASSIST_LIVE` alone; each case injects an editor of the selected project and resets the identity after it; the
@@ -505,7 +507,7 @@ cite and wrote nothing, then wrote twice with no drift); `app/lib/evaluation/liv
 B24-B2's corpus gate; the census holds 19 line-start gates in 16 files to four kinds; the seven suites were repaired (`assist-live` on its
 flag with an editor, the selector and Anthropic - its old request refused 400 `AUTH_PROJECT_SELECTOR_REQUIRED` offline with zero model
 calls; `b19-e-live-contract`'s and the canary's vacuous passes gone; the oracle on the routed demo behind a NOT MEASURED control;
-`worker-integration` and B22's two gated, `worker-integration` admitted at `deterministic-manufacturing.yml:292`). Counterexamples with
+`worker-integration` and B22's two gated, `worker-integration` admitted at `deterministic-manufacturing.yml:292`; [B24-D1, 2026-10-09] now `:293`). Counterexamples with
 each flag "1" and every resource empty: before, `assist-live` 4 skipped, `b19-e-live-contract` 2 passed, `b16-1b-live-qualification` 1
 passed 9 skipped (each exit 0); after, each exit 1 `NOT EXERCISED` with no case body run; after only, the oracle with a missing
 absolute `KICAD_CLI` and the three ngspice suites, each exit 1 `NOT EXERCISED`. B24-B3b: the suite failed first (`b3-red-1-b3b`), then

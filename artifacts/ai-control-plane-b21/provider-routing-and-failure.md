@@ -698,7 +698,7 @@ checks it; for every other file the line is as of the base. C61-C72 and the re-a
 | C57 | `app/lib/agent/adapters.ts` | 224 | — | `tool_choice: tools.length > 0 ? { type: "auto", disable_parallel_tool_use: true } : undefined,` | Anthropic: `auto`, never `any` / `tool` |
 | C58 | `app/lib/mcp/__tests__/b20-a5-provider-request-shape.test.ts` | 52 | — | `const OPENAI_PARAM_KEYS = ` | the pinned request key sets, untouched |
 | C59 | `app/api/chat/__tests__/b19-d-external-text-injection-route.test.ts` | 128 | — | `admission-control\.ts$` | the closure gate's reviewed exemption of the meters |
-| C60 | `.github/workflows/deterministic-manufacturing.yml` | 149 | — | `app/api/chat/__tests__/b21-e1-chat-provider.test.ts` | the route suite's one explicit CI entry |
+| C60 | `.github/workflows/deterministic-manufacturing.yml` | 150 | — | `app/api/chat/__tests__/b21-e1-chat-provider.test.ts` | the route suite's one explicit CI entry [B24-D1, 2026-10-09] re-pinned +1: B24-D1's prompt-to-gerber start step at `:32` (OD-30) |
 | C61 | `app/lib/ai-preferences.ts` | 176 | — | `typeof data.reason === "string" && providerRetryWithheld(` | the shared card's JSON 503 path withholds Retry the same way |
 | C62 | `app/page.tsx` | 6875 | — | `startNewRun: lastAiRetryRef.current,` | the Switch hands the kept closure to performProviderSwitch (it re-sends on the other provider) |
 | C63 | `app/lib/agent/orchestration/provider-policy.ts` | 61 | — | `const duplicate = duplicateKeyOf(raw);` | a key named twice refuses the whole map |
