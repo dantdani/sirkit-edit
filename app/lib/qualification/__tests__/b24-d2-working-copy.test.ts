@@ -24,6 +24,26 @@
  *  8. [B24-D2 review] RECORDED LIMIT (OD-214): the conflict record is one slot. A refused save's record is replaced by a later
  *     load-time stash of another tab's copy (two tabs suffice); what this case pins is that limit, stated on the page, never a claim
  *     that every record survives.
+ *  9. [B24-D4, 2026-10-10] D24-30's CI red (run 38061798204, e2e/multi-tab.spec.ts case 2): a tab whose own edit happens to
+ *     produce the very board another tab wrote since (B's first nudge equals A's) writes nothing and keeps the copy its board derives
+ *     from as its base, so its next edit is refused; the stored copy's token was adopted as the tab's own before the fix;
+ * 10. [B24-D4, 2026-10-10] a checkpoint restore adopted after another tab wrote (the load effect's pending restore): the adoption
+ *     takes only the copy page.tsx persisted (no write token) as the tab's own, never another tab's newer copy.
+ * Cases 9 and 10 failed first on 1fe719e (`d4r2-02-red-working-copy`): the second save of B, and A's save after the restore,
+ * returned true and replaced the other tab's copy with no conflict record.
+ * [B24-D4 review, 2026-10-10] Case 9 now compares A's whole stored copy (token, base, claim, time) before and after B's save, B
+ * writing with its own base and a canonical claim (correctness-4: the token alone was equal under an overwrite too); the restore
+ * adoption takes the stored copy when it holds the restored board the editor hands it (`rememberStoredWorkingCopy(projectId,
+ * restoredBoard)`, both call sites in PcbEditor; case 7 reads them), whoever wrote it:
+ * 11. two tabs that loaded no copy hydrate the same board: the second's autosave of that board takes the stored copy for its own,
+ *     so its first edit is not refused (correctness-3; at 1fe719e it was not refused either);
+ * 12. a restore whose copy another tab rewrote unchanged (its hydration autosave, under the "legacy:" token of page.tsx's copy) is
+ *     still the restoring tab's own, so its edits are not refused (correctness-2; at 1fe719e they were not);
+ * 13. two token-less restore writes race (A restores while its editor waits on a board load; B restores another checkpoint): A's
+ *     adoption never takes B's restored copy for its own, so A's restored board is refused, kept as the conflict record, and B keeps
+ *     saving (security-2).
+ * Cases 11-13 failed first on the D4 tree before this review fix (`d4fix-01-red-working-copy`); case 9's comparison failed under a
+ * planted write of the skip (`d4fix-02-mutation-skip-writes`, the source restored by sha256).
  *
  * Failing first on 3d5f225 (performance-and-reliability.md part 2): B's save returns true and silently replaces A's copy - no
  * conflict record, nothing said (INFERRED in the task from board-persistence.ts:188-192; reproduced here). Cases 6 and 7 failed
@@ -35,6 +55,7 @@ import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createEmptyBoard, type PcbBoard } from "@/app/lib/pcb/types";
 import type { SchematicState } from "@/lib/schematic-types";
+import type { PcbCanonicalHead } from "@/lib/persistence";
 
 type BoardPersistence = typeof import("@/app/lib/pcb/board-persistence");
 const EMPTY: SchematicState = { components: [], wires: [], kicadComponents: [], netLabels: [] };
@@ -64,8 +85,12 @@ async function writeWithoutToken(projectId: string, value: PcbBoard, updatedAt: 
   const { saveProjectFields } = await import("@/lib/persistence");
   expect(saveProjectFields(projectId, { pcbWorking: { board: value, baseRevision: BASE.revision, baseDigest: BASE.digest, updatedAt } })).toBe(true);
 }
-/** The editor's checkpoint-restore adoption step (absent before the review fix, so then nothing is remembered). */
-const adoptRestore = (persistence: BoardPersistence, projectId: string): void => (persistence as Partial<Pick<BoardPersistence, "rememberStoredWorkingCopy">>).rememberStoredWorkingCopy?.(projectId);
+/** The editor's checkpoint-restore adoption step (absent before the review fix, so then nothing is remembered), handed the restored
+ *  board as PcbEditor hands it ([B24-D4 review, 2026-10-10]). */
+const adoptRestore = (persistence: BoardPersistence, projectId: string, restoredBoard: PcbBoard): void => (persistence as Partial<Pick<BoardPersistence, "rememberStoredWorkingCopy">>).rememberStoredWorkingCopy?.(projectId, restoredBoard);
+/** [B24-D4 review, 2026-10-10] Another tab's base and canonical claim, so a write over A's copy is visible even under A's token. */
+const BASE_B = { revision: "pcb2-b24d4tabb", digest: "digest-b24d4-tab-b" };
+const HEAD_B: PcbCanonicalHead = { schemaVersion: 1, lineageDigest: "lineage-b24d4-tab-b", boardSemanticRevision: "pcb2-b24d4tabb", headSequence: 3, headTransactionId: "tx-b24d4-tab-b", canonicalStateDigest: "state-b24d4-tab-b" };
 
 beforeEach(() => {
   localStorage.clear();
@@ -196,7 +221,7 @@ describe("[B24-D2] the PCB working copy across two tabs: compare-before-write (D
     a.loadWorkingCopy(id);
     expect(a.saveWorkingCopy(id, board(1), BASE)).toBe(true);
     await writeWithoutToken(id, board(5), Date.now() + 1);
-    adoptRestore(a, id);
+    adoptRestore(a, id, board(5));
     // an edit of the restored board before its first autosave (the debounce restarts on each change)
     expect(a.saveWorkingCopy(id, board(6), BASE), "the restoring tab's own next edit").toBe(true);
     const after = await stored(id);
@@ -206,6 +231,12 @@ describe("[B24-D2] the PCB working copy across two tabs: compare-before-write (D
     const editor = readFileSync("app/components/pcb/PcbEditor.tsx", "utf8").split("\n").filter((line) => line.includes('adoptBoardLifecycle("checkpoint-restore"'));
     expect(editor).toHaveLength(2);
     for (const line of editor) expect(line).toContain("rememberStoredWorkingCopy(");
+    // [B24-D4 review, 2026-10-10] security-2: each adoption hands over the very board it adopts, which the stored copy must hold
+    for (const line of editor) {
+      const adopted = /adoptBoardLifecycle\("checkpoint-restore", (\w+)\)/.exec(line)?.[1];
+      expect(adopted, line).toBeTruthy();
+      expect(line, "the restored board is passed to the adoption").toMatch(new RegExp(`rememberStoredWorkingCopy\\([\\w.]+, ${adopted}\\)`));
+    }
   });
 
   it("8. RECORDED LIMIT (OD-214): the conflict record is one slot - a refused save's record is replaced by a later load-time stash of another tab's copy", { timeout: 30_000 }, async () => {
@@ -226,5 +257,117 @@ describe("[B24-D2] the PCB working copy across two tabs: compare-before-write (D
     const after = await stored(id);
     expect(after.pcbWorkingConflict?.board.tracks, "the one slot now holds A's copy; B's refused board is no longer stored").toHaveLength(2);
     expect(after.pcbWorkingConflict?.reason).toBe("Server board advanced");
+  });
+
+  it("9. [B24-D4] a tab whose own edit happens to produce the very board another tab wrote since never takes that copy for its own: the save of that board writes nothing, and the tab's next edit is refused (the CI path of e2e/multi-tab.spec.ts case 2)", { timeout: 30_000 }, async () => {
+    const id = await project();
+    const seed = await tab();
+    expect(seed.saveWorkingCopy(id, board(1), BASE)).toBe(true);
+    const a = await tab();
+    const b = await tab();
+    a.loadWorkingCopy(id);
+    b.loadWorkingCopy(id);
+    expect(a.saveWorkingCopy(id, board(2), BASE), "A's edit (one nudge)").toBe(true);
+    const copyOfA = structuredClone((await stored(id)).pcbWorking);
+    const tokenOfA = copyOfA?.writeId;
+    // B, loaded before A's edit, makes the same first edit and its autosave fires before its second (CI's slower runner): its board
+    // is the stored board, so nothing is lost - but B's board derives from the copy B loaded, not from A's. [B24-D4 review,
+    // 2026-10-10] correctness-4: B saves with its own base and a canonical claim, so any write over A's copy shows even under A's token
+    expect(b.saveWorkingCopy(id, board(2), BASE_B, HEAD_B), "B's board is the stored board: no conflict").toBe(true);
+    expect((await stored(id)).pcbWorking?.writeId, "nothing is written over A's copy").toBe(tokenOfA);
+    expect((await stored(id)).pcbWorking, "A's copy is untouched: its token, base, claim and time are A's").toEqual(copyOfA);
+    expect((await stored(id)).pcbWorkingConflict).toBeUndefined();
+    // B's second edit: another tab wrote after the copy B's board derives from, so it is refused
+    expect(b.saveWorkingCopy(id, board(3), BASE), "B's next edit is refused").toBe(b.WORKING_COPY_CONFLICT);
+    const after = await stored(id);
+    expect(after.pcbWorking?.board.tracks, "A's copy is not replaced").toHaveLength(2);
+    expect(after.pcbWorking?.writeId).toBe(tokenOfA);
+    expect(after.pcbWorkingConflict?.board.tracks, "B's board is the conflict record").toHaveLength(3);
+    expect(after.pcbWorkingConflict?.reason).toMatch(/another tab/i);
+    // A, whose copy it is, keeps saving
+    expect(a.saveWorkingCopy(id, board(4), BASE)).toBe(true);
+    expect((await stored(id)).pcbWorking?.board.tracks).toHaveLength(4);
+  });
+
+  it("10. [B24-D4] a checkpoint restore adopted after another tab wrote over the restored copy: the adoption never takes the other tab's copy for its own, and the restoring tab's next edit is refused", { timeout: 30_000 }, async () => {
+    const id = await project();
+    const a = await tab();
+    a.loadWorkingCopy(id);
+    expect(a.saveWorkingCopy(id, board(1), BASE)).toBe(true);
+    // A restores a checkpoint while its editor is not mounted: page.tsx persists the restored board with no write token, and the
+    // editor adopts it only when its board load answers (PcbEditor's load effect, the pending restore)
+    await writeWithoutToken(id, board(5), Date.now() + 1);
+    // meanwhile B loads that copy and saves an edit of it
+    const b = await tab();
+    expect(b.loadWorkingCopy(id)!.board.tracks).toHaveLength(5);
+    expect(b.saveWorkingCopy(id, board(6), BASE)).toBe(true);
+    // A's editor adopts the restored board: the stored copy is B's, not the one page.tsx persisted for A
+    adoptRestore(a, id, board(5));
+    expect(a.saveWorkingCopy(id, board(7), BASE), "A's edit of the restored board over B's newer copy is refused").toBe(a.WORKING_COPY_CONFLICT);
+    const after = await stored(id);
+    expect(after.pcbWorking?.board.tracks, "B's copy is not replaced").toHaveLength(6);
+    expect(after.pcbWorkingConflict?.board.tracks, "A's board is the conflict record").toHaveLength(7);
+  });
+
+  it("11. [B24-D4 review] two tabs that loaded no copy hydrate the same board: the second tab's autosave of that board takes the stored copy for its own, so its first edit is not refused, and the first tab, now behind, is", { timeout: 30_000 }, async () => {
+    const id = await project();
+    const x = await tab();
+    const y = await tab();
+    expect(x.loadWorkingCopy(id)).toBeNull();
+    expect(y.loadWorkingCopy(id)).toBeNull();
+    // both adopt the same server board; Y's hydration autosave lands first, then X's of the very same board
+    expect(y.saveWorkingCopy(id, board(1), BASE), "Y's hydration autosave").toBe(true);
+    expect(x.saveWorkingCopy(id, board(1), BASE), "X's hydration autosave of the same board").toBe(true);
+    expect(x.saveWorkingCopy(id, board(2), BASE), "X's first edit is not refused").toBe(true);
+    const after = await stored(id);
+    expect(after.pcbWorking?.board.tracks).toHaveLength(2);
+    expect(after.pcbWorkingConflict, "no conflict record").toBeUndefined();
+    expect(y.saveWorkingCopy(id, board(3), BASE), "Y, behind X's edit, is refused").toBe(y.WORKING_COPY_CONFLICT);
+    expect((await stored(id)).pcbWorking?.board.tracks).toHaveLength(2);
+  });
+
+  it("12. [B24-D4 review] a restore whose copy another tab rewrote unchanged before the restoring tab adopted it is still that tab's own: its autosave and its edits are not refused, and the other tab, now behind, is", { timeout: 30_000 }, async () => {
+    const id = await project();
+    const a = await tab();
+    a.loadWorkingCopy(id);
+    expect(a.saveWorkingCopy(id, board(1), BASE)).toBe(true);
+    // A restores a checkpoint while its editor waits on a board load: page.tsx persists the restored board with no write token
+    await writeWithoutToken(id, board(5), Date.now() + 1);
+    // B loads that copy and its hydration autosave writes it back unchanged (under the copy's own "legacy:" token)
+    const b = await tab();
+    expect(b.loadWorkingCopy(id)!.board.tracks).toHaveLength(5);
+    expect(b.saveWorkingCopy(id, board(5), BASE), "B's unchanged rewrite").toBe(true);
+    expect((await stored(id)).pcbWorking?.writeId, "the rewrite carries a token now").toMatch(/^legacy:/);
+    // A's editor adopts its restored board: the stored copy holds that very board
+    adoptRestore(a, id, board(5));
+    expect(a.saveWorkingCopy(id, board(5), BASE), "A's autosave of its restored board").toBe(true);
+    expect(a.saveWorkingCopy(id, board(6), BASE), "A's edit of its restored board is not refused").toBe(true);
+    const after = await stored(id);
+    expect(after.pcbWorking?.board.tracks).toHaveLength(6);
+    expect(after.pcbWorkingConflict, "no conflict record").toBeUndefined();
+    expect(b.saveWorkingCopy(id, board(7), BASE), "B, behind A's edit, is refused").toBe(b.WORKING_COPY_CONFLICT);
+  });
+
+  it("13. [B24-D4 review] two token-less restore writes race: A's adoption never takes B's restored copy for its own - A's restored board is refused and kept as the conflict record, B's copy stays and B keeps saving", { timeout: 30_000 }, async () => {
+    const id = await project();
+    const a = await tab();
+    a.loadWorkingCopy(id);
+    expect(a.saveWorkingCopy(id, board(1), BASE)).toBe(true);
+    const b = await tab();
+    expect(b.loadWorkingCopy(id)!.board.tracks).toHaveLength(1);
+    // A restores a checkpoint while its editor waits on a board load (page.tsx's copy, no token) ...
+    await writeWithoutToken(id, board(5), Date.now() + 1);
+    // ... then B restores another checkpoint (page.tsx's copy in B, no token) and B's mounted editor adopts it at once
+    await writeWithoutToken(id, board(8), Date.now() + 2);
+    adoptRestore(b, id, board(8));
+    // A's load answers and A's editor adopts ITS restored board: the stored copy is B's, a different board
+    adoptRestore(a, id, board(5));
+    expect(a.saveWorkingCopy(id, board(5), BASE), "A's autosave of its restored board over B's restored copy is refused").toBe(a.WORKING_COPY_CONFLICT);
+    const after = await stored(id);
+    expect(after.pcbWorking?.board.tracks, "B's restored copy is not replaced").toHaveLength(8);
+    expect(after.pcbWorkingConflict?.board.tracks, "A's restored board is the conflict record").toHaveLength(5);
+    expect(after.pcbWorkingConflict?.reason).toMatch(/another tab/i);
+    expect(b.saveWorkingCopy(id, board(9), BASE), "B's own next edit goes through").toBe(true);
+    expect((await stored(id)).pcbWorking?.board.tracks).toHaveLength(9);
   });
 });

@@ -599,7 +599,7 @@ export default function PcbEditor({
     if (init.demo) return;
     const onRestore = () => {
       const board = consumePendingBoardRestore();
-      if (board) { if (init.scope) rememberStoredWorkingCopy(init.scope.projectId); adoptBoardLifecycle("checkpoint-restore", board); } // [B24-D2 review, 2026-10-09] page.tsx persisted the restored copy first: it is this tab's own from here
+      if (board) { if (init.scope) rememberStoredWorkingCopy(init.scope.projectId, board); adoptBoardLifecycle("checkpoint-restore", board); } // [B24-D2 review, 2026-10-09] page.tsx persisted the restored copy first: it is this tab's own from here; [B24-D4 review, 2026-10-10] security-2: told by the restored board, which the stored copy must hold
     };
     window.addEventListener(BOARD_RESTORE_EVENT, onRestore);
     return () => window.removeEventListener(BOARD_RESTORE_EVENT, onRestore);
@@ -626,7 +626,7 @@ export default function PcbEditor({
           saveAuthoritativeBoardCache(loaded.value.record);
           setAuthoritativeRecord(loaded.value.record);
         }
-        rememberStoredWorkingCopy(syncIdentity.projectId); adoptBoardLifecycle("checkpoint-restore", restored); // [B24-D2 review, 2026-10-09] the restored copy page.tsx persisted is this tab's own from here
+        rememberStoredWorkingCopy(syncIdentity.projectId, restored); adoptBoardLifecycle("checkpoint-restore", restored); // [B24-D2 review, 2026-10-09] the restored copy page.tsx persisted is this tab's own from here; [B24-D4 review, 2026-10-10] security-2: only while it holds the restored board (another tab's restore or edit in the load's window is refused)
         return;
       }
       const working = loadWorkingCopy(syncIdentity.projectId);

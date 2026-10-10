@@ -219,6 +219,21 @@ focus inside, Tab and Shift+Tab cycling among Close, Cancel and Confirm, Escape 
 that card alone by the lead's run (section 5). For the other approval dialogs and the four BOM dialogs the trap is INFERRED (the
 same Base UI component, `dialog.tsx` unchanged); no case measures it (jsdom has no sequential focus navigation).
 
+**[B24-D4, 2026-10-10] The card's focus return (D24-32, 2.4.3).** CI run 38061798204 on `1fe719e` failed `keyboard-and-focus` 4 at
+`:235` with focus on `body` after Escape (the entry did read cancelled): the card set no return target, and Base UI's default - the
+last element an earlier popup recorded, focus being on `body` when the card opened (the prompt is disabled while the run streams,
+section 7) - was none on CI. Fixed in place: the card's `DialogContent` carries `finalFocus={promptFocus}` (`GrantedExecutionDialog.tsx:55`;
+`promptFocus` at the end of the file, `:123`, gives the prompt when it is enabled; [B24-D4 review, 2026-10-10] correctness-1: with the
+prompt still disabled - the card closed while the run streams - it moves no focus (`false`, `:125`), never Base UI's default, so focus
+is on `body` and page.tsx's run-end return, which acts only from `body`, takes it to the prompt when the run ends), as the worksheet
+returns focus to its trigger. When the card closes by Escape, Cancel or Confirm, focus lands on the prompt: `b24-d3-bom-dialogs` 5 in
+jsdom (red first on `1fe719e`, `d4r2-04-red-card-focus`: focus on `body`; green after, `d4r2-05-green-card-focus`); closed while the
+prompt is still disabled, focus is on `body` (not the page's first control, where the default sent it), then on the prompt after
+page.tsx's run-end code, run over jsdom: `b24-d3-bom-dialogs` 6 (red first on the D4 tree, `d4fix-03-red-card-focus` and
+`d4fix-06-red-card-focus-2`: focus on the page's first control; green after, `d4fix-07-green-part1`). **CONFIRMED** in jsdom only.
+The browser proof is case 4's stricter assertion (focus ON the prompt, `keyboard-and-focus.spec.ts:235`, in place, which either path
+satisfies), PROPOSED until the lead's run.
+
 **The four hand-rolled dialogs outside OD-215's list** (`b24-d3-accessible-names` 5 pins exactly these, outside `BomView.tsx`):
 
 | dialog | `role="dialog"` | observed focus behaviour (read) | state |
@@ -344,7 +359,8 @@ then the strengthened suite was run on the same breakage, then the source was re
    terminal event, focus on the prompt.
 3. Shift+Tab to the PCB tab, Enter; Tab to `pcb-goto-input`, "R3", Enter: the selection's primary is a footprint.
 4. The Tier 1 card by keyboard (section 4), every stop of the cycle visibly focused; after Escape the entry reads cancelled ("Cancelled
-   — nothing was changed."), R3 has not moved (a "Status." turn's editor context before and after), and focus is not on `body`.
+   — nothing was changed."), R3 has not moved (a "Status." turn's editor context before and after), and focus is on the prompt
+   ([B24-D4, 2026-10-10] stricter, in place at `:235`; was: focus is not on `body`. PROPOSED until the lead's browser run).
 5. Both canvas hosts expose `role="img"` named exactly by their statements, each naming the Go to field case 3 used.
 
 **Visible-focus fixes.** None made: reading the stops on the case 1 path, every control either keeps the browser's own
@@ -356,6 +372,12 @@ that fails is fixed in place by a `focus-visible` class on its existing line (a 
 **After Escape on the card.** Base UI returns focus to the element focused when the card opened; the prompt was disabled then, so
 that element is `body`, and Base UI moves focus to `body`'s first tabbable element instead (the header's first button). INFERRED from
 `FloatingFocusManager`'s return-focus code; case 4 asserts only that focus is not on `body`. Recorded open (section 12).
+[B24-D4, 2026-10-10] That INFERRED fallback was the defect: on CI's runner (run 38061798204) focus stayed on `body` and case 4 failed
+at `:235`. The card now returns focus to the prompt through its `finalFocus` (section 4; `b24-d3-bom-dialogs` 5, jsdom), and case 4
+asserts focus on the prompt, PROPOSED until the lead's browser run. [B24-D4 review, 2026-10-10] Base UI's default is the last
+element an earlier popup recorded (a list it keeps across popups), not `body`'s first tabbable element; closed while the prompt is
+still disabled, the card now moves no focus, so focus is on `body` until page.tsx's run-end return takes it to the prompt
+(`b24-d3-bom-dialogs` 6, jsdom).
 
 **[B24-D3 lead, 2026-10-10] Case 1's measured path.** On the lead's run, 13 Tab presses reach AI Chat from a fresh load and 95 more
 reach the prompt: the chat `<aside>` follows the whole PCB editor in the DOM (the workspace tabs, the PCB toolbar, Go to, the board
@@ -403,7 +425,7 @@ that through `BROWSER_SPECS_EXECUTED`, which the lead flips to true with the row
 | 2.3.1 Three Flashes or Below Threshold | A | NOT MEASURED | |
 | 2.4.1 Bypass Blocks | A | NOT MEASURED | no skip link; case 1 of the keyboard spec records how many presses reach the chat: 95 from AI Chat to the prompt on the lead's run (section 7) |
 | 2.4.2 Page Titled | A | NOT MET | the document title is "Create Next App" (`app/layout.tsx:20`, read; no case) |
-| 2.4.3 Focus Order | A | tested in part | every stop recorded on the path to the prompt `keyboard-and-focus 1`: 95 presses from AI Chat, focus not moved into the opened chat (section 7, a gap); whether the order is meaningful is not judged |
+| 2.4.3 Focus Order | A | tested in part | every stop recorded on the path to the prompt `keyboard-and-focus 1`: 95 presses from AI Chat, focus not moved into the opened chat (section 7, a gap); whether the order is meaningful is not judged; [B24-D4, 2026-10-10] the Tier 1 card returns focus to the prompt when it closes `b24-d3-bom-dialogs 5` (CI run 38061798204 found it on `body`, section 4); [B24-D4 review, 2026-10-10] closed while the prompt is still disabled, no focus moves until page.tsx's run-end return takes it to the prompt `b24-d3-bom-dialogs 6` |
 | 2.4.4 Link Purpose (In Context) | A | NOT MEASURED | |
 | 2.4.5 Multiple Ways | AA | NOT MEASURED | a single-page editor (INFERRED) |
 | 2.4.6 Headings and Labels | AA | tested in part | in-scope labels present `b24-d3-accessible-names 2`; dialog headings `b24-d3-bom-dialogs 1`, `b24-d3-accessible-names 5`; their wording is not judged |
@@ -555,7 +577,13 @@ every increment's list into one table):
   only a chat run sent from the prompt gets it back. INFERRED, low.
 - Case 11 runs the page's focus code over a model of the DOM's focus rules, not in a browser; `keyboard-and-focus` 2 is the browser
   proof (CONFIRMED by the lead's run). The pointer capture on the root element is not a B17-A site, by B17-A's own attribute list (section 3).
-- After Escape on the Tier 1 card focus lands on the header's first button, not the prompt (section 7), INFERRED, low.
+- After Escape on the Tier 1 card focus lands on the header's first button, not the prompt (section 7), INFERRED, low. [B24-D4,
+  2026-10-10] Closed: that fallback was the defect (CI run 38061798204: focus on `body`); the card's `finalFocus` gives the prompt
+  (section 4, `b24-d3-bom-dialogs` 5 in jsdom); case 4's stricter browser assertion is PROPOSED until the lead's run. [B24-D4 review,
+  2026-10-10] Closed for both paths: closed with the prompt enabled, the card gives the prompt; closed while it is still disabled, the
+  card moves no focus and page.tsx's run-end return takes it from `body` to the prompt (`b24-d3-bom-dialogs` 6 in jsdom). Left open:
+  that return acts only for a run sent from the prompt with no pointer pressed since (`chatFocusReturnRef`), so a card closed by a
+  pointer click while the run streams leaves focus on `body` after the run, by B24-D3's pointer rule. INFERRED, low.
 - [B24-D3 lead, 2026-10-10] The chat prompt is 95 Tab presses after AI Chat (section 7): opening the chat does not move focus into
   it and there is no skip link (2.4.3, 2.4.1). CONFIRMED by the lead's run; a follow-up in `app/page.tsx`, not D3's.
 - The BOM drawers now cover the viewport through the portal (section 4), INFERRED visual change, low.
@@ -618,7 +646,7 @@ Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on 
 | C49 | `app/lib/engineering/control-surface.ts` | 56 | — | `Human-recognisable label: data-testid > aria-label > title > text > placeholder > name > (none).` | B17-A's label order |
 | C50 | `playwright.config.ts` | 39 | — | `devices["Desktop Chrome"]` | the one project |
 | C51 | `.github/workflows/deterministic-manufacturing.yml` | 229 | — | `app/lib/qualification/__tests__` | A1's directory filter admits both unit suites |
-| C52 | `.github/workflows/deterministic-manufacturing.yml` | 417 | — | `- run: pnpm exec playwright test` | the browser step admits both specs |
+| C52 | `.github/workflows/deterministic-manufacturing.yml` | 417 | — | `- run: pnpm exec playwright test` | the browser step admits both specs; [B24-D4, 2026-10-10] superseded: since OD-30's split this step leaves both out (`SIRKIT_E2E_SKIP`, `:418-419`) and the appended `page-browser-e2e-b24` runs them (C70; [B24-D4 lead, 2026-10-10] with B24-D2's two specs, by the lead's option (b)) |
 | C53 | `.github/workflows/deterministic-manufacturing.yml` | 402 | — | `timeout-minutes: 30` | page-browser-e2e's limit (OD-30) |
 | C54 | `.github/workflows/deterministic-manufacturing.yml` | 26 | — | `timeout-minutes: 25` | prompt-to-gerber's limit (OD-30) |
 | C55 | `scripts/generate-b24-accessible-names.ts` | 22 | — | `const CENSUS_PATH = "artifacts/ai-control-plane-b24/accessible-name-census.csv";` | the ratchet's baseline, never read from outDir (review round) |
@@ -633,3 +661,7 @@ Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on 
 | C64 | `app/page.tsx` | 6046 | — | `onPointerDownCapture={() => { chatFocusReturnRef.current = false;` | any pointer press clears it, in place (review round) |
 | C65 | `app/page.tsx` | 7022 | — | `title="More checks" aria-label="More checks"` | the More checks button named, in place (review round) |
 | C66 | `app/lib/engineering/accessible-names.ts` | 779 | — | `const name = nameOf({ surface: rows[0]!.surface, kind: "click"` | a backdrop's closer found by its accessible name (review round) |
+| C67 | `app/components/pcb/GrantedExecutionDialog.tsx` | 55 | — | `<DialogContent className="max-w-xl" finalFocus={promptFocus}>` | [B24-D4, 2026-10-10] the card's return target, in place |
+| C68 | `app/components/pcb/GrantedExecutionDialog.tsx` | 125 | — | `return prompt && !prompt.disabled ? prompt : false;` | [B24-D4, 2026-10-10] the prompt when enabled; [B24-D4 review, 2026-10-10] else no focus move (was: Base UI's default, `: true`) |
+| C69 | `e2e/keyboard-and-focus.spec.ts` | 235 | — | `await expect(prompt, "focus returns to the prompt after Escape").toBeFocused({ timeout: 10_000 });` | [B24-D4, 2026-10-10] case 4, stricter, in place |
+| C70 | `.github/workflows/deterministic-manufacturing.yml` | 651 | — | `run: pnpm exec playwright test e2e/multi-tab.spec.ts e2e/crash-recovery.spec.ts e2e/keyboard-and-focus.spec.ts e2e/minimum-width.spec.ts` | [B24-D4, 2026-10-10] the two specs' job since OD-30's split (`ci-split.md` section 11); [B24-D4 lead, 2026-10-10] `page-browser-e2e-b24`, which also runs B24-D2's two specs (the lead's option (b); Playwright runs the four files in name order, `multi-tab` last) |

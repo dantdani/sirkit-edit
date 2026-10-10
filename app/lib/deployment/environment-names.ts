@@ -134,7 +134,7 @@ const ROWS: readonly EnvironmentNameRow[] = [
   undeclared("NODE_OPTIONS", "platform", "app/lib/computation/engine-host.ts", "the Node.js options of the process, read for its heap flags"),
   undeclared("SIRKIT_E2E_BASE_URL", "platform", "scripts/e2e-prompt-to-gerber.ts", "the acceptance driver's server address, a developer tool"),
   undeclared("SIRKIT_E2E_ORCHESTRATION_PORT", "platform", "playwright.orchestration.config.ts", "the port of the orchestration browser proof's server, a test harness setting"),
-  undeclared("SIRKIT_E2E_PORT", "platform", "scripts/dev-fixture.mjs", "the port of the fixture browser proof's server, a test harness setting"),
+  undeclared("SIRKIT_E2E_PORT", "platform", "scripts/dev-fixture.mjs", "the port of the fixture browser proof's server, a test harness setting"), undeclared("SIRKIT_E2E_SKIP", "platform", "playwright.config.ts", "the spec globs a fixture browser run leaves out, set by CI's page-browser-e2e step for the specs page-browser-e2e-b24 runs (OD-30's split), a test harness setting"), /* [B24-D4, 2026-10-10] OD-30 (the lead's option A): tooling -> platform; appended on this line so no line moves */
   undeclared("TZ", "platform", "app/lib/computation/runtime-profile.ts", "the time zone a runtime profile requires of a child process environment (UTC)"),
   // ── child-passthrough ──
   undeclared("KICAD_CONFIG_HOME", "child-passthrough", "app/lib/pcb/fab/kicad-cli-runner.ts", "kicad-cli's own configuration folder, passed through from the operator's environment to the child only"),

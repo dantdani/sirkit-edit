@@ -17,7 +17,7 @@
  *  4. The approval card by keyboard: "Move R3 2 mm to the right." opens `granted-execution-card`; focus is inside the dialog
  *     "AI change — confirm before it is made"; Tab and Shift+Tab cycle only among its Close, Cancel and Confirm, each visibly
  *     focused; Escape reaches onCancel through onOpenChange: the entry reads cancelled with "Cancelled — nothing was changed.",
- *     R3 has not moved, and focus is not on `body`. This is the Tab-trap proof for the Tier 1 card ONLY (discovery section 8
+ *     R3 has not moved, and focus is on the prompt ([B24-D4, 2026-10-10] was: not on `body`). This is the Tab-trap proof for the Tier 1 card ONLY (discovery section 8
  *     item 10); the other approval dialogs and the BOM dialogs stay INFERRED.
  *  5. Both canvas hosts expose role img with their statement as the accessible name, and each statement names the Go to
  *     component field case 3 used.
@@ -232,7 +232,7 @@ test("4. the Tier 1 card by keyboard: focus inside, Tab and Shift+Tab cycle amon
   const entry = entries.last();
   await expect(entry).toHaveAttribute("data-state", "cancelled");
   await expect(entry).toContainText("Cancelled — nothing was changed.");
-  expect(await page.evaluate(() => document.activeElement !== null && document.activeElement !== document.body), "focus is not on body after Escape").toBe(true);
+  await expect(prompt, "focus returns to the prompt after Escape").toBeFocused({ timeout: 10_000 }); // [B24-D4, 2026-10-10] D24-32: stricter, on the prompt (was: not on body); CI run 38061798204 found focus on body (the card's finalFocus, GrantedExecutionDialog.tsx)
   await pressUntil(prompt, "Tab", MAX_NAVIGATION, false);
   expect(r3x(await sendByKeyboard("Status.")), "R3 has not moved").toBe(x0);
 });

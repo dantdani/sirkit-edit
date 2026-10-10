@@ -415,6 +415,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm exec playwright test
+        env:
+          SIRKIT_E2E_SKIP: "**/multi-tab.spec.ts,**/crash-recovery.spec.ts,**/keyboard-and-focus.spec.ts,**/minimum-width.spec.ts" # [B24-D4] OD-30: all four run in page-browser-e2e-b24
       # [B21 F2] D21-43: the orchestration spec on its own config and flag-on server, AFTER the step above - one next dev at a time
       - name: Orchestration browser proof (B21 F2)
         run: pnpm exec playwright test -c playwright.orchestration.config.ts
@@ -624,3 +626,38 @@ jobs:
           retention-days: 14
       - if: always() # [B24-D1] OD-30: agent-boundary-suites's headroom
         run: pnpm exec tsx scripts/ci-job-headroom.ts .github/workflows/deterministic-manufacturing.yml agent-boundary-suites
+
+  # [B24-D4] OD-30: page-browser-e2e came within five minutes of its limit at B24-D3's run (27 min 40 s of 30, headroom 2 min 20 s),
+  # so B24's own browser specs run here instead - B24-D2's multi-tab and crash-recovery, B24-D3's keyboard-and-focus and minimum-width;
+  # page-browser-e2e's first browser step leaves them out through SIRKIT_E2E_SKIP. The same setup steps; no secret, database or live resource.
+  page-browser-e2e-b24:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+    steps:
+      - run: echo "SIRKIT_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV" # [B24-D1] OD-30: page-browser-e2e-b24's start
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: B24's browser specs (B24-D2's two, B24-D3's two; OD-30's split)
+        run: pnpm exec playwright test e2e/multi-tab.spec.ts e2e/crash-recovery.spec.ts e2e/keyboard-and-focus.spec.ts e2e/minimum-width.spec.ts
+      - name: Upload browser evidence (B24's specs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: page-browser-e2e-b24-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
+      - if: always() # [B24-D1] OD-30: page-browser-e2e-b24's headroom
+        run: pnpm exec tsx scripts/ci-job-headroom.ts .github/workflows/deterministic-manufacturing.yml page-browser-e2e-b24

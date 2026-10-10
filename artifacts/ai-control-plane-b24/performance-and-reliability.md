@@ -148,8 +148,8 @@ records commit lands green: before the round a legitimate v2 planted into the fi
   (`b24-d1-latency-policy` 8). Its minutes per run are **UNKNOWN** until its first run (locally the two suites take 101.7 s and
   19.8 s); no auto-retry.
 - **The OD-30 steps** (`deterministic-manufacturing.yml`): `prompt-to-gerber`'s start step at `:32` and headroom step at `:344-345`,
-  `page-browser-e2e`'s at `:405` and `:432-433`, `agent-boundary-suites`'s at `:565` and `:624-625` (lead decision D19; A1's
-  insertion table carries the six rows). Still exactly two `playwright test` lines; no new line ends in `pnpm exec vitest run`; the
+  `page-browser-e2e`'s at `:405` and `:432-433`, `agent-boundary-suites`'s at `:565` and `:624-625` ([B24-D4, 2026-10-10] now `:406` and `:435-436`, `:568` and `:627-628`: +1 after B24-D2's database-delivery entry at `:384`, +2 more for the lines after B24-D4's `env:` mapping at `:418-419`; prompt-to-gerber's stand) (lead decision D19; A1's
+  insertion table carries the six rows). Still exactly two `playwright test` lines ([B24-D4, 2026-10-10] superseded: three, B24-D4's appended `page-browser-e2e-b24` runs the four moved specs ([B24-D4 lead, 2026-10-10] the lead's option (b): B24-D2's two with B24-D3's two), with B24-D1's start and headroom steps; `ci-split.md` section 11); no new line ends in `pnpm exec vitest run`; the
   admission helper derives the three jobs. **CONFIRMED** (`b24-d1-latency-policy` 9, `b19-e-ci-job-scope`).
 - **Headroom.** `page-browser-e2e` (of 30) and `prompt-to-gerber` (of 25) are gated since D1; their headroom on the D1 CI run is the
   lead's reading - **BLOCKED-LIVE-QUALIFICATION** here (the builder runs no CI). History: prompt-to-gerber 17 min 31 s of 25 on
@@ -446,7 +446,7 @@ The lead's commit gate re-runs each chain; the one red case is the lead's own pi
 
 ### The README rows of B24-C1..C3 and B24-D0
 
-- [B24-D1, 2026-10-09] their workflow lines are `:381`, `:382`, `:383` (C1-C3's database-delivery entries), `:294-331` (D0's `--exclude` lines) and `:557-625` (`agent-boundary-suites`, with D1's start step at `:565` and headroom step at `:624-625`) after B24-D1's OD-30 steps; the C1-C3 drafts on their pages carry the same dated note.
+- [B24-D1, 2026-10-09] their workflow lines are `:381`, `:382`, `:383` (C1-C3's database-delivery entries), `:294-331` (D0's `--exclude` lines) and `:557-625` (`agent-boundary-suites`, with D1's start step at `:565` and headroom step at `:624-625`) after B24-D1's OD-30 steps ([B24-D4, 2026-10-10] now `:560-628`, its start step at `:568`, its headroom step at `:627-628`: +1 after B24-D2's entry at `:384`, +2 after B24-D4's `env:` mapping at `:418-419`); the C1-C3 drafts on their pages carry the same dated note.
 
 ### B24-D1 - Benchmark methodology and latency (2026-10-09 local; increment workflow + lead; this commit)
 
@@ -694,10 +694,20 @@ NOT MEASURED, and not claimed (LB-8).
     tab". Now a write that changes no board keeps the stored copy's own token (`prepareWorkingCopyWrite`,
     `board-persistence.ts:247`): the stored board itself, or the very board the tab holds with nobody writing since (a load
     remembers the normalized board it hands the editor, `:181`); a legacy copy keeps its `legacy:` token the same way. A conflict
-    still needs the token moved AND the stored board being neither this board nor the one the tab held (case 6);
+    still needs the token moved AND the stored board being neither this board nor the one the tab held (case 6); [B24-D4, 2026-10-10]
+    superseded in part: when the token moved and the stored board is this board but not the one the tab held, nothing is written and
+    the tab keeps the copy its board derives from as its base - the stored token was adopted as the tab's own before, CI's path of
+    `multi-tab` case 2 (section 29; case 9); [B24-D4 review, 2026-10-10] a tab that holds no copy's board (it loaded none) still
+    writes a stored copy of its very board under that copy's token and takes it for its own, as at `1fe719e` (`:255`; case 11);
   - a same-tab checkpoint restore: page.tsx persists the restored board with no token, and an edit before its first autosave was
     refused in a single tab. The editor's two checkpoint-restore adoptions now make the stored copy the tab's own
-    (`rememberStoredWorkingCopy`, `:261`; `PcbEditor.tsx:602`, `:629`, in place; case 7). page.tsx is not edited.
+    (`rememberStoredWorkingCopy`, `:261`; `PcbEditor.tsx:602`, `:629`, in place; case 7). page.tsx is not edited. [B24-D4, 2026-10-10]
+    Only the copy page.tsx persisted (it carries no write token) is adopted; a copy with one is another tab's, written since the
+    restore (the load effect adopts after a board load), and is never taken for the tab's own (`:262`, in place; case 10).
+    [B24-D4 review, 2026-10-10] Superseded: the adoption is told by the board, not the token - `rememberStoredWorkingCopy(projectId,
+    restoredBoard)` takes the stored copy when it holds the very board restored (page.tsx's copy, or another tab's unchanged rewrite
+    of it, case 12) and never another board (another tab's edit, case 10, or its own token-less restore, case 13); both adoptions
+    pass the board they adopt (`PcbEditor.tsx:602`, `:629`, in place; case 7 reads them).
   - Case 4 now saves straight after the stash, with no reload, so it rests on the stash's own memory: deleting
     `rememberWorkingCopy(projectId, null)` from `stashWorkingConflict` turns it red (`d2fix-mutation-case4`; the file restored, its
     sha256 `82ecf8c6...` checked). Each of the eight cases carries a 30 s budget: each resets the module graph, and case 1 ran
@@ -1587,7 +1597,7 @@ this round's report to the lead, never here.
   commit); the memory baseline (OD-212, OD-30).
 - The two browser specs' outcomes and durations, and the CI durations of page-browser-e2e and prompt-to-gerber with them (D1's
   headroom steps report them on the D2 commit; section 27). [B24-D2B, 2026-10-10] The outcomes are now MEASURED locally (sections 18
-  and 19, one win32 run each); the CI durations stay NOT MEASURED until the D2 commit's run.
+  and 19, one win32 run each); the CI durations stay NOT MEASURED until the D2 commit's run. [B24-D4 lead, 2026-10-10] page-browser-e2e's CI duration with them is RECORDED since (section 29: 21 min 46 s on D2's run, 27 min 40 s on D3's); from B24-D4's commit on, CI runs the two specs in `page-browser-e2e-b24`, not page-browser-e2e (OD-30's split, the lead's option (b); `ci-split.md` section 11).
 - A browser heap figure and a routed-board browser journey (LB-8); a real-store restart (LB-14); the live orphan runs (LB-3, LB-17).
 
 ## 26. What stays open
@@ -1746,7 +1756,7 @@ Test-first on `chapter/b24-production-qualification` from `3d5f225`, one run (D2
 
 ### The browser runs and the CI durations
 
-- Run both Playwright configurations with the two new specs; record each spec's outcome (and `crash-outcome.json`), and read the page-browser-e2e and prompt-to-gerber durations from the D2 commit's run (B24-D1's headroom steps; `gh run view`, read-only). If either job's headroom is under five minutes (`OD30_SPLIT_REQUIRED`), the split is its own reviewed change (OD-30). Read a failure of crash (b)'s landed branch with `crash-outcome.json` first (section 19).
+- Run both Playwright configurations with the two new specs; record each spec's outcome (and `crash-outcome.json`), and read the page-browser-e2e and prompt-to-gerber durations from the D2 commit's run (B24-D1's headroom steps; `gh run view`, read-only). If either job's headroom is under five minutes (`OD30_SPLIT_REQUIRED`), the split is its own reviewed change (OD-30). Read a failure of crash (b)'s landed branch with `crash-outcome.json` first (section 19). [B24-D4 lead, 2026-10-10] Done for D2's commit (section 29); from B24-D4's commit on, CI runs the two specs in `page-browser-e2e-b24`, so their CI durations are that job's, not page-browser-e2e's (OD-30's split, the lead's option (b); `ci-split.md` section 11).
 - The B17-A control inventory: no control was added or changed (`generate-b17-control-inventory` twice, zero drift); `PcbEditor.tsx` changed only in place (two restore adoptions, a toast branch, two `=== true` checks), so the browser control-inventory suite is the lead's to run with the specs.
 - [B24-D2B, 2026-10-10] Done: both configurations, each under the lock with `pw2.sh` - default 60 passed (9.2 m, `d2b-default-final`), orchestration 4 passed (2.7 m, `d2b-orch-final`), exit 0 each; the new specs' outcomes in sections 18 and 19 and their `crash-outcome.json` there. The 32 evidence PNGs the default run rewrites were restored from `HEAD`'s blobs and verified by `git hash-object` (0 mismatched). The CI durations stay NOT MEASURED until the D2 commit's run. The B17-A inventory regenerated after the notice change: byte-identical (`d2b-gen-generate-b17-control-inventory`; PcbEditor's notice lines and import changed in place, no control). [B24-D2B review, 2026-10-10] Again after the review round: the specs alone (`d2b-multitab-6`, `-7`; `d2b-crash-3` red, `-4`, `-5`), the default configuration twice (`d2b2-default-final`: 57 passed, 1 failed - the worker-process crash, cause UNKNOWN - 2 did not run, exit 1; `d2b2-default-final-2`: 60 passed, 9.5 m, exit 0) and the orchestration configuration (`d2b2-orch-final`: 4 passed, 2.6 m, exit 0); the 32 evidence PNGs restored the same way (0 mismatched); the B17-A inventory, the census, the scenario map and the catalog byte-identical (`d2b2-gen-*`). [B24-D2B review 2, 2026-10-10] Again after the second review round: the crash spec alone on the final bytes (`d2b3-crash-2`, 2 passed) and on two older code states (the code before the review round, `d2b3-crash-4-pre2code` and `-5-pre2code-b`; the round-2 code, `d2b3-crash-3-round2code`; [B24-D2B review 4] as first written, "on the code before each fix", which no run did: none put the code before the first fix under these assertions), each red as section 19 records, each code state restored byte-identical, the default configuration once (`d2b3-default-final`: 60 passed, 9.5 m, exit 0) and the orchestration configuration once (`d2b3-orch-final`: 4 passed, 2.6 m, exit 0; it runs neither new spec); the 32 evidence PNGs restored from `HEAD` (`git checkout HEAD -- <png>`, the lead's close procedure; [B24-D2B review 3] as first written, "as the lead's task names it", which task-D2B.md does not - the lead sanctioned the procedure for the third review round, section 19) and checked with `git hash-object` (0 mismatched); the generators: section 22's last table. [B24-D2B review 3, 2026-10-10] Again after the third review round: the crash spec alone on the final bytes (`d2b4-crash-1`, 2 passed, exit 0), the default configuration once (`d2b4-default-final`: 60 passed, 10.4 m, exit 0) and the orchestration configuration once (`d2b4-orch-final`: 4 passed, 2.7 m, exit 0; it runs neither new spec, run because the page and the editor it shares changed); the evidence PNGs the runs rewrote restored by the lead's sanctioned close procedure (`git checkout HEAD -- <png>`), each checked with `git hash-object` against `HEAD` (31 rewritten, 0 mismatched; all 32 equal `HEAD`); the generators byte-identical (section 22's last table). [B24-D2B review 4, 2026-10-10] Again after the fourth review round: the crash spec alone on the final bytes (`d2b5-crash-1`, 2 passed, exit 0) and the default configuration once (`d2b5-default-final`: 60 passed, 10.4 m, exit 0); the 25 evidence PNGs it rewrote restored by the lead's sanctioned close procedure (`git checkout HEAD -- <png>`), checked with `git hash-object` (all 32 equal `HEAD`, 0 mismatched); the orchestration configuration not run this round (it runs neither spec).
 
@@ -1859,3 +1869,52 @@ Test-first on `chapter/b24-production-qualification` from `3d5f225`, one run (D2
   record's R3 before rethrowing (`explainNoConflict`, appended), so CI's next failure says which cause held.
 - A Playwright worker-process crash (0xC0000409, no assertion failed) ended `multi-tab` case 1 once more in B24-D3's final default
   run on this machine (the third in that case); the spec alone passed 3 of 3 after it (B24-D3's ledger entry).
+- [B24-D4, 2026-10-10] CI run 38061798204 on `1fe719e` (B24-D3's tree; page-browser-e2e 27 min 40 s of 30, its headroom step
+  2 min 20 s, `split_required` - B24-D4's split answers it, `ci-split.md` section 11): 64 passed, 2 failed, 2 did not run. Both
+  failures are functional and B24-D4 fixes both, test-first; neither is called a flake.
+- `multi-tab` case 2 failed again, and `explainNoConflict` printed the state: `xa` 50.5 mm (A's nudge, stored), the stored working
+  copy's R3 at 51.0 mm with token `b24d2000-e2e0-4000-8000-000000002714`, no conflict record, B "Saved" with no notice, B's selection
+  R3 (a footprint), focus on `body`; no server request was logged during the case. 51.0 = 50.0 + 2 x 0.5: B's board, derived from
+  the copy B loaded before A's edit, replaced A's copy.
+- The path, by reading and a unit reproduction. B's two arrow-key nudges are two serialized canonical commits
+  (`select-move.ts:641`), and the working-copy autosave is debounced 600 ms (`PcbEditor.tsx:1113`); when B's second commit lands more
+  than 600 ms after its first (CI's runner ran `agent-execution.spec.ts` 4.4 times slower than this machine), B saves its first nudge
+  alone. That board is the very board A had stored (50.0 + 0.5), so `prepareWorkingCopyWrite` found no conflict ("the stored board is
+  this board") and kept the stored copy's token - and B's save remembered A's token as B's own. B's second nudge was then judged
+  untouched and replaced A's copy, with no record and no notice. Locally the two nudges fall in one 600 ms window: one save of
+  51.0, refused, so every local run passed. **CONFIRMED** at the unit level: `b24-d2-working-copy` 9, red first on `1fe719e`
+  (`d4r2-02-red-working-copy`: B's second save returned `true`). That this path held on CI's run is **INFERRED**: it fits every field
+  of the line, and the log has no timing of B's saves.
+- A second path the same module allowed, found by reading: the checkpoint-restore adoption in the editor's load effect, which runs
+  after a board load (`PcbEditor.tsx:629`), took whatever copy was stored then for the tab's own, another tab's newer copy included.
+  `b24-d2-working-copy` 10, red first on `1fe719e` (A's edit of the restored board returned `true` over B's copy).
+- The fix, in place in `app/lib/pcb/board-persistence.ts` (no line added; every cited line keeps its anchor). When another tab wrote
+  since and its board is this board but not the board this tab held, the save writes nothing, returns `true` (the board is stored)
+  and the tab keeps the copy its board derives from as its base (`:189`, `:245`, `:255-256`), so its next edit is refused: the
+  conflict record and the toast, as on a local run. The restore adoption takes only the copy page.tsx persisted, which carries no
+  write token (`:262`). A tab's save is refused whenever another tab wrote the stored copy after the copy its board derives from, by
+  either path. `b24-d2-working-copy` 1-10 green (`d4r2-03-green-working-copy`), with the project-state, sync-authority, activation
+  and scenario-2 suites. The spec is unchanged; the browser proof is the lead's CI run (PROPOSED until then). [B24-D4 lead, 2026-10-10] That CI run is `page-browser-e2e-b24`'s: since OD-30's split (the lead's option (b)) that job runs `multi-tab` and `crash-recovery`, not page-browser-e2e (`ci-split.md` section 11).
+- [B24-D4 review, 2026-10-10] The review round (three findings, each red first: `b24-d2-working-copy` 11-13 in
+  `d4fix-01-red-working-copy`; case 9's whole-copy comparison red under a planted write of the skip, `d4fix-02-mutation-skip-writes`,
+  the source restored by sha256). The previous bullet's last two claims are superseded. (1) The skip held a tab that loaded no copy
+  out of every later save once another tab had saved its very board (two tabs hydrating one server board): such a tab now writes it
+  under the copy's token and takes it for its own, as at `1fe719e` (`:255`, `known.boardJson !== null`; case 11). (2) The restore
+  adoption told page.tsx's copy by its missing token, so another tab's unchanged rewrite of it (a "legacy:" token) made the restoring
+  tab's edits refused, and another tab's own token-less restore was taken for the tab's own: it is now told by the board the editor
+  hands it (`rememberStoredWorkingCopy(projectId, restoredBoard)`, `:261-262`; `PcbEditor.tsx:602`, `:629`, in place; cases 12, 13,
+  7). What holds now: a tab's save is refused whenever another tab wrote the stored copy after the copy this tab's board derives from
+  and the stored board is not this tab's board - by a load, a save or a restore. One exception, recorded open (INFERRED, low): a tab
+  that loaded no copy, whose first save is an edit reproducing another tab's newer copy exactly, takes that copy for its own, as at
+  `1fe719e` (the module cannot tell that edit from the tab's hydration autosave, which normally comes first). `b24-d2-working-copy`
+  1-13 green (`d4fix-07-green-part1`, with the project-state, sync-authority, activation, scenario-2 and B18-C/D card suites).
+- Paths ruled out by reading: a board load re-running `loadWorkingCopy` in B after A's write (it runs only in the load effect, after
+  `client.loadBoard`, a network request, and none was logged during the case); `app/page.tsx:4093` (a checkpoint restore; none in the
+  case); a whole-record writer re-writing a stale `pcbWorking` (`saveProject` and `trySaveProject` are reached only by create,
+  duplicate, rename and import, and every writer re-reads the stored record in the same task); the deterministic uuid sequence shared
+  through localStorage (`e2e/fixture-journey.ts:24-35`) minting B's remembered token again as A's (B's token was minted in case 1, A's
+  in case 2, from one advancing sequence). Not ruled out: a delay in localStorage's propagation between the two tabs' renderers, so
+  that B's read had not yet seen A's write - **INFERRED** unlikely (it would have to outlast the second or more between A's stored
+  write and B's save); localStorage offers no compare-and-set across tabs, and OD-214 forbids a cross-tab channel. Recorded open.
+- `keyboard-and-focus` case 4 failed at `:235` with focus on `body` after Escape (the entry did read cancelled): `accessibility.md`
+  sections 4, 7 and 12 (D24-32).

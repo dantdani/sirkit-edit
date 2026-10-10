@@ -180,13 +180,13 @@ describe("[B24-A2] the scanner (D24-4, OD-195)", () => {
     expect(runSecretScan({ entries: [], allowlist: [entry], mode: "history" }).exitCode).toBe(0);
   });
 
-  it("(c) the CI job: secret-scan follows production-smoke and precedes the appended agent-boundary-suites ([B24-D0, 2026-10-09] was: the workflow's last job is secret-scan), declares no permissions (it inherits contents: read), checks out, sets up pnpm and node 24, installs, then runs pnpm exec tsx scripts/scan-secrets.ts; the file still has exactly two lines containing `playwright test` (b21-f-page.test.ts:259-267)", () => { // [B24-D0, 2026-10-09] reviewed pin move: secret-scan follows production-smoke and precedes B24-D0's appended agent-boundary-suites (OD-30's split); the job is found by content and read to the next header; [B24-D0 review, 2026-10-09] correctness-5: the title retitled in place to what the body pins
+  it("(c) the CI job: secret-scan follows production-smoke and precedes the appended agent-boundary-suites ([B24-D0, 2026-10-09] was: the workflow's last job is secret-scan), declares no permissions (it inherits contents: read), checks out, sets up pnpm and node 24, installs, then runs pnpm exec tsx scripts/scan-secrets.ts; the file has exactly three lines containing `playwright test` ([B24-D4, 2026-10-10] was two: + page-browser-e2e-b24's, OD-30's split; b21-f-page.test.ts:259-267)", () => { // [B24-D0, 2026-10-09] reviewed pin move: secret-scan follows production-smoke and precedes B24-D0's appended agent-boundary-suites (OD-30's split); the job is found by content and read to the next header; [B24-D0 review, 2026-10-09] correctness-5: the title retitled in place to what the body pins
     const all = read(WORKFLOW).split(NEWLINE);
     const jobsAt = all.indexOf("jobs:");
     const headers = all.flatMap((line, index) => (index > jobsAt && /^ {2}[a-z][a-z0-9-]*:$/.test(line) ? [index] : []));
     const last = all.indexOf("  secret-scan:");
     expect(headers).toContain(last);
-    expect(headers.map((index) => all[index]!.trim())).toEqual(["prompt-to-gerber:", "database-delivery:", "page-browser-e2e:", "production-smoke:", "secret-scan:", "agent-boundary-suites:"]);
+    expect(headers.map((index) => all[index]!.trim())).toEqual(["prompt-to-gerber:", "database-delivery:", "page-browser-e2e:", "production-smoke:", "secret-scan:", "agent-boundary-suites:", "page-browser-e2e-b24:"]); // [B24-D4, 2026-10-10] reviewed pin move: + the browser job B24-D4 appended after agent-boundary-suites (OD-30's split of page-browser-e2e)
     expect(headers[headers.indexOf(last) - 1]).toBe(all.indexOf("  production-smoke:"));
     const job = all.slice(last, headers[headers.indexOf(last) + 1]).join(NEWLINE);
     expect(job).not.toMatch(/permissions:/);
@@ -197,7 +197,7 @@ describe("[B24-A2] the scanner (D24-4, OD-195)", () => {
     expect(job).toMatch(/^ {10}node-version: 24$/m);
     expect(job).not.toMatch(/\$\{\{[^}]*\bsecrets\./);
     expect(read(WORKFLOW).match(/^permissions:$/gm)).toHaveLength(1);
-    expect(all.filter((line) => line.includes("playwright test"))).toHaveLength(2);
+    expect(all.filter((line) => line.includes("playwright test"))).toHaveLength(3); // [B24-D4, 2026-10-10] reviewed pin move: 2 -> 3, page-browser-e2e-b24's run line (the four moved specs, [B24-D4 lead, 2026-10-10] option (b); OD-30's split)
   });
 
   it("(d) scanning the scanner, its allowlist, the script, this suite and the page gives zero hits with no allowlist entry; the allowlist is exactly the six sentinel lines of the task's Lead note 2 and, since the review round, the two connection-string fakes, each holding in the tree; [B24-A2F, 2026-10-09] and a ninth, history-only entry for the fake B24-C3 committed and the lead's fix rewrote, which holds in history only (cases l-q)", () => {

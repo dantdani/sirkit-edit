@@ -186,7 +186,7 @@ export function loadWorkingCopy(projectId: string): PcbWorkingCopy | null {
  *  at that canonical head; passing null/undefined clears any previous claim so
  *  a legacy-path edit can never inherit a stale canonical identity. */
 export function saveWorkingCopy(projectId: string, board: PcbBoard, base: { revision: string; digest: string } | null, canonicalHead?: PcbCanonicalHead | null): boolean | typeof WORKING_COPY_CONFLICT { // [B24-D2, 2026-10-09] D24-30, OD-214: compare-before-write - a copy another tab wrote since this tab last loaded or saved is never replaced: this tab's board becomes the conflict record (the other copy stays) and the answer is WORKING_COPY_CONFLICT
-  const write = prepareWorkingCopyWrite(projectId, board), copy: PcbWorkingCopy = { board, baseRevision: base?.revision ?? null, baseDigest: base?.digest ?? null, updatedAt: Date.now(), writeId: write.writeId, ...(canonicalHead ? { canonicalHead } : {}) }; if (write.conflict) return stashWorkingConflict(projectId, copy, WORKING_COPY_CONFLICT_REASON, { keepWorking: true }) ? WORKING_COPY_CONFLICT : false; const saved = saveProjectFields(projectId, { // [B24-D2 review, 2026-10-09] an unchanged board keeps the copy's token (prepareWorkingCopyWrite)
+  const write = prepareWorkingCopyWrite(projectId, board), copy: PcbWorkingCopy = { board, baseRevision: base?.revision ?? null, baseDigest: base?.digest ?? null, updatedAt: Date.now(), writeId: write.writeId, ...(canonicalHead ? { canonicalHead } : {}) }; if (write.conflict) return stashWorkingConflict(projectId, copy, WORKING_COPY_CONFLICT_REASON, { keepWorking: true }) ? WORKING_COPY_CONFLICT : false; if (write.skip) return true; /* [B24-D4, 2026-10-10] D24-30: another tab's copy already holds this very board - nothing to write, and this tab's base stays the copy its board derives from */ const saved = saveProjectFields(projectId, { // [B24-D2 review, 2026-10-09] an unchanged board keeps the copy's token (prepareWorkingCopyWrite)
     pcbWorking: copy,
   }); if (saved) rememberWorkingCopy(projectId, copy, write.boardJson); return saved;
 }
@@ -242,9 +242,9 @@ function storedWorkingCopy(projectId: string): PcbWorkingCopy | null {
  *    board nor the board this tab held - another tab's different board, never silently replaced (never, for a tab that never loaded);
  *  - otherwise the write's token: the stored copy's OWN token when the write changes no board (the stored board, or the very board
  *    this tab holds with nobody writing since; a normalized reload of it included), so an idle tab's autosave of an unchanged
- *    board never makes the copy another tab remembers look rewritten; a fresh token for a changed board.
+ *    board never makes the copy another tab remembers look rewritten; a fresh token for a changed board. [B24-D4, 2026-10-10] A SKIP when another tab wrote since and its board is this board but not the board this tab held: nothing is written and the tab keeps its base (CI run 38061798204); [B24-D4 review, 2026-10-10] a tab that holds no copy's board writes it under the copy's token, as before.
  */
-function prepareWorkingCopyWrite(projectId: string, board: PcbBoard): { conflict: boolean; writeId: string; boardJson: string } {
+function prepareWorkingCopyWrite(projectId: string, board: PcbBoard): { conflict: boolean; skip?: boolean; writeId: string; boardJson: string } {
   const boardJson = JSON.stringify(board);
   const stored = storedWorkingCopy(projectId);
   const known = knownWorkingCopies.get(projectId);
@@ -252,15 +252,15 @@ function prepareWorkingCopyWrite(projectId: string, board: PcbBoard): { conflict
   const storedJson = stored ? JSON.stringify(stored.board) : null;
   const untouched = known !== undefined && storedToken === known.token;
   if (known !== undefined && !untouched && storedJson !== boardJson && (storedJson === null || storedJson !== known.boardJson)) return { conflict: true, writeId: nextWriteId(), boardJson };
-  const unchanged = stored !== null && (storedJson === boardJson || (untouched && known.boardJson === boardJson));
-  return { conflict: false, writeId: unchanged ? storedToken! : nextWriteId(), boardJson };
+  const unchanged = stored !== null && (storedJson === boardJson || (untouched && known.boardJson === boardJson)), notOurs = known !== undefined && !untouched && known.boardJson !== null && storedJson !== known.boardJson; // [B24-D4, 2026-10-10] D24-30: a copy another tab wrote over a board this tab did not hold is never adopted as this tab's own, even when this tab's edit reproduces it; [B24-D4 review, 2026-10-10] correctness-3: a tab that holds no copy's board (it loaded none, or its restore adoption was refused) takes a stored copy of its very board for its own, as before
+  return { conflict: false, skip: unchanged && notOurs, writeId: unchanged ? storedToken! : nextWriteId(), boardJson };
 }
 /** [B24-D2 review, 2026-10-09] The stored copy becomes the one this tab holds: the editor's checkpoint-restore adoption calls it, as
  *  page.tsx persists the restored board (with no write token) before handing it over, so the tab's next edit - even one made before
  *  the restored board's first autosave - is never refused as another tab's. */
-export function rememberStoredWorkingCopy(projectId: string): void {
-  const stored = storedWorkingCopy(projectId);
-  rememberWorkingCopy(projectId, stored, stored ? JSON.stringify(stored.board) : null);
+export function rememberStoredWorkingCopy(projectId: string, restoredBoard: PcbBoard): void {
+  const stored = storedWorkingCopy(projectId), restored = stored && JSON.stringify(stored.board) === JSON.stringify(restoredBoard) ? stored : null; // [B24-D4, 2026-10-10] D24-30: a copy another tab wrote since (the load effect's pending restore adopts after a board load) is never this tab's own; [B24-D4 review, 2026-10-10] security-2, correctness-2: told by its board, not by its token - the copy is this tab's when it holds the very board restored (page.tsx's copy, or another tab's unchanged rewrite of it), never another board (another tab's edit or its own restore)
+  rememberWorkingCopy(projectId, restored, restored ? JSON.stringify(restored.board) : null);
 }
 function nextWriteId(): string {
   try {

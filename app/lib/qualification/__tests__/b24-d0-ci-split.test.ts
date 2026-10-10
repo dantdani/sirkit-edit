@@ -87,7 +87,7 @@ const FIRST_EXCLUDE_ROW = 293;
 const JOB_FIRST_LINE_ROW = 551;
 const JOB_LINES_AT_D0 = 66;
 const FIRST_EXCLUDE = 294;
-const JOB_FIRST_LINE = 558; // [B24-D2, 2026-10-09] was 557 (B24-D2's database-delivery entry at `:384`)
+const JOB_FIRST_LINE = 560; // [B24-D2, 2026-10-09] was 557 (B24-D2's database-delivery entry at `:384`); [B24-D4, 2026-10-10] was 558 (B24-D4's two-line env mapping at `:418-419`, OD-30's split of page-browser-e2e)
 /** B24-C2's prompt-to-gerber run, 20 min 37 s, the numerator of CI's ratio (task-D0 "What D0 delivers" 6). */
 const CI_SECONDS = 1237;
 /** The lead's set (page section 3, option 2), in prompt-to-gerber's order: B24-B2's 25 unlinked named suites, the 11 unheld files of
@@ -286,7 +286,7 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     const filters = ciAdmission().filters["prompt-to-gerber"];
     expect(filters).toHaveLength(242);
     // this suite joined the qualification filter's selection after the measurement ran, so it is the one file set aside
-    expect(measured.map((row) => row.file).sort()).toEqual(positional(filters).filter((file) => file !== SELF && !/\/b24-d[123]-[a-z-]+\.test\.tsx?$/.test(file))); // [B24-D1, 2026-10-09] reviewed pin move: B24-D1's four suites joined the qualification filter's selection after the measurement ran, set aside with this one; [B24-D2, 2026-10-09] reviewed pin move: B24-D2's four suites in app/lib/qualification/__tests__ (board-read, memory, process-cleanup, working-copy) set aside the same way; [B24-D3, 2026-10-10] reviewed pin move: B24-D3's two suites (accessible-names, bom-dialogs - a .tsx) set aside the same way
+    expect(measured.map((row) => row.file).sort()).toEqual(positional(filters).filter((file) => file !== SELF && !/\/b24-d[1234]-[a-z-]+\.test\.tsx?$/.test(file))); // [B24-D1, 2026-10-09] reviewed pin move: B24-D1's four suites joined the qualification filter's selection after the measurement ran, set aside with this one; [B24-D2, 2026-10-09] reviewed pin move: B24-D2's four suites in app/lib/qualification/__tests__ (board-read, memory, process-cleanup, working-copy) set aside the same way; [B24-D3, 2026-10-10] reviewed pin move: B24-D3's two suites (accessible-names, bom-dialogs - a .tsx) set aside the same way; [B24-D4, 2026-10-10] reviewed pin move: b24-d4-browser-split (the guard of OD-30's split of page-browser-e2e) set aside the same way
     expect(measured).toHaveLength(471);
     const totals = measured.reduce((all, row) => ({ tests: all.tests + row.tests, failures: all.failures + row.failures, errors: all.errors + row.errors, skipped: all.skipped + row.skipped }), { tests: 0, failures: 0, errors: 0, skipped: 0 });
     expect(totals).toEqual({ tests: 5430, failures: 0, errors: 0, skipped: 42 });
@@ -345,12 +345,12 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     expect(heaviest.map((row) => row.entry)).toEqual(["app/lib/manufacturing-providers/__tests__", "app/lib/mcp", "app/lib/qualification/__tests__", "app/lib/agent/orchestration/__tests__", "app/lib/computation/__tests__"]);
   });
 
-  it("4. [B24-D0, 2026-10-09] reviewed pin move (the lead's decision; was: the tree is unsplit): the tree is split at D0 and the page says so - 38 --exclude lines, the agent-boundary-suites key last among six, no timeout-minutes changed; sections in order, the labels, the decision, this suite's row with its it( count, every citation on the line it names, the records for the lead under their headings, no CI time claimed CONFIRMED for the job that has not run", () => {
+  it("4. [B24-D0, 2026-10-09] reviewed pin move (the lead's decision; was: the tree is unsplit): the tree is split at D0 and the page says so - 38 --exclude lines, the agent-boundary-suites key sixth of seven ([B24-D4, 2026-10-10] was: last among six; B24-D4 appended page-browser-e2e-b24 after it), no timeout-minutes changed; sections in order, the labels, the decision, this suite's row with its it( count, every citation on the line it names, the records for the lead under their headings, no CI time claimed CONFIRMED for the job that has not run", () => {
     const workflow = lines(WORKFLOW);
     expect(workflow.filter((line) => line.trim().startsWith("--exclude"))).toHaveLength(MOVED.length);
     expect(workflow.filter((line) => line.trim().startsWith("--exclude") && !EXCLUDE_LINE.test(line))).toEqual([]);
-    expect(workflow.filter((line, index) => index > workflow.indexOf("jobs:") && JOB_KEY.test(line)).map((line) => line.trim())).toEqual(["prompt-to-gerber:", "database-delivery:", "page-browser-e2e:", "production-smoke:", "secret-scan:", `${NEW_JOB}:`]);
-    expect(workflow.filter((line) => /^ {4}timeout-minutes: /.test(line)).map((line) => line.trim())).toEqual(["timeout-minutes: 25", "timeout-minutes: 15", "timeout-minutes: 30", "timeout-minutes: 20", "timeout-minutes: 10", "timeout-minutes: 20"]);
+    expect(workflow.filter((line, index) => index > workflow.indexOf("jobs:") && JOB_KEY.test(line)).map((line) => line.trim())).toEqual(["prompt-to-gerber:", "database-delivery:", "page-browser-e2e:", "production-smoke:", "secret-scan:", `${NEW_JOB}:`, "page-browser-e2e-b24:"]); // [B24-D4, 2026-10-10] reviewed pin move: + the job B24-D4 appended after this one (OD-30's split of page-browser-e2e)
+    expect(workflow.filter((line) => /^ {4}timeout-minutes: /.test(line)).map((line) => line.trim())).toEqual(["timeout-minutes: 25", "timeout-minutes: 15", "timeout-minutes: 30", "timeout-minutes: 20", "timeout-minutes: 10", "timeout-minutes: 20", "timeout-minutes: 20"]); // [B24-D4, 2026-10-10] reviewed pin move: + page-browser-e2e-b24's 20; no limit raised
     const page = read(PAGE);
     expect(page.startsWith("# B24-D0 - ")).toBe(true);
     const positions = SECTIONS.map((title) => page.indexOf(`${NEWLINE}## ${title}${NEWLINE}`));
@@ -383,9 +383,9 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
 
   it("5. (i) the new job is appended at the end of the workflow with exactly the moved items in prompt-to-gerber's order and the reporter line last: 20 minutes, prompt-to-gerber's checkout, pnpm, node and install steps verbatim, one folded vitest step, an always() diagnostics upload; no env, secret, database or browser; the other jobs' limits unchanged", () => {
     const workflow = lines(WORKFLOW);
-    const job = jobBlock(workflow, `  ${NEW_JOB}:`);
+    const job = ownBlock(workflow, `  ${NEW_JOB}:`); // [B24-D4, 2026-10-10] reviewed pin move: the job's own lines - its block ends where the next job's leading blank and comment lines begin (A1's jobRegions rule), since B24-D4 appended page-browser-e2e-b24 after it
     expect(job.start).toBeGreaterThan(workflow.indexOf("  secret-scan:"));
-    expect(job.end).toBe(lineCount(workflow));
+    expect(job.end).toBe(regionStart(workflow, "  page-browser-e2e-b24:")); // [B24-D4, 2026-10-10] reviewed pin move: was the workflow's end (lineCount); B24-D4's appended job follows
     // appended: its [B24-D0] comment lines sit right above its header, one blank line above them, secret-scan's last step above that
     let above = job.start - 1;
     while (workflow[above]!.startsWith("  # ")) above -= 1;
@@ -498,7 +498,7 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     expect(ALL_TESTS.filter((file) => admission.jobsOf(file).includes("database-delivery") && admission.jobsOf(file).includes(NEW_JOB))).toEqual([]);
     for (const file of positional(["app/lib/workflow/prompt-to-gerber/__tests__"])) expect(promptToGerber, file).toContain(file);
     expect(promptToGerber).toContain(SELF);
-    expect(promptToGerber).toHaveLength(483 - MOVED_FILES); // [B24-D1, 2026-10-09] reviewed pin move: 472 -> 476, B24-D1's four suites in app/lib/qualification/__tests__ (two of them skipped there, gated by SIRKIT_B24_BENCHMARK); [B24-D2, 2026-10-09] reviewed pin move: 476 -> 480, B24-D2's four suites in app/lib/qualification/__tests__ (board-read, memory, process-cleanup, working-copy; the memory suite skipped there, gated by SIRKIT_B24_BENCHMARK); [B24-D2B, 2026-10-10] reviewed pin move: 480 -> 481, b24-d2-crash-recovery (the crash notice's unit proof); [B24-D3, 2026-10-10] reviewed pin move: 481 -> 483, B24-D3's two suites in app/lib/qualification/__tests__ (b24-d3-accessible-names, b24-d3-bom-dialogs)
+    expect(promptToGerber).toHaveLength(484 - MOVED_FILES); // [B24-D4, 2026-10-10] reviewed pin move: 483 -> 484, b24-d4-browser-split in app/lib/qualification/__tests__ (OD-30's split of page-browser-e2e); [B24-D1, 2026-10-09] reviewed pin move: 472 -> 476, B24-D1's four suites in app/lib/qualification/__tests__ (two of them skipped there, gated by SIRKIT_B24_BENCHMARK); [B24-D2, 2026-10-09] reviewed pin move: 476 -> 480, B24-D2's four suites in app/lib/qualification/__tests__ (board-read, memory, process-cleanup, working-copy; the memory suite skipped there, gated by SIRKIT_B24_BENCHMARK); [B24-D2B, 2026-10-10] reviewed pin move: 480 -> 481, b24-d2-crash-recovery (the crash notice's unit proof); [B24-D3, 2026-10-10] reviewed pin move: 481 -> 483, B24-D3's two suites in app/lib/qualification/__tests__ (b24-d3-accessible-names, b24-d3-bom-dialogs)
   });
 
   it("8. (iv) the page's moved-set table equals the xml's figures per item - its workflow line, files, testcase time and share - and in total", () => {
@@ -539,9 +539,9 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     const d0 = rows.indexOf(mine[0]!);
     expect(rows.slice(d0, d0 + 2)).toEqual(mine);
     const later = rows.slice(d0 + 2); // [B24-D1, 2026-10-09] D1's rows, each on a line after D0's or above them (the carry moves D0's lines)
-    expect(later.map((row) => [row[1], row[3], Number(row[4]), Number(row[5])])).toEqual([["B24-D1", "prompt-to-gerber", 32, 1], ["B24-D1", "prompt-to-gerber", 344, 2], ["B24-D1", "page-browser-e2e", 405, 1], ["B24-D1", "page-browser-e2e", 432, 2], ["B24-D1", "agent-boundary-suites", 565, 1], ["B24-D1", "agent-boundary-suites", 624, 2], ["B24-D2", "database-delivery", 384, 1]]); // [B24-D2, 2026-10-09] reviewed pin move: + B24-D2's database-delivery row (the handover's rule (1))
+    expect(later.map((row) => [row[1], row[3], Number(row[4]), Number(row[5])])).toEqual([["B24-D1", "prompt-to-gerber", 32, 1], ["B24-D1", "prompt-to-gerber", 344, 2], ["B24-D1", "page-browser-e2e", 405, 1], ["B24-D1", "page-browser-e2e", 432, 2], ["B24-D1", "agent-boundary-suites", 565, 1], ["B24-D1", "agent-boundary-suites", 624, 2], ["B24-D2", "database-delivery", 384, 1], ["B24-D4", "page-browser-e2e", 418, 2], ["B24-D4", "page-browser-e2e-b24", 629, 35]]); // [B24-D2, 2026-10-09] reviewed pin move: + B24-D2's database-delivery row (the handover's rule (1)); [B24-D4, 2026-10-10] reviewed pin move: + B24-D4's two rows (page-browser-e2e's env mapping, the appended page-browser-e2e-b24 job; OD-30's split)
     const workflow = lines(WORKFLOW);
-    const jobLines = lineCount(workflow) - JOB_FIRST_LINE + 1;
+    const jobLines = ownBlock(workflow, `  ${NEW_JOB}:`).end - JOB_FIRST_LINE + 1; // [B24-D4, 2026-10-10] reviewed pin move: the job's own region's last line (was the workflow's last line; B24-D4's job follows it)
     expect(jobLines).toBe(JOB_LINES_AT_D0 + 3); // [B24-D1, 2026-10-09] the job gained its start step and its two headroom lines
     expect(mine.map((row) => [row[2], row[3], Number(row[4]), Number(row[5])])).toEqual([[DATE, "prompt-to-gerber", FIRST_EXCLUDE_ROW, MOVED.length], [DATE, NEW_JOB, JOB_FIRST_LINE_ROW, JOB_LINES_AT_D0]]);
     expect(carry(FIRST_EXCLUDE_ROW, later)).toBe(FIRST_EXCLUDE);
@@ -549,7 +549,7 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     expect(EXCLUDE_LINE.test(workflow[FIRST_EXCLUDE - 1]!)).toBe(true);
     expect(workflow[JOB_FIRST_LINE - 1]).toBe("");
     expect(workflow[JOB_FIRST_LINE]).toMatch(/^ {2}# /);
-    expect(jobBlock(workflow, `  ${NEW_JOB}:`).end).toBe(JOB_FIRST_LINE + jobLines - 1);
+    expect(ownBlock(workflow, `  ${NEW_JOB}:`).end).toBe(JOB_FIRST_LINE + jobLines - 1); // [B24-D4, 2026-10-10] reviewed pin move: its own lines (ownBlock), as case 5
     // A2's convention, read from the tree: its secret-scan row (:447 at A2's tree) carried through the later rows is the blank line
     // above secret-scan's comment, and its 26 lines end right above D0's blank line
     const earlier = rows.slice(0, d0);
@@ -569,7 +569,7 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     const onLine = (line: number, anchor: string): void => expect(workflow[line - 1] ?? "", `${WORKFLOW}:${line}`).toContain(anchor);
     // B21's C49, C93, C94 (b21-f-page 6)
     const matrix = lines("artifacts/ai-control-plane-b21/evaluation-matrix.md");
-    for (const [id, line, anchor] of [["C49", 417, "- run: pnpm exec playwright test"], ["C93", 420, "run: pnpm exec playwright test -c playwright.orchestration.config.ts"], ["C94", 429, "playwright-report-orchestration"]] as const) { // [B24-D1, 2026-10-09] reviewed pin move: +4 (B24-D1's OD-30 steps at `:32`, `:344-345` and `:405`); D0's note stays on each row; [B24-D2, 2026-10-09] reviewed pin move: +1 more (B24-D2's database-delivery entry at `:384`)
+    for (const [id, line, anchor] of [["C49", 417, "- run: pnpm exec playwright test"], ["C93", 422, "run: pnpm exec playwright test -c playwright.orchestration.config.ts"], ["C94", 431, "playwright-report-orchestration"]] as const) { // [B24-D4, 2026-10-10] reviewed pin move: C93 and C94 +2 (B24-D4's env mapping at `:418-419`); C49 unmoved // [B24-D1, 2026-10-09] reviewed pin move: +4 (B24-D1's OD-30 steps at `:32`, `:344-345` and `:405`); D0's note stays on each row; [B24-D2, 2026-10-09] reviewed pin move: +1 more (B24-D2's database-delivery entry at `:384`)
       const row = matrix.find((candidate) => candidate.startsWith(`| ${id} |`))!;
       expect(row, id).toContain(`| ${id} | \`${WORKFLOW}\` | ${line} | — | \`${anchor}\` |`);
       expect(row, id).toContain(`${note} re-pinned +38`);
@@ -683,3 +683,18 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     expect(problems).toEqual([]);
   });
 });
+
+/** [B24-D4, 2026-10-10] The 0-based index where a job's region begins: its key line, preceded by the blank and `  # ` comment lines
+ *  that belong to it (A1's jobRegions rule, b24-a1-environment-profile.test.ts). Declared after the describe block (no case line moves). */
+function regionStart(workflow: readonly string[], key: string): number {
+  let start = workflow.indexOf(key);
+  while (start > 0 && /^(?:\s*| {2}#.*)$/.test(workflow[start - 1]!)) start -= 1;
+  return start;
+}
+/** [B24-D4, 2026-10-10] A job's own lines: jobBlock's lines up to the next job's region (its leading blank and comment lines excluded). */
+function ownBlock(workflow: readonly string[], key: string): { start: number; end: number; lines: string[] } {
+  const block = jobBlock(workflow, key);
+  let end = block.end;
+  while (end > block.start + 1 && /^(?:\s*| {2}#.*)$/.test(workflow[end - 1]!)) end -= 1;
+  return { start: block.start, end, lines: workflow.slice(block.start, end) };
+}

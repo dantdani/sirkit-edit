@@ -640,7 +640,7 @@ describe("[B24-A1] the page environments-and-deployment.md", () => {
     const planned = simulate(remaining);
     expect(lineCount(planned.workflow) - lineCount(lines(WORKFLOW))).toBe(remaining.reduce((sum, step) => sum + step.lines.length, 0));
     expect(insertionRowsOf(planned.page)).toHaveLength(insertionTable(read(PAGE)).rows.length + remaining.length);
-    expect(insertionRowsOf(planned.page)).toHaveLength(17); // [B24-D1, 2026-10-09] reviewed pin move (the lead's): D1's six real rows where A1 planned four groups (lead decision D19 added agent-boundary-suites's two), +2 on D0's 15; [B24-D0, 2026-10-09] reviewed pin move (the lead's): D0's two real rows (the exclusions, the appended job) beside the 13 planned groups (OD-30's split)
+    expect(insertionRowsOf(planned.page)).toHaveLength(19); // [B24-D4, 2026-10-10] reviewed pin move: 17 -> 19, B24-D4's two real rows (page-browser-e2e's env mapping at `:418`, 2 lines, and the appended page-browser-e2e-b24 job at `:629`, 35 lines with its leading blank line; OD-30's split), each appended to the table; [B24-D1, 2026-10-09] reviewed pin move (the lead's): D1's six real rows where A1 planned four groups (lead decision D19 added agent-boundary-suites's two), +2 on D0's 15; [B24-D0, 2026-10-09] reviewed pin move (the lead's): D0's two real rows (the exclusions, the appended job) beside the 13 planned groups (OD-30's split)
     expect(jobOrderProblems(planned.workflow)).toEqual([]); // A2's appended job (task-A2.md:340) follows production-smoke
     expect(shiftTableProblems(planned.page, planned.workflow)).toEqual([]);
     expect(sectionFourteenWorkflowProblems(planned.page, planned.workflow)).toEqual([]);

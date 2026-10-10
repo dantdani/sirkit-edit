@@ -218,6 +218,7 @@ describe("[B24-D1] the threshold census (D24-28, OD-212)", () => {
       "ci.production-smoke.timeout-minutes": 20 * 60_000,
       "ci.secret-scan.timeout-minutes": 10 * 60_000,
       "ci.agent-boundary-suites.timeout-minutes": 20 * 60_000,
+      "ci.page-browser-e2e-b24.timeout-minutes": 20 * 60_000, // [B24-D4, 2026-10-10] reviewed pin move: + the job B24-D4 appended (OD-30's split of page-browser-e2e)
       "ci.benchmark-core.timeout-minutes": 20 * 60_000,
       "ci.benchmark-nightly.timeout-minutes": 90 * 60_000,
       "ci.benchmark-latency.timeout-minutes": 30 * 60_000,
