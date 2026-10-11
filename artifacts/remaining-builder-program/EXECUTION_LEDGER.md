@@ -5503,3 +5503,72 @@ Test-first on `chapter/b24-production-qualification` from `1fe719e`: two runs, t
   read-only checks of main's history and of the protected original's modification times. The lead's close: on the final tree with the
   drafts applied: pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification 525 passed, 15 skipped (`b24-f-registers` 4 and
   8 green once applied); tsc 0; eslint 0 on the changed TypeScript files.
+
+### B24-closeout - commit 2/2: the final run, the verdict's measured scopes and the integrity lines (2026-10-10 local; increment workflow + lead; this commit)
+
+- **Delivered** (D5; D24-38 closed; D24-40's integrity half; OD-221 amended by one dated line; no new defect, no LB row, no OD entry). Records, reports and one test file, `b24-f-verdict-lines`, which prompt-to-gerber runs; no production code.
+  - `test-and-validation-report.md` (new):
+    - The lead's final run at 26dc8b8: vitest 864 files passed and 11 skipped; 9,733 tests passed and 68 skipped; exit 0 in 1,164 s. tsc 0. eslint . exit 1: 68 problems, 33 errors in 13 files, none introduced by B24. Browser runs as CI splits them: 55, 13 and 4 passed.
+    - CI at 26dc8b8: deterministic-manufacturing run 38104126392, seven jobs `success`, the least headroom page-browser-e2e's 8 min 06 s of 30. benchmark-quality run 38104126347: benchmark-core and benchmark-latency `success`.
+    - The 61 B24 vitest suites (563 `it(` blocks) and 5 Playwright specs (17 `test(` blocks), by increment.
+    - The counts from their pins.
+    - What CI does not select: 302 of the 878 vitest test files, 64 of the 73 `b16-0-*` suites among them. And what was not run.
+  - `unknowns-and-owner-decisions.md` (new):
+    - OD-190..OD-241: 47 applied, 3 applied in part, 2 proposed.
+    - D24-1..D24-43 by their clauses: 26 closed offline, 8 closed, 4 closed as recorded, 3 in part, 2 open.
+    - The discovery's section 8 items, and the owner decisions still required.
+  - `final-verdict.md` filled in place:
+    - Scope 1 NOT READY (eslint). Scope 2 READY, scoped. The verdict PARTIAL at 26dc8b8.
+    - Section 5: the final program report in runbook `:1220-1264`'s format, with FINAL MAIN SHA and PULL REQUESTS MERGED left as `{MERGE}`.
+    - The ten status lines, computed (5.2).
+    - The integrity lines with method and reach (5.3):
+      - SECRETS EXPOSED NO for the scanned reach (354 commits, 0 hits); the 167 commits of the five pushed, unmerged branches scanned since by the lead (origin/main..origin/<branch> each: 0 hits, exit 0).
+      - PROTECTED ORIGINAL MODIFIED YES (67 of 43,943 files modified on or after 2026-09-07; writers UNKNOWN, INFERRED other tools and the owner; none a tracked source file of the program's making; no commit of the program writing there).
+      - HISTORY FABRICATED OR BACKDATED NO (pull requests #4-#7 dated after their merges, INFERRED a clock-label skew; the reconstruction branch named and unmerged).
+  - `changed-files.md` re-derived for 57c3b29..26dc8b8 (21 commits).
+  - `threat-model-closure-register.md`: D24-38 closed on its re-read; D24-39 and D24-40 named at B24-F, `7ce1236`, in place of `this commit (B24-Fb)`; the twelve open rows re-read and unchanged.
+  - `executive-summary.md`: two dated notes.
+- **Test-first (implementation).**
+  - close2-base-qualification: 53 files and 552 tests passed before any edit.
+  - close2-red-1-verdict-lines: red on cases 1, 2, 7 and 11 with the pins moved.
+  - close2-green-1, then -2: 11 passed.
+  - close2-break-1: two planted breakages, both caught, restored by sha256.
+- **Review round** (2026-10-11; correctness-1 to -6, security-1, -5, -6).
+  - close2fix-red-1 and -2 (the second with soft assertions):
+    - red: the benchmark-quality jobs as one merged row; D24-39 and D24-40 still `this commit`; PROTECTED ORIGINAL MODIFIED answered NO beside 67 modified files; SECRETS EXPOSED naming no 167 unscanned pushed commits; five unqualified "every job" claims; the CI selection unnamed; three records-only lines; D24-3 off its clause.
+    - green on the old pages: the unknowns page's OD rows, the suite table and 5.2 (no present error).
+  - Fixed on the pages as listed above.
+  - close2fix-break-A to -D: eight planted breakages, each caught, all files restored by sha256.
+- **Gates** (all through the lock):
+  - The qualification folder plus the B21, B22 and B23 tripwires: 53 files passed, 3 skipped; 552 tests passed, 15 skipped; exit 0.
+  - The nine page suites: 81 passed.
+  - Readers: 49 passed. AST gates: 22 passed.
+  - tsc 0. eslint 0 on the changed test file.
+  - 28 generators twice: 56 runs, zero drift but `gen-demo-fixtures`' CRLF rewrite, LF bytes restored.
+  - Tree secret scan: exit 0, 4,199 entries.
+- **Counts.** Census 168 / 165 / 3 / 0; tools 48 / 37 / 9 / 28; 107 action records; 32 migrations. Unchanged.
+- **Before the merge.** Commit 2/2's own CI run must be green in every pull-request job. The five pushed, unmerged branches still need their secret scan.
+- Lead close (2026-10-11 local): the fast increment form, one run (wf_5d692c5a-cb3: implementer, four review lenses, a skeptic each,
+  one fix round), on the lead's final run at `26dc8b8` and CI there (both recorded on the task as its inputs). The review raised
+  thirteen findings; nine were confirmed and fixed test-first in `b24-f-verdict-lines` (cases 2, 7 and 11 strengthened in place),
+  four refuted - the gravest, that `PROTECTED ORIGINAL MODIFIED` read NO beside a listing of 67 modified files whose writers no
+  listing can name: it now reads YES, as measured, with what the listing does and does not show (none a tracked source file of the
+  program's making; no commit of the program writes there; writers UNKNOWN, INFERRED other tools and the owner) - and that the secret
+  scan's range left the 167 commits of the five pushed, unmerged branches outside it. The lead's decisions: (1) the lead accepts YES
+  as the measured answer (the runbook's line asks whether the original was modified, and a listing cannot attribute it), and the
+  final report states both what was measured and that no program commit wrote there; (2) the lead scanned the five branches at once
+  (B24-A2's scanner, `--history origin/main..origin/<branch>` for `codex/reconstruct-b06-b16-history` 162 commits,
+  `fix/assignment-queue-selection-reset` 1, `fix/b16-0-revoked-member-cold-import-timeout` 1, `fix/b18-d-repair-reapply-after-undo` 2
+  and `fix/b21-page-react-hooks-refs` 1: 1,505 entries, 6 allowlisted lines, 0 hits, every run exit 0), recorded it in place on
+  `final-verdict.md` 5.1 and 5.3 and the report (the line keeps "167 commits", which case 11 requires), and moved case 11's bite from
+  the phrase "not scanned: the N commits", no longer true, to the count itself, which the bite still removes; the drafts that still
+  called them unscanned were applied with that phrase replaced and nothing else changed; (3) OD-221's line replaces the blank line at
+  `OWNER_DECISIONS.md:3212`, as drafted, so OD-241 stays at `:3214`; (4) scope 1 reads NOT READY by its own rule (eslint `.` exits 1
+  on 33 errors that predate B24: `app/page.tsx`'s 14, `BomView.tsx`'s 4 and `PcbEditor.tsx:1422` among the files B24 touched, each
+  recorded before it, the rest in files B24 never changed; the two B24-touched files with warnings lint identically at `57c3b29`),
+  and the three real-process suites ran in neither the final run nor CI; (5) D24-39's and D24-40's register cells keep `this commit
+  (B24-Fb)`, since no record binds `7ce1236` to that token and the binding check would turn red; (6) commit 2/2 changes one test file
+  that prompt-to-gerber runs, so its own CI run is read before the merge, and `lastGreenSha` moves to it only when green. The lead's
+  close: pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification 525 passed, 15 skipped; tsc 0; eslint 0 on the changed
+  TypeScript file; the page checks after the records 6,693 passed, 35 skipped (553 files, app/api and app/lib/agent included);
+  citation sweeps 0 broken; the tree secret scan 0 hits; counts 168/165/3/0, 48/37/9/28, 107, 32.

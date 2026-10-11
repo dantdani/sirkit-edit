@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B24",
-  "currentCheckpoint": "B24 closeout commit 1/2 committed on chapter/b24-production-qualification (records in the ledger)",
-  "status": "in_progress",
+  "currentCheckpoint": "B24 closeout commit 2/2 committed on chapter/b24-production-qualification (records in the ledger); the chapter PR awaits commit 2/2's CI",
+  "status": "PARTIAL",
   "baseSha": "57c3b29",
   "branch": "chapter/b24-production-qualification",
-  "lastGreenSha": "7ce1236",
+  "lastGreenSha": "26dc8b8",
   "pullRequest": "draft PR (chapter/b24-production-qualification -> main) opened after the discovery commit; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
@@ -28,7 +28,7 @@
     "LB-16: BLOCKED-LIVE-QUALIFICATION: live approved external MCP server (discovery, tool calls and hostile tool results through Sirkit's MCP client)",
     "LB-17: BLOCKED-LIVE-QUALIFICATION: kicad-cli live oracle (the exported routed demo loaded and DRC-checked by a real kicad-cli)"
   ],
-  "nextAction": "closeout commit 2/2 (the final run at the final SHA, the test-and-validation report, the unknowns and owner decisions, the final verdict's run-measured scopes, final SHA and integrity lines), then the chapter PR merged normally after green CI, then the final program report",
-  "updatedAt": "2026-10-10T21:44:22-04:00",
+  "nextAction": "commit 2/2's own CI run green in every pull-request job (it changes b24-f-verdict-lines, which prompt-to-gerber runs); then the chapter PR (chapter/b24-production-qualification -> main) merged normally after green CI; then the final program report (final-verdict.md section 5, FINAL MAIN SHA and PULL REQUESTS MERGED filled after the merge)",
+  "updatedAt": "2026-10-11T00:35:44-04:00",
   "previousChapter": "B23 merged normally into main as 57c3b29 (PR #14, 2026-10-06) after green CI on f663d71; verdict PARTIAL (no provider admitted, LB-11; ordering visibly disabled, its contract tested offline only, LB-12; physical evidence defined, none exists, LB-5; no agent can release, transfer or spend; census 166/163/3/0, counts 47/36/9/27)"
 }

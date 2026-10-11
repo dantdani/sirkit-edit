@@ -17,7 +17,9 @@ none is claimed.
 One readiness scope is READY, scoped: the deterministic jlcpcb-2l bare-board manufacturing files. MCP readiness is IN PART. Live provider
 and sandbox readiness are NOT READY on recorded failing runs (Q1's provider runs; B22-D's class 4 NOT CONTAINED). Staging authentication,
 external component-provider, external quote/order and physical hardware are BLOCKED-LIVE-QUALIFICATION. Deterministic local and CI
-readiness are the closeout's final run.
+readiness are the closeout's final run. [B24-closeout, 2026-10-10] Measured at commit 2/2, at `26dc8b8`: deterministic local readiness
+NOT READY (`eslint .` exits 1, none of its 33 errors introduced by B24), CI readiness READY, scoped; the verdict stays PARTIAL
+(`final-verdict.md` sections 1 and 5; `test-and-validation-report.md`).
 
 ## 2. The pages
 
@@ -39,7 +41,7 @@ readiness are the closeout's final run.
 | `performance-reliability-report.md` | the BENCHMARK-QUALITY RESULT, latency, reliability, accessibility |
 | `threat-model-closure-register.md` | 189 defects of the seven numbered registers with their closure |
 | `open-risks-and-owner-decisions.md` | OD-1 to OD-241, the open risks, the one superseded-statement table |
-| `changed-files.md` | the chapter's commits and files to B24-E |
+| `changed-files.md` | the chapter's commits and files to B24-E [B24-closeout, 2026-10-10] re-derived to `26dc8b8` at commit 2/2 |
 
 ## 3. Counts (from `current-system-map.md`)
 

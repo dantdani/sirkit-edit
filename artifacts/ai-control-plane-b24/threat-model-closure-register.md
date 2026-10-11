@@ -47,7 +47,10 @@ one its chapter recorded, re-read at `58c0834` (RECORDED), with the later closur
 
 - `closed`: the chapter's record closes the defect; the row names a suite or a commit that a record binds to the row's own closing
   increment (CI checkouts are shallow, so a commit is checked by its record, never through git); B24-Fb's two rows name
-  `this commit (B24-Fb)`, which the closeout replaces with the SHA in place.
+  `this commit (B24-Fb)`, which the closeout replaces with the SHA in place. [B24-closeout review, 2026-10-11] correctness-6: replaced
+  at commit 2/2 - D24-39 and D24-40 name `7ce1236`, B24-F's one commit (B24-Fa and B24-Fb landed together), with B24-F as their
+  closing increment, the increment a record binds the commit to (B24-F's ledger section's successor, closeout 1/2's, records
+  `7ce1236`; `b24-f-registers` 2); `b24-f-verdict-lines` 7 holds that no row names `this commit`.
 - `closed in part`: part closed, the rest named in the residual.
 - `closed as recorded`: the chapter recorded the defect as an accepted bound, a decision or a limit and changed nothing more.
 - `open`: nothing closes it at `58c0834`; the residual names who would.
@@ -64,7 +67,8 @@ or a B24 discovery closure line of the increment. B24-F's own pages are never re
 last one), so each stands on its suite; the closeout may write the commit in place once B24-F's ledger paragraph records it as its
 base.
 
-Counts: 189 rows - 132 closed, 20 closed in part, 21 closed as recorded, 12 open, 4 BLOCKED-LIVE-QUALIFICATION.
+Counts: 189 rows - 132 closed, 20 closed in part, 21 closed as recorded, 12 open, 4 BLOCKED-LIVE-QUALIFICATION. [B24-closeout,
+2026-10-10] Since commit 2/2: 133 closed and 19 closed in part (D24-38 re-read, section 5); the rest unchanged.
 
 ## 5. The register
 
@@ -253,9 +257,9 @@ Counts: 189 rows - 132 closed, 20 closed in part, 21 closed as recorded, 12 open
 | D24-35 | nothing can record fabrication or test evidence | BLOCKED-LIVE-QUALIFICATION (LB-5) | B24-E | - | `b24-e-register` | nothing built (OD-218) |
 | D24-36 | the deterministic 555 release is time-bound | closed as recorded | B24-E | - | `b24-e-register` | valid through 2027-09-09 (OD-219) |
 | D24-37 | no generator joins the coverage, permission and agent maps; no generator inventory | closed | B24-Fa | - | `b24-f-maps` | the regenerate-all and drift command recorded, not built (OD-220) |
-| D24-38 | the hand-written current-system, permission and database pages are stale | closed in part | B24-Fa | - | `b24-f-maps` | the stale pages' in-place notes are closeout 1/2's |
-| D24-39 | no threat-model closure register exists | closed in part | B24-Fb | this commit (B24-Fb) | `b24-f-registers` | the register is written; its states are re-read at the closeout |
-| D24-40 | the program's own records would not support the final report | closed in part | B24-Fb | this commit (B24-Fb) | `b24-f-registers` | OD-5/OD-19 and the integrity measurements are the closeout's |
+| D24-38 | the hand-written current-system, permission and database pages are stale | closed | B24-Fa, B24-closeout | - | `b24-f-maps` | [B24-closeout, 2026-10-10] re-read at commit 2/2: closed in part (B24-Fa) until closeout 1/2 noted the stale lines; every row of the superseded-statement table is handled since (`b24-f-registers` 7, 8 and 10) - 142 noted, 39 noted nearby, 12 rewritten, 8 never noted in place, and 5 not noted with the reason in place, their own sources calling the line still true or unchanged |
+| D24-39 | no threat-model closure register exists | closed in part | B24-F | `7ce1236` | `b24-f-registers` | the register is written; its states are re-read at the closeout [B24-closeout, 2026-10-10] commit 2/2 re-read D24-38 (closed) and the twelve open rows (section 6, unchanged); the other rows stand as recorded at `58c0834`; [B24-closeout review, 2026-10-11] B24-Fb's half, in B24-F's commit (section 4: the closing increment and commit written in place for `this commit (B24-Fb)`) |
+| D24-40 | the program's own records would not support the final report | closed in part | B24-F | `7ce1236` | `b24-f-registers` | OD-5/OD-19 and the integrity measurements are the closeout's [B24-closeout, 2026-10-10] both done: OD-5 and OD-19 at commit 1/2, the three integrity lines answered at commit 2/2 (`final-verdict.md` section 5.3); in part still: no CI eslint step until `5dfae2b` merges, and the corrective branches unmerged (OD-221); [B24-closeout review, 2026-10-11] B24-Fb's half, in B24-F's commit (section 4) |
 | D24-41 | the benchmark corpus had no executor for CD-9 | closed | B24-D1 | `3d5f225` | `b24-b2-corpus-nightly` | the nightly job's run is not recorded |
 | D24-42 | a delete removes a whole wire that also joins surviving pins | open | - | - | `b24-b2-power-ground` | the owner's decision (OD-229, proposed) |
 | D24-43 | a strict-mode provider cannot call a read whose optional arguments it leaves unset | open | - | - | `b24-d2-board-read` | proposed fix OD-236 |
@@ -265,7 +269,10 @@ Counts: 189 rows - 132 closed, 20 closed in part, 21 closed as recorded, 12 open
 - The states are each chapter's record re-read at `58c0834`; this page re-ran no closing suite. A record that a later increment made
   stale is named in its residual only where B24 closed the remainder (D22-9 by B24-D2) or narrowed it (D22-17 by B24-A3).
 - The open rows are the ones their records leave open: F18-3, D20-7, D20-8, D20-25, D20-36, D21-32, D21-34, D21-42, D21-47, D21-48,
-  D24-42 and D24-43. The closeout re-reads them at the final SHA.
+  D24-42 and D24-43. The closeout re-reads them at the final SHA. [B24-closeout, 2026-10-10] Re-read at commit 2/2: each stays open at
+  `26dc8b8`. After `58c0834` no production line changed but four comment notes, and one generator was added
+  (`scripts/generate-b24-maps.ts`; `git diff --name-status 58c0834 26dc8b8`, read-only), so no closing change landed; D24-42 and D24-43
+  wait for OD-229 and OD-236 (proposed).
 - D24-3 is closed in part although its closure clause reads "closed offline": OD-192 applies the row-security half and keeps the
   application role PROPOSED (`artifacts/remaining-builder-program/OWNER_DECISIONS.md:2733`), so the defect's role half stands offline
   too (the review round, 2026-10-10; `b24-f-registers` 2 pins the row).

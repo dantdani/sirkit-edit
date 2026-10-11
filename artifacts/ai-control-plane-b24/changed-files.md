@@ -4,10 +4,15 @@ Labels: **CONFIRMED** (read with `git log` and `git diff` at `58c0834`). Base: t
 `57c3b29..58c0834` (main `57c3b29`, PR #14's merge, to B24-E). Written from `git log --no-merges --name-status 57c3b29..58c0834` and
 `git diff --name-status 57c3b29 58c0834`; CI checkouts are shallow, so no suite re-derives this page. The closeout re-derives it for the
 final range, B24-F's own commit and the closeout's included.
+[B24-closeout, 2026-10-10] Re-derived by closeout commit 2/2, by the rule above, for the chapter's final range `57c3b29..26dc8b8`
+(`origin/main..26dc8b8`; origin/main is `57c3b29`): `git log --no-merges --name-status 57c3b29..26dc8b8` and
+`git diff --name-status 57c3b29 26dc8b8`, read-only. The derivation first reproduced sections 1 and 2 byte for byte for
+`57c3b29..58c0834`, then ran for the final range. **CONFIRMED** (read with `git log` and `git diff` at `26dc8b8`). `26dc8b8` is the
+final SHA of the chapter's code; closeout commit 2/2 itself is section 3.
 
-## 1. Commits (19, oldest first, none a merge)
+## 1. Commits (21, oldest first, none a merge)
 
-Every commit's author is Dandi Desta <dandidesta82@gmail.com> (19 of 19).
+Every commit's author is Dandi Desta <dandidesta82@gmail.com> (21 of 21).
 
 | commit | date | files | subject |
 |---|---|---|---|
@@ -30,8 +35,10 @@ Every commit's author is Dandi Desta <dandidesta82@gmail.com> (19 of 19).
 | `1fe719e` | 2026-10-10 | 31 | B24-D3: accessible names and announcements, the BOM dialogs on the shared dialog, desktop-only scope; B24-D2's CI red fixed |
 | `6e4e1bb` | 2026-10-10 | 32 | B24-D4: the OD-30 split of page-browser-e2e; B24-D3's two CI reds fixed (a silent two-tab overwrite, focus lost after the card) |
 | `58c0834` | 2026-10-10 | 29 | B24-E: live and physical gates - the offline production-auth harness, the normalised register, the qualification matrix, the statement tripwire |
+| `7ce1236` | 2026-10-10 | 33 | B24-F: final product verdict artifacts - the derived maps, the registers, the reports and the verdict (PARTIAL) |
+| `26dc8b8` | 2026-10-10 | 40 | B24 closeout 1/2: the superseding notes and OD-221's record corrections |
 
-## 2. Files (371 paths changed net: 164 added, 207 modified, 0 other)
+## 2. Files (409 paths changed net: 188 added, 221 modified, 0 other)
 
 Each path with its net status over the range, the first commit that touched it and how many commits did.
 
@@ -43,11 +50,11 @@ Each path with its net status over the range, the first commit that touched it a
 | `.gitignore` | M | `58c0834` | 1 |
 | `app/api/__tests__/b16-1c-invariant-tripwires.test.ts` | M | `1b2c08c` | 1 |
 | `app/api/ai/runtime/route.ts` | M | `1b2c08c` | 1 |
-| `app/api/chat/attribution-runtime.ts` | A | `600d1ba` | 1 |
+| `app/api/chat/attribution-runtime.ts` | A | `600d1ba` | 2 |
 | `app/api/chat/route.ts` | M | `4ec18eb` | 2 |
 | `app/api/chat/trace-runtime.ts` | A | `4ec18eb` | 1 |
 | `app/api/health/route.ts` | A | `1b2c08c` | 1 |
-| `app/api/parts/search/route.ts` | M | `3cd7d6e` | 1 |
+| `app/api/parts/search/route.ts` | M | `3cd7d6e` | 2 |
 | `app/api/pcb-sync/__tests__/route.test.ts` | M | `72c1376` | 1 |
 | `app/api/pcb/edit/__tests__/_assist-live-request.ts` | A | `a405db9` | 1 |
 | `app/api/pcb/edit/__tests__/assist-live.test.ts` | M | `a405db9` | 1 |
@@ -69,7 +76,7 @@ Each path with its net status over the range, the first commit that touched it a
 | `app/lib/accessibility/statements.ts` | A | `1fe719e` | 1 |
 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | M | `1b2c08c` | 2 |
 | `app/lib/acquisition/__tests__/b19-e-live-contract.test.ts` | M | `a405db9` | 1 |
-| `app/lib/acquisition/admission-control.ts` | M | `3cd7d6e` | 1 |
+| `app/lib/acquisition/admission-control.ts` | M | `3cd7d6e` | 2 |
 | `app/lib/agent/__tests__/b09-1-boundary.test.ts` | M | `3773c6a` | 1 |
 | `app/lib/agent/__tests__/b11-5-capture-exactness.test.ts` | M | `3773c6a` | 1 |
 | `app/lib/agent/__tests__/b18-e-board-inspect-budget.test.ts` | M | `3773c6a` | 1 |
@@ -80,6 +87,7 @@ Each path with its net status over the range, the first commit that touched it a
 | `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | M | `a405db9` | 1 |
 | `app/lib/agent/orchestration/__tests__/b21-c-least-privilege.test.ts` | M | `3773c6a` | 1 |
 | `app/lib/agent/orchestration/__tests__/b21-c-role-tools.test.ts` | M | `3773c6a` | 1 |
+| `app/lib/agent/orchestration/__tests__/b21-closeout-statements.test.ts` | M | `7ce1236` | 1 |
 | `app/lib/agent/orchestration/__tests__/b21-e1-provider-policy.test.ts` | M | `1b2c08c` | 1 |
 | `app/lib/agent/orchestration/__tests__/b21-e1-result-tool.test.ts` | M | `3773c6a` | 1 |
 | `app/lib/agent/orchestration/__tests__/b21-e1-stop-reasons.test.ts` | M | `600d1ba` | 1 |
@@ -137,7 +145,7 @@ Each path with its net status over the range, the first commit that touched it a
 | `app/lib/durable-workflow/index.ts` | M | `600d1ba` | 1 |
 | `app/lib/durable-workflow/retention-cli.ts` | A | `600d1ba` | 2 |
 | `app/lib/durable-workflow/retention.ts` | A | `600d1ba` | 1 |
-| `app/lib/embedding-admission.ts` | A | `3cd7d6e` | 1 |
+| `app/lib/embedding-admission.ts` | A | `3cd7d6e` | 2 |
 | `app/lib/embeddings.ts` | M | `4ec18eb` | 1 |
 | `app/lib/engineering/__tests__/b17-f-agent-exposure.test.ts` | M | `3773c6a` | 1 |
 | `app/lib/engineering/__tests__/b18-c-exposure-lift.test.ts` | M | `3773c6a` | 1 |
@@ -213,11 +221,13 @@ Each path with its net status over the range, the first commit that touched it a
 | `app/lib/qualification/__tests__/_b24-b3-two-provider-capsule.ts` | A | `a405db9` | 1 |
 | `app/lib/qualification/__tests__/_b24-c3-fixtures.ts` | A | `ba4f562` | 1 |
 | `app/lib/qualification/__tests__/_b24-e-register.ts` | A | `58c0834` | 1 |
+| `app/lib/qualification/__tests__/_b24-f-pages.ts` | A | `7ce1236` | 1 |
+| `app/lib/qualification/__tests__/_b24-f-registers.ts` | A | `7ce1236` | 2 |
 | `app/lib/qualification/__tests__/_ci-admission.ts` | A | `b0af256` | 5 |
 | `app/lib/qualification/__tests__/_database-env-guard.ts` | A | `4ec18eb` | 1 |
 | `app/lib/qualification/__tests__/_power-ground-facts.ts` | A | `4738aa3` | 1 |
 | `app/lib/qualification/__tests__/b24-a1-configuration.test.ts` | A | `1b2c08c` | 2 |
-| `app/lib/qualification/__tests__/b24-a1-environment-profile.test.ts` | A | `1b2c08c` | 6 |
+| `app/lib/qualification/__tests__/b24-a1-environment-profile.test.ts` | A | `1b2c08c` | 7 |
 | `app/lib/qualification/__tests__/b24-a1-flags.test.ts` | A | `1b2c08c` | 7 |
 | `app/lib/qualification/__tests__/b24-a1-readiness.test.ts` | A | `1b2c08c` | 2 |
 | `app/lib/qualification/__tests__/b24-a2-env-names.test.ts` | A | `b3b6b05` | 6 |
@@ -228,7 +238,7 @@ Each path with its net status over the range, the first commit that touched it a
 | `app/lib/qualification/__tests__/b24-a3-abuse-controls-page.test.ts` | A | `3cd7d6e` | 1 |
 | `app/lib/qualification/__tests__/b24-a3-abuse-limits.test.ts` | A | `3cd7d6e` | 1 |
 | `app/lib/qualification/__tests__/b24-a3-credit-census.test.ts` | A | `3cd7d6e` | 1 |
-| `app/lib/qualification/__tests__/b24-a3-embedding-admission.test.ts` | A | `3cd7d6e` | 1 |
+| `app/lib/qualification/__tests__/b24-a3-embedding-admission.test.ts` | A | `3cd7d6e` | 2 |
 | `app/lib/qualification/__tests__/b24-a3-placement-bound.test.ts` | A | `3cd7d6e` | 1 |
 | `app/lib/qualification/__tests__/b24-a3-principal-limits.test.ts` | A | `3cd7d6e` | 1 |
 | `app/lib/qualification/__tests__/b24-a3-signin-message.test.ts` | A | `3cd7d6e` | 1 |
@@ -240,7 +250,7 @@ Each path with its net status over the range, the first commit that touched it a
 | `app/lib/qualification/__tests__/b24-b2-power-ground.test.ts` | A | `4738aa3` | 1 |
 | `app/lib/qualification/__tests__/b24-b3-live-suite-honesty.test.ts` | A | `a405db9` | 3 |
 | `app/lib/qualification/__tests__/b24-b3-model-in-loop.test.ts` | A | `a405db9` | 1 |
-| `app/lib/qualification/__tests__/b24-b3-scenario-map.test.ts` | A | `a405db9` | 1 |
+| `app/lib/qualification/__tests__/b24-b3-scenario-map.test.ts` | A | `a405db9` | 2 |
 | `app/lib/qualification/__tests__/b24-c1-durable-trace.test.ts` | A | `4ec18eb` | 2 |
 | `app/lib/qualification/__tests__/b24-c1-llm-call-record.test.ts` | A | `4ec18eb` | 3 |
 | `app/lib/qualification/__tests__/b24-c2-attribution.test.ts` | A | `600d1ba` | 2 |
@@ -249,7 +259,7 @@ Each path with its net status over the range, the first commit that touched it a
 | `app/lib/qualification/__tests__/b24-c2-retention.test.ts` | A | `600d1ba` | 2 |
 | `app/lib/qualification/__tests__/b24-c3-recorded-limits.test.ts` | A | `ba4f562` | 1 |
 | `app/lib/qualification/__tests__/b24-c3-trace-read.test.ts` | A | `ba4f562` | 2 |
-| `app/lib/qualification/__tests__/b24-d0-ci-split.test.ts` | A | `b3a4f2d` | 6 |
+| `app/lib/qualification/__tests__/b24-d0-ci-split.test.ts` | A | `b3a4f2d` | 7 |
 | `app/lib/qualification/__tests__/b24-d1-latency-policy.test.ts` | A | `3d5f225` | 3 |
 | `app/lib/qualification/__tests__/b24-d1-latency-workflow.test.ts` | A | `3d5f225` | 1 |
 | `app/lib/qualification/__tests__/b24-d1-latency.test.ts` | A | `3d5f225` | 1 |
@@ -265,6 +275,10 @@ Each path with its net status over the range, the first commit that touched it a
 | `app/lib/qualification/__tests__/b24-e-production-auth-config.test.ts` | A | `58c0834` | 1 |
 | `app/lib/qualification/__tests__/b24-e-register.test.ts` | A | `58c0834` | 1 |
 | `app/lib/qualification/__tests__/b24-e-statements.test.ts` | A | `58c0834` | 1 |
+| `app/lib/qualification/__tests__/b24-f-generator-inventory.test.ts` | A | `7ce1236` | 1 |
+| `app/lib/qualification/__tests__/b24-f-maps.test.ts` | A | `7ce1236` | 1 |
+| `app/lib/qualification/__tests__/b24-f-registers.test.ts` | A | `7ce1236` | 2 |
+| `app/lib/qualification/__tests__/b24-f-verdict-lines.test.ts` | A | `7ce1236` | 1 |
 | `app/lib/qualification/__tests__/fixtures/b24-b3-price-table.contract.fake.json` | A | `a405db9` | 1 |
 | `app/lib/qualification/__tests__/fixtures/b24-b3-price-table.fake.json` | A | `a405db9` | 1 |
 | `app/lib/qualification/__tests__/fixtures/b24-b3-price-table.malformed.json` | A | `a405db9` | 1 |
@@ -305,7 +319,7 @@ Each path with its net status over the range, the first commit that touched it a
 | `artifacts/ai-control-plane-b10/runtime-tool-availability.csv` | M | `3773c6a` | 1 |
 | `artifacts/ai-control-plane-b11/evaluation-case-matrix.csv` | M | `3773c6a` | 1 |
 | `artifacts/ai-control-plane-b11/evaluation-results.json` | M | `3773c6a` | 1 |
-| `artifacts/ai-control-plane-b11/redaction-and-retention-policy.md` | M | `4ec18eb` | 1 |
+| `artifacts/ai-control-plane-b11/redaction-and-retention-policy.md` | M | `4ec18eb` | 2 |
 | `artifacts/ai-control-plane-b11/replay-trace-pins.json` | M | `3773c6a` | 1 |
 | `artifacts/ai-control-plane-b16-0-1/exact-route-authorization-policy.csv` | M | `1b2c08c` | 2 |
 | `artifacts/ai-control-plane-b16-0-2/route-data-and-resource-classification.csv` | M | `1b2c08c` | 2 |
@@ -313,20 +327,29 @@ Each path with its net status over the range, the first commit that touched it a
 | `artifacts/ai-control-plane-b16-0-4/request-body-boundary-matrix.csv` | M | `1b2c08c` | 1 |
 | `artifacts/ai-control-plane-b16-0-7/route-wrapper-matrix.csv` | M | `1b2c08c` | 1 |
 | `artifacts/ai-control-plane-b16-0/auth-route-coverage.csv` | M | `1b2c08c` | 1 |
+| `artifacts/ai-control-plane-b16-0/migration-and-rollback.md` | M | `26dc8b8` | 1 |
 | `artifacts/ai-control-plane-b16-1b/live-auth-qualification-matrix.md` | M | `1b2c08c` | 1 |
+| `artifacts/ai-control-plane-b16-1c/current-prompt-to-gerber-map.md` | M | `26dc8b8` | 1 |
+| `artifacts/ai-control-plane-b16-closeout/clean-and-upgrade-db-proof.md` | M | `26dc8b8` | 1 |
+| `artifacts/ai-control-plane-b16-closeout/migration-delivery-contract.md` | M | `26dc8b8` | 1 |
 | `artifacts/ai-control-plane-b17/ui-control-inventory-summary.json` | M | `1fe719e` | 1 |
 | `artifacts/ai-control-plane-b17/ui-control-inventory.csv` | M | `1fe719e` | 1 |
-| `artifacts/ai-control-plane-b19/unknowns-and-owner-decisions.md` | M | `4738aa3` | 1 |
+| `artifacts/ai-control-plane-b18/permission-tiers.md` | M | `26dc8b8` | 1 |
+| `artifacts/ai-control-plane-b18/unknowns-and-owner-decisions.md` | M | `26dc8b8` | 1 |
+| `artifacts/ai-control-plane-b19/unknowns-and-owner-decisions.md` | M | `4738aa3` | 2 |
+| `artifacts/ai-control-plane-b20/discovery.md` | M | `26dc8b8` | 1 |
+| `artifacts/ai-control-plane-b20/final-verdict.md` | M | `26dc8b8` | 1 |
 | `artifacts/ai-control-plane-b20/mcp-adversarial.md` | M | `3773c6a` | 1 |
 | `artifacts/ai-control-plane-b20/mcp-client-boundary.md` | M | `b3a4f2d` | 2 |
-| `artifacts/ai-control-plane-b20/mcp-exposure.md` | M | `3773c6a` | 1 |
+| `artifacts/ai-control-plane-b20/mcp-exposure.md` | M | `3773c6a` | 2 |
 | `artifacts/ai-control-plane-b20/mcp-parity.json` | M | `3773c6a` | 1 |
 | `artifacts/ai-control-plane-b20/mcp-parity.md` | M | `3773c6a` | 1 |
 | `artifacts/ai-control-plane-b20/mcp-provider-connectors.md` | M | `a405db9` | 3 |
-| `artifacts/ai-control-plane-b20/mcp-server-proposals.md` | M | `3773c6a` | 1 |
+| `artifacts/ai-control-plane-b20/mcp-server-proposals.md` | M | `3773c6a` | 2 |
 | `artifacts/ai-control-plane-b20/mcp-server-reads.md` | M | `3773c6a` | 1 |
 | `artifacts/ai-control-plane-b20/mcp-tool-manifest.csv` | M | `3773c6a` | 1 |
 | `artifacts/ai-control-plane-b20/mcp-tool-manifest.json` | M | `3773c6a` | 1 |
+| `artifacts/ai-control-plane-b21/closeout-statements.md` | M | `7ce1236` | 1 |
 | `artifacts/ai-control-plane-b21/composer-and-first-turn.md` | M | `3d5f225` | 1 |
 | `artifacts/ai-control-plane-b21/evaluation-matrix.md` | M | `1b2c08c` | 11 |
 | `artifacts/ai-control-plane-b21/orchestration-contracts.md` | M | `a405db9` | 3 |
@@ -337,45 +360,66 @@ Each path with its net status over the range, the first commit that touched it a
 | `artifacts/ai-control-plane-b21/specialist-proposals.md` | M | `3d5f225` | 1 |
 | `artifacts/ai-control-plane-b21/specialist-replacement.md` | M | `3d5f225` | 1 |
 | `artifacts/ai-control-plane-b21/task-complexity-router.md` | M | `3d5f225` | 1 |
-| `artifacts/ai-control-plane-b21/unknowns-and-owner-decisions.md` | M | `58c0834` | 1 |
+| `artifacts/ai-control-plane-b21/unknowns-and-owner-decisions.md` | M | `58c0834` | 2 |
 | `artifacts/ai-control-plane-b22/adversarial-matrix.md` | M | `3773c6a` | 1 |
-| `artifacts/ai-control-plane-b22/deck-and-secret-corrections.md` | M | `1b2c08c` | 3 |
+| `artifacts/ai-control-plane-b22/deck-and-secret-corrections.md` | M | `1b2c08c` | 4 |
+| `artifacts/ai-control-plane-b22/discovery.md` | M | `26dc8b8` | 1 |
 | `artifacts/ai-control-plane-b22/final-verdict.md` | M | `3773c6a` | 1 |
+| `artifacts/ai-control-plane-b22/named-computations.md` | M | `26dc8b8` | 1 |
 | `artifacts/ai-control-plane-b22/runtime-profiles.md` | M | `3773c6a` | 1 |
 | `artifacts/ai-control-plane-b22/unknowns-and-owner-decisions.md` | M | `58c0834` | 1 |
 | `artifacts/ai-control-plane-b23/dfm-quote-flow.md` | M | `1b2c08c` | 5 |
+| `artifacts/ai-control-plane-b23/final-verdict.md` | M | `26dc8b8` | 1 |
 | `artifacts/ai-control-plane-b23/ordering-boundary.md` | M | `1b2c08c` | 1 |
 | `artifacts/ai-control-plane-b23/physical-evidence.md` | M | `b0af256` | 3 |
-| `artifacts/ai-control-plane-b23/provider-registry.md` | M | `1b2c08c` | 2 |
-| `artifacts/ai-control-plane-b23/unknowns-and-owner-decisions.md` | M | `58c0834` | 1 |
-| `artifacts/ai-control-plane-b24/README.md` | A | `8664964` | 18 |
-| `artifacts/ai-control-plane-b24/abuse-controls.md` | A | `3cd7d6e` | 2 |
+| `artifacts/ai-control-plane-b23/provider-registry.md` | M | `1b2c08c` | 3 |
+| `artifacts/ai-control-plane-b23/tier3-vocabulary.md` | M | `26dc8b8` | 1 |
+| `artifacts/ai-control-plane-b23/unknowns-and-owner-decisions.md` | M | `58c0834` | 2 |
+| `artifacts/ai-control-plane-b24/README.md` | A | `8664964` | 20 |
+| `artifacts/ai-control-plane-b24/abuse-controls.md` | A | `3cd7d6e` | 3 |
 | `artifacts/ai-control-plane-b24/accessibility.md` | A | `1fe719e` | 2 |
 | `artifacts/ai-control-plane-b24/accessible-name-census-summary.json` | A | `1fe719e` | 1 |
 | `artifacts/ai-control-plane-b24/accessible-name-census.csv` | A | `1fe719e` | 1 |
+| `artifacts/ai-control-plane-b24/agent-graph.md` | A | `7ce1236` | 1 |
+| `artifacts/ai-control-plane-b24/changed-files.md` | A | `7ce1236` | 1 |
 | `artifacts/ai-control-plane-b24/ci-admission.md` | A | `4738aa3` | 8 |
-| `artifacts/ai-control-plane-b24/ci-split.md` | A | `b3a4f2d` | 4 |
+| `artifacts/ai-control-plane-b24/ci-split.md` | A | `b3a4f2d` | 5 |
+| `artifacts/ai-control-plane-b24/coverage-matrix.csv` | A | `7ce1236` | 1 |
+| `artifacts/ai-control-plane-b24/current-system-map.md` | A | `7ce1236` | 1 |
 | `artifacts/ai-control-plane-b24/database-and-recovery.md` | A | `72c1376` | 3 |
-| `artifacts/ai-control-plane-b24/discovery.md` | A | `8664964` | 18 |
+| `artifacts/ai-control-plane-b24/database-migration-proof.md` | A | `7ce1236` | 1 |
+| `artifacts/ai-control-plane-b24/discovery.md` | A | `8664964` | 20 |
 | `artifacts/ai-control-plane-b24/edge-security.md` | A | `b3b6b05` | 8 |
 | `artifacts/ai-control-plane-b24/environments-and-deployment.md` | A | `1b2c08c` | 14 |
+| `artifacts/ai-control-plane-b24/eval-catalog-and-results.md` | A | `7ce1236` | 1 |
 | `artifacts/ai-control-plane-b24/eval-catalog.csv` | A | `b0af256` | 4 |
 | `artifacts/ai-control-plane-b24/eval-catalog.json` | A | `b0af256` | 4 |
 | `artifacts/ai-control-plane-b24/eval-catalog.md` | A | `b0af256` | 4 |
 | `artifacts/ai-control-plane-b24/evidence/d0-ptg-timing.xml` | A | `b3a4f2d` | 1 |
+| `artifacts/ai-control-plane-b24/executive-summary.md` | A | `7ce1236` | 1 |
+| `artifacts/ai-control-plane-b24/final-verdict.md` | A | `7ce1236` | 1 |
+| `artifacts/ai-control-plane-b24/generator-inventory.md` | A | `7ce1236` | 1 |
 | `artifacts/ai-control-plane-b24/latency-baseline.json` | A | `3d5f225` | 1 |
-| `artifacts/ai-control-plane-b24/observability-and-replay.md` | A | `4ec18eb` | 5 |
+| `artifacts/ai-control-plane-b24/mcp-security-report.md` | A | `7ce1236` | 1 |
+| `artifacts/ai-control-plane-b24/observability-and-replay.md` | A | `4ec18eb` | 6 |
+| `artifacts/ai-control-plane-b24/open-risks-and-owner-decisions.md` | A | `7ce1236` | 2 |
 | `artifacts/ai-control-plane-b24/performance-and-reliability.md` | A | `3d5f225` | 4 |
+| `artifacts/ai-control-plane-b24/performance-reliability-report.md` | A | `7ce1236` | 1 |
+| `artifacts/ai-control-plane-b24/permission-autonomy-matrix.csv` | A | `7ce1236` | 1 |
+| `artifacts/ai-control-plane-b24/provider-security-report.md` | A | `7ce1236` | 1 |
 | `artifacts/ai-control-plane-b24/qualification-matrix.md` | A | `58c0834` | 1 |
-| `artifacts/ai-control-plane-b24/retention-and-deletion.md` | A | `600d1ba` | 4 |
+| `artifacts/ai-control-plane-b24/retention-and-deletion.md` | A | `600d1ba` | 5 |
+| `artifacts/ai-control-plane-b24/sandbox-security-report.md` | A | `7ce1236` | 1 |
 | `artifacts/ai-control-plane-b24/scenario-map.csv` | A | `a405db9` | 2 |
 | `artifacts/ai-control-plane-b24/scenario-map.json` | A | `a405db9` | 3 |
-| `artifacts/ai-control-plane-b24/scenario-map.md` | A | `a405db9` | 3 |
-| `artifacts/ai-control-plane-b24/threshold-census.csv` | A | `3d5f225` | 5 |
-| `artifacts/remaining-builder-program/EXECUTION_LEDGER.md` | M | `8664964` | 19 |
+| `artifacts/ai-control-plane-b24/scenario-map.md` | A | `a405db9` | 4 |
+| `artifacts/ai-control-plane-b24/threat-model-closure-register.md` | A | `7ce1236` | 1 |
+| `artifacts/ai-control-plane-b24/threshold-census.csv` | A | `3d5f225` | 6 |
+| `artifacts/ai-control-plane-b24/trust-boundary-map.md` | A | `7ce1236` | 1 |
+| `artifacts/remaining-builder-program/EXECUTION_LEDGER.md` | M | `8664964` | 21 |
 | `artifacts/remaining-builder-program/LIVE_BLOCKERS.md` | M | `1b2c08c` | 12 |
-| `artifacts/remaining-builder-program/OWNER_DECISIONS.md` | M | `1b2c08c` | 17 |
-| `artifacts/remaining-builder-program/PROGRAM_STATE.json` | M | `8664964` | 18 |
+| `artifacts/remaining-builder-program/OWNER_DECISIONS.md` | M | `1b2c08c` | 19 |
+| `artifacts/remaining-builder-program/PROGRAM_STATE.json` | M | `8664964` | 20 |
 | `drizzle/0031_rls_default_deny.sql` | A | `72c1376` | 1 |
 | `drizzle/rollback/0027_project_membership.down.sql` | A | `72c1376` | 1 |
 | `drizzle/rollback/0028_bom_project_ownership.down.sql` | A | `72c1376` | 1 |
@@ -402,9 +446,26 @@ Each path with its net status over the range, the first commit that touched it a
 | `scripts/e2e-prompt-to-gerber.ts` | M | `72c1376` | 1 |
 | `scripts/generate-b24-accessible-names.ts` | A | `1fe719e` | 1 |
 | `scripts/generate-b24-eval-catalog.ts` | A | `b0af256` | 1 |
+| `scripts/generate-b24-maps.ts` | A | `7ce1236` | 1 |
 | `scripts/generate-b24-scenario-map.ts` | A | `a405db9` | 1 |
 | `scripts/generate-b24-threshold-census.ts` | A | `3d5f225` | 1 |
 | `scripts/retention-purge.ts` | A | `600d1ba` | 2 |
 | `scripts/run-b21-live-orchestration-evaluation.ts` | M | `a405db9` | 1 |
 | `scripts/scan-secrets.ts` | A | `b3b6b05` | 1 |
 | `vitest.config.ts` | M | `4ec18eb` | 1 |
+
+## 3. Closeout commit 2/2 (records, reports and one test file)
+
+[B24-closeout, 2026-10-10] Outside the range above: the lead commits it on `26dc8b8`. Its paths, read from `git status --porcelain` on the
+working tree before the lead's commit, then the lead's own records; no production code.
+
+| path | status | what |
+|---|---|---|
+| `app/lib/qualification/__tests__/b24-f-verdict-lines.test.ts` | M | the reviewed pin move: scopes 1-2 measured at the final SHA, the closeout's verdict line, the report's status lines; the closeout's two pages read by cases 4, 7 and 8; [B24-closeout review, 2026-10-11] cases 2, 7 and 11 strengthened, no case added (the CI tables bound to the final SHA and each workflow's pull-request jobs, what no CI job selects, the register's `this commit` replaced, no records-only claim, the unknowns page and the suite table re-derived, 5.2's computed column, the integrity lines against 5.3) |
+| `artifacts/ai-control-plane-b24/changed-files.md` | M | this page, re-derived for the final range |
+| `artifacts/ai-control-plane-b24/executive-summary.md` | M | two dated notes |
+| `artifacts/ai-control-plane-b24/final-verdict.md` | M | scopes 1 and 2, the closeout's verdict, section 5 (the final program report as drafted) |
+| `artifacts/ai-control-plane-b24/test-and-validation-report.md` | A | the final run, CI at the final SHA, the B24 suites, the counts, what was not run |
+| `artifacts/ai-control-plane-b24/threat-model-closure-register.md` | M | D24-38 re-read (closed); the counts, the open rows and D24-39's and D24-40's residuals noted; [B24-closeout review, 2026-10-11] D24-39's and D24-40's `this commit (B24-Fb)` written in place as B24-F, `7ce1236` |
+| `artifacts/ai-control-plane-b24/unknowns-and-owner-decisions.md` | A | OD-190..OD-241, D24-1..D24-43, the discovery's section 8 items, the owner decisions still required |
+| `artifacts/remaining-builder-program/OWNER_DECISIONS.md`, `artifacts/remaining-builder-program/EXECUTION_LEDGER.md`, `artifacts/remaining-builder-program/PROGRAM_STATE.json`, `artifacts/ai-control-plane-b24/README.md`, `artifacts/ai-control-plane-b24/discovery.md` | M | the lead's records: the OD-221 amendment, the ledger section, the state, the README row, the discovery's section-10 line and its D24-38 and D24-40 closure clauses |
