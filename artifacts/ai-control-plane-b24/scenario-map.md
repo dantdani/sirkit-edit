@@ -305,7 +305,7 @@ Every log is under the session scratchpad's `b24/logs/`.
 ## 6. Pins moved, and why (each in place, with a dated `[B24-B3, 2026-10-08]` note)
 
 - The workflow: one prompt-to-gerber line, `app/lib/spice/__tests__/worker-integration.test.ts` at
-  `deterministic-manufacturing.yml:292` (the one live suite no job selected); A1's insertion table gains
+  `deterministic-manufacturing.yml:292` (the one live suite no job selected); A1's insertion table gains [B24-closeout, 2026-10-10] superseded: B24-D1's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:305.
   ``| [B24-B3, 2026-10-08] | prompt-to-gerber | `:292` | 1 |``; B21's C49, C93 and C94 (`:370` -> `:371`, `:373` -> `:374`, `:382` ->
   `:383`, `evaluation-matrix.md:1139, :1183, :1184`), B23's C64 (`:334` -> `:335`, `dfm-quote-flow.md:537`, its note on `:470`) and B23's
   prose citation of the PGlite entry (`dfm-quote-flow.md:269`) moved +1; `ci-admission.md:185`'s browser timeout citation `:356` -> `:357`.
@@ -476,7 +476,7 @@ Every text below is the lead's to apply; B24-B3 edited none of the reserved file
 
 ### Amendment under OD-222's existing heading (B24-A1's, `OWNER_DECISIONS.md:2598`)
 
-- [B24-B3, 2026-10-08] The one opt-in live suite no job selected, `app/lib/spice/__tests__/worker-integration.test.ts`, is admitted to prompt-to-gerber with one explicit line (`deterministic-manufacturing.yml:292`), where it skips without `SPICE_WORKER_LIVE`; every registered live suite is selected by a job that never sets its flag. A third admission kind is named: a non-live opt-in gate (`NON_LIVE_GATES`, lead decision D2) is selected by the job its entry names with its flag set to exactly "1" in that step (B24-B2's corpus on benchmark-nightly, schedule and dispatch only), and every other job that selects it leaves the flag unset.
+- [B24-B3, 2026-10-08] The one opt-in live suite no job selected, `app/lib/spice/__tests__/worker-integration.test.ts`, is admitted to prompt-to-gerber with one explicit line (`deterministic-manufacturing.yml:292`), where it skips without `SPICE_WORKER_LIVE`; every registered live suite is selected by a job that never sets its flag. A third admission kind is named: a non-live opt-in gate (`NON_LIVE_GATES`, lead decision D2) is selected by the job its entry names with its flag set to exactly "1" in that step (B24-B2's corpus on benchmark-nightly, schedule and dispatch only), and every other job that selects it leaves the flag unset. [B24-closeout, 2026-10-10] superseded: B24-D1's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:305.
 
 ### The live-blocker register: dated notes only (no new row; lead decision D14)
 

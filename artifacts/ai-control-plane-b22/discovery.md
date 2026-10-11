@@ -357,7 +357,7 @@ are corrected in place, marked `[B22 lead, 2026-10-01]`.
   `Promise.race` timer that rejects but kills nothing (`app/lib/engineering/tool-invocation.ts:512-518`; `run-drc.ts:103`,
   `readiness/evaluate.ts:364`, `connectivity-board.ts:384`, reader 3). The placement engine checks its budget only between candidate
   specs and measured 44-104 s per 250-footprint run (`OWNER_DECISIONS.md:670-681`, OD-87). The anonymous public
-  `/api/pcb/placement/preview` ("stateless compute", `route-policy.ts:257`) can block the event loop about 125 s per request
+  `/api/pcb/placement/preview` ("stateless compute", `route-policy.ts:257`) can block the event loop about 125 s per request [B24-closeout, 2026-10-10] superseded: B24-A3's record, artifacts/ai-control-plane-b24/abuse-controls.md:334.
   (`artifacts/ai-control-plane-b20/final-verdict.md:66-67`), unchanged since `041fad9` (B17-E). CONFIRMED (non-preemption: INFERRED)
 
 ### 2.4 How a named computation would be exposed
@@ -774,7 +774,7 @@ unchanged). Sources: S2 facts, S3 facts, S6-G3, S6-G4, S6-G9.
     - the titles of `b21-c-least-privilege` cases 3 and 7 and `b20-b3-mcp-subset-move` case 5;
     - the comments at `b21-a-contracts.test.ts:6` and `b21-c-role-tools.test.ts:140`;
     - `orchestration-contracts.md` :195 and :198.
-  - [B22-B lead] B22-A1/A2/A3's suites write temporary fixtures, which B11.5's case 12 (no test writes outside a justified scratch root) refused - unnoticed because no CI job runs a B11 suite and the A1-A3 lead gates did not run `app/lib/agent/__tests__`; the lead added justifications for the A1 and A2 suites on the B19-E precedent (every write line rooted at its `mkdtemp(tmpdir())` root, or the admission lapses - shown by a breakage), and A3's suite now assembles its counterexample write lines at run time.
+  - [B22-B lead] B22-A1/A2/A3's suites write temporary fixtures, which B11.5's case 12 (no test writes outside a justified scratch root) refused - unnoticed because no CI job runs a B11 suite and the A1-A3 lead gates did not run `app/lib/agent/__tests__`; the lead added justifications for the A1 and A2 suites on the B19-E precedent (every write line rooted at its `mkdtemp(tmpdir())` root, or the admission lapses - shown by a breakage), and A3's suite now assembles its counterexample write lines at run time. [B24-closeout, 2026-10-10] superseded: B24-B2's record, artifacts/ai-control-plane-b24/ci-admission.md:404.
 - **D22-16 (the titles):** **Closed by the B22 closeout (1/2)** (2026-10-02).
   - 20 cases in 15 suites are retitled to what their bodies assert, with assertions and `it(` counts unchanged and the same-line note `[B22 closeout, 2026-10-02] retitled (D22-16): ...; assertions unchanged`. They are the seven "12" titles (9.5 item 10), B22-B's "33" list and the sweep's additions.
   - The seven "12" titles now read:
@@ -793,7 +793,7 @@ unchanged). Sources: S2 facts, S3 facts, S6-G3, S6-G4, S6-G9.
 **D22-17 - In-process engines cannot be stopped at their budget.** Requirement: B22-A limits and kill semantics; B22-B "run a pinned
 placement/routing experiment"; global `:155`. Finding: the read-invocation deadline is a `Promise.race` that rejects but cannot preempt
 synchronous work (`tool-invocation.ts:512-518`) (INFERRED, reader 3); the placement engine checks budget only between specs (OD-87,
-measured); the anonymous `/api/pcb/placement/preview` blocks the event loop about 125 s per request (B20 F1, still open, `route-policy.ts:257`);
+measured); the anonymous `/api/pcb/placement/preview` blocks the event loop about 125 s per request (B20 F1, still open, `route-policy.ts:257`); [B24-closeout, 2026-10-10] superseded: B24-A3's record, artifacts/ai-control-plane-b24/abuse-controls.md:334.
 a long-running read placed in a specialist row would be offered to that specialist (`scheduler.ts:700-718`, reader 3). Severity medium.
 **CONFIRMED** (records, code), **INFERRED** (non-preemption). Closes: B22-B (a bounded engine host with hard termination for the
 experiment profile and the in-process computations); F1 by OD-140. Sources: S3-G3, S6-G6.

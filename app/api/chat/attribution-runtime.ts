@@ -15,7 +15,7 @@
  *    the run: it starts after `record` has returned;
  *  - the repositories are `getDurableWorkflowRepository()`, resolved lazily at write time, so importing the route builds no database
  *    client: PostgreSQL in production, the fixture runtime's in-memory repository under the fixture runtime. This module constructs no
- *    repository of its own (D11: the one PostgreSQL repository construction site stays `durable-workflow/runtime.ts`).
+ *    repository of its own (D11: the one PostgreSQL repository construction site stays `durable-workflow/runtime.ts`). [B24-closeout, 2026-10-10] superseded: B24-C3's record, artifacts/ai-control-plane-b24/observability-and-replay.md:1048.
  *
  * The toolset digest is taken over `buildRunToolset(...).declarations` on the run's registry and context (the loop's own derivation,
  * recomputed here at record time; a refused plan has none); the reads over the injected read service's traces; the request ids through

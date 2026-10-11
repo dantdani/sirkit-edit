@@ -100,6 +100,7 @@ corrected in place; nothing else this page cites moved. Main `57c3b29`'s tree eq
   `PCB_ASSIST_LIVE=1` it would most likely be refused before any model call. The kicad-cli oracle's first case exports `createEmptyBoard()`
   (`app/lib/pcb/__tests__/kicad-cli-oracle.test.ts:30`) while its title and assertion expect the routed demo's deliberate short
   (`:29`, `:57-58`); `buildRoutedDemo` is imported (`:22`) and unused by that case. Neither was run: INFERRED (D24-19).
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:97 by B24-B3's record, artifacts/ai-control-plane-b24/scenario-map.md:407.
 
 ---
 
@@ -207,6 +208,7 @@ corrected in place; nothing else this page cites moved. Main `57c3b29`'s tree eq
   identity is allowed only outside production (`:78-80`); `sensitiveOperationsBlocker` refuses sensitive operations in production when the
   Supabase URL or publishable key is missing (`:87-95`). No staging, CI or preview identifier is read anywhere (reader 1's `SIRKIT_*`
   census; the synthesizer's own census of non-test `SIRKIT_*` names finds none). CONFIRMED
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:205-209 by B24-A1's record, artifacts/ai-control-plane-b24/environments-and-deployment.md:488.
 - **No deployment configuration.** `git ls-files` lists no Dockerfile, compose file, `vercel.json`, `netlify.toml`, `fly.toml`,
   `render.yaml`, Procfile or `supabase/config.toml`; the scripts are `build: next build` and `start: next start` (`package.json:9-10`).
   CONFIRMED
@@ -235,6 +237,7 @@ corrected in place; nothing else this page cites moved. Main `57c3b29`'s tree eq
 - **No health or readiness route.** None of the 152 `route.ts` files at `dfd51e3` is a health, readiness, status or ping endpoint; Playwright's start probe
   is `GET /api/ai/runtime` (`playwright.config.ts:42`), a public static-configuration route that checks no database, auth configuration or
   provider (`app/api/ai/runtime/route.ts:13-40`). CONFIRMED
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:235-237 by B24-A1's record, artifacts/ai-control-plane-b24/environments-and-deployment.md:488.
 
 ### 2.2 Data layer: migrations, roles, RLS, backup, test isolation
 
@@ -327,11 +330,13 @@ corrected in place; nothing else this page cites moved. Main `57c3b29`'s tree eq
   (`artifacts/ai-control-plane-b11/validation-summary.md:74`). The single-agent hard budgets (max steps and tool calls, cycle detection)
   and "no automatic provider fallback" are among the unadmitted cases (`app/lib/agent/__tests__/b09-loop-safety.test.ts:203, :218, :229`).
   CONFIRMED
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:322 by B24-B2's record, artifacts/ai-control-plane-b24/ci-admission.md:404.
 - **Model-in-loop.** The only agent live harness is `scripts/run-b21-live-orchestration-evaluation.ts`: refused unless
   `SIRKIT_LIVE_ORCHESTRATION_EVALUATION` is exactly "1" (`:76-79`), one provider per run (`:80`), at most 40 requests with SDK retries 0
   (`:35-38`), the four task-graph capsules only (`:71-73`), `faultReproduced: false` recorded (`:88`); "It is NOT a test and no suite runs
   it" (`:4-5`); never run (`_f-cases.ts:34-35`; B21 verdict `:13-14`). The other model-in-loop check is `assist-live.test.ts` (Anthropic only, the PCB assist
   route, INFERRED broken, section 0). CONFIRMED
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:330 by B24-B3's record, artifacts/ai-control-plane-b24/scenario-map.md:407.
 - **Area coverage** (reader 2, by area, with CI admission checked by the synthesizer for the cited suites): discovery and selection (B11
   e02/e03/e06c/e09 outside CI; b04 registry and b17-f exposure in CI); argument generation (three-way schema parity, explicit grammars in CI;
   live only in assist-live); reference resolution (b07, b18-e-via-facts, b14; browser Go-to); tier compliance (b18-a, b18-c sweeps, `b23-a-tier3-vocabulary`, `b23-a-route-vocabulary`, B20
@@ -361,6 +366,7 @@ corrected in place; nothing else this page cites moved. Main `57c3b29`'s tree eq
   `void agentRunTraceDigest(trace)` and nothing else (`app/api/chat/route.ts:437, :458-465`). B11 left persistence, duration, location,
   readers, access audit and per-tenant salting to the owner (`artifacts/ai-control-plane-b11/redaction-and-retention-policy.md:41-57`).
   CONFIRMED
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:360 by B24-C1's record, artifacts/ai-control-plane-b24/observability-and-replay.md:338.
 - **What is durable.** With orchestration on: the `agent.orchestration-run.v1` record (plan, request, result, decision, dissent; "silent";
   "retention: RECORDED on the page, not implemented here", `app/lib/agent/orchestration/store.ts:1-22`), a resume record holding the
   coordinator's final text up to 60,000 characters (`:398, :402`), and one `agent.orchestration-trace.v1` per specialist task (reader 3,
@@ -386,6 +392,7 @@ corrected in place; nothing else this page cites moved. Main `57c3b29`'s tree eq
   durable commits replayed under the same idempotency key write nothing; the MCP replay cache returns `replayed` reads; an AI undo or redo
   needs a newly minted grant (reader 3). Live runs keep digests only, so no immutable snapshot of a production run exists to replay
   (`trace.ts:11-13`). CONFIRMED (`trace.ts`), reader 3 (the rest)
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:385-386 by B24-C3's record, artifacts/ai-control-plane-b24/observability-and-replay.md:1048.
 
 ### 2.6 Reliability, performance and accessibility (B24-D)
 
@@ -399,6 +406,7 @@ corrected in place; nothing else this page cites moved. Main `57c3b29`'s tree eq
   whose script runs in no workflow (reader 4, `artifacts/stage-10/foundation-evidence.json`; `package.json:35`). Complex workflows have
   ceilings only (qualify 170 s in replay, the DAG's 300 s cap; reader 4). Traces keep run-level `startedAt`/`endedAt` only (`trace.ts:251-252`).
   CONFIRMED
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:400 by B24-D1's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:305.
 - **Streaming and budgets.** One terminal event per run and `stream_cut` on a cut stream are browser-gated (reader 4,
   `e2e/agent-execution.spec.ts:626-690`); no first-event timeout, idle timeout or keepalive exists (`git grep heartbeat|keepalive` over
   `app/api/chat`, `app/lib/agent`, `app/lib/llm`, empty). Budgets: 6 steps, 10 tool calls, 15 s per tool, 120 s per run, 2 identical calls
@@ -421,6 +429,7 @@ corrected in place; nothing else this page cites moved. Main `57c3b29`'s tree eq
   (`app/components/pcb/PcbCanvas.tsx:38`). The B17-A inventory checks classification and non-silence, not accessible names (reader 4; 195
   of 631 rows at `dfd51e3` (628 at `50fe156`) have no static label). Approval cards use the Base UI dialog and are browser-proven modal; the BOM dialogs are hand-rolled
   (reader 4, INFERRED no focus trap). CONFIRMED (re-read lines), reader 4
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:418-419 by B24-D3's record, artifacts/ai-control-plane-b24/accessibility.md:535; discovery.md:421-422 by B24-D3's record, artifacts/ai-control-plane-b24/accessibility.md:535.
 - **Responsive.** One Desktop Chrome project, no viewport emulation in any spec (`git grep setViewportSize|devices\[` over `e2e`,
   `e2e-orchestration`, empty), one responsive class in the page (`app/page.tsx:1982`, `sm:inline`). CONFIRMED
 - **Thresholds.** `vitest.config.ts` sets no `testTimeout` (`:13-18`, default 5 s); about 40 CI-gated real-clock bounds (about 45 at `dfd51e3`), the tightest
@@ -428,6 +437,7 @@ corrected in place; nothing else this page cites moved. Main `57c3b29`'s tree eq
   timeouts are on record (reader 4, `EXECUTION_LEDGER.md:249, :2566-2569`); since then slow cases have hit vitest's 5 s default or its RPC limit (`:4288`, `:4393-4398`; on the GitHub runner `:4619`), and the runner's `:4461` timeout was a lost abort fixed in `f0e7bae`, not load. A stable method exists and is unused in CI: `scripts/route-bench.ts`
   (20 warm-ups, sorted samples, p50/p95 budgets that throw, `:34-45, :86-87`) and the stage-09 `REGRESSION_BUDGETS` with a noise band
   (`regression-policy.ts:53-60`; unit-tested in `benchmark-core` on synthetic results only, `stage-09-benchmark-core.test.ts:181-183`, `benchmark.yml:34`). CONFIRMED
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:426 by B24-C1's record, artifacts/ai-control-plane-b24/observability-and-replay.md:338.
 
 ### 2.7 Live and physical gates (B24-E)
 
@@ -440,6 +450,7 @@ corrected in place; nothing else this page cites moved. Main `57c3b29`'s tree eq
 | 5 DFM/quote staging (`:1119`) | B23's provider registry (nine rows, every DFM/quote operation refused `provider_not_admitted`, `79fa18b`) and the fake-backed `POST /api/pcb/provider-exchange` flow (`0c78e93`, `0cd3f59`, `8bca09e`); every credential reference is empty, and no code or suite reads `SIRKIT_B23_LIVE_PROVIDER` (records name it, and `b23-c-ordering-disabled.test.tsx:108` passes it only as a negative case that enables nothing) | per B23 OD-160 | No account | BLOCKED-LIVE-QUALIFICATION (LB-11 recorded, `LIVE_BLOCKERS.md:17`; ordering LB-12, `:18`) |
 | 6 deterministic 555 release; fabricate only with separate approval (`:1120`) | release produced in CI under the frozen clock, fake provider, recorded router; pinned `mfg-release-45b3b7efbc85dc3a8ecd233c906384cd`, archive sha256 `997664c0...6dcc` (`app/lib/workflow/prompt-to-gerber/__tests__/fixtures/expected-identities.json:3, :15-17`); in-repo verifier plus a local-only Python reader | none (deterministic) | Fabrication approval: none recorded; OD-8 authorises no live purchase (`OWNER_DECISIONS.md:14`) | Release: deterministic CI evidence; fabrication BLOCKED-LIVE-QUALIFICATION (LB-5) |
 | 7 inspection and functional test evidence (`:1121`) | no store or route; `manufacturing.assembled-release` is `missing`, "explicitly blocked" (`app/lib/engineering/action-registry.ts:118`); the CD-11/12/13 measurement and claim functions have no production caller (`git grep`); B23-D delivered `physical-evidence.ts` (eight kinds, validators, a review port nothing wires, eligibility blocked for every input; OD-175, `OWNER_DECISIONS.md:2431`) but no store, route, tool or form | none defined | No boards, equipment or operator | BLOCKED-LIVE-QUALIFICATION (LB-5, labelled "not attempted") |
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:436 by B24-B3's record, artifacts/ai-control-plane-b24/scenario-map.md:407; discovery.md:437 by B24-E's record, artifacts/ai-control-plane-b24/qualification-matrix.md:329.
 
 - **Release repeatability.** The rule-profile evidence was retrieved 2026-09-09 and is trusted 365 days (`app/lib/pcb/fab/rule-profile.ts:27-28,
   :45-48`); the release route refuses evidence older than 366 days (`app/api/pcb/release/route.ts:50-51, :185-189`, inside the exported `revalidateReleaseAuthority`, `:145`, which the provider exchange also runs): a real-clock release
@@ -451,6 +462,7 @@ corrected in place; nothing else this page cites moved. Main `57c3b29`'s tree eq
 - **Vacuous live passes.** The distributor contract returns with a passing assertion when a source is not admitted
   (`app/lib/acquisition/__tests__/b19-e-live-contract.test.ts:34-37`); the live-auth membership canary returns when its database URL is
   absent (`b16-1b-live-qualification.test.ts:196`). CONFIRMED
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:451 by B24-B3's record, artifacts/ai-control-plane-b24/scenario-map.md:407.
 
 ### 2.8 Inputs to the final verdict (B24-F)
 
@@ -538,6 +550,7 @@ corrected in place; nothing else this page cites moved. Main `57c3b29`'s tree eq
 | F: maps | B01, B04, B09, B17, B20 generators; `permission-tiers.ts` decision functions; B21 graph data | `scripts/*`; `app/lib/engineering/permission-tiers.ts` (reader); `router.ts`, `scheduler.ts`, `role-tools.ts` (reader) | No join, no permission or graph render (D24-37) |
 | F: statements | the B21 closeout statement tripwire | `app/lib/agent/orchestration/__tests__/b21-closeout-statements.test.ts:321-456` (reader) | B24 needs its own (no live or physical over-claim); B22's `app/lib/computation/__tests__/b22-closeout-statements.test.ts` is a second precedent |
 | F: numeric report fields | census, counts and families pinned | section 1.3 | Moved by B22-B and B23: census 166/163/3/0, tools 47/36/9/27, unchanged by B23's closeout (its final validation run at `b6c6b0d`) |
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:532 by B24-D1's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:305.
 
 ---
 
@@ -629,6 +642,7 @@ B24-A1 (OD-198); real dependency health in staging BLOCKED-LIVE-QUALIFICATION (L
 (`anthropic-config.ts:15`; `adapters.ts:208, :328`); the Anthropic agent client sets no timeout of its own (`adapters.ts:213`). Traces do
 record the adapter-reported model (section 0). Severity low. **CONFIRMED**. Closes: B24-A1 (OD-199). Sources: G-A12 (configuration half),
 B24D-5 (timeout).
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:629 by B24-A1's record, artifacts/ai-control-plane-b24/environments-and-deployment.md:488.
 - [B24-A1, 2026-10-06] D24-10: closed by B24-A1 - the digested `sirkit.deployment-configuration.v1` record, every provider SDK client in it by the code that builds it with its timeout and retries (`b24-a1-configuration`), `/api/ai/runtime` reporting what the clients send and an empty or padded Anthropic model refused rather than sent, and the Anthropic client timeout (`adapters.ts:213`, `timeout: 120_000`); attaching the digest to trace records goes to B24-C2 (OD-208), after B24-C1's durable trace.
 
 **D24-11 - No feature flag or kill switch for the sandbox (external manufacturing gained two off-only switches in B23), and no flag inventory.** Requirement: B24-A `:1042`.
@@ -665,6 +679,7 @@ physical column; stage-09's regression check can return `pass` over all-`blocked
 INFERRED). `evaluation.ts` is hash-pinned (section 0), so a class field there is a pin move. Severity high. **CONFIRMED** (structure),
 **INFERRED** (pooling consequence). Closes: B24-B1 (OD-203). Sources: G24B-1, G24B-2, G24B-3, S6-G8.
 - [B24-B1, 2026-10-08] D24-14: closed offline by B24-B1 (OD-203). `app/lib/evaluation/golden-catalog.ts` (`sirkit.golden-eval-catalog.v1` 1.0.0) is the six-class catalog: 114 rows, one per (area, class), each linking its suites (with B11 and B21-F ids, and CI jobs derived from the workflows by a test-only helper), naming the missing evaluation and its owner, or blocked on its LB id. The validator refuses a live-class row without an LB id, a covered live row, and any blocked, missing, not-applicable, in-part or failing row without its reason. Scores are per class, typed so that two classes cannot be added (`Tally<C>`), and no verdict is a pass: deterministic offline incomplete, model-in-loop and external-provider staging BLOCKED-LIVE-QUALIFICATION, browser E2E and database-backed incomplete, physical-hardware validation failing (B22-D's live run, case 4 NOT CONTAINED, LB-10). Stage-09's `evaluateRegressionResults` no longer reads a run with no `passed` or `completed_with_unknowns` status as `pass` (`NO_EVIDENCE_STATUS`, insufficient_evidence; the counterexample answered `pass` at `72c1376`); a blocked run over a gated profile stays a misreported correctness block (recorded). The B11 scorer and B21-F are not edited. `eval-catalog.md`; `b24-b1-catalog` (11), `b24-b1-score-separation` (5).
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:667 by B24-B2's record, artifacts/ai-control-plane-b24/ci-admission.md:404.
 - [B24-B2, 2026-10-08] D24-14: deterministic offline is `failing` since B24-B2 (power-ground, the member-pin counterexample, D24-42): missing 0, outside pull-request CI 1.
 
 **D24-15 - Evaluation, budget and map-pinning suites run in no CI job.** Requirement: section 4 `:1206-1207`; OD-59/OD-124 practice.
@@ -674,7 +689,9 @@ Finding: the 23 B09-B11 suites, among them B11's whole evaluation and replay sui
 outside too (`b16-0-1-ci-gates.test.ts:107-111`; `b16-0-2-gates.test.ts:266-270`), though since `da36d51` the classification CSV's bytes are also pinned in CI (`b23-a-route-vocabulary.test.ts:667`); `pin-pad-mapping` and footprint-resolver suites are
 outside (reader 2); the 63-package corpus runs only by hand (`benchmark.yml:28-35`; baseline 2026-07-17, reader 2); whether the B11 suite
 passes at `dfd51e3` is **UNKNOWN** (B22's local closeout run at `85439e7` had `app/lib/agent/__tests__` 415/415 green, `artifacts/ai-control-plane-b22/test-and-validation-report.md:94`). Severity medium. **CONFIRMED**. Closes: B24-B2 (OD-204). Sources: G24B-4, G24B-10, B24D-6, G7-8.
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:670 by B24-B2's record, artifacts/ai-control-plane-b24/ci-admission.md:404.
 - [B24 lead, 2026-10-06] Re-verification (section 9): Re-verified at `dfd51e3`: still outside both workflows are the 23 B09-B11 suites (`b09-loop-safety.test.ts:203, :218, :229`), the exact-route-policy, auth-coverage and raw-baseline byte pins, `pin-pad-mapping`, the footprint-resolver suites and the 63-package corpus (`CHAPTERS` now `b19-`..`b23-`). B23-A2 (`da36d51`) narrowed the gap: `b23-a-route-vocabulary.test.ts:667` byte-pins the route resource classification CSV in CI through `deterministic-manufacturing.yml:227`. B22's closeout run at `85439e7` ran `app/lib/agent/__tests__` (B11 suites included), `app/api/chat` and `app/lib/auth/__tests__` green locally (`test-and-validation-report.md:94, :97, :101`); no pass at `dfd51e3` is recorded.
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:677 by B24-B2's record, artifacts/ai-control-plane-b24/ci-admission.md:404.
 - [B24-B2, 2026-10-08] D24-15: closed offline by B24-B2 (OD-204). The 33 suites of D24-15 and the three catalogued opt-in live suites (skipping, OD-222) ride prompt-to-gerber as 32 lines before its `--reporter` line (`deterministic-manufacturing.yml:260-291`, the five footprint-resolver suites under one directory filter), after one local green run at `b0af256` (36 files, 431 passed, 15 skipped, 43.8 s; the B11 evaluation suite 16 of 16, which answers section 8 item 5). The guard `b24-b2-ci-admission` (9 cases) pins every catalogued link's admission, the closed negative list (three FreeRouting/Java suites, LB-3), the named list, the corpus step and the order case's own-turn checks. The corpus (`b24-b2-corpus-nightly`, 5 cases) runs the 58 non-holdout packages on benchmark-nightly only; its local flagged run is red on the three CD-9 packages, recorded, not excused (D24-41, owned by B24-D1). 64 of the 73 `b16-0-*` suites stay outside CI (OD-228 (f)). `ci-admission.md`.
 
 **D24-16 - Three runbook areas had no evaluation; power and ground still has none.** Requirement: B24-B `:1058`, `:1066`, `:1068`. Finding: no case asserts power or ground
@@ -713,6 +730,7 @@ distributor contract passes when a source is not admitted (`b19-e-live-contract.
 **D24-20 - The coordinator and single-agent run trace is built, validated and thrown away.** Requirement: B24-C `:1074-1086`; B24-A
 `:1038`. Finding: `trace-recorder.ts:108-113`; `app/api/chat/route.ts:437, :458-465`; no production caller of `setAgentTraceSinkFactory`.
 After a request ends there is nothing to inspect, audit or replay. Severity high. **CONFIRMED**. Closes: B24-C1 (OD-207). Sources: G24C-1.
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:714 by B24-C1's record, artifacts/ai-control-plane-b24/observability-and-replay.md:338.
 - [B24-C1, 2026-10-08] D24-20: closed offline by B24-C1 (OD-207 applied): every run that reaches the chat route's recorder hands its finalized, validated `sirkit.agent-run-trace.v1` document to a durable sink bound through `setAgentTraceSinkFactory` at the chat composition root (`app/api/chat/trace-runtime.ts`, imported on `app/api/chat/route.ts:40`; no B11-scanned file edited), kept as `agent.run-trace.v1` on the durable-workflow substrate - one record per trace in one aggregate per scope and run id (the scope as the substrate stores it), a resume's trace at revision 2 - and retrievable by run id through `DurableRunTraceStore.history`, every load re-verified; proven in memory, through the production chat POST and on PGlite (`b24-c1-durable-trace`, `b24-c1-durable-records-pglite`); the real database platform is BLOCKED-LIVE-QUALIFICATION (LB-14), and whether a serverless platform keeps the scheduled write alive is LB-13's (OD-190); `observability-and-replay.md`.
 
 **D24-21 - Twenty-two model-calling route paths besides `/api/chat` build no trace and leave no durable usage or error record.** Requirement: B24-C `:1074-1086`. Finding: section
@@ -761,6 +779,7 @@ low. **CONFIRMED** (`trace.ts`), reader 3. Closes: B24-C3 (OD-211). Sources: G24
 long tool waits send nothing.** Requirement: B24-D `:1094-1097`. Finding: section 2.6; the client has no first-event or idle timeout and the
 server no keepalive (reader 4; `git grep`). Severity medium. **CONFIRMED**. Closes: B24-D1 (OD-212). Sources: B24D-1, B24D-2, B24D-3,
 B24D-4.
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:760 by B24-D1's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:305.
 - [B24-D1, 2026-10-09] D24-27: closed offline by B24-D1 (OD-212 applied); the four runbook measurements (view and read commands, a granted reversible edit, one verified workflow on recordings, the first stream event and completion) are measured locally with fixed warm-ups and samples and gated on the runner baseline, which is BLOCKED-LIVE-QUALIFICATION until the owner accepts `benchmark-latency`'s minutes (lead decision D3: `baseline_missing` is a recorded, non-blocking BLOCKED state while the latest version is the declared-without-values v1). Its keepalive half is measured and stated: after `run_started` the route sends seven `warning` lines at once and nothing more until the provider answers (a 250 ms delayed fake: the silent gap's median 260.1 ms on the review round's re-run, 255.3 ms on the first local run), and the question - a protocol keepalive, or silence stated - is OD-234's, never built here.
 
 **D24-28 - Fragile real-clock thresholds gate CI, the stable method runs nowhere, and the browser budget is tracked by hand.** Requirement:
@@ -768,6 +787,7 @@ B24-D `:1109`; OD-30. Finding: about 45 CI-gated real-clock bounds at `dfd51e3` 
 default timeout (`vitest.config.ts:13-18`); load-induced failures on record (reader 4), one on the GitHub runner itself (`EXECUTION_LEDGER.md:4619`); `route-bench` runs in no workflow and the regression budgets, unit-tested on synthetic results only, gate measured latency in no
 workflow; OD-30 durations from 402 s to 951 s and the whole browser job (19m50s on `849a933`, `EXECUTION_LEDGER.md:4281`) recorded by hand (section 2.6). Severity medium. **CONFIRMED**. Closes: B24-D1 (OD-212).
 Sources: B24D-15, B24D-16.
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:767 by B24-D1's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:305; discovery.md:768 by B24-C1's record, artifacts/ai-control-plane-b24/observability-and-replay.md:338.
 - [B24 lead, 2026-10-06] Re-verification (section 9): Re-verified at `dfd51e3`. All cited lines hold except the browser job's `timeout-minutes`, which moved from `deterministic-manufacturing.yml:317` to `:319` (B23 `79fa18b`, `0cd3f59`). The gap widened. B22-B and B23-B2 added five more CI-gated real-clock bounds (about 45; the tightest is still 700 ms). CI on `0cd3f59` failed `b23-b-page` case 4 at the 5 s default on the runner itself (`EXECUTION_LEDGER.md:4619`). The response was explicit per-test budgets (`a02c9fb`, with `d5f5512` restoring `b23-b-approval-plan` case 18), as earlier local timeouts had drawn budgets and yields (`e8c7928`, `4a988c8`, `9cb675d`), rather than a stable method. The browser job's whole-job time is still recorded by hand (19m50s on `849a933`, `:4281`). `REGRESSION_BUDGETS` are unit-tested in benchmark-core on synthetic results only.
 - [B24-D1, 2026-10-09] D24-28: closed offline by B24-D1 (OD-212 applied). The method: a closed metric catalogue, `sirkit.latency-results.v1` (sorted samples, the stage-09 `quantile`, `correctness: "verified"`, the environment as stage10-evidence records it), the append-only `sirkit.latency-baseline.v1` with the stage-09 budget shape plus a floor and never a `maximumP95`, `evaluateLatency` (pass / block on the band AND the floor, p95 from 20 samples / baseline_missing / sample_shortfall / unmeasured) and the widening rule over every consecutive pair through `validateThresholdChange`. The job: `benchmark-latency` (`benchmark.yml`, appended; 30 minutes, no `if:`, the flag in its vitest step's env, the directory outside the repository, the gate, `route-bench` unchanged, the headroom report, the `always()` upload). The census (`threshold-census.ts`, `threshold-classification.ts`, `threshold-census.csv` byte-pinned): 55 CI-gated bounds at `6acae24` (53 before the review round taught the scanner helper-returned and best-of-runs timings) - 33 deadline-proofs and 15 complexity-proofs kept with what each disproves, 7 performance bounds moved in place to catalogued metrics (b20-a4-observation-normalizer case 6's four, pcb-sync performance-resilience's two, b20-a1-redaction-linear's one), 13 outside CI; 178 budgets, 23 yields, 26 CI `vi.waitFor` calls in 12 files, 14 config rows. OD-30 enforced in CI from D1 on: the start and headroom steps of `prompt-to-gerber`, `page-browser-e2e` and `agent-boundary-suites` (lead decision D19), `OD30_SPLIT_REQUIRED` under five minutes. The stage-09 `REGRESSION_BUDGETS` (`qor-runtime-p95-v1`, `maximumP95` 2,000, `regression-policy.ts:57`) still gate no measured run; D1's latency budgets are the measured ones, and the corpus run belongs to B24-B2 (OD-204). `performance-and-reliability.md` part 1; suites `b24-d1-latency-policy` (10), `b24-d1-threshold-census` (7), `b24-d1-latency` (7), `b24-d1-latency-workflow` (1). The exception of lead decision D3 is version 1's alone (`DECLARED_AFTER_V1`, `values_dropped`; the gate refuses a committed baseline with an unreviewed widening), a results file carries only its own suite's metrics and a doubled metric is refused (the review round, 2026-10-09).
 
@@ -796,6 +816,7 @@ tooling or assertion; no live region on the chat transcript (two `aria-live` reg
 exercised only incidentally; the B17-A inventory does not audit accessible names; visible focus untested; hand-rolled BOM dialogs with no
 programmatic focus (INFERRED); one Desktop Chrome project and one breakpoint class in `app/page.tsx` (section 2.6). Severity high (users of assistive
 technology cannot follow an AI answer arriving). **CONFIRMED**. Closes: B24-D3 (OD-215). Sources: B24D-12, B24D-13, B24D-14.
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:795 by B24-D3's record, artifacts/ai-control-plane-b24/accessibility.md:535; discovery.md:796-797 by B24-D3's record, artifacts/ai-control-plane-b24/accessibility.md:535.
 - [B24-D3, 2026-10-10] D24-32: closed offline by B24-D3 (OD-215 applied; OD-237): the accessible-name rule over B17-A's control sites (`app/lib/engineering/accessible-names.ts`; closed statuses - eight name sources, six exemption reasons, `unnamed`; a placeholder, test id, name or id is never a name) and its byte-pinned census (`accessible-name-census.csv`, 628 sites / 63 surfaces) gate OD-215's scope at zero unnamed, zero structural problems and no name that is a glyph alone (six named red first on `3773c6a`, and the More checks button), and ratchet the rest (111 unnamed at `3773c6a`, pinned at 102 after D3 with a frozen key list in the suite that regeneration cannot move; the generator refuses a new one against the census committed at its repository path); the chat transcript is a polite `log` with `aria-busy`, the chat error and the provider refusal are `alert`s, focus returns to the prompt after a chat run sent from it unless a pointer was pressed since (a model run of the page's code, case 11), the two canvases are `role="img"` named by statements that name Go to component, the four BOM dialogs run on the shared dialog (named, focus inside, Escape, focus back, one shared Close and no glyph-only button; 16 jsdom cases, red first), and desktop only at 1,280 CSS px with a CSS-only notice below; two browser specs (`keyboard-and-focus`, 5 cases; `minimum-width`, 3), red on `3773c6a`'s code and green on the lead's runs (local, win32; `BROWSER_SPECS_EXECUTED` flipped, rows 2.1.1, 2.4.3 and 2.4.7 tested in part), case 1 measuring 95 Tab presses from AI Chat to the prompt (the chat follows the whole editor in the DOM and opening it does not move focus: a 2.4.3 / 2.4.1 gap, recorded); one review round, six findings fixed test-first. Residuals: no assistive-technology run and no axe audit (owner actions, NOT MEASURED); contrast (1.4.3) NOT MEASURED; 1.4.10 Reflow NOT MET by OD-215's desktop-only scope; 2.5.7 Dragging Movements NOT MET for the panel resizers (`app/page.tsx:6288`, `:6471`); 2.4.2 NOT MET (the title "Create Next App", `app/layout.tsx:20`); 102 out-of-scope unnamed sites (the census); handler-less focusable controls outside the census (4.1.2; the rule was not extended in scope); the Tab trap measured on the Tier 1 card only (section 8 item 10); the four non-BOM hand-rolled dialogs (`SyncPlacementDialog`, the routing rules editor, `FabDialog`, `ShortcutsHelp`); the canvases accessible only through Go to; the chat prompt 95 Tab presses after its opener with no skip link (2.4.3, 2.4.1).
 - [B24-D4, 2026-10-10] D24-32: CI's run 38061798204 failed `keyboard-and-focus` case 4 with focus on `body` after Escape on the Tier 1 card; the INFERRED fallback to the header's first button was the defect. When the card closes with the prompt enabled, it now returns focus to the prompt through its `finalFocus` (`GrantedExecutionDialog.tsx:55`, in place). When the prompt is still disabled (the card closed while its run streams), the card moves no focus (`:125`), so focus stays on `body` until page.tsx's run-end return takes it to the prompt. Tests: `b24-d3-bom-dialogs` 5 and 6 (Escape, Cancel and Confirm; red first; case 6 runs page.tsx's run-end code over jsdom). Case 4 asserts focus on the prompt (`keyboard-and-focus.spec.ts:235`, stricter, PROPOSED until the lead's browser run; `accessibility.md` sections 4, 7 and 12). A pointer close during the run leaves focus on `body`, by B24-D3's pointer rule (INFERRED, low).
 
@@ -805,6 +826,7 @@ technology cannot follow an AI answer arriving). **CONFIRMED**. Closes: B24-D3 (
 section 4 `:1210`. Finding: section 2.7 (`LIVE_BLOCKERS.md:7-18`); LB-4 contradicts the 2026-09-24 run (section 0); no rows for staging and
 production, the database platform, the distributor contract, a live external MCP server or the kicad-cli oracle; `PROGRAM_STATE.json` lists
 eight of twelve (`:12-21`; OD-179 leaves LB-4, LB-6, LB-7 and LB-8 out on purpose). Severity medium. **CONFIRMED**. Closes: B24-E (OD-217). Sources: S5-G5, S6-G3, S6-G4, S6-G5, G24B-11.
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:804 by B24-E's record, artifacts/ai-control-plane-b24/qualification-matrix.md:329.
 - [B24 lead, 2026-10-06] Re-verification (section 9): Re-verified at `dfd51e3`. The register now has twelve rows (`LIVE_BLOCKERS.md:7-18`): B22-A2 `c037627` added LB-10, B23-A1 `79fa18b` added LB-11/LB-12 (OD-179), and B23-D `dfd51e3` put a dated note on LB-5. `PROGRAM_STATE.json` now mirrors eight of the twelve (`:12-21`); OD-179 leaves LB-4, LB-6, LB-7 and LB-8 out on purpose. The gap stands. LB-2 is still UNKNOWN, LB-3 local-only, LB-4 "dead external resource" (B22's `artifacts/ai-control-plane-b22/unknowns-and-owner-decisions.md:174` repeats it as unchanged) and LB-5 "not attempted". Staging/production, the database platform, the B19-E distributor contract, a live external MCP server and the kicad-cli oracle still have no row. LB-13..LB-17 and OD-217 remain free.
 - [B24-E, 2026-10-10] D24-33: closed by B24-E (OD-217 applied in full): every register classification takes one of `BLOCKED-LIVE-QUALIFICATION`, `QUALIFIED (date, scope, resource)` or `NOT APPLICABLE` (LB-2 and LB-5 BLOCKED, LB-3 BLOCKED for CI and qualified platforms, LB-4 QUALIFIED 2026-09-24 non-isolated with isolated staging BLOCKED under LB-14), each old wording kept in its cell; LB-13..LB-17 checked with dated notes, no row added; `PROGRAM_STATE.json` mirrors every row (OD-179 reversed); the qualification matrix Q1..Q15 covers every LB both ways; `b24-e-register` (10), `b24-e-statements` (7: negation read only where it governs a statement, one find allow-listed, one reviewed negation, eight in-place notes, four finds left for the closeout); qualification-matrix.md.
 
@@ -812,6 +834,7 @@ eight of twelve (`:12-21`; OD-179 leaves LB-4, LB-6, LB-7 and LB-8 out on purpos
 `local_dev` (`playwright.config.ts:50`); the live auth gate is fetch-based (`b16-1b-live-qualification.test.ts:86-96`). Even with a staging
 project, item 2 cannot run today. Severity medium. **CONFIRMED**. Closes: B24-E writes the spec and its config offline; the run stays
 BLOCKED-LIVE-QUALIFICATION (LB-1, LB-13; whether an isolated project exists is OD-191's). Sources: S5-G1, G-A3.
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:811 by B24-E's record, artifacts/ai-control-plane-b24/qualification-matrix.md:329.
 - [B24-E, 2026-10-10] D24-34: offline: the config and the spec are written; the run is BLOCKED-LIVE-QUALIFICATION (LB-1, LB-13; OD-191). `playwright.production-auth.config.ts` throws `PRODUCTION_AUTH_NOT_EXERCISED` unless `resolveProductionAuthTarget` answers ready over the empty staging list; `e2e-production-auth/production-auth.spec.ts` and its form steps `e2e-production-auth/sign-in-form.ts` sit outside both CI browser folders; `b24-e-production-auth-config` (8); qualification-matrix.md part 1.
 
 **D24-35 - Nothing can record fabrication, inspection or functional-test evidence.** Requirement: B24-E `:1120-1121`; `:1157`. Finding: no
@@ -845,6 +868,7 @@ cited). Severity medium. **CONFIRMED**. Closes: B24-F (regenerated or re-derived
 (pages), S6-G10.
 - [B24 lead, 2026-10-06] Re-verification (section 9): Partly closed. Three pages are unchanged, unpinned and carry no superseding note: the B16.1C map (`:18`, 153/12), the B18 page (`:30`/`:37`, 155/97/143/573/58) and the B16 closeout DB proof (`:14`/`:16-17`, 29 migrations). The current values are 166/163/3/0, 36 of 47 tools, 106 records, 152 B01 route paths, 631 controls on 63 surfaces and 31 migrations. B22-A2 (`c037627`) corrected the three `externalProcess` rows. B23-A2 (`da36d51`) closed the outbound-egress gap: the classification CSV carries `outbound_egress` and `model_egress` on all 166 rows, CI-pinned by `b23-a-route-vocabulary.test.ts:667`, and `tier3-vocabulary.md:210-236` lists the transport modules and per-route egress. B24-F should derive its maps from these.
 - [B24-F, 2026-10-10] D24-38: in part: the derived maps and the superseded table - `current-system-map.md` derives every reviewed count beside its pin and lists the stale lines of the three hand-written pages (`b24-f-maps` 8, 9), and `open-risks-and-owner-decisions.md` section 3 gathers every B24 increment's superseded statements into one table of 206 rows, eight of them marked never noted in place (six checksum-bound migrations, two lines of a B11-scanned file); the stale pages' in-place notes are closeout 1/2's.
+- [B24-closeout, 2026-10-10] D24-38: the closeout's half, commit 1/2: every stale line of the superseded-statement table (open-risks-and-owner-decisions.md section 3.2) is handled - 48 noted in place by the closeout, six in place in the lead's files, 37 discovery rows by dated lines, and five left not noted with the reason in place because their own sources call the line still true or unchanged - and no bare not-noted row remains (b24-f-registers 7, 8 and 10); the register's row is re-read at commit 2/2.
 
 **D24-39 - No threat-model register exists to close.** Requirement: B24-F `:1139`. Finding: section 2.8; no closure register exists; B03.1's `security-boundary.md` (the "Full threat model" of `revision-history-contract.md:120-121`), the CD-10 stage report (`docs/stage-reports/SIRKIT_CD_10_MODEL_BACKED_SIMULATION_IMPLEMENTATION.md:55`) and B22's `threat-model.md` and `adversarial-matrix.md` are chapter-scoped threat models, B09 and B13 have security-boundary statements of the same kind as B03.1's, and the other chapters were not
 threat-modelled as such. Severity medium. **CONFIRMED**. Closes: B24-F writes the register by hand from the per-chapter defect tables
@@ -861,6 +885,7 @@ closeout (OD-221). Sources: S6-G6, S6-G7, S6-G9.
 - [B24 lead, 2026-10-06] Delta after B23's closeout (`b6c6b0d`, `f663d71`): OD-178 and OD-160 are now recorded (`OWNER_DECISIONS.md:2536`, `:2560`), and OD-188 is spent (`:2545`); the rest of the finding stands.
 - [B24 lead, 2026-10-06] Re-verification (section 9): Partly closed. Every OD-134..OD-159 is now a register heading (B22's, except SEC-1's OD-151 and OD-152; headings now end at OD-187, `:2463`; OD-153 moved to `:1696`), and `chapter/b22-sandboxed-computation` merged as `43cb1b0` (PR #13). OD-181..OD-189 are reserved at `EXECUTION_LEDGER.md:4344`, and no OD-190+ or LB-13+ is recorded (B23-C's tests use only a fake `OD-999`), so no renumbering is needed. Still true: OD-5 is stale (`:11`); OD-19 counts 54 commits under the other address where there are 54+11; there is no single open-decision list; CI runs no eslint; `app/page.tsx` is unchanged and its fix `5dfae2b` is unmerged; four fix branches and the reconstruction branch (162 commits) are unmerged; and the integrity lines rest on process only. B23's OD-160 and OD-178 have no heading, and the five PR merge commits #9-#13 are authored by a GitHub noreply address.
 - [B24-F, 2026-10-10] D24-40: in part: the list and the risks - `open-risks-and-owner-decisions.md` lists OD-1..OD-241 with every gap and duplicate marked (`b24-f-registers` 4), the open risks and the three integrity lines' methods, and `final-verdict.md` holds the ten scope lines and the status-line -> row table (`b24-f-verdict-lines`); OD-5/OD-19 and the integrity measurements are the closeout's.
+- [B24-closeout, 2026-10-10] D24-40: the closeout's record half, commit 1/2: OD-5 closed (the mechanism offline; the 2026-09-24 run RECORDED, 0031 not yet written then, its real-server apply BLOCKED-LIVE-QUALIFICATION, LB-14) and OD-19 corrected (65 commits under the other address; 13 pull-request merges carry the GitHub noreply author), the OD list citing OD-220, OD-221, OD-240 and OD-241 at their heading lines; the three integrity measurements stay commit 2/2's (open-risks-and-owner-decisions.md section 4).
 
 Count: 40 defects; 12 high (D24-1, 2, 3, 5, 7, 8, 14, 17, 20, 21, 29, 32), 23 medium, 5 low (D24-6, 10, 25, 26, 36). Not carried as B24
 defects because another chapter owns them: the README and quickstart JLCPCB claim (B23 D23-16, OD-178), D22-18's `externalProcess` rows
@@ -890,6 +915,7 @@ From the runbook (`C:/Users/robsa/Downloads/Sirkit_Remaining_Builder_Master_Runb
   current state unless a new explicit approval begins a new transaction." Pinned by the B11 trace and replay suites (reader 6:
   `b11-trace-replay-evaluation.test.ts:82`, `b11-1-trace-integrity.test.ts:445-448` - both outside CI, D24-15) and
   `b21-a-contracts.test.ts:4, :27` (reasoning-shaped stems, in CI); `app/lib/agent/trace.ts:5-13` states it.
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:887 by B24-B2's record, artifacts/ai-control-plane-b24/ci-admission.md:404.
 - `:1109` "Replace fragile wall-clock unit thresholds with stable benchmark methodology where appropriate, without hiding real regressions."
   No pin; B24-D1 adds the benchmark job and converts cases one by one, each conversion recorded.
 - `:1113` "When credentials and hardware are explicitly supplied:" and `:1123` "If any resource is unavailable, mark that gate
@@ -926,6 +952,7 @@ From the runbook (`C:/Users/robsa/Downloads/Sirkit_Remaining_Builder_Master_Runb
 - `:158` "Preserve same-origin CSRF protection, authenticated server-derived identity, membership and role checks, bounded readers,
   cancellation and one-terminal-event semantics." Pinned by the B16.0 gates (reader 6) and the B11.1 route finalization suite (outside CI,
   D24-15).
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:923 by B24-B2's record, artifacts/ai-control-plane-b24/ci-admission.md:404.
 - `:162` "Use real current timestamps. Never fabricate or backdate activity."; `:164` the identity `Dandi Desta <dandidesta82@gmail.com>`;
   `:165` "Do not add Claude, Anthropic, Codex, OpenAI or other AI co-author trailers."; `:168` "Run a staged-content secret scan before every
   push." Process only: every non-merge commit since `5a59a1f` (109 of 109 at `dfd51e3`) uses the approved address, the five GitHub PR merges carrying the GitHub noreply author, and none since `62ea4a6^` has a trailer (section 2.8).
@@ -942,6 +969,7 @@ From the code (verbatim, must stay true; pinning test named):
   (`b21-e2b-trace-attribution.test.ts:42-53`); OD-113.
 - `trace.ts:5-13` "It NEVER contains API keys/credentials/environment values, raw provider request/response bodies, hidden reasoning or
   thinking blocks, provider continuation state" (pinned by the B11.1 integrity suite, outside CI, D24-15).
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:940 by B24-B2's record, artifacts/ai-control-plane-b24/ci-admission.md:404.
 - The pinned release identity (`expected-identities.json:15-17`) and "No manufacturer upload/order has been performed."
   (`release-gate.ts:272`).
 - `CHAPTERS` admission (`b19-e-ci-job-scope.test.ts:54`), already extended with `b23-` (`79fa18b`, OD-180); `b24-` remains (OD-222).
@@ -951,6 +979,7 @@ Owner decisions that bind B24 (`artifacts/remaining-builder-program/OWNER_DECISI
 (`:31-35`), OD-30 (`:104-108`), OD-42 (no new dependency), OD-48 (empty MCP allowlist), OD-54 (MCP off), OD-59/OD-124/OD-146 (CI
 admission), OD-82/OD-87 (no proposal over MCP), OD-102 (no live external MCP contract), OD-107 (budgets reported, not priced), OD-111
 (`:1077-1098`), OD-113 (`:1634-1645`), OD-125 (`:1611-1631`), and the B22 and B23 records OD-134 (`:1705`), OD-138 (`:1879`), OD-147 (`:1720`), OD-158 (`:1862`), OD-167 (`:2182`), OD-171 (`:2338`), OD-174 (`:2034`, `:2127`), OD-175 (`:2431`), OD-177 (`:2453`), OD-179 (`:1970`) and OD-180 (`:1978`), with OD-160 still a B23 discovery row (`artifacts/ai-control-plane-b23/discovery.md:767`).
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:947 by B24-D3's record, artifacts/ai-control-plane-b24/accessibility.md:535.
 
 ---
 
@@ -994,6 +1023,7 @@ BLOCKED-LIVE-QUALIFICATION until the owner supplies the resource in writing; not
 | OD-220 | How the B24-F maps are produced. | One byte-pinned generator (proposed `scripts/generate-b24-maps.ts`) for the coverage matrix, the permission and autonomy matrix, the agent graph and a generator inventory, run after B22 and B23 merge; the threat-model register written by hand from the numbered defect registers (F18, B19, D20, D21, D22, D23, D24), citing B03.1's `security-boundary.md`, the CD-10 stage report's threat-model section and B22's `threat-model.md` and adversarial matrix as inputs, with no claim that other chapters were threat-modelled. |
 | OD-221 | Program records and hygiene before the verdict. | OD-5 closed and OD-19 corrected (11 + 54 commits) with dated notes; B23's OD-160 and OD-178 already recorded at its closeout (`b6c6b0d`, `f663d71`; every OD-134..OD-159 is now a heading); eslint added to CI only after the page fix merges (the fix branch goes through its own PR, never merged by B24); the four fix branches and the reconstruction branch listed as open risks; `HISTORY FABRICATED OR BACKDATED` answered for main's history with the unmerged branch named. |
 | OD-222 | CI admission for B24 suites. | `CHAPTERS` gains `b24-` (after B23's `b23-`) and one directory filter admits the B24 suite folder; live suites opt-in only, admitted to CI and skipping themselves without their flag, as the OD-59 every-suite guard requires (`b19-e-ci-job-scope.test.ts:148-153`); adding `b24-` moves B22's C77 (`deck-and-secret-corrections.md:484`) and B23's C15 (`provider-registry.md:303`) line pins in place by review. |
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:972 by B24-C2's record, artifacts/ai-control-plane-b24/observability-and-replay.md:752; discovery.md:978 by B24-C2's record, artifacts/ai-control-plane-b24/observability-and-replay.md:752.
 
 ---
 
@@ -1133,6 +1163,7 @@ Each item: what is built offline, the resource that unblocks it, and its state w
 6. Deterministic 555 release (`:1120`): CI evidence (the pinned identity) and the expiry recorded (OD-219); fabrication - BLOCKED-LIVE-QUALIFICATION
    (LB-5) until separate owner approval (OD-218).
 7. Inspection and functional test (`:1121`): B23-D's `physical-evidence.ts` exists (review port unwired, `:330`; eligibility blocked for every input, `:484`, the assembly-data authority "absent", `:454`); B24-E adds the store, the session-derived recording route and the wired review port only if OD-218 is answered; state - BLOCKED-LIVE-QUALIFICATION (LB-5).
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:1131 by B24-E's record, artifacts/ai-control-plane-b24/qualification-matrix.md:329.
 - Code: the register normalised (OD-217) with a test that every row's classification is from the closed set and that `PROGRAM_STATE.json`
   mirrors every row (reversing OD-179's choice, with a dated OD-179 note); a statement tripwire extending B22's `b22-closeout-statements` (no copy claims a live, staging or physical pass absent from the matrix).
 - Suites: `b24-e-register`, `b24-e-statements`.
@@ -1334,6 +1365,7 @@ B23's closeout is not in `dfd51e3`. It only adds dated notes, retitles and recor
 | 7/B24-F | partly-closed-since | trust-boundary columns (changed-since: committed); `generator-inventory.md` (changed-since: 23 scripts); threat-model register (changed-since: B22 `threat-model.md`); open-risks list (changed-since: OD-160/OD-178 unheaded, OD-188/189 reserved) | |
 | 7/Closeout | partly-closed-since | expected PARTIAL list (changed-since: add B23); OD-221 (changed-since: B22 part done) | |
 | 8 | partly-closed-since | Q5 (changed-since: `85439e7` local run); Q14 (changed-since: `discovery.md:1349`, `EXECUTION_LEDGER.md:4344`); Q16 (changed-since: answered except B23's verdict) | Q1 now also gates LB-10. |
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:1304 by B24-D3's record, artifacts/ai-control-plane-b24/accessibility.md:535.
 
 ### 9.3 What B22 and B23 changed that B24 inherits
 
@@ -1420,6 +1452,7 @@ D24-2, D24-6, D24-7, D24-9, D24-10, D24-12, D24-14, D24-17, D24-18, D24-19, D24-
 | Model-egress paths (untraced) | at least 18 (grep) | 23 (22 untraced) | `route-resource-classification.ts:130-136` |
 | New non-test `SIRKIT_*` env names | — | +12 | 9.5 item 28 |
 | CI ranges | — | prompt-to-gerber `:50-259`; database-delivery `:272-302`; page-browser-e2e `:317-336`, timeout `:319` | `deterministic-manufacturing.yml` |
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:1409 by B24-D3's record, artifacts/ai-control-plane-b24/accessibility.md:535.
 
 #### New records and numbering
 
@@ -1489,6 +1522,7 @@ D24-2, D24-6, D24-7, D24-9, D24-10, D24-12, D24-14, D24-17, D24-18, D24-19, D24-
   - The threshold census includes the new per-case budgets, the yields and the vitest 60 s worker-RPC limit.
   - The OD-30 timeout line is now `:319`.
   - The browser job runs about 19m50s.
+- [B24-closeout, 2026-10-10] superseded at 58c0834's numbering: discovery.md:1487 by B24-D1's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:305.
 - **B24-D2.**
   - Owns, or records as open, the tree kill and an orphan check for FreeRouting and kicad-cli.
   - Cites B22-A3's ngspice tree kill and B22-D's opt-in case 14.
@@ -1692,3 +1726,4 @@ No draft OD or LB number needs to shift. Re-check after B23's closeout, which mu
 - [B24-D4, 2026-10-10] B24-D4 landed the OD-30 split of page-browser-e2e by insertions only (the lead's corrective increment; option A after the first run's STOP, then option (b) and the rename, both the lead's on 2026-10-10; closes no new defect): `playwright.config.ts:21` reads `SIRKIT_E2E_SKIP` into `testIgnore` in place, page-browser-e2e's first browser step sets it to B24's own four browser specs - `multi-tab`, `crash-recovery`, `keyboard-and-focus`, `minimum-width` (`deterministic-manufacturing.yml:418-419`) - the appended `page-browser-e2e-b24` (`:629-663`, 20 minutes) runs them, one inventory row and one census row (`flag-inventory.ts:65`, `environment-names.ts:137`, on existing lines), `_ci-admission.ts` reads the split, and guard `b24-d4-browser-split` (8) pins it. Part 1 fixed B24-D3's two CI reds test-first: D24-30's silent overwrite (`board-persistence.ts`; `PcbEditor.tsx:602`, `:629` in place; `b24-d2-working-copy` 9-13) and D24-32's focus on `body` after Escape (`GrantedExecutionDialog.tsx:55`, `:125`; `b24-d3-bom-dialogs` 5, 6; `keyboard-and-focus.spec.ts:235` stricter). No census, tool-count, action-record, route or migration move (168 = 165 + 3 + 0; 48 / 37 / 9 / 28; 107; 32), and no `timeout-minutes` raised. Expected page-browser-e2e about 22 min 03 s of 30 and `page-browser-e2e-b24` about 12 min 48 s of 20, each at least OD-30's five minutes (INFERRED until CI). The `--list` check and the browser runs are the lead's (`ci-split.md` section 11).
 - [B24-E, 2026-10-10] B24-E landed the production-auth harness offline (Ea: D24-34 offline; OD-191 amended; OD-238) and the register, the matrix and the statement tripwire (Eb: D24-33; D24-35 and D24-36 as recorded; OD-217 amended, OD-179 noted, OD-218, OD-219, OD-239) in one run, with a review round of eight confirmed findings fixed test-first (the harness's credential exposure on a test timeout, the server's 0.0.0.0 binding, a database URL two parsers read differently, unexercised resolver rules, the tripwire's sentence-wide negation and its line-wide note); suites `b24-e-production-auth-config` (8), `b24-e-register` (10), `b24-e-statements` (7); no workflow line, route, tool, UI control or migration; census 168 / 165 / 3 / 0 and tools 48 / 37 / 9 / 28 unchanged; pins the plan did not name, each in place with a dated note: `b24-a2-headers` 11, `b24-d4-browser-split` 8, `b24-d0-ci-split` 1 and 7 (484 -> 487), `threshold-census.csv` (306 -> 311), B23-D's C41 anchor; `qualification-matrix.md`.
 - [B24-F, 2026-10-10] B24-F landed the derived maps and the generator inventory (Fa: D24-37; D24-38 in part; OD-220, OD-240) and the registers, the reports and the verdict (Fb: D24-39 and D24-40 in part; OD-220 amended, OD-221, OD-241) in one run, with a review round of twelve confirmed findings fixed test-first: the inventory's suites, checks and pin classes now derived from the test files, the permission matrix's role gate beside the tier function's decision, D24-3 closed in part (OD-192 keeps the application role PROPOSED), commits bound to their own closing increment by a record, the frozen migration and B11-scanned lines marked never noted in place, and the discovery's rows cited at `58c0834`'s numbering.
+- [B24-closeout, 2026-10-10] Closeout commit 1/2 landed the superseding notes and OD-221's record corrections (D5; D24-38's and D24-40's closeout halves; no new defect, no LB row, no OD entry): of 96 not-noted rows, 91 noted (48 in place, six in the lead's files, 37 discovery rows nearby) and five left not noted with the reason in place (their sources call the line still true or unchanged), one citation corrected, B24-E's four finds noted, OD-5 closed, OD-19 corrected, and the A1 and B3 discovery filters skip the closeout's dated lines (a reviewed pin move); suites b24-f-registers 7 to 10; open-risks-and-owner-decisions.md section 4.

@@ -385,7 +385,7 @@ citation at or below `:293`): B21's C49 374 -> 412, C93 377 -> 415, C94 386 -> 4
 `:360` -> `:398` (`ci-admission.md:185`); B24-C1's row `:340` -> `:378` with A4's last entry `:339` -> `:377`
 (`observability-and-replay.md:364`), C3's prose `:342` -> `:380` (`:861`), C3's row `:342` -> `:380` with C2's `:341` -> `:379`
 (`:1072`), C50 342 -> 380 (`:1226`, a four-cell citation row, so its note is on `:861`); B24-C2's row `:341` -> `:379` with C1's
-`:340` -> `:378` (`retention-and-deletion.md:184`); B24-A4's two workflow lines, which no earlier task had moved (the first run's open
+`:340` -> `:378` (`retention-and-deletion.md:184`); B24-A4's two workflow lines, which no earlier task had moved (the first run's open [B24-closeout, 2026-10-10] superseded: B24-D1's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:305.
 item): `:303-306` and `:302` -> `:374-377` and `:373` (`database-and-recovery.md:446`, A4's numbers carried +32, +1, +38) and
 `timeout-minutes: 15` at `:275` -> `:346` (`:475`). The C1-C3 pages' `### The README row` drafts ([B24-D0 review, 2026-10-09]
 correctness-4; the second run had left them): `:340` -> `:378` (`observability-and-replay.md:526`, C45),

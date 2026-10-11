@@ -194,7 +194,7 @@ describe("[B24-A3] the embedding meter (D24-8, OD-197)", () => {
     for (const value of [null, undefined, "429", 429, { code: "insufficient_quota" }]) expect(classifyEmbeddingError(value), String(value)).toBe("neutral");
   });
 
-  it("7. the meter as declared: key embedding:openai/model:text-embedding-3-small; 240 a minute, 3 failures, 60 s, 1 h; a refusal throws EmbeddingAdmissionRefused (code, reason, retryAtMs) before any provider call; admission-control.ts gains no runtime import; embeddings.ts is unchanged (one client, no maxRetries: the SDK's own retries sit below the meter)", async () => {
+  it("7. the meter as declared: key embedding:openai/model:text-embedding-3-small; 240 a minute, 3 failures, 60 s, 1 h; a refusal throws EmbeddingAdmissionRefused (code, reason, retryAtMs) before any provider call; admission-control.ts gains no runtime import; embeddings.ts is unchanged (one client, no maxRetries: the SDK's own retries sit below the meter)", async () => { // [B24-closeout, 2026-10-10] superseded: B24-C1's record, artifacts/ai-control-plane-b24/observability-and-replay.md:338.
     startCase(7);
     const control = await import("@/app/lib/acquisition/admission-control");
     const admission = await import("@/app/lib/embedding-admission");

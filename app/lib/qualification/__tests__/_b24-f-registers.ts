@@ -163,7 +163,8 @@ export const APPENDED = "`OWNER_DECISIONS.md`, appended by the lead in this comm
 
 /** What the OD list (`open-risks-and-owner-decisions.md` section 1) breaks against the facts: a number missing or out of order, a recorded
  *  place, status or marker that differs, a number recorded nowhere, a double heading beyond OD-52, OD-54, OD-135, OD-150 and OD-174, an
- *  amendment heading beyond OD-74 and OD-80, or a highest heading that is not the list's last number (lead decision D13). */
+ *  amendment heading beyond OD-74 and OD-80, or a highest heading that is not the list's last number (lead decision D13); since the
+ *  closeout's review round also an OD heading of another level (`ownerDecisionHeadingLevelProblems`). */
 export function ownerDecisionListProblems(read: Read, rows: ReadonlyArray<Readonly<Record<string, string>>>): string[] {
   const problems: string[] = [];
   const numbers = rows.map((row) => Number(/^OD-(\d+)$/.exec(row.OD ?? "")?.[1]));
@@ -174,6 +175,7 @@ export function ownerDecisionListProblems(read: Read, rows: ReadonlyArray<Readon
   if (doubles.join(", ") !== "52, 54, 135, 150, 174") problems.push(`doubles ${doubles.join(", ")}`);
   const amendmentHeadings = facts.filter((fact) => fact.amendmentHeadings.length > 0).map((fact) => fact.n);
   if (amendmentHeadings.join(", ") !== "74, 80") problems.push(`amendment headings ${amendmentHeadings.join(", ")}`);
+  problems.push(...ownerDecisionHeadingLevelProblems(read)); // [B24-closeout review, 2026-10-10] correctness-1: a `### OD-n` heading is a second heading too (D13)
   const highest = Math.max(...facts.filter((fact) => fact.headings.length > 0).map((fact) => fact.n));
   if (highest !== max) problems.push(`the highest heading is OD-${highest}, the list ends at OD-${max}`);
   const cite = (path: string, line: number): string => `\`${path}:${line}\``;
@@ -274,3 +276,17 @@ export const discoveryAtBase = (text: string): string[] => text.split(NEWLINE).f
 export const FORWARD_MIGRATION = /^drizzle\/\d{4}_[^/]+\.sql$/;
 /** The note states a superseded line may carry; the last two mark a line that is never noted in place. */
 export const NOTE_STATES = Object.freeze(["noted", "noted nearby", "rewritten", "not noted", "never noted in place (checksum-bound)", "never noted in place (B11-scanned, OD-113)"] as const);
+
+// ── [B24-closeout review, 2026-10-10] correctness-1, correctness-3, security-2 ─────────────────────────────────────────────────────
+
+/** A row the closeout leaves unnoted, its reason in place (the task's rule: `not noted (<reason>)`, never a bare `not noted`). */
+export const NOT_NOTED_WITH_REASON = /^not noted \((.+)\)$/;
+
+/** An OD heading of a level other than `##` (`### OD-221 amendment`): the register's amendments are dated lines under the first
+ *  heading (D13), so such a heading is a second heading the double and amendment-heading checks do not read. */
+export function ownerDecisionHeadingLevelProblems(read: Read): string[] {
+  return read(OWNER_DECISIONS).split(NEWLINE).flatMap((line, index) => {
+    const heading = /^(#{1,6}) OD-(\d+)\b/.exec(line);
+    return heading === null || heading[1] === "##" ? [] : [`OD-${heading[2]}: a heading of another level at :${index + 1} (D13: an amendment is a dated line under the first heading)`];
+  });
+}

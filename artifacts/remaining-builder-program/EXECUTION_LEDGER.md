@@ -5277,7 +5277,7 @@ Test-first on `chapter/b24-production-qualification` from `3d5f225`, one run (D2
   runs on D2's tree, and C2 saw one in another spec), then, re-run with memory sampled: multi-tab alone 3 passed twice (1.3 and 1.0
   min) and the whole default configuration 60 passed (6.2 min); free memory fell to 1,247 MB with `next dev` at 2,301 MB and the
   worker at 500 MB (INFERRED: memory pressure on this 16 GB machine; cause UNKNOWN, recorded, never called a flake; CI's
-  page-browser-e2e is the independent check); evidence PNGs restored by blob hash, 0 mismatched.
+  page-browser-e2e is the independent check); evidence PNGs restored by blob hash, 0 mismatched. [B24-closeout, 2026-10-10] superseded: B24-D4's record, artifacts/remaining-builder-program/EXECUTION_LEDGER.md:5343.
 
 ### B24-D3 - Accessibility and responsive scope (2026-10-10 local; increment workflow + lead; this commit)
 
@@ -5462,3 +5462,44 @@ Test-first on `chapter/b24-production-qualification` from `1fe719e`: two runs, t
   the `[B24-closeout, <date>]` tag. The lead's close: on the final tree with the records applied: pcb 977 passed, 4 skipped; B14.4
   22; confinement 375; qualification 521 passed, 15 skipped; F's four suites with the record readers 59 of 59 after the case-6 fix;
   tsc 0; eslint 0 on the 9 changed TypeScript files.
+
+
+### B24-closeout - commit 1/2: the superseding notes and OD-221's record corrections (2026-10-10 local; increment workflow + lead; this commit)
+
+- **Delivered** (D5; D24-38's and D24-40's closeout halves; no new defect, no LB row, no OD entry; `open-risks-and-owner-decisions.md` section 4).
+  - Of the superseded-statement table's 96 not-noted rows, 91 are noted: 48 in place by the closeout in 30 files (five code files - four inside an existing comment, one trailing comment on a test's it( line - and 25 pages: twelve table rows inside their last cell, 31 lines appended), each with the closeout's dated note naming the increment's record and its list's line, on a code line inside a comment the TypeScript parser reads as one and at a sentence or clause end; six in place in the lead's files and 37 discovery rows nearby by 32 dated lines, from the page's drafts (4.7, 4.8), applied by the lead in this commit. Five stay not noted with the reason in place, because their own sources call the cited line still true or unchanged (B24-A1's expected-origin.ts and trusted-request-context.ts headers; B24-C2's llm-call-record.ts, orchestration store.ts and run-trace-store.ts): those five files are byte-identical to 7ce1236. The eight frozen rows stay recorded only.
+  - One row's citation corrected (OD-111's purge statement: OWNER_DECISIONS.md 1101-1103 to 1106-1107, read at 600d1ba, 58c0834 and 7ce1236).
+  - B24-E's four tripwire finds carry the note (B21's unknowns page lines 155, 156 and 158; B18's line 12).
+  - OD-5 closed in its Status cell: B16-B's mechanism (ddf1dc0 registered 0027 and 0028; B19-D 0029 and B19-E 0030, 2026-09-13; B24-A4 0031, 2026-10-08) CONFIRMED offline; the 2026-09-24 run RECORDED as the migration proof's section 3 holds it (the migrations of its day on a clean database, 0029 and 0030 INFERRED, 0031 not yet written), and 0031's real-server apply BLOCKED-LIVE-QUALIFICATION (LB-14). OD-19's count corrected in place (65 commits under the other address, 11 in B17's range and 54 in B18's, 2026-09-09 to 2026-09-11; 13 pull-request merges, #2-#14, carry the GitHub noreply author; the program's range f7bf546^1..origin/main, 276 commits); the OD list cites OD-220, OD-221, OD-240 and OD-241 at their heading lines; OD-221 amended by one dated line under its heading (D13).
+  - Recorded for commit 2/2: pull requests #4-#7 hold commits dated up to 237 minutes after their merge (INFERRED a clock-label skew), and the unmerged branches at 7ce1236.
+- **Test-first.** closeout-red-1: b24-f-registers 7 and 8 red on 7ce1236 with the cases written, 6 passed, exit 1. The filter counterexample: with the 32 drafted lines inserted in memory, A1's fourteen discovery rows and B3's later citations moved; after the pin move none did. closeout-break-run: four planted breakages, each caught by case 7, restored by sha256.
+- **Review round** (2026-10-10; correctness-1, correctness-2, correctness-3, correctness-5, security-1, security-2, security-3). cfix-red-1: cases 9 and 10 written and case 7 strengthened (a whole-tree walk, the TypeScript parser's comment ranges, a sentence-boundary rule) on the closeout's tree: red - 7 (four notes splitting a sentence), 9 (16 problems: the OD-221 amendment a four-line heading block; 2.3's hand-off unnoted; OD-5's two texts not held to the proof's section 3 - the run's migrations and the increments that registered 0029-0031), 10 (five notes on lines their own sources call still true or unchanged); the planted texts of case 10 all caught. Fixed: the amendment one dated line (OD-241 cited at :3214); 2.3 noted; OD-5's texts against the proof; five rows not noted with the reason and their files restored to 7ce1236's bytes; two notes moved to a sentence end on their line. cfix-green-2: 7, 9 and 10 green (4 and 8 wait for the lead); case 7's whole-tree walk takes 0.44-0.52 s here, under lesson 14's 1.5 s, so it declares no budget and the threshold census is unchanged (a first try with a 180 s budget and a yield turned b24-d1-threshold-census 5 red, cfix-after-qualification). cfix-break-1: two planted breakages in real files - a closeout note in app/lib/auth/route-handlers.ts, which no row names, and the note of app/api/parts/search/route.ts:19 moved into a string after https:// - each caught by case 7 (the old scan read only the table's files and took any earlier // for a comment); both files restored, sha256 equal.
+- **Pin moves** (each in place, dated): b24-a1-environment-profile.test.ts:394 and b24-b3-scenario-map.test.ts:267 - the discovery filters skip the closeout's dated lines as B24-F's AFTER_BASE_LINE does; the lead's own dated lines stay counted. b24-f-registers 6 admits the task's `not noted (<reason>)` state, which case 10 confines to the five rows.
+- **Gates** (all through the lock; no DATABASE_URL, no browser):
+  - The 50 reader suites outside the qualification folder: 667 passed before (closeout-after-readers) and after the review round (cfix-after-readers).
+  - The qualification folder (cfix-final-qualification): 523 passed, 15 skipped, 2 red - b24-f-registers 4 and 8, which wait for this commit's OD texts, notes and discovery lines (cfix-sim-1 applies the lead's 4.7-4.9 in memory: green; case 9 runs case 4's check on 4.9's three OD texts applied in memory: green).
+  - b24-e-statements and the B21, B22 and B23 closeout tripwires green on the final page; tsc 0; eslint 0 on the 9 changed TypeScript files.
+  - All 28 generators twice: 56 runs, exit 0, zero drift but gen-demo-fixtures' known CRLF rewrite (content identical, LF bytes restored from HEAD; the tree then equal to the pre-run snapshot).
+  - The tree secret scan: exit 0 (4197 entries, 8 allowlisted lines).
+- **Counts.** Census 168 / 165 / 3 / 0; tools 48 / 37 / 9 / 28; 107 action records; 32 migrations - unchanged.
+- **Stop conditions.** None hit: five of 96 rows stay not noted with their reason (under a quarter); no note changed a generated output; every tripwire green.
+- Lead close (2026-10-10): the fast increment form, one run (wf_cf4d1b77-4df: implementer, four review lenses, a skeptic each, one
+  fix round). The review raised nine findings; seven were confirmed and fixed test-first, the gravest that OD-5's closing note
+  credited the 2026-09-24 real-server run with all 32 migrations although 0031 did not exist then (OD-5's text now says what ran,
+  RECORDED and INFERRED, and that 0031's apply to a real server stays BLOCKED-LIVE-QUALIFICATION, LB-14), and that five cited lines
+  whose own sources call them still true were being labelled superseded (they stay `not noted` with the reason in place). Disclosed
+  by the builder and recorded here: early in the run it executed `git fetch --dry-run` once in this tree - read-only, no ref moved,
+  though it may have contacted GitHub, which the run's rules forbid; no other network call was made. The lead's decisions: (1) the
+  drafts for the lead's files (the in-place notes in `README.md` and `OWNER_DECISIONS.md`, OD-5's Status cell, OD-19's corrected
+  count, the one-line OD-221 amendment, the 32 dated discovery lines and three clauses, this ledger heading and the README row) were
+  applied by the builder's own simulation of the lead's application, run first in memory (green: `b24-f-registers` 4 and 8, the three
+  discovery numberings, the defect ids, the commit bindings and the list sources) and then turned into a write-on-green copy of the
+  same script, so the files hold exactly what was checked; (2) B24-F's CI run (38096591308 on `7ce1236`) was green in every job -
+  prompt-to-gerber 16 min 30 s of 25, page-browser-e2e 12 min 01 s of 30, page-browser-e2e-b24 8 min 58 s of 20,
+  agent-boundary-suites 5 min 42 s of 20 - so `lastGreenSha` is `7ce1236`; (3) the A1 and B3 discovery filters now skip the
+  closeout's dated lines (a reviewed pin move the task's text missed: their pattern took upper-case increment letters only); (4) the
+  history finding - pull requests #4-#7 hold commits whose author dates fall up to 237 minutes after their own merge commits
+  (INFERRED: a clock writing UTC under a -0400 label) - is for commit 2/2's `HISTORY FABRICATED OR BACKDATED` line, with the lead's
+  read-only checks of main's history and of the protected original's modification times. The lead's close: on the final tree with the
+  drafts applied: pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification 525 passed, 15 skipped (`b24-f-registers` 4 and
+  8 green once applied); tsc 0; eslint 0 on the changed TypeScript files.

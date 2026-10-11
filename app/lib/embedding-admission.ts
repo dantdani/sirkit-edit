@@ -1,7 +1,7 @@
 /**
  * [B24-A3] D24-8, OD-197 - the metered embedding call of the two public searches. `admittedEmbedQuery` takes an admission from the
  * embedding meter (`app/lib/acquisition/admission-control.ts`, key `embedding:openai/model:<EMBEDDING_MODEL>`), then calls
- * `embedQuery` (`app/lib/embeddings.ts`, not edited: the DB schema imports it), then records the outcome. A refusal throws
+ * `embedQuery` (`app/lib/embeddings.ts`, not edited: the DB schema imports it), then records the outcome. [B24-closeout, 2026-10-10] superseded: B24-C1's record, artifacts/ai-control-plane-b24/observability-and-replay.md:338. A refusal throws
  * `EmbeddingAdmissionRefused` (with `retryAtMs`) and no provider call is made: `POST /api/parts/search` takes its lexical fallback,
  * `GET /api/pcb/footprints/search` answers 429 EMBEDDING_ADMISSION_PAUSED.
  *

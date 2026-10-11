@@ -282,7 +282,7 @@ The allowlist: `PATH`, `Path`, `PATHEXT`, `SystemRoot`, `SystemDrive`, `WINDIR`,
 
 - **Red (CONFIRMED):** with `b22-` added to `CHAPTERS` first, the guard `b19-e-ci-job-scope` failed 1 / passed 11 of 12 - its
   `it.each(CHAPTERS)` case listed the six `b22-a1` suites as admitted by no filter.
-- **Fix:** one directory filter `app/lib/computation/__tests__` in `prompt-to-gerber` (workflow `:226`, after SEC-1's entry; [B24-D0, 2026-10-09] the line stays, but since OD-30's split prompt-to-gerber excludes it (`--exclude 'app/lib/computation/__tests__/**'`, `:301`) and the suites run in the appended `agent-boundary-suites` job - `ci-split.md`), and
+- **Fix:** one directory filter `app/lib/computation/__tests__` in `prompt-to-gerber` (workflow `:226`, after SEC-1's entry; [B24-D0, 2026-10-09] the line stays, but since OD-30's split prompt-to-gerber excludes it (`--exclude 'app/lib/computation/__tests__/**'`, `:301`) and the suites run in the appended `agent-boundary-suites` job - `ci-split.md`), and [B24-closeout, 2026-10-10] superseded: B24-D1's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:305.
   `b22-` in `CHAPTERS` (`b19-e-ci-job-scope.test.ts:54`, in place, its comment extended on the line above). No `it(` was added to the
   guard, so B21's `b21-a-page` case 4 pin (8 blocks) stands; a run prints 8 + 4 = 12 tests. No `b22-` suite starts PGlite; no
   explicit entry duplicates the filter (the guard's redundancy rule). The review added no suite file, so the filter is unchanged.
@@ -318,7 +318,7 @@ Each is a reviewed move with its reason written beside it in the file.
 - `b16-0-23-tranche-parity.test.ts:315` (hygiene, not a pin): the file held a raw NUL byte in a string literal; it is now built at
   run time (`String.fromCharCode(0)`), the same string, so the staged file carries no control byte.
 - `artifacts/ai-control-plane-b21/evaluation-matrix.md` C49, C93, C94 - re-pinned +1 (331, 334, 343) with a dated note: the B22-A1
-  filter at workflow `:226`.
+  filter at workflow `:226`. [B24-closeout, 2026-10-10] superseded: B24-D1's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:305.
 - `artifacts/ai-control-plane-b21/orchestration-contracts.md:351` - a dated note: the guard prints 8 + 4 = 12 tests since `b22-`.
 - `artifacts/ai-control-plane-b22/sec-1-spice-deck-injection.md` - four dated notes where B22-A1 supersedes SEC-1's record (the
   smoke screen no longer the only guard; the XSPICE residual closed, with `d_process`/`d_cosim` and the joined-card reading; the
@@ -498,7 +498,7 @@ The reserved files are not edited here. `<sha>` is the commit that lands B22-A1 
 >   `b21-a-page` case 4 pin of 8 blocks stands; a run prints 8 + 4 = 12 tests); no `b22-` suite starts PGlite; live suites stay opt-in
 >   (`SIRKIT_B22_LIVE_RUNNER=1` when one exists) and never run in CI - A1 has none.
 > - **Evidence:** `artifacts/ai-control-plane-b22/deck-and-secret-corrections.md` section 6 (the guard red with `b22-` and no filter,
->   then green); the workflow line `:226`; B21's matrix citations C49/C93/C94 re-pinned +1.
+>   then green); the workflow line `:226`; B21's matrix citations C49/C93/C94 re-pinned +1. [B24-closeout, 2026-10-10] superseded: B24-D1's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:305.
 > - **The owner may choose otherwise:** explicit per-suite entries (each then exempt from a directory filter by the guard's
 >   redundancy rule). Owner confirmation pending.
 

@@ -391,7 +391,7 @@ const section = (page: string, title: string): string => {
 };
 /** The discovery as committed at 8664964: the lead's later single-line closure clauses (`- [B24-<increment>, <date>] ...`) are skipped,
  *  so a line the page cites keeps its number (the b23-b-page case 5 rule). */
-const discoveryAtBase = (): string[] => lines(DISCOVERY).filter((line) => !/^- \[B24-[A-F]\d*[a-z]?(?:,| )/.test(line));
+const discoveryAtBase = (): string[] => lines(DISCOVERY).filter((line) => !/^- \[B24-(?:[A-F]\d*[a-z]?|closeout)(?:,| )/.test(line)); // [B24-closeout, 2026-10-10] reviewed pin move: the closeout's one-line dated discovery lines are not counted either (B24-F's AFTER_BASE_LINE rule), so its noted-nearby lines move no citation; the lead's own `- [B24 lead` lines stay counted (b24-f-registers 7)
 
 /** [B24-A1 review] regressions-2: section 10's old -> new table against a workflow text (case 14 on the tree, case 16 on the edits later
  *  tasks plan). The table is A1's own shift and never moves: each row's new line is exactly its old line +1 past A1's filter line

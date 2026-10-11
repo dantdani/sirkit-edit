@@ -264,7 +264,7 @@ describe("[B24-B3] the twenty-scenario map (D24-17, OD-206)", () => {
     expect(wrong).toEqual([]);
     // discovery citations: each `discovery.md:N` on the page is a row of section 2's citation table, whose anchor its line holds at the
     // committed numbering (the lead's later one-line `- [B24-...` closure clauses dropped, as b24-a1-environment-profile case 14 does)
-    const discovery = read(DISCOVERY).split(NEWLINE).filter((line) => !/^- \[B24-[A-F]\d*[a-z]?(?:,| )/.test(line));
+    const discovery = read(DISCOVERY).split(NEWLINE).filter((line) => !/^- \[B24-(?:[A-F]\d*[a-z]?|closeout)(?:,| )/.test(line)); // [B24-closeout, 2026-10-10] reviewed pin move: the closeout's one-line dated discovery lines are not counted either, as in b24-a1-environment-profile (b24-f-registers 7)
     const cites = [...page.matchAll(/^\| `discovery\.md:(\d+)` \| `([^`]+)` \|$/gm)];
     expect(cites.length).toBeGreaterThanOrEqual(6);
     for (const cite of cites) expect(discovery[Number(cite[1]) - 1] ?? "", `discovery.md:${cite[1]}`).toContain(cite[2]!);

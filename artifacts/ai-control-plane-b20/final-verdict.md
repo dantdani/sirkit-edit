@@ -65,7 +65,7 @@ unchanged at 162 canonical + 3 factories + 0 raw; every generator re-run with ze
 ## Follow-ups raised to the owner during the chapter
 
 - The anonymous `/api/pcb/placement/preview` route can block the event loop for about two minutes per request
-  (measured 124.9 s); queued as its own fix outside B20.
+  (measured 124.9 s); queued as its own fix outside B20. [B24-closeout, 2026-10-10] superseded: B24-A3's record, artifacts/ai-control-plane-b24/abuse-controls.md:334.
 - The DB-gated suites share fixed fixture ids and one fixed idempotency key, so they collide across workers and re-runs;
   queued as its own fix.
 - OpenAI reports no credits for the organisation behind both configured keys, so nothing that embeds or calls a model

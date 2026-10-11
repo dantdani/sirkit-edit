@@ -49,7 +49,7 @@ or the b17-f id tripwire (`process|exec|shell|database|db.|file.|replace-state|i
 a read with no approval tier is Tier 0, a proposal is Tier 2 by construction (an inert sealed artifact a human approves;
 [B20 B4] none is exposed).
 
-## 2. The 39 excluded descriptors, by closed reason — CONFIRMED
+## 2. The 39 excluded descriptors, by closed reason — CONFIRMED [B24-closeout, 2026-10-10] superseded: B24-D2's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:1577.
 
 `MCP_EXCLUSION_REASONS` (`app/lib/engineering/mcp-exposure.ts:33` (`export const MCP_EXCLUSION_REASONS`)) is closed and
 ordered by precedence: the first reason that applies is THE reason, so every descriptor carries exactly one. The first eleven

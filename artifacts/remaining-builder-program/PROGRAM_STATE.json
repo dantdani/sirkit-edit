@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B24",
-  "currentCheckpoint": "B24-F committed on chapter/b24-production-qualification (records in the ledger)",
+  "currentCheckpoint": "B24 closeout commit 1/2 committed on chapter/b24-production-qualification (records in the ledger)",
   "status": "in_progress",
   "baseSha": "57c3b29",
   "branch": "chapter/b24-production-qualification",
-  "lastGreenSha": "58c0834",
+  "lastGreenSha": "7ce1236",
   "pullRequest": "draft PR (chapter/b24-production-qualification -> main) opened after the discovery commit; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
@@ -28,7 +28,7 @@
     "LB-16: BLOCKED-LIVE-QUALIFICATION: live approved external MCP server (discovery, tool calls and hostile tool results through Sirkit's MCP client)",
     "LB-17: BLOCKED-LIVE-QUALIFICATION: kicad-cli live oracle (the exported routed demo loaded and DRC-checked by a real kicad-cli)"
   ],
-  "nextAction": "the closeout (commit 1/2: OD-221's record corrections and the superseding notes; commit 2/2: the test-and-validation report, the unknowns and owner decisions, the final verdict's run-measured scopes and final SHA), then the chapter PR merged normally after green CI, then the final program report",
-  "updatedAt": "2026-10-10T19:37:01-04:00",
+  "nextAction": "closeout commit 2/2 (the final run at the final SHA, the test-and-validation report, the unknowns and owner decisions, the final verdict's run-measured scopes, final SHA and integrity lines), then the chapter PR merged normally after green CI, then the final program report",
+  "updatedAt": "2026-10-10T21:44:22-04:00",
   "previousChapter": "B23 merged normally into main as 57c3b29 (PR #14, 2026-10-06) after green CI on f663d71; verdict PARTIAL (no provider admitted, LB-11; ordering visibly disabled, its contract tested offline only, LB-12; physical evidence defined, none exists, LB-5; no agent can release, transfer or spend; census 166/163/3/0, counts 47/36/9/27)"
 }

@@ -231,7 +231,7 @@ the committed file with the render byte for byte, with no line-ending normalisat
   of 13: its `it.each(CHAPTERS)` case listed both `b23-a` suites as admitted by no filter. Both new suites failed to load (their modules
   did not exist). Log: 3 files failed, 1 test failed / 12 passed.
 - **Fix:** one directory filter, `app/lib/manufacturing-providers/__tests__`, in the `prompt-to-gerber` job of
-  `.github/workflows/deterministic-manufacturing.yml` at `:227`, right after B22-A1's `app/lib/computation/__tests__` (`:226`); and
+  `.github/workflows/deterministic-manufacturing.yml` at `:227`, right after B22-A1's `app/lib/computation/__tests__` (`:226`); and [B24-closeout, 2026-10-10] superseded: B24-D1's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:305.
   `b23-` appended IN PLACE to `CHAPTERS` (`b19-e-ci-job-scope.test.ts:54`), its comment on `:53` extended with an `[B23-A1]` note. No
   `it(` was added to the guard, so `b21-a-page` case 4's pin (8 blocks) stands and a run prints 8 + 5 = 13 tests. Neither suite starts
   PGlite; no explicit entry duplicates the filter (the redundancy rule). Live suites: none in A1.

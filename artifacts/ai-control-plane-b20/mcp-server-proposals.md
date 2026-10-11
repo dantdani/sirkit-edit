@@ -261,7 +261,7 @@ Restoring any proposal is a reviewed ratchet move back to the exposed list with 
   ms timeout (C7) is checked only between specs, and the route's `deadlineMs` 45 000 reaches only the body reader (C19, C20),
   never the synchronous call (C17). Measured in process on 2026-09-21 (the POST handler called directly, no network): one
   anonymous request (50 footprints, 105 010 characters, `timeoutMs` 1 000, 3 passes) answered 200 after 124.9 s and blocked
-  the event loop for 124.9 s; with 1 pass, 40.9 s (`b4f-05`).
+  the event loop for 124.9 s; with 1 pass, 40.9 s (`b4f-05`). [B24-closeout, 2026-10-10] superseded: B24-A3's record, artifacts/ai-control-plane-b24/abuse-controls.md:334.
 - **The native agent path's budget.** `sirkit.placement.propose` over the chat run clamps the engine to 110 s (C14), a
   between-spec budget like every other: a spec that has started runs to its end.
 - **F4** is closed by the process gate (section 6).

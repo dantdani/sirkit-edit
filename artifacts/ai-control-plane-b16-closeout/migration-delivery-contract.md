@@ -40,7 +40,7 @@ Three-valued behaviour (CONFIRMED by inserts): fully-NULL and fully-owned BOM ro
 | Statement splitting | Drizzle's `--> statement-breakpoint`; files without breakpoints (`0027`, `0028`) run as one chunk inside the transaction. |
 | Credentials | the CLI prints host:port/database only and strips the URL's user and password from driver errors. |
 
-Commands: `pnpm run db:migrate` (apply), `pnpm run db:migrate -- --dry-run` (plan), `pnpm run db:migrate:status` (applied / pending / drift / unknown / gap; exit 1 on any inconsistency), `pnpm run db:migrate -- --baseline <name>` (adopt a database that pre-dates the ledger, see 3a). `.env.local` is read ONLY by this CLI, never by tests.
+Commands: `pnpm run db:migrate` (apply), `pnpm run db:migrate -- --dry-run` (plan), `pnpm run db:migrate:status` (applied / pending / drift / unknown / gap; exit 1 on any inconsistency), `pnpm run db:migrate -- --baseline <name>` (adopt a database that pre-dates the ledger, see 3a). `.env.local` is read ONLY by this CLI, never by tests. [B24-closeout, 2026-10-10] superseded: B24-A4's record, artifacts/ai-control-plane-b24/database-and-recovery.md:399.
 
 ### 3a. Adopting a database that pre-dates the ledger (review finding, CONFIRMED)
 

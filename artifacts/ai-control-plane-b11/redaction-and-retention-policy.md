@@ -54,7 +54,7 @@ are persisted at all; retention duration; storage location and encryption;
 who may read them; whether trace access is audited; and whether the
 `argsDigest`/`outputDigest` inputs should additionally be salted per
 tenant to prevent dictionary correlation. None of these should be decided
-implicitly by shipping code.
+implicitly by shipping code. [B24-closeout, 2026-10-10] superseded: B24-C2's record, artifacts/ai-control-plane-b24/retention-and-deletion.md:213. [B24-closeout, 2026-10-10] superseded: B24-C3's record, artifacts/ai-control-plane-b24/observability-and-replay.md:1048.
 
 ## Runtime trace vs replay capsule
 

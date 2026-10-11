@@ -298,7 +298,7 @@ and all three suites ran before and after the edit (section 16).
 - **Retention and deletion** (B24-C2, OD-202): nothing purges either aggregate; both grow until the owner's retention rule and its CLI
   exist.
 - **Attribution, cost and principal** (B24-C2, OD-208, OD-209): no request digest, principal digest, budget, per-event offset, provider
-  request id or cost is recorded; a call record holds tokens, never a price.
+  request id or cost is recorded; a call record holds tokens, never a price. [B24-closeout, 2026-10-10] superseded: B24-C2's record, artifacts/ai-control-plane-b24/observability-and-replay.md:752.
 - **Readers** (B24-C3, OD-211): no route, MCP tool, agent tool or UI reads either record; `DurableRunTraceStore.history`,
   `DurableLlmCallRecordStore.load` and `.list` are the verified read paths C3 builds on.
 - **Legacy routes** are not retired (OD-106 stands).
@@ -721,7 +721,7 @@ names another tree. The labels are part 1's.
   module imports nothing, so no closure grows beyond it); `b21-e1-stop-reasons` 1's `AgentStep` field list gains `providerRequestId?`
   (folded onto the `model` line after a doc comment, so no cited line of `contracts.ts` moves; E1's `stop?` stays the one field E1 added).
   Neither was listed in the task's "pins this change could move"; both are listed here and in the ledger text.
-- The workflow line (database-delivery `:341`) moved B21's C49, C93 and C94 (`:372` -> `:373`, `:375` -> `:376`, `:384` -> `:385`;
+- The workflow line (database-delivery `:341`) moved B21's C49, C93 and C94 (`:372` -> `:373`, `:375` -> `:376`, `:384` -> `:385`; [B24-closeout, 2026-10-10] superseded: B24-D1's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:305.
   `b21-f-page` 6), `ci-admission.md:185` (`:358` -> `:359`) and added A1's insertion-table row (`b24-a1-environment-profile` 14, 16, 17 green);
   B23's C64 and its prose citation cite `:335`, above the line, and did not move.
 
@@ -1070,7 +1070,7 @@ change):
 | pin | move | why |
 |---|---|---|
 | `.github/workflows/deterministic-manufacturing.yml:380` | one database-delivery line, `app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts`, after C2's entry (`:379`; [B24-D0, 2026-10-09] was `:342` after `:341` before B24-D0's 38 prompt-to-gerber `--exclude` lines at `:293-330`; [B24-D1, 2026-10-09] now `:383` after B24-D1's OD-30 steps at `:32` and `:344-345`), above `--reporter=dot` | the PGlite suite, admitted file by file (OD-222; `b19-e-ci-job-scope`) |
-| B21 C49, C93, C94 (`artifacts/ai-control-plane-b21/evaluation-matrix.md:1139, :1183, :1184`; `b21-f-page` 6) | `:373` -> `:374`, `:376` -> `:377`, `:385` -> `:386`, each with `re-pinned +1` naming the entry at `:342` | the inserted line moves every later workflow line +1 (lead decision D8) |
+| B21 C49, C93, C94 (`artifacts/ai-control-plane-b21/evaluation-matrix.md:1139, :1183, :1184`; `b21-f-page` 6) | `:373` -> `:374`, `:376` -> `:377`, `:385` -> `:386`, each with `re-pinned +1` naming the entry at `:342` | the inserted line moves every later workflow line +1 (lead decision D8) [B24-closeout, 2026-10-10] superseded: B24-D1's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:305. |
 | `artifacts/ai-control-plane-b24/environments-and-deployment.md` section 10 | one row appended to the insertion table (task `[B24-C3, 2026-10-09]`, job `database-delivery`, first line `:342`, count 1) | A1's insertion-table protocol; no earlier row and no number of sections 10 and 14 moved |
 | `artifacts/ai-control-plane-b24/ci-admission.md:185` | the browser job's `timeout-minutes: 30` citation `:359` -> `:360`, earlier notes kept | the same +1 (re-derived by anchor) |
 | `b24-c2-retention` 5 (`--read` refused) | retitled in place: `--read` is refused by the PURGE parser alone; the wrapper dispatches it to the read mode before that parser, and `--read` beside a purge flag is refused there (`b24-c3-trace-read` 6); the assertions on `runRetentionCli` hold unchanged, so does `--limit`'s purge range | lead decision D12 |
@@ -1111,7 +1111,7 @@ the action records 107; the migrations 32; the six SDK importers; the B01 CSV; t
 | tsc | `tsc --noEmit -p tsconfig.json` | exit 0, no output |
 | eslint | the eleven changed `.ts` files (the core, the script, `retention-cli.ts`, the fixtures, the three C3 suites, the four moved suites) | exit 0, no output |
 | generators | `generate-agent-artifacts`, `generate-b16-0-2-artifacts`, `generate-b17-control-inventory`, `generate-b11-artifacts`, `generate-action-toolability-matrix`, one after another under the lock | each exit 0; `git status` afterwards names only this task's files - zero drift (47 registered / 36 exposed tools, 107 action records, 631 controls on 63 surfaces, B11 19 / 19 cases and 61 / 61 checks) |
-| by hand | the workflow lines the unmoved citations name | `:226` `app/lib/computation/__tests__` (B22 C76), `:227` `app/lib/manufacturing-providers/__tests__` (B23 C14, C46), `:335` the B23 PGlite entry (C64 and `dfm-quote-flow.md:269`), `:342` the new entry, `:360` `timeout-minutes: 30`, `:374`, `:377`, `:386` the browser job's three steps; `drizzle/` holds 32 migrations; every changed file is LF (`git ls-files --eol`: `w/lf`) with no control byte |
+| by hand | the workflow lines the unmoved citations name | `:226` `app/lib/computation/__tests__` (B22 C76), `:227` `app/lib/manufacturing-providers/__tests__` (B23 C14, C46), `:335` the B23 PGlite entry (C64 and `dfm-quote-flow.md:269`), `:342` the new entry, `:360` `timeout-minutes: 30`, `:374`, `:377`, `:386` the browser job's three steps; `drizzle/` holds 32 migrations; every changed file is LF (`git ls-files --eol`: `w/lf`) with no control byte [B24-closeout, 2026-10-10] superseded: B24-D1's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:305. |
 | final | `b21-closeout-statements`, `b22-closeout-statements`, `b23-closeout-statements`, `b24-c1-durable-trace` (its page case 13) and the three C3 suites on this page as finished (7 files) | 67 / 67, 42.80 s, exit 0; the five page-reading suites re-run once more after this row was written (the last line of this table is the re-run's record) |
 | final, re-run | the three closeout tripwires, `b24-c1-durable-trace` and `b24-c3-recorded-limits` after this table's last two rows were written | see the increment report: the page cannot carry its own last run; the lead's close records it |
 

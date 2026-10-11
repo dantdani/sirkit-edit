@@ -158,7 +158,7 @@ closed list minus the placement experiment). What each bound is held by:
 It is not a sandbox and not an isolation boundary: it bounds the TIME and the JS heap of Sirkit's own closed engines, which only
 ever receive server-validated closed inputs. **The placement experiment** has no worker entry in this build: the placement engine
 is TypeScript whose module graph a worker cannot load without a build step B22-B does not add (`ENGINE_UNAVAILABLE`, recorded on the
-profile). B20's F1 (the anonymous `/api/pcb/placement/preview` blocking the event loop) stays a separate queued fix: it is not the
+profile). B20's F1 (the anonymous `/api/pcb/placement/preview` blocking the event loop) stays a separate queued fix: it is not the [B24-closeout, 2026-10-10] superseded: B24-A3's record, artifacts/ai-control-plane-b24/abuse-controls.md:334.
 same seam (it needs that same engine entry).
 
 ## 5. The process-backed requests: inert until a human approves
@@ -401,7 +401,7 @@ fix run on its final tree; the numbers below are that run's (where they differ, 
 - **The placement experiment cannot run**: the placement engine is TypeScript whose module graph a worker cannot load without a
   build step; the profile exists, the request is sealed, approved and consumed, and the host refuses it `ENGINE_UNAVAILABLE`. The
   OD-87 precondition is therefore met for the host (hard termination at the budget, observed exit, heap limits, empty environment)
-  and NOT for placement itself; B20's F1 (`/api/pcb/placement/preview` blocking the event loop) stays open for the same reason.
+  and NOT for placement itself; B20's F1 (`/api/pcb/placement/preview` blocking the event loop) stays open for the same reason. [B24-closeout, 2026-10-10] superseded: B24-A3's record, artifacts/ai-control-plane-b24/abuse-controls.md:334.
   [B22-B review, 2026-10-02] coverage-5: that is OD-87's first path only; its second (an accepted bound after a real-board probe)
   and third (placement only below a measured footprint cap) need no host and stay open (section 7).
 - **No human approval surface** (OD-159, proposed): approving a process-backed request needs an authenticated route (a reviewed

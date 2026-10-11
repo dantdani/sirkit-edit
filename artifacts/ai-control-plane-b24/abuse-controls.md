@@ -28,7 +28,7 @@ reproduced it, the fix and the re-run, and the sections it changed carry dated `
 - **What it is not.** No shared store (Redis, the database, a platform limiter): every window is per process (section 2), OD-197's
   alternative being to require sign-in, which A3 does not do. No route, tool, action record, UI control or dependency (OD-42); the
   census stays 168 / 165 / 3 / 0, the tool counts 47 / 36 / 9 / 27, the action records 107; `engine.ts`, `placementRunOptions`,
-  `embeddings.ts` and the nine B11-scanned files are untouched; no real network, provider, database or deployment was used, and every
+  `embeddings.ts` and the nine B11-scanned files are untouched; no real network, provider, database or deployment was used, and every [B24-closeout, 2026-10-10] superseded: B24-C1's record, artifacts/ai-control-plane-b24/observability-and-replay.md:338.
   live half is **BLOCKED-LIVE-QUALIFICATION** (section 14).
 - **What the builder did not run.** No `next dev`, `next build`, `next start` or Playwright: both browser configs are the lead's runs
   (section 20).
