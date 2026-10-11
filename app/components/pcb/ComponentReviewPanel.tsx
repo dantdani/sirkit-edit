@@ -107,7 +107,7 @@ function SuccessorReview({ refDes, preview, canResolve, reason, busy, setReason,
         <div className="flex flex-wrap items-center gap-2">
           <input
             className="min-w-[14rem] flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-[10px] text-zinc-100"
-            placeholder="Rebind reason (required)"
+            placeholder="Rebind reason (required)" aria-label={`Rebind reason for ${refDes} (required)`}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             data-testid={`review-successor-reason-${refDes}`}
@@ -191,7 +191,7 @@ export function ComponentReviewPanel({ review }: ComponentReviewPanelProps) {
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   <input
                     className="min-w-[14rem] flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-[10px] text-zinc-100"
-                    placeholder="Decision reason (required to reject)"
+                    placeholder="Decision reason (required to reject)" aria-label={`Decision reason for ${ref} (required to reject)`}
                     value={reason}
                     onChange={(event) => setReasons((current) => ({ ...current, [ref]: event.target.value }))}
                     data-testid={`review-reason-${ref}`}

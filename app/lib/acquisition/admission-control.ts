@@ -16,7 +16,7 @@
  * window, so the agent can never starve a person of a source's quota.
  *
  * [B20 A0] GENERALISED KEY: the meters are keyed by an `AdmissionKey` — a distributor source (exactly as before), an MCP
- * server, or one tool of an MCP server [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): or, since B21-E1, an LLM provider with an optional model - the llm-provider kind below, OD-115] [superseded 2026-10-05 by the B23 closeout (B23-B2, OD-165): and, since B23-B2, a manufacturing provider - the manufacturing-provider kind below, agent share 0] (`app/lib/mcp/server-registry.ts` is the policy: `limits.requestsPerMinute`,
+ * server, or one tool of an MCP server [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): or, since B21-E1, an LLM provider with an optional model - the llm-provider kind below, OD-115] [superseded 2026-10-05 by the B23 closeout (B23-B2, OD-165): and, since B23-B2, a manufacturing provider - the manufacturing-provider kind below, agent share 0] [B24-closeout, 2026-10-10] superseded: B24-A3's record, artifacts/ai-control-plane-b24/abuse-controls.md:334. (`app/lib/mcp/server-registry.ts` is the policy: `limits.requestsPerMinute`,
  * `limits.perTool[tool].requestsPerMinute`, `limits.breaker`). An MCP call (`requestMcpAdmission`) is admitted only when
  * the server's window AND, where the row names the tool, the tool's window both admit it; a refusal by either reserves
  * nothing in the other. The breaker is per server — a tool never has one, and an open server breaker refuses every tool.
@@ -44,14 +44,14 @@ export type RequestOutcome = "success" | "failure" | "rate_limited" | "neutral";
  */
 export type McpRequestOutcome = RequestOutcome | "inconclusive";
 
-/** [B20 A0] What a meter is for: a distributor source, an MCP server, or one tool of an MCP server [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): or, since B21-E1, an LLM provider, OD-115]. [B23-B2: or a manufacturing provider, OD-165]. */
+/** [B20 A0] What a meter is for: a distributor source, an MCP server, or one tool of an MCP server [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): or, since B21-E1, an LLM provider, OD-115]. [B23-B2: or a manufacturing provider, OD-165]. [B24-A3: or an OpenAI embedding model, OD-197]. */
 export type AdmissionKey =
   | { kind: "acquisition-source"; id: AcquisitionSourceId }
-  | { kind: "mcp-server"; serverId: string; tool?: string } | { kind: "llm-provider"; provider: "openai" | "anthropic"; model?: string } | { kind: "manufacturing-provider"; providerId: string }; // [B21 E1] + an LLM provider with an optional model (OD-115): a reviewed extension of the union; [B23-B2] + a manufacturing provider (OD-165), the same kind of reviewed extension
+  | { kind: "mcp-server"; serverId: string; tool?: string } | { kind: "llm-provider"; provider: "openai" | "anthropic"; model?: string } | { kind: "manufacturing-provider"; providerId: string } | { kind: "embedding"; provider: "openai"; model: string }; // [B21 E1] + an LLM provider with an optional model (OD-115): a reviewed extension of the union; [B23-B2] + a manufacturing provider (OD-165), the same kind of reviewed extension; [B24-A3] + an embedding model (OD-197), the same reviewed, append-only extension
 
 /** [B20 A0] The map key of one meter; tool names are registry-validated (`[A-Za-z0-9_.-]`), so the separators are unambiguous. */
 export function admissionKeyString(key: AdmissionKey): string {
-  if (key.kind === "acquisition-source") return `acquisition-source:${key.id}`; if (key.kind === "llm-provider") return key.model === undefined ? `llm-provider:${key.provider}` : `llm-provider:${key.provider}/model:${key.model}`; if (key.kind === "manufacturing-provider") return `manufacturing-provider:${key.providerId}`; // [B23-B2] provider ids are registry ids; [B21 E1] model ids are policy-validated `[a-z0-9._-]`
+  if (key.kind === "acquisition-source") return `acquisition-source:${key.id}`; if (key.kind === "llm-provider") return key.model === undefined ? `llm-provider:${key.provider}` : `llm-provider:${key.provider}/model:${key.model}`; if (key.kind === "manufacturing-provider") return `manufacturing-provider:${key.providerId}`; if (key.kind === "embedding") return `embedding:${key.provider}/model:${key.model}`; // [B23-B2] provider ids are registry ids; [B21 E1] model ids are policy-validated `[a-z0-9._-]`; [B24-A3] the embedding model is the embeddings module's constant, named by its caller
   return key.tool === undefined ? `mcp-server:${key.serverId}` : `mcp-server:${key.serverId}/tool:${key.tool}`;
 }
 
@@ -302,7 +302,7 @@ export function currentMcpPause(server: McpServerRegistryEntry, tool: string | u
 
 /** Test hook: forget every meter and breaker. */
 export function resetAdmissionControl(): void {
-  states.clear(); resetLlmProviderGenerations(); // [B21 E1] and why each LLM provider breaker opened, and its generation (every earlier ticket stale)
+  states.clear(); resetLlmProviderGenerations(); resetEmbeddingMeter(); // [B21 E1] and why each LLM provider breaker opened, and its generation (every earlier ticket stale); [B24-A3] and why each embedding meter opened (its states are in the map above)
 }
 
 /** One in-flight map per client: a second identical lookup joins the first instead of calling the vendor again. */
@@ -518,4 +518,79 @@ export function recordManufacturingProviderOutcome(key: ManufacturingProviderKey
 export function currentManufacturingProviderPause(key: ManufacturingProviderKey, policy: ManufacturingProviderMeterPolicy, now: number = Date.now(), purpose: AdmissionPurpose = "interactive"): AdmissionPause | null {
   if (purpose !== "interactive") return manufacturingProviderAgentRefusal(key, now);
   return preview(manufacturingProviderMeter(key, policy), null, 1, now, "interactive", { halfOpenAdmits: true });
+}
+
+// ─── [B24-A3] The embedding meter (OD-197, D24-8) ─────────────────────────────────────────────────────────────────────────────────
+// Appended on purpose, as B23-B2 appended its meter: no line the B19-B23 pages cite in this file moves. One meter per embedding model,
+// keyed `embedding:<provider>/model:<model>`: a minute window of 240, PROCESS-WIDE (every caller of both public searches shares it), with
+// the purpose share (OD-40), and a breaker - three consecutive failures (a 5xx, a timeout, a network error) open it for 60 s, a provider
+// 429 at once for 60 s, and `insufficient_quota` (no credits) at once for an hour; after an opening ONE trial call goes (half-open). An
+// outcome that tells nothing about the provider - an error thrown before any request (a missing OPENAI_API_KEY), or the provider's
+// refusal of the request itself (another 4xx) - is `neutral` and opens nothing. An outcome recorded while the breaker is open belongs
+// to a call admitted before the opening, so it neither closes nor re-opens it (only `insufficient_quota` may lengthen it). The meter
+// counts admitted `embedQuery` calls, not provider HTTP requests: the SDK retries a call on its own below the meter. The meters live in
+// this process, the limit the header states. Nothing new is imported: the caller names the model (`app/lib/embedding-admission.ts`).
+
+export type EmbeddingKey = Extract<AdmissionKey, { kind: "embedding" }>;
+export const EMBEDDING_ADMISSION = Object.freeze({
+  /** the meter's minute window, process-wide (the agent may use its OD-40 share of it) */
+  requestsPerMinute: 240,
+  /** consecutive failures (a 5xx, a timeout, a network error) that open the breaker */
+  consecutiveFailuresToOpen: 3,
+  /** how long those failures, or a provider 429, keep it open */
+  rateLimitOpenMs: 60_000,
+  /** how long a provider out of credits (`insufficient_quota`) keeps it open */
+  quotaOpenMs: 3_600_000,
+});
+/** How an admitted embedding call ended (classified by the error's provider status and code, never its text). */
+export type EmbeddingOutcome = "success" | "failure" | "rate_limited" | "insufficient_quota" | "neutral";
+/** Why each embedding meter's breaker last opened (named in its pause sentence); `resetAdmissionControl` clears it with the states. */
+const embeddingOpenCauses = new Map<string, "insufficient_quota" | "rate_limit" | "failures">();
+
+function embeddingMeter(key: EmbeddingKey): Meter {
+  const subject = `Embeddings with "${key.provider}" model "${key.model}"`;
+  return {
+    key: admissionKeyString(key),
+    policy: { subject, shareSubject: subject, limits: [{ window: "minute", max: EMBEDDING_ADMISSION.requestsPerMinute, unit: "request" }], breaker: { consecutiveFailuresToOpen: EMBEDDING_ADMISSION.consecutiveFailuresToOpen, openMs: EMBEDDING_ADMISSION.rateLimitOpenMs } },
+  };
+}
+/** A breaker pause re-worded with its cause (the shared sentence says "after repeated failures", untrue for a quota or a rate limit). */
+function embeddingPause(key: EmbeddingKey, pause: AdmissionPause): AdmissionPause {
+  if (pause.reason !== "breaker_open") return pause;
+  const cause = embeddingOpenCauses.get(admissionKeyString(key)) ?? "failures";
+  return { ...pause, message: `Embeddings with "${key.provider}" model "${key.model}" are paused (${cause}) until ${new Date(pause.retryAtMs).toISOString()}; no call is made to the provider before then (OD-197).` };
+}
+
+/** Ask to send ONE embedding call. An allowed call MUST be followed by `recordEmbeddingOutcome`. */
+export function requestEmbeddingAdmission(key: EmbeddingKey, now: number = Date.now(), purpose: AdmissionPurpose = "interactive"): RequestAdmission {
+  const admission = admit(embeddingMeter(key), null, 1, now, purpose);
+  return admission.allowed ? admission : { allowed: false, ...embeddingPause(key, admission) };
+}
+
+/** Record how an admitted embedding call ended (the breaker is the model's meter's). */
+export function recordEmbeddingOutcome(key: EmbeddingKey, outcome: EmbeddingOutcome, now: number = Date.now()): void {
+  const meter = embeddingMeter(key);
+  const state = stateOf(meter.key);
+  if (outcome === "insufficient_quota") {
+    state.trialInFlight = false;
+    state.consecutiveFailures = Math.max(state.consecutiveFailures, EMBEDDING_ADMISSION.consecutiveFailuresToOpen);
+    state.openUntil = Math.max(state.openUntil, now + EMBEDDING_ADMISSION.quotaOpenMs);
+    embeddingOpenCauses.set(meter.key, "insufficient_quota");
+    return;
+  }
+  if (state.openUntil > now) return; // admitted before the opening: it says nothing newer about the provider
+  settle(meter, outcome, now);
+  if (state.openUntil === 0) embeddingOpenCauses.delete(meter.key);
+  else if (state.openUntil > now) embeddingOpenCauses.set(meter.key, outcome === "rate_limited" ? "rate_limit" : "failures");
+}
+
+/** Why an embedding meter is paused right now, per purpose, without reserving anything (half-open admits a trial). */
+export function currentEmbeddingPause(key: EmbeddingKey, now: number = Date.now(), purpose: AdmissionPurpose = "interactive"): AdmissionPause | null {
+  const pause = preview(embeddingMeter(key), null, 1, now, purpose, { halfOpenAdmits: true });
+  return pause === null ? null : embeddingPause(key, pause);
+}
+
+/** The test hook's part (`resetAdmissionControl`): every embedding meter forgets why it opened (its windows and breaker are states). */
+function resetEmbeddingMeter(): void {
+  embeddingOpenCauses.clear();
 }

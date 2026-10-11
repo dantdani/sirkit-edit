@@ -25,7 +25,7 @@ import { loadMigrationManifest, truncateManifest } from "../migrations/manifest"
 import { createPostgresMigrationExecutor } from "../migrations/postgres-executor";
 import { checkMigrationPrerequisites, migrateDatabase, migrationStatus } from "../migrations/runner";
 import { captureSchemaSnapshot, schemaFingerprint, verifyAtomicRevisionStatusEvents, verifyMembershipAndOwnership } from "../migrations/verify-schema";
-import { databaseQualification, withQualifiedDatabase } from "../test-qualification";
+import { databaseQualification, withQualifiedDatabase } from "../test-qualification"; import { requireDisposableQualificationTarget } from "../qualification-target"; // [B24-A4] D24-12, OD-201 (on this line so no line moves)
 
 const qualification = databaseQualification();
 if (!qualification.enabled) console.log(`[b16-b postgres qualification] skipped — ${qualification.reason}`);
@@ -43,7 +43,7 @@ describe.runIf(qualification.enabled)("B16-B §qualified PostgreSQL — clean, r
   let cleanPrint = "";
 
   beforeAll(async () => {
-    executor = createPostgresMigrationExecutor(withQualifiedDatabase());
+    executor = createPostgresMigrationExecutor(withQualifiedDatabase()); await requireDisposableQualificationTarget(executor, "SIRKIT_DB_QUALIFICATION_URL", { requireNoPublicTable: true }); // [B24-A4] the shared guard first: claims the empty database outside public, so requireEmpty below still counts no public table; [B24-A4 review, 2026-10-08] strict: a target holding any public table is refused before the claim is written
     await requireEmpty(executor, "SIRKIT_DB_QUALIFICATION_URL");
   }, 60_000);
   afterAll(async () => { await executor?.close(); }, 60_000);
@@ -72,10 +72,10 @@ describe.runIf(qualification.enabled)("B16-B §qualified PostgreSQL — clean, r
     const manifest = loadMigrationManifest();
     const upgrader = createPostgresMigrationExecutor(secondUrl!);
     try {
-      await requireEmpty(upgrader, "SIRKIT_DB_QUALIFICATION_URL_2");
+      await requireDisposableQualificationTarget(upgrader, "SIRKIT_DB_QUALIFICATION_URL_2", { requireNoPublicTable: true }); await requireEmpty(upgrader, "SIRKIT_DB_QUALIFICATION_URL_2"); // [B24-A4] the shared guard first; [B24-A4 review, 2026-10-08] strict, as above
       await migrateDatabase(upgrader, { manifest: truncateManifest(manifest, 27) });
       const upgrade = await migrateDatabase(upgrader, { manifest });
-      expect(upgrade.applied).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn", "0030_atomic_revision_status_events"]); // [B19-D I5b review] pin move missed in I5b; [B19-E E3] reviewed pin move: + 0030
+      expect(upgrade.applied).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn", "0030_atomic_revision_status_events", "0031_rls_default_deny"]); // [B19-D I5b review] pin move missed in I5b; [B19-E E3] reviewed pin move: + 0030; [B24-A4, 2026-10-08] reviewed pin move: + 0031 (default-deny row security, OD-192)
       expect(schemaFingerprint(await captureSchemaSnapshot(upgrader))).toBe(cleanPrint);
     } finally {
       await upgrader.close();

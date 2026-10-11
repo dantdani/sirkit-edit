@@ -9,7 +9,7 @@ Labels: **CONFIRMED** (executed and measured), **INFERRED** (code reading), **RE
 |---|---|---|---|
 | U18-1 | A real model choosing these tools: a live provider writing interim and final text, calling execution tools, and the chat's entries, labels and notes under it | BLOCKED-LIVE-QUALIFICATION (LB-7, no credits) | the scripted fixture agent drives the REAL loop, gateway, minter, ritual and page through every flow; the loop's text phases and pre-run refusals are pinned with scripted providers |
 | U18-2 | A ROUTED board in the browser journey (scenario 2's vias; scenario 5's routing) | BLOCKED-LIVE-QUALIFICATION (LB-8; the bundled FreeRouting runtime needs a JRE this machine does not have, and the committed recording does not cover this journey's placed board — measured: `ROUTE_FIXTURE_MISS:pcb2-d5bd2f299ef57ca0`, 2 executions recorded) | the padstack truth, the bounded via read and the routing candidate's failures are proven in unit and integration; the browser proves the reads, the answers and that nothing changed |
-| U18-3 | Manufacturing qualification and release beyond their human-only gates | not attempted (LB-5) | `/api/pcb/qualify` and `/api/pcb/release` refuse a non-human actor before any durable read; no agent path reaches either (verified adversarially, §3) |
+| U18-3 | Manufacturing qualification and release beyond their human-only gates | not attempted (LB-5) | `/api/pcb/qualify` and `/api/pcb/release` refuse a non-human actor before any durable read; no agent path reaches either (verified adversarially, §3) [B24-closeout, 2026-10-10] superseded: B24-E's record, artifacts/ai-control-plane-b24/qualification-matrix.md:329. |
 
 ## 2. Findings carried forward (found by the closing adversarial pass, recorded rather than fixed)
 

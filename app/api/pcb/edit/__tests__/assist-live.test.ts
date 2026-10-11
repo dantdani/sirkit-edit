@@ -10,19 +10,24 @@
  * applies.
  *
  *   PCB_ASSIST_LIVE=1 ANTHROPIC_API_KEY=… pnpm vitest run app/api/pcb/edit/__tests__/assist-live.test.ts
+ *
+ * [B24-B3, 2026-10-08] D24-18, D24-19, OD-209: the suite runs on its flag alone. With PCB_ASSIST_LIVE=1 and the key absent it FAILS
+ * `NOT EXERCISED` before any case body runs (the registry's gate, app/lib/evaluation/live-suites.ts), where it used to skip. Each case
+ * injects an editor of the selected project and sends the selector headers, the origin and `provider: "anthropic"`
+ * (`_assist-live-request.ts`): before B24-B3 the request was refused 400 `AUTH_PROJECT_SELECTOR_REQUIRED` before any model call, and
+ * the route would have sent it to OpenAI. Recorded `not exercised`: no run with a funded key exists (LB-2, LB-7).
  */
 
-import { describe, it, expect } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, it, expect } from "vitest";
+import { injectAuthorizedPrincipal, resetInjectedIdentity } from "@/app/lib/auth/test-support";
+import { assertLiveResources } from "@/app/lib/evaluation/live-suites";
 import { buildRoutedDemo } from "@/app/lib/pcb/demo/routed-demo";
 import { ensureBoardPadstacks } from "@/app/lib/pcb/padstack/migrate";
-import { buildDigest, buildItemIndex } from "@/app/lib/pcb/edit/digest";
 import { compileEdits } from "@/app/lib/pcb/edit/apply";
 import type { SelectionRef } from "@/app/lib/pcb/edit/commands";
+import { ASSIST_LIVE_PRINCIPAL, assistLiveRequest } from "./_assist-live-request";
 
-const hasKey =
-  typeof process.env.ANTHROPIC_API_KEY === "string" &&
-  process.env.ANTHROPIC_API_KEY !== "" &&
-  process.env.PCB_ASSIST_LIVE === "1";
+const LIVE = process.env.PCB_ASSIST_LIVE === "1";
 
 const board = buildRoutedDemo();
 ensureBoardPadstacks(board);
@@ -32,27 +37,18 @@ async function assist(
   selection: SelectionRef[] = [],
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   const { POST } = await import("@/app/api/pcb/edit/assist/route");
-  const payload = {
-    instruction,
-    digest: buildDigest(board, selection, { presetId: "jlcpcb-2l" }),
-    items: buildItemIndex(board),
-  };
-  const res = await POST(
-    new Request("http://localhost/api/pcb/edit/assist", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    }),
-  );
+  const res = await POST(assistLiveRequest(board, instruction, selection));
   const body = (await res.json()) as Record<string, unknown>;
   return { status: res.status, body };
 }
 
-describe.skipIf(!hasKey)("POST /api/pcb/edit/assist (live Claude)", () => {
+describe.runIf(LIVE)("POST /api/pcb/edit/assist (live Claude)", () => {
+  beforeEach(() => { injectAuthorizedPrincipal(ASSIST_LIVE_PRINCIPAL); });
+  afterEach(() => { resetInjectedIdentity(); });
+
   it("'make all GND traces 0.5 mm' → validated set-track-width", { timeout: 60_000 }, async () => {
     const { status, body } = await assist("make all GND traces 0.5 mm");
     // Paste-able evidence for the phase gate:
-    // eslint-disable-next-line no-console
     console.log("[stage17-d live] response:", JSON.stringify(body).slice(0, 800));
     expect(status).toBe(200);
     const commands = body.commands as { op: string; widthNm?: number; ids?: string[] }[];
@@ -98,4 +94,6 @@ describe.skipIf(!hasKey)("POST /api/pcb/edit/assist (live Claude)", () => {
     ).toBe(true);
     expect(compileEdits(board, commands as never).errors).toEqual([]);
   });
+
+  beforeAll(() => assertLiveResources("assist-live")); // [B24-B3, 2026-10-08] the registry's gate, once in this block (hooks run before the cases wherever they sit)
 });

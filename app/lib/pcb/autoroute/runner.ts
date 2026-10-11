@@ -1,6 +1,6 @@
 /**
  * Freerouting subprocess runner (PCB Stage 9). Mirrors the NGSpice pattern in
- * app/api/simulate/route.ts: write input to a temp file, spawn the JAR, capture [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): /api/simulate starts no process since B22-A3; ngspice runs through the diagnostic runner, whose per-run directory, exact environment and tree kill this runner does not share]
+ * app/api/simulate/route.ts: write input to a temp file, spawn the JAR, capture [superseded 2026-10-02 by the B22 closeout (D22-14, OD-144): /api/simulate starts no process since B22-A3; ngspice runs through the diagnostic runner, whose per-run directory, exact environment and tree kill this runner does not share] [B24-D2, 2026-10-09] the tree kill is now app/lib/pcb/process-tree.ts, OD-145's method (taskkill /T on win32, the process group on POSIX), and a killed run settles on its exit or after the confirm wait; the per-run directory and the exact environment are still not shared
  * stderr, race a kill-timer against `close`, read the output file, clean up in a
  * `finally`. Local CLI only: no Docker, hosted REST, or API key.
  *
@@ -57,7 +57,7 @@ export type RunFreeroutingResult =
       elapsedMs: number;
       processStatus: "not-started" | "exit-nonzero" | "timeout" | "cancelled" | "spawn-failed" | "exit-success";
       outputFileStatus: "not-checked" | "missing" | "empty";
-      exitCode?: number | null;
+      exitCode?: number | null; killConfirmed?: boolean; // [B24-D2, 2026-10-09] present only on a killed run (timeout, cancelled): true when its exit was observed after the tree kill, false when the confirm wait ran out first
     };
 
 function errMsg(e: unknown): string {
@@ -138,14 +138,14 @@ export async function runFreerouting(input: RunFreeroutingInput): Promise<RunFre
 
     const outcome = await new Promise<
       | { kind: "closed"; code: number | null; stderr: string }
-      | { kind: "timeout"; stderr: string }
-      | { kind: "cancelled"; stderr: string }
+      | { kind: "timeout"; stderr: string; killConfirmed: boolean }
+      | { kind: "cancelled"; stderr: string; killConfirmed: boolean }
       | { kind: "spawn-error"; err: NodeJS.ErrnoException; stderr: string }
     >((resolve) => {
       // [B22-A1] D22-8 (OD-148): each stream is kept to the one diagnostic bound, and the joined diagnostics to it too, stderr keeping its own share ([B22-A1 review] regressions-2)
       const stdout = createDiagnosticCollector();
       const stderr = createDiagnosticCollector();
-      let settled = false;
+      let settled = false; let closed = false; let killing: "timeout" | "cancelled" | null = null; let confirm: ReturnType<typeof setTimeout> | undefined; const place = treeKillPlace(process.platform, process.env.SystemRoot); // [B24-D2, 2026-10-09] OD-145: the tree kill's place, its Windows directory read once per run
       const diagnostics = (): string => joinDiagnosticTexts(stderr.text().trim(), stdout.text().trim());
       const done = (v: Parameters<typeof resolve>[0]): void => {
         if (settled) return;
@@ -160,17 +160,17 @@ export async function runFreerouting(input: RunFreeroutingInput): Promise<RunFre
           stdio: "pipe",
           cwd: tmpdir(),
           env: freeroutingEnvironment(),
-          windowsHide: true,
+          windowsHide: true, detached: !place.win32, // [B24-D2, 2026-10-09] the child leads its own process group on POSIX, so the group kill reaches its children (not on win32: taskkill /T walks the tree)
         },
       );
-      input.signal?.addEventListener("abort", () => {
-        child.kill("SIGKILL");
-        done({ kind: "cancelled", stderr: diagnostics() });
-      }, { once: true });
+      input.signal?.addEventListener("abort", () => kill("cancelled"), { once: true }); // [B24-D2, 2026-10-09] OD-145: the whole tree, never the direct child alone
+      function kill(kind: "timeout" | "cancelled"): void { if (settled || closed || killing !== null) return; killing = kind; clearTimeout(timer); killProcessTree(child, place, () => !closed, spawn); if (child.pid === undefined) done({ kind, stderr: diagnostics(), killConfirmed: false }); else confirm = setTimeout(() => done({ kind, stderr: diagnostics(), killConfirmed: false }), TREE_KILL_CONFIRM_MS); }
+      // [B24-D2, 2026-10-09] a started child settles on its observed exit (close, below: killConfirmed true) or after the confirm wait (false); one never
+      // started (no pid) at once, as before. A run that already settled or closed is never killed, so no pid is reused by a late abort.
 
       const timer = setTimeout(() => {
-        child.kill("SIGKILL");
-        done({ kind: "timeout", stderr: diagnostics() });
+        kill("timeout");
+        // [B24-D2, 2026-10-09] settled by the kill: on the observed exit, or after the confirm wait
       }, timeoutMs);
 
       child.on("error", (err: NodeJS.ErrnoException) => {
@@ -184,16 +184,16 @@ export async function runFreerouting(input: RunFreeroutingInput): Promise<RunFre
         stderr.append(d.toString());
       });
       child.on("close", (code) => {
-        clearTimeout(timer);
-        done({ kind: "closed", code, stderr: diagnostics() });
+        closed = true; clearTimeout(timer); clearTimeout(confirm);
+        done(killing !== null ? { kind: killing, stderr: diagnostics(), killConfirmed: true } : { kind: "closed", code, stderr: diagnostics() }); // [B24-D2, 2026-10-09] after the tree kill the observed exit confirms it
       });
     });
 
     if (outcome.kind === "timeout") {
-      return { ok: false, error: "timeout", stderr: outcome.stderr, elapsedMs: elapsed(), processStatus: "timeout", outputFileStatus: "not-checked" };
+      return { ok: false, error: "timeout", stderr: outcome.stderr, elapsedMs: elapsed(), processStatus: "timeout", outputFileStatus: "not-checked", killConfirmed: outcome.killConfirmed };
     }
     if (outcome.kind === "cancelled") {
-      return { ok: false, error: "cancelled", stderr: outcome.stderr, elapsedMs: elapsed(), processStatus: "cancelled", outputFileStatus: "not-checked" };
+      return { ok: false, error: "cancelled", stderr: outcome.stderr, elapsedMs: elapsed(), processStatus: "cancelled", outputFileStatus: "not-checked", killConfirmed: outcome.killConfirmed };
     }
     if (outcome.kind === "spawn-error") {
       const error = outcome.err.code === "ENOENT" ? "java-missing" : "io";
@@ -253,3 +253,6 @@ export async function runFreerouting(input: RunFreeroutingInput): Promise<RunFre
     await Promise.all([rm(inPath, { force: true }).catch(() => {}), rm(outPath, { force: true }).catch(() => {})]);
   }
 }
+
+// [B24-D2, 2026-10-09] the tree kill (OD-145), imported at the END (imports are hoisted) so no cited line above moves
+import { TREE_KILL_CONFIRM_MS, killProcessTree, treeKillPlace } from "@/app/lib/pcb/process-tree";

@@ -75,6 +75,7 @@ path,method,auth_class,identity_source,requires_auth,permitted_roles,required_ca
 /api/full-flow/propose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/full-flow/run,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/full-flow/transition,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/health,GET,public,none,false,,,false,false,false,false,"app/api/health: liveness, { ok: true }, reads nothing"
 /api/interfaces/allocate,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/interfaces/alternatives,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/interfaces/candidates,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
@@ -99,7 +100,7 @@ path,method,auth_class,identity_source,requires_auth,permitted_roles,required_ca
 /api/parts/[id]/alternates,GET,public,none,false,,,false,false,false,false,catalog read
 /api/parts/categories,GET,public,none,false,,,false,false,false,false,catalog read
 /api/parts/external-search,POST,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,true,true,false,false,"external candidate search of the enabled distributors (LIVE, metered vendor quota; at most 5 per source; nothing persisted; trusted project scope)"
-/api/parts/search,POST,public,none,false,,,false,false,false,false,catalog read
+/api/parts/search,POST,public,none,false,,,true,false,false,false,"catalog read; embeds the anonymous caller's query text with OpenAI: metered provider credit behind its public windows and the embedding meter (B24-A3, OD-197)"
 /api/passive-policy,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/passive-policy,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/pcb-sync,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,app/api/pcb-sync
@@ -113,7 +114,7 @@ path,method,auth_class,identity_source,requires_auth,permitted_roles,required_ca
 /api/pcb/export/kicad-pcb,POST,public,none,false,,,false,false,false,false,stateless export
 /api/pcb/footprints/[id],GET,public,none,false,,,false,false,false,false,footprint catalog read
 /api/pcb/footprints/resolve,GET,public,none,false,,,false,false,false,false,footprint catalog read
-/api/pcb/footprints/search,GET,public,none,false,,,false,false,false,false,footprint catalog read
+/api/pcb/footprints/search,GET,public,none,false,,,true,false,false,false,"footprint catalog read; embeds the anonymous caller's q text with OpenAI: metered provider credit behind its public windows and the embedding meter (B24-A3, OD-197)"
 /api/pcb/placement/preview,POST,public,none,false,,,false,false,false,false,stateless compute
 /api/pcb/provider-exchange,POST,authenticated-mutation,trusted-context,true,project_admin,,false,true,false,false,"app/api/pcb/provider-exchange (preview and commit of a named provider's DFM or quote exchange of a ledgered release; human project administrator only; no provider admitted in B23, nothing sent)"
 /api/pcb/qualify,POST,authenticated-release,trusted-context,true,pcb_editor;project_admin,,false,true,true,true,app/api/pcb/qualify
@@ -127,6 +128,7 @@ path,method,auth_class,identity_source,requires_auth,permitted_roles,required_ca
 /api/power/problem,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/power/propose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/power/reconcile,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/ready,GET,internal-worker,worker-secret,true,,,false,false,false,false,"app/api/ready: readiness by check name and closed state, never a value; the worker secret; reads the configuration digest and a bounded select 1; writes nothing"
 /api/release-engineering/problem,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/release-engineering/propose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/replacement-authority,POST,authenticated-read,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api/replacement-authority

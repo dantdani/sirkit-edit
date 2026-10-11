@@ -9,7 +9,7 @@ the lead decided (the OD-87 default): **B20 serves no proposal over MCP.** All f
 ratchet move, each with its reason; the structural rule (`mcp-exposure.ts`), the registry and every descriptor are
 unchanged (registry digest `eng1-4aacd63c7e0a6193`, as on the base 4299067), so only the two lists, the MCP tool manifest and
 the pages moved.
-The MCP subset is 9 tools: the 9 served reads; 7 tools are withheld: 2 reads and the 5 proposals.
+The MCP subset is 9 tools: the 9 served reads; 8 tools are withheld: 2 reads and the 5 proposals, and B24-D2's 1 paged board read ([B24-D2, 2026-10-09] 7 until B24-D2 withheld its paged board read by choice, OD-235; its row is in section 14, appended so no line of this page moved).
 MCP exposure in B20 is read-only. Closes D20-34's placement half and UNKNOWN 4; defers D20-8 by owner decision (not
 closed); D20-10's proposal half does not apply in B20. The propose delegation, the returned projection, the proposal
 pool, windows, replay and trace designed for B4 (OD-50's projection, OD-83 to OD-86, OD-88) are NOT built; their design is
@@ -261,7 +261,7 @@ Restoring any proposal is a reviewed ratchet move back to the exposed list with 
   ms timeout (C7) is checked only between specs, and the route's `deadlineMs` 45 000 reaches only the body reader (C19, C20),
   never the synchronous call (C17). Measured in process on 2026-09-21 (the POST handler called directly, no network): one
   anonymous request (50 footprints, 105 010 characters, `timeoutMs` 1 000, 3 passes) answered 200 after 124.9 s and blocked
-  the event loop for 124.9 s; with 1 pass, 40.9 s (`b4f-05`).
+  the event loop for 124.9 s; with 1 pass, 40.9 s (`b4f-05`). [B24-closeout, 2026-10-10] superseded: B24-A3's record, artifacts/ai-control-plane-b24/abuse-controls.md:334.
 - **The native agent path's budget.** `sirkit.placement.propose` over the chat run clamps the engine to 110 s (C14), a
   between-spec budget like every other: a spec that has started runs to its end.
 - **F4** is closed by the process gate (section 6).
@@ -349,3 +349,15 @@ every suite passed before the change and the strengthened case fails, the source
 | coverage-1: the probe tallies left out the abort probe's two runs | rows P11 and P12; the tallies and the footprint-cap statement recomputed | `b20-b4-withhold-proposals` case 6 |
 | coverage-3: the reads page still credited J2 with "no process run" | item 8 of its deviations carries the F4 correction | `b20-b4-process-gate` case 4 (every B20 page paragraph that says what the import gate proves names that gate) |
 | tests-2: no test rendered a propose-class definition's `readOnlyHint` | withhold case 5 checks the forged proposal's annotations | forcing `readOnlyHint` true in the returned definition passed the 27 suites of `app/lib/mcp`, `app/api/mcp` and the B1 and B3 exposure suites (596 cases) before (forcing it at the derivation line was caught only by B1's page citation of that line); `b20-b4-withhold-proposals` case 5 fails with it |
+
+## 14. [B24-D2, 2026-10-09] A third withheld category: the paged board read (OD-235) — CONFIRMED (suites `b20-b4-withhold-proposals` case 6, `b24-d2-board-read` case 2)
+
+B24-D2 added one agent-exposed Tier 0 read, `sirkit.pcb.board-page-inspect` (OD-213: one layer, net or region of
+board-inspect's own snapshot, a page at a time). The structural rule admits it, and it IS servable from durable state
+(`canonical-state`, `durable-server-board`, `board-present`) - unlike B3's two withheld reads. It is withheld by a reviewed
+choice, not an inability: paged answers and their cursors were never reviewed for MCP clients (OD-48, OD-54). The MCP subset
+stays the 9 served reads; restoring the read needs an owner decision.
+
+| tool | class | MCP | increment | decision | reason |
+|---|---|---|---|---|---|
+| `sirkit.pcb.board-page-inspect` | read | withheld | B24-D2 | OD-235 | servable from the durable server board, withheld by choice: paged answers and their cursors were never reviewed for MCP clients (OD-48, OD-54) |

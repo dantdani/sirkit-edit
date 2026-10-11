@@ -20,10 +20,10 @@ case counts; the tests, not the numbers, are the gate.
 A tool is exposed only when BOTH hold: the structural rule (section 3) admits its descriptor, AND the reviewed decision
 lists it — `INTENTIONAL_MCP_EXPOSED_TOOL_IDS` (`app/lib/engineering/mcp-exposure-review.ts:14` (`export const INTENTIONAL_MCP_EXPOSED_TOOL_IDS`)),
 one reason comment per id — and does not withhold it (`MCP_WITHHELD_TOOL_IDS`: empty at B1, two reads since B3, and the
-five proposals since B4). The exposure
-(the structural rule and the reviewed decision together) admits exactly these 9 from the production registry of 47 descriptors ([B22-B, 2026-10-01] 42 until B22-B added the five named
+five proposals since B4; [B24-D2, 2026-10-09] and the paged board read since B24-D2, withheld by choice, OD-235). The exposure
+(the structural rule and the reviewed decision together) admits exactly these 9 from the production registry of 48 descriptors ([B24-D2, 2026-10-09] 47 until B24-D2 added the paged board read, OD-213, withheld from MCP by choice, OD-235; [B22-B, 2026-10-01] 42 until B22-B added the five named
 computations, OD-139, all excluded as `computation`);
-the structural rule alone admits seven more, the withheld tools of section 2. `mcpExposureReport` (`app/lib/engineering/mcp-exposure.ts:197` (`export function mcpExposureReport(`))
+the structural rule alone admits eight more ([B24-D2, 2026-10-09] seven until B24-D2's paged board read), the withheld tools of section 2. `mcpExposureReport` (`app/lib/engineering/mcp-exposure.ts:197` (`export function mcpExposureReport(`))
 compares the two in both directions: an admitted id that is neither listed nor withheld is `unexpected` (never exposed, and
 drift until reviewed), a listed id that is not exposed is `missing`, any id outside the reviewed agent set is
 `outsideAgentSet`, and one id admitted under two versions is a `duplicate`; any of them makes the report not ok and the
@@ -49,7 +49,7 @@ or the b17-f id tripwire (`process|exec|shell|database|db.|file.|replace-state|i
 a read with no approval tier is Tier 0, a proposal is Tier 2 by construction (an inert sealed artifact a human approves;
 [B20 B4] none is exposed).
 
-## 2. The 38 excluded descriptors, by closed reason — CONFIRMED
+## 2. The 39 excluded descriptors, by closed reason — CONFIRMED [B24-closeout, 2026-10-10] superseded: B24-D2's record, artifacts/ai-control-plane-b24/performance-and-reliability.md:1577.
 
 `MCP_EXCLUSION_REASONS` (`app/lib/engineering/mcp-exposure.ts:33` (`export const MCP_EXCLUSION_REASONS`)) is closed and
 ordered by precedence: the first reason that applies is THE reason, so every descriptor carries exactly one. The first eleven
@@ -68,14 +68,14 @@ ordered by precedence: the first reason that applies is THE reason, so every des
 | `external_read` | `sirkit.mcp.observation-read`, `sirkit.parts.evidence-read`, `sirkit.parts.external-search` | OD-55: live vendor quota, labels only while agent disclosure is unknown (OD-36, OD-40); [B20 A4] the external tool read of approved MCP servers is the agent's only (OD-74) |
 | `view_state_read` | `sirkit.selection.inspect`, `sirkit.view.read-state` | OD-49 (D20-7): they read an open editor's selection or view state |
 | `not_servable` | none in the registry (a forged or future descriptor) | not an active, discoverable, callable descriptor bound to a server-side read or an inert proposal with no approval tier of its own |
-| `withheld` | `sirkit.pcb.propose-bounded-edit`, `sirkit.placement.propose`, `sirkit.project.history-inspect`, `sirkit.routing.propose`, `sirkit.schematic.inspect`, `sirkit.schematic.propose-component-replacement`, `sirkit.schematic.propose-tier1-edit` | structurally admissible, but withheld from MCP by a reviewed decision recorded with its reason (how B3 and B4 remove an id). [B20 B3] OD-69: the two reads each need browser-only state — the captured project timeline, and the editor's `SchematicState` (browser storage; no durable table holds it) — so no durable server source can serve it (`mcp-server-reads.md`). [B20 B4] OD-82 and OD-87: the five proposals — the schematic ones need the editor's `SchematicState` and head mark, the bounded edit the open editor's history head, lineage and DRC preset, routing runs the FreeRouting child process, and placement's engine blocks the event loop and cannot be stopped inside a spec (`mcp-server-proposals.md`) |
+| `withheld` | `sirkit.pcb.board-page-inspect`, `sirkit.pcb.propose-bounded-edit`, `sirkit.placement.propose`, `sirkit.project.history-inspect`, `sirkit.routing.propose`, `sirkit.schematic.inspect`, `sirkit.schematic.propose-component-replacement`, `sirkit.schematic.propose-tier1-edit` | structurally admissible, but withheld from MCP by a reviewed decision recorded with its reason (how B3 and B4 remove an id). [B20 B3] OD-69: the two reads each need browser-only state — the captured project timeline, and the editor's `SchematicState` (browser storage; no durable table holds it) — so no durable server source can serve it (`mcp-server-reads.md`). [B20 B4] OD-82 and OD-87: the five proposals — the schematic ones need the editor's `SchematicState` and head mark, the bounded edit the open editor's history head, lineage and DRC preset, routing runs the FreeRouting child process, and placement's engine blocks the event loop and cannot be stopped inside a spec (`mcp-server-proposals.md`) [B24-D2, 2026-10-09] OD-235: a third category, B24-D2's paged board read - servable from the durable board, withheld by choice: paged answers and their cursors were never reviewed for MCP clients (OD-48, OD-54) |
 | `not_mcp_reviewed` | none in the registry (a forged or future admissible descriptor under an id that is not listed) | structurally admissible, but not reviewed for MCP: never exposed, and the report calls it `unexpected` (drift) until it is listed or withheld |
 
 `tier3` and `never_exposed` precede `not_agent_exposed`, so a descriptor outside the agent set still names the stronger
 reason (`sirkit.manufacturing.release` is Tier 3 and matches `\.release$`; the page and the manifest say `tier3`).
 The agent set (`app/lib/engineering/agent-exposure.ts:30` (`export const INTENTIONAL_AGENT_EXPOSED_TOOL_IDS`)) holds:
-36 ids = the 9 above + 6 granted executions + 3 external reads + 6 view-session controls + 2 open-editor reads + 7 withheld tools
-+ 3 named computation reads ([B22-B, 2026-10-01] OD-139: 33 until B22-B; the three reads are excluded as `computation`).
+37 ids = the 9 above + 6 granted executions + 3 external reads + 6 view-session controls + 2 open-editor reads + 8 withheld tools
++ 3 named computation reads ([B22-B, 2026-10-01] OD-139: 33 until B22-B; the three reads are excluded as `computation`; [B24-D2, 2026-10-09] 36 and seven withheld until B24-D2's paged board read, OD-235).
 B3 and B4 may REMOVE an id they cannot serve safely, as a reviewed ratchet move of `app/lib/engineering/mcp-exposure-review.ts`:
 the id moves from `INTENTIONAL_MCP_EXPOSED_TOOL_IDS` to `MCP_WITHHELD_TOOL_IDS`
 (`app/lib/engineering/mcp-exposure-review.ts:32` (`export const MCP_WITHHELD_TOOL_IDS`)) with its reason, and the pins of
@@ -165,7 +165,7 @@ registry, per the Tool contract of revision 2026-07-28 (`mcp-reference-notes.md`
   closed reason `not evaluable by the output validator`, and the manifest records `omitted (<closed reason>)`. It is the
   registry's declared schema, copied — not strict-normalized, because strict normalization turns optional fields into
   required nullable ones, which a conforming output that omits the field would then violate.
-  At B1 all 9 exposed tools declare it (the count since B4's move; the seven withheld tools declare one too).
+  At B1 all 9 exposed tools declare it (the count since B4's move; the seven withheld tools declare one too). [B24-D2, 2026-10-09] eight withheld since B24-D2; the paged board read declares one too (`{ page }`).
   [B20 C1] A declared schema BINDS the
   served success: it carries a `structuredContent` that conforms after the model-safe walk, or the read is refused with
   B05's closed `invalid_output` (MCP 2026-07-28 server/tools, "Output Schema": servers MUST provide structured results that

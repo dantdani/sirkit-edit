@@ -18,7 +18,7 @@ const PORT = Number(process.env.SIRKIT_E2E_PORT ?? 3100);
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /.*\.spec\.ts/,
+  testMatch: /.*\.spec\.ts/, testIgnore: (process.env.SIRKIT_E2E_SKIP ?? "").split(",").map((glob) => glob.trim()).filter(Boolean), // [B24-D4, 2026-10-10] OD-30's split: SIRKIT_E2E_SKIP, a comma-separated list of spec globs, leaves those specs out of a run (page-browser-e2e skips the four page-browser-e2e-b24 runs); unset or empty ignores nothing
   fullyParallel: false,
   workers: 1,
   retries: 0,

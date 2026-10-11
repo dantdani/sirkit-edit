@@ -59,8 +59,8 @@ const QUALIFY_ROLES: readonly ProjectRole[] = ["pcb_editor", "project_admin"];
 const TIER1_EXECUTE: readonly ProjectRole[] = ["pcb_editor", "project_admin"];
 
 // ── Policy constructors (defaults per class) ─────────────────────────────────
-function pub(path: string, methods: readonly string[], evidence: string): RoutePolicy[] {
-  return methods.map((method) => ({ path, method, authClass: "public", identitySource: "none", requiresAuth: false, permittedRoles: [], providerCredit: false, requiresCsrf: false, authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence }));
+function pub(path: string, methods: readonly string[], evidence: string, opts: { providerCredit?: boolean } = {}): RoutePolicy[] { // [B24-A3] OD-197: a public row may declare metered provider credit; no key is added to RoutePolicy
+  return methods.map((method) => ({ path, method, authClass: "public", identitySource: "none", requiresAuth: false, permittedRoles: [], providerCredit: opts.providerCredit ?? false, requiresCsrf: false, authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence }));
 }
 function read(path: string, methods: readonly string[], evidence: string, roles: readonly ProjectRole[] = ALL_MEMBERS): RoutePolicy[] {
   return methods.map((method) => ({ path, method, authClass: "authenticated-read", identitySource: "trusted-context", requiresAuth: true, permittedRoles: roles, providerCredit: false, requiresCsrf: method !== "GET" && method !== "HEAD", authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence }));
@@ -243,7 +243,7 @@ const ALL: RoutePolicy[] = [
   ...pub("/api/components/atomic/search", ["POST"], "catalog read"),
   // [B19-E E5] a member reads the catalog status of the revisions the project pins (bounded ids, no quota, no write)
   ...read("/api/components/revision-status", ["POST"], "app/api/components/revision-status (catalog status of pinned atomic revisions; at most 500 ids; trusted project scope)"),
-  ...pub("/api/parts/search", ["POST"], "catalog read"),
+  ...pub("/api/parts/search", ["POST"], "catalog read; embeds the anonymous caller's query text with OpenAI: metered provider credit behind its public windows and the embedding meter (B24-A3, OD-197)", { providerCredit: true }),
   ...pub("/api/parts/categories", ["GET"], "catalog read"),
   ...pub("/api/parts/[id]", ["GET"], "catalog read"),
   ...pub("/api/parts/[id]/alternates", ["GET"], "catalog read"),
@@ -253,7 +253,7 @@ const ALL: RoutePolicy[] = [
   ...pub("/api/kicad/v1/parts/category/[id]", ["GET"], "public KiCad HTTP library"),
   ...pub("/api/pcb/footprints/[id]", ["GET"], "footprint catalog read"),
   ...pub("/api/pcb/footprints/resolve", ["GET"], "footprint catalog read"),
-  ...pub("/api/pcb/footprints/search", ["GET"], "footprint catalog read"),
+  ...pub("/api/pcb/footprints/search", ["GET"], "footprint catalog read; embeds the anonymous caller's q text with OpenAI: metered provider credit behind its public windows and the embedding meter (B24-A3, OD-197)", { providerCredit: true }),
   ...pub("/api/pcb/placement/preview", ["POST"], "stateless compute"),
   ...pub("/api/pcb/export/kicad-pcb", ["POST"], "stateless export"),
   ...pub("/api/constraints/explain", ["POST"], "stateless compute"),
@@ -301,7 +301,7 @@ const ALL: RoutePolicy[] = [
   ...read("/api/mcp/token", ["POST"], "app/api/mcp/token (mints a one-hour, audience-bound MCP access token for the signed-in member's selected project; nothing is stored; same-origin CSRF)", ALL_MEMBERS),
   ...pub("/.well-known/oauth-protected-resource/api/mcp", ["GET"], "RFC 9728 protected-resource metadata of the MCP endpoint (static configuration only; no project data)"),
   // ── [B23-B1] the provider exchange (OD-174, OD-164): a human project administrator previews, then commits, the DFM or quote exchange of a LEDGERED release with a named provider; files would leave through this row once a provider is admitted (none in B23: every commit is refused provider_not_admitted). Writes no engineering state ──
-  ...mutate("/api/pcb/provider-exchange", ["POST"], "app/api/pcb/provider-exchange (preview and commit of a named provider's DFM or quote exchange of a ledgered release; human project administrator only; no provider admitted in B23, nothing sent)", { roles: ADMIN_ONLY }).map((policy) => ({ ...policy, authoritativeWrite: false, externalTransfer: true })),
+  ...mutate("/api/pcb/provider-exchange", ["POST"], "app/api/pcb/provider-exchange (preview and commit of a named provider's DFM or quote exchange of a ledgered release; human project administrator only; no provider admitted in B23, nothing sent)", { roles: ADMIN_ONLY }).map((policy) => ({ ...policy, authoritativeWrite: false, externalTransfer: true })), ...pub("/api/health", ["GET"], "app/api/health: liveness, { ok: true }, reads nothing"), ...readOnlyWorker("/api/ready", ["GET"], "app/api/ready: readiness by check name and closed state, never a value; the worker secret; reads the configuration digest and a bounded select 1; writes nothing"), // [B24-A1] OD-198: appended in place (census 166 -> 168)
 ];
 
 // ── Lookup ────────────────────────────────────────────────────────────────────
@@ -393,4 +393,11 @@ export function routeVocabularyViolations(policies: readonly RoutePolicy[] = ALL
     for (const reason of ROUTE_VOCABULARY_VIOLATIONS) if (found.has(reason)) out.push(`${policy.method} ${policy.path}: ${reason}`);
   }
   return out;
+}
+
+/** [B24-A1] OD-198: the reviewed READ-ONLY worker row for `GET /api/ready` - the worker secret like `worker()`, but no authoritative
+ *  write, no transfer, no spend and no provider credit (`worker()` hard-codes `authoritativeWrite: true` for the three worker write
+ *  routes). Least privilege, RECORDED: the same secret authorizes those routes too; a separate credential is OD-195's (B24-A2). */
+function readOnlyWorker(path: string, methods: readonly string[], evidence: string): RoutePolicy[] {
+  return methods.map((method) => ({ path, method, authClass: "internal-worker", identitySource: "worker-secret", requiresAuth: true, permittedRoles: [], providerCredit: false, requiresCsrf: false, authoritativeWrite: false, releaseOrQualification: false, externalTransfer: false, spend: false, evidence }));
 }

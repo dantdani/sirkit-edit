@@ -308,7 +308,7 @@ capsule key below the top level.]
   before API — OD-106's tripwire), BUILD_LOOP `app/lib/build-loop.ts`, API `app/api/`, and a provider SDK by bare specifier (`openai`,
   `@anthropic-ai/sdk`, any subpath) found on any closure member's VALUE imports — the closure walk never follows a bare specifier, so the
   SDK check reads each member's references. Case 1 proves every family resolves to real files today (no vacuous case) and RECORDS the
-  five SDK importers of the whole tree (`adapters.ts`, `embeddings.ts`, the two LLM providers, `parts-search.ts`).
+  five SDK importers of the whole tree (`adapters.ts`, `embeddings.ts`, the two LLM providers, `parts-search.ts`). [B24-B3, 2026-10-08] Six since B24-B3: + `app/lib/evaluation/live-contract-clients.ts`, the record-only command's maxRetries-0 contract-turn clients; case 1's pin moved in place (OD-125, OD-216).
 - **The walk** is `importClosure` (the B20 helper: static imports, re-exports, import-equals, dynamic imports and requires with static
   strings; case-folded resolution). **A type-only import is erased at run time and is deliberately NOT caught** (case 3 proves it, as
   B20-D3 does); every probe is an injected in-memory file under the orchestration prefix, never a file on disk, one per family plus a
@@ -341,14 +341,14 @@ it - while a paired astral character stays text (the check's residual of B21-E2 
 | `app/lib/agent/orchestration/__tests__/b21-a-store.test.ts` | 15 | 15 |
 | `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 7 | 7 |
 | `app/lib/agent/orchestration/__tests__/b21-a-page.test.ts` | 6 | 6 |
-| `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 8 | 8 + 1 per chapter |
+| `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 9 | 9 + 1 per chapter |
 
 [B21 C] The gate suite gained case 6 (role-tools.ts joins the entry set; the three pins of cases 1, 3 and 5 moved from five modules
 to six, `specialist-roles.md` section 6); B21-B had moved them from three to five the same way. [B21 D] The gate suite gained case 7
 (merge.ts joins the entry set; the same three pins moved from six modules to seven, `merge-and-disagreement.md` section 7).
 
 The guard's `it.each(CHAPTERS)` adds one runtime test per chapter of its list, so a run prints 8 + 3 = 11 tests today (`b19-`, `b20-`,
-`b21-`) for its 8 `it(` blocks ([SEC-1, 2026-10-01] 7 and 10 until SEC-1 added its explicit-entry case; [B22-A1, 2026-10-01] 8 + 4 = 12 since B22-A1 admitted `b22-`, no `it(` added; [B23-A1, 2026-10-02] 8 + 5 = 13 since B23-A1 admitted `b23-`, no `it(` added); the page case computes the `it(` count and the rule from the source and pins the rule as a FORMULA, never
+`b21-`) for its 8 `it(` blocks ([SEC-1, 2026-10-01] 7 and 10 until SEC-1 added its explicit-entry case; [B22-A1, 2026-10-01] 8 + 4 = 12 since B22-A1 admitted `b22-`, no `it(` added; [B23-A1, 2026-10-02] 8 + 5 = 13 since B23-A1 admitted `b23-`, no `it(` added; [B24-D0, 2026-10-09] 9 + 6 = 15 since B24-D0 added its OD-30 split case to the guard, the row above re-pinned 8 -> 9 and `9 + 1 per chapter` in place - B24-A1 had admitted `b24-` with no `it(` added, 8 + 6 = 14); the page case computes the `it(` count and the rule from the source and pins the rule as a FORMULA, never
 today's total, so the next chapter's admission (`b22-`, an eleventh test) moves nothing in this closed increment (review correction: the
 earlier row said 7 against runs printing 10, and a first correction pinned 10, which the `b22-` probe below showed would break here).
 
@@ -635,7 +635,7 @@ review the lines are as of the corrected modules.
 | C36 | `app/lib/agent/trace.ts` | 153 | — | `declaredNames: ReadonlySet<string> = EMPTY_NAME_SET,` | the B11.3 declared-name rule the artifact exemption mirrors |
 | C37 | `app/lib/engineering/execution-grant.ts` | 79 | — | `export const GRANT_PREVIEW_TTL_MS = 10 * 60 * 1000;` | grants expire; their records are not purged |
 | C38 | `app/lib/mcp/server/__tests__/b20-d3-authority-import-gates.test.ts` | 55 | — | `const APPROVAL_PREFIXES = ["app/lib/engineering/approved-", "app/lib/engineering/agent-execution-journal"];` | the prefix-family gate this one mirrors |
-| C39 | `.github/workflows/deterministic-manufacturing.yml` | 132 | — | `app/lib/agent/orchestration/__tests__` | the one directory filter |
+| C39 | `.github/workflows/deterministic-manufacturing.yml` | 133 | — | `app/lib/agent/orchestration/__tests__` | the one directory filter [B24-D1, 2026-10-09] re-pinned +1: B24-D1's prompt-to-gerber start step at `:32` (OD-30) |
 | C40 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 54 | — | `const CHAPTERS = [` | the guard's chapter list (anchored on its head: the next chapter extends the members) |
 | C41 | `app/lib/agent/orchestration/tripwires.ts` | 9 | — | `export const B11_SCANNED_FILES = Object.freeze([` | the nine files, named only here |
 | C42 | `app/lib/agent/orchestration/tripwires.ts` | 22 | — | `export const ORCHESTRATION_IDENTIFIER_PATTERN = ` | the identifier pattern |

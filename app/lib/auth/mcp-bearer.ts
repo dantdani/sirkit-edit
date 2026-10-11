@@ -26,7 +26,7 @@ import { timingSafeEqualString } from "./constant-time";
 import { SIRKIT_EXPECTED_ORIGIN_ENV, isLoopbackHostname, normalizeOrigin } from "./expected-origin";
 import { resolveAuthMode } from "./mode";
 import { ID_PATTERN } from "./trusted-request-context";
-import { WORKER_PRINCIPAL_ID, WORKER_SECRET_ENV } from "./worker-principal";
+import { WORKER_PRINCIPAL_ID, WORKER_SECRET_ENV, WORKER_SECRET_PREVIOUS_ENV } from "./worker-principal";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -186,12 +186,12 @@ function secretBytesOf(environment: unknown): Buffer | null {
   if (raw !== raw.trim()) return null;
   const bytes = Buffer.from(raw, "utf8");
   if (bytes.byteLength < MCP_TOKEN_SECRET_MIN_BYTES || bytes.byteLength > MCP_TOKEN_SECRET_MAX_BYTES) return null;
-  // key separation: never the worker's shared secret (compared as its verifier trims it), never the KiCad library token
+  // key separation: never the worker's shared secret (compared as its verifier trims it), never the KiCad library token; [B24-A2] nor, OD-195, their previous values
   const worker = environmentValue(environment, WORKER_SECRET_ENV)?.trim();
   if (worker !== undefined && worker.length > 0 && timingSafeEqualString(raw, worker)) return null;
   const kicad = environmentValue(environment, KICAD_LIBRARY_TOKEN_ENV);
   if (kicad !== undefined && kicad.length > 0 && timingSafeEqualString(raw, kicad)) return null;
-  return bytes;
+  return reusesAPreviousServiceSecret(raw, environment) ? null : bytes; // [B24-A2] D24-4, OD-195: key separation covers the previous worker secret and KiCad token
 }
 
 /** The configured origin: SIRKIT_EXPECTED_ORIGIN normalised; https, or http on a loopback host only, in production; no fallback. */
@@ -273,7 +273,7 @@ function verifyToken(token: unknown, expected: McpTokenExpectation, environment:
   if (header !== MCP_TOKEN_HEADER_B64) return refuse("unsupported_algorithm");
   // 5. the signature, in constant time, before the payload is decoded
   if (!SIGNATURE_PATTERN.test(sent)) return refuse("bad_signature");
-  if (!timingSafeEqualString(signature(`${header}.${payload}`, key), sent)) return refuse("bad_signature");
+  if (!signedByCurrentOrPreviousKey(`${header}.${payload}`, key, sent, environment)) return refuse("bad_signature"); // [B24-A2] D24-4, OD-195: the current key, then the previous one while it is set
   // 6. the payload: bounded, canonical base64url, fatal UTF-8, JSON, a plain object with exactly the eleven claims
   if (payload.length > PAYLOAD_SEGMENT_MAX_CHARS) return refuse("claims_invalid");
   const bytes = Buffer.from(payload, "base64url");
@@ -540,4 +540,50 @@ export function buildMcpBearerContext(input: { readonly claims: McpAccessTokenCl
     requestId,
     actor,
   });
+}
+
+// ── [B24-A2] Rotation: a previous signing key that only verifies (D24-4, OD-195) ─────────────────────────────────────────────────
+
+/**
+ * The previous signing key. While it is set, a token signed under it still verifies, so a rotation is: put the old key here and the
+ * new one in `SIRKIT_MCP_TOKEN_SECRET`, keep both for at least MCP_TOKEN_LIFETIME_S (3600 s, the longest a token minted under the old
+ * key can live), then unset this one. It never signs, never mints and never configures: minting and the resource configuration read
+ * the current key only (`mintToken`, `resolveMcpResourceConfiguration`), and with the current key unset nothing is configured. It
+ * passes the current key's own bounds and separation (secretBytesOf), or it is never used - and never unconfigures the endpoint. The
+ * token header stays byte for byte (no `kid`), and no refusal code or bound is added: a token signed by neither key is bad_signature.
+ */
+export const MCP_TOKEN_SECRET_PREVIOUS_ENV = "SIRKIT_MCP_TOKEN_SECRET_PREVIOUS" as const;
+const KICAD_LIBRARY_TOKEN_PREVIOUS_ENV = "KICAD_HTTP_LIBRARY_TOKEN_PREVIOUS";
+
+/** Key separation over the previous values: the worker's previous secret (trimmed, as its verifier trims it) and the previous KiCad
+ *  library token. Both are compared before the answer. */
+function reusesAPreviousServiceSecret(raw: string, environment: unknown): boolean {
+  const worker = environmentValue(environment, WORKER_SECRET_PREVIOUS_ENV)?.trim();
+  const kicad = environmentValue(environment, KICAD_LIBRARY_TOKEN_PREVIOUS_ENV);
+  const reusesWorker = worker !== undefined && worker.length > 0 && timingSafeEqualString(raw, worker);
+  const reusesKicad = kicad !== undefined && kicad.length > 0 && timingSafeEqualString(raw, kicad);
+  return reusesWorker || reusesKicad;
+}
+
+/** The previous key's bytes under exactly the current key's rules: secretBytesOf over an environment that holds the previous value
+ *  as the key beside the four service secrets it must differ from; null when it is unset or fails. */
+function previousSecretBytesOf(environment: unknown): Buffer | null {
+  const raw = environmentValue(environment, MCP_TOKEN_SECRET_PREVIOUS_ENV);
+  if (raw === undefined) return null;
+  return secretBytesOf({
+    [MCP_TOKEN_SECRET_ENV]: raw,
+    [WORKER_SECRET_ENV]: environmentValue(environment, WORKER_SECRET_ENV),
+    [KICAD_LIBRARY_TOKEN_ENV]: environmentValue(environment, KICAD_LIBRARY_TOKEN_ENV),
+    [WORKER_SECRET_PREVIOUS_ENV]: environmentValue(environment, WORKER_SECRET_PREVIOUS_ENV),
+    [KICAD_LIBRARY_TOKEN_PREVIOUS_ENV]: environmentValue(environment, KICAD_LIBRARY_TOKEN_PREVIOUS_ENV),
+  });
+}
+
+/** The signature against the current key, then against the previous one, each in constant time, both computed before the one
+ *  answer; with no usable previous key the second compare repeats the first and cannot accept on its own. */
+function signedByCurrentOrPreviousKey(signingInput: string, key: Buffer, sent: string, environment: unknown): boolean {
+  const previous = previousSecretBytesOf(environment);
+  const byCurrent = timingSafeEqualString(signature(signingInput, key), sent);
+  const byPrevious = timingSafeEqualString(signature(signingInput, previous ?? key), sent);
+  return byCurrent || (previous !== null && byPrevious);
 }

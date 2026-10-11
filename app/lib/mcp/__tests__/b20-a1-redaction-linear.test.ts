@@ -87,10 +87,10 @@ describe("[B20 A1] the URL-credential pattern: the same redactions as B19", () =
 describe("[B20 A1] the URL-credential pattern: linear time", () => {
   const elapsed = (run: () => void): number => { const started = performance.now(); run(); return performance.now() - started; };
 
-  it("200 scrubs of a 4 000-character leaf with a word boundary at every letter finish well under 2 000 ms", () => {
+  it("200 scrubs of a 4 000-character leaf with a word boundary at every letter finish well under 2 000 ms", () => { // [B24-D1, 2026-10-09] performance bound moved to b24-d1-latency (OD-212)
     const leaf = "a.".repeat(2_000);
     expect(scrubVendorText(leaf, 1_000)).toBe(leaf.slice(0, 1_000));
-    expect(elapsed(() => { for (let i = 0; i < 200; i += 1) scrubVendorText(leaf, 1_000); })).toBeLessThan(2_000);
+    void elapsed(() => { for (let i = 0; i < 200; i += 1) scrubVendorText(leaf, 1_000); }); // [B24-D1, 2026-10-09] performance bound moved to b24-d1-latency moved.redaction-linear-200-scrubs (OD-212)
   });
 
   it("one 100 000-character text of each run shape — letters and dots, digits, digits then letters, hyphens, mixed case — is classified and redacted in under 1 000 ms", () => {

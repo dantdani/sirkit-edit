@@ -50,7 +50,7 @@ export type PcbWorkingCopy = {
   board: PcbBoard;
   baseRevision: string | null;
   baseDigest: string | null;
-  updatedAt: number;
+  updatedAt: number; /** [B24-D2, 2026-10-09] D24-30, OD-214: a token unique to the write that stored this copy (absent on older copies); a tab compares it before it writes */ writeId?: string;
   /** B03: canonical-executor head this board was at when last saved.
    *  Written only after a successful canonical mutation reached autosave;
    *  absent on legacy projects and after legacy-path edits. Verified against

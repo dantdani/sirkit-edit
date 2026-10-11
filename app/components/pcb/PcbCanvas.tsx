@@ -11,6 +11,7 @@
 
 import { useEffect, useRef } from "react";
 import { createPcbScene, type PcbScene } from "@/app/lib/pcb/render/scene";
+import { PCB_CANVAS_STATEMENT } from "@/app/lib/accessibility/statements";
 
 export function PcbCanvas({
   onReady,
@@ -35,5 +36,6 @@ export function PcbCanvas({
     };
   }, [onReady]);
 
-  return <div ref={hostRef} className="absolute inset-0 overflow-hidden" />;
+  // [B24-D3] OD-215: the drawing is declared non-accessible (pointer-only); its keyboard alternative is Go to component.
+  return <div ref={hostRef} className="absolute inset-0 overflow-hidden" role="img" aria-label={PCB_CANVAS_STATEMENT} />;
 }

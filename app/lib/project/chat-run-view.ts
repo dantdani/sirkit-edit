@@ -310,7 +310,7 @@ export const entryRecovery = (entry: ExecutionEntry, action: unknown): Execution
   if (action === "adopted-and-settled" || action === "settled-from-receipt") return { ...entry, recovery, state: "committed", serverRecord: "settled", failure: null, undoEligible: false };
   if (action === "abandoned-not-committed") return { ...entry, recovery: null, state: "not_made", failure: { headline: recovery, next: "Ask again.", code: "abandoned-not-committed" }, undoEligible: false };
   if (action === "refused-poisoned") return { ...entry, recovery, state: "landed_unverified", failure: { ...refusalSentence(null, true), code: "refused-poisoned" }, undoEligible: false };
-  return { ...entry, recovery };
+  return action === "interrupted-in-flight" ? { ...entry, recovery: null, state: "outcome_unknown", failure: { headline: recovery, next: INTERRUPTED_NEXT, code: "interrupted-in-flight" }, undoEligible: false } : { ...entry, recovery }; // [B24-D2B, 2026-10-10] OD-214: interrupted elsewhere, never "still in progress"
 };
 /** [B18-D review] A schematic edit proposal's chat text (Rule 2): the answer is the page's own sentence; the model's note, if
  *  any, is a labelled note for the run log — never the answer, and never the history the next run receives. */
@@ -517,7 +517,7 @@ export const RESTORED_UNDO_HINTS = Object.freeze({
   redo: "Undo: after a reload the editor's one-step Undo no longer applies — use the revision history.",
 });
 export function restoredEntryLog<M extends { id: string; entries: ReadonlyArray<{ id: string; text: string }> }>(message: M): M {
-  if (entryStateOfLogMessage(message) !== "committed") return message;
+  if (entryStateOfLogMessage(message) !== "committed") return entryStateOfLogMessage(message) === "landed_unverified" ? restoredLandedNext(message) : message; // [B24-D2B review 4, 2026-10-10] nor a landed-unverified record's next step
   const entries = message.entries.map((row) => {
     if (!row.id.endsWith(":undo") || !row.text.startsWith("Undo: while it is the latest change")) return row;
     const kind = row.text.includes("re-applies the change") ? "undo" : row.text.includes("removes the change again") ? "redo" : "change";
@@ -661,4 +661,147 @@ export function restoredChatResume(messages: ReadonlyArray<{ role: string; conte
     return { runId: offer[2]!, text: user.content, provider: offer[1]!, projectId: scope.projectId, branchId: scope.branchId };
   }
   return null;
+}
+
+// ─── [B24-D2B, 2026-10-10] D24-30, OD-214: a recovery sweep's result reaches the entry it names, live or restored after a reload ────
+// Appended on purpose: function declarations are hoisted, so no line cited above moves.
+
+/** [B24-D2B, 2026-10-10] The next step an interrupted entry names (`entryRecovery`, `restoredEntryRecovery`). */
+const INTERRUPTED_NEXT = "Check the board; ask again if you still want the change.";
+
+/** [B24-D2B, 2026-10-10] A recovery sweep result as the action the person is shown (the page's rule, `page.tsx:6460`). An execution
+ *  THIS page's own ritual holds (`heldHere`, B18-C I10b) is never shown: its ritual settles it. A grant left in flight that no ritual of
+ *  this page holds - the server consumed it for a page that closed before the answer, or for another tab - is NOT "still in progress"
+ *  here (B18's sentence for `left-in-flight`): it is `interrupted-in-flight`. Any other action is itself. */
+export function recoveryDisplayAction(result: { action: unknown; heldHere?: unknown; cause?: unknown }): string | null {
+  if (typeof result.action !== "string") return null;
+  if (result.action !== "left-in-flight") return result.action === "unavailable" && result.cause === "lineage-reopened" ? "lineage-reopened" : result.action; // [B24-D2B review 4, 2026-10-10] a lasting `unavailable` is shown as its cause
+  return result.heldHere === true ? null : "interrupted-in-flight";
+}
+
+/** [B24-D2B, 2026-10-10] The actions a restored entry takes: those the editor's recovery notice names (`executionRecoveryNotice`), a
+ *  grant the server still holds issued (`left-issued`) and an unreadable one (`unavailable`). B18's own `left-in-flight` (this page's
+ *  ritual finishes it) and an unknown action leave the record as it was. */
+const RESTORED_RECOVERY_ACTIONS: ReadonlySet<string> = new Set(["adopted-and-settled", "settled-from-receipt", "abandoned-not-committed", "refused-poisoned", "interrupted-in-flight", "left-issued", "unavailable", /* [B24-D2B review 3] the journal's record of a grant outside the sweep's work list (`recordedEnds`) */ "recorded-committed", "recorded-not-committed", "recorded-unverified", "unrecorded", /* [B24-D2B review 4] a lasting unreadable outcome, and a grant another tab moved while the sweep read it */ "lineage-reopened", "in-flight-elsewhere"]);
+/** [B24-D2B, 2026-10-10] A restored entry whose grant the server still holds issued: B18's live "confirm or cancel it" is false after a reload (the card is in-memory state).
+ *  [B24-D2B review 2] Never a terminal "not made": the journal is the profile's and the claim registry the page's, so another open tab may still hold the live card (kept after an
+ *  unanswered tender, `refusalKeepsPreviewCard`) and commit it. Not started, open; an expired grant is closed by a later sweep (`b24-d2-crash-recovery` 4). */
+const RESTORED_NOT_STARTED = "Not started — when the editor loaded this project, the server still held this change's grant unused, so nothing had been changed by it. This page cannot start it: a reload keeps no confirmation card. Another open tab of this project may still start it."; /* [B24-D2B review 3] what held at that load, no prediction: every editor load re-derives it (restoredEntryGrants) */ const RESTORED_NOT_STARTED_NEXT = "Check your other open tabs of this project; ask again if you still want the change.";
+
+/**
+ * [B24-D2B, 2026-10-10] D24-30, OD-214: a recovery sweep's result for the execution entry of `grantId` when the page holds no live entry
+ * for it - an entry restored after a reload is a static log record (`fromStoredChat`; `executionEntriesRef` starts empty), so before
+ * this no sweep result ever reached it and the record kept its pre-crash sentence ("Executing … awaiting the editor's result
+ * (interrupted by reload)") beside a transient notice. The record now takes what `entryRecovery` gives a live entry, written as
+ * `entryToLogMessage` writes it: a non-terminal record moves to the state the sweep established (its state row's sentence, the next step
+ * and the recovery sentence; an adopted change committed, with the hint a reloaded record keeps; a grant still issued - `left-issued` -
+ * not started and of open outcome, never terminal; an unreadable one of unknown outcome); a terminal record keeps its state and gains the
+ * sentence of an action the notice names. Its other rows are kept. A restored record is never shown as running (nothing runs for it
+ * in this page). Returns the same array when nothing changed (no record of the grant, or an action a restored record does not take).
+ */
+export function restoredEntryRecovery<M extends { id: string }>(messages: M[], grantId: string, action: string): M[] {
+  const id = `${EXECUTION_ENTRY_ID_PREFIX}${grantId}`;
+  const index = messages.findIndex((message) => message.id === id);
+  if (index < 0 || !RESTORED_RECOVERY_ACTIONS.has(action)) return messages;
+  const record = messages[index] as unknown as { id: string; status?: unknown; entries?: unknown };
+  if (!Array.isArray(record.entries) || record.entries.length === 0) return messages;
+  const rows = record.entries as EntryLogRow[];
+  const state = entryStateOfLogMessage({ id, entries: rows });
+  if (state === null || (action === "unrecorded" && !writtenAtALoad(rows[0]!.text))) return messages; // [B24-D2B review 3] no record names it: only a sentence an earlier load wrote from the records is withdrawn
+  const row = (key: string, text: string, status: EntryLogRow["status"] = "done"): EntryLogRow => ({ id: `${id}:${key}`, text, status });
+  const sentence = recoverySentence(action);
+  // the record's own rows from the tier to the transaction, in entryToLogMessage's order; the rows after them are written anew
+  const body = rows.slice(1).filter((existing) => !/:(attempt|next|recovery|undo)$/.test(existing.id));
+  let entries: EntryLogRow[];
+  let status: unknown;
+  if (TERMINAL.has(state)) {
+    if (action === "left-issued" || action === "unavailable" || action === "lineage-reopened" || action === "in-flight-elsewhere" || RECORDED_END_ACTIONS.has(action)) return messages; // its settled state already says the outcome; B18's live "confirm or cancel it" is false here; [B24-D2B review 3] a settled entry is never asked about
+    entries = [rows[0]!, ...body, ...rows.filter((existing) => existing.id.endsWith(":next")), row("recovery", sentence), ...rows.filter((existing) => existing.id.endsWith(":undo"))];
+    status = record.status;
+  } else {
+    let settled: { state: ExecutionEntryState; text: string; tail: EntryLogRow[] };
+    if (action === "adopted-and-settled" || action === "settled-from-receipt") {
+      settled = { state: "committed", text: "AI change committed by your editor (one canonical transaction)", tail: [row("recovery", sentence), row("undo", RESTORED_UNDO_HINTS.redo)] };
+    } else if (action === "abandoned-not-committed") {
+      settled = { state: "not_made", text: sentence, tail: [row("next", "Next: Ask again.", "error")] };
+    } else if (action === "left-issued") {
+      settled = { state: "outcome_unknown", text: RESTORED_NOT_STARTED, tail: [row("next", `Next: ${RESTORED_NOT_STARTED_NEXT}`, "error")] }; // [B24-D2B review 2] open: another tab may still start it
+    } else if (action === "unavailable" || action === "lineage-reopened") { // [B24-D2B review 4] its sentence names the lasting cause
+      settled = { state: "outcome_unknown", text: sentence, tail: [row("next", "Next: Check the board and the revision history.", "error")] };
+    } else if (action === "refused-poisoned") {
+      const refusal = refusalSentence(null, true);
+      settled = { state: "landed_unverified", text: refusal.headline, tail: [row("next", CHECK_RECORDS_NEXT, "error"), row("recovery", sentence)] }; // [B24-D2B review 4, 2026-10-10] after a reload the editor's one-step Undo no longer applies (RESTORED_UNDO_HINTS): the restored next step
+    } else if (RECORDED_END_ACTIONS.has(action)) { settled = recordedEnd(action, row); /* [B24-D2B review 3] the journal's record, or no record any more */ } else {
+      settled = { state: "outcome_unknown", text: sentence, tail: [row("next", `Next: ${action === "in-flight-elsewhere" ? IN_FLIGHT_ELSEWHERE_NEXT : INTERRUPTED_NEXT}`, "error")] }; // [B24-D2B review 4] another tab carrying it: never "ask again"
+    }
+    const rowStatus: EntryLogRow["status"] = settled.state === "committed" ? "done" : "error";
+    entries = [{ id: `${id}${STATE_MARK}${settled.state}`, text: settled.text, status: rowStatus }, ...body, ...settled.tail];
+    status = rowStatus;
+  }
+  const updated = { ...(messages[index] as object), status, entries } as unknown as M;
+  return [...messages.slice(0, index), updated, ...messages.slice(index + 1)];
+}
+
+// ─── [B24-D2B review 3, 2026-10-10] D24-30, OD-214: every editor load re-derives a restored, unsettled entry from durable truth ────
+// Appended on purpose: function declarations are hoisted and the constants are read only when an entry is re-derived, so no line cited above moves.
+
+/**
+ * [B24-D2B review 3, 2026-10-10] The grants the page asks the editor's sweep about at each editor load (`restoredGrants`): those of its restored
+ * execution entries that are not settled (`awaiting_confirmation`, `issued`, `executing`, `outcome_unknown`) and that the page holds no
+ * live entry for, each once, in chat order. A settled entry is never asked about: its grant was settled, retired or refused in the one
+ * page that held its card, so no page can start it later (INFERRED: a card lives only in the page whose chat run received the grant).
+ * An unsettled one is re-derived at every editor load from what the sweep reads - the journal and the server for an unfinished journal entry,
+ * the journal's record of its end for a finished one (`recordedEnds`) - never kept from a sentence an earlier load wrote.
+ */
+export function restoredEntryGrants(messages: ReadonlyArray<{ id: string; entries?: ReadonlyArray<{ id: string }> }>, isLive: (grantId: string) => boolean): string[] {
+  const grants: string[] = [];
+  for (const message of messages) {
+    if (!Array.isArray(message.entries)) continue;
+    const state = entryStateOfLogMessage({ id: message.id, entries: message.entries });
+    if (state === null || TERMINAL.has(state)) continue;
+    const grantId = message.id.slice(EXECUTION_ENTRY_ID_PREFIX.length);
+    if (!isLive(grantId) && !grants.includes(grantId)) grants.push(grantId);
+  }
+  return grants;
+}
+
+/** [B24-D2B review 3, 2026-10-10] The sweep's results for a grant outside its work list (`recordedEnds` in `granted-executions.ts`). */
+const RECORDED_END_ACTIONS: ReadonlySet<string> = new Set(["recorded-committed", "recorded-not-committed", "recorded-unverified", "unrecorded"]);
+const RECORDED_COMMITTED = "Recorded: this browser's execution journal for this project records this change as committed and reported to the server.";
+const RECORDED_NOT_COMMITTED = "Not made — this browser's execution journal for this project records this change as closed without a commit. Nothing was changed by it.";
+const RECORDED_UNVERIFIED = "Recorded: this browser's execution journal for this project records this change's commit as one that could not be verified.";
+const UNRECORDED = "Outcome not known — when the editor loaded this project, no record this page can read named this change any more, so this entry cannot say whether it was made.";
+const CHECK_RECORDS_NEXT = "Next: Check the board and the revision history.";
+
+/** [B24-D2B review 3, 2026-10-10] What a restored, unsettled entry becomes from the journal's record of its grant's end - committed as the
+ *  adopted path writes it, not made, or landed unverified - or, once no record names its grant any more, of unknown outcome. */
+function recordedEnd(action: string, row: (key: string, text: string, status?: EntryLogRow["status"]) => EntryLogRow): { state: ExecutionEntryState; text: string; tail: EntryLogRow[] } {
+  if (action === "recorded-committed") return { state: "committed", text: "AI change committed by your editor (one canonical transaction)", tail: [row("recovery", RECORDED_COMMITTED), row("undo", RESTORED_UNDO_HINTS.redo)] };
+  if (action === "recorded-not-committed") return { state: "not_made", text: RECORDED_NOT_COMMITTED, tail: [row("next", "Next: Ask again.", "error")] };
+  if (action === "recorded-unverified") return { state: "landed_unverified", text: refusalSentence(null, true).headline, tail: [row("next", CHECK_RECORDS_NEXT, "error"), row("recovery", RECORDED_UNVERIFIED)] };
+  return { state: "outcome_unknown", text: UNRECORDED, tail: [row("next", CHECK_RECORDS_NEXT, "error")] };
+}
+
+/** [B24-D2B review 3, 2026-10-10] A state sentence a load wrote from what it read then (`restoredEntryRecovery`): withdrawn at a load
+ *  where no record names the grant any more. B18's own sentences (a pre-crash state "(interrupted by reload)") are kept. */
+function writtenAtALoad(text: string): boolean {
+  return text === RESTORED_NOT_STARTED || text === recoverySentence("interrupted-in-flight") || text === recoverySentence("unavailable") || text === UNRECORDED || text === recoverySentence("lineage-reopened") || text === recoverySentence("in-flight-elsewhere"); // [B24-D2B review 4] and the two sentences that round added
+}
+
+// ─── [B24-D2B review 4, 2026-10-10] D24-30, OD-214: a restored entry never offers the editor's one-step Undo ─────────────────────────
+// Appended on purpose: a function declaration is hoisted and the constant is read only when an entry is restored or re-derived.
+
+/** [B24-D2B review 4, 2026-10-10] The next step of a restored entry whose grant another tab is carrying forward (`in-flight-elsewhere`). */
+const IN_FLIGHT_ELSEWHERE_NEXT = "Check your other open tabs of this project, or the board and the revision history.";
+
+/**
+ * [B24-D2B review 4, 2026-10-10] A landed-unverified record restored after a reload (`restoredEntryLog`): its live next step names the
+ * editor's one-step Undo ("...; the editor's Undo restores the previous board.", `refusalSentence(_, true)`), which a reload no longer
+ * offers (`RESTORED_UNDO_HINTS`). It reads the restored next step the page already uses ("Check the board and the revision history.");
+ * every other row is kept, and a record without that step is returned as it was.
+ */
+function restoredLandedNext<M extends { id: string; entries: ReadonlyArray<{ id: string; text: string }> }>(message: M): M {
+  const live = `Next: ${refusalSentence(null, true).next}`;
+  if (!message.entries.some((row) => row.id.endsWith(":next") && row.text === live)) return message;
+  return { ...message, entries: message.entries.map((row) => (row.id.endsWith(":next") && row.text === live ? { ...row, text: CHECK_RECORDS_NEXT } : row)) } as M;
 }

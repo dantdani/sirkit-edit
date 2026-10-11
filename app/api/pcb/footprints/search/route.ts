@@ -14,7 +14,7 @@
  */
 
 import { publicRoute } from "@/app/lib/auth/route-handlers";
-import { searchFootprints } from "@/app/lib/pcb/footprint-search-service";
+import { searchFootprints } from "@/app/lib/pcb/footprint-search-service"; import { EmbeddingAdmissionRefused, admittedEmbedQuery, embeddingRetryAfterSeconds } from "@/app/lib/embedding-admission"; // [B24-A3] OD-197
 import type { FootprintSearchResponse } from "@/app/lib/pcb/footprint-api-types";
 
 export const runtime = "nodejs";
@@ -55,10 +55,10 @@ export const GET = publicRoute({ query: true }, async ({ meta }): Promise<Respon
   const smd = smdRaw === null ? null : smdRaw === "true";
 
   try {
-    const hits = await searchFootprints({ q, limit, padCount, smd });
+    const hits = await searchFootprints({ q, limit, padCount, smd }, { embed: (text) => admittedEmbedQuery(text, { purpose: "interactive" }) }); // [B24-A3] the metered embedding; the exact Lib:Name path makes no call
     const body: FootprintSearchResponse = { hits };
     return Response.json(body);
-  } catch (err) {
+  } catch (err) { if (err instanceof EmbeddingAdmissionRefused) return Response.json({ ok: false, code: err.code, error: err.message }, { status: 429, headers: { "Retry-After": String(embeddingRetryAfterSeconds(err)), "Cache-Control": "no-store" } }); // [B24-A3] OD-197: the meter refused, nothing was sent
     const message = err instanceof Error ? err.message : String(err);
     return Response.json({ ok: false, error: message }, { status: 500 });
   }

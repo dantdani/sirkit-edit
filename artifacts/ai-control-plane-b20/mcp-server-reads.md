@@ -9,7 +9,7 @@ stays an adapter (runbook B20): role, capability, scope, authority, revision, bu
 and post-verification are B05's, exactly as for the agent; B3 adds the durable source, the per-call bindings (the expected
 revision, the registry digest, an idempotency key), the membership re-check after the read, a replay cache, admission and
 deadlines, and its own trace. Nothing reachable over MCP writes, approves, binds, publishes, qualifies, releases or orders.
-The MCP subset is 9 tools: the 9 served reads; 7 tools are withheld: 2 reads and, since B4, the 5 proposals.
+The MCP subset is 9 tools: the 9 served reads; 7 tools are withheld: 2 reads and, since B4, the 5 proposals. [B24-D2, 2026-10-09] 8 since B24-D2: and the paged board read `sirkit.pcb.board-page-inspect`, withheld by choice although servable from durable state (OD-235; `mcp-exposure.md` section 2, `mcp-server-proposals.md` section 14).
 [B20 B4] B4 withheld the five proposals (OD-82, OD-87; `mcp-server-proposals.md`): a `tools/call` naming one is B2's identical
 `-32602` (B3 listed them with the `not_served` answer). Closes D20-6 for the nine servable reads, D20-9
 and D20-10 for MCP reads, and the principal half of D20-11.

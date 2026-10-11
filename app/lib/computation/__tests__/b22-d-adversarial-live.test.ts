@@ -22,7 +22,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, linkSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest"; import { assertLiveResources } from "../../evaluation/live-suites"; // [B24-B3, 2026-10-08] D24-19, OD-209: the resource gate, on this line so no line moves
 
 const LIVE = process.env.SIRKIT_B22_LIVE_RUNNER === "1";
 const spy = vi.hoisted(() => ({
@@ -327,4 +327,6 @@ describe.runIf(LIVE)("[B22-D] the adversarial matrix against the real pinned ngs
       expect(parsed.header.variables.map((entry) => entry.name)).toEqual(vectors.map((vector) => vector.name));
     }
   });
+
+  beforeAll(() => assertLiveResources("b22-d-adversarial-live")); // [B24-B3, 2026-10-08] D24-19, OD-209: with the flag set and the pin or the host absent this block fails NOT EXERCISED before any case body runs
 });

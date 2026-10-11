@@ -848,3 +848,9 @@ export interface SpiceReport {
   disclosures: string[];
   reproducibility: { simulatorVersions: string[]; seeds: number[]; manifestIds: string[] };
 }
+
+// ─── [B24-C2 review, 2026-10-09] D24-25: appended as a MERGING declaration (an interface may be declared twice in one module), so no line cited above moves ───
+export interface AiAuditEntry {
+  /** The number of evidence references past `AI_AUDIT_LOG_BOUNDS.maxEvidenceRefs` (`spice/project.ts`) that were not kept; absent when none. */
+  evidenceWithheld?: number;
+}

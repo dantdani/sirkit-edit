@@ -8,16 +8,16 @@
  * For one well-known MPN per admitted source it checks: the exact mapping (the vendor's own MPN is the requested one), only
  * the registry's hosts were contacted, the labels are complete, exactly one quota unit was spent at the agent's purpose, and no
  * credential appeared in anything logged. The disclosure is permitted only inside this check (a test-only registry passed to
- * the port); the committed registry stays "unknown" everywhere (OD-36).
+ * the port); the committed registry stays "unknown" everywhere (OD-36). [B24-B3, 2026-10-08] D24-19, OD-209: with the flag set, an absent credential name or a source that is not admitted FAILS `NOT EXERCISED`; it never passes (app/lib/evaluation/live-suites.ts).
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { makeDigiKeyClient } from "../../distributors/digikey";
 import { makeOctopartClient } from "../../distributors/octopart";
 import type { DistributorEgress } from "../../distributors/egress";
 import type { DistributorClient } from "../../distributors/types";
 import { previewAdmission, resetAdmissionControl } from "../admission-control";
 import { createAgentReadPort } from "../agent-read-port";
-import { admitSource, SOURCE_IDS, SOURCE_REGISTRY, type AcquisitionSourceId, type SourceRegistryEntry } from "../source-registry";
+import { admitSource, SOURCE_IDS, SOURCE_REGISTRY, type AcquisitionSourceId, type SourceRegistryEntry } from "../source-registry"; import { assertLiveResources } from "../../evaluation/live-suites"; // [B24-B3, 2026-10-08] D24-19, OD-209: the resource gate, on this line so no line moves
 
 const LIVE = process.env.SIRKIT_LIVE_ACQUISITION_CONTRACT === "1";
 /** One long-lived, widely stocked exact MPN per source. */
@@ -33,8 +33,8 @@ describe.skipIf(process.env.SIRKIT_LIVE_ACQUISITION_CONTRACT !== "1")("[B19-E E6
     it(`${id}: exact mapping, registry host, labels, one quota unit, no credential logged`, async () => {
       const admission = admitSource(id, process.env);
       if (!admission.admitted) {
-        expect(["credentials_missing", "operator_disabled"], `${id} is not admitted`).toContain(admission.refusal);
-        return;
+        // [B24-B3, 2026-10-08] D24-19, OD-209: this branch used to exit the case early as a pass; a source the operator's shell does not admit is never a pass
+        throw new Error(`NOT EXERCISED: ${id} not admitted (${admission.refusal})`);
       }
       const hosts: string[] = [];
       const logged: string[] = [];
@@ -63,4 +63,6 @@ describe.skipIf(process.env.SIRKIT_LIVE_ACQUISITION_CONTRACT !== "1")("[B19-E E6
       for (const line of [...logged, JSON.stringify(answer)]) for (const secret of secrets) expect(line.includes(secret)).toBe(false);
     }, 60_000);
   }
+
+  beforeAll(() => assertLiveResources("b19-e-live-contract")); // [B24-B3, 2026-10-08] D24-19, OD-209: with the flag set and a registry credential name absent this block fails NOT EXERCISED before any case body runs
 });

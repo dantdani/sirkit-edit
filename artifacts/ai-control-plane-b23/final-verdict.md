@@ -129,7 +129,7 @@ benchmark-quality `37410317237`).
 - **The board's file-safe name** (it is the board id, which embeds the project id or its kept prefix) leaves inside the file names and
   bytes of any future upload. It is disclosed, never stripped; whether a provider may receive it is OD-163's open question.
 - **Two public routes send anonymous search text to OpenAI** (`POST /api/parts/search`, `GET /api/pcb/footprints/search`). This is
-  recorded in A2 (OD-174's open question), not changed; its assignment is for the B24 discovery to record (not yet committed).
+  recorded in A2 (OD-174's open question), not changed; its assignment is for the B24 discovery to record (not yet committed). [B24-closeout, 2026-10-10] superseded: B24-A3's record, artifacts/ai-control-plane-b24/abuse-controls.md:334.
 - **Reconciliation of an UNKNOWN exchange or order** is a person's, with the provider. No reconciliation read is built (OD-184 (m)).
 
 ## Owner follow-ups

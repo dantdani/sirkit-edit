@@ -13,6 +13,7 @@ sirkit.parts.external-search,1.0.0,read,0,bound-external-read,no,external_read,,
 sirkit.parts.search,1.0.0,read,0,bound-read,no,not_agent_exposed,,,
 sirkit.pcb.arrange,1.1.1,mutate,1,bound-mutation-editor-session,no,granted_execution,,,
 sirkit.pcb.board-inspect,1.1.0,read,0,bound-read,yes,,true,true,declared
+sirkit.pcb.board-page-inspect,1.0.0,read,0,bound-read,no,withheld,,,
 sirkit.pcb.create-via,1.1.0,mutate,2,unbound,no,never_exposed,,,
 sirkit.pcb.delete-item,1.0.0,destructive,2,bound-mutation-editor-session,no,never_exposed,,,
 sirkit.pcb.dimension,1.2.0,mutate,1,bound-mutation-editor-session,no,granted_execution,,,

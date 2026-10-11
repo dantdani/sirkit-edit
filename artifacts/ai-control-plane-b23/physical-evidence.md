@@ -219,7 +219,7 @@ No route, store, tool or form records, accepts or holds evidence (case 8, an AST
   `assembledProductEligibility`, and no exported binding, function or const, is named as a writer (shown to bite on an exported arrow
   `storeRecord`);
 - no production module imports it (the import gates' AST resolution over the whole root, an escaped specifier probe included);
-- no production file names its schema, its file name or any kind id; no route path, tool id or action record is about it.
+- no production file names its schema, its file name or any kind id; no route path, tool id or action record is about it. [B24-B1, 2026-10-08] Since B24-B1 one production file names the file name: the golden evaluation catalog (`app/lib/evaluation/golden-catalog.ts`) cites `physical-evidence.ts:44`, `:394` and `:484` and the B23-D suite's path, names neither the schema nor a kind id, and imports nothing from the module (`b23-d-physical-evidence-contract` case 8, a reviewed pin move).
 
 Evidence from a request body or browser state is therefore never accepted: nothing can carry it in. CONFIRMED
 
@@ -268,7 +268,7 @@ there (a missing pin, not a code defect; section 9).
 
 ## 8. Live: BLOCKED-LIVE-QUALIFICATION (LB-5)
 
-No board has been fabricated, assembled, inspected or tested for Sirkit; LB-5 (C41) stays "not attempted" and unblocks on owner approval
+No board has been fabricated, assembled, inspected or tested for Sirkit; LB-5 (C41) stays "not attempted" [superseded 2026-10-10 by B24-E (D24-33, OD-217): LB-5 is BLOCKED-LIVE-QUALIFICATION in OD-217's form, and B24-E built nothing for it (OD-218's default): the store, the session-derived recording route and the wired review port are their own increment once the owner answers OD-218; C41's anchor is the row's first two cells, its third cell taking OD-217's form] and unblocks on owner approval
 and hardware (B24-E). Recording physical evidence needs a reviewed store, a route that derives the reviewer from the session, and the
 review port, all B24-E's; none is in B23. **BLOCKED-LIVE-QUALIFICATION**. The assembly-data authority (exact approved MPN, population
 variant, BOM, placement, paste) is not in B23 either: qualification seals only `bare_pcb`. RECORDED
@@ -743,12 +743,12 @@ every row.
 | C38 | `app/lib/release-engineering/types.ts` | 67 | `export interface PhysicalValidationEvidence {` |
 | C39 | `app/lib/release-engineering/types.ts` | 58 | `export interface ScopedException { exceptionId: string; kind: "deviation" \| "waiver";` |
 | C40 | `app/lib/engineering/__tests__/b17-a-control-inventory.test.ts` | 63 | `if (record.status === "missing") expect(reached.has(record.id) \|\| routed.has(record.id)` |
-| C41 | `artifacts/remaining-builder-program/LIVE_BLOCKERS.md` | 11 | `\| LB-5 \| Physical fabrication, assembly, incoming inspection, functional test \| not attempted \|` |
+| C41 | `artifacts/remaining-builder-program/LIVE_BLOCKERS.md` | 11 | `\| LB-5 \| Physical fabrication, assembly, incoming inspection, functional test \|` |
 | C42 | `app/lib/workflow/prompt-to-gerber/__tests__/fixtures/expected-identities.json` | 15 | `"releaseId": "mfg-release-45b3b7efbc85dc3a8ecd233c906384cd",` |
 | C43 | `app/lib/workflow/prompt-to-gerber/__tests__/fixtures/expected-identities.json` | 17 | `"archiveSha256": "997664c0b9a87c4d3a65e64eeb90b98159b2ad6ad8806e4ebea748a592ac6dcc",` |
 | C44 | `app/lib/workflow/prompt-to-gerber/__tests__/acceptance-pipeline.test.ts` | 421 | `expect({ releaseId: manifestBody.releaseId, filename, archiveSha256: archiveSha, archiveByteLength: bytes.byteLength` |
 | C45 | `app/lib/pcb/__tests__/manufacturing-release-gate.test.ts` | 150 | `rejects.toMatchObject({ code: "MFG_ASSEMBLY_AUTHORITY_UNAVAILABLE" });` |
-| C46 | `.github/workflows/deterministic-manufacturing.yml` | 227 | `app/lib/manufacturing-providers/__tests__` |
+| C46 | `.github/workflows/deterministic-manufacturing.yml` | 228 | `app/lib/manufacturing-providers/__tests__` |
 | C47 | `app/lib/pcb/fab/release-gate.ts` | 272 | `"No manufacturer upload/order has been performed. External board-house DFM and physical prototype review remain mandatory.",` |
 | C48 | `lib/persistence.ts` | 622 | `export function saveProjectReleaseEngineeringProgram(id: string, releaseEngineeringProgram: ReleaseEngineeringProjectState): boolean {` |
 | C49 | `lib/persistence.ts` | 628 | `try { localStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(updated)); return true; } catch { return false; }` |
@@ -794,3 +794,5 @@ nothing creates a record. It is recorded whole and not retired; the table is in 
 One export in it is named nowhere, not even by a test: `ServerDerivedHumanReview`, the shape a review port's answer takes (section 3).
 The reviewed change that wires a port would type the port's answer with it; until then the validator checks the same keys through
 `PHYSICAL_EVIDENCE_REVIEW_KEYS`. It is recorded with its module, not retired (PROPOSED for that change).
+
+[B24-D1, 2026-10-09] C46 re-pinned `:227` -> `:228` in place: B24-D1's prompt-to-gerber start step at `:32` (OD-30); `b23-d-physical-evidence-contract` case 9 resolves it.

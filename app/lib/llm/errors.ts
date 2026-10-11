@@ -1,4 +1,5 @@
 import type { LLMProviderId } from "./types";
+import { sanitizeTraceText } from "../agent/redaction"; // [B24-C2] D24-25: the redaction authority on the provider's own message (dependency-neutral: the module imports nothing)
 
 export type LLMProviderFailureReason =
   | "missing_credentials"
@@ -179,7 +180,7 @@ export function toProviderError(provider: LLMProviderId, error: unknown): LLMPro
 /** Truncated provider-authored diagnostic, safe to surface (never contains the key). */
 function providerDetail(error: LLMProviderError): string | undefined {
   if (!error.providerMessage) return undefined;
-  const trimmed = error.providerMessage.replace(/\s+/g, " ").trim();
+  const trimmed = sanitizeTraceText(error.providerMessage.replace(/\s+/g, " ").trim(), Number.MAX_SAFE_INTEGER); // [B24-C2] D24-25: redacted whole BEFORE the cut below (the default 300 would cut a key that straddles the boundary before it could match, and lose the ellipsis); this covers the log line and the 503 body alike
   return trimmed.length > 300 ? `${trimmed.slice(0, 297)}...` : trimmed;
 }
 

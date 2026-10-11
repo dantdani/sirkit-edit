@@ -4,7 +4,7 @@
  * and an explicit file entry in a job is never already covered by one of that job's directory filters.
  *
  * Vitest positional filters select every test file whose path contains the filter, so the job's filters are applied here
- * the same way to the repository's test files.
+ * the same way to the repository's test files. [B24-D0, 2026-10-09] OD-30's split (ci-split.md): prompt-to-gerber's step ends in `--exclude '<pattern>'` lines, one per item the appended `agent-boundary-suites` job runs instead (a directory filter as `<dir>/**`, a file as its path); a job's files are its positional selection net of its exclusions (`runBy`), and a non-PGlite suite must run in exactly one of the two jobs - reviewed pin moves, each noted on its line, nothing loosened. The new helpers (`jobExcludes`, `excludedBy`, `runBy`, `OFFLINE_JOBS`, `offlineRuns`) are declared after the describe block, at the end of the file, so the cases keep their lines but for the in-case notes; [B24-D0 review, 2026-10-09] correctness-1: they first sat before the describe (+35 on every case) and were moved here, and the citations of the cases the notes shifted are re-pinned on their pages (ci-split.md section 5).
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, posix, relative, sep } from "node:path";
@@ -26,7 +26,7 @@ function jobFilters(job: string): string[] {
   const filters: string[] = [];
   for (let index = run + 1; index < lines.length && !/--reporter/.test(lines[index]!); index += 1) {
     const filter = lines[index]!.trim();
-    if (filter) filters.push(filter);
+    if (filter && !filter.startsWith("--")) filters.push(filter); // [B24-D0, 2026-10-09] the --exclude lines are jobExcludes' (OD-30's split)
   }
   return filters;
 }
@@ -50,8 +50,8 @@ const ALL_TESTS = ["app", "lib", "components"].flatMap((root) => {
 });
 const selected = (filters: readonly string[]): string[] => ALL_TESTS.filter((file) => filters.some((filter) => file.includes(filter)));
 /** [B20 A0] The chapters whose every suite must be admitted to a CI job (OD-59); a suite belongs to a chapter by its file-name prefix.
- *  [B21 A] b21- admitted (OD-124). [B22-A1] b22- admitted with the first b22- suites, by one directory filter (OD-146). [B23-A1] b23- admitted with the first b23- suites, by one directory filter (OD-180). */
-const CHAPTERS = ["b19-", "b20-", "b21-", "b22-", "b23-"] as const;
+ *  [B21 A] b21- admitted (OD-124). [B22-A1] b22- admitted with the first b22- suites, by one directory filter (OD-146). [B23-A1] b23- admitted with the first b23- suites, by one directory filter (OD-180). [B24-A1, 2026-10-06] b24- admitted with the first b24- suites, by one directory filter, app/lib/qualification/__tests__ (OD-222). */
+const CHAPTERS = ["b19-", "b20-", "b21-", "b22-", "b23-", "b24-"] as const;
 const chapterFiles = (chapter: (typeof CHAPTERS)[number]): string[] => ALL_TESTS.filter((file) => file.includes(`/${chapter}`));
 
 /**
@@ -93,10 +93,11 @@ const readRepoFile = (file: string): string | null => {
 const startsPostgres = (file: string): boolean => startsPostgresVia(file, readRepoFile);
 
 describe("[B19-E E2 review] CI job scope", () => {
-  it("the no-database prompt-to-gerber job selects no suite that starts PGlite; the B19 PGlite suites run in database-delivery", () => {
-    const promptToGerber = selected(jobFilters("prompt-to-gerber"));
+  it("the no-database prompt-to-gerber job selects no suite that starts PGlite; the B19 PGlite suites run in database-delivery", () => { // [B24-D0, 2026-10-09] net of its exclusions; agent-boundary-suites, no database either, likewise
+    const promptToGerber = runBy("prompt-to-gerber");
     expect(promptToGerber.length).toBeGreaterThan(100);
     expect(promptToGerber.filter(startsPostgres)).toEqual([]);
+    expect(runBy("agent-boundary-suites").filter(startsPostgres)).toEqual([]); // [B24-D0, 2026-10-09]
     const databaseDelivery = selected(jobFilters("database-delivery"));
     const b19Postgres = chapterFiles("b19-").filter(startsPostgres);
     expect(b19Postgres).toEqual(expect.arrayContaining(["app/lib/distributors/__tests__/b19-offer-retention.test.ts", "app/lib/distributors/__tests__/b19-e-external-search-retention.test.ts"]));
@@ -123,8 +124,9 @@ describe("[B19-E E2 review] CI job scope", () => {
     expect(startsPostgresVia("app/lib/acquisition/__tests__/plain.test.ts", read)).toBe(false);
   });
 
-  it("[B19-E E3 review] every B19 suite runs in CI: a PGlite suite in database-delivery, every other one in prompt-to-gerber", () => {
-    const promptToGerber = selected(jobFilters("prompt-to-gerber"));
+  it("[B19-E E3 review] every B19 suite runs in CI: a PGlite suite in database-delivery, every other one in prompt-to-gerber", () => { // [B24-D0, 2026-10-09] reviewed pin move: every other one in exactly ONE of prompt-to-gerber (net of its exclusions) and agent-boundary-suites (OD-30's split; four B19 suites moved)
+    const promptToGerber = runBy("prompt-to-gerber");
+    const offline = offlineRuns();
     const databaseDelivery = selected(jobFilters("database-delivery"));
     const b19 = chapterFiles("b19-");
     expect(b19).toEqual(expect.arrayContaining(["app/lib/atomic/__tests__/b19-e-publication-integrity.test.ts", "app/lib/atomic/__tests__/b19-e-atomic-publication-durable.test.ts", "app/lib/atomic/__tests__/b19-e-atomic-revision-loaders.test.ts"]));
@@ -142,19 +144,23 @@ describe("[B19-E E2 review] CI job scope", () => {
     // [B19-E E6 review] the exact-MPN offer-cache read is proven against PGlite: that one suite runs in database-delivery
     expect(startsPostgres("app/lib/distributors/__tests__/b19-e-exact-mpn-offer-cache.test.ts")).toBe(true);
     expect(databaseDelivery).toContain("app/lib/distributors/__tests__/b19-e-exact-mpn-offer-cache.test.ts");
-    expect(b19.filter((file) => !(startsPostgres(file) ? databaseDelivery : promptToGerber).includes(file))).toEqual([]);
+    expect(b19.filter((file) => !(startsPostgres(file) ? databaseDelivery.includes(file) : offline(file).length === 1))).toEqual([]); // [B24-D0, 2026-10-09] reviewed pin move (was: in prompt-to-gerber)
   }, 60_000);
 
-  it.each(CHAPTERS)("[B20 A0] every %s suite runs in CI (OD-59): a PGlite suite in database-delivery, every other one in prompt-to-gerber", (chapter) => {
-    const promptToGerber = selected(jobFilters("prompt-to-gerber"));
+  it.each(CHAPTERS)("[B20 A0] every %s suite runs in CI (OD-59): a PGlite suite in database-delivery, every other one in prompt-to-gerber", (chapter) => { // [B24-D0, 2026-10-09] reviewed pin move: every other one in exactly ONE of prompt-to-gerber (net of its exclusions) and agent-boundary-suites (OD-30's split)
+    const offline = offlineRuns();
     const databaseDelivery = selected(jobFilters("database-delivery"));
     const files = chapterFiles(chapter);
     expect(files.length, `${chapter} suites exist`).toBeGreaterThan(0);
-    expect(files.filter((file) => !(startsPostgres(file) ? databaseDelivery : promptToGerber).includes(file))).toEqual([]);
+    expect(files.filter((file) => !(startsPostgres(file) ? databaseDelivery.includes(file) : offline(file).length === 1))).toEqual([]);
   }, 60_000);
 
-  it("[B20 A0] the B20 suites: app/lib/mcp is a prompt-to-gerber directory filter; no A0 suite starts PGlite", () => {
+  it("[B20 A0] the B20 suites: app/lib/mcp is a prompt-to-gerber directory filter; no A0 suite starts PGlite", () => { // [B24-D0, 2026-10-09] reviewed pin move: the filter line stays; prompt-to-gerber excludes it and agent-boundary-suites runs the suites under it (OD-30's split)
     expect(jobFilters("prompt-to-gerber")).toContain("app/lib/mcp");
+    // [B24-D0, 2026-10-09] OD-30's split: prompt-to-gerber excludes app/lib/mcp, agent-boundary-suites lists it; app/api/mcp/__tests__ stays in prompt-to-gerber
+    expect(jobExcludes("prompt-to-gerber")).toContain("app/lib/mcp/**");
+    expect(jobFilters("agent-boundary-suites")).toContain("app/lib/mcp");
+    expect(jobExcludes("prompt-to-gerber")).not.toContain("app/api/mcp/__tests__/**");
     // [B20 B2] the endpoint suites (E-H) run through the app/api/mcp/__tests__ directory filter (OD-59)
     expect(jobFilters("prompt-to-gerber")).toContain("app/api/mcp/__tests__");
     const b20 = chapterFiles("b20-");
@@ -202,8 +208,10 @@ describe("[B19-E E2 review] CI job scope", () => {
     ];
     for (const file of explicit) expect(filters, file).toContain(file);
     for (const file of byDirectory) expect(filters, file).not.toContain(file);
-    const promptToGerber = selected(filters);
-    expect(promptToGerber).toEqual(expect.arrayContaining([...explicit, ...byDirectory]));
+    // [B24-D0, 2026-10-09] reviewed pin move (OD-30's split): net of the exclusions, the four explicit entries and the acquisition suite run in prompt-to-gerber, the two app/lib/mcp suites in agent-boundary-suites
+    const promptToGerber = runBy("prompt-to-gerber");
+    expect(promptToGerber).toEqual(expect.arrayContaining([...explicit, "app/lib/acquisition/__tests__/b20-a4-mcp-quarantine.test.ts"]));
+    expect(runBy("agent-boundary-suites")).toEqual(expect.arrayContaining(["app/lib/mcp/__tests__/b20-a4-observation-normalizer.test.ts", "app/lib/mcp/__tests__/b20-a4-agent-read-port.test.ts"]));
     expect([...explicit, ...byDirectory].filter(startsPostgres)).toEqual([]);
   });
 
@@ -220,6 +228,8 @@ describe("[B19-E E2 review] CI job scope", () => {
       "app/lib/agent/orchestration/__tests__/b21-a-page.test.ts",
     ]));
     for (const file of b21) expect(filters.filter((filter) => file.includes(filter)), file).toHaveLength(1);
+    const runs = runBy("prompt-to-gerber"); // [B24-D0, 2026-10-09] and none is excluded: every B21 suite still runs in prompt-to-gerber (OD-30's split moved none)
+    for (const file of b21) expect(runs, file).toContain(file);
     expect(b21.filter(startsPostgres)).toEqual([]);
     // no B21 suite under app/lib/engineering/__tests__: benchmark-core would run it a second time on every PR
     expect(b21.filter((file) => file.startsWith("app/lib/engineering/__tests__/"))).toEqual([]);
@@ -230,6 +240,7 @@ describe("[B19-E E2 review] CI job scope", () => {
     const filters = jobFilters("prompt-to-gerber");
     expect(filters).toContain(file);
     expect(filters.some((filter) => filter !== file && file.includes(filter))).toBe(false);
+    expect(jobExcludes("prompt-to-gerber")).not.toContain(file); // [B24-D0, 2026-10-09] and not excluded (OD-30's split)
     expect(startsPostgres(file)).toBe(false);
   });
 
@@ -238,4 +249,58 @@ describe("[B19-E E2 review] CI job scope", () => {
     const redundant = filters.filter((filter) => /\.test\.tsx?$/.test(filter) && filters.some((other) => other !== filter && filter.includes(other)));
     expect(redundant).toEqual([]);
   });
+
+  it("[B24-D0, 2026-10-09] OD-30's split: prompt-to-gerber's --exclude lines are exactly agent-boundary-suites' positional list (a directory filter as <dir>/**, a file as its path), each removing at least one file the positional filters select; every excluded file runs in agent-boundary-suites and nothing runs in both; the new job has no exclude, no PGlite suite and no explicit file under one of its directory filters", () => {
+    const excludes = jobExcludes("prompt-to-gerber");
+    const newJob = jobFilters("agent-boundary-suites");
+    expect(excludes.length).toBeGreaterThan(0);
+    expect(excludes).toEqual(newJob.map((item) => (/\.test\.tsx?$/.test(item) ? item : `${item}/**`)));
+    expect(jobExcludes("agent-boundary-suites")).toEqual([]);
+    expect(jobExcludes("database-delivery")).toEqual([]);
+    const positional = selected(jobFilters("prompt-to-gerber"));
+    for (const pattern of excludes) expect(positional.some((file) => excludedBy(pattern, file)), pattern).toBe(true);
+    const excluded = positional.filter((file) => excludes.some((pattern) => excludedBy(pattern, file)));
+    const moved = runBy("agent-boundary-suites");
+    expect([...excluded].sort()).toEqual([...moved].sort());
+    const promptToGerber = runBy("prompt-to-gerber");
+    expect(moved.filter((file) => promptToGerber.includes(file))).toEqual([]);
+    expect([...promptToGerber, ...moved].sort()).toEqual([...positional].sort());
+    expect(moved.filter(startsPostgres)).toEqual([]);
+    expect(newJob.filter((filter) => /\.test\.tsx?$/.test(filter) && newJob.some((other) => other !== filter && filter.includes(other)))).toEqual([]);
+  }, 60_000);
 });
+
+/** [B24-D0, 2026-10-09] The `--exclude '<pattern>'` lines of a job's vitest step (OD-30's split): after every positional filter, right
+ *  before `--reporter`, each a quoted `<dir>/**` or test-file path; another flag there, or a positional filter after an exclude, fails. */
+function jobExcludes(job: string): string[] {
+  const lines = readFileSync(join(ROOT, WORKFLOW), "utf8").split(/\r?\n/);
+  const start = lines.indexOf(`  ${job}:`);
+  expect(start, `job ${job}`).toBeGreaterThan(-1);
+  const run = lines.findIndex((line, index) => index > start && /pnpm exec vitest run\s*$/.test(line));
+  const excludes: string[] = [];
+  for (let index = run + 1; index < lines.length && !/--reporter/.test(lines[index]!); index += 1) {
+    const line = lines[index]!.trim();
+    if (!line.startsWith("--")) {
+      expect(excludes, `${job}: a positional filter after an --exclude: ${line}`).toEqual([]);
+      continue;
+    }
+    const pattern = /^--exclude '([^'\s]+)'$/.exec(line)?.[1];
+    expect(pattern, `${job}: a flag that is not --exclude '<pattern>': ${line}`).toBeDefined();
+    expect(/\.test\.tsx?$/.test(pattern!) || (pattern!.endsWith("/**") && !/\.tsx?\/\*\*$/.test(pattern!)), `${job}: ${pattern} is neither <dir>/** nor a test file`).toBe(true);
+    excludes.push(pattern!);
+  }
+  return excludes;
+}
+/** [B24-D0] vitest's exclude for the two shapes: `<dir>/**` leaves out every file under the directory, a file path that one file. */
+const excludedBy = (pattern: string, file: string): boolean => (pattern.endsWith("/**") ? file.startsWith(pattern.slice(0, -2)) : file === pattern);
+/** [B24-D0] The files a job runs: its positional selection net of its exclusions. */
+const runBy = (job: string): string[] => {
+  const excludes = jobExcludes(job);
+  return selected(jobFilters(job)).filter((file) => !excludes.some((pattern) => excludedBy(pattern, file)));
+};
+/** [B24-D0] The jobs without a database, read once per case: a non-PGlite suite must run in exactly one of them. */
+const OFFLINE_JOBS = ["prompt-to-gerber", "agent-boundary-suites"] as const;
+const offlineRuns = (): ((file: string) => string[]) => {
+  const files = new Map(OFFLINE_JOBS.map((job) => [job, new Set(runBy(job))] as const));
+  return (file) => OFFLINE_JOBS.filter((job) => files.get(job)!.has(file));
+};

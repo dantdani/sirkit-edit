@@ -35,7 +35,7 @@ registry validates every profile at construction (`runtimeProfileViolations`); a
 | `validationState` | CD-10: `diagnostic_only` (local) or `unvalidated` (OCI); never `validated` here | `validated` only with qualification evidence, a pinned digest and, on a container profile, a pinned host client |
 | `deterministicDigest` | CD-10: the profile's SHA-256 over the canonical JSON of every other field (`sirkit.runtime-profile.v1`) | recomputed and equal |
 | `profileId` | the registry id | one of the four ids |
-| `revision` | the profile revision (1; `ngspice-local-diagnostic` is 2 since B22-A3: `-n` in both argv templates, the runner's seed note, no legacy spawn; [B22-C review, 2026-10-02] `ngspice-local-diagnostic` is 3 and `ngspice-oci` 2 since B22-C: the wired output validator) | closed key |
+| `revision` | the profile revision (1; `ngspice-local-diagnostic` is 2 since B22-A3: `-n` in both argv templates, the runner's seed note, no legacy spawn; [B22-C review, 2026-10-02] `ngspice-local-diagnostic` is 3 and `ngspice-oci` 2 since B22-C: the wired output validator; [B24-D2, 2026-10-09] `kicad-cli-local-diagnostic` and `freerouting-local-diagnostic` are 2 since B24-D2: the runners' tree kill and a result that waits for the exit, OD-145's method) | closed key |
 | `executionBackendKind` | CD-10's backend vocabulary: `local_subprocess_diagnostic` or `container` | a local profile claims no OS limit, mount, network or kill |
 | `authoritativeEligible` | whether a profile could ever back an authoritative run | true only for a validated, network-deny container profile; false for all four |
 | `executable` | identity: install tree or OCI image, program, platform, relative path, the install-root and digest server settings, the algorithm, `digestMembers` (the install root's entries the digest covers, or null for the whole tree), the expected digest (pinned or unpinned, with a reason) | closed keys; the expected digest's shape; members only on an install tree, plain names, distinct, non-empty and covering the executable's first path segment |
@@ -245,7 +245,7 @@ the child (a timer, a bounded collector, a bounded reader, a per-run directory);
   files (RECORDED). Kill: process tree, by the runner (contract).
 - Legacy spawn (as B22-A1 left it; case 13 pins the allowlist to `KICAD_CLI_ENV_KEYS`): `KICAD_CLI` or PATH; the host allowlist of 18
   keys plus `NODE_ENV`; 60 s per invocation; SIGKILL of the direct child, resolved before exit; the board file named from the caller's
-  sanitized board name. Deviations: the six local ones, `terminal-before-exit`, `caller-influenced-argv`.
+  sanitized board name. Deviations: the six local ones, `terminal-before-exit`, `caller-influenced-argv`. [B24-D2, 2026-10-09] superseded in part (revision 2): the timeout now ends the whole tree (`app/lib/pcb/process-tree.ts`, OD-145's method: taskkill /T on win32, the process group on POSIX) and the result waits for the child's close or the 5,000 ms confirm wait (`killConfirmed`); the deviations drop `direct-child-kill` and `terminal-before-exit` (`b24-d2-process-cleanup`).
 
 | limit | enforcedBy | value | how |
 |---|---|---|---|
@@ -281,7 +281,7 @@ the child (a timer, a bounded collector, a bounded reader, a per-run directory);
   the bundled release and JRE lies outside the install root the profile digests ([B22-A2 review] coverage-5, discovery 9.5 item
   13(c); case 13 derives the candidate set by driving `resolveFreeroutingRuntime` with a fake file check); the host allowlist of
   11 keys plus `NODE_ENV`; cwd the shared OS temp directory with uuid files; SIGKILL of the direct child on abort and timeout, resolved
-  before exit. Deviations: the six local ones, `terminal-before-exit`, `shared-temp-cwd`, `caller-influenced-argv`.
+  before exit. Deviations: the six local ones, `terminal-before-exit`, `shared-temp-cwd`, `caller-influenced-argv`. [B24-D2, 2026-10-09] superseded in part (revision 2): abort and timeout now end the whole tree (`app/lib/pcb/process-tree.ts`, OD-145's method) and the result waits for the child's close or the 5,000 ms confirm wait (`killConfirmed`), the temporary files removed after it; the deviations drop `direct-child-kill` and `terminal-before-exit`; the shared temp cwd stays (`b24-d2-process-cleanup`).
 
 | limit | enforcedBy | value | how |
 |---|---|---|---|

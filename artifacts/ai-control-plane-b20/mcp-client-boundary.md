@@ -38,7 +38,7 @@ endpoint, no new dependency.
 | distributor sources unchanged | `admission-control.ts:87-94`, `:257-277` | same signatures, same windows, same sentences (pinned verbatim in `b20-a0-admission-by-server-and-tool.test.ts`) |
 | feature flag (OD-54, flag part) | `app/lib/mcp/rollout.ts:12-26`; `.env.example:61-69` | `SIRKIT_MCP_ENABLED` enables only when its value is exactly `1`, compared untrimmed as `SIRKIT_DB_QUALIFICATION` is (`app/lib/db/test-qualification.ts:72`; a padded `1` does not enable); `SIRKIT_MCP_DISABLED_SERVERS` is a remove-only id list; read at call time through the environment-record pattern; no value echoed |
 | admission by state and flag | `server-registry.ts:307-317` | approved only, and only with the flag on; the environment defaults to `process.env` at call time, so an omitted environment consults the flag rather than skipping it (as `admitSource(id, env)`); `unknown_server` / `blocked` / `disabled` / `feature_disabled` / `operator_disabled` closed codes; the registry state wins over the operator list |
-| CI admission (OD-59) | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts:53-54`, `:147-164`; `.github/workflows/deterministic-manufacturing.yml:131` | chapter list `["b19-", "b20-"]`; every `/b20-` suite must be selected by the right job; `app/lib/mcp` is a `prompt-to-gerber` directory filter (explicit files under it are refused by the redundancy rule) |
+| CI admission (OD-59) | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts:53-54`, `:150-194` ([B24-D0, 2026-10-09] was `:147-164`; the chapter case and the [B20 A0] case on this tree); `.github/workflows/deterministic-manufacturing.yml:131` | chapter list `["b19-", "b20-"]`; every `/b20-` suite must be selected by the right job; `app/lib/mcp` is a `prompt-to-gerber` directory filter (explicit files under it are refused by the redundancy rule); [B24-D0, 2026-10-09] the line stays, but since OD-30's split prompt-to-gerber excludes it (`--exclude 'app/lib/mcp/**'`) and the `b20-` suites under it run in the appended `agent-boundary-suites` job, where the guard admits them (`ci-split.md`) |
 
 ### Evidence
 
@@ -396,7 +396,7 @@ can be taken on (was a rejection). R3-4 changes no behaviour (test strength).
   NaN deadline reaching the timer (one case), no removal of the token prefix at the window's end (the straddling case
   fails on its last row: `fake-mcp` in the outcome), no NFC before the comparison (the KELVIN case fails) — 7 of 83 fail,
   exactly those. Measured (this machine, `tsx`, one process): 200 scrubs of a 4 000-character "a." leaf 1 371 ms before,
-  24 ms after (85 times under the 2 000 ms pin); `sanitizeTraceText` over 100 000 characters of "a." 3 184 ms before, 1.4 ms
+  24 ms after (85 times under the 2 000 ms pin; [B24-D1, 2026-10-09] that pin is a performance bound moved to `b24-d1-latency`'s `moved.redaction-linear-200-scrubs`, OD-212 - the quadratic 1 371 ms sat under it, so it disproved nothing; the 1 000 ms pin below stays, a complexity-proof); `sanitizeTraceText` over 100 000 characters of "a." 3 184 ms before, 1.4 ms
   after. RESIDUAL, recorded: the same pattern is still quadratic on a token with many scheme separators and no `@`
   ("a://a://…": every `scheme://` scans to the end of the token) — 100 000 characters 1 894 ms before, 1 662 ms after;
   making it linear changes what is redacted (a password containing `://`), so it is left to B19's owner; on the MCP path
@@ -1497,7 +1497,7 @@ model and show inputs), and that `tools/call` results are not cacheable results.
 - `app/lib/mcp/__tests__/b20-a4-observation-normalizer.test.ts` — 17 cases: determinism and the content id; the exact
   deep-frozen shape; the eight refusals and the clock; hostile content (A2's 27 directives and 12 benign texts read from the
   A2 suite, bidi, ESC and NUL, decomposed and fullwidth, the NFC dilution of the non-printing share, the three T9 rows);
-  three tokens in five disguises in text, leaves and keys; enormous content within pinned times; duplicates; non-text;
+  three tokens in five disguises in text, leaves and keys; enormous content within pinned times ([B24-D1, 2026-10-09] the four pinned times of case 6 are performance bounds moved to `b24-d1-latency`'s `moved.observation-normalizer-*` metrics, OD-212; the budget assertions stay); duplicates; non-text;
   every structured state; disclosure left to the boundary; never throwing; S3; no console; the helper and its agreement with
   A2's tables; this page; [B20 A4 review] the JOINED reading (a directive or a credential split across two blocks, two
   leaves, two keys or a key and its value; the benign neighbours still shown; the joined matcher's own bounds and answers).

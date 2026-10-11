@@ -114,7 +114,7 @@ export function DrcPanel({ drc, repair, readiness, constraintProgram }: { drc: D
           <span className="text-xs font-medium text-zinc-300">Design rule check</span>
           {result && <span className="text-[10px] text-zinc-500 tabular-nums">{result.stats.elapsedMs.toFixed(0)} ms</span>}
         </div>
-        <select
+        <select aria-label="DRC rule preset"
           value={drc.activePresetId}
           onChange={(e) => drc.setActivePresetId(e.target.value as DrcPresetId)}
           className="w-full bg-zinc-800 text-xs text-zinc-200 rounded px-1.5 py-1 border border-zinc-700 focus:outline-none focus:border-teal-500"

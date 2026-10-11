@@ -152,10 +152,10 @@ Other UNKNOWN / BLOCKED items the increments recorded:
 | LB | check | classification | B21's relation |
 |---|---|---|---|
 | LB-1 | Production Supabase authentication browser E2E | BLOCKED-LIVE-QUALIFICATION | unchanged |
-| LB-2 | Real LLM provider turn (OpenAI / Anthropic) | UNKNOWN | unchanged: OpenAI answered 429 no-credits for both configured keys (2026-09-24); Anthropic unrecorded |
-| LB-3 | Live routing in CI | local-only | unchanged |
-| LB-4 | Database-backed tests | dead external resource | unchanged; offline the orchestration store runs on the fixture runtime's in-memory repository, independent of the shell's `DATABASE_URL` (B21-B) |
-| LB-5 | Physical fabrication | not attempted | unchanged |
+| LB-2 | Real LLM provider turn (OpenAI / Anthropic) | UNKNOWN | unchanged: OpenAI answered 429 no-credits for both configured keys (2026-09-24); Anthropic unrecorded [B24-closeout, 2026-10-10] superseded: B24-E's record, artifacts/ai-control-plane-b24/qualification-matrix.md:329. |
+| LB-3 | Live routing in CI | local-only | unchanged [B24-closeout, 2026-10-10] superseded: B24-E's record, artifacts/ai-control-plane-b24/qualification-matrix.md:329. |
+| LB-4 | Database-backed tests | dead external resource [superseded 2026-10-10 by B24-E (D24-33, OD-217): LB-4 is QUALIFIED (2026-09-24, migrations and the nine DB-gated suites on two empty databases of a non-isolated server, the PostgreSQL 17.6 server of the main Supabase project) in OD-217's form; isolated staging stays BLOCKED-LIVE-QUALIFICATION (LB-14)] | unchanged; offline the orchestration store runs on the fixture runtime's in-memory repository, independent of the shell's `DATABASE_URL` (B21-B) |
+| LB-5 | Physical fabrication | not attempted | unchanged [B24-closeout, 2026-10-10] superseded: B24-E's record, artifacts/ai-control-plane-b24/qualification-matrix.md:329. |
 | LB-6 | Local container PostgreSQL | BLOCKED-LIVE-QUALIFICATION | unchanged |
 | LB-7 | A real model's chat execution | BLOCKED-LIVE-QUALIFICATION | unchanged; the scripted fixture agent now also drives every specialist (B21-F) |
 | LB-8 | A routed board in a browser journey | BLOCKED-LIVE-QUALIFICATION | unchanged |

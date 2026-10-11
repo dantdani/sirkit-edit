@@ -268,8 +268,8 @@ describe("[B23-A2] the Tier 3 vocabulary (OD-173)", () => {
     // the census: the generated CSVs ARE the registries, and no id in them matches a new stem
     const toolIds = csvIds("artifacts/ai-control-plane-b04/tool-registry.csv");
     const actionIds = csvIds("artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv");
-    expect(toolIds).toHaveLength(47);
-    expect(actionIds).toHaveLength(106); // [B23-B1, 2026-10-03] was 104: + manufacturing.provider-exchange (the provider exchange route's record; its id matches no new stem) [B23-C, 2026-10-04] reviewed pin move, was 105: + manufacturing.provider-order (OD-170: missing, explicitly blocked, approval tier release; its id matches no new stem, and its order stem was already a family stem)
+    expect(toolIds).toHaveLength(48); // [B24-D2, 2026-10-09] reviewed pin move (OD-213): 47 -> 48, + sirkit.pcb.board-page-inspect (a Tier 0 read; its id matches no Tier 3 stem)
+    expect(actionIds).toHaveLength(107); // [B24-A1, 2026-10-06] reviewed pin move (D9), was 106: + project.service-health (GET /api/health and GET /api/ready's record; its id matches no new stem) [B23-B1, 2026-10-03] was 104: + manufacturing.provider-exchange (the provider exchange route's record; its id matches no new stem) [B23-C, 2026-10-04] reviewed pin move, was 105: + manufacturing.provider-order (OD-170: missing, explicitly blocked, approval tier release; its id matches no new stem, and its order stem was already a family stem)
     expect([...toolIds].sort()).toEqual(registry.list().map((descriptor) => descriptor.toolId).sort());
     expect(actionIds).toEqual(ACTION_COVERAGE_REGISTRY.map((record) => record.id));
     expect([...toolIds, ...actionIds].filter((id) => B23_STEM_PATTERN.test(id))).toEqual([]);

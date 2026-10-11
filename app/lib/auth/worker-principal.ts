@@ -51,6 +51,22 @@ export function verifyWorkerSecret(request: Request, environment: Record<string,
   if (!configured || configured.length === 0) return null; // no worker auth configured → fail closed
   const presented = bearerToken(request);
   if (!presented) return null;
-  if (!timingSafeEqualString(presented, configured)) return null;
+  if (!matchesCurrentOrPreviousWorkerSecret(presented, configured, environment)) return null; // [B24-A2] D24-4, OD-195: the current secret, or the previous one while it is set (verification only)
   return { principalId: WORKER_PRINCIPAL_ID, actor: workerActor() };
+}
+
+/**
+ * [B24-A2] D24-4, OD-195 - rotation: while `SIRKIT_WORKFLOW_WORKER_SECRET_PREVIOUS` is set, a bearer holding the previous secret
+ * verifies too, so the operator can switch the current value first and every worker after it, then unset the previous one. It only
+ * verifies: alone (the current value unset or blank) it configures nothing, and `verifyWorkerSecret` answers null before reaching it.
+ */
+export const WORKER_SECRET_PREVIOUS_ENV = "SIRKIT_WORKFLOW_WORKER_SECRET_PREVIOUS";
+
+/** The bearer against the current secret and against the previous one (both trimmed), each compared in constant time, both compares
+ *  made before the one answer: no return between them. An unset or blank previous value matches nothing. */
+function matchesCurrentOrPreviousWorkerSecret(presented: string, current: string, environment: Record<string, string | undefined>): boolean {
+  const previous = environment[WORKER_SECRET_PREVIOUS_ENV]?.trim() ?? "";
+  const matchesCurrent = timingSafeEqualString(presented, current);
+  const matchesPrevious = timingSafeEqualString(presented, previous);
+  return matchesCurrent || (previous.length > 0 && matchesPrevious);
 }

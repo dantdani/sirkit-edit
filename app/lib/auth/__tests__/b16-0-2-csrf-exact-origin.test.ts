@@ -19,7 +19,7 @@ import { join } from "node:path";
 const PRODUCTION_BASE = {
   NODE_ENV: "production",
   NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
-  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable-test-key",
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable-test-key", SIRKIT_DEPLOYMENT_ENV: "production", // [B24-A1, 2026-10-06] + the deployment profile (OD-190): unconfigured below is the ORIGIN alone
 } as const;
 const PRODUCTION = { ...PRODUCTION_BASE, SIRKIT_EXPECTED_ORIGIN: "https://sirkit.example" } as const;
 const LOCAL_DEV = { SIRKIT_AUTH_MODE: "local_dev" } as const;

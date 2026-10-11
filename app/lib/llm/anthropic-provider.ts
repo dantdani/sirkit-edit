@@ -104,7 +104,7 @@ export class AnthropicProvider implements LLMProvider {
   private params(request: LLMRequest) {
     const supportsTemperature = ANTHROPIC_TEMPERATURE_MODEL_FAMILY.test(this.model);
     return {
-      model: this.model,
+      model: sendableAnthropicModel(this.model), // [B24-A1] OD-199: an empty or padded model is refused (bad_request) before the request call, never sent
       max_tokens: request.maxTokens ?? 4096,
       system: composeInstructions(request),
       messages: mapMessages(request),
@@ -187,3 +187,4 @@ export class AnthropicProvider implements LLMProvider {
 // [B21 E1] the default model and the temperature family, named once (anthropic-config.ts), on their own line at the end (an import is
 // hoisted): no line cited in this file moves
 import { ANTHROPIC_TEMPERATURE_MODEL_FAMILY, configuredAnthropicModel } from "./anthropic-config";
+import { sendableAnthropicModel } from "./anthropic-model-guard"; // [B24-A1] on its own line at the end (an import is hoisted): no cited line moves

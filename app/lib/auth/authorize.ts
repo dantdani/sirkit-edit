@@ -14,7 +14,7 @@
  * through the constant-time secret boundary; a viewer is refused with 403
  * BEFORE any downstream authority load / provider call / mutation.
  */
-
+import { CLIENT_IP_LITERAL_MAX_CHARS, takePrincipalAbuseLimit, takePublicAbuseLimit, trustedClientIpHeaderName } from "./abuse-limits"; import { unfrozenNowMs } from "../fixture-runtime/clock"; // [B24-A3] OD-197: the public abuse windows (in place of a blank line, so no cited line moves) [B24-A3b] and the per-principal windows
 import type { EngineeringActor, EngineeringCapability, ProjectRole } from "../engineering/types";
 import { actorCapabilities } from "../engineering/authorization";
 import { resolveTrustedRequestContext } from "./trusted-request-context";
@@ -73,13 +73,13 @@ export async function authorizeRequest(request: Request, options: AuthorizeReque
   // Public routes — no identity. (The policy asserts they touch no
   // project data / credit / write / approval / mutation / release; the CI
   // gate enforces that assertion.) A public policy may still demand
-  // same-origin CSRF (e.g. the auth boundary) — enforced here too.
+  // same-origin CSRF (e.g. the auth boundary) — enforced here too. [B24-A3, 2026-10-06] Not the credit half any more: the two reviewed public model-egress searches carry metered provider credit (OD-197), and every row in ABUSE_LIMITS meets its windows below, after the CSRF check and before the media type and the body.
   if (!policy.requiresAuth) {
     if (policy.requiresCsrf) {
       const csrf = requireSameOrigin(request, options.environment);
       if (csrf) return { ok: false, response: csrf };
     }
-    return { ok: true, kind: "public", policy };
+    const abuse = takePublicAbuseLimit(`${policy.method} ${policy.path}`, trustedClientValue(request, options.environment), unfrozenNowMs()); if (abuse && !abuse.ok) return { ok: false, response: publicRateLimited(abuse.retryAfterS) }; return { ok: true, kind: "public", policy }; // [B24-A3] OD-197: per client, then global; a refusal pulls no body byte [B24-A3 review, 2026-10-08] on the real clock (unfrozenNowMs), never the fixture runtime's frozen one
   }
 
   // Authenticated routes — server-derived identity + membership, with
@@ -94,7 +94,7 @@ export async function authorizeRequest(request: Request, options: AuthorizeReque
 
   const authz = authorizeContext(context, policy);
   if (authz) return { ok: false, response: authz };
-  return { ok: true, kind: "authenticated", policy, context };
+  const principal = principalRateLimitRefusal(context, policy); if (principal) return { ok: false, response: principal }; return { ok: true, kind: "authenticated", policy, context }; // [B24-A3b] OD-197: the per-principal window, after membership and role, before the media type and the body
 }
 
 /** Enforce the policy's role / capability against a resolved context. Returns
@@ -181,3 +181,27 @@ function safePathname(url: string): string {
 }
 
 export type { RoutePolicy, EngineeringCapability };
+
+/** [B24-A3] OD-197: the value of the one configured trusted proxy header, bounded to an IP literal's length (abuse-limits.ts checks
+ *  that it is exactly one literal), or null when no header is configured or the value is longer. It keys a window only. */
+function trustedClientValue(request: Request, environment: Record<string, string | undefined> | undefined): string | null {
+  const name = trustedClientIpHeaderName(environment ?? process.env);
+  if (name === null) return null;
+  const value = request.headers.get(name);
+  return value !== null && value.length <= CLIENT_IP_LITERAL_MAX_CHARS ? value : null;
+}
+
+/** [B24-A3] OD-197: a public window refused the request - 429 with when to try again (whole seconds in [1, 60]), never cached. */
+function publicRateLimited(retryAfterS: number): Response {
+  return Response.json({ ok: false, code: "PUBLIC_RATE_LIMITED", error: "Too many requests to this public route; try again later." }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(retryAfterS) } });
+}
+
+/** [B24-A3b] OD-197: the per-principal window of an authenticated provider-credit or expensive row, keyed on the trusted context's
+ *  [tenantId, projectId, principalId] only. null when admitted or when the row has none; otherwise 429 PRINCIPAL_RATE_LIMITED with
+ *  when to try again (whole seconds in [1, 60]), never cached. Any refusal of the window refuses (fail closed). Called here after
+ *  membership and role, and by `agentStreamRoute` after its role check. */
+export function principalRateLimitRefusal(context: TrustedRequestContext, policy: RoutePolicy): Response | null {
+  const decision = takePrincipalAbuseLimit(`${policy.method} ${policy.path}`, [context.tenantId, context.projectId, context.principalId], unfrozenNowMs()); // [B24-A3 review, 2026-10-08] regressions-1: the real clock, which the fixture runtime does not freeze
+  if (decision === null || decision.ok) return null;
+  return Response.json({ ok: false, code: "PRINCIPAL_RATE_LIMITED", error: "Too many requests to this route for your account in this project; try again later." }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(decision.retryAfterS) } });
+}

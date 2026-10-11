@@ -238,7 +238,7 @@ describe("[B20 C1] P — registry, providers and MCP render one tool three ways"
     // agentOnly with reason external_read); a B4 subset move would change mcpExposed and agentOnly together.
     // [B20 merge] pin move: the A track's A4 adds one agent-exposed descriptor (sirkit.mcp.observation-read), so the
     // registry is 42 and the agent set 33; the MCP subset is unchanged at 9 (B4 withheld every proposal)
-    expect(report.counts).toEqual({ registry: 47, agentExposed: 36, mcpExposed: 9, agentOnly: 27 }); // [B22-B, 2026-10-01] pin move (OD-139): + the five named computations, three of them agent-exposed reads MCP withholds (`computation`)
+    expect(report.counts).toEqual({ registry: 48, agentExposed: 37, mcpExposed: 9, agentOnly: 28 }); // [B22-B, 2026-10-01] pin move (OD-139): + the five named computations, three of them agent-exposed reads MCP withholds (`computation`); [B24-D2, 2026-10-09] pin move (OD-213, OD-235): + the paged board read, an agent-exposed read MCP withholds by choice (`withheld`)
     expect(report.counts.registry).toBe(registry.list().length);
     expect(report.counts.agentExposed).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     const expected = [...INTENTIONAL_AGENT_EXPOSED_TOOL_IDS].filter((id) => !INTENTIONAL_MCP_EXPOSED_TOOL_IDS.includes(id)).sort(byCodePoint);

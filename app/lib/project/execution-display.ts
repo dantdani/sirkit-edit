@@ -232,10 +232,10 @@ const RECOVERIES: Readonly<Record<string, string>> = Object.freeze({
   "adopted-and-settled": "Recovered: an AI change that landed before an interruption was verified from the durable records and reported.",
   "settled-from-receipt": "Recovered: the server record of a finished AI change was completed.",
   "abandoned-not-committed": "Recovered: an AI change that never landed was closed. Nothing was changed.",
-  "left-in-flight": "Still in progress — the change's own execution finishes it.",
+  "left-in-flight": "Still in progress — the change's own execution finishes it.", /* [B24-D2B, 2026-10-10] OD-214: left in flight with no ritual of THIS page holding it (a page closed after the server consumed the grant) */ "interrupted-in-flight": "Interrupted — when the editor loaded this project, the server had started this change, but no execution of it was running in this page and no change from it was recorded on this board. Another open tab of this project may still be making it.", /* [B24-D2B review 3, 2026-10-10] what held at that load, no prediction: a restored entry is re-derived at every editor load (chat-run-view.ts restoredEntryGrants) */
   "left-issued": "Waiting — the change was never started; confirm or cancel it.",
   "refused-poisoned": "An AI change could not be verified during recovery — the board MAY have changed; check the board and the revision history.",
-  unavailable: "Recovery could not read the records right now; it retries on the next load.",
+  unavailable: "Recovery could not read the records right now; it retries on the next load.", /* [B24-D2B review 4, 2026-10-10] a lasting cause, named, no retry promised (chat-run-view.ts recoveryDisplayAction); and a grant another tab moved while the sweep read it (granted-executions.ts heldNow) */ "lineage-reopened": "Outcome not known — when the editor loaded this project, the board's canonical history had been reopened since this change was started, so its records could neither prove nor disprove that the change was made.", "in-flight-elsewhere": "In progress in another tab — when the editor loaded this project, another open tab of this project was carrying this change forward (its execution record moved while this page read it), so this page left it to that tab.",
 });
 
 /** A hydration-sweep action as a sentence. */

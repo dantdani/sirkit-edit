@@ -19,6 +19,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { databaseQualification, withQualifiedDatabase } from "../../db/test-qualification";
+import { claimQualificationTarget } from "../../db/qualification-target";
 import { parseKicadMod } from "../kicad-mod";
 import { parseSexpr, emitVerbatim } from "../sexpr";
 
@@ -28,6 +29,8 @@ describe.runIf(q.enabled)("pcb_footprints raw_sexpr round-trip (DB)", () => {
   // The shared client reads DATABASE_URL lazily: publish the QUALIFICATION url
   // for the duration of this suite only, and put back whatever was there.
   let priorDatabaseUrl: string | undefined;
+  // [B24-A4] D24-12, OD-201: the shared guard, before the first database statement (its own hook, registered before the publication)
+  beforeAll(async () => { await claimQualificationTarget(withQualifiedDatabase(), "ingest-integrity"); }, 60_000);
   beforeAll(() => {
     priorDatabaseUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = withQualifiedDatabase();

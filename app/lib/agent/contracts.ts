@@ -230,7 +230,7 @@ export interface AgentStep {
   toolCalls: AgentToolCall[];
   stopReason: string | null; /** [B21 E1] (D21-21) the provider's stop, normalized INSIDE the adapter (the real adapters always set it; a scripted double may not) - read on a SPECIALIST's run path only, never by the coordinator's loop */ stop?: StepStop;
   usage: { inputTokens?: number; outputTokens?: number };
-  model: string;
+  model: string; /** [B24-C2] OD-208: the provider's request id (the SDK's `_request_id`), set by the adapters only when the response carries one; a bounded id for the attribution document, never content (in place: no cited line moves) */ providerRequestId?: string;
   continuation: ProviderContinuation;
 }
 

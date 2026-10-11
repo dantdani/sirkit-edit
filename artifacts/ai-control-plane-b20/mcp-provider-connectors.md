@@ -157,7 +157,7 @@ The policy module enforces nothing and has no production caller. What makes the 
 - **The request side — the importer, closure and constructor gates.** Exactly five production modules import a provider
   SDK at run time, none of them reaches `app/lib/mcp/**` or `app/lib/auth/mcp-bearer.ts` through its runtime import
   closure, and every provider client is constructed with only `apiKey`, `maxRetries` and `timeout` — never
-  `defaultHeaders`, `defaultQuery` or `baseURL`: `app/lib/agent/adapters.ts:112` (`new OpenAI(`) and `app/lib/agent/adapters.ts:213` (`new Anthropic(`).
+  `defaultHeaders`, `defaultQuery` or `baseURL`: `app/lib/agent/adapters.ts:112` (`new OpenAI(`) and `app/lib/agent/adapters.ts:213` (`new Anthropic(`). [B24-B3, 2026-10-08] Six since B24-B3: the record-only model-in-loop command's contract-turn clients, `app/lib/evaluation/live-contract-clients.ts` (`new OpenAI(` and `new Anthropic(`, each with only `apiKey`, `maxRetries: 0` and `timeout`; it reaches neither `app/lib/mcp/**` nor the bearer module, and no route reaches it), so T2 counts six importers and T4 eight constructions (OD-125, OD-216).
 - **The statement.** Its only runtime import is the registry: `app/lib/mcp/provider-connector-policy.ts:19` (`./server-registry`).
   It has no production importer, its verdict type admits only `"refused"`, and it is pure, frozen and byte-deterministic.
 - **B09's continuation matrix is unchanged and still true.** Its conversation-state row reads "continuation input = prior
@@ -251,7 +251,7 @@ RECORDED. Each is a place the gates above do not reach.
 ## Evidence
 
 Four suites, all under the `app/lib/mcp` directory filter of the prompt-to-gerber job
-(`.github/workflows/deterministic-manufacturing.yml:131` (`app/lib/mcp`)), so no workflow entry was added.
+(`.github/workflows/deterministic-manufacturing.yml:132` (`app/lib/mcp`)), so no workflow entry was added. [B24-D0, 2026-10-09] Since OD-30's split the filter line stays at `:132` (`app/lib/mcp`) while prompt-to-gerber excludes it and the four suites run in the appended `agent-boundary-suites` job (ci-split.md). [B24-D2, 2026-10-09] Both citations moved in place from line 131 to 132: B24-D1's start step (workflow line 32, `3d5f225`) shifted the filter line by one, and T6 of `b20-a5-connector-tripwires` resolves both (red at `3d5f225`).
 
 - `app/lib/mcp/__tests__/b20-a5-provider-connector-policy.test.ts` — 10 cases
 - `app/lib/mcp/__tests__/b20-a5-provider-request-shape.test.ts` — 4 cases

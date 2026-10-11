@@ -13,14 +13,14 @@
  *  - a route that executes an external process may not be public;
  *  - a public row is genuinely static / catalog / stateless compute over
  *    caller-supplied data (no durable project data, no provider credit, no
- *    external process, no authoritative write).
+ *    external process, no authoritative write). [B24-A3, 2026-10-06] Not the credit half any more: the two reviewed public model-egress searches carry metered provider credit, excused only with a valid ABUSE_LIMITS entry (publicHasCreditOrWrite, OD-197).
  *
  * The committed `route-data-and-resource-classification.csv` is rendered from
  * this table (byte-pinned).
  */
 
 import { allRoutePolicies, type RoutePolicy } from "./route-policy";
-
+import { ABUSE_LIMITS, PRINCIPAL_ABUSE_LIMITS, principalAbuseLimitProblems, publicAbuseLimitProblems } from "./abuse-limits"; // [B24-A3] OD-197: the public windows [B24-A3b] and the per-principal windows the census holds the classification to (in place of a blank line)
 export type DurableAccess = "none" | "read" | "write" | "read-write";
 export type ProjectDataSensitivity = "none" | "caller-supplied-only" | "project-durable" | "session-identity";
 
@@ -96,7 +96,7 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   // [B20 B2] the token route returns a credential bound to the caller's own identity and live membership; nothing is stored
   "/api/mcp/token": { durable: "none", sensitivity: "session-identity" },
   // [B23-B1] reads the authority head, the board head and lineage and the release ledger, and regenerates the release (no ledger write) [B23-B2 review, 2026-10-04] regressions-3: the commit composes the durable exchange record (mfg.provider-exchange.v1), which writes only past a reviewed transfer descriptor; none exists, so the row stays read; the revision adding the first descriptor moves it to read-write (b23-b-exchange-ledger case 21 fails until it does)
-  "/api/pcb/provider-exchange": { durable: "read", sensitivity: "project-durable", expensive: true },
+  "/api/pcb/provider-exchange": { durable: "read", sensitivity: "project-durable", expensive: true }, "/api/ready": { durable: "none", sensitivity: "none" }, // [B24-A1] OD-198: appended in place - readiness reads the configuration and a bounded select 1, no project or caller data, and writes nothing
 };
 
 /**
@@ -135,7 +135,7 @@ const MODEL_EGRESS_PATHS: ReadonlySet<string> = new Set([
   "/api/schematic/review", "/api/spice/ai",
 ]);
 /** [B23-A2 review] Reviewed: the PUBLIC paths that send a model input, one reason each (`outboundEgressViolations`). Both embed the
- *  anonymous caller's search text with OpenAI; nothing else of the caller's leaves. Recorded, not changed: A2 adds no route change. */
+ *  anonymous caller's search text with OpenAI; nothing else of the caller's leaves. Recorded, not changed: A2 adds no route change. [B24-A3, 2026-10-06] Changed since: both rows declare provider credit and expensive and each meets its public windows and the embedding meter (OD-197, answering OD-174's question). */
 export const PUBLIC_MODEL_EGRESS: Readonly<Record<string, string>> = Object.freeze({
   "/api/parts/search": "the public catalogue search embeds the caller's query text with OpenAI (embedQuery) for its semantic ranking",
   "/api/pcb/footprints/search": "the public footprint search embeds the caller's q text with OpenAI (embedQuery) for its semantic ranking",
@@ -193,7 +193,7 @@ function rowFor(policy: RoutePolicy): RouteResourceRow {
     projectDataSensitivity: sensitivity,
     providerCredit: policy.providerCredit,
     externalProcess,
-    expensive: annotation.expensive ?? false,
+    expensive: annotation.expensive ?? PUBLIC_EXPENSIVE_PATHS.has(policy.path), // [B24-A3] OD-197: the two public searches and the preview (the set is appended at the end)
     authoritativeWrite: policy.authoritativeWrite,
     releaseOrQualification: policy.releaseOrQualification,
     staticOrCatalog,
@@ -212,7 +212,7 @@ export function classificationViolations(): { publicTouchesDurableData: string[]
   return {
     publicTouchesDurableData: rows.filter((r) => r.isPublic && r.durableAccess !== "none").map((r) => `${r.method} ${r.path}`),
     publicSpawnsProcess: rows.filter((r) => r.isPublic && r.externalProcess !== "").map((r) => `${r.method} ${r.path}`),
-    publicHasCreditOrWrite: rows.filter((r) => r.isPublic && (r.providerCredit || r.authoritativeWrite || r.releaseOrQualification)).map((r) => `${r.method} ${r.path}`),
+    publicHasCreditOrWrite: rows.filter((r) => r.isPublic && ((r.providerCredit && !reviewedMeteredPublicCredit(r)) || r.authoritativeWrite || r.releaseOrQualification)).map((r) => `${r.method} ${r.path}`), // [B24-A3] OD-197: narrowed in place - credit is excused only on a reviewed PUBLIC_MODEL_EGRESS path with a valid limit
   };
 }
 
@@ -246,5 +246,67 @@ export function outboundEgressViolations(rows: readonly RouteResourceRow[] = rou
     if (row.isPublic && row.outboundEgress !== "none") out.push(`${key}: public_sends`);
     if (row.isPublic && row.modelEgress && !Object.hasOwn(PUBLIC_MODEL_EGRESS, row.path)) out.push(`${key}: public_model_egress`); // [B23-A2 review]
   }
+  return out;
+}
+
+// ── [B24-A3] the abuse-limit census (D24-8, OD-197, OD-174's question) ────────────────────────────────────────────────────────────────
+// Appended on purpose: no line the B16-B24 pages cite in this file moves.
+
+/** The public rows that are expensive: the two searches (an OpenAI embedding per free-text query) and the placement preview (synchronous
+ *  engine work; B20 F1 measured 124.9 s before the route's bound). Read in place by `rowFor`. */
+const PUBLIC_EXPENSIVE_PATHS: ReadonlySet<string> = new Set(["/api/parts/search", "/api/pcb/footprints/search", "/api/pcb/placement/preview"]);
+
+/** The closed set of `abuseLimitViolations` reasons ([B24-A3b] + `credit_unlimited` and `expensive_unlimited`, the authenticated rows). */
+export const ABUSE_LIMIT_REASONS = Object.freeze(["public_credit_unlimited", "public_expensive_unlimited", "public_model_egress_unlimited", "public_credit_unreviewed", "limit_invalid", "orphan_limit", "credit_unlimited", "expensive_unlimited", "public_signin_unlimited"] as const); // [B24-A3 review, 2026-10-08] coverage-signin-gate-gap: + public_signin_unlimited, sign-in without its window
+/** Sign-in is in the registry's scope though it spends no credit and is not expensive: a password check per request (OD-197). */
+const SIGNIN_ABUSE_KEY = "POST /api/auth/signin";
+
+/** A public row's provider credit is excused only when the row is a reviewed `PUBLIC_MODEL_EGRESS` path with a valid limit entry. */
+export function reviewedMeteredPublicCredit(row: Pick<RouteResourceRow, "path" | "method" | "isPublic" | "providerCredit">, limits: Readonly<Record<string, unknown>> = ABUSE_LIMITS): boolean {
+  const key = `${row.method} ${row.path}`;
+  return row.isPublic && row.providerCredit && Object.hasOwn(PUBLIC_MODEL_EGRESS, row.path) && Object.hasOwn(limits, key) && publicAbuseLimitProblems(limits[key]).length === 0;
+}
+
+/** OD-197's gate, one `<METHOD> <path>: <reason>` line per violation: every public row that is provider credit, expensive or model
+ *  egress has a valid limit entry (else `public_credit_unlimited`, `public_expensive_unlimited`, `public_model_egress_unlimited`, one
+ *  per fact; an entry that is malformed is `limit_invalid`); a public credit row with an entry is still refused unless it is a reviewed
+ *  `PUBLIC_MODEL_EGRESS` path (`public_credit_unreviewed`); and every entry names such a row or sign-in (`orphan_limit`).
+ *  [B24-A3b] OD-197's full scope: every AUTHENTICATED row that is provider credit or expensive has a valid per-principal entry (else
+ *  `credit_unlimited`, `expensive_unlimited`, one per fact; a malformed one `limit_invalid`), and every per-principal entry names such a
+ *  row (`orphan_limit`). The two registries never stand in for each other. */
+export function abuseLimitViolations(rows: readonly RouteResourceRow[] = routeResourceClassification(), policies: readonly RoutePolicy[] = allRoutePolicies(), limits: Readonly<Record<string, unknown>> = ABUSE_LIMITS, principalLimits: Readonly<Record<string, unknown>> = PRINCIPAL_ABUSE_LIMITS): string[] {
+  const out: string[] = [];
+  const scoped = new Set<string>();
+  const principalScoped = new Set<string>();
+  for (const row of rows) {
+    const key = `${row.method} ${row.path}`;
+    const policy = policies.find((candidate) => candidate.path === row.path && candidate.method === row.method);
+    const isPublic = row.isPublic || policy?.requiresAuth === false;
+    const credit = row.providerCredit || policy?.providerCredit === true;
+    if (!isPublic) {
+      if (!credit && !row.expensive) continue;
+      principalScoped.add(key);
+      if (!Object.hasOwn(principalLimits, key)) {
+        if (credit) out.push(`${key}: credit_unlimited`);
+        if (row.expensive) out.push(`${key}: expensive_unlimited`);
+      } else if (principalAbuseLimitProblems(principalLimits[key]).length > 0) out.push(`${key}: limit_invalid`);
+      continue;
+    }
+    if (!credit && !row.expensive && !row.modelEgress && key !== SIGNIN_ABUSE_KEY) continue;
+    scoped.add(key);
+    if (!Object.hasOwn(limits, key)) {
+      if (credit) out.push(`${key}: public_credit_unlimited`);
+      if (row.expensive) out.push(`${key}: public_expensive_unlimited`);
+      if (row.modelEgress) out.push(`${key}: public_model_egress_unlimited`); if (key === SIGNIN_ABUSE_KEY) out.push(`${key}: public_signin_unlimited`); // [B24-A3 review, 2026-10-08] sign-in is in scope though neither credit nor expensive: its missing window is refused too
+      continue;
+    }
+    if (publicAbuseLimitProblems(limits[key]).length > 0) {
+      out.push(`${key}: limit_invalid`);
+      continue;
+    }
+    if (credit && !Object.hasOwn(PUBLIC_MODEL_EGRESS, row.path)) out.push(`${key}: public_credit_unreviewed`);
+  }
+  for (const key of Object.keys(limits)) if (!scoped.has(key)) out.push(`${key}: orphan_limit`);
+  for (const key of Object.keys(principalLimits)) if (!principalScoped.has(key)) out.push(`${key}: orphan_limit`);
   return out;
 }

@@ -39,7 +39,7 @@ describe("[B21 E1] normalized stop reasons (D21-21)", () => {
       const own = /^\s+([a-zA-Z]+)(\?)?: /.exec(line);
       return [...(own ? [`${own[1]}${own[2] ?? ""}`] : []), ...[...line.matchAll(/\*\/ ([a-zA-Z]+)(\?)?: /g)].map((match) => `${match[1]}${match[2] ?? ""}`)];
     });
-    expect(fields).toEqual(["text", "toolCalls", "stopReason", "stop?", "usage", "model", "continuation"]);
+    expect(fields).toEqual(["text", "toolCalls", "stopReason", "stop?", "usage", "model", "providerRequestId?", "continuation"]); // [B24-C2, 2026-10-08] reviewed pin move: + `providerRequestId?` (OD-208, D24-22), the SDK's `_request_id` set by the adapters only when a response carries one, folded onto the `model` line after a doc comment so no cited line of contracts.ts moves; E1's `stop?` stays the one field E1 added, and the coordinator's loop reads neither
     expect(body).toContain("stop?: StepStop;");
     const loop = read("app/lib/agent/loop.ts");
     expect(loop).not.toMatch(/\.stop\b(?!Reason)/);

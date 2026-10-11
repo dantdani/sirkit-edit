@@ -59,8 +59,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run benchmark:validate > benchmark-validate.json
-      - run: pnpm exec vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts app/lib/pcb/__tests__/stage-08-professional-routing.test.ts --reporter=dot --reporter=junit --outputFile=vitest-nightly.xml
+      # [B24-B2] D24-15, OD-204: the stage-09 corpus (every package outside the hidden holdout, below) runs only here, on schedule and
+      # dispatch, through b24-b2-corpus-nightly and this step's flag; every pull-request job skips that suite's corpus cases.
+      - run: pnpm exec vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts app/lib/pcb/__tests__/stage-08-professional-routing.test.ts app/lib/qualification/__tests__/b24-b2-corpus-nightly.test.ts --reporter=dot --reporter=junit --outputFile=vitest-nightly.xml
+        env:
+          SIRKIT_B24_CORPUS_NIGHTLY: "1"
       - run: pnpm run stage10:test -- --reporter=dot --reporter=junit --outputFile=vitest-stage10.xml
+        if: ${{ !cancelled() }} # [B24-B2 review, 2026-10-08] a red corpus run above never skips this step
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -72,6 +77,55 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
       - name: Declare unavailable protected suites
+        if: ${{ !cancelled() }} # [B24-B2 review, 2026-10-08] the holdout stays declared when a step above fails
         run: |
           echo "Hidden holdout requires holdout-admin credentials and is not exposed to CI candidates."
           echo "Licensed competitor runs require approved tools/operators and remain manual."
+
+  # [B24-D1] D24-27, D24-28, OD-212: the latency benchmark - the four runbook measurement families (view/read commands, a granted
+  # reversible edit, one verified workflow on recordings, the first stream event) and the moved performance bounds, each a
+  # correctness-checked workload with fixed warm-ups and samples on this runner, gated only on regression against the recorded
+  # baseline (artifacts/ai-control-plane-b24/latency-baseline.json). While its latest version is the declared-without-values v1,
+  # baseline_missing is written BLOCKED (OD-212/OD-30: the owner has not accepted this job's minutes) and does not fail the gate (lead
+  # decision D3); unmeasured, sample_shortfall and a regression always do. Every trigger of the workflow runs it (no if:). The results
+  # go outside the repository; route-bench runs unchanged as its own step (its two absolute budgets stay, OD-234's question). The
+  # gate, route-bench and headroom steps each run after an earlier red step and fail on their own; nothing is retried.
+  # [B24-D2] D24-29, OD-212's memory half: b24-d2-memory rides the same vitest step and flag. --expose-gc goes to this step's workers
+  # only, named twice on purpose: vitest's CLI hands ONE value to the forks pool as a string, which it spreads into characters (the
+  # worker hangs; measured locally 2026-10-09), and two make the array the pool expects. No vitest.config.ts change.
+  benchmark-latency:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # outside the repository, as prompt-to-gerber's SIRKIT_B16_1C_EVIDENCE_DIR is (a literal path: the `runner` context is not available in job-level env)
+      SIRKIT_B24_BENCHMARK_DIR: /tmp/sirkit-b24-benchmark
+    steps:
+      - run: mkdir -p "$SIRKIT_B24_BENCHMARK_DIR" && echo "SIRKIT_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV" # [B24-D1] OD-30: benchmark-latency's start
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run app/lib/qualification/__tests__/b24-d1-latency.test.ts app/lib/qualification/__tests__/b24-d1-latency-workflow.test.ts app/lib/qualification/__tests__/b24-d2-memory.test.ts --no-file-parallelism --poolOptions.forks.execArgv=--expose-gc --poolOptions.forks.execArgv=--expose-gc --reporter=dot --reporter=junit --outputFile=vitest-benchmark-latency.xml
+        env:
+          SIRKIT_B24_BENCHMARK: "1"
+      - if: success() || failure()
+        run: pnpm exec tsx scripts/b24-latency-gate.ts
+      - if: success() || failure()
+        run: pnpm exec tsx scripts/route-bench.ts > "$SIRKIT_B24_BENCHMARK_DIR/route-bench.json"
+      - if: success() || failure() # [B24-D1] OD-30: benchmark-latency's headroom (reports only)
+        run: pnpm exec tsx scripts/ci-job-headroom.ts .github/workflows/benchmark.yml benchmark-latency --report-only
+      - name: Upload the latency results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-latency-results
+          path: |
+            vitest-benchmark-latency.xml
+            /tmp/sirkit-b24-benchmark
+          if-no-files-found: ignore
+          retention-days: 14

@@ -204,7 +204,7 @@ export function updateTest(
   test.updatedAt = now;
   next.revision += 1;
   next.updatedAt = now;
-  next.aiAuditLog.push({
+  next.aiAuditLog = appendAiAuditEntry(next.aiAuditLog, { // [B24-C2] D24-25: through the one append helper (redacted, capped, bounded)
     id: createId("audit"),
     timestamp: now,
     actor: "user",
@@ -315,7 +315,7 @@ export function applyAiProposal(
   });
   next.revision += 1;
   next.updatedAt = now;
-  next.aiAuditLog.push({
+  next.aiAuditLog = appendAiAuditEntry(next.aiAuditLog, { // [B24-C2] D24-25: through the one append helper (redacted, capped, bounded)
     id: createId("audit"),
     timestamp: now,
     actor: "ai",
@@ -348,3 +348,88 @@ export function assertProjectShape(value: unknown): asserts value is SimulationP
     throw new Error("Simulation project collections are invalid");
   }
 }
+
+// ─── [B24-C2] D24-25: the audit log's bounds and the one append helper both writers use ─────────────────────────────────────────
+// Appended on purpose (function declarations are hoisted): no line cited above moves.
+
+/** The audit log's bounds, stated choices (OD-232): 200 entries, 2,000 reason characters, 16,000 change-set characters, 200 evidence
+ *  references per entry (the server's own cap on a proposal's references, `/api/spice/ai`; [B24-C2 review, 2026-10-09]). */
+export const AI_AUDIT_LOG_BOUNDS = Object.freeze({ maxEntries: 200, maxReasonChars: 2_000, maxChangeSetChars: 16_000, maxEvidenceRefs: 200 });
+export const AI_AUDIT_LOG_TRUNCATED = "audit-log-truncated" as const;
+
+/** A change set past its bound is stored as this, never as text. */
+export interface AiAuditChangeSetWithheld { withheld: "change_set_too_large"; operationCount: number; digest: string }
+
+/** Every string leaf of a value through the token-anchored redactor (design text such as a net name survives; a key does not). */
+function redactStringLeaves(value: unknown, depth = 0): unknown {
+  if (typeof value === "string") return sanitizeModelBoundText(value);
+  if (depth > 32 || value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((entry) => redactStringLeaves(entry, depth + 1));
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) out[key] = redactStringLeaves(entry, depth + 1);
+  return out;
+}
+/** [B24-C2 review, 2026-10-09] The evidence references as they are stored: string leaves redacted (a `signal`, a `unit`, an id), at most
+ *  `maxEvidenceRefs` kept, the excess counted in `evidenceWithheld` (cumulative, so a bounded entry loads unchanged; absent when none). */
+function redactAiAuditEvidence(entry: AiAuditEntry): Pick<AiAuditEntry, "evidence" | "evidenceWithheld"> {
+  if (entry.evidence === undefined) return {};
+  if (!Array.isArray(entry.evidence)) return { evidence: [] };
+  const kept = entry.evidence.slice(0, AI_AUDIT_LOG_BOUNDS.maxEvidenceRefs);
+  const carried = typeof entry.evidenceWithheld === "number" && Number.isSafeInteger(entry.evidenceWithheld) && entry.evidenceWithheld > 0 ? entry.evidenceWithheld : 0;
+  const withheld = carried + (entry.evidence.length - kept.length);
+  return { evidence: redactStringLeaves(kept) as EvidenceRef[], ...(withheld > 0 ? { evidenceWithheld: withheld } : {}) };
+}
+/** One entry as it is stored: the reason redacted and capped; the evidence redacted and bounded; a change set redacted, or withheld past its bound. */
+function redactAiAuditEntry(entry: AiAuditEntry): AiAuditEntry {
+  const reason = sanitizeModelBoundText(typeof entry.reason === "string" ? entry.reason : "").slice(0, AI_AUDIT_LOG_BOUNDS.maxReasonChars);
+  const base: AiAuditEntry = { ...entry, reason, ...redactAiAuditEvidence(entry) };
+  if (!("changeSet" in entry) || entry.changeSet === undefined) return base;
+  let serialized: string;
+  try { serialized = JSON.stringify(entry.changeSet) ?? ""; } catch { serialized = ""; }
+  if (serialized.length > AI_AUDIT_LOG_BOUNDS.maxChangeSetChars) {
+    const withheld: AiAuditChangeSetWithheld = { withheld: "change_set_too_large", operationCount: Array.isArray(entry.changeSet) ? entry.changeSet.length : 1, digest: engineeringDigest({ schema: "sirkit.spice-audit-change-set.v1", changeSet: entry.changeSet }) };
+    return { ...base, changeSet: withheld };
+  }
+  return { ...base, changeSet: redactStringLeaves(entry.changeSet) };
+}
+const isTruncationMarker = (entry: AiAuditEntry | undefined): boolean => entry !== undefined && entry.actor === "system" && entry.operation === AI_AUDIT_LOG_TRUNCATED;
+const droppedOf = (marker: AiAuditEntry | undefined): number => {
+  const dropped = marker !== undefined && typeof marker.changeSet === "object" && marker.changeSet !== null ? (marker.changeSet as { droppedEntries?: unknown }).droppedEntries : undefined;
+  return typeof dropped === "number" && Number.isSafeInteger(dropped) && dropped >= 0 ? dropped : 0;
+};
+
+/** The log bounded to `maxEntries`: the oldest entries go first, behind ONE leading `system` entry carrying the cumulative number dropped. Applied on every write and again when a stored project is loaded. */
+export function boundAiAuditLog(entries: readonly AiAuditEntry[]): AiAuditEntry[] {
+  if (entries.length <= AI_AUDIT_LOG_BOUNDS.maxEntries) return [...entries];
+  const marker = isTruncationMarker(entries[0]) ? entries[0] : undefined;
+  const body = marker === undefined ? entries : entries.slice(1);
+  const keep = AI_AUDIT_LOG_BOUNDS.maxEntries - 1;
+  const dropped = body.slice(0, Math.max(0, body.length - keep));
+  const droppedEntries = droppedOf(marker) + dropped.length;
+  const newest = dropped.at(-1) ?? marker;
+  const leading: AiAuditEntry = {
+    id: marker?.id ?? createId("audit"),
+    timestamp: newest?.timestamp ?? nowIso(),
+    actor: "system",
+    operation: AI_AUDIT_LOG_TRUNCATED,
+    approval: "automatic",
+    status: "applied",
+    reason: `${droppedEntries} older audit entries were dropped (the log keeps ${AI_AUDIT_LOG_BOUNDS.maxEntries}).`,
+    changeSet: { droppedEntries },
+  };
+  return [leading, ...body.slice(body.length - keep)];
+}
+/** The one append both writers use: redact, cap and bound. */
+function appendAiAuditEntry(entries: readonly AiAuditEntry[], entry: AiAuditEntry): AiAuditEntry[] {
+  return boundAiAuditLog([...entries, redactAiAuditEntry(entry)]);
+}
+/** [B24-C2 review, 2026-10-09] A STORED log as `loadStudioProject` returns it: every entry (one written before the redaction, or by a writer
+ *  that set `aiAuditLog` directly, included) redacted and capped exactly as on write, then the log bounded. A non-object entry is dropped. */
+export function loadAiAuditLog(stored: unknown): AiAuditEntry[] {
+  if (!Array.isArray(stored)) return [];
+  const entries = stored.filter((entry): entry is AiAuditEntry => typeof entry === "object" && entry !== null && !Array.isArray(entry));
+  return boundAiAuditLog(entries.map((entry) => redactAiAuditEntry(entry)));
+}
+import type { AiAuditEntry, EvidenceRef } from "./types"; // on its own line at the end (an import is hoisted): no cited line moves
+import { sanitizeModelBoundText } from "@/app/lib/agent/redaction"; // [B24-C2] D24-25: the redaction authority (dependency-neutral) on the browser-local audit log; at the end, hoisted, so the flag census's cited line (:72) holds
+import { engineeringDigest } from "@/app/lib/engineering/stable"; // [B24-C2] browser-safe digest of a withheld change set

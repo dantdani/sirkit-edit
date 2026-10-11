@@ -52,7 +52,7 @@ export function GrantedExecutionDialog({ grant, note, busy, disableReason, onCon
   const tier = tierLabel(grant?.binding.operation?.tier ?? 1);
   return (
     <Dialog open={grant !== null} onOpenChange={(open) => { if (!open && !busy) onCancel(); }}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-xl" finalFocus={promptFocus}>{/* [B24-D4, 2026-10-10] D24-32 (2.4.3): when the card closes, focus returns to the prompt (promptFocus, below) */}
         <DialogHeader>
           <DialogTitle>AI change — confirm before it is made</DialogTitle>
         </DialogHeader>
@@ -112,4 +112,15 @@ export function GrantedExecutionDialog({ grant, note, busy, disableReason, onCon
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * [B24-D4, 2026-10-10] D24-32 (2.4.3), CI run 38061798204 (keyboard-and-focus 4): the card opens from a chat run sent from the prompt, which
+ * is disabled while the run streams, so focus is on `body` then and Base UI's default return target is what an earlier popup recorded (on CI
+ * nothing: focus stayed on `body`; locally the header's first button). On close (Escape, Cancel, Confirm) focus goes to the prompt; [B24-D4
+ * review, 2026-10-10] correctness-1: a prompt still disabled cannot take it, so no focus moves (`false`): `body`, where page.tsx's run-end return acts.
+ */
+function promptFocus(): HTMLElement | false {
+  const prompt = typeof document === "undefined" ? null : document.querySelector<HTMLTextAreaElement>('[data-testid="prompt-input"]');
+  return prompt && !prompt.disabled ? prompt : false;
 }

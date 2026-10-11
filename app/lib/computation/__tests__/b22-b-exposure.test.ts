@@ -53,15 +53,15 @@ const invoke = (gateway: ReturnType<typeof createAgentToolGateway>, ctx: AgentRu
   gateway.invoke({ runId, provider: "openai", callId: `call-${toolId}-${Math.random()}`, toolId, version: "1.0.0", args, context: ctx, timeoutMs: 20_000 });
 
 describe("[B22-B] the reviewed exposure moves (OD-139)", () => {
-  it("1. the ratchets move by review: registry 47 (42 + the five kinds), agent set 36 (33 + the three reads), MCP 9 unchanged, agent-only 27; both reports are ok; the derived partition gives every computation the `computation` reason and the withheld list is unchanged", () => {
-    expect(registry.list()).toHaveLength(47);
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(36);
+  it("1. the ratchets move by review: registry 47 (42 + the five kinds), agent set 36 (33 + the three reads), MCP 9 unchanged, agent-only 27; both reports are ok; the derived partition gives every computation the `computation` reason and the withheld list is unchanged", () => { // [B24-D2, 2026-10-09] reviewed pin move (OD-213, OD-235): + B24-D2's paged board read, one agent-exposed Tier 0 read MCP withholds by choice - registry 48, agent set 37, MCP 9, agent-only 28, withheld 8 (B22-B's own entries unchanged); the structurally excluded stay 31
+    expect(registry.list()).toHaveLength(48); // [B24-D2, 2026-10-09] 47 + the paged board read
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(37); // [B24-D2, 2026-10-09] 36 + the paged board read
     for (const id of READS) expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, id).toContain(id);
     for (const id of REQUESTS) expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, id).not.toContain(id);
-    expect(agentExposureReport(registry)).toMatchObject({ ok: true, missing: [], unexpected: [], classViolations: [], executionViolations: [], count: 36 });
+    expect(agentExposureReport(registry)).toMatchObject({ ok: true, missing: [], unexpected: [], classViolations: [], executionViolations: [], count: 37 }); // [B24-D2, 2026-10-09] 36 + the paged board read
     expect(INTENTIONAL_MCP_EXPOSED_TOOL_IDS).toHaveLength(9);
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => !INTENTIONAL_MCP_EXPOSED_TOOL_IDS.includes(id))).toHaveLength(27);
-    expect(MCP_WITHHELD_TOOL_IDS).toHaveLength(7);
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => !INTENTIONAL_MCP_EXPOSED_TOOL_IDS.includes(id))).toHaveLength(28); // [B24-D2, 2026-10-09] 27 + the paged board read
+    expect(MCP_WITHHELD_TOOL_IDS).toHaveLength(8); // [B24-D2, 2026-10-09] 7 + the paged board read (OD-235)
     const report = mcpExposureReport(registry);
     expect(report.ok).toBe(true);
     expect([...report.excludedByReason.computation]).toEqual([...ALL].sort());
@@ -107,7 +107,7 @@ describe("[B22-B] the reviewed exposure moves (OD-139)", () => {
   it("3. no gate regex and no NEVER_EXPOSED_TOOL_PATTERNS entry was widened: the six patterns are unchanged, and every exposed id passes the b17-f, B16.0.23, B16.0.24 and B16.0.20/21 gates as they stand; no computation id is Tier 3 or ever a granted execution", () => {
     expect(NEVER_EXPOSED_TOOL_PATTERNS.map((pattern) => pattern.source)).toEqual(["\\.release$", "qualif", "^sirkit\\.pcb\\.undo-redo-canonical$", "^sirkit\\.pcb\\.(edit-track|delete-item|create-via|zone-edit)$", "\\.atomic\\.(approve|publish|revoke|deprecate|supersede|transition)", "publication-(request|resolve|review)"]);
     const exposed = registry.list().filter((descriptor) => descriptor.agentExposed);
-    expect(exposed).toHaveLength(36);
+    expect(exposed).toHaveLength(37); // [B24-D2, 2026-10-09] 36 + the paged board read
     for (const descriptor of exposed) {
       expect(descriptor.toolId).not.toMatch(/process|exec|shell|database|db\.|file\.|replace-state|import-state/i);
       expect(descriptor.toolId).not.toMatch(/spice/i);

@@ -677,7 +677,7 @@ never checked (`composer-routing.ts`, `adapters.ts` and the gate test gained lin
 | C28 | `app/lib/durable-workflow/runtime.ts` | 18 | — | `if (fixtureRuntimeEnabled()) return fixtureContainer().durableRepository;` | the fixture runtime's in-memory repository |
 | C29 | `app/lib/agent/orchestration/store.ts` | 348 | — | `export function resolveOrchestrationRunStore(): OrchestrationRunStore {` | A's unavailable default the runtime falls back to |
 | C30 | `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 147 | — | `injected.set(at("evil-loop"), ` | the gate's loop probe (D21-33), pinned as an invariant |
-| C31 | `.github/workflows/deterministic-manufacturing.yml` | 145 | — | `app/api/chat/__tests__/b21-b-chat-router.test.ts` | the one explicit CI entry |
+| C31 | `.github/workflows/deterministic-manufacturing.yml` | 146 | — | `app/api/chat/__tests__/b21-b-chat-router.test.ts` | the one explicit CI entry [B24-D1, 2026-10-09] re-pinned +1: B24-D1's prompt-to-gerber start step at `:32` (OD-30) |
 | C32 | `app/lib/llm/errors.ts` | 151 | — | `export function isRetryableReason(reason: LLMProviderFailureReason): boolean {` | the classifier's retryable set |
 | C33 | `app/lib/agent/contracts.ts` | 185 | — | `runDeadlineMs: 120_000,` | the coordinator's 120 s per turn |
 | C34 | `app/lib/engineering/explicit-request.ts` | 35 | — | `const MOVE_PATTERN = ` | the explicit-request grammar the S-explicit rule mirrors |

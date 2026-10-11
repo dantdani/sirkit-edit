@@ -71,7 +71,7 @@ export type DiagnosticRunnerErrorCode =
   | "NGSPICE_DIAGNOSTIC_SYSTEM_ROOT_UNKNOWN"
   | "NGSPICE_DIAGNOSTIC_BUSY"
   | "NGSPICE_DIAGNOSTIC_DECK_REFUSED"
-  | "NGSPICE_DIAGNOSTIC_RUN_DIRECTORY_FAILED";
+  | "NGSPICE_DIAGNOSTIC_RUN_DIRECTORY_FAILED" | "NGSPICE_DIAGNOSTIC_DISABLED"; // [B24-A1] OD-200: the operator switched the runner off (SIRKIT_DIAGNOSTIC_RUNNER_DISABLED)
 
 /** [B22-A3] A refusal before any spawn: a closed code and a fixed text that names the server setting, never a value or a path. */
 export class DiagnosticRunnerError extends Error {
@@ -246,7 +246,7 @@ interface Preflight { readonly root: string; readonly systemRoot: string; readon
 
 /** The checks that need no file: the host's platform is the profile's, the Windows directory is known, both settings are set. */
 function preflight(profile: RuntimeProfile): Preflight {
-  const platform = host.platform();
+  refuseIfDiagnosticRunnerSwitchedOff(); const platform = host.platform(); // [B24-A1] OD-200: the operator's off switch, before the host is read (verifyDiagnosticInstall's entry)
   if (platform !== profile.executable.platform) throw new DiagnosticRunnerError("NGSPICE_DIAGNOSTIC_PLATFORM_UNSUPPORTED", `the ${profile.profileId} profile runs on ${profile.executable.platform} only`);
   const win32Host = platform.startsWith("win32-");
   const systemRoot = host.systemRoot() ?? "";
@@ -630,7 +630,7 @@ async function rawFileKind(path: string): Promise<"plain" | "missing" | "not-a-p
  * before any spawn; everything else returns a labelled record.
  */
 export async function runDiagnosticNgspice(request: DiagnosticRunRequest): Promise<DiagnosticRunRecord> {
-  const profile = runtimeProfile(DIAGNOSTIC_RUNNER_PROFILE_ID);
+  refuseIfDiagnosticRunnerSwitchedOff(); const profile = runtimeProfile(DIAGNOSTIC_RUNNER_PROFILE_ID); // [B24-A1] OD-200: first - before the deck screen, any digest, directory or spawn
   if (request.operation === "run") {
     const lines = typeof request.deck === "string" ? request.deck.split("\n") : [];
     const end = finalEndLine(lines);
@@ -752,4 +752,25 @@ export function __resetDiagnosticRunnerCachesForTests(): void {
   state.versions.clear();
   state.digestComputations = 0;
   state.installChecks = 0;
+}
+
+// ── [B24-A1] the operator's off-only switch (D24-11, OD-200) ──────────
+// Appended after the module's last line (function declarations are hoisted): the two checks sit in place on :249 and :633, and no
+// line B22's pages cite moves.
+
+/** [B24-A1] Set to any non-blank value (the SIRKIT_ORDERING_DISABLED precedent, ordering-enablement.ts:104-105), the runner refuses
+ *  every run and every install check first ([B24-A1 review] coverage-6: a version line already probed is answered from memory, with
+ *  no refusal and no process); unset, empty or blank leaves it as it is. It only switches off; production simulation stays BLOCKED. */
+export const DIAGNOSTIC_RUNNER_DISABLE_ENV = "SIRKIT_DIAGNOSTIC_RUNNER_DISABLED";
+
+/** [B24-A1] Whether the operator switched the runner off (read from the environment at each call; the value is never echoed). */
+export function diagnosticRunnerDisabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+  const value = environment[DIAGNOSTIC_RUNNER_DISABLE_ENV];
+  return typeof value === "string" && value.trim() !== "";
+}
+
+/** [B24-A1] The refusal every run and every install check raises first while the switch is set: before the deck screen, the host,
+ *  any digest, directory or spawn. The text names the setting, never a value or a path. */
+function refuseIfDiagnosticRunnerSwitchedOff(): void {
+  if (diagnosticRunnerDisabled()) throw new DiagnosticRunnerError("NGSPICE_DIAGNOSTIC_DISABLED", `the diagnostic runner is switched off by the operator (${DIAGNOSTIC_RUNNER_DISABLE_ENV}); nothing was run`);
 }

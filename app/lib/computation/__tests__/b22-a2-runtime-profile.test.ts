@@ -570,7 +570,7 @@ describe("[B22-A2] what a profile binds", () => {
     expect(freerouting.argvTemplates.route!.map((element) => markers[element] ?? element)).toEqual(built);
     expect(runtimeProfile("ngspice-oci", settingsOf({})).legacySpawn).toBeNull();
     for (const profile of runtimeProfiles(settingsOf({})).filter((candidate) => candidate.legacySpawn !== null)) {
-      expect(profile.legacySpawn!.deviations, profile.profileId).toEqual(expect.arrayContaining(["executable-from-path-or-env", "no-digest-check", "host-environment-allowlist", "home-and-userprofile-passed", "no-locale-or-timezone", "direct-child-kill"]));
+      expect(profile.legacySpawn!.deviations, profile.profileId).toEqual(expect.arrayContaining(["executable-from-path-or-env", "no-digest-check", "host-environment-allowlist", "home-and-userprofile-passed", "no-locale-or-timezone"])); expect(profile.legacySpawn!.deviations, profile.profileId).not.toContain("direct-child-kill"); expect(profile.legacySpawn!.deviations, profile.profileId).not.toContain("terminal-before-exit"); // [B24-D2, 2026-10-09] reviewed pin move (OD-145's method, D22-9's FreeRouting and kicad-cli half): the two legacy profiles no longer carry direct-child-kill or terminal-before-exit - both runners end the tree and wait for the exit (b24-d2-process-cleanup)
     }
     const { DEFAULT_WORKER_LIMITS } = await import("@/app/lib/spice/server/worker");
     expect([local.limits.wallClockMs.value, local.limits.readBackBytes.value, local.limits.waveformPoints.value]).toEqual([DEFAULT_WORKER_LIMITS.timeoutMs, DEFAULT_WORKER_LIMITS.maxOutputBytes, DEFAULT_WORKER_LIMITS.maxWaveformPoints]);

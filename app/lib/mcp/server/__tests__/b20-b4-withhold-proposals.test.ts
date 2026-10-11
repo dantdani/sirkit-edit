@@ -36,7 +36,7 @@ const descriptor = (toolId: string): ToolDescriptor => registry.get(toolId)!;
 
 const WITHHELD_READS = ["sirkit.project.history-inspect", "sirkit.schematic.inspect"];
 const PROPOSALS = ["sirkit.pcb.propose-bounded-edit", "sirkit.placement.propose", "sirkit.routing.propose", "sirkit.schematic.propose-component-replacement", "sirkit.schematic.propose-tier1-edit"];
-const WITHHELD = [...WITHHELD_READS, ...PROPOSALS].sort();
+const WITHHELD = [...WITHHELD_READS, ...PROPOSALS, "sirkit.pcb.board-page-inspect"].sort(); // [B24-D2, 2026-10-09] pin move (OD-235): a third withheld category beside B3's two reads and B4's five proposals - B24-D2's paged board read, withheld by choice (7 -> 8)
 /** Each proposal's decision and the fact its reason comment must state (the lead's decision text, OD-82 / OD-87). */
 const REASONS: Record<string, { od: string; fact: RegExp }> = {
   "sirkit.pcb.propose-bounded-edit": { od: "OD-82", fact: /history head, lineage and DRC preset/ },
@@ -54,7 +54,7 @@ const BASE = { registryDigest: "eng1-4aacd63c7e0a6193", descriptors: "eng1-f1d7f
  * difference - the same reading `b20-b3-mcp-subset-move` takes.
  */
 const A4_ADDITION = "sirkit.mcp.observation-read";
-const B22B_ADDITIONS = ["sirkit.computation.analytical-equation", "sirkit.computation.artifact-compare", "sirkit.computation.artifact-parse", "sirkit.computation.circuit-analysis", "sirkit.computation.layout-experiment"]; const baseRegistry = new ToolRegistry(SIRKIT_TOOL_CATALOG.filter((item) => item.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(item.toolId))); // [B22-B, 2026-10-01] reviewed pin move: the base is the registry without A4's and B22-B's additions, so its digests stay the base-4299067 pins
+const B22B_ADDITIONS = ["sirkit.computation.analytical-equation", "sirkit.computation.artifact-compare", "sirkit.computation.artifact-parse", "sirkit.computation.circuit-analysis", "sirkit.computation.layout-experiment"]; const B24D2_ADDITION = "sirkit.pcb.board-page-inspect"; const baseRegistry = new ToolRegistry(SIRKIT_TOOL_CATALOG.filter((item) => item.toolId !== A4_ADDITION && !B22B_ADDITIONS.includes(item.toolId) && item.toolId !== B24D2_ADDITION)); // [B22-B, 2026-10-01] reviewed pin move: the base is the registry without A4's and B22-B's additions, so its digests stay the base-4299067 pins; [B24-D2, 2026-10-09] and without B24-D2's paged board read (OD-213, OD-235) too
 const STORED: MembershipRole[] = ["viewer", "commenter", "editor", "reviewer", "admin"];
 const META = Object.freeze({ "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} });
 
@@ -109,7 +109,7 @@ afterEach(() => {
 });
 
 describe("[B20 B4] no proposal over MCP: the withholding move, listed means served, and the page", () => {
-  it("1. the exposed list is exactly the 9 served reads and the withheld list the 2 B3 reads and the 5 proposals, sorted, frozen and disjoint; each proposal is withheld with its B4 reason and decision; the report is clean with count 9 and nothing exposed is a proposal", () => {
+  it("1. the exposed list is exactly the 9 served reads and the withheld list the 2 B3 reads and the 5 proposals, sorted, frozen and disjoint; each proposal is withheld with its B4 reason and decision; the report is clean with count 9 and nothing exposed is a proposal", () => { // [B24-D2, 2026-10-09] and, since B24-D2, the paged board read: eight withheld (OD-235); assertions over WITHHELD
     expect([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS]).toEqual([...SERVED_READS]);
     expect([...MCP_WITHHELD_TOOL_IDS]).toEqual(WITHHELD);
     for (const list of [INTENTIONAL_MCP_EXPOSED_TOOL_IDS, MCP_WITHHELD_TOOL_IDS]) {
@@ -140,13 +140,13 @@ describe("[B20 B4] no proposal over MCP: the withholding move, listed means serv
     expect(engineeringDigest(baseRegistry.list().map((item) => [item.toolId, item.version, engineeringDigest(item)]))).toBe(BASE.descriptors);
     expect(baseRegistry.list()).toHaveLength(BASE.count);
     // the addition is the ONLY difference: one descriptor more, and it is A4's, which no MCP list names [superseded 2026-10-02 by the B22 closeout (D22-16, OD-139): with B22-B's five named computations too (OD-139), each excluded from MCP with the reason `computation`]
-    expect(registry.list()).toHaveLength(BASE.count + 1 + B22B_ADDITIONS.length); // [B22-B] + the five named computations (OD-139)
-    expect(registry.list().map((item) => item.toolId).filter((id) => !baseRegistry.list().some((item) => item.toolId === id))).toEqual([...B22B_ADDITIONS, A4_ADDITION].sort());
+    expect(registry.list()).toHaveLength(BASE.count + 1 + B22B_ADDITIONS.length + 1); // [B22-B] + the five named computations (OD-139); [B24-D2, 2026-10-09] + the paged board read
+    expect(registry.list().map((item) => item.toolId).filter((id) => !baseRegistry.list().some((item) => item.toolId === id))).toEqual([...B22B_ADDITIONS, A4_ADDITION, B24D2_ADDITION].sort()); // [B24-D2, 2026-10-09] + the paged board read, which MCP withholds (OD-235)
     expect([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS, ...WITHHELD]).not.toContain(A4_ADDITION);
     // [B20 merge] pin move: the A track's A4 adds one agent-exposed descriptor (sirkit.mcp.observation-read), so the
     // registry is 42 and the agent set 33; the MCP subset is unchanged at 9 (B4 withheld every proposal)
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(36); // [B22-B, 2026-10-01] pin move: + the three named computation reads (OD-139), which no MCP list names
-    expect(engineeringDigest([...INTENTIONAL_AGENT_EXPOSED_TOOL_IDS].filter((id) => id !== A4_ADDITION && !B22B_ADDITIONS.includes(id)))).toBe(BASE.agentSet);
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(37); // [B22-B, 2026-10-01] pin move: + the three named computation reads (OD-139), which no MCP list names; [B24-D2, 2026-10-09] pin move: + the paged board read (OD-213)
+    expect(engineeringDigest([...INTENTIONAL_AGENT_EXPOSED_TOOL_IDS].filter((id) => id !== A4_ADDITION && !B22B_ADDITIONS.includes(id) && id !== B24D2_ADDITION))).toBe(BASE.agentSet);
     const admitted = mcpExposureReport(registry).admitted;
     for (const id of PROPOSALS) {
       const item = descriptor(id);
@@ -221,16 +221,16 @@ describe("[B20 B4] no proposal over MCP: the withholding move, listed means serv
 
   it("6. mcp-server-proposals.md states the decision's counts, the served and withheld table with each decision as the code has it, the probe table's counts, medians and extremes as its rows compute them, and each B4 suite's case count", () => {
     const page = read(PAGE);
-    const counts = /The MCP subset is (\d+) tools: the (\d+) served reads; (\d+) tools are withheld: (\d+) reads and the (\d+) proposals\./.exec(page);
-    expect(counts?.slice(1).map(Number)).toEqual([INTENTIONAL_MCP_EXPOSED_TOOL_IDS.length, SERVED_READS.length, MCP_WITHHELD_TOOL_IDS.length, WITHHELD_READS.length, PROPOSALS.length]);
-    const table = [...page.matchAll(/^\| `(sirkit\.[a-z0-9.-]+)` \| (read|propose) \| (served|withheld) \| (B3|B4) \| (—|OD-\d+) \| [^|]{10,} \|$/gm)].map((row) => ({ id: row[1]!, klass: row[2]!, mcp: row[3]!, by: row[4]!, od: row[5]! }));
+    const counts = /The MCP subset is (\d+) tools: the (\d+) served reads; (\d+) tools are withheld: (\d+) reads and the (\d+) proposals, and B24-D2's (\d+) paged board read/.exec(page); // [B24-D2, 2026-10-09] reviewed in-place move (OD-235): the sentence names the third withheld category
+    expect(counts?.slice(1).map(Number)).toEqual([INTENTIONAL_MCP_EXPOSED_TOOL_IDS.length, SERVED_READS.length, MCP_WITHHELD_TOOL_IDS.length, WITHHELD_READS.length, PROPOSALS.length, 1]);
+    const table = [...page.matchAll(/^\| `(sirkit\.[a-z0-9.-]+)` \| (read|propose) \| (served|withheld) \| (B3|B4|B24-D2) \| (—|OD-\d+) \| [^|]{10,} \|$/gm)].map((row) => ({ id: row[1]!, klass: row[2]!, mcp: row[3]!, by: row[4]!, od: row[5]! }));
     expect(table.filter((row) => row.mcp === "served").map((row) => row.id)).toEqual([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS]);
     expect(table.filter((row) => row.mcp === "withheld").map((row) => row.id).sort()).toEqual([...MCP_WITHHELD_TOOL_IDS]);
     for (const row of table) {
       expect(row.klass, row.id).toBe(descriptor(row.id).operationClass);
       if (PROPOSALS.includes(row.id)) expect([row.by, row.od], row.id).toEqual(["B4", REASONS[row.id]!.od]);
       else if (WITHHELD_READS.includes(row.id)) expect([row.by, row.od], row.id).toEqual(["B3", "OD-69"]);
-      else expect([row.by, row.od], row.id).toEqual(["B3", "—"]);
+      else if (row.id === B24D2_ADDITION) expect([row.by, row.od], row.id).toEqual(["B24-D2", "OD-235"]); else expect([row.by, row.od], row.id).toEqual(["B3", "—"]); // [B24-D2, 2026-10-09] the table admits B24-D2's row (OD-235)
     }
     // the probe table: each row's runs, median and maximum as its own values compute them, and the summary sentence
     const probe = [...page.matchAll(/^\| (P\d+) \| (\d+) \| (\d+) \| (unrouted|routed) \| (\d+) \| ([\d, ]+) \| (\d+) \| (\d+) \| `(b4[\w-]+)` \|$/gm)].map((row) => ({ id: row[1]!, footprints: Number(row[2]), iterations: Number(row[3]), variant: row[4]!, runs: Number(row[5]), values: row[6]!.split(",").map((value) => Number(value.trim())), median: Number(row[7]), max: Number(row[8]), log: row[9]! }));

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { databaseQualification, withQualifiedDatabase } from "../../db/test-qualification";
+import { claimQualificationTarget } from "../../db/qualification-target";
 
 vi.mock("../../footprint-resolver/__tests__/fixtures", async () => {
   const { InMemoryPhysicalBindingRepository, PhysicalBindingService } = await import("../../physical-binding/repository");
@@ -139,6 +140,7 @@ describe("R05 electrical identity durable boundary", () => {
 
   // B16-B item 5 (LB-4): opt-in via SIRKIT_DB_QUALIFICATION=1 + SIRKIT_DB_QUALIFICATION_URL — never .env.local, never DATABASE_URL.
   it.runIf(databaseQualification().enabled)("qualifies the same identity flow against isolated PostgreSQL", async () => {
+    await claimQualificationTarget(withQualifiedDatabase(), "electrical-identity-boundary"); // [B24-A4] D24-12, OD-201: the shared guard, before the first database statement
     process.env.DATABASE_URL = withQualifiedDatabase();
     const { PostgresDurableWorkflowRepository } = await import("../../durable-workflow/server-repository");
     const result = await exerciseDurableIdentity(new PostgresDurableWorkflowRepository(), () => new PostgresDurableWorkflowRepository());

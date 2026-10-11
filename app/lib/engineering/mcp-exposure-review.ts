@@ -27,7 +27,7 @@ export const INTENTIONAL_MCP_EXPOSED_TOOL_IDS: readonly string[] = Object.freeze
  * Admissible ids withheld from MCP by a reviewed decision, one reason comment per id (sorted). [B20 B3] OD-69: the two reads
  * whose only input is browser-only state, so no durable server source can serve them (each descriptor is unchanged; restoring
  * one needs an owner decision and a durable source for its state). [B20 B4] OD-82 / OD-87: all five proposals, so MCP exposure
- * is read-only in B20; restoring one needs an owner decision, a serving path and, for placement, a bounded engine host.
+ * is read-only in B20; restoring one needs an owner decision, a serving path and, for placement, a bounded engine host. [B24-D2, 2026-10-09] OD-235: a third category, B24-D2's paged board read - servable from durable state, withheld by choice (paged answers were never reviewed for MCP clients, OD-48, OD-54); restoring it needs an owner decision.
  */
 export const MCP_WITHHELD_TOOL_IDS: readonly string[] = Object.freeze([
   "sirkit.pcb.propose-bounded-edit",              // B4 (OD-82): seals the open editor's history head, lineage and DRC preset; no durable source holds them and apply re-verifies them against the live editor
@@ -37,4 +37,5 @@ export const MCP_WITHHELD_TOOL_IDS: readonly string[] = Object.freeze([
   "sirkit.schematic.inspect",                     // B3 (OD-69): the editor's SchematicState lives in browser storage; no durable table holds it (F4)
   "sirkit.schematic.propose-component-replacement", // B4 (OD-82): compiles against the editor's SchematicState and head mark, which are browser-only (as B3's OD-69)
   "sirkit.schematic.propose-tier1-edit",          // B4 (OD-82): compiles against the editor's SchematicState and head mark, which are browser-only (as B3's OD-69)
+  "sirkit.pcb.board-page-inspect",                // B24-D2 (OD-235): a choice, not an inability - it is servable from the durable board, but paged answers and their cursors were never reviewed for MCP clients (OD-48, OD-54)
 ].sort());

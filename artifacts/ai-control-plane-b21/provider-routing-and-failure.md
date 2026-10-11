@@ -658,7 +658,7 @@ checks it; for every other file the line is as of the base. C61-C72 and the re-a
 | C17 | `app/lib/agent/adapters.ts` | 321 | — | `export function agentAdapterForRole(` | a role's adapter; the coordinator's is agentAdapterFor's |
 | C18 | `app/lib/agent/adapters.ts` | 312 | — | `export const SPECIALIST_SDK_MAX_RETRIES = 0;` | a specialist's SDK retries |
 | C19 | `app/lib/agent/adapters.ts` | 112 | — | `maxRetries: this.maxRetries, timeout: 120_000` | the OpenAI client's retries per adapter (the coordinator's 2) |
-| C20 | `app/lib/agent/adapters.ts` | 213 | — | `new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: this.maxRetries })` | the Anthropic client's retries per adapter (the coordinator's SDK default) |
+| C20 | `app/lib/agent/adapters.ts` | 213 | — | `new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 120_000, maxRetries: this.maxRetries })` | the Anthropic client's retries per adapter (the coordinator's SDK default) [B24-A1, 2026-10-06] re-anchored in place: B24-A1 set the client's `timeout: 120_000` on this line (D24-10, OpenAI's value at C19), spelled before the retries so C19's anchor stays unique; the retries are unchanged |
 | C21 | `app/lib/agent/adapters.ts` | 87 | — | `stop: openAIStepStop(response, items)` | the OpenAI step's stop, from the judged list |
 | C22 | `app/lib/agent/adapters.ts` | 189 | — | `stop: anthropicStepStop(message.stop_reason)` | the Anthropic step's stop |
 | C23 | `app/lib/agent/adapters.ts` | 278 | — | `function openAIStepStop(` | OpenAI's status, incomplete reason and refusal part |
@@ -698,7 +698,7 @@ checks it; for every other file the line is as of the base. C61-C72 and the re-a
 | C57 | `app/lib/agent/adapters.ts` | 224 | — | `tool_choice: tools.length > 0 ? { type: "auto", disable_parallel_tool_use: true } : undefined,` | Anthropic: `auto`, never `any` / `tool` |
 | C58 | `app/lib/mcp/__tests__/b20-a5-provider-request-shape.test.ts` | 52 | — | `const OPENAI_PARAM_KEYS = ` | the pinned request key sets, untouched |
 | C59 | `app/api/chat/__tests__/b19-d-external-text-injection-route.test.ts` | 128 | — | `admission-control\.ts$` | the closure gate's reviewed exemption of the meters |
-| C60 | `.github/workflows/deterministic-manufacturing.yml` | 149 | — | `app/api/chat/__tests__/b21-e1-chat-provider.test.ts` | the route suite's one explicit CI entry |
+| C60 | `.github/workflows/deterministic-manufacturing.yml` | 150 | — | `app/api/chat/__tests__/b21-e1-chat-provider.test.ts` | the route suite's one explicit CI entry [B24-D1, 2026-10-09] re-pinned +1: B24-D1's prompt-to-gerber start step at `:32` (OD-30) |
 | C61 | `app/lib/ai-preferences.ts` | 176 | — | `typeof data.reason === "string" && providerRetryWithheld(` | the shared card's JSON 503 path withholds Retry the same way |
 | C62 | `app/page.tsx` | 6875 | — | `startNewRun: lastAiRetryRef.current,` | the Switch hands the kept closure to performProviderSwitch (it re-sends on the other provider) |
 | C63 | `app/lib/agent/orchestration/provider-policy.ts` | 61 | — | `const duplicate = duplicateKeyOf(raw);` | a key named twice refuses the whole map |

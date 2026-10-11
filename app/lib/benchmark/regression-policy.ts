@@ -84,7 +84,7 @@ export function evaluateRegressionResults(results: readonly BenchmarkResult[], s
   const runtimeBudget = REGRESSION_BUDGETS.find((budget) => budget.suiteId === suiteId && budget.metricId === "performance.elapsed_ms");
   if (runtimeBudget?.maximumP95 !== undefined && elapsedP95Ms !== null && elapsedP95Ms > runtimeBudget.maximumP95) reasons.push(`BUDGET_EXCEEDED:performance.elapsed_ms:p95=${elapsedP95Ms}`);
   if (!results.length) reasons.push("NO_RESULTS");
-  const unique = [...new Set(reasons)].sort();
+  const unique = [...new Set([...reasons, ...(statuses.some((status) => status === "passed" || status === "completed_with_unknowns") ? [] : ["NO_EVIDENCE_STATUS"])])].sort(); // [B24-B1, 2026-10-08] D24-14: a run with no passed or completed_with_unknowns status (no status at all included) is never read as a pass - NO_EVIDENCE_STATUS makes it insufficient_evidence unless a BLOCKING_, CRITICAL_ or BUDGET_ reason already blocks; REGRESSION_POLICY_VERSION is unchanged (the serialised policy is the suites and the budgets only)
   return { state: unique.some((reason) => reason.startsWith("BLOCKING_") || reason.startsWith("CRITICAL_") || reason.startsWith("BUDGET_")) ? "block" : unique.length ? "insufficient_evidence" : "pass", reasons: unique, statusDenominators, elapsedP95Ms };
 }
 

@@ -11,10 +11,10 @@ Labels: CONFIRMED = observed by running the named test on this machine on 2026-0
 
 | Observation | Value |
 |---|---|
-| Migrations applied | 29 (`0000`…`0028`), all in one `migrateDatabase` run |
+| Migrations applied | 29 (`0000`…`0028`), all in one `migrateDatabase` run [B24-closeout, 2026-10-10] superseded: B24-Fa's record, artifacts/ai-control-plane-b24/current-system-map.md:34. |
 | Statement chunks | 465 (from the feasibility probe; the ledger stores per-file counts) |
-| Wall clock | ≈0.5 s for all 29 files in-process |
-| Ledger rows | 29, `runner_version = sirkit.db-migration-runner.v1`, every `statement_count > 0` |
+| Wall clock | ≈0.5 s for all 29 files in-process [B24-closeout, 2026-10-10] superseded: B24-Fa's record, artifacts/ai-control-plane-b24/current-system-map.md:34. |
+| Ledger rows | 29, `runner_version = sirkit.db-migration-runner.v1`, every `statement_count > 0` [B24-closeout, 2026-10-10] superseded: B24-Fa's record, artifacts/ai-control-plane-b24/current-system-map.md:34. |
 | Public tables | > 100 (142 in the probe), `sirkit_schema_migrations` excluded from every fingerprint |
 | `project_members.relrowsecurity` | `true` |
 | Prerequisite report on a BARE instance (no shims) | refused `DB_MIGRATION_PREREQUISITE_MISSING`; `checkMigrationPrerequisites` = `extension:vector, role:authenticated, function:auth.uid` — nothing created silently |

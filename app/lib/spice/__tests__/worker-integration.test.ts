@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"; import { assertLiveResources } from "../../evaluation/live-suites"; // [B24-B3, 2026-10-08] D24-19, OD-209: the resource gate (the pinned ngspice install on a win32-x64 host), on this line so no line moves
 import { injectAuthorizedPrincipal, resetInjectedIdentity } from "@/app/lib/auth/test-support";
 import JSZip from "jszip";
 import { createSimulationProject } from "../project";
@@ -88,4 +88,5 @@ describe.runIf(LIVE)("isolated ngspice worker", () => { // [superseded 2026-10-0
     expect(body.check.status).toBe("pass");
     expect(body.model.validationStatus).toBe("smoke-tested");
   }, 15_000);
+  beforeAll(() => assertLiveResources("worker-integration")); // [B24-B3, 2026-10-08] with SPICE_WORKER_LIVE=1 and the pin or the host absent this block fails NOT EXERCISED before any case body runs, never a runner error
 });

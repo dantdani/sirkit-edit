@@ -26,7 +26,7 @@ const routedBoards = (): Array<{ key: string; board: PcbBoard }> => {
 };
 
 describe("B18-E E3 — board-inspect against the model's result budget", () => {
-  it("a placed board fits with margin; every recorded ROUTED board exceeds the budget, so the model would get no board facts", () => {
+  it("a placed board fits with margin; every recorded ROUTED board exceeds the budget, so the model would get no board facts", () => { // [B24-D2, 2026-10-09] board-inspect only: sirkit.pcb.board-page-inspect pages a routed board within the budget (OD-213, b24-d2-board-read); these assertions are unchanged
     expect(MAX_RESULT_CHARS).toBe(60_000);
 
     const placed = buildAutonomousGoldenBoard();

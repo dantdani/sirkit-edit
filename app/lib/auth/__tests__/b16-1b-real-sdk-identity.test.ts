@@ -26,7 +26,7 @@ const ORIGIN = "https://sirkit.example";
 const USER_ID = "7d1b2a4e-0000-4000-8000-sirkitqual01";
 const SESSION_ID = "9e8f7a6b-0000-4000-8000-sirkitsess01";
 const REFRESH = "sirkit-auth-qualification-refresh-sentinel";
-const PROD_ENV = { NODE_ENV: "production", NEXT_PUBLIC_SUPABASE_URL: SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: KEY, SIRKIT_EXPECTED_ORIGIN: ORIGIN } as const;
+const PROD_ENV = { NODE_ENV: "production", NEXT_PUBLIC_SUPABASE_URL: SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: KEY, SIRKIT_EXPECTED_ORIGIN: ORIGIN, SIRKIT_DEPLOYMENT_ENV: "production" } as const; // [B24-A1, 2026-10-06] + the deployment profile (OD-190)
 const SEL = { "x-sirkit-tenant-id": "local", "x-sirkit-project-id": "proj-1", "x-sirkit-branch-id": "main" } as const;
 const nowSec = () => Math.floor(Date.now() / 1000);
 

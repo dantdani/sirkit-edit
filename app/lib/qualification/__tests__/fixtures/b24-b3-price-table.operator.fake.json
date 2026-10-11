@@ -1,0 +1,9 @@
+{
+  "schema": "sirkit.live-price-table.v1",
+  "version": "1.0.0",
+  "currency": "XTS",
+  "prices": [
+    { "provider": "openai", "model": "gpt-fake-operator-b24", "inputPerMillion": "0.5", "outputPerMillion": "0.5" },
+    { "provider": "anthropic", "model": "claude-fake-operator-b24", "inputPerMillion": "0.5", "outputPerMillion": "0.5" }
+  ]
+}

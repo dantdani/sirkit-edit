@@ -4794,3 +4794,781 @@ control, tool or composition-root wiring was added. Live ordering stays BLOCKED-
     heading as recorded, LB-11's dated note on its runbook range and the README B2 row's dated note on its case counts. The verdict is
     the lead's: PARTIAL, its judgement unchanged by the closeout's nine factual corrections.
   - (4) PR #14's description is the closeout's summary for the owner, with no AI attribution footer or co-author line (owner rule).
+
+### B23 — merged (2026-10-06 local; lead)
+
+- PR #14 (`chapter/b23-external-manufacturing` -> `main`) merged normally as `57c3b29` at 06:50 UTC after all four checks passed on
+  `f663d71` (benchmark-core 3m43s, database-delivery 2m21s, page-browser-e2e 14m48s with both Playwright configs, prompt-to-gerber
+  17m09s; benchmark-nightly skipped). No auto-merge, no force-push. Verdict PARTIAL (`artifacts/ai-control-plane-b23/final-verdict.md`):
+  no provider admitted (LB-11), ordering visibly disabled (LB-12), physical evidence defined and none exists (LB-5). The merge tree
+  equals `f663d71`.
+
+### B24 — chapter start and discovery (2026-10-01/10-06 local; read-only workflows + lead; this commit)
+
+- Branch `chapter/b24-production-qualification` from main `57c3b29` (runbook `:28`: B23's closeout merged).
+- The discovery was drafted on 2026-10-01 over the tree at `50fe156` (B22-A1): seven read-only readers (environments and deployment,
+  the golden evaluation program, observability and replay, reliability, performance and accessibility, the live and physical gates,
+  prior records and the final report, the maps B24-F must produce), 82 gap candidates, one synthesizer that re-read every
+  defect-bearing fact and merged them into D24-1..40 (12 high, 23 medium, 5 low); OD-190..OD-222 drafted with safe defaults; LB-13..LB-17
+  proposed. Nothing was executed, sent or fetched.
+- Re-verification on the B23 tree `dfd51e3` (`b24-discovery-verify`, `wf_a8eafd9c-5d3`, twelve read-only verifiers and a synthesizer,
+  2026-10-05): 74 items (D24-1..40 and sections 0-8). Of the defects: 0 refuted, none fully closed, 24 stand, 5 stand with moved
+  citations, 4 changed since and 7 partly closed since (B22 and B23 work: the default-off computation and ordering switches, the
+  physical-evidence contract, the CI admission of b22-/b23- suites, the census 166/163/3/0 and the tool counts 47/36/9/27). 193 text
+  corrections proposed.
+- Audit (`b24-verify-audit`, `wf_5107d3ba-493`, five read-only auditors, 2026-10-05): every proposed correction, amendment and section-9
+  claim checked against the code at `dfd51e3`; 37 problems found (wrong attributions such as OD-151 and OD-152 to B22, a nine-suite
+  count given as eight, a credential seam called unwired that the provider exchange route reaches past admission, wrong line numbers,
+  overstated counts). One agent corrected each; the lead validated the result (every replaced text unchanged, unique and applicable in
+  order) and re-read eight of the new citations at `dfd51e3`.
+- The 193 corrections are applied in place; sixteen defects carry the re-verification's dated notes; section 9 is the reconciliation
+  with the lead's decisions as 9.6 (the database-delivery range, one set of webhook citations, D24-34 aligned to LB-1 and LB-13 with
+  OD-191, OD-174's open question assigned to B24-A3, and the numbering: OD-190..OD-222 and LB-13..LB-17 free).
+- B23's closeout (`b6c6b0d`, `f663d71`) landed after `dfd51e3` and was delta-checked against every citation of the page: four B23
+  discovery citations moved by one line and the statements about OD-160, OD-178 and OD-188 changed, each corrected in place, with a dated
+  note on D24-40; nothing else the page cites moved.
+- The verifiers wrote four scratch files of environment-variable names outside the repository; the lead deleted them.
+- Task drafts for the fifteen increments were prepared outside the repository (`b24-task-drafts`, `wf_6e22a4be-118`: a drafter, a
+  read-only reviewer and a reviser per increment, then a cross-task critic); the critic's twenty cross-task issues are applied before
+  B24-A1 launches.
+- Documents only: no production, test or generator file changed.
+
+### B24-A1 - environment profile, production-mode CI, health, readiness, configuration, flags (2026-10-06 local; increment workflow + lead; this commit)
+
+- Test-first on `chapter/b24-production-qualification` from `8664964`: the four `b24-a1-*` suites failed to load on the unmodified tree; with the new modules present but unwired, 20 of 37 failed, each counterexample for its reason (no profile, a ci profile and an origin-less read resolved; the MCP wrapper passed the blocker; the coordinator's Anthropic client had no timeout; the route reported `claude-opus-4-7` for an empty model; the diagnostic runner reached its install check with the switch set); then 47 / 47.
+- The profile and the blocker (D24-1 offline, OD-190): `SIRKIT_DEPLOYMENT_ENV`, `productionServingBlocker` at its two callers in place, the four production fixtures outside CI gaining the profile; the worker and public paths never call it.
+- The configuration (D24-10, OD-199): the digested `sirkit.deployment-configuration.v1` record, every provider SDK client in it with its timeout and retries; the Anthropic model setting refused rather than sent by both clients, with the refusal's own message; `adapters.ts:213` `timeout: 120_000`; `/api/ai/runtime` reporting what the clients send.
+- The flags (D24-11, OD-200): the 49-name inventory pinned against the tree and the owners, each recorded flag state checked against its owner; `SIRKIT_DIAGNOSTIC_RUNNER_DISABLED`, off-only, refusing every diagnostic run and every install check first.
+- CI (OD-222): `b24-` admitted by one directory filter; the `production-smoke` job (`next build`, `next start`, fail-closed probes) appended, PROPOSED until the lead's local production-mode run and its first CI run are green; no `next build` was run by the builder.
+- Health and readiness (D24-9, OD-198): `GET /api/health`, `GET /api/ready`; census 166 -> 168 by review; action records 106 -> 107; every pin moved in place with a dated note (page section 9), the eight CSVs regenerated.
+- Records: OD-190, OD-198, OD-199, OD-200, OD-222 and OD-217 (in part) as applied, OD-223 for A1's own choices; LB-13; the closure clauses; `environments-and-deployment.md`. Staging, production and every live step BLOCKED-LIVE-QUALIFICATION (LB-13).
+- Review round (2026-10-06): 14 confirmed findings (13 distinct) fixed test-first, the test-strength ones proven against seven deliberate breakages, each restored by hash; the four suites 54 / 54 (page section 8): readiness can no longer reach a real database (a guard port before every case, the database client faked) and its 2,000 ms bound and default port are exercised; the record covers every provider SDK client and its flag states are checked against the owners; the Anthropic model refusal says it sent nothing; the blocker order, the effort list and the ambient-model independence are pinned; the workflow table and the job-order case take later insertions in place; B23's `dfm-quote-flow.md:269` prose citation moved; the production-smoke statements say PROPOSED; the section-10 amendment lists the unnamed pins.
+- Check round (2026-10-06): two low findings fixed test-first. A later workflow insertion now changes only data: every inserting B24 task (A2, A4, B2, B3, C1, C2, C3, D1, D2) appends one row per contiguous group to the page's section-10 insertion table. A1's checks carry A1's lines (the old -> new table, C35, C47) through the rows, check each row's job and the line total since A1's 435, and find A1's filter line, the permissions block and B23's prose citation of the PGlite entry by content; that citation needs a dated note from each task whose rows moved it. A simulation of the nine tasks' 13 planned groups passes; each designed failure still bites (16 breakages caught, each restored by hash). The paste-ready handover for the nine task files is in section 13, and the edge cases left open are in section 15 (INFERRED). `b24-a1-environment-profile` 20/20; the four suites 55/55.
+- Lead close (2026-10-06):
+  - (1) The check round's own check raised one more low issue: case 11's "no `secrets.` reference" guard (`\bsecrets\.` over the whole
+    workflow) also matched B24-A2's planned `scripts/scan-secrets.ts` step. The lead closed it test-first: case 16 applies the guard
+    to the simulated planned workflow and failed on the old pattern (`a1lead-secrets-red2`); the guard is now a GitHub
+    `${{ ... secrets. ... }}` expression (`SECRETS_REFERENCE`), and case 16 pins that such an expression is still refused (`a1lead-secrets-green`,
+    with the three closeout tripwires, 47 tests).
+  - (2) The lead's local production-mode run of the `production-smoke` job's steps (`b24/smoke/smoke.sh`): a fresh detached worktree
+    holding the uncommitted A1 tree, no `.env*` file but `.env.example`, every live variable explicitly empty, dependencies installed as
+    CI installs them (`pnpm install --frozen-lockfile --offline`, pnpm 11.2.2, nothing fetched). `next build` exit 0 in 234 s;
+    `engine-worker.mjs` emitted, as the hashed asset `.next/server/assets/engine-worker.<hash>.mjs`; `next start` answered after 2 s;
+    the job's sixteen probe checks all passed (health 200; ready 503 naming the profile, Supabase and the database, without the
+    secret; ready 401 anonymous; autonomy 403 `AUTH_PRODUCTION_NOT_CONFIGURED`; sign-out 403 cross-origin and 503 same-origin; the
+    runtime report 200 with a `Content-Security-Policy` header). Two earlier attempts failed on the lead's environment, not on A1: Turbopack
+    refuses a `node_modules` junction that points outside the project root, and the scratchpad path pushed pnpm's deepest package past
+    Windows' 260-character limit; the run moved to a short worktree path. The worktree was removed afterwards, junctions as themselves.
+  - (3) The nine later task files that insert workflow lines (A2, A4, B2, B3, C1, C2, C3, D1, D2) carry the A1 handover paragraph, with
+    the instructions it overrides marked in place.
+  - (4) The lead's supplementary gates on the final tree (the sets the implementer did not run): `app/lib/pcb` without its three
+    real-process suites 977 passed, 4 skipped; the B14.4 AST gate 22; the confinement gates 375; tsc 0; eslint 0 on 35 files. The
+    implementer's own gates covered auth, `app/api`, MCP, the agent and orchestration, computation, engineering, the provider folder and
+    the project gates, all green, and all 21 generators with no drift.
+  - (5) Browser suites under the lock: the default configuration 47 of 48 - `e2e/prompt-to-gerber.spec.ts` failed before its body ran,
+    the Playwright worker exiting `0xC0000409` (0 ms) - and the orchestration configuration 2 of 4, F12's browser half timing out its
+    240 s wait for the resumed run (6.0 min against its usual 2.1) with F12b not run. Neither reproduced: each spec alone passed
+    (prompt-to-gerber 1.0 min; F12 2.1 min), and the orchestration configuration re-run passed 4 of 4 (3.0 min). A1 changes no fixture
+    path either test takes: the Anthropic client timeout applies to the real SDK client only, and the deployment profile never blocks a
+    non-production runtime. Recorded as not reproduced; CI on the pushed commit runs both configurations. The 31 evidence PNGs the
+    runs rewrote were restored from HEAD, all 32 equal by blob hash.
+
+### B24-A2 - headers, origins, secrets (2026-10-06 local; increment workflow + lead; this commit)
+
+- Test-first on `chapter/b24-production-qualification` from `1b2c08c`: the five `b24-a2-*` suites failed first (three failed to load; with the new modules present and no existing file edited, 26 of 42 red, each counterexample for its reason: no builder and the one image header; a previous worker secret, KiCad token or MCP key refused; 51 names read and undeclared, 33 of a declared class; the workflow's last job `production-smoke`); then green.
+- Headers (D24-5, OD-196): six headers on every path from `securityHeaders` (a named export of `next.config.ts`, the task's fallback), HSTS only for an https build-time origin, `poweredByHeader: false`; `e2e/security-headers.spec.ts` gains the served proof and `production-smoke` the probes, both PROPOSED until the lead's runs.
+- Origins (D24-6, OD-196): `supabaseAuthUrls` records the Site URL and the one redirect per profile; the app starts no Supabase flow that lands on the callback; the project's settings UNKNOWN and BLOCKED-LIVE-QUALIFICATION (LB-1, LB-13).
+- Secrets (D24-4, OD-195): previous values that only verify for the worker secret, the KiCad token and the MCP key, with the planned-rotation and leak procedures; the 80-row census and `.env.example` parity over the declared classes (OD-195 narrowed); the secret scan in three modes and the `secret-scan` CI job (PROPOSED until its first CI run); B23's two single-value seams recorded.
+- Records: OD-195 and OD-196 as applied, OD-224 for A2's own choices, the OD-30 amendment, the LB-13 note, the closure clauses, `edge-security.md`. The edge, the Supabase project and a real rotation BLOCKED-LIVE-QUALIFICATION (LB-1, LB-13).
+- Review round (2026-10-06): 16 confirmed findings (14 distinct) fixed test-first, the test-strength ones proven against eight deliberate breakages, each restored by hash (page section 8): no file skipped for a NUL byte any more (UTF-16 decoded; `pcb-delta.ts` and two tests were never scanned) and a blob git does not return fails the run; the rules widened to OpenAI's and GitHub's current forms and the project's connection strings (allowlist six -> eight test fakes); an empty `--staged` or `--history` run fails, and CI scans every commit of a pull request; the leak procedure and a seven-day maximum written; A1's page notes 49 -> 51; the page's records completed (section 13 in full, every gate run in section 10). One STOP for the lead: `b24-a1-environment-profile` case 16 re-applies A2's planned groups on top of A2's real rows (15 rows where 13 are pinned) - A2 does not edit A1's test logic; the proposed reviewed move is written and was probed green on the tree. Gates (page section 10): the qualification suites 112 of 113 (case 16, the STOP); `app/lib/auth/__tests__` 479 + 9 skipped; `app/api/__tests__` 1,059 of 1,059 with one `onTaskUpdate` timeout in B16.0's `b16-0-identity-header-gate` (alone: 6 / 6, the same timeout; recorded, not loosened); MCP 95 and 825; orchestration 460; computation 300 + 18 skipped; manufacturing providers 387; B14 22; tsc 0; eslint 0 on 17 files; three generators with no drift; the tree scan and `--history 57c3b29..HEAD` clean.
+- Lead close (2026-10-06):
+  - (1) A2's first implementer run did the increment but its gate run held `app/lib/manufacturing-providers/__tests__` for about 38 minutes
+    (B23-D case 8, 2,271 s) and never returned; the workflow's retry found the tree dirty and stopped, as the single-writer rule requires,
+    and the review and fix rounds then worked on that tree. The fix round's run of the same set passed 387 of 387: the stall did not
+    reproduce, and its cause is UNKNOWN (recorded in edge-security.md section 12).
+  - (2) The review's one STOP item - B24-A1's case 16 simulated A2's planned rows on top of A2's real ones (15 rows where 13 were pinned)
+    - is closed by the lead's reviewed move of case 16, written by the fix round and probed green: only the tasks still to land are
+    simulated, the counts derive from them, and A2's job is found by its row. The qualification suites pass 113 of 113, and a later task
+    that lands needs no further move (environments-and-deployment.md section 15).
+  - (3) The browser run found A2's new framing case failing (a page response event Chromium never emits for a refused frame; reproduced
+    alone). The lead fixed it in place: the headers by a direct request, a positive control, the frame check unchanged; the spec alone 8
+    of 8. The default configuration was 53 of 54 before the fix (10.3 min) and the orchestration configuration 4 of 4 (2.6 min).
+  - (4) The independent check's three new low issues are recorded in edge-security.md section 12, not iterated.
+  - (5) The lead's supplementary gates: `app/lib/pcb` 977 passed, 4 skipped; B14.4 22; the confinement gates 375; the qualification
+    suites 113; tsc 0; eslint 0 on 18 files. `.next/` (889 MB, recreated by the lead's earlier browser runs) was removed first.
+  - (6) B24-A1's first CI run (`1b2c08c`, run 37499322603) was green in every job, `production-smoke` included (2m16s: next build
+    99 s, next start 2 s, engine-worker.mjs emitted, every probe as pinned): D24-1's production-mode half is closed offline, with dated
+    notes under OD-190, in LB-13's row and on A1's README row.
+
+### B24-A3 - abuse controls (2026-10-08 local; increment workflow + lead; this commit)
+
+- Test-first from `b3b6b05`, A3a then A3b in one run. The six part-1 suites failed first on `b3b6b05`'s sources (6 files, 32 cases red: request 301 answered 200; a throttled sign-in showed the credentials message; the provider fake counted 241 calls; `providerCredit` false; the engine got `localRefinementPasses: 3`; the page was absent). The part-2 suites failed first on the A3a tree (11 cases, twice; the final suites again in the review round, 16 cases).
+- Part 1: public windows on the four anonymous rows, the trusted-header rule, the `embedding` meter, the credit and `expensive` declarations, `abuseLimitViolations`, the preview's work bound, and the sign-in 429 message.
+- Part 2: per-principal windows on the 40 authenticated gated rows (60 / 50 / chat 60); Q8 answered with 0.
+- Review round (2026-10-08): 14 confirmed findings fixed test-first. The five test-strength findings were proven against eight deliberate breakages, each restored by sha256. The fixes:
+  - the windows and the meter on the real clock (the frozen browser clock would have refused agent-execution's 61st chat run);
+  - the preview's ceilings and measured bounds (at most 1.5 s per admitted request, against more than 900 s);
+  - IPv6 keyed by /64, and the lockout stated as standing with the header set;
+  - `public_signin_unlimited`;
+  - A2's page total;
+  - the A3b red record and the measurement evidence corrected.
+- Gates green (see `abuse-controls.md` section 20). Census, tool counts and action records unchanged. Live halves BLOCKED-LIVE-QUALIFICATION (LB-13, LB-1, LB-2).
+
+**8. Superseded statements for B24-F:**
+- B23 `tier3-vocabulary.md:177-178, :238-241, :343-345`
+- B23 `unknowns-and-owner-decisions.md:44`
+- B23 `final-verdict.md:131-132`
+- `admission-control.ts:19`'s key-kind enumeration (listed, not edited)
+- B20 `final-verdict.md:67-68` and `mcp-server-proposals.md:258-264` (F1)
+- B22 `discovery.md:360, :796` and `named-computations.md:161, :404`
+
+**9. Live blockers** (dated notes only, no new row):
+- LB-13: [B24-A3, 2026-10-08] LB-13 (B24-A3): still BLOCKED-LIVE-QUALIFICATION for a real edge or proxy that overwrites one of the four allow-listed client headers, for per-client keying behind it, and for several instances, each with its own windows. Proven offline by `b24-a3-abuse-limits`. Unblocks when the owner names the platform (OD-190).
+- LB-1: [B24-A3, 2026-10-08] LB-1 (B24-A3): sign-in throttled against a live Supabase project (its own auth limits beside the app's 30 / 10 windows) is BLOCKED-LIVE-QUALIFICATION.
+- LB-2: [B24-A3, 2026-10-08] LB-2 (B24-A3): OpenAI's own 429 and `insufficient_quota` under the `embedding` meter, and how many HTTP requests one call becomes with the SDK's retries, are BLOCKED-LIVE-QUALIFICATION (OD-216).
+
+**10. Lead runs and decisions:**
+- **Browser runs:** run `playwright.config.ts` once, with `e2e/agent-execution.spec.ts` (the regressions-1 path) and `e2e/security-headers.spec.ts`, then `playwright.orchestration.config.ts` once, each with no vitest running. Neither ran here, and no `next dev`, `next build` or `next start` ran.
+- **Sign-in UI:** the sign-in message is the only UI change. `app/signin` is outside B17-A's control roots, and the control-inventory generator showed no diff; the browser suite is yours.
+- **Preview restriction:** the public preview now refuses polygon outlines and boards above 30 footprints. That is OD-225 (d) for the owner.
+- **Older meters on the frozen clock (inferred, not checked):** the B21 LLM-provider meter and B20's distributor meter, which predate A3, still read `Date.now()` under the frozen clock. Recorded on the page, section 19.
+- Lead close (2026-10-08):
+  - (1) A3 ran three times: the first two implementer runs were cut off (an account usage limit on 2026-10-06, a session end on
+    2026-10-07) after building most of A3a; the third adopted their 30 files, verified each against the task by sha256 and the logs,
+    confirmed the recorded red runs, and finished A3a and A3b. No other writer changed the tree.
+  - (2) The independent check of the review fixes raised one more medium issue on the anonymous preview: a footprint's
+    `allowedRotations` (refined value by value inside the uninterruptible first candidate) and `pinPadMappings` were not counted. The
+    lead closed it test-first (`b24-a3-placement-bound` case 7: 1,000 rotations admitted, red; then 413 naming the bound for more than 4
+    rotations, a rotation other than 0, 90, 180 or 270, more than 128 mappings in one footprint or 600 in all; the B24 suites and
+    `b20-b4-stop-evidence` 176 of 176). The check's other new item, the shared per-client window of an IPv6 /64, is recorded on the page.
+  - (3) The lead's close (`b24/lead-close.sh a3 yes`): `app/lib/pcb` 977 passed, 4 skipped; B14.4 22; the confinement gates 375; the
+    B24 suites 168; tsc 0; eslint 0 on 26 files; the default browser configuration 54 of 54 (4.9 min, `agent-execution`'s chat runs
+    inside the new per-principal windows) and the orchestration configuration 4 of 4 (2.5 min); 31 rewritten evidence PNGs restored, all
+    equal by blob hash.
+
+### B24-A4 - data layer: roles, row security, TLS, test isolation, rollback, recovery (2026-10-08 local; increment workflow + lead; this commit)
+
+- Test-first from `3cd7d6e`, A4a then A4b in one run.
+  - Pre-edit counterexamples on PGlite (page section 1):
+    - P1: the emulated `anon` and `authenticated` each read the seeded `bom_snapshots` row.
+    - P2: no rollback path; any flag fell through to an apply.
+    - P3: the five unscoped DELETEs emptied a foreign tenant's aggregate, its readiness row included.
+  - A4a's suites failed first: two failed to load, and row security had 7 of 8 red. A4b's failed after A4a was green (13 of 13).
+- A4a:
+  - 0031 (no policy, on 142 tables and the ledger);
+  - `.enableRLS()` on 142 declarations, and `verifyDefaultDenyRls`;
+  - the TLS rule at the five clients (drizzle-kit recorded as unsupported);
+  - the shared guard, with the eight suites awaiting it first;
+  - `schema-integrity` scoped to its run;
+  - the acceptance-driver check.
+- A4b:
+  - the reviewed rollback (`drizzle/rollback/`, classes, `--rollback --confirm`);
+  - the logical dump and restore;
+  - the connection-loss cases: the trusted context rejects and no handler runs; appends leave no partial row and retry exactly once.
+- Review round (2026-10-08): ten confirmed findings (one medium, nine low; two are one defect), fixed test-first. 9 of 46 cases were red first. The three test-strength findings were proven against seven deliberate breakages of the source, each restored by sha256. The fixes:
+  - the dump refuses a role that row security would empty;
+  - FORCE counts as hiding rows from an owner;
+  - `requireNoPublicTable` is checked before the claim;
+  - cleanup hooks run only once the target is admitted;
+  - the driver's first-`@` host reading;
+  - a wider migration guard and TLS census.
+- Gates green (page section 16).
+  - database-delivery: 20 files passed and 3 skipped; 179 tests passed and 12 skipped; 95 s locally, about 1.6 minutes of its 15-minute limit (OD-30; about 13.4 minutes of headroom; CI's runner is slower, INFERRED).
+  - Migrations 31 -> 32. Census, tool counts and action records unchanged.
+  - Live halves BLOCKED-LIVE-QUALIFICATION (LB-14).
+
+**9. LB-14** (append after LB-13 at `LIVE_BLOCKERS.md:19`; no LB-14 row or `liveBlockers` line exists at `3cd7d6e`):
+
+| LB-14 | Database platform: Data API exposure, roles, backup, PITR, failover, restart (OD-217; runbook B24-A `:1031`, `:1033`, `:1037`, B24-D `:1103`) | BLOCKED-LIVE-QUALIFICATION | B24-A4: offline PGlite proofs - 0031's default-deny row security against the emulated Data API grants (`b24-a4-rls-default-deny`), the TLS rule at every postgres-js client (`b24-a4-database-tls`), the shared test-data guard (`b24-a4-test-isolation`), the reviewed rollback of the newest migration (`b24-a4-rollback`), the logical dump and restore and the connection-loss cases (`b24-a4-restore`); `database-and-recovery.md` (0031's owner pre-apply step, the PROPOSED application role, the recovery runbook) - nothing applied to a live database | the owner supplies an isolated, disposable project, or the staging or production project's settings (Data API exposure), grants and role attributes and backup plan (schedule, PITR window), and runs 0031's pre-apply check on it (OD-191, OD-192, OD-194) |
+
+`PROGRAM_STATE.json` `liveBlockers` line: `"database platform (Data API exposure, roles, backup, PITR, failover, restart): BLOCKED-LIVE-QUALIFICATION (LB-14)"`
+
+**10. Superseded statements for B24-F** (A4 edits none of them; page section 13):
+- `drizzle/0027_project_membership.sql:7`, the header's "Rollback: see the DOWN section at the bottom of this file";
+- the commented DOWN sections at `drizzle/0027_project_membership.sql:57` and `drizzle/0028_bom_project_ownership.sql:62`;
+- the "FORWARD-ONLY" headers at `drizzle/0028_bom_project_ownership.sql:3`, `drizzle/0029_part_offers_mpn.sql:3` and `drizzle/0030_atomic_revision_status_events.sql:3`;
+- `artifacts/ai-control-plane-b16-0/migration-and-rollback.md:29-30`;
+- `artifacts/ai-control-plane-b16-closeout/migration-delivery-contract.md:43`, its command list;
+- none other from the review round.
+
+**11. Lead runs:**
+- No UI changed. The B17-A control-inventory generator showed no diff, so no browser run is needed.
+- No local production-mode step is needed: task A4 asks for none, and nothing ran `next build`, `next start` or `next dev`. `client.ts` imports the pure `connection-security.ts`, so the next CI run of `production-smoke` covers the build.
+- No step touched a live database, and no qualification marker was set.
+- Lead close (2026-10-08): the fast increment form (two merged review lenses with their skeptics, then the fix round; no post-fix
+  check stage). The lead's close (`b24/lead-close.sh a4 no`; no UI or served change, so no browser run - CI runs both configurations):
+  `app/lib/pcb` 977 passed, 4 skipped; B14.4 22; the confinement gates 375; the B24 suites 175; tsc 0; eslint 0 on 30 files. No real
+  database was contacted: every proof ran on PGlite in-process.
+
+### B24-B1 - the golden evaluation catalog (2026-10-08 local; increment workflow + lead; this commit)
+
+- Test-first from `72c1376`:
+  - Run 1, module absent: both suites failed to load (`Cannot find module '../../evaluation/golden-catalog'`).
+  - Run 2, module present, no fix, no artifacts, no page: 5 failed, 11 passed. These were catalog cases 5, 9, 10 and 11, and score-separation case 5.
+  - The stage-09 counterexample `evaluateRegressionResults([<no gates>], ["blocked_by_prerequisite"], "pull_request_correctness")` answered `{ state: "pass", reasons: [] }`.
+- The score lines, verbatim:
+  ```text
+  deterministic offline: incomplete - covered 18, in part 0, missing 1, blocked 0, failing 0, not applicable 0; outside pull-request CI 6; live blockers none
+  model-in-loop: BLOCKED-LIVE-QUALIFICATION - covered 0, in part 0, missing 0, blocked 19, failing 0, not applicable 0; outside pull-request CI 0; live blockers LB-2, LB-7, LB-9
+  browser E2E: incomplete - covered 8, in part 4, missing 4, blocked 0, failing 0, not applicable 3; outside pull-request CI 0; live blockers LB-1, LB-8, LB-13
+  database-backed: incomplete - covered 3, in part 0, missing 5, blocked 0, failing 0, not applicable 11; outside pull-request CI 0; live blockers none
+  external-provider staging: BLOCKED-LIVE-QUALIFICATION - covered 0, in part 0, missing 0, blocked 6, failing 0, not applicable 13; outside pull-request CI 0; live blockers LB-1, LB-11, LB-12, LB-13, LB-15, LB-16
+  physical-hardware validation: failing - covered 0, in part 0, missing 0, blocked 3, failing 1, not applicable 15; outside pull-request CI 0; live blockers LB-3, LB-5, LB-10, LB-17
+  ```
+- Review round (2026-10-08): nine confirmed findings (seven distinct), fixed test-first.
+  - 5 of 16 cases were red first.
+  - The four test-strength findings were proven against eleven deliberate breakages (eight in the helper, one in the module, two in the page), each restored by sha256.
+  - The real generator ran twice against a scratch register holding the three rows, with zero drift.
+- Gates green except case 5, which waits on the register rows:
+  - the qualification folder 190 of 191;
+  - orchestration 460;
+  - manufacturing providers 387;
+  - mcp 825;
+  - the small set 109;
+  - the import gates 29;
+  - benchmark:validate 63 packages;
+  - tsc 0, and eslint 0 on 7 files.
+- Census and counts unchanged. Every live row stays BLOCKED-LIVE-QUALIFICATION except the failing sandbox-escape physical row, which is recorded (LB-10).
+
+**8. Review `eval-catalog.md`** (417 lines). Pay particular attention to the artifacts bullet, section 15's live-row bullet and section 16.
+
+**9. After your record edits**, re-run:
+- `app/lib/mcp`: b20-a2-negotiation reads `OWNER_DECISIONS.md` and b20-a3-live-reread reads `EXECUTION_LEDGER.md`;
+- `app/lib/agent/orchestration/__tests__`: the page suites read `PROGRAM_STATE.json`;
+- `app/lib/qualification/__tests__`: case 5 reads the register.
+
+No browser run, no B17-A inventory run and no local production-mode run is needed: no UI, route or served change.
+
+**10. Commit and push.**
+- Stage these 11 files:
+  - `app/lib/benchmark/regression-policy.ts`
+  - `app/lib/manufacturing-providers/__tests__/b23-d-physical-evidence-contract.test.ts`
+  - `artifacts/ai-control-plane-b23/physical-evidence.md`
+  - `app/lib/evaluation/golden-catalog.ts`
+  - `app/lib/qualification/__tests__/_ci-admission.ts`
+  - `app/lib/qualification/__tests__/b24-b1-catalog.test.ts`
+  - `app/lib/qualification/__tests__/b24-b1-score-separation.test.ts`
+  - `artifacts/ai-control-plane-b24/eval-catalog.{csv,json,md}`
+  - `scripts/generate-b24-eval-catalog.ts`
+
+  Also stage your record files.
+- Commit as `Dandi Desta <dandidesta82@gmail.com>` with no AI trailer, run the staged-content secret scan, push, and never merge.
+- Lead close (2026-10-08): the fast increment form. The implementer left `b24-b1-catalog` case 5 red by design: it needs LB-15, LB-16
+  and LB-17 as rows of the lead-only register. The lead appended them (with their `PROGRAM_STATE.json` `liveBlockers` lines) in these
+  records, then ran the catalog generator twice: both runs printed "Wrote golden evaluation catalog 1.0.0 (114 rows)", and two more
+  after the rows were final did the same, with `eval-catalog.csv` sha256 `6d2b11868f02d082…fd97e` and `eval-catalog.json`
+  `8262dbe0da09afe5…d21c3` unchanged each time (the bytes the implementer rendered). The lead's close: pcb 977 passed, 4 skipped;
+  B14.4 22; confinement 375; `app/lib/qualification/__tests__` 191/191 (case 5 green with the rows); tsc 0; eslint 0 on the 7 code
+  files. No browser run: B1 changes no page or served behaviour.
+
+### B24-B2 - CI admission and the missing areas (2026-10-08 local; increment workflow + lead; this commit)
+
+- **Test-first from b0af256:** guard 5 failed and 2 passed (cases 1, 3, 4, 5, 7); corpus case 1 red; power-ground case 10 red.
+- **Local run of the 36:** 431 passed, 15 skipped, 43.81 s.
+- **Score lines:**
+  ```text
+  deterministic offline: failing - covered 18, in part 0, missing 0, blocked 0, failing 1, not applicable 0; outside pull-request CI 1; live blockers none
+  model-in-loop: BLOCKED-LIVE-QUALIFICATION - covered 0, in part 0, missing 0, blocked 19, failing 0, not applicable 0; outside pull-request CI 0; live blockers LB-2, LB-7, LB-9
+  browser E2E: incomplete - covered 8, in part 5, missing 3, blocked 0, failing 0, not applicable 3; outside pull-request CI 0; live blockers LB-1, LB-8, LB-13
+  database-backed: incomplete - covered 3, in part 0, missing 5, blocked 0, failing 0, not applicable 11; outside pull-request CI 0; live blockers none
+  external-provider staging: BLOCKED-LIVE-QUALIFICATION - covered 0, in part 0, missing 0, blocked 6, failing 0, not applicable 13; outside pull-request CI 0; live blockers LB-1, LB-11, LB-12, LB-13, LB-15, LB-16
+  physical-hardware validation: failing - covered 0, in part 0, missing 0, blocked 3, failing 1, not applicable 15; outside pull-request CI 0; live blockers LB-3, LB-5, LB-10, LB-17
+  ```
+- **OD-30 arithmetic:** as under OD-30 above.
+- **Review round:** ten confirmed findings (seven distinct), fixed test-first.
+  - Red first: corpus case 5, guard cases 8 and 9, and A1 case 17 reproduced.
+  - Two deliberate spec breakages were caught and restored by sha256.
+  - The case-17 move v2 was checked on a temporary copy at the tree and at six later landing points.
+- **Gates:**
+  - G1 616/634 (18 skipped); agent 425; orchestration 460; engineering 1,107;
+  - qualification and pages 315 passed, 1 failed (A1 case 17); the corpus flagged run red on case 4;
+  - tsc 0; eslint 0 on 11 files; catalog generator zero drift; B17 inventory and toolability no drift.
+- **Census and counts:** unchanged.
+- Lead close (2026-10-08): the fast increment form, with three STOPs the implementer handed up. (1) A1 case 17: the lead reviewed the
+  implementer's v2 move (`stillPlanned()`, the tree's own PGlite line instead of `:302`, the noting tasks derived step by step, a
+  synthetic insertion once no remaining task moves the entry) and applied it in place with its dated `[B24-B2 STOP]` note; the
+  qualification folder then passed 212, 3 skipped (the corpus's flagged cases), and A1's `it(` count stays 20. (2) The red corpus:
+  option (c), recorded and not excused; D24-41 opened and owned by B24-D1 (the CD-9 executor), recorded under OD-204. (3) The
+  member-pin counterexample: the delete planner is shared with the user's own delete, so the change is the owner's; D24-42 opened and
+  OD-229 proposed (recommended default: fail closed on the agent path), and the catalog's power-ground offline row stays `failing`.
+  The lead's close: pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification 212 passed, 3 skipped; tsc 0; eslint 0 on 12
+  files; the browser default configuration 55 passed in 4.8 min (the `[B24-B2]` order case green, 8.3 s) and the orchestration
+  configuration 4 passed in 2.5 min; 32 evidence PNGs restored by blob hash, 0 mismatched.
+- Records repair (2026-10-08): the lead found that B24-A3's, B24-A4's and B24-B1's records had copied their reports' later sections
+  (numbered report headings and README-row copies) into `OWNER_DECISIONS.md` inside OD-197, OD-225, OD-201, OD-226 and OD-227. They
+  were removed (README.md holds the rows), and three amendments that had landed only there now stand under their own headings:
+  B24-A3's answer under OD-174 (B23-A2), B24-A4's LB-14 line under OD-217 and B24-A4's database-delivery time under OD-30 (dated note
+  under OD-217). The lead's records script now ends an OD body at a numbered report heading or a README row.
+
+### B24-B3 - scenario map, honest live suites, the model-in-loop command offline (2026-10-08 local; increment workflow + lead; this commit)
+
+Test-first on `chapter/b24-production-qualification` from `4738aa3`, one run in two tagged halves (D21). B24-B3a: the two suites failed first with their modules absent (`b3-red-1-b3a`); `app/lib/evaluation/scenario-map.ts` and its generator map the twenty scenarios (7 demonstrated, 4 offline only, 5 in part, 2 by refusal, 1 by recorded deviation, 1 blocked; the generator refused once on an unresolved cite and wrote nothing, then wrote twice with no drift); `app/lib/evaluation/live-suites.ts` registers the seven opt-in live suites and B24-B2's corpus gate; the census holds 19 line-start gates in 16 files to four kinds; the seven suites were repaired (`assist-live` on its flag with an editor, the selector and Anthropic - its old request refused 400 `AUTH_PROJECT_SELECTOR_REQUIRED` offline with zero model calls; `b19-e-live-contract`'s and the canary's vacuous passes gone; the oracle on the routed demo behind a NOT MEASURED control; `worker-integration` and B22's two gated, `worker-integration` admitted at `deterministic-manufacturing.yml:292`). Counterexamples with each flag "1" and every resource empty: before, `assist-live` 4 skipped, `b19-e-live-contract` 2 passed, `b16-1b-live-qualification` 1 passed 9 skipped (each exit 0); after, each exit 1 `NOT EXERCISED` with no case body run; after only, the oracle with a missing absolute `KICAD_CLI` and the three ngspice suites, each exit 1 `NOT EXERCISED`. B24-B3b: the suite failed first (`b3-red-1-b3b`), then with the new modules and the old command - case 1 `B24_B3_LIVE_ADAPTER_BUILT`: with the flag "1" and no key the command built adapters (`b3-red-2-b3b-command`); the command now refuses a scripted agent and an absent key (exit 3) and runs only with an owner price table and a cap (exit 2), each request priced at its worst case (`app/lib/evaluation/live-spend.ts`, the one price table, D1); `both` runs the two-provider capsule (full-circuit-creation, schematic on Anthropic); `--contract-turns` forces one tool per provider over `maxRetries: 0` clients - the sixth SDK importer, `b21-a-import-gates` and `b20-a5-connector-tripwires` T2/T4 moved by review, and `b24-a1-configuration` case 14's expected site list moved pending the lead's decision (a STOP item). A review round, test-first: the run is priced and metered at the models it calls (the orchestration's replay-pinned models, the turns' configured ones), the command's accepted path, the spend wrapper's failure branches and the in-flight reservation are tested, a contract turn carries the 4096-token ceiling and a cut-short turn is `incomplete`, the early-return detector resolves derived consts, and the registry no longer says the old `assist-live` request went to a provider - each failing first (`b3fix-red-1`; re-created in `b3fix2-r-*`) and each test-strength case shown to catch a deliberate breakage (`b3fix-mut-*`, `b3fix2-m-*`). Gates after it: the B24 suite folder 25 files 237 passed 3 skipped; orchestration 49 files 460 passed; computation 300 passed 18 skipped; acquisition 214 passed 2 skipped; the named singles 244 passed 18 skipped; llm, the connector tripwires, route vocabulary, import gates and B22's closeout 56 passed; B14.4 and the process gate 27 passed; the pages' readers 300 passed 3 skipped; tsc 0; eslint 0 errors (one pre-existing warning); every exit 0. Census 168 / 165 / 3 / 0 and counts 47 / 36 / 9 / 27 unchanged. Every live step BLOCKED-LIVE-QUALIFICATION; nothing live ran. `scenario-map.md`.
+- Lead close (2026-10-08): the fast increment form (the fix agent stalled once and was retried by the workflow; its second pass found
+  the first pass's work in the tree, re-created each defect against it and restored every file by sha256). The one STOP item,
+  `b24-a1-configuration` case 14 (B24-A1's suite, a pin B3's task did not name): the lead accepted the move (option A, OD-230 (n)).
+  The sixth SDK client construction site is the record-only command's contract-turn module, reached only through `await import(...)`
+  after the command's refusals and outside the deployment record; the lead made the case's title truthful in place and replaced B3's
+  two notes with one dated `[B24-B3 STOP]` note on each line. The lead's close: pcb 977 passed, 4 skipped; B14.4 22; confinement 375;
+  qualification 237 passed, 3 skipped; tsc 0; eslint 0 on 27 files. No browser run: B3 changes no UI and no browser spec.
+
+### B24-C1 - durable traces: the run trace and the LLM call record (2026-10-08 local; increment workflow + lead; this commit)
+
+Test-first on `chapter/b24-production-qualification` from `a405db9`, one run in two tagged halves (D21). Pre-edit probe on `a405db9`: a completed chat request under the fixture runtime left 0 `agent.run-trace.v1` heads, and a public parts search made its embedding call and left 0 `llm.call-record.v1` heads (both expected 1). B24-C1a: the two suites failed first with their modules absent; `run-trace-store.ts` keeps the validated trace as `agent.run-trace.v1` (compare-and-set, no outbox, replay per trace id, every load re-verified), and `app/api/chat/trace-runtime.ts`, imported in place on `route.ts:40`, binds a synchronous sink through `setAgentTraceSinkFactory` that schedules one write per finalized trace and counts five closed failure classes - no B11-scanned file edited, the stream's bytes unchanged (B21-B's digest); one database-delivery line (`:340`) moved B21's C49, C93, C94 and `ci-admission.md:185` +1 in place, with A1's insertion-table row; the B11 retention page carries a dated note. B24-C1b: the suite failed first with the seam absent; `llm-call-record.ts` (pure) wraps the four provider-call points in place (`router.ts:33, :38`, `embeddings.ts:50-53`, `parts-search.ts:495`), the three route wrappers enter the scope in place (`route-handlers.ts:43, :354, :358, :446, :586, :590`), and `instrumentation.ts` binds the durable sink (`llm.call-record.v1`); the 22 derived paths were each driven through their real handler with fake SDKs, one record per call. Two review rounds, each test-first on the reviewed tree: the first made the seam's error identity, the stream's done chunk and the call-record runtime's serial appends testable and fixed them, and gave vitest one setup file that removes an ambient `DATABASE_URL`; the second keyed the run-trace store by the scope as the substrate stores it (NFC, trimmed; the chat route's own identifier rule already refused a padded id before its recorder - CONFIRMED and pinned), moved the reserved operator tenant id outside the selector alphabet (`~sirkit-operator`, so no authenticated selector can name it) and recorded that a trace warning may carry up to 80 characters of a model-chosen tool name. Suites `b24-c1-durable-trace` (16), `b24-c1-durable-records-pglite` (6), `b24-c1-llm-call-record` (14 `it(` and one `it.each`, 36 tests): 58 / 58; the gate sets re-run on the final tree (`observability-and-replay.md` section 16; one load-timeout run and one tripwire hit on C1's own test in the first round, both recorded); tsc 0; eslint 0 on 17 files; five generators no drift. No migration, census, tool-count, classification or flag move; every live step BLOCKED-LIVE-QUALIFICATION (LB-13, LB-14, LB-2, LB-7, LB-9).
+- Lead close (2026-10-08): the fast increment form, with a recovery. The implementer finished every deliverable (its page drafts and
+  gate logs on disk) but stalled at its final gate; the harness's retry started a second implementer that stopped on the dirty tree,
+  so the run's recorded "implementation report" is that stop text, and the records come from the page's section 18 and the fix
+  reports. The two review lenses read the real tree (14 findings); the skeptics confirmed 10 and the first fix pass closed them
+  test-first (the seam's error identity, the stream's done chunk, the runtime's serial appends, vitest's `DATABASE_URL` guard, the
+  page's gate claims) with eleven gate sets re-run, of which the engineering set was cut by a session restart with its two AST gates
+  timed out under load (recorded; re-run green in the second pass). The resumed run re-verified the 14 against the fixed tree: 3
+  still held (the padded-scope keying of the run-trace store, the reachable operator scope, the model-chosen tool-name text in
+  warnings) and the second pass closed them test-first, with every gate set green and the chat-level half of the first refuted by the
+  route's own identifier rule and pinned. The lead's close: pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification 289
+  passed, 3 skipped; tsc 0; eslint 0 on 16 files; the browser default configuration 55 passed (8.7 min; every chat spec now runs with
+  the chat route's durable trace sink bound) and the orchestration configuration 4 passed (2.8 min); 32 evidence PNGs restored by
+  blob hash, 0 mismatched. The call-record sink's browser path was NOT observed: no browser spec names `/api/parts/search` or
+  `/api/pcb/footprints/search` and none opens the build-library panel that calls them (a static check of `e2e/` and the panel's test
+  ids), so no call record was written by the browser run - recorded, not claimed. `instrumentation.ts`'s binding is first built by
+  CI's `production-smoke` on this commit.
+
+### B24-C2 - attribution, cost, latency, retention, redaction (2026-10-08 local; increment workflow + lead; this commit)
+
+Test-first on `chapter/b24-production-qualification` from `4ec18eb`, one run in two tagged halves (D21). B24-C2a: `b24-c2-attribution` and `b24-c2-cost` failed first with their modules absent; `run-trace-attribution.ts` keeps one `sirkit.agent-run-trace-attribution.v1` per validated trace (`agent.run-trace-attribution.v1`, compare-and-set at revision 0, no outbox, replay per trace id, every load re-verified; closed keys, digests, ids, classes, counts and bounded numbers only, `findSecretShapedPath` over the document), `trace-salt.ts` one `agent.trace-salt.v1` per scope (OD-232), `run-attribution-collector.ts` the route's passive observers (the sink wrapped for monotonic offsets and the validated document, the coordinator adapter for the SDKs' `_request_id`, the emit for the first text delta, the refused-call classes and the answer), `app/api/chat/attribution-runtime.ts` the composition root (imported in place on `route.ts:35`; the five other route edits in place on 398, 427, 437, 463, 486; the route keeps its 562 lines), `model-price-table.ts` the one table (`MODEL_PRICE_TABLE` null) and `priceUsage` over B3's schema and validator (D1), the adapters' `providerRequestId` in place (`adapters.ts:88, :190`; `contracts.ts:233`), and `instrumentation.ts` publishes A1's configuration digest (the chat closure may not import the record). B24-C2b: `b24-c2-retention` and `b24-c2-retention-pglite` failed first with no policy and no port, `b24-c2-redaction` 2 / 10 on the three unredacted stores; `retention-policy.ts` names every class (a 34-type census), `durable-workflow/retention.ts` the port, planner and PostgreSQL implementation (`getDb()` only, one transaction per aggregate, `mixed_commit` and `outbox_in_flight` refused whole), `retention-cli.ts` and `scripts/retention-purge.ts` the dry-run-by-default CLI with `--apply --confirm <planDigest> --as-of` and closed flags; `mint.ts:181`, `spice/project.ts` and `persistence.ts:3, :40`, `llm/errors.ts:183` take the redaction authority in place. One database-delivery line (`:341`) moved B21's C49, C93, C94 and `ci-admission.md:185` +1 in place with A1's insertion-table row; two pins moved in place with dated notes beyond the task's list (`b24-c1-llm-call-record` 12's `SEAM_CLOSURE`, `b21-e1-stop-reasons` 1's `AgentStep` fields). Suites 5 files, 41 / 41 at the first round; the gate sets re-run on that tree (`observability-and-replay.md` section 28: qualification 37 files 375 + 3; chat, llm, computation 57 + 2; orchestration 48 + the moved file; manufacturing 30; agent, grant, durable, fixture, spice, components 52 + 2; auth and api 68; mcp 52; engineering and project 136; database-delivery 21 + 3 and the re-run of the two files; four red runs each the suites' own expectations or a cited line moved by a top-of-file import, each fixed in the test or by hoisting, recorded); tsc 0; eslint 0 on 25 files; five generators zero drift. The adversarial review (2026-10-09) confirmed four findings, each fixed test-first: the SPICE log's evidence references were stored unredacted and unbounded (now redacted, at most 200, the excess in `evidenceWithheld`; `b24-c2-redaction` 11, red then green); `loadStudioProject` bounded the entry count only (now `loadAiAuditLog` redacts and caps every stored entry as on write; case 6 extended, red then green); the port's `head_moved` guards had no PostgreSQL proof (`b24-c2-retention-pglite` 6, proven against the port with its three throws deleted - 5 / 6 - then restored byte for byte, 6 / 6); and the records cited the adapters' two edits one line too low (the `model:` lines) and the persistence edit one line too high (`assertProjectShape`); corrected by anchor to `adapters.ts:88, :190` and `persistence.ts:40`. Suites 43 / 43 after the round; the gate re-runs are in the increment report. No migration (32), census, tool-count, classification, flag or environment-name move; every live step BLOCKED-LIVE-QUALIFICATION (LB-14, LB-13, LB-2, LB-7, LB-9).
+- Lead close (2026-10-09): the fast increment form. The review confirmed 4 of 7 findings (the SPICE audit log's unbounded, unredacted
+  evidence references and its load path, the purge port's never-exercised `head_moved` refusals, four stale line citations) and the
+  fix round closed each test-first, with the `head_moved` proof's first mutated run recorded as not counting (a missing import) and
+  re-run against a sha256-restored source. No STOP. The lead's OD-30 reading: B24-C1's CI run put prompt-to-gerber at 19 min 58 s of
+  25, so C2's four suites are admitted (about 45 s) and the split job is B24-D1's (OD-30 amendment). The lead's close: pcb 977
+  passed, 4 skipped; B14.4 22; confinement 375; qualification 326 passed, 3 skipped; tsc 0; eslint 0 on 27 files. Browser: the first
+  default-configuration run ended 44 passed, 1 failed, 10 did not run (8.3 min) - the failure was a Playwright worker-process crash
+  (exit code 3221226505, 0xC0000409, at `e2e/mcp-endpoint.spec.ts:127`, 0 ms into the test; no server-side error in either log; 4.3
+  GB free with the orchestration run's 5 node and 16 Chrome processes alive), not an assertion; the orchestration configuration
+  passed 4 in 2.7 min; 32 evidence PNGs restored by blob hash, 0 mismatched. Re-run with the machine idle: `e2e/mcp-endpoint.spec.ts`
+  alone 11 passed (8.2 s), then the whole default configuration 55 passed (8.4 min), 24 PNGs restored, 0 mismatched - the crash did
+  not reproduce and is recorded as a runner-process crash under memory pressure, not a product failure.
+
+### B24-C3 - readers and recorded limits (2026-10-09 local; increment workflow + lead; this commit)
+
+Test-first on `chapter/b24-production-qualification` from `600d1ba`, one run (D21). Red first: with the core set aside, `b24-c3-trace-read` and `b24-c3-trace-read-pglite` failed to load (2 files, no tests), and the one operator CLI at HEAD held no `--read` (C2's parser refused it as unknown, `b24-c2-retention` 5); `b24-c3-recorded-limits` ran 1 failed (the page) / 10 passed before part 3 existed, each code-fact case red over its injected variant inside the case. `app/lib/observability/trace-read.ts` is the pure core: a read-only adapter over the durable-workflow repository (`listHeads`, `history`, `loadHead`, `loadRecord` under a 30 s deadline; every write and `getReplay`/`listOutbox` refused), the four closed kinds (`run-trace`, `run-trace-attribution`, `llm-call-record`, `specialist-trace`) read through their stores' digest-verified readers, B16-A's `ok`/`absent`/`corrupt`/`withheld` policy with closed codes and no payload, message or stack, the redaction authority's and the call record's secret shapes over each record and again over the whole document, a 1 MiB cap dropping whole records, the exit codes 0/1/2/3 and the production acknowledgement; `scripts/retention-purge.ts` gains the `--read` dispatch (`.env.local` loaded for the read mode only, `DATABASE_URL` named only, the target as host:port/database, no driver text, the PostgreSQL repository constructed here - D11's second site - and the dispatcher called only as the entry module); no reader was added to a C1 or C2 store (each had one). One database-delivery line (`:342`) moved B21's C49, C93, C94 and `ci-admission.md:185` +1 in place with A1's insertion-table row; pins moved in place with dated notes: the constructor census of `b24-c1-durable-trace` 11, `b24-c1-llm-call-record` 12 and `b24-c2-attribution` 12 (+ the CLI, D11), `b24-c2-retention` 1, 5 and 7 (the script's loader and constructor text, `--read` refused by the purge parser alone, D12), `retention-cli.ts:13`, `retention-and-deletion.md:138` - the four suites red before the move (5 failed / 68 passed, exactly the five pins) and green after (73 / 73). Suites `b24-c3-trace-read` (10), `b24-c3-recorded-limits` (11), `b24-c3-trace-read-pglite` (4): 25 / 25 (the first green attempt 5 failed / 8 passed on the suites' own helper bugs, fixed in the tests). The adversarial review's eleven confirmed findings were closed test-first in this tree (section 39, review round): the inverted dispatch left every pin green (the counterexample, 20 / 20), the extended suites went red on the unfixed code (4 failed / 17 passed), four sources were broken on disk at once and each intended case went red (8 failed / 17 passed), every source restored byte-for-byte by sha256; the fixes - the dispatcher `main` (argv, env, overrides) driven over PGlite, the whole-read deadline, the withheld document's `omitted`, the client's close, `TRACE_READ_HEAD_MISMATCH` and `TRACE_READ_FAILED` reached, the Tier 1 pin over quoted and computed keys, assignment statements and calls, the no-access-audit variants, the entry guard's suffix-optional pattern - and the records (the two limits of the read mode's access control, OD-233 (i) reworded, the pre-edit hand check as a deviation); the gate sets on the final tree, re-run after the review round (`observability-and-replay.md` section 39): C1-C3 126; qualification 347 + 3; agent 415; orchestration 460; durable and grant 23 + 2; engineering 1107; mcp and B14.4 847; auth, api and B19-E 1559 + 9; computation and manufacturing 687 + 18; database-delivery 195 + 12; tsc 0 (after one in-place type widening in the core); eslint 0 on 11 files; five generators zero drift. The limits of D24-24 are recorded and pinned (OD-210), the read mode is OD-211 as applied, the choices beyond the drafts OD-233. Census 168 / 165 / 3 / 0, counts 47 / 36 / 9 / 27, 107 action records, 32 migrations unchanged; no new dependency; no UI control; every live step BLOCKED-LIVE-QUALIFICATION (LB-14, LB-13).
+- Lead close (2026-10-09): the fast increment form. The review confirmed 11 of 13 findings (the `--read` dispatcher never executed by
+  a suite, the per-call-only deadline, the untested whole-document withholding and its miscount, the process left alive after a
+  deadline, the entry guard's pattern, the attestation pin's narrow visitor, two unreached read codes, a limits case without a
+  variant, two unrecorded access limits, the unrecorded pre-edit page-suite runs) and the fix round closed each test-first with
+  sha256-restored breakage proofs. No STOP. The lead's decisions: (1) the pre-edit run of the B22/B23 page suites is accepted as the
+  hand check - the three anchors (`:226`, `:227`, `:335`) lie above the inserted `:342` and the suites ran green after it (section
+  39's note stands as the record); (2) the entry guard's positive branch is the lead's run in a worktree with no `.env*` file and no
+  `DATABASE_URL`, recorded below; (3) OD-30: B24-C2's CI run put prompt-to-gerber at 20 min 37 s of 25, inside OD-30's five-minute
+  line - C3's two unit suites (about 25 s) are admitted and the split lands next as the lead's own corrective increment B24-D0
+  (insertion-only, before B24-D1), never a raised timeout. The lead's close: pcb 977 passed, 4 skipped; B14.4 22; confinement 375;
+  qualification 347 passed, 3 skipped; tsc 0; eslint 0 on 11 files. No browser run: C3 changes no UI, no served route and no spec.
+  The entry guard's positive branch, the lead's run (2026-10-09, a detached worktree at `600d1ba` plus C3's
+  `scripts/retention-purge.ts`, `app/lib/observability/trace-read.ts` and `app/lib/durable-workflow/retention-cli.ts`, a
+  `node_modules` junction, no `.env*` file but the tracked `.env.example`, `DATABASE_URL` absent from the environment; `node
+  node_modules/tsx/dist/cli.mjs`): (a) `scripts/retention-purge.ts --read --kind run-trace --tenant t --project p --branch b` exited
+  2 with the one stderr line `REFUSED read_database_url_missing: DATABASE_URL is not set (add it to .env.local or the environment). -
+  nothing was read.` and 0 bytes on stdout; (b) the same without the suffix (`scripts/retention-purge`) likewise, exit 2, the same
+  one line, 0 bytes; (c) the bare `scripts/retention-purge.ts` ran B24-C2's purge dry run, printed its four-line header (dry run,
+  as-of, limit 1000, runtime non-production) and failed closed with the text-free `FAILED RETENTION_RUN_FAILED: the run stopped; an
+  aggregate is deleted whole or not at all, so nothing is left partial.`, exit 1 - no URL, credential or driver text on either stream
+  (CONFIRMED; logs `c3-guard-{a,b,c}.{stdout,stderr}`). The worktree was removed afterwards.
+- B24-C3 fix (2026-10-09, the lead): B24-C3's CI run (37905772899) was red on the `secret-scan` job alone - B24-A2's tree scan
+  reported `app/lib/qualification/__tests__/b24-c3-trace-read.test.ts:75 connection-string-password`: the fake connection string was
+  a template literal assigned to `FAKE_URL`, the exact source shape the rule reads (a `postgres://user:pass@` literal under a name
+  ending in `_URL`); the lead's local commit scan had flagged the same line and the lead had allowed it by review, which CI's scanner
+  does not. Fixed in the test only: the constant is `FAKE_CONNECTION`, assembled from joined fragments at run time (B16-B: a test
+  never spells a gate form); the scanner is the check - red before (one hit), green after (exit 0, the eight allowlisted lines
+  unchanged); `b24-c3-trace-read`, `b24-c3-recorded-limits` and `b24-a2-secret-scan` 39/39; eslint 0; tsc 0. No allowlist entry, no
+  scanner change. The same run put prompt-to-gerber at 21 min 33 s of 25 (headroom 3 min 27 s) and page-browser-e2e at 21 min 25 s of
+  30; the other jobs were green.
+
+### B24-D0 - the OD-30 split of prompt-to-gerber (2026-10-09 local; increment workflow + lead; this commit)
+
+Test-first on `chapter/b24-production-qualification`, two runs. The first run (from `ba4f562`) measured prompt-to-gerber's own 242 entries once through the runner with the junit reporter (471 files, 5430 tests, 0 failures, 42 skipped; 931.21 s of testcase time; the xml committed as evidence), derived the holders from the tree and stopped: the entries carrying 77.6 % of the time are the chapter directory filters whose suites the catalog and the scenario map record, and everything no production record holds is 22.5 %, under the task's 40 %. The lead chose option 2 (42.8 %) and relaxed the no-production-change rule exactly to the two catalog modules. The second run (from `aaa6a1b`) wrote the split's cases first (8 red, 3 green at `aaa6a1b`), probed vitest's `--exclude` on the exact shapes, then inserted the 38 `--exclude` lines before prompt-to-gerber's `--reporter` line (`:293-330`) and appended `agent-boundary-suites` (`:551-616`; 104 lines added, 0 removed, 0 edited); extended `_ci-admission.ts` in place to read the exclusions (no second reader), moved B19-E's guard to admit every non-PGlite suite in exactly one of the two jobs (+1 case; B21-A's row 8 -> 9), moved the A1 (16), A2 ((c)), B2 (3, 4) and B1 (4) pins in place with dated notes, recorded the move in `golden-catalog.ts` and `scenario-map.ts` and re-ran both generators twice with zero drift, moved every page citation the 38 lines shifted (+38: B21 C49/C93/C94, B23 C64 and its prose, B24-B2's limit line, C1-C3's rows and C50, A4's two lines) and noted the superseded statements (B20, B22, A2, B1, B2), appended D0's two rows to A1's insertion table (`:293` 38; `:551` 66). Suite `b24-d0-ci-split` (12 cases: the evidence is the job's selection; the tables are the evidence; the holders are derived; the tree is split and the page says so; the new job's shape; the exclude list equals the new job's list and the helper bites; disjoint selections whose union is the former one; the moved-set table; at least 40 % and the OD-30 arithmetic; A1's two rows; every moved citation and superseded statement noted; the review round's checks). The review round ([B24-D0 review, 2026-10-09], ten confirmed findings, seven distinct) closed in-tree, case 12 red first with its 67 problems listed, then green: the guard's five helpers moved after its describe block (every case back on HEAD's line but for the in-case notes) and the guard citations re-pinned in place with dated notes (`ci-admission.md:85`, `:92`, `mcp-client-boundary.md:41`, `b24-b2-ci-admission.test.ts:19`, `:192`; the seven in the lead's discovery pages drafted), the page's placeholders replaced by the recorded gates and case 12 refusing a placeholder or a gate without a numeric exit, B2's section-13 statements and the C1-C3 README-row drafts noted in place, A2's case (c) retitled to what it pins, the evidence's `hostname` attribute recorded (kept byte-identical; the scrub drafted), the merge gate drafted for the lead. Gates (every run alone under the lock, 0 processes left after each): the readers after the fixes (18 files, 296 tests), the new job's own selection locally (109 files: 107 passed, 2 opt-in live suites skipped whole, 1574 tests, none failed; the files equal the measurement's moved set), the three closeout tripwires with B11.5, `b21-a-page` and the count pins (11 files, 108 tests; census 168 / 165 / 3 / 0, tools 47 / 36 / 9 / 27, 107 action records, 32 migrations, the six SDK importers, B01's toolability matrix), the qualification directory (34 files, 362 tests), the closeouts once more and the suite green over the finished page (12), tsc and eslint clean twice, the B1, B3 and B17 generators with zero drift; every exit 0. Expected CI times INFERRED (11 min 47 s of 25; 8 min 50 s of 20) until the first run, which the lead reads for all three jobs. `ci-split.md`.
+- Lead close (2026-10-09): the fast increment form, two runs. The first run measured prompt-to-gerber's own selection and STOPPED,
+  because the task's 40 % target was unreachable without touching the catalog's and the scenario map's recorded `ciJobs` rows (77.6 %
+  of the time sits under them); the lead chose option 2 and relaxed the no-production-change rule exactly to those two data modules,
+  with both generators re-run twice. The second run (from `aaa6a1b`, the lead's C3 fix) delivered the split; its implementer's
+  recorded return was a status line rather than its report (it was waiting on its own gate chain when it returned), so the records
+  come from the page and the fix round's report; the review confirmed all 10 findings (seven distinct: the guard's helpers inserted
+  mid-file and the stale guard citations, the page's placeholders and unbacked CONFIRMED labels, two superseded B2 statements, the
+  C1-C3 README-row drafts, A2's case (c) title, the evidence's hostname attribute, the merge gate) and the fix round closed each
+  test-first with the suite's case 12 red first. The lead's decisions: (1) the evidence file's `hostname` attribute is scrubbed
+  before the commit (option (b): `hostname="Dandi"` -> `hostname="local"` on all 471 testsuite elements; the page's recorded value
+  and digest updated; the suite re-run), because a machine name is personal data the record does not need; (2) the merge gate is the
+  owner's: whether `main`'s required-status-check list names `agent-boundary-suites` beside `prompt-to-gerber` is a GitHub setting
+  the lead never changes, recorded under OD-30 for the owner; (3) B24-C3's CI runs read: prompt-to-gerber 21 min 33 s of 25 at
+  `ba4f562` (37905772899) and 21 min 31 s at `aaa6a1b` (37912316237), both green, each run red only on the `secret-scan` job - the
+  tree scan at `ba4f562`, then the PR history step at `aaa6a1b` (the fake connection string of C3's test exists in history at
+  `ba4f562`; the lead's corrective increment B24-A2F adds a history-only allowlist kind test-first, never a rule change or a history
+  rewrite). The lead's close: pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification 359 passed, 3 skipped; tsc 0;
+  eslint 0 on 9 files; after the hostname scrub, `b24-d0-ci-split` with the whole providers folder (the three closeout tripwires) 30
+  files, 399 passed. No browser run: D0 changes the CI workflow, tests, data modules and pages only.
+
+### B24-A2F - the secret scan's history-only allowlist entries (2026-10-09 local; increment workflow + lead; this commit)
+
+Test-first on `chapter/b24-production-qualification` from `b3a4f2d`, the lead's corrective increment: CI's `secret-scan` job was red on the pull request's history step alone (`ba4f562:app/lib/qualification/__tests__/b24-c3-trace-read.test.ts:75 connection-string-password` - B24-C3's fake as committed, rewritten by the lead's fix `aaa6a1b`; history not rewritten, runbook 2.4), and an ordinary allowlist entry for a line that exists only in history is stale in tree mode. The increment's run (its records on the page, logs `a2f-00`…`a2f-17`): baseline first (qualification 34 files, 359 passed, 3 skipped; the count pins 168 / 165 / 3 / 0, 47 / 36 / 9 / 27, 107, 32, six SDK importers; the three tripwires 27), the six cases l-q appended to `b24-a2-secret-scan` red at `b3a4f2d` (7 failed of 24: d, l, m, n, o, p, q), then the kind: `SecretScanAllowlistEntry.historyOnly?: true` in the pure `runSecretScan` - exempt from the tree-mode stale check, allowlisting in `--history` mode exactly as an ordinary entry, its line back in the tree or the index reported and never allowlisted, its reason required to name the replacing commit (a 7-40 hex id) and say replaced or rewritten, or the allowlist is unusable in every mode - five in-place edits (`secret-scan.ts:16`, `:70`, `:108`, `:150`, `:162`) and the helper with its two patterns appended at the end (`:384-406`), no rule or pattern changed; the ninth entry appended to `secret-scan-allowlist.ts` (`:60-69`: the lead's digest re-derived from `git show ba4f562:<path> | sed -n 75p` piped into sha256, equal, the line never printed, the blob LF), its header amended in place (seven lines kept). The real scanner through the heavy-job lock: tree 4,127 entries, 8 allowlisted (the ninth neither used nor stale), exit 0; history `57c3b29..HEAD` (13 commits) 396 entries, 1 allowlisted, exit 0; the counterexample without the entry 396 entries, 0 allowlisted, exactly the `ba4f562` line, exit 1. Pins moved in place with dated notes: (d)'s shape list eight -> nine, the secret-scan suite's header (one line, since `ci-split.md` C25/C40 cite `:183`/`:187`), the page's section 6 clause, section 10's `it(` cells, `b24-a2-headers` 8's section count 15 -> 16. The review round ([B24-A2F review, 2026-10-09], four confirmed findings, each low) closed in-tree test-first (`a2f-18`…`a2f-29`): `b24-a2-headers` 13 appended (section 15's citations C37-C46 checked on their lines as section 14's are, the cited helper range checked against the file's last line, the "not a second way" judgement required under INFERRED), red first with its three problems listed in one run, and (r) red on the allowlist header's `:3-4`; case 13 proved against a one-line insertion before `historyOnlyProblems` (C41 and the range end caught; the module restored, sha256 equal before and after); the helper range `:384-405` -> `:384-406` on the page and in these records; the allowlist header's "every entry is a test sentinel ... read in its test" sentence amended on its own `:4` with the dated exception (the stale sentence on `:5-6` already carried its own) and the page's pin row corrected to `:4-6`; the two CI run ids on the page marked as the lead's reading (this ledger's B24-C3 fix note and B24-D0 lead close), the paragraph's CONFIRMED staying scoped to the offline reproduction; the design judgement moved from a CONFIRMED paragraph to "What stays open" (INFERRED) with its limit pinned by (s) - in history mode a history-only entry matches its digest under every commit of the range, no commit compared, the reason's id checked for shape only, as an ordinary entry does - and a `commit` field drafted as PROPOSED, not applied. Gates of the fix round (every run alone under the lock, 0 processes left after each): `b24-a2-headers` 13, `b24-a2-secret-scan` 26 and `b24-d0-ci-split` 12 green (51), the qualification directory 34 files, 368 passed, 3 skipped (165.6 s), the three closeout tripwires 27, B11.5 18, tsc 0 errors, eslint 0 problems on the three changed .ts files, the scanner's tree and history runs as above, the page readers and tripwires once more over the finished page (6 files, 78); every exit 0 but the recorded red runs. No browser run; no `next build`, `next start` or `next dev`; no `.github` edit; no generator module touched. CI's two `secret-scan` steps after the push are the lead's reading: PROPOSED until read. Counts unchanged (census 168 / 165 / 3 / 0, tools 47 / 36 / 9 / 27, 107 action records, 32 migrations, six SDK importers). `edge-security.md` section 15.
+- Lead close (2026-10-09): the fast increment form. The review confirmed 5 of 6 findings (all low: the page's attribution of CI run
+  ids to steps, the allowlist header sentence left unamended, the new citations C37-C43 unchecked by a suite, a history-only entry
+  exempting its digest under every commit of any range, the helper's cited line range) and the fix round closed each test-first; the
+  refuted one (a decimal word read as a commit id) was shown not to hold. No STOP. The lead's reading of B24-D0's first CI run
+  (37926146764 at `b3a4f2d`, 2026-10-09): prompt-to-gerber 13 min 10 s of 25 (21 min 33 s before the split; headroom 11 min 50 s),
+  agent-boundary-suites 7 min 21 s of 20, page-browser-e2e 16 min 24 s of 30, database-delivery 4 min 17 s, production-smoke 2 min 25
+  s - every job green but the `secret-scan` job's history step, red exactly on the `ba4f562` line this increment allowlists as
+  history-only (the expected red; CI measures the fix on this commit's run). The lead's close: pcb 977 passed, 4 skipped; B14.4 22;
+  confinement 375; qualification 368 passed, 3 skipped; tsc 0; eslint 0 on 4 files. No browser run: A2F changes the scanner module,
+  its allowlist, two suites and one page.
+
+### B24-D1 - Benchmark methodology and latency (2026-10-09 local; increment workflow + lead; this commit)
+
+Test-first on `chapter/b24-production-qualification` from `6acae24`, one run. Red first: the two always-on suites and the two benchmark suites failed at collection with the policy, the writer, the headroom core and the census absent (`d1-red-1-always-on`, `d1-red-2-benchmark-unflagged`, `d1-red-3-benchmark-flagged`; nothing written under the results directory); the flagged corpus suite was red on the three CD-9 packages (`d1-red-corpus-flagged-1`: 51 passed, 2 blocked, 5 failing of 58); the census counted 53 CI-gated `elapsed` bounds with no classification (`d1-probe-census-1`; 55 once the review round's scanner followed helper-returned timings, the two new ones refused unclassified by the generator, `d1fix-gen-census-probe-1`). Landed: the policy, the writer (lead decision D15), the headroom core and script, the census scanner, its hand classification (33 deadline-proofs, 15 complexity-proofs, 7 performance bounds moved in place: b20-a4-observation-normalizer case 6's four, pcb-sync performance-resilience's two and b20-a1-redaction-linear's one) and its byte-pinned CSV (296 rows; the generator re-run twice, byte-identical, sha256 `586cb9fc...`), the gate script, the declared-without-values baseline v1, the `benchmark-latency` job appended to `benchmark.yml`, nine OD-30 lines in `deterministic-manufacturing.yml` (six groups, A1's rows), the two `NON_LIVE_GATES` entries (D2), the three names in A1's inventory and A2's census (D16; `GITHUB_STEP_SUMMARY`, read by the two scripts, a platform census row beside them), the CD-9 corpus executor (D24-41, OD-204) and the page. Measured locally (this machine, a history, never a baseline; the review round's re-run `d1fix-green-latency-flagged` 7 of 7 in 77.52 s and `d1fix-green-latency-workflow-flagged` 1 of 1 in 11.96 s; the first run `d1-green-latency-flagged` 6 of 6 in 101.69 s and `d1-green-latency-workflow-flagged` 1 of 1 in 19.81 s, its values the page's first-run column): view 0.03 and 0.04 ms, read 49.1 and 53.4 ms, edit 286.2 ms, first event 10.6 ms, silent gap 260.1 ms (D = 250 ms: the route sends seven `warning` lines at once after `run_started` and nothing during the provider wait), completion 278.0 ms, the workflow replay 669.4 ms (p50; the acceptance suite's 60 s replay budget and the browser spec's 170 s are budgets, not measurements), the moved workloads 20.1, 302.9, 865.5, 87.9, 6.0, 766.0 and 38.1 ms. The gate over both results files answers BLOCKED (`baseline_missing`, non-blocking under v1, lead decision D3), exit 0 (16 metrics on the re-run, `d1fix-gate-2`); over the latency file alone `unmeasured` for the workflow metric, exit 1 (`d1-gate-1`, `d1-gate-2`). The flagged corpus suite went green (`d1-green-corpus-flagged-2`: 54 passed, 2 blocked, 2 failing of 58 - the two baseline-recorded failed_correctness packages only). The census suite's local duration is under 5 s for both always-on suites (`d1-green-5-always-on`: 17 passed in 11.52 s with the policy suite). Gates after the pin moves: the readers chain 25 files 377 passed; the qualification directory 38 files, 384 passed, 10 skipped, 1 failed (`b24-a1-environment-profile` 16, the lead's 15 -> 17; the first after-run's nine other reds - the kinds pin, A2's cases 2, 5, 6 and `b24-a2-headers` 11 on `GITHUB_STEP_SUMMARY` and the three names, D0's cases 1, 4, 7 on the four suites in prompt-to-gerber's selection and C16, C17, C48, the census suite's 7 on a title-line note - each moved in place with a dated note); the orchestration directory with the three closeout scanners 51 files 477 passed; prompt-to-gerber 5 files 34 passed; the three generators byte-identical; tsc 0 (`d1-tsc-4`, `d1-tsc-5`); eslint 0 on 24 files (`d1-eslint-1`, `d1-eslint-2`); no CRLF, control byte or key-shaped literal in the 51 changed files. Prompt-to-gerber's duration on the D1 CI run against its 25-minute limit, the three jobs' headroom and `benchmark-latency`'s minutes are the lead's reading (OD-30 arithmetic: history 13 min 10 s of 25 at `b3a4f2d`; D1 adds under a minute, INFERRED). No baseline run ids: BLOCKED-LIVE-QUALIFICATION until the owner accepts the job's minutes. The lead's own pin: `b24-a1-environment-profile` 16 (15 -> 17 rows, lead decision D19's two `agent-boundary-suites` groups). Review round (2026-10-09; nine confirmed findings, each test-first): a legitimate runner v2 planted into the baseline turned `b24-d1-latency-policy` 3 and 5 red at `:190` and `:258` (`d1fix-counterexample-planted-v2-pre-edit`; the file restored byte-identical by sha256), the strengthened assertions failed on the unfixed sources (`d1fix-red-1-strengthened-tests`: 10 failed of 29 - policy 1-6 and 8, census 3, D0 4 and 11) and went green after the fixes (`d1fix-green-1-policy-d0` 22 passed; `d1fix-green-2-always-on-d0` 28 of 29, census 3's plant then completed, `d1fix-green-3-census` 7 of 7): lead decision D3's exception keyed to version 1 alone (`DECLARED_AFTER_V1`, `values_dropped`, the gate refusing an unreviewed widening), the writer refusing a repository child named with dots (`..results`), a results file carrying only its own suite's metrics and a doubled metric refused, case 5 checking a runner version by shape, the census following helper-returned and best-of-runs timings (b20-a1-redaction-linear's two CI bounds found, `d1fix-gen-census-probe-1`: the 2,000 ms one moved as the seventh performance bound, `moved.redaction-linear-200-scrubs`, 38.1 ms p50 locally; the 1,000 ms one a complexity-proof against the B20 page's measured 3,184 ms; connectivity-board's best-of-runs outside CI; the generator re-run twice, byte-identical, 296 rows), D0's C64 note on `dfm-quote-flow.md` restored whole, the silent-gap workload text, and honesty case 10's dated title note. Gates after the round (section 8's review-round rows): the readers chain 24 files 333 passed (`d1fix-after-readers-1`); orchestration 49 files 460 passed; qualification 38 files 384 passed, 11 skipped, 1 failed (the lead's pin, as before); prompt-to-gerber 5 files 34 passed; tsc 0 (`d1fix-tsc-2`, after one TS2345 on a test helper's literal type in `d1fix-tsc-1`, re-typed in place); eslint 0 on the 25 changed or new TS files; `generate-b24-eval-catalog` and `generate-b24-scenario-map` twice each, every B24 artifact byte-identical; the policy suite with the three closeout scanners 4 files 37 passed (`d1fix-final-policy-closeouts`; the scanners re-run on this paragraph's final text as `d1fix-final-closeouts-2`); no CRLF, control byte or key-shaped literal in the 52 changed files; only the files this round edited differ from the round's start snapshot.
+- Lead close (2026-10-09): the fast increment form. The review confirmed all 10 findings (4 medium: a later declared-without-values
+  baseline version re-arming the non-blocking state, the census missing helper-returned timings, the writer's confinement bypassed by
+  a repository child named with leading dots, a foreign suite's metric overriding another's; 6 low) and the fix round closed each
+  test-first with a planted-baseline counterexample and sha256-restored probes. Two items were the lead's by the A1 handover, both in
+  `b24-a1-environment-profile` 16: the insertion-row count moved 15 -> 17 in place with a dated note (D1's six real rows where A1
+  planned four groups), and - found red in the lead's close - the case's column-moving probes, which assume the remaining plan moves
+  a row of A1's shift table: with every task above the table landed, D2's one database-delivery row sits below every row (the table's
+  new column ends at `:349`; D2's row goes after `:383`), so the simulated page came back unchanged; the lead's reviewed move gives
+  those probes case 17's synthetic B24-A9 insertion when the remaining plan moves no table row, declared once at the END of the file
+  so no cited line above moved, and placed at the top of prompt-to-gerber's list (before its first filter) so that every later line
+  moves - the shift table's rows, section 14's C35 at `:228` and the PGlite entry alike (at the reporter line, where case 17 had it,
+  the C35 probe could not bite) (the counts and row probes stay on the remaining plan alone; `it(` count 20, line 643 unchanged).
+  B24-D0's page cited that moved line by its old anchor (`toHaveLength(15)`, C24): re-pinned in place with a dated note. The README's
+  C1-C3 and D0 rows were re-pinned to the workflow lines D0's and D1's insertions moved them to (`:381`-`:383`; `:294-331`,
+  `:557-625`). The lead's decisions: (1) the runner baseline (version 2 from at least three `benchmark-latency` runs) is a later
+  records commit after the owner accepts the job's Actions minutes - until then `baseline_missing` stays the recorded, non-blocking
+  BLOCKED state (lead decision D3), and the lead reads the job's first run; (2) the keepalive question and `route-bench`'s two
+  absolute budgets are the owner's (OD-234); (3) the A2F CI run and A4's moved database-delivery lines are recorded under OD-30. No
+  browser run: D1 changes no UI and no served route (its workflow steps, policy modules, scripts, tests and pages only). The lead's
+  close: pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification first 383 passed, 2 failed (A1 case 16's probe and D0's
+  C24 anchor, both the lead's edits above) and, after them, 385 passed, 11 skipped; tsc 0 (twice, after each edit of the A1 suite);
+  eslint 0 on D1's 26 files and on the A1 suite. No browser run.
+
+### B24-D2 - Large boards, memory, multi-tab, crash, cleanup (2026-10-09 local; increment workflow + lead; this commit)
+
+Test-first on `chapter/b24-production-qualification` from `3d5f225`, one run (D2a and D2b together, lead decision D21). Red first: the paged read refused `unknown_tool` with its module absent (`d2-red-board-read-2`, 8 of 8); B11 with the read registered and `ALL_READS` unmoved, 5 failed of 79 (`d2-red-b11`); the memory suite with no memory metric catalogued (`d2-red-memory-2`, 4 of 4); the process-cleanup suite with the helper absent (7 of 7), then with the runners of `3d5f225` (4 of 7: no tree kill, no `killConfirmed`), then the real orphan grandchild alive on win32 (`d2-red-process-cleanup`, `-2`, `-3`); the working copy silently replaced across two tabs (`d2-red-working-copy`, 2 of 5). Not reproduced: the restart on PGlite (`d2-restart-pglite-1`). The counts moved 47 / 36 / 9 / 27 -> 48 / 37 / 9 / 28 and the B09.1 fixture context 12 -> 13 declarations, each pin in place with a dated note; the B11 move is one `ALL_READS` line with B21's sha256 moved (`66370997...` -> `2b392c0a...`). The review round (an adversarial review CONFIRMED fifteen findings) fixed each test-first: 7 failed of 34 in 4 files on the D2 tree (`d2fix-red-1`: the two-tab lockout and the same-tab restore refusal, `b24-d2-working-copy` 6, 7; the strict-mode call refused, `b24-d2-board-read` 9; a 55,902-character page, 10; the survivors not struck off, `b24-d2-process-cleanup` 7; the kill confirmation dropped by the pass executor, the production router, the bundle error and the gerbers answer, 8 and `route.test.ts`), the scratch removal hidden from the write gate (`d2fix-red-b11-5`), and two mutation proofs (`d2fix-mutation-case4`, `d2fix-mutation-b11-5`, each source restored and its sha256 matched); then 52 of 52 (`d2fix-green-1`). The strict-mode refusal is not D2's to fix: D24-43 and OD-236 are proposed, `b24-d2-board-read` 9 pins it, and D24-29 stays open for those providers. Generators twice with zero drift (registry `eng1-a0270c5feaa2c1c4`; scenario map `eng1-e05a2d382b5321d1`; threshold census 302 rows). The memory figures are local (win32, Node v24.15.0); the baseline is BLOCKED (OD-212, OD-30). CI durations: NOT MEASURED at the time of writing (the D2 commit's run reports them through B24-D1's headroom steps). One red found at `3d5f225` and fixed in place: `b20-a5-connector-tripwires` T6 (B24-D1's start step shifted the filter line its page cites). [B24-D2B, 2026-10-10] The lead's browser run (56 passed, 2 failed, 2 did not run) failed one case of each new spec; each was reproduced alone with its trace kept and decided from the trace and the code. Crash (b) was a product defect, CONFIRMED: a grant the server consumed for a page that closed before the answer was left in flight on reopen with no notice (the sweep's `left-in-flight` was outside the editor's notice), the entry showing its pre-crash `executing` - fixed test-first (`b24-d2-crash-recovery` red, `d2b-red-crash-unit`; the sweep marks its own ritual's result `heldHere` and the notice names every other grant left in flight); the spec green alone (`d2b-crash-2`, 2 of 2). Multi-tab case 1 was the spec's, four premises in turn (the head read from a plain board load, the empty state's Sync test id, the publication's wire shape and 201, and two tabs both editing the schematic, which the shared canonical store refuses with a notice): fixed in the spec, every contract assertion kept; green alone (`d2b-multitab-5`, 3 of 3). Then both configurations: 60 passed (`d2b-default-final`) and 4 passed (`d2b-orch-final`), exit 0 each; one pin moved in place (`b24-d0-ci-split` `:501`, 480 -> 481). [B24-D2B review, 2026-10-10] Its review found two holes, each fixed: the multi-tab fix had dropped the fully stale tab (B never reloaded, Syncing after A's publication), now case 1's first path - no publication created (the replay of its own revision), its preflight blocked as stale, the apply its toolbar offers refused 409, the board record and the head unchanged, each read back from the server (`d2b-multitab-7`, 3 of 3, the round-2 file alone; `-6` ran an earlier case 1; the product right on what was tested); and the crash notice was a 6 s toast with the raw `left-in-flight` (B18's "still in progress") beside an entry still "awaiting the editor's result" - CONFIRMED, fixed test-first (`b24-d2-crash-recovery` 1-3 red, `d2b2-red-crash-unit`, `-2`): the notice says `interrupted`, and the reloaded chat entry takes the sweep's result (`chat-run-view.ts` `restoredEntryRecovery`, `page.tsx:6460` in place); the spec green alone (`d2b-crash-5`, 2 of 2). The default configuration then: 57 passed, 1 failed, 2 did not run (`d2b2-default-final`: a Playwright worker-process crash, 0xC0000409, in multi-tab case 1 after its last server call, no assertion failed, cause UNKNOWN), rerun with memory sampled: 60 passed (`d2b2-default-final-2`, exit 0; the worker's peak 519 MB); orchestration 4 passed (`d2b2-orch-final`, exit 0); no pin moved. [B24-D2B review 2, 2026-10-10] Its second review found one product defect and seven claims broader than the runs. The defect, CONFIRMED at the unit level and fixed test-first: a restored entry whose grant the server still holds issued was made a terminal "Not made ... Nothing was changed." although another open tab of the profile may still hold that grant's card and commit it (the journal is the profile's, the claim registry the page's); now not started and open (`outcome_unknown`), its sentence naming the other tab (`b24-d2-crash-recovery` 4 - the other tab commits, or the expired grant is closed by a later sweep - red first with case 3, `d2b3-red-crash-unit`, 2 of 4; green `d2b3-green-crash-unit`, 4 of 4; `chat-run-view.ts` in place). The crash spec's assertions as that round left them are red in the browser on two older code states, each put over the working files for one run and restored byte-identical by sha256 ((a) at `:172` and (b) alone at `:211` on the code before the review round, `d2b3-crash-4-pre2code`, `d2b3-crash-5-pre2code-b`; (a) at `:172` on the round-2 code, `d2b3-crash-3-round2code`; no run put the code before the first fix under them, and (b)'s durable-entry assertions were never reached) and green alone (`d2b3-crash-2`, 2 of 2, recording (a)'s entry `not_made` at (b)'s reopen, its grant retired - by (b)'s newer grant, INFERRED - without showing which record was restored there). The claims now match the runs: `d2b-crash-3` showed (b) red only, on code with a stub not kept; `d2b-multitab-6` ran an earlier case 1; the specs run in the default configuration only; the stored replayed revision and the entry's survival of a further reload are INFERRED; `d2b2-tsc-1`'s exit was never recorded; the replay pin says at its line that it records today's behaviour under OD-214's open question. The default configuration: 60 passed (`d2b3-default-final`, exit 0); orchestration 4 passed (`d2b3-orch-final`, exit 0); no pin moved outside `b24-d2-crash-recovery`. [B24-D2B review 3, 2026-10-10] Its third review found one product defect and four texts broader than the runs. The defect, CONFIRMED at the unit level and fixed test-first: a restored entry kept a sentence an earlier load wrote - once another tab committed the grant, the journal entry was finished, no sweep named the grant again, and the tab that saved its chat last restored "Not started ..." at every load for a change that had landed; now every editor load re-derives each restored, unsettled entry from durable truth (the page names the grants, `restoredEntryGrants`; the sweep answers each one outside its work list from the profile journal's record, `recordedEnds` - committed, closed, unverifiable, or no record any more - read-only, no server call), and a load's sentences say only what held at that load, never a later close (`b24-d2-crash-recovery` 4 extended and 5 added, red first on the round's start code, `d2b4-red-crash-unit`, 2 of 5, then on the fixed code with the sentences pinned, `d2b4-red2-crash-unit`, 4 of 5; green `d2b4-green-crash-unit`, `d2b4-green2-crash-unit`, 5 of 5; in place in `granted-executions.ts`, `chat-run-view.ts`, `execution-display.ts`, `PcbEditor.tsx` and `page.tsx`, appended functions; the cross-tab path at the unit level only). The texts: the not-started sentence predicted expiry only (a newer grant for the same principal and editor, a cancel or another tab's commit also end an issued grant), (a)'s record at (b)'s reopen does not show which record was closed, the crash spec's reds ran two older code states only, its header now names every section that records a run of it (section 19 lists them all), and the PNG restore by `git checkout HEAD` is the lead's close procedure, sanctioned for this round. The crash spec alone on the final bytes: 2 passed (`d2b4-crash-1`, exit 0); the default configuration 60 passed (`d2b4-default-final`, exit 0); orchestration 4 passed (`d2b4-orch-final`, exit 0); no pin moved outside `b24-d2-crash-recovery`. [B24-D2B review 4, 2026-10-10] Its fourth review found four paths on which what a load writes could still be false, each CONFIRMED at the unit level and fixed test-first, and texts broader than the code. The defects: a restored landed-unverified entry offered the editor's one-step Undo, which a reload no longer offers (now the restored next step, "Check the board and the revision history."); a sweep whose write met a journal entry another tab had moved since the sweep read it reported a change that landed as not made (its refused close ignored), or poisoned the other tab's execution in flight and settled the grant poisoned on the server (now the sweep reads the entry again before each write, writes only while it holds the state it read, and otherwise reports what holds - an end the journal records, or "In progress in another tab"); a sweep in flight answered for a project the page had left (now it answers only for the project the page showed when it started); and an entry the sweep cannot settle because the canonical lineage was reopened promised a retry (now it names that cause; B18-E's result kept, with a `cause`) (`b24-d2-crash-recovery` 3 moved by review and 6-10 added, red first on the round's start code, `d2b5-red-crash-unit`, 6 of 10, with `-2` and `-3` showing every failure; green `d2b5-green-crash-unit`, 10 of 10; case 10 rewritten without the agent loop so that no 60,000 ms budget reaches the threshold census, red on a mutation, `d2b5-mutation-case10`, green `d2b5-green-crash-unit-2`; in place in `granted-executions.ts`, `chat-run-view.ts`, `execution-display.ts`, `PcbEditor.tsx` and `page.tsx`, helpers appended; the cross-tab paths at the unit level only, and a cross-tab window between the sweep's re-read and its write recorded, INFERRED). The texts: "every load" now reads "every editor load"; the D24-30 clause no longer says a reloaded entry never reads "awaiting the editor's result" (one no record names keeps B18's pre-crash record, case 5); the second review's browser reds ran two older code states, not "the code before each fix"; the crash spec's header no longer names section 26. The 209 suites that read a changed file green on the final code bytes (`d2b5-gate-readers-2`; the first run, `d2b5-gate-readers`, red only on the census byte pin that case 10's first setup moved); the crash spec alone on the final bytes: 2 passed (`d2b5-crash-1`, exit 0); the default configuration 60 passed (`d2b5-default-final`, exit 0); no pin moved outside `b24-d2-crash-recovery`.
+- Lead close (2026-10-10): the fast increment form, two runs. The first run (2026-10-09) died on the account's usage credits before
+  it changed a file (its implementer and the harness's retry both refused; the tree stayed clean at `3d5f225`); the owner switched
+  the model and the lead relaunched the same task unchanged. The review confirmed all 15 findings (2 high) and the fix round closed
+  13 test-first - the high one among them, an idle second tab's hydration autosave locking the first tab out of saving
+  (`b24-d2-working-copy` 6, red first) - and recorded 2: the single conflict slot (OD-214's open item) and the other high one, a
+  strict-mode provider's `null` for an optional argument refused by B05's validation before the paged read (and via-inspect) runs.
+  The lead's decisions: (1) that refusal is a cross-cutting change to B05's argument validation, so it is a new defect, D24-43, with
+  OD-236 proposed for the owner (safe default: no change; `b24-d2-board-read` 9 pins the refusal) and D24-29 recorded as partly
+  closed; (2) the B24-D1 CI red (`b20-a5-connector-tripwires` T6: `mcp-provider-connectors.md:254` cited
+  `deterministic-manufacturing.yml:131` for `app/lib/mcp`, moved to `:132` by D1's start step) is fixed inside this commit - the D2
+  implementer found it red at `3d5f225` and re-pinned both citations in place; the lead's whole-chapter sweep of anchored citations
+  (192 at `3d5f225`) found it the only one broken; (3) `PcbEditor.tsx:1422`'s `react-hooks/purity` eslint error predates D2 (recorded
+  at B23's closeout) and stays the owner's lint debt. (4) The lead's browser run failed one case of each new spec (default
+  configuration 56 passed, 2 failed, 2 did not run); the lead ran a diagnose-and-fix workflow (task-D2B) with an adversarial review
+  after each round, five rounds in all, until a review found the tree sound with no medium or high item: crash (b) was a product
+  defect (a consumed grant left in flight with no notice), and its reviews found and fixed four more paths on which a reloaded entry
+  could state something false (a still-issued grant shown as not made, an entry frozen after another tab committed, a sweep reporting
+  a committed change as not made or poisoning another tab's execution, a stale sweep across a project switch), each red first at the
+  unit level; multi-tab case 1 was the spec's premises, fixed with every contract assertion kept. The fifth review's five low items
+  are recorded on the page (section 26), the lead qualified every "never not made" statement with the one remaining stalled-tab
+  exception (OD-214's open item), and the lead rebuilt these records from the page's final section 27. The lead's close: on the final
+  tree (after the browser rounds and the lead's record rebuild): pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification
+  421 passed, 15 skipped; tsc 0; eslint the 15 known pre-existing errors only (`PcbEditor.tsx:1422`, and `page.tsx`'s 14 react-hooks
+  errors fixed only on the unmerged `fix/b21-page-react-hooks-refs`; none on D2's two `page.tsx` lines, 62 and 6460); the lead's
+  citation sweeps (every anchored citation of every page against the working tree, and the B20 T6 replica) 0 broken; browser: the
+  orchestration configuration 4 passed on the final bytes; the default configuration 57 passed with multi-tab case 1 ending in a
+  Playwright worker-process crash (0xC0000409, 0 ms, no assertion failed - the second such crash in that case across ten full default
+  runs on D2's tree, and C2 saw one in another spec), then, re-run with memory sampled: multi-tab alone 3 passed twice (1.3 and 1.0
+  min) and the whole default configuration 60 passed (6.2 min); free memory fell to 1,247 MB with `next dev` at 2,301 MB and the
+  worker at 500 MB (INFERRED: memory pressure on this 16 GB machine; cause UNKNOWN, recorded, never called a flake; CI's
+  page-browser-e2e is the independent check); evidence PNGs restored by blob hash, 0 mismatched. [B24-closeout, 2026-10-10] superseded: B24-D4's record, artifacts/remaining-builder-program/EXECUTION_LEDGER.md:5343.
+
+### B24-D3 - Accessibility and responsive scope (2026-10-10 local; increment workflow + lead; this commit)
+
+Test-first on `chapter/b24-production-qualification` from `3773c6a`, one run (D3a and D3b together, lead decision D21). Red first: `b24-d3-accessible-names` failed to load (`d3-red-1-accessible-names`); with the rule in place, 7 failed of 10, case 2 listing six in-scope unnamed sites (`d3-red-2-accessible-names`, recorded on the page); `b24-d3-bom-dialogs` 16 failed of 16 (`d3-red-1-bom-dialogs`); a `finalFocus` mutation turned the worksheet's case 3 red. Review round (2026-10-10): six confirmed findings, each reproduced first and fixed:
+- the out-of-scope ratchet let a new unnamed site through after regeneration (case 3 now holds a frozen key list and the post-D3 pin of 102; the generator reads its baseline from the repository path and refuses a missing one unless `--bootstrap`);
+- the focus return took focus from a pointer person (new case 11, a model run of the page's code; the return limited in place to a run sent from the prompt with no pointer press since);
+- BOM case 4 could not see a "✕" return (the strengthened case and an AST check in case 5);
+- More checks was named by its glyph (an `aria-label` in place, and the backdrop's closer found by its accessible name);
+- three WCAG rows read "tested" on unrun browser cases (now PROPOSED, enforced by case 10).
+
+Gates on the final tree are the review round's, as listed above and in `accessibility.md` section 9. Pins moved: B17-A summary and CSV (631 -> 628 sites, click -7, dialog +4) and the B01 fingerprint, both in D3's build; the census and its summary; the threshold census (+3 rows; D3 row counts budget 10, yield 5); `b24-d0-ci-split` 1 and 7. OD-30: the D3 CI run's prompt-to-gerber and page-browser-e2e durations against 25 and 30 minutes are the lead's reading (UNKNOWN here). History, RECORDED: prompt-to-gerber 13 min 10 s and page-browser-e2e 16 min 24 s at `b3a4f2d`. D3 adds two unit suites (about 5 s locally) and two browser specs (one bootstrap).
+- Lead close (2026-10-10): the fast increment form, one run (wf_fceac3ff-e1a: implementer, four review lenses, a skeptic each, one
+  fix round; six findings confirmed, one medium, all fixed test-first). The lead's decisions: (1) B24-D2's CI red (run 38049453257 on
+  `3773c6a`, page-browser-e2e: 56 passed, 2 failed, 2 did not run; every other job green) is fixed inside this commit, as D2 fixed
+  D1's: `crash-recovery` (a)'s premise failed on CI's runner - the server logged the tender 105 ms before the reopened page's first
+  request, so the never-answered route did not hold it past the close, the grant was consumed and the product truthfully said
+  "Interrupted" - and the hold is now a local sink that never answers (every assertion kept; green alone, no tender in (a)'s server
+  log); `multi-tab` case 2 (B's conflict notice not visible in 30 s) was not reproduced in any local run, 4x CPU-throttled included,
+  so its expectation is unchanged and its failure now prints the state that tells the causes apart (cause UNKNOWN, never called a
+  flake; CI's run of this commit is the check); `performance-and-reliability.md` section 29 records both. (2) The lead's browser
+  runs: the two new specs red on `3773c6a`'s code (the eight product files D3 changed put back for one run and restored by sha256:
+  `keyboard-and-focus` 1 red, 2-5 not reached in serial mode, INFERRED red; `minimum-width` 3 red, 1-2 green by design); the first
+  default run on the D3 tree failed `keyboard-and-focus` 1 at the builder's unmeasured bound of 80 Tab presses, and a measuring run
+  (spec restored byte-identical) found 95 presses from AI Chat to the prompt, every stop visibly focused - the bound is now 120 from
+  that measurement (in place, dated), and the path is recorded as a 2.4.3 / 2.4.1 gap (opening the chat does not move focus into it;
+  no skip link), not fixed: the fix is an `app/page.tsx` change outside D3's code list. (3) With both specs green the lead made the
+  review round's reviewed move: `BROWSER_SPECS_EXECUTED` true, rows 2.1.1, 2.4.3 and 2.4.7 tested in part, the browser labels that
+  ran CONFIRMED with the runs named on `accessibility.md` section 5, C60's anchor moved; the records the builder drafted as PROPOSED
+  were rewritten to what ran. (4) `BomView.tsx`'s four `react-hooks/set-state-in-effect` errors exist at `3773c6a` (lines 472, 575,
+  601, 1667; D3's dialog move shifted them to 475, 578, 604, 1676; the lead's lint of `3773c6a`'s bytes, restored by sha256), so they
+  are pre-existing lint debt with `page.tsx`'s 14 and `PcbEditor.tsx:1422`. (5) A1's production-smoke build was not run locally (it
+  starts `next build`); CI's production-smoke job is the check, and it was green on `3773c6a`. (6) OD-30: page-browser-e2e ran 21 min
+  46 s of 30 on D2's run (headroom 8 min 23 s by D1's step, with two failed cases' waits and two cases not run); D3's two specs take
+  about 2 min locally (keyboard 111 s, minimum width 2 s), so its CI headroom may fall under five minutes (INFERRED). D3's CI run
+  measures it; if the headroom step reports under five minutes, the lead proposes and lands a split of page-browser-e2e before B24-E
+  (OD-30: never a raised timeout). The lead's close: on the final tree: pcb 977 passed, 4 skipped; B14.4 22; confinement 375;
+  qualification 448 passed, 15 skipped (before the flag flip), then the two D3 suites and the B21, B22 and B23 closeout scanners 54
+  of 54 after it; tsc 0; eslint the 18 known pre-existing errors only (`page.tsx`'s 14, `BomView.tsx`'s 4), 0 on the two D2 specs;
+  browser: the orchestration configuration 4 passed on the D3 product code; the default configuration on the final bytes 65 passed
+  with every D3 case (`keyboard-and-focus` 1-5, `minimum-width` 1-3) and both `crash-recovery` cases, `multi-tab` case 1 ending in a
+  Playwright worker-process crash (0xC0000409, no assertion failed; its third on this machine, INFERRED memory pressure late in a
+  full run) and its 2 later cases not run, then `multi-tab` alone 3 of 3; evidence PNGs restored by blob hash, 0 mismatched.
+
+### B24-D4 - the OD-30 split of page-browser-e2e (2026-10-10 local; increment workflow + lead; this commit)
+
+Test-first on `chapter/b24-production-qualification` from `1fe719e`: two runs, then a review round. The first run (wf_9abf9eb9-813) stopped before any lasting edit. `SIRKIT_E2E_SKIP` on `playwright.config.ts:21` is a new `SIRKIT_` name in a root config, and B24-A1's flag census wants an inventory row for it (`d4-01-counterexample-flags`: `b24-a1-flags` 2 and `b24-b1-catalog` 4 red). The lead chose option A, relaxing the no-production-change rule exactly to the two inventory modules, one row each. The second run, Part 1, fixed B24-D3's two CI reds (run 38061798204), each red first at the unit level and fixed in the product. D24-30: on CI's slower runner, B's first nudge was saved alone as a board equal to A's newer copy, and the "unchanged" rule adopted A's write token as B's own, so B's second nudge replaced A's copy (`b24-d2-working-copy` 9, red: B's second save returned `true`). `board-persistence.ts` now writes nothing for such a save and keeps the tab's base; case 10 (red first) covers the restore adoption. The path on CI is INFERRED and the mechanism CONFIRMED; the paths ruled out are recorded (`performance-and-reliability.md` section 29). D24-32: focus fell to `body` after Escape on the Tier 1 card (`b24-d3-bom-dialogs` 5, red: focus on `body`). The card's `finalFocus` now gives the prompt (`GrantedExecutionDialog.tsx:55`), and `keyboard-and-focus.spec.ts:235` asserts focus on the prompt, stricter. Part 2, the split by insertions only: guard `b24-d4-browser-split` (red 7 of 7 at `1fe719e`), `playwright.config.ts:21` edited in place, the two-line `env:` mapping at `deterministic-manufacturing.yml:418-419`, the appended `page-browser-e2e-b24` (`:629-663`, 20 minutes), one inventory row and one census row on existing lines, and `_ci-admission.ts` reading both lists and refusing every malformed shape. The workflow without D4's 37 lines is `1fe719e`'s byte for byte. Reviewed pin moves, in place with dated notes: `b24-a1-flags` 1; `b24-a2-env-names` 5, 9, 10; `b24-a1-environment-profile` 16; `b24-a2-secret-scan` (c); `b24-d0-ci-split` 1, 4, 5, 7, 10, 11; `b24-d1-latency-policy` 9, 10; `b24-d1-threshold-census` 4, 5; `b21-f-page` 10. Pages: B21's C93 and C94 (+2), `ci-split.md` C12-C14 and C24, `accessibility.md`, `edge-security.md`, `environments-and-deployment.md`, `performance-and-reliability.md` (section 11.6). The review round fixed eight confirmed findings, each test-first (section 11.7). (1) The skip had held a tab that loaded no copy out of every save once another tab stored its very board (`b24-d2-working-copy` 11, red); such a tab again takes the copy for its own, as at `1fe719e`. (2) The restore adoption is now told by the restored board the editor hands it, not by a missing token (`rememberStoredWorkingCopy(projectId, restoredBoard)`; `PcbEditor.tsx:602`, `:629` in place). Another tab's unchanged rewrite no longer locks the restoring tab out, and another tab's own restore is never adopted (cases 12, 13 and 7, red first). (3) Case 9 now compares A's whole copy; it failed under a planted write of the skip, and the source was restored and checked by sha256. (4) A card closed while the prompt is still disabled moves no focus, so page.tsx's run-end return takes focus from `body` to the prompt (`b24-d3-bom-dialogs` 6, which runs that code over jsdom; red first, with focus on the page's first control). (5) The OD-30 arithmetic now subtracts the two specs' measured CI share (4 min 52 s) and adds the orchestration step that D2's and D3's runs never reached (about 2 min 51 s, from B24-C2's job): page-browser-e2e about 25 min 39 s of 30, still under OD-30's five minutes (INFERRED). (6) `edge-security.md`'s census note moved out of the `SIRKIT_AUTH_MODE` sentence. (7) The OD-30 steps' present-tense citations were re-pinned with D4 notes (`performance-and-reliability.md:151`, `:449`; `ci-split.md:289`; guard case 8). Gates (section 11.7): the qualification directory, B21's page suites, the B19-E guard, the B22 and B23 page suites, the three closeout tripwires, components, project, engineering, the AST and process gates, tsc, eslint (one pre-existing error at `PcbEditor.tsx:1422`, present at `1fe719e`), the generators (only the reviewed threshold-census rows moved: the new job's limit row, then the two budget counts) and the secret scan. Counts unchanged: census 168 / 165 / 3 / 0, tool counts 48 / 37 / 9 / 28, 107 action records, 32 migrations. The lead then chose option (b) and the rename on 2026-10-10 (section 11.9): B24-D2's `multi-tab` and `crash-recovery` move with B24-D3's `keyboard-and-focus` and `minimum-width` into the appended job, renamed `page-browser-e2e-b24` for B24's own browser specs. Only D4's own workflow lines changed (the skip value, two comment lines, the key, the start step's comment, the run step's name and line, the upload step's name, the artifact name, the headroom step's comment and argument); the workflow without D4's 37 lines is still `1fe719e`'s byte for byte. Test-first: guard `b24-d4-browser-split` red on the D4 tree, 6 failed of 8 (`d4lead-01-red-browser-split`: cases 1, 2, 3, 5, 7, 8), then every reader moved in place with a dated `[B24-D4 lead, 2026-10-10]` note (`_ci-admission.ts`; `b21-f-page` 10; `b24-a2-secret-scan` (c); `b24-d0-ci-split` 4, 5, 10; `b24-d1-latency-policy` 9, 10; `b24-d1-threshold-census` 4 and the census row; `playwright.config.ts:21`'s note; `environment-names.ts:137`'s reason; D2's page, sections 25, 27 and 29; `accessibility.md`, `edge-security.md`, `environments-and-deployment.md`, B21's C49). Expected page-browser-e2e about 22 min 03 s of 30 and `page-browser-e2e-b24` about 12 min 48 s of 20, each at least OD-30's five minutes (INFERRED until CI). Gates after the lead's change: the readers green before and after (97 files and 3 skipped, 972 passed and 15 skipped, `d4lead-00`, `d4lead-05`), the guard's readers (`d4lead-04`), tsc, eslint on the ten files it edits (0 problems), the census twice and the B1 and B3 generators twice each (zero drift but the renamed census row), the secret scan (0 hits) and the final pages (`d4lead-10`). Left for the lead's close: the three `--list` checks on the real config (for the four), the browser runs of `keyboard-and-focus` and `multi-tab`, and CI's first run of the split.
+- Lead close (2026-10-10): the lead's corrective increment, three workflow runs. The lead launched D4 on an estimate while B24-D3's
+  CI run was still going (CI's ratio of about 4.4 put D3's two specs near the limit); that run (38061798204) then measured
+  page-browser-e2e at 27 min 40 s of 30 (headroom 2 min 20 s, `split_required`) and failed two cases, both functional, never called
+  flakes. The lead's decisions: (1) the first run (wf_9abf9eb9-813) STOPPED correctly before any lasting edit - `SIRKIT_E2E_SKIP`
+  needs a `FLAG_INVENTORY` row (`b24-a1-flags` 2) - and the lead chose option A (one row each in `flag-inventory.ts` and
+  `environment-names.ts`, no runtime record); (2) the lead folded D3's two CI reds into the task as Part 1, fixed in the product
+  test-first: `multi-tab` case 2 was a real silent overwrite of another tab's working copy (D3's diagnostic line: B's board stored
+  over A's, no conflict record, B "Saved"), and `keyboard-and-focus` case 4 was focus lost to `body` after Escape on the Tier 1 card
+  (the INFERRED Base UI fallback was the defect); (3) the second run (wf_d9e0e463-371) landed both fixes and the split, and its
+  review confirmed eight findings, all fixed test-first, one of them that the split of D3's two specs alone left page-browser-e2e
+  about 4 min 21 s under the limit's five minutes (INFERRED); the lead chose option (b) - B24-D2's `multi-tab` and `crash-recovery`
+  move too (neither is a catalog link or a scenario-map path) - and renamed the appended job `page-browser-e2e-b24`, since an
+  accessibility-only name would misdescribe it (lead-fix run wf_2939a475-937, test-first, its checker: fixed, revert-sensitive); (4)
+  the checker's low residuals, fixed by the lead: two records said the new job runs B24-D2's two specs first, but Playwright runs the
+  files it collects in name order (the run line's order is not the run order; the sentences corrected in place on `ci-split.md` and
+  `accessibility.md` C70); and B24-D2's ledger entry above still names page-browser-e2e as the CI check for `multi-tab` case 1's
+  worker crash - superseded by this split, which runs `multi-tab` in `page-browser-e2e-b24` (a record of its time, not moved; B24-F's
+  superseded-statement table takes it); (5) README rows 24 (B24-D0) and 26 (B24-D1) cited workflow lines below `:384` that B24-D2's
+  entry (+1) and D4's mapping (+2) moved; the lead re-pinned them in place with dated notes (`:560-628`; `:406`, `:435-436`, `:568`,
+  `:627-628`), every line read back first; (6) the production-mode build is CI's production-smoke job, not run locally (D4 changes
+  three modules the application imports). The lead's close: on the final tree: pcb 977 passed, 4 skipped; B14.4 22; confinement 375;
+  qualification 463 passed, 15 skipped; tsc 0; eslint the one known pre-existing error (`PcbEditor.tsx:1422`, `react-hooks/purity`,
+  on a line D4 did not touch); the `--list` checks on the real config: unset, all 9 spec files; with page-browser-e2e's
+  `SIRKIT_E2E_SKIP` value, the 5 others; the new job's four paths, exactly the four (13 cases); browser, run as CI splits it:
+  page-browser-e2e's default step with the skip value 55 passed (5.4 min), `page-browser-e2e-b24`'s run line 13 passed (4.1 min:
+  `multi-tab` 3, `crash-recovery` 2, `keyboard-and-focus` 5 with case 4's focus on the prompt, `minimum-width` 3), the orchestration
+  configuration 4 passed (2.6 min), each exit 0; evidence PNGs restored by blob hash, 0 mismatched.
+
+### B24-E - live and physical gates: the production-auth harness, the register, the matrix, the statement tripwire (2026-10-10 local; increment workflow + lead; this commit)
+
+- **Test-first.**
+  - `e-red-1`: the Ea suite does not load (module absent), exit 1.
+  - `e-red-2`: the register and statements suites are red before the notes, matrix and drafts, exit 1.
+  - `e-ea-1` and `e-ea-2`: the census and page pins red, then moved in place.
+- **Delivered.** The harness offline (part 1); the matrix Q1..Q15 (part 2); the register and mirror drafts, applied by the lead; eight in-place notes; four closeout finds; C41 narrowed (part 3).
+- **E's LB notes.** LB-1, LB-2, LB-5, LB-7, LB-9 and LB-13..LB-17; no row added.
+- **Review round.** Eight confirmed findings (correctness-1..4, security-1..4) were fixed test-first.
+  - `e-fix-red-1`: config suite cases 1, 4, 6 and 8 red; statements case 3 red with twelve problems; exit 1.
+  - `e-fix-green-2`: 15 of 15.
+  - The fixes:
+    - new `sign-in-form.ts`: credentials go in as evaluation arguments, every step is bounded, worst case 100 s against 120 s;
+    - `actionTimeout` and `navigationTimeout` set;
+    - `PRODUCTION_AUTH_RUNNER_ENV` (`PLAYWRIGHT_NO_COPY_PROMPT=1`);
+    - `--hostname 127.0.0.1` and a blank `SIRKIT_TRUSTED_CLIENT_IP_HEADER`;
+    - the database-URL rule for a second "@" or a postgres.js host list;
+    - thirteen single-rule resolver inputs in case 1;
+    - the tripwire's local negation rule with one reviewed negation;
+    - a note admits only its own statement.
+  - Breakages `e-fix-break-1`..`-6` were each caught and restored by sha256.
+  - The review's declarations stand at the module's end, so every cited line holds; one interim run (`e-fix-gate-1`) caught a moved owner line.
+- **Gates.** The qualification folder: 483 passed, 15 skipped, 5 register reds until the drafts are applied. Every other gate exit 0; tsc 0; eslint 0 on 14 files; generators zero drift; secret rules 0 hits.
+- **Strength.** Three deliberate breakages before the review and the review's own, each restored by sha256.
+- **Stop conditions.** None hit.
+- Lead close (2026-10-10): the fast increment form, one run (wf_6b80c88e-c12: implementer, four review lenses, a skeptic each, one
+  fix round). The review raised nine findings; eight were confirmed (none above medium after verification) and all eight were fixed
+  test-first with planted breakages restored by sha256 - among them the sign-in password reaching Playwright's `error-context.md`
+  when test 1 timed out before its `finally` (the credentials now go in through `evaluate`, every step is bounded, the snapshot is
+  switched off for the harness's runner), and the statement tripwire admitting a positive claim whenever a negating word stood
+  earlier in its sentence. The lead's decisions: (1) the builder drafted `LIVE_BLOCKERS.md` and `PROGRAM_STATE.json` (the lead's
+  files) under OD-217's vocabulary; the lead checked that the drafts change only the LB-1, 2, 3, 4, 5, 7, 9 and 13-17 rows and only
+  `liveBlockers`, copied them in (sha256 `9ad5bdef...` and `ffae5bef...`, as the report states), and `b24-e-register` then passed 10
+  of 10 with B1's catalog, B3's scenario map and live-suite honesty and B23-D's physical-evidence contract (7 files, 68 tests); the
+  records below add only what the drafts did not hold. (2) Nothing live ran: the production-auth harness
+  (`playwright.production-auth.config.ts`, `e2e-production-auth/`) refuses to start without a reviewed isolated target and
+  `PRODUCTION_AUTH_STAGING_TARGETS` is empty (OD-191), so every live and physical row of `qualification-matrix.md` stays
+  BLOCKED-LIVE-QUALIFICATION with its LB ids; E changes no application UI, so no browser run was needed, and the harness is outside
+  both browser configurations' test directories. (3) B24-D4's CI run (38076687384 on `6e4e1bb`) was green in every job -
+  page-browser-e2e 21 min 47 s of 30 (headroom 8 min 13 s), page-browser-e2e-b24 6 min 20 s of 20 (13 min 40 s; `multi-tab` 2 and
+  `keyboard-and-focus` 4 green there), prompt-to-gerber 9 min 26 s, agent-boundary-suites 4 min 55 s - so `lastGreenSha` is
+  `6e4e1bb`. (4) Four statements the tripwire found in older pages (`ai-control-plane-b21/unknowns-and-owner-decisions.md:155, :156,
+  :158`, `ai-control-plane-b18/unknowns-and-owner-decisions.md:12`) are left for the closeout's notes, as the task says. The lead's
+  close: on the final tree with the drafts applied: pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification 488 passed,
+  15 skipped; tsc 0; eslint 0 on the 14 changed TypeScript files; the four B24 generators run twice with zero drift (only
+  `threshold-census.csv` moves, E's five rows).
+
+### B24-F - final product verdict artifacts: the derived maps, the registers, the reports and the verdict (2026-10-10 local; increment workflow + lead; this commit)
+
+- **Delivered.**
+  - Fa (D24-37; D24-38 in part): the generator and its six maps. `b24-f-maps` (10) and `b24-f-generator-inventory` (6).
+  - Fb (D24-39, D24-40 in part): eleven written pages. `b24-f-registers` (6) and `b24-f-verdict-lines` (11).
+  - The reviewed pin moves: B21's three export rows (34 -> 31), `b24-d0-ci-split` 1 and 7 (487 -> 491), the threshold census (311 -> 315 rows).
+- **Review round.** Twelve confirmed findings, all low after verification, each fixed test-first:
+  - correctness-1..7 and 11;
+  - security-1..4.
+  - `ffix-red-1` was red as expected: 11 cases across the four suites, exit 1.
+  - Pre-edit counterexamples:
+    - the old commit rule accepted two swapped commits and a planted `deadbee` (`old-commit-rule.out`);
+    - the old physical rule passed "...passed on all boards; no regressions" (`old-physical-rule.out`).
+  - `ffix-break-run` used four deliberate breakages, each caught, then restored by sha256 with zero drift:
+    - the generator's setting override dropped (maps case 6);
+    - one record per site (maps case 5);
+    - the detector's for-of rule disabled (inventory cases 3 and 6);
+    - case 8 reverted to twelve unbudgeted walks (maps case 2).
+  - The fixes:
+    - the inventory is derived from the test files: 46 suites added, classes unchanged;
+    - `role_permitted` beside the decision;
+    - the coverage row space is pinned;
+    - the setting is built independently;
+    - one walk, with a budget, in maps case 8;
+    - commits bound to their own increment by a record;
+    - D24-3 closed in part;
+    - the frozen lines are never noted in place;
+    - E's four discovery rows take E's own page as source;
+    - the discovery is cited at `58c0834`'s numbering;
+    - bare and continued citations resolve;
+    - the physical rule needs the negation on the completion word itself.
+- **Gates** (all through the lock; no DATABASE_URL):
+  - The qualification folder: 520 passed, 15 skipped, 1 red. The red is `b24-f-registers` 4, which waits for this commit's OD append.
+  - The engineering, auth, MCP, CI-scope and lead-record suites: 17 files, 244 passed.
+  - The closeout tripwires, the provider gates and B14.2-B14.4: 12 files, 144 passed.
+  - `app/api/__tests__` and `app/lib/agent/__tests__`: 63 files, 1474 passed.
+  - The database-delivery list as CI runs it: 24 files passed, 3 skipped; 196 tests passed, 12 skipped.
+  - tsc 0. eslint 0 on the nine changed TypeScript files.
+  - All 28 generators exit 0 with zero drift; the maps and census generators were run twice, byte-identical. `gen-demo-fixtures` rewrites its file with CRLF; the content is identical, and the file was restored to its LF bytes (sha256 equal to HEAD).
+- **Prompt-to-gerber.** F's four suites add about 39 s locally (maps 37 s). CI's last reading was 9 min 26 s of 25, so the job stays well clear of OD-30's five-minute line.
+- **Stop conditions.** None hit.
+- Lead close (2026-10-10): the fast increment form, one run (wf_5af2a8f6-d97: implementer, four review lenses, a skeptic each, one
+  fix round; Fa and Fb together, lead decision D21). The review raised sixteen findings; twelve were confirmed (all low after
+  verification) and fixed test-first with planted breakages restored by sha256 - among them the commit check that accepted any hash
+  anywhere in the ledger (now bound to the closing increment's own clause or paragraph), the permission matrix that omitted the role
+  gate (708 rows), the coverage-matrix case that checked presence instead of the row space, and four of B24-E's superseded-statement
+  rows that named B24-D4's ledger as their source; four were refuted (among them that scope 4 should read BLOCKED: Q1's recorded live
+  runs carry E's `failing` marker, so the shared sandbox rule computes NOT READY, and the verdict states what is computed). The
+  lead's decisions: (1) the two pin moves the task did not list - `b24-d0-ci-split` 1 and 7 (the set-aside pattern gains `f`; 487 ->
+  491 files) and four new `threshold-census.csv` rows for the Fa suites' budgets and yields - are the same reviewed moves B24-D3, D4
+  and E made for their new suites, and stand; (2) the four OD entries were appended from the review round's verbatim drafts
+  (`f-od-drafts-v2.md`, sha256 `411194c4...`), each heading equal to its draft, in the order OD-220, OD-240, OD-221, OD-241, OD-220's
+  register half a dated line under its own heading; (3) `b24-f-registers` 6 simulated F's four closure lines on top of a discovery
+  that, once the lead applied them, already held them, and so counted nine where it expected four - a defect of the case, not of the
+  records - fixed in place with a dated note (the count is now the tree's post-base lines plus the four simulated), then 6 of 6 with
+  `b20-a2-negotiation`, `b20-a3-live-reread` and `b21-d-page` (4 files, 59 tests); (4) `PROGRAM_STATE.json`'s `nextAction` names the
+  closeout's two commits, the merge after green CI and the final program report; (5) B24-E's CI run (38086426338 on `58c0834`) was
+  green in every job - page-browser-e2e 15 min 31 s of 30, page-browser-e2e-b24 7 min 06 s of 20, prompt-to-gerber 14 min 04 s of 25,
+  agent-boundary-suites 5 min 54 s of 20 - so `lastGreenSha` is `58c0834`; (6) F's superseded-statement table cites discovery at
+  `58c0834`'s numbering, which does not count lines starting `- [B24-F` or `- [B24-closeout`, so the closeout's discovery lines carry
+  the `[B24-closeout, <date>]` tag. The lead's close: on the final tree with the records applied: pcb 977 passed, 4 skipped; B14.4
+  22; confinement 375; qualification 521 passed, 15 skipped; F's four suites with the record readers 59 of 59 after the case-6 fix;
+  tsc 0; eslint 0 on the 9 changed TypeScript files.
+
+
+### B24-closeout - commit 1/2: the superseding notes and OD-221's record corrections (2026-10-10 local; increment workflow + lead; this commit)
+
+- **Delivered** (D5; D24-38's and D24-40's closeout halves; no new defect, no LB row, no OD entry; `open-risks-and-owner-decisions.md` section 4).
+  - Of the superseded-statement table's 96 not-noted rows, 91 are noted: 48 in place by the closeout in 30 files (five code files - four inside an existing comment, one trailing comment on a test's it( line - and 25 pages: twelve table rows inside their last cell, 31 lines appended), each with the closeout's dated note naming the increment's record and its list's line, on a code line inside a comment the TypeScript parser reads as one and at a sentence or clause end; six in place in the lead's files and 37 discovery rows nearby by 32 dated lines, from the page's drafts (4.7, 4.8), applied by the lead in this commit. Five stay not noted with the reason in place, because their own sources call the cited line still true or unchanged (B24-A1's expected-origin.ts and trusted-request-context.ts headers; B24-C2's llm-call-record.ts, orchestration store.ts and run-trace-store.ts): those five files are byte-identical to 7ce1236. The eight frozen rows stay recorded only.
+  - One row's citation corrected (OD-111's purge statement: OWNER_DECISIONS.md 1101-1103 to 1106-1107, read at 600d1ba, 58c0834 and 7ce1236).
+  - B24-E's four tripwire finds carry the note (B21's unknowns page lines 155, 156 and 158; B18's line 12).
+  - OD-5 closed in its Status cell: B16-B's mechanism (ddf1dc0 registered 0027 and 0028; B19-D 0029 and B19-E 0030, 2026-09-13; B24-A4 0031, 2026-10-08) CONFIRMED offline; the 2026-09-24 run RECORDED as the migration proof's section 3 holds it (the migrations of its day on a clean database, 0029 and 0030 INFERRED, 0031 not yet written), and 0031's real-server apply BLOCKED-LIVE-QUALIFICATION (LB-14). OD-19's count corrected in place (65 commits under the other address, 11 in B17's range and 54 in B18's, 2026-09-09 to 2026-09-11; 13 pull-request merges, #2-#14, carry the GitHub noreply author; the program's range f7bf546^1..origin/main, 276 commits); the OD list cites OD-220, OD-221, OD-240 and OD-241 at their heading lines; OD-221 amended by one dated line under its heading (D13).
+  - Recorded for commit 2/2: pull requests #4-#7 hold commits dated up to 237 minutes after their merge (INFERRED a clock-label skew), and the unmerged branches at 7ce1236.
+- **Test-first.** closeout-red-1: b24-f-registers 7 and 8 red on 7ce1236 with the cases written, 6 passed, exit 1. The filter counterexample: with the 32 drafted lines inserted in memory, A1's fourteen discovery rows and B3's later citations moved; after the pin move none did. closeout-break-run: four planted breakages, each caught by case 7, restored by sha256.
+- **Review round** (2026-10-10; correctness-1, correctness-2, correctness-3, correctness-5, security-1, security-2, security-3). cfix-red-1: cases 9 and 10 written and case 7 strengthened (a whole-tree walk, the TypeScript parser's comment ranges, a sentence-boundary rule) on the closeout's tree: red - 7 (four notes splitting a sentence), 9 (16 problems: the OD-221 amendment a four-line heading block; 2.3's hand-off unnoted; OD-5's two texts not held to the proof's section 3 - the run's migrations and the increments that registered 0029-0031), 10 (five notes on lines their own sources call still true or unchanged); the planted texts of case 10 all caught. Fixed: the amendment one dated line (OD-241 cited at :3214); 2.3 noted; OD-5's texts against the proof; five rows not noted with the reason and their files restored to 7ce1236's bytes; two notes moved to a sentence end on their line. cfix-green-2: 7, 9 and 10 green (4 and 8 wait for the lead); case 7's whole-tree walk takes 0.44-0.52 s here, under lesson 14's 1.5 s, so it declares no budget and the threshold census is unchanged (a first try with a 180 s budget and a yield turned b24-d1-threshold-census 5 red, cfix-after-qualification). cfix-break-1: two planted breakages in real files - a closeout note in app/lib/auth/route-handlers.ts, which no row names, and the note of app/api/parts/search/route.ts:19 moved into a string after https:// - each caught by case 7 (the old scan read only the table's files and took any earlier // for a comment); both files restored, sha256 equal.
+- **Pin moves** (each in place, dated): b24-a1-environment-profile.test.ts:394 and b24-b3-scenario-map.test.ts:267 - the discovery filters skip the closeout's dated lines as B24-F's AFTER_BASE_LINE does; the lead's own dated lines stay counted. b24-f-registers 6 admits the task's `not noted (<reason>)` state, which case 10 confines to the five rows.
+- **Gates** (all through the lock; no DATABASE_URL, no browser):
+  - The 50 reader suites outside the qualification folder: 667 passed before (closeout-after-readers) and after the review round (cfix-after-readers).
+  - The qualification folder (cfix-final-qualification): 523 passed, 15 skipped, 2 red - b24-f-registers 4 and 8, which wait for this commit's OD texts, notes and discovery lines (cfix-sim-1 applies the lead's 4.7-4.9 in memory: green; case 9 runs case 4's check on 4.9's three OD texts applied in memory: green).
+  - b24-e-statements and the B21, B22 and B23 closeout tripwires green on the final page; tsc 0; eslint 0 on the 9 changed TypeScript files.
+  - All 28 generators twice: 56 runs, exit 0, zero drift but gen-demo-fixtures' known CRLF rewrite (content identical, LF bytes restored from HEAD; the tree then equal to the pre-run snapshot).
+  - The tree secret scan: exit 0 (4197 entries, 8 allowlisted lines).
+- **Counts.** Census 168 / 165 / 3 / 0; tools 48 / 37 / 9 / 28; 107 action records; 32 migrations - unchanged.
+- **Stop conditions.** None hit: five of 96 rows stay not noted with their reason (under a quarter); no note changed a generated output; every tripwire green.
+- Lead close (2026-10-10): the fast increment form, one run (wf_cf4d1b77-4df: implementer, four review lenses, a skeptic each, one
+  fix round). The review raised nine findings; seven were confirmed and fixed test-first, the gravest that OD-5's closing note
+  credited the 2026-09-24 real-server run with all 32 migrations although 0031 did not exist then (OD-5's text now says what ran,
+  RECORDED and INFERRED, and that 0031's apply to a real server stays BLOCKED-LIVE-QUALIFICATION, LB-14), and that five cited lines
+  whose own sources call them still true were being labelled superseded (they stay `not noted` with the reason in place). Disclosed
+  by the builder and recorded here: early in the run it executed `git fetch --dry-run` once in this tree - read-only, no ref moved,
+  though it may have contacted GitHub, which the run's rules forbid; no other network call was made. The lead's decisions: (1) the
+  drafts for the lead's files (the in-place notes in `README.md` and `OWNER_DECISIONS.md`, OD-5's Status cell, OD-19's corrected
+  count, the one-line OD-221 amendment, the 32 dated discovery lines and three clauses, this ledger heading and the README row) were
+  applied by the builder's own simulation of the lead's application, run first in memory (green: `b24-f-registers` 4 and 8, the three
+  discovery numberings, the defect ids, the commit bindings and the list sources) and then turned into a write-on-green copy of the
+  same script, so the files hold exactly what was checked; (2) B24-F's CI run (38096591308 on `7ce1236`) was green in every job -
+  prompt-to-gerber 16 min 30 s of 25, page-browser-e2e 12 min 01 s of 30, page-browser-e2e-b24 8 min 58 s of 20,
+  agent-boundary-suites 5 min 42 s of 20 - so `lastGreenSha` is `7ce1236`; (3) the A1 and B3 discovery filters now skip the
+  closeout's dated lines (a reviewed pin move the task's text missed: their pattern took upper-case increment letters only); (4) the
+  history finding - pull requests #4-#7 hold commits whose author dates fall up to 237 minutes after their own merge commits
+  (INFERRED: a clock writing UTC under a -0400 label) - is for commit 2/2's `HISTORY FABRICATED OR BACKDATED` line, with the lead's
+  read-only checks of main's history and of the protected original's modification times. The lead's close: on the final tree with the
+  drafts applied: pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification 525 passed, 15 skipped (`b24-f-registers` 4 and
+  8 green once applied); tsc 0; eslint 0 on the changed TypeScript files.
+
+### B24-closeout - commit 2/2: the final run, the verdict's measured scopes and the integrity lines (2026-10-10 local; increment workflow + lead; this commit)
+
+- **Delivered** (D5; D24-38 closed; D24-40's integrity half; OD-221 amended by one dated line; no new defect, no LB row, no OD entry). Records, reports and one test file, `b24-f-verdict-lines`, which prompt-to-gerber runs; no production code.
+  - `test-and-validation-report.md` (new):
+    - The lead's final run at 26dc8b8: vitest 864 files passed and 11 skipped; 9,733 tests passed and 68 skipped; exit 0 in 1,164 s. tsc 0. eslint . exit 1: 68 problems, 33 errors in 13 files, none introduced by B24. Browser runs as CI splits them: 55, 13 and 4 passed.
+    - CI at 26dc8b8: deterministic-manufacturing run 38104126392, seven jobs `success`, the least headroom page-browser-e2e's 8 min 06 s of 30. benchmark-quality run 38104126347: benchmark-core and benchmark-latency `success`.
+    - The 61 B24 vitest suites (563 `it(` blocks) and 5 Playwright specs (17 `test(` blocks), by increment.
+    - The counts from their pins.
+    - What CI does not select: 302 of the 878 vitest test files, 64 of the 73 `b16-0-*` suites among them. And what was not run.
+  - `unknowns-and-owner-decisions.md` (new):
+    - OD-190..OD-241: 47 applied, 3 applied in part, 2 proposed.
+    - D24-1..D24-43 by their clauses: 26 closed offline, 8 closed, 4 closed as recorded, 3 in part, 2 open.
+    - The discovery's section 8 items, and the owner decisions still required.
+  - `final-verdict.md` filled in place:
+    - Scope 1 NOT READY (eslint). Scope 2 READY, scoped. The verdict PARTIAL at 26dc8b8.
+    - Section 5: the final program report in runbook `:1220-1264`'s format, with FINAL MAIN SHA and PULL REQUESTS MERGED left as `{MERGE}`.
+    - The ten status lines, computed (5.2).
+    - The integrity lines with method and reach (5.3):
+      - SECRETS EXPOSED NO for the scanned reach (354 commits, 0 hits); the 167 commits of the five pushed, unmerged branches scanned since by the lead (origin/main..origin/<branch> each: 0 hits, exit 0).
+      - PROTECTED ORIGINAL MODIFIED YES (67 of 43,943 files modified on or after 2026-09-07; writers UNKNOWN, INFERRED other tools and the owner; none a tracked source file of the program's making; no commit of the program writing there).
+      - HISTORY FABRICATED OR BACKDATED NO (pull requests #4-#7 dated after their merges, INFERRED a clock-label skew; the reconstruction branch named and unmerged).
+  - `changed-files.md` re-derived for 57c3b29..26dc8b8 (21 commits).
+  - `threat-model-closure-register.md`: D24-38 closed on its re-read; D24-39 and D24-40 named at B24-F, `7ce1236`, in place of `this commit (B24-Fb)`; the twelve open rows re-read and unchanged.
+  - `executive-summary.md`: two dated notes.
+- **Test-first (implementation).**
+  - close2-base-qualification: 53 files and 552 tests passed before any edit.
+  - close2-red-1-verdict-lines: red on cases 1, 2, 7 and 11 with the pins moved.
+  - close2-green-1, then -2: 11 passed.
+  - close2-break-1: two planted breakages, both caught, restored by sha256.
+- **Review round** (2026-10-11; correctness-1 to -6, security-1, -5, -6).
+  - close2fix-red-1 and -2 (the second with soft assertions):
+    - red: the benchmark-quality jobs as one merged row; D24-39 and D24-40 still `this commit`; PROTECTED ORIGINAL MODIFIED answered NO beside 67 modified files; SECRETS EXPOSED naming no 167 unscanned pushed commits; five unqualified "every job" claims; the CI selection unnamed; three records-only lines; D24-3 off its clause.
+    - green on the old pages: the unknowns page's OD rows, the suite table and 5.2 (no present error).
+  - Fixed on the pages as listed above.
+  - close2fix-break-A to -D: eight planted breakages, each caught, all files restored by sha256.
+- **Gates** (all through the lock):
+  - The qualification folder plus the B21, B22 and B23 tripwires: 53 files passed, 3 skipped; 552 tests passed, 15 skipped; exit 0.
+  - The nine page suites: 81 passed.
+  - Readers: 49 passed. AST gates: 22 passed.
+  - tsc 0. eslint 0 on the changed test file.
+  - 28 generators twice: 56 runs, zero drift but `gen-demo-fixtures`' CRLF rewrite, LF bytes restored.
+  - Tree secret scan: exit 0, 4,199 entries.
+- **Counts.** Census 168 / 165 / 3 / 0; tools 48 / 37 / 9 / 28; 107 action records; 32 migrations. Unchanged.
+- **Before the merge.** Commit 2/2's own CI run must be green in every pull-request job. The five pushed, unmerged branches still need their secret scan.
+- Lead close (2026-10-11 local): the fast increment form, one run (wf_5d692c5a-cb3: implementer, four review lenses, a skeptic each,
+  one fix round), on the lead's final run at `26dc8b8` and CI there (both recorded on the task as its inputs). The review raised
+  thirteen findings; nine were confirmed and fixed test-first in `b24-f-verdict-lines` (cases 2, 7 and 11 strengthened in place),
+  four refuted - the gravest, that `PROTECTED ORIGINAL MODIFIED` read NO beside a listing of 67 modified files whose writers no
+  listing can name: it now reads YES, as measured, with what the listing does and does not show (none a tracked source file of the
+  program's making; no commit of the program writes there; writers UNKNOWN, INFERRED other tools and the owner) - and that the secret
+  scan's range left the 167 commits of the five pushed, unmerged branches outside it. The lead's decisions: (1) the lead accepts YES
+  as the measured answer (the runbook's line asks whether the original was modified, and a listing cannot attribute it), and the
+  final report states both what was measured and that no program commit wrote there; (2) the lead scanned the five branches at once
+  (B24-A2's scanner, `--history origin/main..origin/<branch>` for `codex/reconstruct-b06-b16-history` 162 commits,
+  `fix/assignment-queue-selection-reset` 1, `fix/b16-0-revoked-member-cold-import-timeout` 1, `fix/b18-d-repair-reapply-after-undo` 2
+  and `fix/b21-page-react-hooks-refs` 1: 1,505 entries, 6 allowlisted lines, 0 hits, every run exit 0), recorded it in place on
+  `final-verdict.md` 5.1 and 5.3 and the report (the line keeps "167 commits", which case 11 requires), and moved case 11's bite from
+  the phrase "not scanned: the N commits", no longer true, to the count itself, which the bite still removes; the drafts that still
+  called them unscanned were applied with that phrase replaced and nothing else changed; (3) OD-221's line replaces the blank line at
+  `OWNER_DECISIONS.md:3212`, as drafted, so OD-241 stays at `:3214`; (4) scope 1 reads NOT READY by its own rule (eslint `.` exits 1
+  on 33 errors that predate B24: `app/page.tsx`'s 14, `BomView.tsx`'s 4 and `PcbEditor.tsx:1422` among the files B24 touched, each
+  recorded before it, the rest in files B24 never changed; the two B24-touched files with warnings lint identically at `57c3b29`),
+  and the three real-process suites ran in neither the final run nor CI; (5) D24-39's and D24-40's register cells keep `this commit
+  (B24-Fb)`, since no record binds `7ce1236` to that token and the binding check would turn red; (6) commit 2/2 changes one test file
+  that prompt-to-gerber runs, so its own CI run is read before the merge, and `lastGreenSha` moves to it only when green. The lead's
+  close: pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification 525 passed, 15 skipped; tsc 0; eslint 0 on the changed
+  TypeScript file; the page checks after the records 6,693 passed, 35 skipped (553 files, app/api and app/lib/agent included);
+  citation sweeps 0 broken; the tree secret scan 0 hits; counts 168/165/3/0, 48/37/9/28, 107, 32.

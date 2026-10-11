@@ -47,7 +47,7 @@ function importersOf(root: string, tops: readonly string[], io: TreeReader): str
       if (!/\.(?:ts|tsx|mjs|js)$/.test(name)) continue;
       const path = relative(root, full).split(sep).join("/");
       if (path.startsWith("app/lib/manufacturing-providers/")) continue;
-      if (io.read(full).includes("manufacturing-providers")) importers.push(path);
+      if (io.read(full).includes("manufacturing-providers") && !B24_QUALIFICATION_ROOTS.some((root) => path.startsWith(root))) importers.push(path); // [B24-A1, 2026-10-06] reviewed move (D6), the only one: a path under a B24 root (B24_QUALIFICATION_ROOTS, at the end of this file) is read - a read error still fails the case - but never listed; every other importer still is
     }
   };
   // [B23-A1 review, 2026-10-02] only a missing top-level directory is skipped; every other read error propagates (was: a bare catch
@@ -282,3 +282,9 @@ describe("[B23-A1] admission per provider and per operation tier", () => {
     expect(refused).toBeGreaterThanOrEqual(2 * handoffs + 4 * reads);
   });
 });
+
+/** [B24-A1, 2026-10-06] D6: the B24 roots case 8 admits as a class, by prefix, never by file - the deployment configuration and flag
+ *  inventory (app/lib/deployment/), the golden evaluation catalog (app/lib/evaluation/, B24-B1), the B24 suites
+ *  (app/lib/qualification/) and the observability records (app/lib/observability/, B24-C1/C3). A root with no file admits nothing.
+ *  A file outside these roots that names the provider directory is still listed, and fails the case until a reviewed move. */
+const B24_QUALIFICATION_ROOTS: readonly string[] = ["app/lib/deployment/", "app/lib/evaluation/", "app/lib/qualification/", "app/lib/observability/"];

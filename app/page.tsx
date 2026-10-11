@@ -59,7 +59,7 @@ import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-
 import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
 import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
 import { layoutCandidateChatLine } from "@/app/lib/agent/layout-report"; // [B18-E E17]
-import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, chatResumeFor, chatResumeKeptAfter, chatResumeOfferLine, initialChatResumeObservation, initialRunView, markGrantLineDropped, observeChatResume, orchestrationRunLogLine, resumableChatRun, restoredChatResume, projectRunView, replacementChatLines, reduceRunView, refusedLineLabel, restoredEntryLog, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry, type ResumableChatRun } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
+import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, chatResumeFor, chatResumeKeptAfter, chatResumeOfferLine, initialChatResumeObservation, initialRunView, markGrantLineDropped, observeChatResume, orchestrationRunLogLine, resumableChatRun, restoredChatResume, projectRunView, recoveryDisplayAction, replacementChatLines, reduceRunView, refusedLineLabel, restoredEntryGrants, restoredEntryLog, restoredEntryRecovery, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry, type ResumableChatRun } from "@/app/lib/project/chat-run-view"; // [B18-D I6]; [B24-D2B] the recovery result for a live or restored entry
 import { ExecutionEntryActions } from "@/app/components/chat/ExecutionEntryActions"; // [B18-D I8]
 import { AutonomyModeControl } from "@/app/components/chat/AutonomyModeControl"; // [B18-D I11]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
@@ -2085,7 +2085,7 @@ function SchematicEditor({
         {statusMsg}
       </div>
 
-      <svg
+      <svg role="img" aria-label="Schematic drawing: pointer-only, not readable by assistive technology. From the keyboard, use Go to component in the schematic toolbar to select a component by its reference designator."
         ref={svgRef}
         id="sirkit-schematic-svg"
         data-testid="schematic-canvas"
@@ -2624,7 +2624,7 @@ export default function Home() {
   const activeReviewRef = useRef<string | null>(null);
   const activeTidyRef = useRef<string | null>(null);
   const activeSecondOpinionRef = useRef<string | null>(null);
-  const activeChatRef = useRef<string | null>(null);
+  const activeChatRef = useRef<string | null>(null); const chatFocusReturnRef = useRef(false); // [B24-D3 review, 2026-10-10] correctness-2: set when a run is sent from the prompt, cleared by any pointer press; the run's end returns focus to the prompt only while it is set
   const [lastDesignPrompt, setLastDesignPrompt] = useState("");
   // Post-apply auto pipeline: bumped whenever a machine-generated schematic
   // lands (generate / Tier-2 edit / apply-suggestions). The debounced effect
@@ -4463,7 +4463,7 @@ export default function Home() {
     setMessages((prev) => [...prev, userMsg, logMsg, assistantMsg]);
     setInput("");
     activeChatRef.current = scope.requestId;
-    setLoading(true);
+    setLoading(true); chatFocusReturnRef.current = document.activeElement !== null && document.activeElement === document.querySelector('[data-testid="prompt-input"]'); // [B24-D3 review, 2026-10-10] correctness-2: sent from the prompt (Enter), so the prompt may take focus back when the run ends
     const chatRun: { requestId: string; reader: ReadableStreamDefaultReader<Uint8Array> | null; stopped: boolean } = { requestId: scope.requestId, reader: null, stopped: false }; // [B18-D I9]
     activeChatRunRef.current = chatRun;
     setAiProviderFailure(null);
@@ -4806,7 +4806,7 @@ export default function Home() {
       // Only THIS request may clear the busy flag it set.
       if (activeChatRef.current === scope.requestId) {
         activeChatRef.current = null;
-        setLoading(false);
+        setLoading(false); const returnFocus = (frames: number): void => { const prompt = document.querySelector<HTMLTextAreaElement>('[data-testid="prompt-input"]'); if (!chatFocusReturnRef.current || !prompt || (document.activeElement !== null && document.activeElement !== document.body)) return; if (prompt.disabled) { if (frames > 0) window.requestAnimationFrame(() => returnFocus(frames - 1)); return; } chatFocusReturnRef.current = false; prompt.focus(); }; window.requestAnimationFrame(() => returnFocus(30)); // [B24-D3, 2026-10-10] OD-215: the prompt is disabled while a run streams, so keyboard focus falls to body; when the run ends it returns to the prompt, and only from body (a person's own focus elsewhere is left where it is); [B24-D3 review, 2026-10-10] correctness-2: and only for a run sent from the prompt with no pointer pressed since (chatFocusReturnRef), so a click on a canvas that takes no focus keeps the editor's shortcuts
       }
     }
   }
@@ -6043,7 +6043,7 @@ export default function Home() {
     : null;
 
   return (
-    <div className="h-screen flex flex-col bg-zinc-950 text-zinc-100">
+    <div className="h-screen flex flex-col bg-zinc-950 text-zinc-100" onPointerDownCapture={() => { chatFocusReturnRef.current = false; /* [B24-D3 review, 2026-10-10] correctness-2: a pointer press anywhere (portals included) means focus is the person's; observes only, no command */ }}>
       {/* ── Header ── */}
       <header className="h-12 border-b border-zinc-800 flex items-center px-3 gap-3 shrink-0">
         <div className="flex items-center gap-2 pr-3 border-r border-zinc-800 h-12 -my-px">
@@ -6457,7 +6457,7 @@ export default function Home() {
                     }}
                     onExecutionGrantProgress={(grantId) => { const entry = executionEntriesRef.current.get(grantId); if (entry) upsertExecutionEntry(entryExecuting(entry)); }}
                     onExecutionGrantAttemptRefused={(grantId, refusal) => { /* [B18-D review] the card stays; the entry says the attempt changed nothing */ const entry = executionEntriesRef.current.get(grantId); if (entry) upsertExecutionEntry(entryAttemptRefused(entry, refusal)); }}
-                    onExecutionRecovery={(results) => { for (const result of results) { const entry = executionEntriesRef.current.get(result.grantId); if (entry && result.action !== "left-in-flight") upsertExecutionEntry(entryRecovery(entry, result.action)); } }}
+                    onExecutionRecovery={(results) => { for (const result of results) { const action = recoveryDisplayAction(result); if (action === null) continue; const entry = executionEntriesRef.current.get(result.grantId); if (entry) upsertExecutionEntry(entryRecovery(entry, action)); else setMessages((prev) => restoredEntryRecovery(prev, result.grantId, action)); } }} /* [B24-D2B, 2026-10-10] OD-214: a live entry as before; an entry restored after a reload (a static record) takes the sweep's result too */ restoredExecutionGrants={() => restoredEntryGrants(liveStateRef.current.messages, (grantId) => executionEntriesRef.current.has(grantId))} /* [B24-D2B review 3, 2026-10-10] every editor load re-derives each restored, unsettled entry from the journal's record, never from an earlier load's sentence */ pageProject={() => projectRef.current?.id ?? null} /* [B24-D2B review 4, 2026-10-10] a sweep's results reach only the project the page showed when it started */
                   />
                 </div>
               )}
@@ -6829,7 +6829,7 @@ export default function Home() {
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto">
-              <div className="px-3 py-4 space-y-3">
+              <div className="px-3 py-4 space-y-3" role="log" aria-live="polite" aria-relevant="additions text" aria-busy={loading} aria-label="Conversation with the assistant">
                 {messages.length === 0 && (
                   <p className="text-xs text-zinc-600 text-center pt-6">
                     Describe a circuit to get started.
@@ -6843,7 +6843,7 @@ export default function Home() {
             </div>
 
             {genError && (
-              <div className="px-3 py-1.5 text-xs text-red-400 border-t border-zinc-800 shrink-0">
+              <div role="alert" className="px-3 py-1.5 text-xs text-red-400 border-t border-zinc-800 shrink-0">
                 {genError}
               </div>
             )}
@@ -6950,7 +6950,7 @@ export default function Home() {
                 </div>
               )}
               <Textarea
-                data-testid="prompt-input"
+                data-testid="prompt-input" aria-label="Message to the assistant"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(e) => {
@@ -7019,7 +7019,7 @@ export default function Home() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      title="More checks"
+                      title="More checks" aria-label="More checks"
                       onClick={() => setMoreMenuOpen((o) => !o)}
                     >
                       ⋯

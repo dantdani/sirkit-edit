@@ -1,21 +1,30 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import postgres, { type PendingQuery, type Row } from "postgres";
 import { getSqlClient } from "../../db/client";
+import { databaseTls } from "../../db/connection-security";
+import { createPostgresMigrationExecutor } from "../../db/migrations/postgres-executor";
+import { claimQualificationTarget } from "../../db/qualification-target";
 import { databaseQualification } from "../../db/test-qualification";
-import { evaluatePhysicalReadiness } from "../readiness";
-import { InMemoryPhysicalBindingRepository, PhysicalBindingService, type PhysicalBindingCommitRequest } from "../repository";
+import { PhysicalBindingService, type PhysicalBindingCommitRequest } from "../repository";
 import { PostgresPhysicalBindingRepository } from "../server-repository";
-import { physicalBindingDigest } from "../stable";
-import type { PhysicalBindingMigrationRecord } from "../types";
-import { ACTOR, exactCandidate, transition } from "./fixtures";
+import { ACTOR, transition } from "./fixtures";
+import { clearRunScope, physicalBindingAggregate, runScopePrefix } from "./_schema-integrity-scope";
 
 // B16-B item 5 (LB-4): opt-in via SIRKIT_DB_QUALIFICATION=1 + SIRKIT_DB_QUALIFICATION_URL — never .env.local, never DATABASE_URL.
 const databaseUrl = databaseQualification().url;
 if (databaseUrl) process.env.DATABASE_URL = databaseUrl;
-const sql = databaseUrl ? postgres(databaseUrl, { max: 2, prepare: false, onnotice: () => {} }) : null;
+const sql = databaseUrl ? postgres(databaseUrl, { max: 2, prepare: false, ssl: databaseTls(databaseUrl), onnotice: () => {} }) : null;
 const live = describe.runIf(Boolean(databaseUrl));
+// [B24-A4] D24-12, OD-201: every row this suite writes carries the run's own tenant prefix, and it deletes and updates only those
+// rows (the cleanup lives in _schema-integrity-scope.ts); the target must be claimed or empty first (claimQualificationTarget).
+const RUN = runScopePrefix("si");
+const TENANT = `${RUN}tenant-1`;
+const OTHER_TENANT = `${RUN}tenant-other`;
+const CROSS_SCOPE_REVISION = `${RUN}cross-scope-revision`;
+const ROLLBACK_REVISION = `${RUN}rollback-revision`;
+const scope = databaseUrl ? createPostgresMigrationExecutor(databaseUrl) : null;
 // Integration tests over the Supabase session pooler: each commit is several
 // network round trips, so the 5 s unit-test default is far too tight.
 const DB_TEST_TIMEOUT_MS = 60_000;
@@ -49,39 +58,14 @@ const checks = [
   "physical_readiness_identity_check",
 ] as const;
 
-async function clearPhysicalBindingTables(): Promise<void> {
-  await sql!.begin(async (tx) => {
-    await tx`DELETE FROM physical_binding_audit_events`;
-    await tx`DELETE FROM physical_readiness_assessments`;
-    await tx`DELETE FROM physical_binding_migration_records`;
-    await tx`DELETE FROM physical_binding_sets`;
-    await tx`DELETE FROM physical_binding_revisions`;
-  });
+/** [B24-A4] the run's rows only, in one transaction (was: five unscoped DELETEs here that emptied the five tables). */
+async function clearRun(): Promise<void> {
+  await clearRunScope(scope!, RUN);
 }
 
+/** [B24-A4] the aggregate, now under the run's own tenant (the builder moved to _schema-integrity-scope.ts). */
 async function aggregate(suffix = "b07"): Promise<PhysicalBindingCommitRequest> {
-  const candidate = exactCandidate(`component-${suffix}`, { candidateKeySuffix: suffix });
-  const memory = new InMemoryPhysicalBindingRepository();
-  const created = await new PhysicalBindingService(memory).createCandidate(candidate, `create-${suffix}`);
-  const assessment = evaluatePhysicalReadiness(candidate, { assessedAt: candidate.createdAt });
-  const migrationBase = {
-    schemaVersion: "sirkit.physical-binding-migration.v1" as const,
-    migrationKey: `migration-${suffix}`,
-    tenantId: candidate.scope.tenantId,
-    projectId: candidate.scope.projectId,
-    branchId: candidate.scope.branchId,
-    componentInstanceId: candidate.scope.componentInstanceId,
-    sourceSchemaVersion: "legacy.v1",
-    candidateRevisionId: candidate.revisionId,
-    status: "migrated" as const,
-    dryRun: false,
-    diagnosticCodes: [],
-    createdAt: candidate.createdAt,
-  };
-  const migration: PhysicalBindingMigrationRecord = { ...migrationBase, recordDigest: physicalBindingDigest(migrationBase) };
-  const state = { ...created, migrationRecords: [migration], assessments: [assessment] };
-  const event = state.auditEvents[0]!;
-  return { setId: state.set.setId, expectedRevision: 0, idempotencyKey: event.idempotencyKey, requestDigest: event.requestDigest!, state };
+  return physicalBindingAggregate(suffix, TENANT);
 }
 
 async function expectConstraint(query: PendingQuery<Row[]>, name: string): Promise<void> {
@@ -121,8 +105,11 @@ describe("migration 0025 identity", () => {
 });
 
 live("PostgreSQL physical-binding relational integrity", () => {
-  beforeEach(clearPhysicalBindingTables, DB_TEST_TIMEOUT_MS);
+  let admitted = false; beforeAll(async () => { await claimQualificationTarget(databaseUrl!, "schema-integrity"); admitted = true; }, DB_TEST_TIMEOUT_MS); // [B24-A4] the shared guard, before any statement; [B24-A4 review, 2026-10-08] `admitted` once it accepted the target
+  beforeEach(clearRun, DB_TEST_TIMEOUT_MS);
   afterAll(async () => {
+    if (admitted) await clearRun(); // [B24-A4 review, 2026-10-08] vitest runs afterAll after a failed beforeAll: never a statement on a refused target
+    await scope?.close();
     await sql?.end({ timeout: 1 });
     await getSqlClient().end({ timeout: 1 });
   });
@@ -159,52 +146,52 @@ live("PostgreSQL physical-binding relational integrity", () => {
 
     const counts = await sql!<{ revisions: number; sets: number; audits: number; migrations: number; assessments: number }[]>`
       SELECT
-        (SELECT count(*)::int FROM physical_binding_revisions) AS revisions,
-        (SELECT count(*)::int FROM physical_binding_sets) AS sets,
-        (SELECT count(*)::int FROM physical_binding_audit_events) AS audits,
-        (SELECT count(*)::int FROM physical_binding_migration_records) AS migrations,
-        (SELECT count(*)::int FROM physical_readiness_assessments) AS assessments
+        (SELECT count(*)::int FROM physical_binding_revisions WHERE left(tenant_id, length(${RUN})) = ${RUN}) AS revisions,
+        (SELECT count(*)::int FROM physical_binding_sets WHERE left(tenant_id, length(${RUN})) = ${RUN}) AS sets,
+        (SELECT count(*)::int FROM physical_binding_audit_events WHERE left(tenant_id, length(${RUN})) = ${RUN}) AS audits,
+        (SELECT count(*)::int FROM physical_binding_migration_records WHERE left(tenant_id, length(${RUN})) = ${RUN}) AS migrations,
+        (SELECT count(*)::int FROM physical_readiness_assessments WHERE binding_revision_id IN (SELECT revision_id FROM physical_binding_revisions WHERE left(tenant_id, length(${RUN})) = ${RUN})) AS assessments
     `;
     expect(counts[0]).toEqual({ revisions: 2, sets: 1, audits: 2, migrations: 1, assessments: 1 });
   });
 
   it("rejects non-positive revisions and every invalid persisted state vocabulary", { timeout: DB_TEST_TIMEOUT_MS }, async () => {
     await seedValid("states");
-    await expectConstraint(sql!`UPDATE physical_binding_revisions SET revision = 0`, "physical_binding_revision_number_check");
-    await expectConstraint(sql!`UPDATE physical_binding_sets SET revision = -1`, "physical_binding_set_revision_number_check");
-    await expectConstraint(sql!`UPDATE physical_binding_revisions SET lifecycle_state = 'invented'`, "physical_binding_revision_lifecycle_check");
-    await expectConstraint(sql!`UPDATE physical_binding_revisions SET approval_state = 'invented'`, "physical_binding_revision_approval_check");
-    await expectConstraint(sql!`UPDATE physical_binding_revisions SET technical_state = 'invented'`, "physical_binding_revision_technical_check");
-    await expectConstraint(sql!`UPDATE physical_binding_revisions SET freshness_state = 'invented'`, "physical_binding_revision_freshness_check");
-    await expectConstraint(sql!`UPDATE physical_binding_revisions SET conflict_state = 'invented'`, "physical_binding_revision_conflict_check");
-    await expectConstraint(sql!`UPDATE physical_binding_revisions SET applicability_state = 'invented'`, "physical_binding_revision_applicability_check");
-    await expectConstraint(sql!`UPDATE physical_binding_audit_events SET action = 'invented'`, "physical_binding_audit_action_check");
-    await expectConstraint(sql!`UPDATE physical_binding_migration_records SET status = 'invented'`, "physical_binding_migration_status_check");
-    await expectConstraint(sql!`UPDATE physical_readiness_assessments SET layout_state = 'invented'`, "physical_readiness_layout_state_check");
-    await expectConstraint(sql!`UPDATE physical_readiness_assessments SET manufacturing_state = 'invented'`, "physical_readiness_manufacturing_state_check");
+    await expectConstraint(sql!`UPDATE physical_binding_revisions SET revision = 0 WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_revision_number_check");
+    await expectConstraint(sql!`UPDATE physical_binding_sets SET revision = -1 WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_set_revision_number_check");
+    await expectConstraint(sql!`UPDATE physical_binding_revisions SET lifecycle_state = 'invented' WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_revision_lifecycle_check");
+    await expectConstraint(sql!`UPDATE physical_binding_revisions SET approval_state = 'invented' WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_revision_approval_check");
+    await expectConstraint(sql!`UPDATE physical_binding_revisions SET technical_state = 'invented' WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_revision_technical_check");
+    await expectConstraint(sql!`UPDATE physical_binding_revisions SET freshness_state = 'invented' WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_revision_freshness_check");
+    await expectConstraint(sql!`UPDATE physical_binding_revisions SET conflict_state = 'invented' WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_revision_conflict_check");
+    await expectConstraint(sql!`UPDATE physical_binding_revisions SET applicability_state = 'invented' WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_revision_applicability_check");
+    await expectConstraint(sql!`UPDATE physical_binding_audit_events SET action = 'invented' WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_audit_action_check");
+    await expectConstraint(sql!`UPDATE physical_binding_migration_records SET status = 'invented' WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_migration_status_check");
+    await expectConstraint(sql!`UPDATE physical_readiness_assessments SET layout_state = 'invented' WHERE binding_revision_id IN (SELECT revision_id FROM physical_binding_revisions WHERE left(tenant_id, length(${RUN})) = ${RUN})`, "physical_readiness_layout_state_check");
+    await expectConstraint(sql!`UPDATE physical_readiness_assessments SET manufacturing_state = 'invented' WHERE binding_revision_id IN (SELECT revision_id FROM physical_binding_revisions WHERE left(tenant_id, length(${RUN})) = ${RUN})`, "physical_readiness_manufacturing_state_check");
   });
 
   it("rejects orphan and cross-scope selected revisions", { timeout: DB_TEST_TIMEOUT_MS }, async () => {
     await seedValid("selected");
-    await expectConstraint(sql!`UPDATE physical_binding_sets SET effective_selected_revision_id = 'missing-revision'`, "physical_binding_set_selected_revision_fk");
+    await expectConstraint(sql!`UPDATE physical_binding_sets SET effective_selected_revision_id = 'missing-revision' WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_set_selected_revision_fk");
     await sql!.unsafe(`
       INSERT INTO physical_binding_revisions
-      SELECT 'cross-scope-revision', binding_id || '-cross', lineage_id || '-cross', 1,
-        'tenant-other', project_id, branch_id, board_instance_id, component_instance_id, variant_scope_digest,
+      SELECT $1, binding_id || '-cross', lineage_id || '-cross', 1,
+        $2, project_id, branch_id, board_instance_id, component_instance_id, variant_scope_digest,
         technical_digest, record_digest || '-cross', lifecycle_state, approval_state, technical_state,
         freshness_state, conflict_state, applicability_state, binding, created_at, created_by
-      FROM physical_binding_revisions LIMIT 1
-    `);
-    await expectConstraint(sql!`UPDATE physical_binding_sets SET effective_selected_revision_id = 'cross-scope-revision'`, "physical_binding_set_selected_revision_fk");
+      FROM physical_binding_revisions WHERE left(tenant_id, length($3)) = $3 LIMIT 1
+    `, [CROSS_SCOPE_REVISION, OTHER_TENANT, RUN]); // [B24-A4] the cross-scope row carries the run's prefix; its source is the run's own row
+    await expectConstraint(sql!`UPDATE physical_binding_sets SET effective_selected_revision_id = ${CROSS_SCOPE_REVISION} WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_set_selected_revision_fk");
   });
 
   it("rejects orphan or mismatched audit, migration, and assessment owners", { timeout: DB_TEST_TIMEOUT_MS }, async () => {
     await seedValid("owners");
-    await expectConstraint(sql!`UPDATE physical_binding_audit_events SET aggregate_set_id = 'missing-set'`, "physical_binding_audit_set_owner_fk");
-    await expectConstraint(sql!`UPDATE physical_binding_audit_events SET from_revision_id = 'missing-revision'`, "physical_binding_audit_from_revision_owner_fk");
-    await expectConstraint(sql!`UPDATE physical_binding_audit_events SET to_revision_id = 'missing-revision'`, "physical_binding_audit_to_revision_owner_fk");
-    await expectConstraint(sql!`UPDATE physical_binding_migration_records SET candidate_revision_id = 'missing-revision'`, "physical_binding_migration_revision_owner_fk");
-    await expectConstraint(sql!`UPDATE physical_readiness_assessments SET binding_record_digest = 'wrong-digest'`, "physical_readiness_revision_owner_fk");
+    await expectConstraint(sql!`UPDATE physical_binding_audit_events SET aggregate_set_id = 'missing-set' WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_audit_set_owner_fk");
+    await expectConstraint(sql!`UPDATE physical_binding_audit_events SET from_revision_id = 'missing-revision' WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_audit_from_revision_owner_fk");
+    await expectConstraint(sql!`UPDATE physical_binding_audit_events SET to_revision_id = 'missing-revision' WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_audit_to_revision_owner_fk");
+    await expectConstraint(sql!`UPDATE physical_binding_migration_records SET candidate_revision_id = 'missing-revision' WHERE left(tenant_id, length(${RUN})) = ${RUN}`, "physical_binding_migration_revision_owner_fk");
+    await expectConstraint(sql!`UPDATE physical_readiness_assessments SET binding_record_digest = 'wrong-digest' WHERE binding_revision_id IN (SELECT revision_id FROM physical_binding_revisions WHERE left(tenant_id, length(${RUN})) = ${RUN})`, "physical_readiness_revision_owner_fk");
   });
 
   it("rolls back valid early rows when a deferred owner violation fails at commit", { timeout: DB_TEST_TIMEOUT_MS }, async () => {
@@ -212,15 +199,15 @@ live("PostgreSQL physical-binding relational integrity", () => {
     await expect(sql!.begin(async (tx) => {
       await tx.unsafe(`
         INSERT INTO physical_binding_revisions
-        SELECT 'rollback-revision', binding_id || '-rollback', lineage_id || '-rollback', 1,
+        SELECT $1, binding_id || '-rollback', lineage_id || '-rollback', 1,
           tenant_id, project_id, branch_id, board_instance_id, component_instance_id, variant_scope_digest,
           technical_digest, record_digest || '-rollback', lifecycle_state, approval_state, technical_state,
           freshness_state, conflict_state, applicability_state, binding, created_at, created_by
-        FROM physical_binding_revisions LIMIT 1
-      `);
+        FROM physical_binding_revisions WHERE left(tenant_id, length($2)) = $2 LIMIT 1
+      `, [ROLLBACK_REVISION, RUN]); // [B24-A4] the run's own row, under the run's prefix
       await tx`UPDATE physical_binding_sets SET effective_selected_revision_id = 'missing-at-commit' WHERE set_id = ${commit.setId}`;
     })).rejects.toMatchObject({ constraint_name: "physical_binding_set_selected_revision_fk" });
-    expect((await sql!<{ count: number }[]>`SELECT count(*)::int AS count FROM physical_binding_revisions WHERE revision_id = 'rollback-revision'`)[0]!.count).toBe(0);
+    expect((await sql!<{ count: number }[]>`SELECT count(*)::int AS count FROM physical_binding_revisions WHERE revision_id = ${ROLLBACK_REVISION}`)[0]!.count).toBe(0);
     expect((await sql!<{ selected: string | null }[]>`SELECT effective_selected_revision_id AS selected FROM physical_binding_sets WHERE set_id = ${commit.setId}`)[0]!.selected).toBeNull();
   });
 });

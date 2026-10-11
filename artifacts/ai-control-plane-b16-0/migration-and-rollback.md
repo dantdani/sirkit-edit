@@ -27,7 +27,7 @@
 
 Apply `drizzle/0027_project_membership.sql` (idempotent `IF NOT EXISTS`),
 which creates `project_members`, its unique index, lookup index, CHECK
-constraints, and the RLS `SELECT` policy. Rollback SQL is in the file's DOWN
+constraints, and the RLS `SELECT` policy. Rollback SQL is in the file's DOWN [B24-closeout, 2026-10-10] superseded: B24-A4's record, artifacts/ai-control-plane-b24/database-and-recovery.md:399.
 section (drop policy, disable RLS, drop indexes, drop table). No existing
 table is altered; the migration is purely additive.
 

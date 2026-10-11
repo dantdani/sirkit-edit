@@ -34,16 +34,16 @@
  * project/session data. Body limits are EXPLICIT per route.
  */
 
-import { authorizeRequest, authorizeActor, type AuthorizeRequestOptions } from "./authorize";
+import { authorizeRequest, authorizeActor, principalRateLimitRefusal, type AuthorizeRequestOptions } from "./authorize"; // [B24-A3b] + the per-principal window (OD-197)
 import type { TrustedRequestContext, ProjectSelector } from "./types";
 import type { WorkerPrincipal } from "./worker-principal";
 import { readBoundedJsonBody, readBoundedJsonObject, boundedJsonRefusalResponse, isJsonContentType } from "../http/bounded-json";
 import { readBoundedStream } from "../http/bounded-stream";
 import { authorizeKicadHttpLibrary } from "../atomic/server-auth";
-import { policyFor } from "./route-policy";
+import { policyFor } from "./route-policy"; import { PUBLIC_MODEL_EGRESS_SCOPE, withLlmCallScope } from "../observability/llm-call-record"; // [B24-C1] D24-21, OD-207: the call-record scope, on this line so no line moves
 import { requireSameOrigin, forbidden, jsonError } from "./request-security";
 import { parseOriginHeader, resolveExpectedOrigin } from "./expected-origin";
-import { projectAuthRuntime, sensitiveOperationsBlocker, type AuthRuntimeProjection } from "./mode";
+import { projectAuthRuntime, type AuthRuntimeProjection } from "./mode"; import { productionServingBlocker } from "./deployment-profile"; // [B24-A1] OD-190: the one sensitive-route blocker, over mode.ts
 import { resolveTrustedRequestContext } from "./trusted-request-context";
 import { resolveMembershipRepository } from "./identity-runtime";
 import { membershipRevisionOf, projectRoleFromMembership, type ProjectMembershipRecord } from "./project-membership";
@@ -351,11 +351,11 @@ export function authenticatedJsonRoute<B = Record<string, unknown>>(
       const read = await readBoundedJsonObject(request, readOpts);
       if (!read.ok) return readerRefusalResponse(read, options.legacyReaderRefusals);
       for (const key of options.forbiddenBodyKeys ?? []) if (key in read.body) return forbiddenKey(key);
-      return handler({ context: authorized.context, body: read.body as B, bytes: read.bytes, meta, ...extra });
+      return withLlmCallScope({ routeId: authorized.policy.path, method: authorized.policy.method, scope: authorized.context }, () => handler({ context: authorized.context, body: read.body as B, bytes: read.bytes, meta, ...extra })); // [B24-C1] D24-21, OD-207: a provider call inside is recorded under the exact policy path and the trusted scope
     }
     const read = await readBoundedJsonBody(request, readOpts);
     if (!read.ok) return readerRefusalResponse(read, options.legacyReaderRefusals);
-    return handler({ context: authorized.context, body: read.value as B, bytes: read.bytes, meta, ...extra });
+    return withLlmCallScope({ routeId: authorized.policy.path, method: authorized.policy.method, scope: authorized.context }, () => handler({ context: authorized.context, body: read.value as B, bytes: read.bytes, meta, ...extra })); // [B24-C1] the same scope
   };
 }
 
@@ -443,7 +443,7 @@ export function publicRoute(
     // [B16.0.24.1 §2] least privilege: only the frozen three-field projection
     // ever reaches a callback — never the raw environment object.
     if (opts.exposeAuthRuntime) extra.authRuntime = projectAuthRuntime(opts.environment ?? process.env);
-    return handler({ meta: buildMeta(request, opts, opts.environment), ...extra });
+    return withLlmCallScope({ routeId: authorized.policy.path, method: authorized.policy.method, scope: PUBLIC_MODEL_EGRESS_SCOPE }, () => handler({ meta: buildMeta(request, opts, opts.environment), ...extra })); // [B24-C1] D24-21, OD-207: a public call is recorded under the reserved operator scope, with no principal
   };
 }
 
@@ -583,11 +583,11 @@ export function publicJsonRoute<B = Record<string, unknown>>(
       const read = await readBoundedJsonObject(request, readOpts);
       if (!read.ok) return readerRefusalResponse(read, options.legacyReaderRefusals);
       for (const key of options.forbiddenBodyKeys ?? []) if (key in read.body) return forbiddenKey(key);
-      return handler({ body: read.body as B, bytes: read.bytes, meta, ...extra });
+      return withLlmCallScope({ routeId: authorized.policy.path, method: authorized.policy.method, scope: PUBLIC_MODEL_EGRESS_SCOPE }, () => handler({ body: read.body as B, bytes: read.bytes, meta, ...extra })); // [B24-C1] the reserved operator scope
     }
     const read = await readBoundedJsonBody(request, readOpts);
     if (!read.ok) return readerRefusalResponse(read, options.legacyReaderRefusals);
-    return handler({ body: read.value as B, bytes: read.bytes, meta, ...extra });
+    return withLlmCallScope({ routeId: authorized.policy.path, method: authorized.policy.method, scope: PUBLIC_MODEL_EGRESS_SCOPE }, () => handler({ body: read.value as B, bytes: read.bytes, meta, ...extra })); // [B24-C1] the reserved operator scope
   };
 }
 
@@ -850,7 +850,7 @@ export function agentStreamRoute(
     const trusted = await resolveTrustedRequestContext(request, { selector: scope, enforceSameOrigin: true });
     if (!trusted.ok) return trusted.refusal.response;
     const roleRefusal = authorizeActor(trusted.context.actor, policy);
-    if (roleRefusal) return roleRefusal;
+    if (roleRefusal) return roleRefusal; const principalRefusal = principalRateLimitRefusal(trusted.context, policy); if (principalRefusal) return principalRefusal; // [B24-A3b] OD-197: the per-principal window, after membership and role (and after the body read, by design: the scope is in the body)
 
     // 8. callback — trusted context + parsed body + scope + signal; the raw
     //    Request never escapes. The callback builds the NDJSON stream Response.
@@ -1007,8 +1007,8 @@ export function mcpBearerJsonRoute(
       if (!policy) return jsonError(500, "AUTH_POLICY_MISSING", "This route has no authorization policy.");
       if (policy.identitySource !== "mcp-bearer") return wrapperMismatch();
       // 4. the production blocker
-      const blocker = sensitiveOperationsBlocker(environment);
-      if (blocker) return forbidden("AUTH_PRODUCTION_NOT_CONFIGURED", blocker);
+      const blocker = productionServingBlocker(environment); // [B24-A1] OD-190: + in a production runtime, a serving profile and the expected origin
+      if (blocker) return forbidden(blocker.code, blocker.message);
       // 5. the configuration and the verifier
       const config = resolveMcpResourceConfiguration(environment);
       const verifier = resolveMcpAccessTokenVerifier(environment);

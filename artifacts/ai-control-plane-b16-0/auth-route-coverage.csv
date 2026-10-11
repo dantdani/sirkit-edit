@@ -67,6 +67,7 @@ path,methods,auth_class,identity_source,migrated
 /api/full-flow/propose,POST,authenticated-propose,trusted-context,yes
 /api/full-flow/run,POST,authenticated-propose,trusted-context,yes
 /api/full-flow/transition,POST,authenticated-mutation,trusted-context,yes
+/api/health,GET,public,none,no
 /api/interfaces/allocate,POST,authenticated-propose,trusted-context,yes
 /api/interfaces/alternatives,POST,authenticated-propose,trusted-context,yes
 /api/interfaces/candidates,POST,authenticated-propose,trusted-context,yes
@@ -115,6 +116,7 @@ path,methods,auth_class,identity_source,migrated
 /api/power/problem,POST,authenticated-propose,trusted-context,yes
 /api/power/propose,POST,authenticated-propose,trusted-context,yes
 /api/power/reconcile,POST,authenticated-propose,trusted-context,yes
+/api/ready,GET,internal-worker,worker-secret,yes
 /api/release-engineering/problem,POST,authenticated-propose,trusted-context,yes
 /api/release-engineering/propose,POST,authenticated-propose,trusted-context,yes
 /api/replacement-authority,POST,authenticated-read,trusted-context,yes
