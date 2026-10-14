@@ -11,7 +11,7 @@
  * Shift snaps the radius to 0.5 mm).
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { produce } from "immer";
 import { Container, Graphics } from "pixi.js";
 import { commitPcbCandidate } from "@/app/lib/engineering/pcb-commit-gateway";
@@ -66,11 +66,16 @@ export function useSilkTool({ scene, active, getHistory, toast }: SilkToolEditor
   const [heightMm, setHeightMm] = useState(mm(DEFAULT_SILK_TEXT_HEIGHT_NM));
   const [strokeMm, setStrokeMm] = useState(mm(DEFAULT_SILK_STROKE_NM));
   const [pendingTextAt, setPendingTextAt] = useState<Vec2 | null>(null);
+  const [session, setSession] = useState({ active, mode, scene });
+  if (session.active !== active || session.mode !== mode || session.scene !== scene) {
+    setSession({ active, mode, scene });
+    if (pendingTextAt !== null) setPendingTextAt(null);
+  }
 
-  const stateRef = useRef({ getHistory, toast, layer, heightMm, strokeMm, pendingTextAt });
-  useEffect(() => {
-    stateRef.current = { getHistory, toast, layer, heightMm, strokeMm, pendingTextAt };
-  });
+  const stateRef = useRef({ getHistory, toast, layer, heightMm, strokeMm, pendingTextAt, active, mode, scene });
+  useLayoutEffect(() => {
+    stateRef.current = { getHistory, toast, layer, heightMm, strokeMm, pendingTextAt, active, mode, scene };
+  }, [getHistory, toast, layer, heightMm, strokeMm, pendingTextAt, active, mode, scene]);
 
   const commit = useCallback((item: SilkItem): void => {
     const h = stateRef.current.getHistory();
@@ -97,7 +102,7 @@ export function useSilkTool({ scene, active, getHistory, toast }: SilkToolEditor
       const at = stateRef.current.pendingTextAt;
       setPendingTextAt(null);
       const trimmed = text.trim();
-      if (!at || trimmed.length === 0) return;
+      if (!stateRef.current.active || stateRef.current.mode !== "text" || !at || trimmed.length === 0) return;
       commit({
         kind: "text",
         id: freshSilkId(),
@@ -116,11 +121,6 @@ export function useSilkTool({ scene, active, getHistory, toast }: SilkToolEditor
   );
 
   const cancelText = useCallback((): void => setPendingTextAt(null), []);
-
-  // Reset transient state when the tool deactivates or the mode changes.
-  useEffect(() => {
-    if (!active) setPendingTextAt(null);
-  }, [active]);
 
   useEffect(() => {
     if (!active || !scene) return;
@@ -212,6 +212,7 @@ export function useSilkTool({ scene, active, getHistory, toast }: SilkToolEditor
     };
 
     const offPointer = scene.onPointer((e: ScenePointerEvent) => {
+      if (!stateRef.current.active || stateRef.current.mode !== mode || stateRef.current.scene !== scene) return;
       if (stateRef.current.pendingTextAt) return; // inline input open — freeze
       switch (e.type) {
         case "down":

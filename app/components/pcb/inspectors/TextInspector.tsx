@@ -5,7 +5,7 @@
  * height, stroke width and silk layer — all through `set-text-props`.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { SilkTextItem } from "@/app/lib/pcb/silk/types";
 import type { EditCommand } from "@/app/lib/pcb/edit/commands";
 import { NumberField } from "./fields/NumberField";
@@ -19,9 +19,13 @@ export function TextInspector({
   commit(cmds: EditCommand[]): void;
 }) {
   const single = items.length === 1 ? items[0] : null;
-  const [draft, setDraft] = useState<string | null>(null);
+  const draftKey = JSON.stringify([single?.id, single?.text]);
+  const [editing, setEditing] = useState<{ key: string; text: string | null }>({ key: draftKey, text: null });
+  if (editing.key !== draftKey) setEditing({ key: draftKey, text: null });
+  const draft = editing.key === draftKey ? editing.text : null;
+  const setDraft = (text: string | null): void => setEditing({ key: draftKey, text });
   const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => setDraft(null), [single?.text]);
+  const skipNextBlur = useRef(false);
 
   const commitText = (): void => {
     if (!single || draft === null) return;
@@ -42,16 +46,21 @@ export function TextInspector({
             aria-label="Text"
             value={draft ?? single.text}
             onChange={(e) => setDraft(e.target.value)}
-            onBlur={commitText}
+            onBlur={() => {
+              if (skipNextBlur.current) { skipNextBlur.current = false; return; }
+              commitText();
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
                 commitText();
+                skipNextBlur.current = document.activeElement === inputRef.current;
                 inputRef.current?.blur();
               } else if (e.key === "Escape") {
                 e.preventDefault();
                 e.stopPropagation();
                 setDraft(null);
+                skipNextBlur.current = document.activeElement === inputRef.current;
                 inputRef.current?.blur();
               }
             }}
@@ -60,6 +69,7 @@ export function TextInspector({
         </div>
       )}
       <NumberField
+        key={`size:${items.map((item) => item.id).join(",")}`}
         label="Size"
         unit="mm"
         scaleFromNm={1e-6}
@@ -75,6 +85,7 @@ export function TextInspector({
         }
       />
       <NumberField
+        key={`stroke:${items.map((item) => item.id).join(",")}`}
         label="Stroke"
         unit="mm"
         scaleFromNm={1e-6}

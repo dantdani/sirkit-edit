@@ -593,6 +593,8 @@ every increment's list into one table):
 
 Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on that line).
 
+[Post-B24, 2026-10-11] C36-C39 and C58-C60 below were refreshed to their current source lines after the UI state and citation-test changes. [Product reliability B, 2026-10-14] C36-C39 refreshed again after the BOM view's request-settlement change (`bom-refresh-lifecycle`): citation maintenance only; the cited code is unchanged. This refresh keeps the executable citation table current; the dated B24 observations and test-run records above retain their original scope and meaning.
+
 | id | file | line | within | anchor | note |
 |---|---|---|---|---|---|
 | C1 | `app/lib/engineering/accessible-names.ts` | 35 | — | `export const NAME_SOURCES = Object.freeze(["aria-labelledby", "aria-label", "label-wrap", "label-for", "text", "title", "palette-title",` | the closed name sources |
@@ -630,10 +632,10 @@ Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on 
 | C33 | `app/layout.tsx` | 20 | — | `title: "Create Next App",` | 2.4.2 |
 | C34 | `app/layout.tsx` | 31 | — | `lang="en"` | 3.1.1 |
 | C35 | `app/components/bom/BomView.tsx` | 42 | — | `import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";` | the BOM dialogs on the shared dialog |
-| C36 | `app/components/bom/BomView.tsx` | 886 | — | `ref={exportTriggerRef}` | the worksheet's return target |
-| C37 | `app/components/bom/BomView.tsx` | 1400 | — | `<DialogContent finalFocus={finalFocus}` | passed as `finalFocus` |
-| C38 | `app/components/bom/BomView.tsx` | 1403 | — | `Priced from cached offers, each with its source and when it was observed.` | the worksheet sentence, verbatim |
-| C39 | `app/components/bom/BomView.tsx` | 1517 | — | `const BOM_DRAWER_CLASS =` | the drawers, by className only |
+| C36 | `app/components/bom/BomView.tsx` | 926 | — | `ref={exportTriggerRef}` | the worksheet's return target |
+| C37 | `app/components/bom/BomView.tsx` | 1443 | — | `<DialogContent finalFocus={finalFocus}` | passed as `finalFocus` |
+| C38 | `app/components/bom/BomView.tsx` | 1446 | — | `Priced from cached offers, each with its source and when it was observed.` | the worksheet sentence, verbatim |
+| C39 | `app/components/bom/BomView.tsx` | 1560 | — | `const BOM_DRAWER_CLASS =` | the drawers, by className only |
 | C40 | `components/ui/dialog.tsx` | 45 | — | `showCloseButton = true,` | the default Close |
 | C41 | `components/ui/dialog.tsx` | 75 | — | `<span className="sr-only">Close</span>` | its name |
 | C42 | `app/components/pcb/GrantedExecutionDialog.tsx` | 54 | — | `onOpenChange={(open) => { if (!open && !busy) onCancel(); }}` | Escape reaches onCancel |
@@ -652,9 +654,9 @@ Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on 
 | C55 | `scripts/generate-b24-accessible-names.ts` | 22 | — | `const CENSUS_PATH = "artifacts/ai-control-plane-b24/accessible-name-census.csv";` | the ratchet's baseline, never read from outDir (review round) |
 | C56 | `scripts/generate-b24-accessible-names.ts` | 37 | — | `pass --bootstrap for a tree that has none` | a missing baseline refuses (review round) |
 | C57 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 76 | — | `const OUT_OF_SCOPE_UNNAMED_AT_3773C6A = 111;` | the `3773c6a` record |
-| C58 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 378 | — | `const OUT_OF_SCOPE_UNNAMED_AFTER_D3 = 102;` | the post-D3 pin (review round) |
-| C59 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 382 | — | `const UNNAMED_KEYS_AFTER_D3: readonly string[] = [` | the frozen key list (review round) |
-| C60 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 491 | — | `const BROWSER_SPECS_EXECUTED = true;` | flipped by the lead after the green browser runs (section 5) |
+| C58 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 382 | — | `const OUT_OF_SCOPE_UNNAMED_AFTER_D3 = 102;` | the post-D3 pin (review round) |
+| C59 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 386 | — | `const UNNAMED_KEYS_AFTER_D3: readonly string[] = [` | the frozen key list (review round) |
+| C60 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 495 | — | `const BROWSER_SPECS_EXECUTED = true;` | flipped by the lead after the green browser runs (section 5) |
 | C61 | `app/page.tsx` | 2627 | — | `const chatFocusReturnRef = useRef(false);` | the focus-return flag, declared in place (review round) |
 | C62 | `app/page.tsx` | 4466 | — | `setLoading(true); chatFocusReturnRef.current = document.activeElement !== null && document.activeElement === document.querySelector('[data-testid="prompt-input"]');` | set when the run is sent from the prompt, in place (review round) |
 | C63 | `app/page.tsx` | 4809 | — | `if (!chatFocusReturnRef.current \|\| !prompt` | the return checks the flag every frame, in place (review round) |

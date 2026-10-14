@@ -8,7 +8,7 @@ import { assembleAgentRunContext } from "../context";
 import { DEFAULT_AGENT_BUDGET, type AgentRunEvent, type AgentStep, type AgentToolResult, type ProviderAgentAdapter } from "../contracts";
 import { createAgentToolGateway } from "../gateway";
 import { buildRunToolset, runAgentLoop } from "../loop";
-import { buildAgentToolDeclarations } from "../provider-tools";
+import { agentProviderName, buildAgentToolDeclarations } from "../provider-tools";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
 import { LLMProviderError } from "../../llm/errors";
 import { createEmptyBoard } from "../../pcb/types";
@@ -79,6 +79,16 @@ const call = (callId: string, providerName: string, args = "{}"): AgentStep["too
 const resultsOf = (adapter: FakeAdapter, index = 0) => adapter.continueInputs[index]!.map((item) => JSON.parse(item.outputText) as Record<string, unknown>);
 
 describe("B09 §3 — loop safety", () => {
+  it("OD-236: alternating omitted and strict-null arguments cannot evade cycle limits", async () => {
+    const { adapter } = await run([
+      () => ({ toolCalls: [call("c1", agentProviderName("sirkit.pcb.via-inspect"), "{}"), call("c2", agentProviderName("sirkit.pcb.via-inspect"), '{"netName":null}')] }),
+      () => ({ text: "done" }),
+    ], { budget: { maxIdenticalCalls: 1 } });
+    const results = resultsOf(adapter);
+    expect(results[0]).toMatchObject({ ok: true });
+    expect(results[1]).toMatchObject({ ok: false, status: "repeated_call" });
+  });
+
   it("11+13. unknown, unregistered, and non-exposed provider names are refused; the exposed toolset omits every unbound/internal/forbidden tool", async () => {
     const toolset = buildRunToolset(sirkitToolRegistry(), context(), () => undefined);
     const names = toolset.declarations.map((declaration) => declaration.toolId);

@@ -1210,7 +1210,7 @@ Each row resolves on the line it names (`b24-c3-recorded-limits` 11): the anchor
 | C34 | `app/lib/engineering/tool-invocation.ts` | 442 | `if (this.traceLog.length > this.maxTraces) this.traceLog.shift();` |
 | C35 | `app/lib/mcp/server/request-trace.ts` | 124 | `export function setMcpServerTraceSinkFactory(` |
 | C36 | `app/lib/mcp/server/read-trace.ts` | 219 | `export function setMcpReadTraceSinkFactory(` |
-| C37 | `app/lib/agent/gateway.ts` | 493 | `new ReadToolInvocationService(registry)` |
+| C37 | `app/lib/agent/gateway.ts` | 494 | `new ReadToolInvocationService(registry)` |
 | C38 | `app/lib/mcp/server/read-call.ts` | 235 | `service = new ReadToolInvocationService(registry, { now: () => Date.now() });` |
 | C39 | `app/lib/observability/trace-read.ts` | 60 | `export const TRACE_READ_ACCESS_AUDIT = "not_recorded" as const;` |
 | C40 | `app/lib/observability/trace-read.ts` | 41 | `export const TRACE_READ_KINDS = Object.freeze(["run-trace", "run-trace-attribution", "llm-call-record", "specialist-trace"] as const);` |

@@ -10,7 +10,7 @@
  * editable for a single via.
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { PcbBoard, Via } from "@/app/lib/pcb/types";
 import type { EditCommand } from "@/app/lib/pcb/edit/commands";
 import type { EditPreview } from "@/app/lib/pcb/edit/preview";
@@ -61,9 +61,10 @@ export function ViaInspector({
   const otherCount = sharedPs ? usageCount(board, sharedPs.id) - items.length : 0;
 
   // Fork rule: local by default; the checkbox opts into the global edit.
-  const [updateOthers, setUpdateOthers] = useState(false);
-  const selectionKey = ids.join(",");
-  useEffect(() => setUpdateOthers(false), [selectionKey]);
+  const selectionKey = JSON.stringify([ids, sharedPsId]);
+  const [globalEdit, setGlobalEdit] = useState({ key: selectionKey, enabled: false });
+  if (globalEdit.key !== selectionKey) setGlobalEdit({ key: selectionKey, enabled: false });
+  const updateOthers = globalEdit.key === selectionKey && globalEdit.enabled;
 
   /** Commands for a dim edit — global edit-padstack, or fork + retarget. */
   const dimCmds = (patch: { outerNm?: number; drillNm?: number }): EditCommand[] => {
@@ -100,6 +101,7 @@ export function ViaInspector({
         onCommit={(padstackId) => commit([{ op: "set-via-padstack", viaIds: ids, padstackId }])}
       />
       <NumberField
+        key={`size:${selectionKey}`}
         label="Size"
         unit="mm"
         scaleFromNm={1e-6}
@@ -108,6 +110,7 @@ export function ViaInspector({
         preview={(nm) => preview(dimCmds({ outerNm: nm }))}
       />
       <NumberField
+        key={`drill:${selectionKey}`}
         label="Drill"
         unit="mm"
         scaleFromNm={1e-6}
@@ -121,7 +124,7 @@ export function ViaInspector({
             type="checkbox"
             aria-label="Also update other vias"
             checked={updateOthers}
-            onChange={(e) => setUpdateOthers(e.target.checked)}
+            onChange={(e) => setGlobalEdit({ key: selectionKey, enabled: e.target.checked })}
             className="mt-0.5 size-3.5 accent-teal-600 shrink-0"
           />
           <span className="text-[11px] leading-snug text-zinc-400">
@@ -139,6 +142,7 @@ export function ViaInspector({
       {single && (
         <>
           <NumberField
+            key={`x:${selectionKey}`}
             label="X"
             unit="mm"
             scaleFromNm={1e-6}
@@ -163,6 +167,7 @@ export function ViaInspector({
             }
           />
           <NumberField
+            key={`y:${selectionKey}`}
             label="Y"
             unit="mm"
             scaleFromNm={1e-6}

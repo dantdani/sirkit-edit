@@ -8,7 +8,7 @@
  * values, so feedback is immediate while commits stay coalesced.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { Padstack, PadstackInput } from "@/app/lib/pcb/padstack/types";
 import type { DrcRules } from "@/app/lib/pcb/drc/types";
 import type { EditCommand } from "@/app/lib/pcb/edit/commands";
@@ -60,29 +60,31 @@ export function PadstackEditor({
 
   const effective: PadstackInput = { ...padstack, ...pending };
 
-  flushRef.current = () => {
-    if (Object.keys(pending).length === 0) return;
-    commit([{ op: "edit-padstack", id: padstack.id, patch: pending }]);
-    setPending({});
-    setOuterText(null);
-    setDrillText(null);
-  };
+  // Layout cleanup runs with the old committed closure before the new
+  // selection publishes its flush closure, so A's draft never targets B.
+  useLayoutEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
+      flushRef.current();
+    },
+    [padstack.id],
+  );
+  useLayoutEffect(() => {
+    flushRef.current = () => {
+      if (Object.keys(pending).length === 0) return;
+      commit([{ op: "edit-padstack", id: padstack.id, patch: pending }]);
+      setPending({});
+      setOuterText(null);
+      setDrillText(null);
+    };
+  }, [pending, padstack.id, commit]);
 
   const stage = (patch: Partial<PadstackInput>): void => {
     setPending((prev) => ({ ...prev, ...patch }));
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => flushRef.current(), FLUSH_MS);
   };
-
-  // Flush pending edits when the selection moves on / the panel unmounts.
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-      flushRef.current();
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [padstack.id],
-  );
 
   const stageDim = (key: "outerNm" | "drillNm", text: string): void => {
     if (key === "outerNm") setOuterText(text);

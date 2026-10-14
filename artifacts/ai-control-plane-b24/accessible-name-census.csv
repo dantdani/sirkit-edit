@@ -22,19 +22,19 @@ app/components/bom/BomView.tsx|click|button|Dismiss|setExportNotice,app/componen
 app/components/bom/BomView.tsx|click|button|Exporting…|Export CSV|exportCsv,app/components/bom/BomView.tsx,click,button,no,named:text,Exporting… Export CSV
 app/components/bom/BomView.tsx|click|button|Exporting…|Export for distributor ▾|setExportMenuOpen,app/components/bom/BomView.tsx,click,button,no,named:text,Exporting… Export for distributor ▾
 "app/components/bom/BomView.tsx|click|button|Generating…|Generate worksheet|onGenerate,title.trim",app/components/bom/BomView.tsx,click,button,no,named:text,Generating… Generate worksheet
-app/components/bom/BomView.tsx|click|button|Get current offers|setRefreshNonce,app/components/bom/BomView.tsx,click,button,no,named:text,Get current offers
+app/components/bom/BomView.tsx|click|button|Get current offers|requestAgain,app/components/bom/BomView.tsx,click,button,no,named:text,Get current offers
 app/components/bom/BomView.tsx|click|button|History ( )|setHistoryOpen,app/components/bom/BomView.tsx,click,button,no,named:text,History ( * )
 app/components/bom/BomView.tsx|click|button|Jump to part|onJump,app/components/bom/BomView.tsx,click,button,no,named:text,Jump to part
-app/components/bom/BomView.tsx|click|button|Loading…|Refresh|setRefreshNonce,app/components/bom/BomView.tsx,click,button,no,named:text,Loading… Refresh
+app/components/bom/BomView.tsx|click|button|Loading…|Refresh|requestAgain,app/components/bom/BomView.tsx,click,button,no,named:text,Loading… Refresh
 app/components/bom/BomView.tsx|click|button|Mark all as read|onMarkAllRead,app/components/bom/BomView.tsx,click,button,no,named:text,Mark all as read
 "app/components/bom/BomView.tsx|click|button|Open the component review to preview the successor and rebind (a reviewer's act)|e.stopPropagation,openSuccessorReview",app/components/bom/BomView.tsx,click,button,no,named:text,Review successor
 app/components/bom/BomView.tsx|click|button|Replace the source part with this alternate|Swap wiring pending — see roadmap|onSwap,app/components/bom/BomView.tsx,click,button,no,named:text,Swap
-app/components/bom/BomView.tsx|click|button|Retry|setRefreshNonce,app/components/bom/BomView.tsx,click,button,no,named:text,Retry
+app/components/bom/BomView.tsx|click|button|Retry|requestAgain,app/components/bom/BomView.tsx,click,button,no,named:text,Retry
 app/components/bom/BomView.tsx|click|button|Saving…|Save|takeSnapshot,app/components/bom/BomView.tsx,click,button,no,named:text,Saving… Save
 app/components/bom/BomView.tsx|click|button|Showing at-risk|View at-risk parts|onToggleAtRisk,app/components/bom/BomView.tsx,click,button,no,named:text,Showing at-risk View at-risk parts
 app/components/bom/BomView.tsx|click|button|Supply-chain notifications|setNotifOpen,app/components/bom/BomView.tsx,click,button,no,named:text,🔔 *
 app/components/bom/BomView.tsx|click|button|Take snapshot|setSnapPopoverOpen,app/components/bom/BomView.tsx,click,button,no,named:text,Take snapshot
-"app/components/bom/BomView.tsx|click|button|View alternate parts|e.stopPropagation,setDrawerRow",app/components/bom/BomView.tsx,click,button,no,named:text,* alt s
+"app/components/bom/BomView.tsx|click|button|View alternate parts|e.stopPropagation,setDrawerFor,setDrawerRow",app/components/bom/BomView.tsx,click,button,no,named:text,* alt s
 app/components/bom/BomView.tsx|click|button|View diff|onViewDiff,app/components/bom/BomView.tsx,click,button,no,named:text,View diff
 app/components/bom/BomView.tsx|click|div|(none)|setExportMenuOpen,app/components/bom/BomView.tsx,click,div,no,unnamed,none
 app/components/bom/BomView.tsx|click|div|(none)|setSnapPopoverOpen,app/components/bom/BomView.tsx,click,div,no,unnamed,none
@@ -142,7 +142,7 @@ app/components/pcb/BoardRevisionDialog.tsx|change|input|board-revision-carry-*|o
 app/components/pcb/BoardRevisionDialog.tsx|click|Button|board-revision-derive|onDerive,app/components/pcb/BoardRevisionDialog.tsx,click,Button,yes,named:text,Deriving… Derive new revision
 app/components/pcb/BoardRevisionDialog.tsx|click|Button|board-revision-dismiss|onDismiss,app/components/pcb/BoardRevisionDialog.tsx,click,Button,yes,named:text,Cancel
 app/components/pcb/BoardRevisionDialog.tsx|dialog|Dialog|(none)|onDismiss,app/components/pcb/BoardRevisionDialog.tsx,dialog,Dialog,yes,exempt:dialog-titled,Derive a new board revision
-app/components/pcb/CommandPalette.tsx|change|input|Search actions|setQuery,app/components/pcb/CommandPalette.tsx,change,input,no,named:aria-label,Search actions
+"app/components/pcb/CommandPalette.tsx|change|input|Search actions|setQuery,setIndex",app/components/pcb/CommandPalette.tsx,change,input,no,named:aria-label,Search actions
 app/components/pcb/CommandPalette.tsx|click|button|(none)|runAction,app/components/pcb/CommandPalette.tsx,click,button,no,named:text,* * *
 app/components/pcb/CommandPalette.tsx|key|input|Search actions|onKeyDown,app/components/pcb/CommandPalette.tsx,key,input,no,named:aria-label,Search actions
 app/components/pcb/CommandPalette.tsx|pointer|div|(none)|onClose,app/components/pcb/CommandPalette.tsx,pointer,div,no,unnamed,none
@@ -208,7 +208,7 @@ app/components/pcb/inspectors/fields/BooleanField.tsx|change|input|(none)|onComm
 app/components/pcb/inspectors/fields/SelectField.tsx|change|select|(none)|onCommit,app/components/pcb/inspectors/fields/SelectField.tsx,change,select,no,named:aria-label,*
 app/components/pcb/inspectors/TextInspector.tsx|change|input|Text|setDraft,app/components/pcb/inspectors/TextInspector.tsx,change,input,no,named:aria-label,Text
 "app/components/pcb/inspectors/TextInspector.tsx|key|input|Text|e.preventDefault,commitText,inputRef.current.blur,e.stopPropagation",app/components/pcb/inspectors/TextInspector.tsx,key,input,no,named:aria-label,Text
-app/components/pcb/inspectors/ViaInspector.tsx|change|input|Also update other vias|setUpdateOthers,app/components/pcb/inspectors/ViaInspector.tsx,change,input,no,named:aria-label,Also update other vias
+app/components/pcb/inspectors/ViaInspector.tsx|change|input|Also update other vias|setGlobalEdit,app/components/pcb/inspectors/ViaInspector.tsx,change,input,no,named:aria-label,Also update other vias
 app/components/pcb/inspectors/ZoneInspector.tsx|click|button|Refill|onRefill,app/components/pcb/inspectors/ZoneInspector.tsx,click,button,no,named:text,Refill
 app/components/pcb/LayerPanel.tsx|click|button|Activate *|onActivate,app/components/pcb/LayerPanel.tsx,click,button,yes,named:aria-label,Activate *
 app/components/pcb/LayerPanel.tsx|click|button|Isolate|onIsolate,app/components/pcb/LayerPanel.tsx,click,button,yes,named:text,Isolate
@@ -345,7 +345,7 @@ app/components/pcb/ShortcutsHelp.tsx|click|button|Esc|onClose,app/components/pcb
 app/components/pcb/ShortcutsHelp.tsx|click|div|(none)|onClose,app/components/pcb/ShortcutsHelp.tsx,click,div,no,unnamed,none
 app/components/pcb/ShortcutsHelp.tsx|click|div|Keyboard shortcuts|e.stopPropagation,app/components/pcb/ShortcutsHelp.tsx,click,div,no,exempt:click-shield,
 "app/components/pcb/ShortcutsHelp.tsx|key|div|Keyboard shortcuts|e.stopPropagation,onClose",app/components/pcb/ShortcutsHelp.tsx,key,div,no,named:aria-label,Keyboard shortcuts
-app/components/pcb/SilkTool.tsx|change|input|Silk text|setDraft,app/components/pcb/SilkTool.tsx,change,input,no,named:aria-label,Silk text
+app/components/pcb/SilkTool.tsx|change|input|Silk text|setTextSession,app/components/pcb/SilkTool.tsx,change,input,no,named:aria-label,Silk text
 "app/components/pcb/SilkTool.tsx|change|input|Stroke width (mm)|silk.setStrokeMm,Math.max,Number",app/components/pcb/SilkTool.tsx,change,input,no,named:aria-label,Stroke width (mm)
 "app/components/pcb/SilkTool.tsx|change|input|Text height (mm)|silk.setHeightMm,Math.max,Number",app/components/pcb/SilkTool.tsx,change,input,no,named:aria-label,Text height (mm)
 app/components/pcb/SilkTool.tsx|change|select|Silk layer|silk.setLayer,app/components/pcb/SilkTool.tsx,change,select,no,named:aria-label,Silk layer

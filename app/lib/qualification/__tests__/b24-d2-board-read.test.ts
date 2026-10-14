@@ -23,9 +23,9 @@
  *  7. a cursor is bound to the board revision and the selector: with another selector or another revision it is refused
  *     (stale_cursor), a malformed one is cursor_invalid;
  *  8. the same board and the same arguments give the same bytes, in a stable order (kinds in BOARD_PAGE_KINDS, ids by code point);
- *  9. [B24-D2 review] RECORDED DEFECT: the argument shape a strict-mode provider must send (the unused properties null) is refused
- *     invalid_input by B05's validation before the builder runs - this read and via-inspect alike - so D24-29 stays open for those
- *     providers until OD-236's reviewed B05 change (the case pins the refusal; that change moves it);
+ *  9. [OD-236 approved] strict-rendered optional nulls are normalized against the original schema at the agent boundary;
+ *     this read and via-inspect answer identically to the omitted-field calls. B05's domain validation is unchanged.
+ *     The original red evidence remains in the historical B24 reports;
  * 10. [B24-D2 review] the page bound holds on the model-bound text: names the sanitizer lengthens never push a page, or a refusal's
  *     list of known names, over the constant (red first on the D2 tree: a 55,902-character page).
  *
@@ -443,11 +443,11 @@ describe("[B24-D2] a bounded, paged board read (D24-29, OD-213)", () => {
     }
   });
 
-  it("9. RECORDED DEFECT (D24-29 stays open for strict-mode providers; OD-236, proposed): the strict-rendered argument shape - every optional property present, the unused ones null, as a strict provider must send it - is refused invalid_input by B05's validation before the builder runs, for this read and via-inspect alike; the same calls without the nulls answer", { timeout: 120_000 }, async () => {
+  it("9. OD-236 approved: strict-rendered optional nulls answer identically to omitted fields", { timeout: 120_000 }, async () => {
     // Red first on the D2 tree (d2fix-red-1): written as "the strict-shaped call answers as the plain one does", it received
     // {"ok":false,"status":"invalid_input","diagnostics":["args.netName: must be a string","args.xMinMm: must be a finite number",...]}.
-    // The fix is a reviewed change to B05 argument validation (null for a property the strict renderer made nullable read as absent),
-    // proposed as OD-236; until it lands this case pins the refusal, so the change has to move it by review.
+    // The owner approved OD-236: the agent boundary now inverts only synthetic optional nulls.
+    // The original B24 red evidence remains in the historical artifacts; B05 validation stays unchanged.
     const [{ strictCompatibility }, { sirkitToolRegistry }, { createAgentToolGateway }, { assembleAgentRunContext }] = await Promise.all([import("@/app/lib/agent/provider-tools"), import("@/app/lib/engineering/tool-catalog"), import("@/app/lib/agent/gateway"), import("@/app/lib/agent/context")]);
     const registry = sirkitToolRegistry();
     const strictShape = (toolId: string, set: Record<string, unknown>): Record<string, unknown> => {
@@ -462,17 +462,15 @@ describe("[B24-D2] a bounded, paged board read (D24-29, OD-213)", () => {
     const strictTexts = handed.filter((entry) => entry.label === "strict").map((entry) => entry.text);
     const plainTexts = handed.filter((entry) => entry.label === "plain").map((entry) => entry.text);
     expect(JSON.parse(plainTexts[0]!), "the plain call answers").toMatchObject({ ok: true, tool: PAGE_TOOL });
-    expect(strictTexts, "one refused call, no page").toHaveLength(1);
-    const refused = JSON.parse(strictTexts[0]!) as { ok: boolean; status: string; diagnostics: string[] };
-    expect(refused).toMatchObject({ ok: false, status: "invalid_input" });
-    expect(refused.diagnostics).toEqual(expect.arrayContaining(["args.netName: must be a string", "args.xMinMm: must be a finite number"]));
-    // via-inspect, whose one optional property a strict provider sends as null to read every net's vias: the same refusal
+    expect(strictTexts.length).toBeGreaterThan(0);
+    expect(strictTexts.map((text) => JSON.parse(text))).toEqual(plainTexts.map((text) => JSON.parse(text)));
+    // via-inspect's synthetic optional null likewise means read all nets.
     const assembly = assembleAgentRunContext({ tenantId: "local", projectId: "p24d2", branchId: "main", board });
     if (!assembly.ok) throw new Error(assembly.reason);
     const gateway = createAgentToolGateway(registry, { now: () => 24_000_000 });
     const invoke = (args: Record<string, unknown>) => gateway.invoke({ runId: "run-b24-d2-strict", provider: "anthropic", toolId: VIA_TOOL, version: "1.0.0", args, context: assembly.context, timeoutMs: 10_000 });
     expect(strictShape(VIA_TOOL, {})).toEqual({ netName: null });
-    expect(await invoke({ netName: null }), "via-inspect with its strict-shaped null").toMatchObject({ ok: false, status: "invalid_input" });
+    expect(await invoke({ netName: null }), "via-inspect with its strict-shaped null").toMatchObject({ ok: true });
     expect(await invoke({}), "via-inspect without it").toMatchObject({ ok: true });
   });
 

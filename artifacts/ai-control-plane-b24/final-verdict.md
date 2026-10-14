@@ -143,11 +143,11 @@ lines are answered with their methods and their reach in 5.3 (the same case hold
 ```text
 SIRKIT REMAINING BUILDER PROGRAM: PARTIAL
 
-FINAL MAIN SHA: {MERGE}
+FINAL MAIN SHA: 32b081e152620b46e791f9589256f7d0603f300f (B24's normal merge, PR #15; verified 2026-10-11)
 CHAPTERS COMPLETED: B16, B17, B18, B19 - each passed its deterministic gate (its own final-verdict.md) and merged normally
 CHAPTERS PARTIAL/BLOCKED: B20, B21, B22, B23 - PARTIAL, merged normally (their own final-verdict.md pages); B24 - PARTIAL (this
-  page), its pull request merging after green CI; no chapter is BLOCKED as a whole
-PULL REQUESTS MERGED: {MERGE}
+  page), merged normally as PR #15 after green CI; no chapter is BLOCKED as a whole
+PULL REQUESTS MERGED: #6 B16, #7 B17, #8 B18, #9 B19, #10 B20, #11 B21, #13 B22, #14 B23, #15 B24; #12 corrective SPICE security; preceding foundation integrations #2-#5 (local first-parent history)
 FULL TEST RESULT: the lead's final run at 26dc8b8 (win32, Node v24.15.0): vitest over the whole repository, the three real-process
   suites excluded (they need java, FreeRouting or kicad-cli) - 864 files passed, 11 skipped (875); 9,733 tests passed, 68 skipped
   (9,801); exit 0, 1,164 s. tsc exit 0, 0 errors. eslint . exit 1: 68 problems (33 errors, 35 warnings), none introduced by B24.
@@ -273,3 +273,29 @@ multi-agent (Q15) have no scope of their own (their Readiness scope cell is `—
 - The verdict above is the chapter's at `26dc8b8`; a merge that changes no code moves none of its states, and any later code change
   needs its own final run. Commit 2/2's test change is such a change for CI: scope 2 stands as measured at `26dc8b8` only once commit
   2/2's own CI run is green in every pull-request job, which the lead records before the merge.
+
+### 5.5 Post-merge reconciliation (2026-10-11; metadata only)
+
+**CONFIRMED:** read-only GitHub metadata authenticated the repository owner, `dantdani`, with admin access to the private
+`dantdani/sirkit-edit` repository. [PR #15](https://github.com/dantdani/sirkit-edit/pull/15) merged normally into `main` at
+2026-10-11T05:26:33Z: head `9dee4fb2d2ea205c3da8b00798a213ce8cea2935`, merge `32b081e152620b46e791f9589256f7d0603f300f`.
+The local first-parent history matches the merge and the chapter PR list now filled in section 5.1. The earlier drafting text
+in sections 5 and 5.4 describes the pre-merge placeholders, not the current repository state.
+
+The final-head pull-request workflows were checked independently through read-only GitHub metadata: [deterministic-manufacturing
+run 38113287508](https://github.com/dantdani/sirkit-edit/actions/runs/38113287508) succeeded with all seven pull-request jobs
+(`agent-boundary-suites`, `production-smoke`, `prompt-to-gerber`, `page-browser-e2e`, `page-browser-e2e-b24`, `database-delivery`,
+`secret-scan`) successful; [benchmark-quality run 38113287472](https://github.com/dantdani/sirkit-edit/actions/runs/38113287472)
+had successful `benchmark-core` and `benchmark-latency` jobs. Its schedule/dispatch-only `benchmark-nightly` job was skipped,
+not qualified by a pull-request run. No workflow was dispatched, rerun or modified by this metadata check.
+
+The chapter's historical measurements, ten scope states, integrity statements and **PARTIAL** verdict at `26dc8b8` remain
+unchanged. In particular, the merge does not turn the whole-repository lint failure, any missing live qualification, or the
+recorded sandbox failure into a pass. A post-merge corrective checkpoint is **IN PROGRESS** on `codex/astra-foundation`, starting
+from the merge SHA: the two owner-approved decisions OD-229 and OD-236 and the remaining deterministic local readiness defects.
+Its current-tree validation is pending and must be reported separately before the additive Astra extension starts; no default
+provider/model change, live model qualification or Astra activation is claimed here. All existing live-blocker entries remain.
+
+## Post-B24 census addendum — 2026-10-11
+
+The 878/302 and 73/64 census statements above remain measurements at `26dc8b8`. Later regression tests change the current checkout's census, not the earlier Git tree. `ci-census-26dc8b8.json` now preserves that tree's test listing and exact CI-reader inputs, and the verdict suite recomputes the dated counts from that snapshot. See `../astra-guided-pcb/qualification-census-addendum.md` for provenance and the separately labelled current-checkout measurement.

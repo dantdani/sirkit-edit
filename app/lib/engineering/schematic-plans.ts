@@ -39,6 +39,7 @@ import { kicadPinWorldPos, pinWorldPos } from "../geometry";
 import type { KicadPin } from "../kicad/types";
 import { VerifiedReplacementAuthority } from "./schematic-authority.internal";
 import type { EngineeringOperation } from "./types";
+import { agentDeleteConnectivityRefusal } from "./agent-delete-connectivity";
 
 const key = (p: { x: number; y: number }): string => `${p.x},${p.y}`;
 
@@ -324,6 +325,8 @@ export function compileTier1Proposal(state: SchematicState, input: Tier1CompileI
   });
 
   if (blockers.length > 0) return { ok: false, blockers };
+  const connectivityRefusal = agentDeleteConnectivityRefusal(state, impacts.deletes, input.pinsByPartId);
+  if (connectivityRefusal) return { ok: false, blockers: [{ code: "delete-plan-refused", detail: connectivityRefusal }] };
   return { ok: true, operations, impacts };
 }
 

@@ -1,0 +1,29 @@
+{
+  "schema": "sirkit.product-reliability.live-spend.v1",
+  "currency": "USD",
+  "owner_cap_total": "5.00",
+  "cap_note": "US$5 cumulative for the builder's bounded live API tests on synthetic fixtures (assignment, 2026-10-14). Not per checkpoint, process, retry or agent.",
+  "price_basis": {
+    "provider": "openai",
+    "model": "gpt-5.6-sol",
+    "input_per_million": "4.00",
+    "cached_input_per_million": "0.40",
+    "output_per_million": "20.00",
+    "source": "developers.openai.com model page (promotional rate through at least 2026-11-21; list rate 5.00 / 30.00)",
+    "checked_at": "2026-10-14",
+    "label": "RECORDED (official page read on the date shown); the repository's MODEL_PRICE_TABLE constant stays null (OD-107): this file prices only the builder's own bounded tests"
+  },
+  "builder_requests": [],
+  "builder_spent_known": "0.00",
+  "builder_reserved_uncertain": "0.00",
+  "builder_remaining_provable": "5.00",
+  "prior_continuation_paid_calls": {
+    "claim": "the prior work in this continuation made no paid calls",
+    "verification": "CONFIRMED independently: the durable llm.call-record.v1 rows (65) all belong to the owner's own browser session of 2026-10-11 (routes /api/schematic/build-multi and embeddings, written while the owner tested with the owner's key); no row names a builder script, suite or command; no record-only evaluation command was run (its outputs are absent)",
+    "checked_at": "2026-10-14"
+  },
+  "owner_own_usage_not_counted": {
+    "note": "the owner's own 2026-10-11 session: 13 gpt-5.6-sol calls (28,878 input / 3,211 output tokens) plus 51 embedding calls on one Build request; priced at the basis above ≈ 0.18 USD; the owner's spend on the owner's key, outside the builder's cap"
+  },
+  "worst_case_per_request_note": "a Build request is bounded today only by MAX_ITERATIONS=20 × maxTokens 8,192 output and the route's 45 s deadline: analytically ≈ 3.36 USD output + input, which is not provable under the cap; checkpoint C adds an explicit loop budget before any builder-initiated live Build request"
+}

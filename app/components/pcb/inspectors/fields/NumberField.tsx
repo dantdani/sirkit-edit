@@ -9,7 +9,7 @@
  * and the warning renders under the field — a hint, never a commit blocker.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { EditPreview } from "@/app/lib/pcb/edit/preview";
 import { useLivePreview } from "../../hooks/useLivePreview";
 
@@ -45,17 +45,14 @@ export function NumberField({
     values.length > 0 && values.every((v) => v === values[0]) ? values[0] : undefined;
   const display = shared !== undefined ? fmt(shared * scaleFromNm) : "";
 
-  const [draft, setDraft] = useState<string | null>(null);
-  const live = useLivePreview(preview);
+  const draftKey = JSON.stringify([values, scaleFromNm, unit]);
+  const [editing, setEditing] = useState<{ key: string; text: string | null }>({ key: draftKey, text: null });
+  if (editing.key !== draftKey) setEditing({ key: draftKey, text: null });
+  const draft = editing.key === draftKey ? editing.text : null;
+  const setDraft = (text: string | null): void => setEditing({ key: draftKey, text });
+  const live = useLivePreview(preview, draftKey);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // A committed/external change invalidates any stale draft + hint.
-  const { clear } = live;
-  useEffect(() => {
-    setDraft(null);
-    clear();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [display]);
+  const skipNextBlur = useRef(false);
 
   const parse = (text: string): number | null => {
     const v = Number(text.trim().replace(",", "."));
@@ -92,16 +89,21 @@ export function NumberField({
             setDraft(e.target.value);
             live.schedule(parse(e.target.value));
           }}
-          onBlur={commit}
+          onBlur={() => {
+            if (skipNextBlur.current) { skipNextBlur.current = false; return; }
+            commit();
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
               commit();
+              skipNextBlur.current = document.activeElement === inputRef.current;
               inputRef.current?.blur();
             } else if (e.key === "Escape") {
               e.preventDefault();
               e.stopPropagation(); // don't clear the canvas selection
               revert();
+              skipNextBlur.current = document.activeElement === inputRef.current;
               inputRef.current?.blur();
             }
           }}

@@ -2,12 +2,24 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B24",
-  "currentCheckpoint": "B24 closeout commit 2/2 committed on chapter/b24-production-qualification (records in the ledger); the chapter PR awaits commit 2/2's CI",
-  "status": "PARTIAL",
-  "baseSha": "57c3b29",
-  "branch": "chapter/b24-production-qualification",
+  "currentCheckpoint": "Product-reliability assignment (artifacts/astra-guided-pcb/PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.md): A (journey reproduced) and B (corrective foundation verified and closed) done on codex/astra-foundation; C (the vertical slice) next",
+  "status": "in_progress",
+  "baseSha": "32b081e152620b46e791f9589256f7d0603f300f",
+  "branch": "codex/astra-foundation",
   "lastGreenSha": "26dc8b8",
-  "pullRequest": "draft PR (chapter/b24-production-qualification -> main) opened after the discovery commit; merge only after green CI, never auto-merge",
+  "pullRequest": "B24 PR #15 merged normally into main; no corrective PR opened yet",
+  "mergedProgram": {
+    "pullRequest": "https://github.com/dantdani/sirkit-edit/pull/15",
+    "headSha": "9dee4fb2d2ea205c3da8b00798a213ce8cea2935",
+    "mergeSha": "32b081e152620b46e791f9589256f7d0603f300f",
+    "mergedAt": "2026-10-11T05:26:33Z",
+    "verdict": "PARTIAL",
+    "ci": {
+      "deterministicManufacturing": "38113287508: seven pull-request jobs success",
+      "benchmarkQuality": "38113287472: benchmark-core and benchmark-latency success; schedule/dispatch-only benchmark-nightly skipped"
+    },
+    "evidenceCheckedAt": "2026-10-11T15:19:00-04:00"
+  },
   "openBlockers": [],
   "liveBlockers": [
     "LB-1: BLOCKED-LIVE-QUALIFICATION: production Supabase authentication browser E2E against an isolated project",
@@ -28,7 +40,7 @@
     "LB-16: BLOCKED-LIVE-QUALIFICATION: live approved external MCP server (discovery, tool calls and hostile tool results through Sirkit's MCP client)",
     "LB-17: BLOCKED-LIVE-QUALIFICATION: kicad-cli live oracle (the exported routed demo loaded and DRC-checked by a real kicad-cli)"
   ],
-  "nextAction": "commit 2/2's own CI run green in every pull-request job (it changes b24-f-verdict-lines, which prompt-to-gerber runs); then the chapter PR (chapter/b24-production-qualification -> main) merged normally after green CI; then the final program report (final-verdict.md section 5, FINAL MAIN SHA and PULL REQUESTS MERGED filled after the merge)",
-  "updatedAt": "2026-10-11T00:35:44-04:00",
+  "nextAction": "Commit A+B and push codex/astra-foundation (no PR merge; normal PR after the series); then checkpoint C: Theory request contract through the shared preparation, structured partial/skipped-check status from build-multi, provider-failure classification with reason, bounded loops, a visible route and submission for every composer route, journey stages with next actions, individually named unresolved instances, no silent sync returns. B24 stays PARTIAL; LB-1..LB-17 unchanged; no Astra activation, default-model change or builder provider spend.",
+  "updatedAt": "2026-10-14T15:20:00-04:00",
   "previousChapter": "B23 merged normally into main as 57c3b29 (PR #14, 2026-10-06) after green CI on f663d71; verdict PARTIAL (no provider admitted, LB-11; ordering visibly disabled, its contract tested offline only, LB-12; physical evidence defined, none exists, LB-5; no agent can release, transfer or spend; census 166/163/3/0, counts 47/36/9/27)"
 }

@@ -9,7 +9,7 @@
  * "live DRC never blocks".
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { EditPreview } from "@/app/lib/pcb/edit/preview";
 import { previewSummary } from "@/app/lib/pcb/edit/preview";
 
@@ -23,30 +23,36 @@ export interface LivePreview {
   clear(): void;
 }
 
-export function useLivePreview(preview?: (nm: number) => EditPreview): LivePreview {
-  const [hint, setHint] = useState<string | null>(null);
+export function useLivePreview(preview?: (nm: number) => EditPreview, resetKey?: string): LivePreview {
+  const [hint, setHint] = useState<{ key: string | undefined; value: string | null }>({ key: resetKey, value: null });
+  // A hint belongs to the identity it was computed for. When that identity changes the hint is RETIRED during render, not
+  // merely hidden: an A→B→A round trip (an external edit and its undo) must not revive A's old warning without a new preview.
+  if (hint.key !== resetKey) setHint({ key: resetKey, value: null });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewRef = useRef(preview);
-  previewRef.current = preview;
+  useLayoutEffect(() => { previewRef.current = preview; }, [preview]);
 
   const schedule = useCallback((nm: number | null) => {
     if (timer.current) clearTimeout(timer.current);
     if (nm === null || !previewRef.current) {
-      setHint(null);
+      timer.current = null;
+      setHint({ key: resetKey, value: null });
       return;
     }
     timer.current = setTimeout(() => {
       const run = previewRef.current;
-      if (run) setHint(previewSummary(run(nm)));
+      timer.current = null;
+      if (run) setHint({ key: resetKey, value: previewSummary(run(nm)) });
     }, DEBOUNCE_MS);
-  }, []);
+  }, [resetKey]);
 
-  useEffect(
+  useLayoutEffect(
     () => () => {
       if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
     },
-    [],
+    [resetKey],
   );
 
-  return { hint, schedule, clear: () => schedule(null) };
+  return { hint: hint.key === resetKey ? hint.value : null, schedule, clear: () => schedule(null) };
 }

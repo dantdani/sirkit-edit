@@ -48,6 +48,10 @@ export function CommandPalette({
   actions: PaletteAction[];
   onClose(): void;
 }) {
+  return open ? <OpenCommandPalette actions={actions} onClose={onClose} /> : null;
+}
+
+function OpenCommandPalette({ actions, onClose }: { actions: PaletteAction[]; onClose(): void }) {
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -63,22 +67,17 @@ export function CommandPalette({
   }, [actions, query]);
 
   useEffect(() => {
-    if (open) {
-      setQuery("");
-      setIndex(0);
-      // Focus after the overlay paints.
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
-  }, [open]);
+    // A new open session owns fresh query/selection state. Focus after paint.
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
-  useEffect(() => setIndex(0), [query]);
+  const selectedIndex = Math.min(index, Math.max(0, filtered.length - 1));
 
   useEffect(() => {
-    const el = listRef.current?.children[index] as HTMLElement | undefined;
+    const el = listRef.current?.children[selectedIndex] as HTMLElement | undefined;
     el?.scrollIntoView({ block: "nearest" });
-  }, [index]);
-
-  if (!open) return null;
+  }, [selectedIndex]);
 
   const runAction = (action: PaletteAction): void => {
     if (action.disabled) return;
@@ -89,13 +88,13 @@ export function CommandPalette({
   const onKeyDown = (e: React.KeyboardEvent): void => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setIndex((i) => Math.min(i + 1, filtered.length - 1));
+      setIndex(Math.min(selectedIndex + 1, Math.max(0, filtered.length - 1)));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setIndex((i) => Math.max(i - 1, 0));
+      setIndex(Math.max(selectedIndex - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const action = filtered[index];
+      const action = filtered[selectedIndex];
       if (action) runAction(action);
     } else if (e.key === "Escape") {
       e.preventDefault();
@@ -120,7 +119,7 @@ export function CommandPalette({
             aria-label="Search actions"
             placeholder="Type a command…"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); setIndex(0); }}
             onKeyDown={onKeyDown}
             className="flex-1 bg-transparent py-2.5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none"
           />
@@ -137,14 +136,14 @@ export function CommandPalette({
               key={action.id}
               type="button"
               role="option"
-              aria-selected={i === index}
+              aria-selected={i === selectedIndex}
               disabled={Boolean(action.disabled)}
               onPointerMove={() => setIndex(i)}
               onClick={() => runAction(action)}
               className={`w-full flex items-baseline gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
                 action.disabled
                   ? "text-zinc-600 cursor-default"
-                  : i === index
+                  : i === selectedIndex
                     ? "bg-zinc-800 text-zinc-100"
                     : "text-zinc-300"
               }`}

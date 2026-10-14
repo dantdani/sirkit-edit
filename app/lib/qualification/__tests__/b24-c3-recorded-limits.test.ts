@@ -162,7 +162,7 @@ function ringProblems(map: FileMap): string[] {
     [REQUEST_TRACE, 15, "export const MCP_SERVER_TRACE_RING_MAX = 1000;"], [REQUEST_TRACE, 116, "ring.push(trace);"], [REQUEST_TRACE, 117, "while (ring.length > MCP_SERVER_TRACE_RING_MAX) ring.shift();"], [REQUEST_TRACE, 124, "export function setMcpServerTraceSinkFactory("],
     [READ_TRACE, 15, "export const MCP_READ_TRACE_RING_MAX = 1_000;"], [READ_TRACE, 211, "ring.push(trace);"], [READ_TRACE, 212, "while (ring.length > MCP_READ_TRACE_RING_MAX) ring.shift();"], [READ_TRACE, 219, "export function setMcpReadTraceSinkFactory("],
     [TOOL_INVOCATION, 204, "this.maxTraces = options?.maxTraces ?? 500;"], [TOOL_INVOCATION, 440, "private record(trace: ReadInvocationTrace): void {"], [TOOL_INVOCATION, 441, "this.traceLog.push(trace);"], [TOOL_INVOCATION, 442, "if (this.traceLog.length > this.maxTraces) this.traceLog.shift();"],
-    ["app/lib/agent/gateway.ts", 493, "new ReadToolInvocationService(registry)"], ["app/lib/mcp/server/read-call.ts", 235, "service = new ReadToolInvocationService(registry, { now: () => Date.now() });"],
+    ["app/lib/agent/gateway.ts", 494, "new ReadToolInvocationService(registry)"], ["app/lib/mcp/server/read-call.ts", 235, "service = new ReadToolInvocationService(registry, { now: () => Date.now() });"],
   ];
   const problems = pins.filter(([path, line, anchor]) => !lineOf(map, path, line).includes(anchor)).map(([path, line]) => `${path}:${line}`);
   const setterCallers = [...map].filter(([path, source]) => path !== REQUEST_TRACE && path !== READ_TRACE && /\bsetMcp(?:Server|Read)TraceSinkFactory\s*\(/.test(source)).map(([path]) => path);
@@ -304,7 +304,7 @@ describe("[B24-C3] the recorded limits (D24-24 as recorded, OD-210; D24-26), eac
     expect(importersOf(probed, CAPSULE)).toContain("app/api/chat/route.ts");
   });
 
-  it("9. the MCP request and read traces and B05's read traces die with their process or instance: the ring constants are 1,000 (request-trace.ts:15, :116-117), 1,000 (read-trace.ts:15, :211-212) and 500 per ReadToolInvocationService (tool-invocation.ts:204, :440-442, one instance per gateway :493 and per MCP read path read-call.ts:235); no production caller of either sink setter (:124, :219); tool-invocation.ts imports nothing under durable-workflow; an injected caller, an injected durable import and a moved constant each go red", () => {
+  it("9. the MCP request and read traces and B05's read traces die with their process or instance: the ring constants are 1,000 (request-trace.ts:15, :116-117), 1,000 (read-trace.ts:15, :211-212) and 500 per ReadToolInvocationService (tool-invocation.ts:204, :440-442, one instance per gateway :494 and per MCP read path read-call.ts:235); no production caller of either sink setter (:124, :219); tool-invocation.ts imports nothing under durable-workflow; an injected caller, an injected durable import and a moved constant each go red", () => {
     expect(ringProblems(production)).toEqual([]);
     expect([MCP_SERVER_TRACE_RING_MAX, MCP_READ_TRACE_RING_MAX]).toEqual([1000, 1000]);
     expect(ringProblems(appended("app/lib/mcp/server/dispatch.ts", "setMcpServerTraceSinkFactory(() => null);"))).toEqual(["a production caller of a sink setter: app/lib/mcp/server/dispatch.ts"]);

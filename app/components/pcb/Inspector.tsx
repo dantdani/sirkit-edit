@@ -16,7 +16,7 @@ import type { PcbBoard } from "@/app/lib/pcb/types";
 import type { PcbHistory } from "@/app/lib/pcb/history";
 import type { DrcRules, DrcPresetId } from "@/app/lib/pcb/drc/types";
 import type { SelectionStore } from "@/app/lib/pcb/selection";
-import type { EditCommand, SelectionRef } from "@/app/lib/pcb/edit/commands";
+import { refKey, type EditCommand, type SelectionRef } from "@/app/lib/pcb/edit/commands";
 import { applyEditsCanonical } from "@/app/lib/engineering/editor-adapter";
 import { previewEdits, type EditPreview } from "@/app/lib/pcb/edit/preview";
 import { getItems, type ResolvedItem } from "@/app/lib/pcb/selection-queries";
@@ -108,6 +108,7 @@ export function Inspector({
 
   const kinds = new Set(items.map((i) => i.kind));
   const kind = kinds.size === 1 ? items[0].kind : "mixed";
+  const selectionIdentity = `${kind}|${items.map((i) => refKey(i.ref)).join(",")}`;
 
   const deletable: SelectionRef[] = set.refs.filter(
     (r) => r.kind === "track" || r.kind === "via" || r.kind === "zone" || r.kind === "text" || r.kind === "dimension",
@@ -190,7 +191,10 @@ export function Inspector({
           {headerText(board, items)}
         </span>
       </div>
-      <div className="overflow-y-auto py-1">
+      {/* The editable subtree is keyed to the SELECTED REFERENCES' identities (not the board revision): a same-kind
+          selection with equal values (track A → track B) remounts its fields, so A's pending draft or preview can never
+          target B; a board refresh that keeps the same selection keeps the subtree and any draft in it. */}
+      <div key={selectionIdentity} className="overflow-y-auto py-1">
         {body}
         <ArrangeSection refs={set.refs} commit={commit} />
       </div>

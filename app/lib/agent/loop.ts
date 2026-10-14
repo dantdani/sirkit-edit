@@ -16,6 +16,7 @@
  */
 
 import { sanitizeModelBoundText } from "./redaction"; // [B19-D I5e row 25]
+import { normalizeToolArguments } from "./normalize-tool-arguments";
 import { discoverTools } from "../engineering/tool-discovery";
 import { grantedExecutionViolations } from "../engineering/granted-execution-families";
 import { permissionTierOfDescriptor } from "../engineering/permission-tiers";
@@ -436,7 +437,12 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
           continue;
         }
         // Cycle detection: tool id/version + canonical argument digest.
-        const cycleKey = `${resolved.toolId}@${resolved.version}:${engineeringDigest({ args })}`;
+        const normalized = descriptor ? normalizeToolArguments(args, descriptor.inputSchema) : { ok: false as const };
+        if (!normalized.ok) {
+          refuse("invalid_input", "Tool arguments must be bounded plain JSON.", { toolId: resolved.toolId, title, tier });
+          continue;
+        }
+        const cycleKey = `${resolved.toolId}@${resolved.version}:${engineeringDigest({ args: normalized.args })}`;
         const seen = (identicalCalls.get(cycleKey) ?? 0) + 1;
         identicalCalls.set(cycleKey, seen);
         if (seen > request.budget.maxIdenticalCalls) {

@@ -1263,8 +1263,8 @@ function SchematicEditor({
 
   const panRef  = useRef(pan);
   const zoomRef = useRef(zoom);
-  panRef.current  = pan;
-  zoomRef.current = zoom;
+  useLayoutEffect(() => { panRef.current = pan; }, [pan]);
+  useLayoutEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
   // Reset pan/zoom so the whole sheet (plus a small frame) fills the viewport.
   const fitToPage = useCallback(() => {
@@ -1328,13 +1328,13 @@ function SchematicEditor({
   });
 
   const componentsRef = useRef(components);
-  componentsRef.current = components;
+  useLayoutEffect(() => { componentsRef.current = components; }, [components]);
   const wiresRef = useRef(wires);
-  wiresRef.current = wires;
+  useLayoutEffect(() => { wiresRef.current = wires; }, [wires]);
   const kicadComponentsRef = useRef(kicadComponents);
-  kicadComponentsRef.current = kicadComponents;
+  useLayoutEffect(() => { kicadComponentsRef.current = kicadComponents; }, [kicadComponents]);
   const netLabelsRef = useRef(netLabels);
-  netLabelsRef.current = netLabels;
+  useLayoutEffect(() => { netLabelsRef.current = netLabels; }, [netLabels]);
 
   // Re-render when async KiCad part data arrives in the cache. `partVersion`
   // bumps on each load so derived data keyed on the cache recomputes.
@@ -1354,7 +1354,7 @@ function SchematicEditor({
   });
   const kicadPinPoints: Point[] = kicadPinSites.flatMap((s) => s.pins);
   const kicadPinSitesRef = useRef(kicadPinSites);
-  kicadPinSitesRef.current = kicadPinSites;
+  useLayoutEffect(() => { kicadPinSitesRef.current = kicadPinSites; }, [kicadPinSites]);
 
   // Net classification for diagram-style rendering (colored power rails, net
   // labels). Recomputed when topology changes or a KiCad part loads.
@@ -2491,11 +2491,11 @@ function KicadPropertiesPanel({
   onReplace: () => void;
 }) {
   const [part, setPart] = useState<CachedPart | null>(() => getCachedPart(instance.partId));
-  useEffect(() => {
-    setPart(getCachedPart(instance.partId));
-    const unsub = subscribeToPart(instance.partId, () => setPart(getCachedPart(instance.partId)));
-    void ensurePartLoaded(instance.partId).then(setPart).catch(() => {});
-    return unsub;
+  const [partFor, setPartFor] = useState(instance.partId); if (partFor !== instance.partId) { setPartFor(instance.partId); setPart(getCachedPart(instance.partId)); }
+  useLayoutEffect(() => { const partId = instance.partId; let active = true;
+    const unsub = subscribeToPart(partId, () => { if (active) setPart(getCachedPart(partId)); });
+    void ensurePartLoaded(partId).then((loaded) => { if (active) setPart(loaded); }).catch(() => {});
+    return () => { active = false; unsub(); };
   }, [instance.partId]);
 
   return (
@@ -7371,15 +7371,15 @@ function ProbeSchematic({
 
   const panRef  = useRef(pan);
   const zoomRef = useRef(zoom);
-  panRef.current  = pan;
-  zoomRef.current = zoom;
+  useLayoutEffect(() => { panRef.current = pan; }, [pan]);
+  useLayoutEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
   const componentsRef    = useRef(components);
   const wiresRef         = useRef(wires);
   const netLabelsRef     = useRef(netLabels);
-  componentsRef.current  = components;
-  wiresRef.current       = wires;
-  netLabelsRef.current   = netLabels;
+  useLayoutEffect(() => { componentsRef.current = components; }, [components]);
+  useLayoutEffect(() => { wiresRef.current = wires; }, [wires]);
+  useLayoutEffect(() => { netLabelsRef.current = netLabels; }, [netLabels]);
 
   const isPanning = useRef(false);
   const panStart  = useRef<{ mouse: Point; pan: Point }>({ mouse: { x: 0, y: 0 }, pan: { x: 0, y: 0 } });
@@ -7789,7 +7789,7 @@ function FloatingPanel({
     return { x: 16, y: 16, w: 720, h: 280 };
   });
   const layoutRef = useRef(layout);
-  layoutRef.current = layout;
+  useLayoutEffect(() => { layoutRef.current = layout; }, [layout]);
 
   useLayoutEffect(() => {
     if (localStorage.getItem(PANEL_STORAGE_KEY)) return;

@@ -163,8 +163,12 @@ describe("[B24-D3] the accessible-name rule and its census (D24-32, OD-215)", ()
     expect(census.scopeProblems).toEqual([]);
     // The join is on the key, never on (surface, line, kind, element): B17-A records the attribute's line only, and these lines
     // each hold two buttons of the same kind and element.
-    for (const line of [27, 30]) {
-      const pair = sites.filter((site) => site.surface === "app/components/pcb/AssignmentQueuePanel.tsx" && site.line === line && site.kind === "click" && site.element === "button");
+    const assignmentButtons = sites.filter((site) => site.surface === "app/components/pcb/AssignmentQueuePanel.tsx" && site.kind === "click" && site.element === "button");
+    const byLine = new Map<number, ControlSite[]>();
+    for (const site of assignmentButtons) byLine.set(site.line, [...byLine.get(site.line) ?? [], site]);
+    const sameLinePairs = [...byLine].filter(([, pair]) => pair.length > 1);
+    expect(sameLinePairs, "the AST scan still finds both same-line button pairs").toHaveLength(2);
+    for (const [line, pair] of sameLinePairs) {
       expect(pair, `AssignmentQueuePanel.tsx:${line}`).toHaveLength(2);
       expect(new Set(pair.map((site) => site.key)).size).toBe(2);
       for (const site of pair) expect(census.rows.filter((row) => row.key === site.key), site.key).toHaveLength(1);

@@ -28,13 +28,19 @@ const fieldClass =
   "w-14 bg-zinc-950 border border-zinc-700 rounded px-1 py-0.5 text-zinc-200 focus:outline-none focus:border-teal-600";
 
 export function SilkTool({ silk, active }: { silk: SilkToolHandle; active: boolean }) {
-  const [draft, setDraft] = useState("");
+  const [textSession, setTextSession] = useState({ at: silk.pendingTextAt, draft: "" });
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Reset before the new position renders, so a later passive effect cannot
+  // discard text typed into the new draft.
+  if (textSession.at !== silk.pendingTextAt) {
+    setTextSession({ at: silk.pendingTextAt, draft: "" });
+  }
+  const draft = textSession.at === silk.pendingTextAt ? textSession.draft : "";
 
   // Fresh draft + focus every time a text position lands.
   useEffect(() => {
     if (silk.pendingTextAt) {
-      setDraft("");
       inputRef.current?.focus();
     }
   }, [silk.pendingTextAt]);
@@ -112,7 +118,7 @@ export function SilkTool({ silk, active }: { silk: SilkToolHandle; active: boole
             aria-label="Silk text"
             value={draft}
             placeholder={`Text on ${LAYER_LABEL[silk.layer]}…`}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => setTextSession({ at: silk.pendingTextAt, draft: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();

@@ -33,6 +33,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { normalizeToolArguments } from "./normalize-tool-arguments";
 import type { SchematicEditOp, SchematicState } from "@/lib/schematic-types";
 import { compileTier1Proposal } from "../engineering/schematic-plans";
 import { sealTier1Proposal, type SealedTier1Proposal, type Tier1ProposalScope } from "../engineering/schematic-proposals";
@@ -506,6 +507,9 @@ export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGa
       if (integrity.length > 0) {
         return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: "context_integrity", diagnostics: integrity.slice(0, 5) };
       }
+      const normalized = normalizeToolArguments(input.args, descriptor.inputSchema);
+      if (!normalized.ok) return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: "invalid_input", diagnostics: ["Tool arguments must be bounded plain JSON."] };
+      input = { ...input, args: normalized.args };
       // [B20 A4] the external tool read (approved MCP servers) travels its own service, BEFORE the E6 external reads: its port,
       // its per-run operation budget, its disclosure decision and its closed projection live there.
       if (resolveMcpObservationBinding(descriptor).state === "resolved") {

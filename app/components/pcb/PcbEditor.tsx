@@ -1392,15 +1392,16 @@ export default function PcbEditor({
   // ── [B15.3 §I] the PCB proposal review + human-gated apply ─────────────────
   const pendingPcbProposal = pcbProposalIntake?.proposal ?? null;
   const [pcbProposalBusy, setPcbProposalBusy] = useState(false);
-  const [pcbProposalTick, setPcbProposalTick] = useState(0);
+  const [pcbProposalNow, setPcbProposalNow] = useState(() => Date.now());
   const pcbJournalStoreRef = useRef<IndexedDbApprovedPcbMutationJournalStore | null>(null);
   if (pcbJournalStoreRef.current === null) pcbJournalStoreRef.current = new IndexedDbApprovedPcbMutationJournalStore();
   // Expiry is time-based: tick while a proposal is open so the disable
   // reason stays current without a manual refresh.
   useEffect(() => {
     if (!pendingPcbProposal) return;
-    const timer = setInterval(() => setPcbProposalTick((tick) => tick + 1), 5_000);
-    return () => clearInterval(timer);
+    const firstTick = setTimeout(() => setPcbProposalNow(Date.now()), 0);
+    const timer = setInterval(() => setPcbProposalNow(Date.now()), 5_000);
+    return () => { clearTimeout(firstTick); clearInterval(timer); };
   }, [pendingPcbProposal]);
   // Board lifecycle adoption / retirement while a proposal is pending
   // RETIRES it (and any unused capability dies with its controller call).
@@ -1415,11 +1416,10 @@ export default function PcbEditor({
    *  condition re-verifies against the LIVE editor state — and the apply
    *  boundary re-verifies all of it AGAIN at the serialized position. */
   const pcbProposalDisableReason = useMemo((): string | null => {
-    void pcbProposalTick; // expiry re-evaluation tick
     if (!pendingPcbProposal) return null;
     const verification = verifySealedPcbEditProposalIntegrity(pendingPcbProposal);
     if (!verification.ok) return `the proposal failed integrity verification (${verification.code}).`;
-    if (isPcbEditProposalExpired(pendingPcbProposal, Date.now())) return "the proposal has expired — request a fresh proposal.";
+    if (isPcbEditProposalExpired(pendingPcbProposal, pcbProposalNow)) return "the proposal has expired — request a fresh proposal.";
     if (init.demo || !syncIdentity) return "demo boards have no durable project scope; proposals cannot be applied here.";
     if (pendingPcbProposal.scope.tenantId !== syncIdentity.tenantId
       || pendingPcbProposal.scope.projectId !== syncIdentity.projectId
@@ -1447,7 +1447,7 @@ export default function PcbEditor({
     }
     if (pcbProposalBusy) return "an apply is already in progress.";
     return null;
-  }, [pendingPcbProposal, pcbProposalTick, init.demo, syncIdentity, currentInterlock, editorRuntime, state.board, drc.activePresetId, pcbProposalBusy]);
+  }, [pendingPcbProposal, pcbProposalNow, init.demo, syncIdentity, currentInterlock, editorRuntime, state.board, drc.activePresetId, pcbProposalBusy]);
 
   const applyPcbProposal = useCallback(async () => {
     const proposal = pendingPcbProposal;

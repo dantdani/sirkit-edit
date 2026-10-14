@@ -18,7 +18,7 @@
 
 import { lineCurrency, lineUnitPrice } from "@/app/lib/bom/line-price"; // [B19-D I5b review]
 import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import type {
   SchematicState,
   SchComponent,
@@ -355,6 +355,16 @@ function loadChoice(): DistributorChoice {
   return stored !== null && SELECTABLE_CHOICES.has(stored) ? (stored as DistributorChoice) : "none";
 }
 
+function subscribePricingChoice(onChange: () => void): () => void {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === STORAGE_KEY || event.key === null) onChange();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => window.removeEventListener("storage", onStorage);
+}
+
+const serverPricingChoice = (): DistributorChoice => "none";
+
 // ─── Distributor import file helpers ─────────────────────────────────────────--
 
 /** [B19-E E1] Each distributor's import file: the tool it is uploaded to, and the vendor. */
@@ -395,6 +405,16 @@ function downloadBlob(blob: Blob, filename: string): void {
 const BOM_NEEDS_PROJECT = "Open or save a project to build its BOM. Live distributor pricing is a project read.";
 
 export function BomView(props: Props) {
+  const scope = props.projectScope;
+  const scopeKey = JSON.stringify(scope ? [scope.tenantId, scope.projectId, scope.branchId] : null);
+  const components = "state" in props ? props.state.components : props.components;
+  const kicadComponents = "state" in props ? props.state.kicadComponents : props.kicadComponents;
+  const isEmpty = !components?.some((part) => part.type !== "ground") && !kicadComponents?.length;
+  // Each project owns its results, dialogs and pending reads. A scope change retires the previous view.
+  return <ProjectBomView key={`${scopeKey}:${isEmpty}`} {...props} />;
+}
+
+function ProjectBomView(props: Props) {
   const state: SchematicState = useMemo(() => {
     if ("state" in props) return props.state;
     return { components: props.components, wires: [], kicadComponents: props.kicadComponents };
@@ -403,10 +423,12 @@ export function BomView(props: Props) {
   const components = state.components ?? [];
   const kicadComponents = state.kicadComponents ?? [];
 
-  const [pricingChoice, setPricingChoice] = useState<DistributorChoice>("none");
+  const persistedPricingChoice = useSyncExternalStore(subscribePricingChoice, loadChoice, serverPricingChoice);
+  const [selectedPricingChoice, setPricingChoice] = useState<DistributorChoice | null>(null);
+  const pricingChoice = selectedPricingChoice ?? persistedPricingChoice;
   const [result, setResult] = useState<BomResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [settledRequest, setSettledRequest] = useState<string | null>(null);
+  const [requestError, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "refDes", dir: 1 });
@@ -414,8 +436,12 @@ export function BomView(props: Props) {
   const [onlyAtRisk, setOnlyAtRisk] = useState(false);
   // The BOM row whose alternates drawer is open, or null when closed.
   const [drawerRow, setDrawerRow] = useState<BomRow | null>(null);
-  // Set just before a "Refresh prices" click so the next fetch bypasses the cache.
-  const forceRef = useRef(false);
+  const [drawerFor, setDrawerFor] = useState<string | null>(null);
+  // "Refresh prices" bypasses the cache for exactly the request its click starts: the nonce the click minted. The intent is
+  // read, never consumed, by the effect (React's development double-invocation aborts the first run and starts another; a
+  // consumed flag would send the surviving request as a cached read) and is cleared only by the request that was answered.
+  const refreshNonceRef = useRef(0);
+  const forceNonceRef = useRef(-1);
   // Export-for-distributor menu + sourcing worksheet modal + post-action banners.
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [fileExporting, setFileExporting] = useState(false);
@@ -451,7 +477,11 @@ export function BomView(props: Props) {
   // surfaces use, and it travels as a selector — never a content hash.
   const projectScope = props.projectScope ?? null;
   const projectKey = projectScope ? projectScope.projectId : null;
-  const selectorHeaders = useMemo(() => projectSelectorHeaders(projectScope), [projectScope]);
+  const tenantId = projectScope?.tenantId ?? null;
+  const branchId = projectScope?.branchId ?? null;
+  const selectorHeaders = useMemo(() => projectKey !== null && tenantId !== null && branchId !== null
+    ? projectSelectorHeaders({ tenantId, projectId: projectKey, branchId })
+    : {}, [tenantId, projectKey, branchId]);
   const unreadCount = notifications.filter((n) => !n.readAt).length;
 
   // Auto-dismiss the post-action banner after 8s.
@@ -470,11 +500,6 @@ export function BomView(props: Props) {
     return () => clearInterval(t);
   }, [showingResult]);
 
-  // Hydrate the persisted choice on mount (client-only).
-  useEffect(() => {
-    setPricingChoice(loadChoice());
-  }, []);
-
   const onChoiceChange = (choice: DistributorChoice) => {
     setPricingChoice(choice);
     try {
@@ -487,15 +512,19 @@ export function BomView(props: Props) {
   // A signature that changes only when the orderable BOM content changes — keeps
   // the fetch effect from looping on every parent re-render (new state object).
   const signature = useMemo(() => {
-    const k = (state.kicadComponents ?? []).map((c) => `${c.partId}:${c.value}:${c.refDes}`).join("|");
+    const k = (state.kicadComponents ?? []).map((c) => [c.id, c.partId, c.atomicPartRevisionId ?? null, c.value, c.refDes]);
     const t = (state.components ?? [])
       .filter((c) => c.type !== "ground")
-      .map((c) => `${c.type}:${c.value}:${c.id}`)
-      .join("|");
-    return `${k}#${t}`;
+      .map((c) => [c.id, c.type, c.value, c.refDes ?? c.id]);
+    return JSON.stringify([k, t]);
   }, [state]);
 
+  // Retire an alternate proposal with its source design, even if a read ignores abort.
+  if (drawerRow && drawerFor !== signature) setDrawerRow(null);
   const isEmpty = components.filter((c) => c.type !== "ground").length === 0 && kicadComponents.length === 0;
+  const requestKey = JSON.stringify([pricingChoice, signature, refreshNonce, isEmpty]);
+  const loading = !isEmpty && projectKey !== null && settledRequest !== requestKey;
+  const error = !isEmpty && !projectKey ? BOM_NEEDS_PROJECT : loading ? null : requestError;
 
   // Carry the live state into fetch requests without making it a fetch dep
   // (the parent passes a fresh state object every render).
@@ -504,105 +533,109 @@ export function BomView(props: Props) {
     stateRef.current = state;
   });
 
-  const fetchBom = useCallback(async () => {
-    if (isEmpty) {
-      setResult(null);
-      setResultFor(null);
-      setOffline(false);
-      return;
-    }
+  const fetchBom = useCallback(async (signal: AbortSignal, forceRefresh: boolean) => {
     // [B19-B I2] live pricing spends a metered vendor quota, so /api/bom is an authenticated project read: it needs the
     // project scope. Until the scope is known there is nothing to authorize the request with, so nothing is sent, and
     // the view says why instead of showing an empty table.
-    if (!projectKey) {
-      setResult(null);
-      setResultFor(null);
-      setOffline(false);
-      setError(BOM_NEEDS_PROJECT);
-      return;
-    }
-    setLoading(true);
-    setError(null);
+    if (isEmpty || !projectKey) return null;
+    let res: Response;
     try {
-      const forceRefresh = forceRef.current;
-      let res: Response;
-      try {
-        res = await fetch("/api/bom", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...selectorHeaders },
-          body: JSON.stringify({ state: stateRef.current, pricingChoice, forceRefresh }),
-        });
-      } catch {
-        // [B19-E E1-C review] only a request that got no answer is offline: the last result stays and says so; Retry refetches
-        setOffline(true);
-        setClock(Date.now());
-        return;
+      res = await fetch("/api/bom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...selectorHeaders },
+        body: JSON.stringify({ state: stateRef.current, pricingChoice, forceRefresh }),
+        signal,
+      });
+    } catch {
+      // [B19-E E1-C review] only a request that got no answer is offline: the last result stays and says so; Retry refetches
+      return { kind: "offline" as const, receivedAt: Date.now() };
+    }
+    // [B19-E E1-C review] an answer that is not a BOM (an error status, or a body that is not JSON) is an error with its
+    // HTTP status, and the last result is not kept as if it were current
+    let data: BomResult | { ok: false; error?: unknown } | null;
+    try {
+      data = (await res.json()) as BomResult | { ok: false; error?: unknown } | null;
+    } catch (bodyError) {
+      if (!(bodyError instanceof SyntaxError)) {
+        // [B19-E E1-C review follow-up] the connection dropped while the answer downloaded: no answer arrived, so offline
+        return { kind: "offline" as const, receivedAt: Date.now() };
       }
-      // [B19-E E1-C review] an answer that is not a BOM (an error status, or a body that is not JSON) is an error with its
-      // HTTP status, and the last result is not kept as if it were current
-      let data: BomResult | { ok: false; error?: unknown } | null;
-      try {
-        data = (await res.json()) as BomResult | { ok: false; error?: unknown } | null;
-      } catch (bodyError) {
-        if (!(bodyError instanceof SyntaxError)) {
-          // [B19-E E1-C review follow-up] the connection dropped while the answer downloaded: no answer arrived, so offline
-          setOffline(true);
-          setClock(Date.now());
-          return;
-        }
-        data = null;
-      }
-      setOffline(false);
-      if (res.ok && data !== null && data.ok === true) {
-        const receivedAt = Date.now();
-        const serverOffsetMs = Number.isFinite(data.generatedAt) ? data.generatedAt - receivedAt : 0;
-        setResult(data);
-        setResultFor({ pricingChoice, signature, receivedAt, serverOffsetMs });
-        setClock(receivedAt);
-      } else {
-        const message = data !== null && data.ok === false && typeof data.error === "string" ? data.error : "The BOM could not be built";
-        setError(`${message} (HTTP ${res.status})`);
+      data = null;
+    }
+    if (res.ok && data !== null && data.ok === true) {
+      const receivedAt = Date.now();
+      const serverOffsetMs = Number.isFinite(data.generatedAt) ? data.generatedAt - receivedAt : 0;
+      return { kind: "result" as const, data, receivedAt, serverOffsetMs };
+    } else {
+      const message = data !== null && data.ok === false && typeof data.error === "string" ? data.error : "The BOM could not be built";
+      return { kind: "error" as const, message: `${message} (HTTP ${res.status})` };
+    }
+  }, [pricingChoice, isEmpty, projectKey, selectorHeaders]);
+
+  useEffect(() => {
+    if (isEmpty || !projectKey) return;
+    const controller = new AbortController();
+    const forceRefresh = forceNonceRef.current === refreshNonce;
+    void fetchBom(controller.signal, forceRefresh).then((answer) => {
+      if (controller.signal.aborted || answer === null) return;
+      if (forceRefresh && forceNonceRef.current === refreshNonce) forceNonceRef.current = -1; // the answered request consumed the click
+      setError(answer.kind === "error" ? answer.message : null);
+      setOffline(answer.kind === "offline");
+      if (answer.kind === "result") {
+        setResult(answer.data);
+        setResultFor({ pricingChoice, signature, receivedAt: answer.receivedAt, serverOffsetMs: answer.serverOffsetMs });
+        setClock(answer.receivedAt);
+      } else if (answer.kind === "error") {
         setResult(null);
         setResultFor(null);
+      } else {
+        setClock(answer.receivedAt);
       }
-    } finally {
-      forceRef.current = false; // one-shot — clear after the request settles
-      setLoading(false);
-    }
-    // signature is included so a content change refetches; stateRef carries the
-    // live state into the request without retriggering on object identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pricingChoice, signature, refreshNonce, isEmpty, projectKey, selectorHeaders]);
+      setSettledRequest(requestKey);
+    }).catch((cause: unknown) => {
+      // A failure outside fetchBom's own handling (nothing retryable about it) still settles THIS request: "Loading…" must
+      // never stick with Refresh disabled.
+      if (controller.signal.aborted) return;
+      setError(`The BOM could not be built (${cause instanceof Error && cause.message ? cause.message : "unexpected failure"})`);
+      setOffline(false);
+      setResult(null);
+      setResultFor(null);
+      setSettledRequest(requestKey);
+    });
+    return () => controller.abort();
+  }, [fetchBom, isEmpty, projectKey, pricingChoice, signature, requestKey]);
 
-  useEffect(() => {
-    void fetchBom();
-  }, [fetchBom]);
-
-  const loadSnapshots = useCallback(async () => {
-    if (!projectKey) return;
+  const loadSnapshots = useCallback(async (signal?: AbortSignal) => {
+    if (!projectKey) return null;
     try {
-      const res = await fetch("/api/bom/snapshot", { headers: selectorHeaders });
+      const res = await fetch("/api/bom/snapshot", { headers: selectorHeaders, signal });
       const data = (await res.json()) as { ok: boolean; snapshots?: SnapshotMeta[] };
-      if (data.ok && data.snapshots) setSnapshots(data.snapshots);
+      return data.ok && data.snapshots ? data.snapshots : null;
     } catch {
-      /* non-fatal */
+      return null;
     }
   }, [projectKey, selectorHeaders]);
 
-  const loadNotifications = useCallback(async () => {
-    if (!projectKey) return;
+  const loadNotifications = useCallback(async (signal?: AbortSignal) => {
+    if (!projectKey) return null;
     try {
-      const res = await fetch("/api/bom/notifications", { headers: selectorHeaders });
+      const res = await fetch("/api/bom/notifications", { headers: selectorHeaders, signal });
       const data = (await res.json()) as { ok: boolean; notifications?: NotifItem[] };
-      if (data.ok && data.notifications) setNotifications(data.notifications);
+      return data.ok && data.notifications ? data.notifications : null;
     } catch {
-      /* non-fatal */
+      return null;
     }
   }, [projectKey, selectorHeaders]);
 
   useEffect(() => {
-    void loadSnapshots();
-    void loadNotifications();
+    const controller = new AbortController();
+    void loadSnapshots(controller.signal).then((loaded) => {
+      if (!controller.signal.aborted && loaded !== null) setSnapshots(loaded);
+    });
+    void loadNotifications(controller.signal).then((loaded) => {
+      if (!controller.signal.aborted && loaded !== null) setNotifications(loaded);
+    });
+    return () => controller.abort();
   }, [loadSnapshots, loadNotifications]);
 
   const takeSnapshot = async () => {
@@ -625,7 +658,7 @@ export function BomView(props: Props) {
       setSnapPopoverOpen(false);
       setSnapLabel("");
       setBanner("Snapshot saved.");
-      void loadSnapshots();
+      void loadSnapshots().then((loaded) => { if (loaded !== null) setSnapshots(loaded); });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Snapshot failed");
     } finally {
@@ -755,7 +788,7 @@ export function BomView(props: Props) {
   // [B19-E E1-C review] Judged in server time (the client clock plus the offset at receipt), online or offline; offline, a
   // kept result that was for another pricing choice or design shows no cost, sources or offer prices at all.
   const now = clock + (resultFor?.serverOffsetMs ?? 0);
-  const staleRequest = offline && result !== null && (resultFor === null || resultFor.pricingChoice !== pricingChoice || resultFor.signature !== signature);
+  const staleRequest = result !== null && (resultFor === null || resultFor.pricingChoice !== pricingChoice || resultFor.signature !== signature);
   const isWithheld = useCallback((offer: PartPricing): boolean => staleRequest || offerWithheld(offer, now, offline), [staleRequest, now, offline]);
 
   const rows = useMemo(() => {
@@ -785,9 +818,16 @@ export function BomView(props: Props) {
   };
 
   // Re-fetch with the cache bypassed.
+  /** Request the BOM again (a cached read is fine): every nonce bump goes through the ref so a forced refresh can name its own request. */
+  const requestAgain = (): number => {
+    const nonce = refreshNonceRef.current + 1;
+    refreshNonceRef.current = nonce;
+    setRefreshNonce(nonce);
+    return nonce;
+  };
   const refreshPrices = () => {
-    forceRef.current = true;
-    setRefreshNonce((n) => n + 1);
+    forceNonceRef.current = refreshNonceRef.current + 1;
+    requestAgain();
   };
 
   if (isEmpty) {
@@ -856,7 +896,7 @@ export function BomView(props: Props) {
         </label>
 
         <button
-          onClick={() => setRefreshNonce((n) => n + 1)}
+          onClick={requestAgain}
           disabled={loading}
           className="text-xs px-2 h-7 rounded border border-zinc-800 text-zinc-300 hover:bg-zinc-800 transition disabled:opacity-50"
         >
@@ -1032,7 +1072,7 @@ export function BomView(props: Props) {
             {staleRequest && " That result was for a different pricing choice or design, so its cost, sources and offer prices are not shown."}
           </span>
           <button
-            onClick={() => setRefreshNonce((n) => n + 1)}
+            onClick={requestAgain}
             disabled={loading}
             className="text-[11px] px-2 h-6 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-900/40 transition disabled:opacity-50 shrink-0"
           >
@@ -1046,7 +1086,7 @@ export function BomView(props: Props) {
         <div data-testid="bom-expired" role="status" className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-amber-200 bg-amber-950/30 border-b border-amber-900/40 shrink-0">
           <span className="flex-1">Some offers have expired since this result was received; their price, stock and link are hidden.</span>
           <button
-            onClick={() => setRefreshNonce((n) => n + 1)}
+            onClick={requestAgain}
             disabled={loading}
             className="text-[11px] px-2 h-6 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-900/40 transition disabled:opacity-50 shrink-0"
           >
@@ -1235,9 +1275,11 @@ export function BomView(props: Props) {
                     <Td>
                       {row.alternatesCount > 0 ? (
                         <button
+                          disabled={staleRequest || loading}
                           onClick={(e) => {
                             e.stopPropagation();
-                            setDrawerRow(row);
+                            if (staleRequest || loading || resultFor?.signature !== signature) return;
+                            setDrawerFor(signature); setDrawerRow(row);
                           }}
                           className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-teal-500/15 text-teal-300 border border-teal-500/40 hover:bg-teal-500/25 transition"
                           title="View alternate parts"
@@ -1325,8 +1367,9 @@ export function BomView(props: Props) {
           : "—"}
       </div>
 
-      {drawerRow && drawerRow.partId && (
+      {drawerRow && drawerFor === signature && drawerRow.partId && (
         <AlternatesDrawer
+          key={drawerRow.partId}
           sourcePartId={drawerRow.partId}
           sourceLabel={alternatesDrawerLabel(drawerRow)}
           onSwapPart={onSwapPart}
@@ -1672,25 +1715,21 @@ function AlternatesDrawer({
   const [showFff, setShowFff] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    fetch(`/api/parts/${sourcePartId}/alternates?kind=all&limit=50`)
+    const controller = new AbortController();
+    fetch(`/api/parts/${sourcePartId}/alternates?kind=all&limit=50`, { signal: controller.signal })
       .then((res) => res.json() as Promise<AlternatesResponse>)
       .then((data) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         if (data.ok) setItems(data.alternates);
         else setError(data.error);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load alternates");
+        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Failed to load alternates");
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [sourcePartId]);
 
   const visible = (items ?? []).filter(

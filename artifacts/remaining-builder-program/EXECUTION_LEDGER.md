@@ -5572,3 +5572,61 @@ Test-first on `chapter/b24-production-qualification` from `1fe719e`: two runs, t
   close: pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification 525 passed, 15 skipped; tsc 0; eslint 0 on the changed
   TypeScript file; the page checks after the records 6,693 passed, 35 skipped (553 files, app/api and app/lib/agent included);
   citation sweeps 0 broken; the tree secret scan 0 hits; counts 168/165/3/0, 48/37/9/28, 107, 32.
+
+### B24 post-merge corrective closeout - reconciliation and current checkpoint (2026-10-11)
+
+- **CONFIRMED, read-only metadata:** the GitHub connector authenticated `dantdani`; `dantdani/sirkit-edit` is private and the
+  authenticated owner has admin permission. No credential value was read into an artifact or printed. The local GitHub CLI's
+  config was sandbox-inaccessible, so the authenticated connector supplied the metadata instead; no escalation was used.
+- **Merge:** PR #15, `chapter/b24-production-qualification` into `main`, merged normally at 2026-10-11T05:26:33Z. Final head
+  `9dee4fb2d2ea205c3da8b00798a213ce8cea2935`; merge `32b081e152620b46e791f9589256f7d0603f300f`. Local first-parent history agrees.
+- **Final-head CI, independently checked:** deterministic-manufacturing run 38113287508 completed successfully with all seven
+  pull-request jobs successful; benchmark-quality run 38113287472 completed successfully with `benchmark-core` and
+  `benchmark-latency` successful. `benchmark-nightly` was skipped by its schedule/dispatch-only condition, not counted as passing.
+  Only metadata was fetched: no external write, workflow dispatch/rerun, provider call, simulator or database operation.
+- **Record repair:** section 5.1 of B24's final verdict now carries the verified merge SHA and the chapter PR list; dated section
+  5.5 records the metadata and distinguishes it from the historical `26dc8b8` gate evidence. None of the historical scope states,
+  test counts, integrity statements, qualification matrix or live-blocker entries was changed.
+- **Current checkpoint:** post-merge corrective closeout **IN PROGRESS**, branch `codex/astra-foundation`, base
+  `32b081e152620b46e791f9589256f7d0603f300f`. The owner approved OD-229 (refuse AI deletion disconnecting final surviving circuitry,
+  without changing human editor deletion) and OD-236 (strict-provider null means omission only where the original schema permits
+  omission). Pre-existing deterministic lint/readiness defects are also being corrected. This entry records no completed gate
+  for the corrective tree; narrow and program-wide non-live validation belong to the lead's serial run.
+- **Handoff rule:** runbook section 0 permits a resource blocker only when no deterministic local/fake-backed work remains;
+  its final report admits an honest PARTIAL verdict and names remaining live/physical unknowns. Close the deterministic local
+  corrections first and record their own results. Only then begin the additive Astra foundation; no Astra activation, default
+  model change, new live qualification or unqualified specialist-model admission is authorized by this metadata reconciliation.
+  The historical chapter remains PARTIAL and all existing live blockers remain unchanged.
+
+### Product-reliability assignment, checkpoints A and B (2026-10-14)
+
+Assignment: `artifacts/astra-guided-pcb/PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.md` (prepared 2026-10-14), evidence under
+`artifacts/product-reliability-simple-ui/`. Branch `codex/astra-foundation`, base `32b081e`; the protected original untouched.
+
+- **A, establish and reproduce (CONFIRMED):** the pending corrective tree inventoried file by file (32 modified, 10 untracked)
+  and preserved; credentials by name only; the normal app (`pnpm dev`, port 3000, the owner's `.env.local`) and the fixture
+  journey both exercised. Theory generate refused 400 `AUTH_PROJECT_SELECTOR_REQUIRED` before any provider work (the client
+  sends no selector, `lib/apply-netlist.ts:11-15`); the owner's own Build run of 2026-10-11 (durable `llm.call-record.v1`:
+  13 model calls, 28,878 in / 3,211 out) ended "No parts produced" on the then-missing table (migrated the same day); chat
+  closed on load with the sheet pointing "above"; no submit for the ask route; dead Settings; "3D view" literal; decorative
+  check rows; a silent sync return. Fixture baseline `e2e/prompt-to-gerber.spec.ts`: 1 passed (1.4 min), exit 0.
+  Reproduction suite `app/lib/qualification/__tests__/pr-a-journey-reproductions.test.ts` (1 ordinary + 10 `it.fails`):
+  11 passed. Fault register and chain contract: `fault-register.md`, `workflow-contract.md` (from four read-only traces).
+  Live spend by the builder: none (`live-spend.json`; price basis recorded from the official model page).
+- **B, finish the pending corrective foundation:** OD-229/OD-236 and the lifecycle repairs verified on the current tree
+  (13 suites green). Four holes closed test-first, each shown failing with the fixes reversed string-exactly
+  (`scratchpad/b/counterexample.py`): inspector subtree keyed to the selected references (same-kind, same-value A→B no longer
+  reuses A's draft; a same-selection refresh keeps it), the live-preview hint retired on identity change (A→B→A does not
+  revive it), the committed assignment result panel-owned (survives the keyed detail's remount), the BOM request chain's
+  `.catch` (a rejection settles the request). A review claim that "Refresh prices" was broken under StrictMode was
+  REFUTED (mount-only double invocation); kept as a pin. `requestAgain` registered in the control registry; both sanctioned
+  generators re-run (628 controls / 63 surfaces; in scope 168, unnamed 0). Gates on the corrective tree: `tsc --noEmit`
+  exit 0 (after removing a truncated generated `.next/dev/types/validator.ts`); whole-repository `eslint .` exit 0 with
+  0 errors and 34 warnings (28 `no-unused-vars`, 5 `no-console`, 1 `exhaustive-deps`), down from the historical 33 errors;
+  the registry, accessibility, reproduction and lifecycle suites recorded in `validation.md`.
+- **Unchanged:** B24's verdict PARTIAL and every live blocker LB-1..LB-17; no Astra activation; no provider or database write
+  by the builder; no default-model change.
+- **Next:** checkpoint C, the vertical slice: Theory request contract through the shared preparation, structured partial /
+  skipped-check status from `build-multi`, provider-failure classification with `reason`, bounded loops, visible route and
+  submission for every composer route, the journey stages with next actions, individually named unresolved instances
+  (mount the existing readiness panel), no silent sync returns, the real reason on a stale apply.
