@@ -228,3 +228,162 @@ If a required live/owner resource blocks a stage, stop only that dependent work 
 End with an honest handoff: what the owner can now type/click to get a schematic and PCB, what still cannot run and why, exact evidence locations, any remaining Astra work, and the verified branch/PR/CI. Do not say “all done” because an assistant response sounds confident.
 
 **Begin now with checkpoint A, verify the pending work, then implement B–I incrementally. Do not ask whether to review, plan or start.**
+
+---
+
+## J — ADDITIVE OWNER REQUEST: usable multi-sheet schematics and practical workload limits
+
+Added 2026-10-15. Append-only extension to the ongoing assignment. Do not interrupt or discard the checkpoint already in progress, redo completed checkpoints, or change the existing chapter goals. Finish the current reliability and simple-workspace work, then implement this feature incrementally as the next product capability. If A–I are already complete, continue here directly. This request is for implementation and browser evidence, not a proposal document alone.
+
+### J.1 Product outcome
+
+The current single-page schematic becomes crowded when a circuit contains several subsystems. Give one Sirkit project multiple real schematic **sheets**, with a simple sheet navigator and explicit electrical interfaces between subsystems. All sheets still describe **one circuit and one PCB** unless a separate multi-board feature is explicitly requested later.
+
+For example, the user should be able to organize a project as:
+
+```text
+System overview
+├── Power and references
+├── Analog front end and filtering
+├── ADC and analog-to-digital interface
+├── Microcontroller, clock and programming
+└── Connectors and external interfaces
+```
+
+The overview shows readable subsystem blocks and their connections. Opening a block shows its actual editable schematic. Named ports, explicit net labels and validated buses carry signals between sheets; do not stretch physical wires across one giant crowded canvas. Do not create separate projects, screenshots, disconnected canvas tabs or separate PCB boards as a substitute.
+
+Aim for a useful, understandable feature, not every feature of a commercial EDA suite. Start with a root overview and ordinary child sheets. Support sensible nesting using the existing model where feasible; do not block the first working feature on a reusable-template marketplace, arbitrary parameterized hierarchy, multi-board harnesses or new specialist-agent infrastructure.
+
+### J.2 Reuse the hierarchy already present; bridge the missing editor path
+
+Inspect current source before selecting the implementation. On 2026-10-15, the code already contains:
+
+- `app/lib/schematic-compiler/types.ts`: sheet definitions/instances, unit-to-sheet assignment, scoped electrical nets, hierarchical port definitions/bindings, signal bundles and per-sheet diagram views.
+- `app/lib/schematic-compiler/hierarchy.ts`: `addSheetInstance`, `defineHierarchicalPort`, `bindHierarchicalPort`, `defineSignalBundle` and `instantiateSignalBundle`.
+- `app/lib/schematic-compiler/graph.ts`: graph identity, hierarchy/reference checks and scoped net-name validation.
+- `app/lib/schematic-compiler/diagram.ts::compileDiagramView`: per-sheet unit filtering, but not a complete rendered parent sheet-symbol/port interface.
+- `lib/schematic-types.ts::SchematicState`: the current editor-facing flat component/wire/label arrays and a single `pageSize`.
+- `app/lib/connectivity.ts::buildNetUnionFind`: coordinate-only point keys and same-name label unions. Applying that flat behavior across sheets without scoping would create unintended connections.
+- `app/lib/pcb/netlist-bridge.ts`: existing PCB publication paths with root-hierarchy assumptions; and `app/lib/schematic-compiler/sync.ts`: an existing project-level synchronization contract. Neither is proof that the current UI flattens hierarchical ports correctly.
+
+Verify these facts against the active tree. Reuse and extend the existing semantic model, canonical commands, storage and validation rather than introducing a competing hierarchy database. Do not replace flat editor state with an unchecked cast, guess that metadata already works end-to-end, or mint upstream compiler approvals to get past a missing prerequisite. Connect the real production path incrementally with explicit conversions and tests.
+
+Sheet membership must be persisted engineering/document state. Active sheet, viewport and navigation history are presentation/session state. Do not store the only copy of circuit connectivity in a React tab, browser DOM, agent message or generated picture.
+
+### J.3 Functional minimum: sheets the user can actually use
+
+Implement through shared commands and the real editor:
+
+1. Create, open, rename and reorder sheets. Show a compact tree or sheet list, current-sheet title and parent breadcrumb. Double-click a subsystem block to enter; provide an obvious Back/Overview action and keyboard navigation.
+2. Add, inspect and edit parts, wires, labels and ports on the active sheet. Render only that sheet's diagram items while retaining the complete project graph. Sheet switching must not discard edits or reset undo/redo.
+3. Move an existing connected selection or subsystem to a new/existing sheet using a previewable canonical operation. Preserve component, unit, pin, net and reference-designator identities. Resolve selection-boundary connections through explicit ports/labels and show their mapping before applying.
+4. Offer “Organize into sheets” for a crowded existing circuit. Group by actual function, connectivity and user intent, not a random count of components. Preview the proposed groups and interface connections. Apply the refactor transactionally; reject an ambiguous or electrically non-equivalent split without changing the design.
+5. Keep independent per-sheet diagram layout and viewport. A tidy operation affects the selected sheet by default and preserves manually locked positions. Do not rearrange every sheet because the user edited one resistor.
+6. Provide project-wide search and cross-probing: finding a part/net/check result opens the correct sheet and highlights the exact target. A cross-sheet connection can show its destinations and navigate to them.
+7. Delete only through an explicit, reversible operation with a clear impact preview. Deleting a populated/referenced sheet must not silently erase circuitry, port bindings or physical parts. Offer a legitimate move/merge alternative where appropriate. Do not require the owner to accept irreversible data loss.
+8. Handle mixed and repeated selections correctly. Switching sheets retires active gestures, drafts, pending previews and callbacks belonging to the old sheet, while leaving project state intact. An async result from sheet A cannot write into sheet B through a reused callback.
+
+Keep the new controls consistent with the simplified workspace requested above. A small Sheets panel and contextual tools are preferable to more floating dashboards. Keep single-sheet projects simple; the user must not create five sheets merely to draw a small circuit.
+
+### J.4 Electrical connections must be explicit and scoped
+
+Implement and document one unambiguous connection policy:
+
+- **Local labels** connect only within the same sheet instance. Equal text or equal XY coordinates on different sheets must not create connectivity.
+- **Hierarchical ports** connect a child interface to an explicit parent sheet pin/binding. The top-level overview uses those interfaces to connect subsystem blocks. Display names help the user, but stable semantic identities and validated bindings determine the connection.
+- **Global/project labels** connect across sheets only when deliberately declared with that scope. Do not turn every ordinary label into a global label to make the feature appear to work.
+- Power/ground labels retain their actual voltage, return and isolation domains. Never merge AGND, DGND, PGND, chassis, shield or isolated returns merely because they look similar. Existing explicit ties and rail-domain rules still apply.
+- Bus/bundle connections map each actual member explicitly. A bus stroke or a name such as `DATA[0..7]` is not sufficient proof of an electrical connection. Check width/member identity, differential polarity, required ports and supported signal-direction/domain constraints.
+- Display port names, direction and useful cross-references. Refuse or clearly flag missing ports, duplicate/incompatible bindings, unresolved endpoints, hierarchy cycles, invalid parent/child references and accidental cross-domain connections.
+
+Validate parent/child electrical membership, not merely that the referenced net IDs exist somewhere in the project. Preserve deliberate disconnected/no-connect states. Use the existing canonical connectivity/ERC authority, extended for sheet scope, instead of writing a second inconsistent checker in the renderer.
+
+Use current official KiCad documentation to inform compatibility, not as a claim that Sirkit already implements it. The official [multi-sheet schematic and connection guide](https://docs.kicad.org/10.0/en/eeschema/eeschema.html#electrical_connections_between_sheets) distinguishes local, global and hierarchical connection scope. Native format work should follow the [official schematic file format](https://dev-docs.kicad.org/en/file-formats/sexpr-schematic/index.html). Pin the format version actually supported; do not claim compatibility with every KiCad version.
+
+### J.5 One project-wide circuit, BOM and PCB
+
+PCB synchronization, ERC, supported SPICE generation, BOM and engineering reads must consume the **whole design**, not only the visible sheet.
+
+- Resolve hierarchical bindings into the project-wide electrical graph and produce the downstream representation deterministically. Include all relevant sheet instances and every physical component exactly once.
+- Multiple symbol units of one physical package may appear on different sheets without duplicating the package in the BOM or PCB. Keep component/unit/instance identities distinct.
+- Repeated sheet definitions, if supported, require unique instance identities and annotation scopes. Do not short their local nets together or duplicate reference designators. If reusable instances are deferred, refuse them explicitly rather than partially clone them.
+- Moving or renaming a sheet without changing circuit meaning must preserve pin-to-net membership and physical part identity. Avoid unnecessary PCB footprint/copper churn. Still honor project revision/digest changes and the existing rules for invalidating stale approvals, proposals or qualifications; never bypass those checks to retain an old green status.
+- A genuine connection/part/interface change invalidates dependent checks and sync plans as the existing policy requires. The UI shows affected sheets and downstream changes.
+- Any “Sync schematic to PCB” action clearly states that it synchronizes the complete project. Opening the MCU sheet must not make the analog front end disappear from the board.
+- Preserve exact component/footprint/pin authority. Hierarchical organization is not permission to invent parts or mapping evidence.
+
+### J.6 AI generation and editing should understand sheets
+
+Extend the existing generation/edit workflow and registry-backed command discovery, not just the system prompt:
+
+1. The AI may propose a functional sheet plan with a short interface list before generating/organizing a larger design. Explain assumptions without demanding an extra owner prompt for every normal step.
+2. Keep the generation contract structured: stable sheet identities, owned component/unit identities, named typed interfaces and explicit inter-sheet bindings. Do not rely on prose or same-name string merging to connect subsystems.
+3. Ensure the existing build planner's subsystem output can be preserved as sheets rather than flattened and pasted onto the front page. All requested subsystems and their interfaces must be accounted for. A failed block remains a visible incomplete requirement, not an omitted subsystem hidden by `ok: true`.
+4. An instruction like “put the ADC interface on its own sheet” should refactor the existing design, not regenerate unrelated circuitry or lose values, annotations, approved parts or connections.
+5. An instruction like “change the filter in Analog front end” should resolve the sheet/target unambiguously, use current project and sheet context, and preserve unrelated sheets. An ambiguous duplicate display name requires disambiguation, not a guessed target.
+6. Add sheet create/inspect/navigate/rename/reassign/connect/organize operations to the real semantic coverage matrix, permissions, validators and manuals. View navigation remains a view command; structural/connection changes remain properly reviewed canonical mutations.
+7. The AI can inspect a bounded sheet summary and explicitly fetch relevant neighboring interfaces/project context. Do not dump every component from every sheet into every tool call or hide unseen dependencies from a mutation.
+8. Multiple agents are optional workers on the same canonical project, not independent owners of duplicate sheets. Their results are proposals over pinned bases, checked and integrated through the existing executor. Schedule work incrementally; do not let concurrent agents overwrite one another.
+
+Useful acceptance requests:
+
+> Organize this controller into separate Power, Analog front end, ADC interface, MCU, and Connectors sheets. Show the system connections on an overview. Keep the existing circuit, part identities and one PCB.
+
+> Move the low-pass filter into Analog front end without changing its values or electrical connections, then show where its output reaches the ADC sheet.
+
+> Open MCU, highlight the SPI link to ADC interface, and update the requested component without changing any other sheet.
+
+### J.7 Practical restrictions: remove artificial ceilings, not basic protections
+
+The owner wants a working tool rather than constant arbitrary restrictions. Audit actual limits and distinguish **logical work**, **concurrent workers**, **resource/spend ceilings**, and **permissions**. These are different things.
+
+On inspection, `app/lib/agent/orchestration/scheduler.ts` limits specialists to four plus a coordinator, with serial specialist execution; `router.ts` also contains a deliberately trimmed full-circuit role plan. This explains the reported “five agents” ceiling, but changing one numeric constant would not restore omitted planned work. Recheck the active implementation before editing it.
+
+The current structure called a DAG is a flat role-task list, not an implemented arbitrary dependency graph or recursive spawning system. Bounded sequential sheet tasks are sufficient for the first usable release. Do not turn this feature into an unnecessary scheduler rewrite. If dependent/parallel module execution is later introduced, model actual dependencies and test their ordering, conflict handling and recovery before enabling it.
+
+- Remove unnecessary hardcoded product/UX limits, including a blanket five-agent ceiling where it prevents useful supported work. Replace workload choices with validated, documented configuration and sensible defaults suited to this machine/provider budget.
+- Separate the number of subsystem/sheet tasks from simultaneous worker count. A project with more than four subsystems can execute in bounded batches or a queue. Never omit a requested subsystem merely because all workers are occupied.
+- Review router task lists, task-DAG cardinality, scheduler parallelism/retries, trace/event limits, context growth and accounting together. Raising a worker cap alone must not silently truncate results or overrun dependent storage/schema bounds.
+- Do not require one agent per sheet, enforce an arbitrary five-sheet limit, or conflate the existing initial placement-qualification size limit with the maximum number of sheets an editor can open. Keep measured implementation limits explicit and provide an actionable explanation when one is reached.
+- Make safe workload settings visible and avoid repetitive confirmations for actions the existing policy already authorizes. Do not let a model raise its own spend ceiling or execution permissions.
+- Retain cancellation, deadlines, finite CPU/memory/token/request bounds, cumulative approved spend, project isolation, revision checks, recoverable saves, correct connectivity, and existing human release/publication/purchase boundaries. Those prevent lost designs or unexpected charges; disabling them is not necessary to make more sheets or queue more tasks.
+- Do not begin a new broad security-hardening or compliance chapter during this feature. Focus on functionality and usability while preserving the safeguards already in the product. Do not replace “too many agents” with unbounded concurrency, recursive spawning or uncontrolled paid retries.
+
+Record which unnecessary limits were changed, the old/new values or configuration, why they were safe to change, the measured workload and the remaining actual bounds. The previously authorized US$5 synthetic-test allowance remains cumulative and unchanged; this request does not authorize additional spend.
+
+### J.8 Persistence, compatibility and outputs
+
+1. Version the document contract and migrate an old flat schematic into one default/root sheet without semantic loss. Existing project files, autosave, checkpoints, hydration and export/import roundtrips must remain supported or give an explicit recoverable compatibility refusal.
+2. Save every sheet, port, binding and per-sheet diagram state needed to reopen the design. Sheet switching is not a save boundary that drops another sheet's pending canonical work.
+3. Keep undo/redo transactions project-wide and coherent. Refactoring a subsystem into a sheet should be a comprehensible transaction, not dozens of independently half-applied edits. Restore interfaces and identity with the inverse operation.
+4. Preserve project isolation, stale-result retirement, multi-tab conflict handling and recovery. A stored active-sheet ID that no longer exists falls back visibly to a valid sheet, never crashes or modifies the circuit.
+5. Provide project-wide and active-sheet print/SVG/PDF outputs where the existing exporter supports them. If native hierarchical KiCad export is implemented, include the actual root and child files with stable instance/path mapping and validate them with the supported parser/oracle. Do not label separate flat images as a complete native hierarchy or claim an unrun KiCad roundtrip passed.
+
+### J.9 Deliver incrementally and prove the complete feature
+
+Suggested execution order within this checkpoint:
+
+1. Reproduce the current crowded-page behavior and inventory existing partial hierarchy support.
+2. Establish the versioned sheet/port/connectivity contract, flat-project migration and canonical operations with tests.
+3. Render and navigate real sheets and overview blocks; support ordinary editing and the previewed move-to-sheet operation.
+4. Integrate project-wide connectivity/ERC, BOM and PCB synchronization, including existing authority and revision handling.
+5. Add sheet-aware AI generation/refactoring and the complete semantic-control/manual coverage.
+6. Review/remove the artificial workload caps as described above, then exercise queued work without silently dropping subsystems.
+7. Run fresh-browser, persistence/recovery and export tests; record the remaining bounded limitations honestly and continue the existing program.
+
+Required permanent tests and browser evidence:
+
+- Old single-sheet project load/save/export preserves component identities, values and pin-to-net connectivity.
+- A root overview plus at least three real subsystem sheets renders, opens and edits; a denser multi-sheet fixture remains readable without giant off-page wire runs or overlapping critical controls.
+- Identical coordinates and identical **local** label text on two sheets remain electrically separate; an explicit hierarchical binding connects the intended pins, and only those pins.
+- Intentional project-global nets work; missing/invalid ports, hierarchy cycles, conflicting bus mappings and incorrect isolation-domain joins refuse with useful diagnostics.
+- Moving a connected subsystem to another sheet preserves the project pin-to-net partition, BOM, physical identities and PCB footprint count. Undo/redo and save/reload restore the expected result.
+- Multi-unit parts do not duplicate packages. Repeated instances, if supported, do not alias local nets or annotations.
+- Project-wide ERC/BOM/PCB sync include all sheets regardless of the current viewport. Circuit-changing edits invalidate the right downstream evidence; sheet-only presentation changes do not silently change connectivity or wipe board work.
+- Async AI/preview results from a retired sheet/project cannot mutate the current sheet. Same-selection draft preservation and A→B→A retirement remain correct.
+- More logical subsystem tasks than concurrent worker slots complete through the queue without missing blocks, uncontrolled spawning, unbounded costs or privilege changes.
+- A fresh browser creates/organizes a multi-sheet circuit, follows a cross-sheet signal, reviews/applies the complete PCB sync, reloads, and retains the same complete circuit. Distinguish fixture proof from authorized live-model proof.
+
+Add concise implementation notes, coverage/manual updates, migration evidence, real screenshots and exact validation results to the existing evidence package, under a `multi-sheet/` subdirectory if useful. Preserve the current source-generated census/drift gates. Do not produce a large duplicate report set instead of finishing the feature.
+
+**Completion means the user can navigate and edit actual connected subsystem sheets and obtain one correct project-wide circuit/PCB. Schema fields, sheet metadata, AI prose, disconnected tabs or attractive overview boxes alone are not completion. Continue autonomously after each verified increment; ask only for a genuine missing owner decision or external resource.**

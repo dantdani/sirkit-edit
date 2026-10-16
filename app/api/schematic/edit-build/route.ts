@@ -10,7 +10,9 @@
  *
  * Body:     { instruction: string; netlist: BuildLogicalNetlist }
  * Response: { ok: true; netlist: BuildLogicalNetlist; explanation: string }
- *      or:  { ok: false; error: string }
+ *      or:  { ok: false; error: string; code; provider?; reason?; retryable? }
+ *           ([PR-C] the loop's failure class, the provider's reason and whether
+ *           a retry can help travel with the failure, as /build-multi reports them)
  */
 
 import type { BuildLogicalNetlist } from "@/lib/schematic-types";
@@ -63,7 +65,7 @@ export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 4
     return Response.json({ ok: true, netlist: result.netlist, explanation: result.explanation });
   }
   return Response.json(
-    { ok: false, error: result.error, code: result.code, provider: result.provider },
+    { ok: false, error: result.error, code: result.code, provider: result.provider, reason: result.reason, retryable: result.retryable },
     { status: result.status },
   );
 });

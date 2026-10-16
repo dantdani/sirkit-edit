@@ -593,7 +593,7 @@ every increment's list into one table):
 
 Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on that line).
 
-[Post-B24, 2026-10-11] C36-C39 and C58-C60 below were refreshed to their current source lines after the UI state and citation-test changes. [Product reliability B, 2026-10-14] C36-C39 refreshed again after the BOM view's request-settlement change (`bom-refresh-lifecycle`): citation maintenance only; the cited code is unchanged. This refresh keeps the executable citation table current; the dated B24 observations and test-run records above retain their original scope and meaning.
+[Post-B24, 2026-10-11] C36-C39 and C58-C60 below were refreshed to their current source lines after the UI state and citation-test changes. [Product reliability B, 2026-10-14] C36-C39 refreshed again after the BOM view's request-settlement change (`bom-refresh-lifecycle`): citation maintenance only; the cited code is unchanged. [Product reliability C, 2026-10-14] C14-C21 and C62-C65 (app/page.tsx) re-pointed after the composer submission, the journey strip and the proposal persistence moved the page's lines (8459 -> 8556); citation maintenance only. This refresh keeps the executable citation table current; the dated B24 observations and test-run records above retain their original scope and meaning.
 
 | id | file | line | within | anchor | note |
 |---|---|---|---|---|---|
@@ -610,14 +610,14 @@ Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on 
 | C11 | `app/lib/accessibility/statements.ts` | 11 | — | `export const EDITOR_MIN_WIDTH_PX = 1280;` | the minimum width |
 | C12 | `app/lib/accessibility/statements.ts` | 14 | — | `export const MIN_WIDTH_NOTICE =` | the notice |
 | C13 | `app/page.tsx` | 2088 | — | `<svg role="img" aria-label="Schematic drawing: pointer-only` | the schematic canvas declared, in place |
-| C14 | `app/page.tsx` | 4809 | — | `setLoading(false); const returnFocus = (frames: number): void =>` | focus back to the prompt, in place |
-| C15 | `app/page.tsx` | 6832 | — | `role="log" aria-live="polite" aria-relevant="additions text" aria-busy={loading} aria-label="Conversation with the assistant"` | the transcript, in place |
-| C16 | `app/page.tsx` | 6846 | — | `<div role="alert" className="px-3 py-1.5 text-xs text-red-400` | the chat error, in place |
-| C17 | `app/page.tsx` | 6953 | — | `data-testid="prompt-input" aria-label="Message to the assistant"` | the prompt, in place |
-| C18 | `app/page.tsx` | 6963 | — | `disabled={loading \|\| isGenerating \|\| isEditing}` | the prompt is disabled while a run streams |
-| C19 | `app/page.tsx` | 6166 | — | `<Button size="sm" variant="ghost" className="text-zinc-300">` | the handler-less, unnamed Settings button |
-| C20 | `app/page.tsx` | 6288 | — | `onMouseDown={(e) => startDrag("left", e)}` | a pointer-only resizer (2.5.7) |
-| C21 | `app/page.tsx` | 6471 | — | `onMouseDown={(e) => startDrag("right", e)}` | the other resizer |
+| C14 | `app/page.tsx` | 4829 | — | `setLoading(false); const returnFocus = (frames: number): void =>` | focus back to the prompt, in place |
+| C15 | `app/page.tsx` | 6923 | — | `role="log" aria-live="polite" aria-relevant="additions text" aria-busy={loading} aria-label="Conversation with the assistant"` | the transcript, in place |
+| C16 | `app/page.tsx` | 6937 | — | `<div role="alert" className="px-3 py-1.5 text-xs text-red-400` | the chat error, in place |
+| C17 | `app/page.tsx` | 7044 | — | `data-testid="prompt-input" aria-label="Message to the assistant"` | the prompt, in place |
+| C18 | `app/page.tsx` | 7054 | — | `disabled={loading \|\| isGenerating \|\| isEditing}` | the prompt is disabled while a run streams |
+| C19 | `app/page.tsx` | 6250 | — | `<Button size="sm" variant="ghost" className="text-zinc-300">` | the handler-less, unnamed Settings button |
+| C20 | `app/page.tsx` | 6377 | — | `onMouseDown={(e) => startDrag("left", e)}` | a pointer-only resizer (2.5.7) |
+| C21 | `app/page.tsx` | 6562 | — | `onMouseDown={(e) => startDrag("right", e)}` | the other resizer |
 | C22 | `app/page.tsx` | 1987 | — | `aria-label="Go to component"` | the schematic Go to field |
 | C23 | `app/page.tsx` | 2559 | — | `const [chatOpen, setChatOpen]` | the chat starts closed |
 | C24 | `app/components/pcb/PcbCanvas.tsx` | 40 | — | `role="img" aria-label={PCB_CANVAS_STATEMENT}` | the PCB host declared |
@@ -654,14 +654,14 @@ Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on 
 | C55 | `scripts/generate-b24-accessible-names.ts` | 22 | — | `const CENSUS_PATH = "artifacts/ai-control-plane-b24/accessible-name-census.csv";` | the ratchet's baseline, never read from outDir (review round) |
 | C56 | `scripts/generate-b24-accessible-names.ts` | 37 | — | `pass --bootstrap for a tree that has none` | a missing baseline refuses (review round) |
 | C57 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 76 | — | `const OUT_OF_SCOPE_UNNAMED_AT_3773C6A = 111;` | the `3773c6a` record |
-| C58 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 382 | — | `const OUT_OF_SCOPE_UNNAMED_AFTER_D3 = 102;` | the post-D3 pin (review round) |
-| C59 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 386 | — | `const UNNAMED_KEYS_AFTER_D3: readonly string[] = [` | the frozen key list (review round) |
-| C60 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 495 | — | `const BROWSER_SPECS_EXECUTED = true;` | flipped by the lead after the green browser runs (section 5) |
+| C58 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 385 | — | `const OUT_OF_SCOPE_UNNAMED_AFTER_D3 = 102;` | the post-D3 pin (review round) |
+| C59 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 389 | — | `const UNNAMED_KEYS_AFTER_D3: readonly string[] = [` | the frozen key list (review round) |
+| C60 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 498 | — | `const BROWSER_SPECS_EXECUTED = true;` | flipped by the lead after the green browser runs (section 5) |
 | C61 | `app/page.tsx` | 2627 | — | `const chatFocusReturnRef = useRef(false);` | the focus-return flag, declared in place (review round) |
-| C62 | `app/page.tsx` | 4466 | — | `setLoading(true); chatFocusReturnRef.current = document.activeElement !== null && document.activeElement === document.querySelector('[data-testid="prompt-input"]');` | set when the run is sent from the prompt, in place (review round) |
-| C63 | `app/page.tsx` | 4809 | — | `if (!chatFocusReturnRef.current \|\| !prompt` | the return checks the flag every frame, in place (review round) |
-| C64 | `app/page.tsx` | 6046 | — | `onPointerDownCapture={() => { chatFocusReturnRef.current = false;` | any pointer press clears it, in place (review round) |
-| C65 | `app/page.tsx` | 7022 | — | `title="More checks" aria-label="More checks"` | the More checks button named, in place (review round) |
+| C62 | `app/page.tsx` | 4486 | — | `setLoading(true); chatFocusReturnRef.current = document.activeElement !== null && document.activeElement === document.querySelector('[data-testid="prompt-input"]');` | set when the run is sent from the prompt, in place (review round) |
+| C63 | `app/page.tsx` | 4829 | — | `if (!chatFocusReturnRef.current \|\| !prompt` | the return checks the flag every frame, in place (review round) |
+| C64 | `app/page.tsx` | 6130 | — | `onPointerDownCapture={() => { chatFocusReturnRef.current = false;` | any pointer press clears it, in place (review round) |
+| C65 | `app/page.tsx` | 7119 | — | `title="More checks" aria-label="More checks"` | the More checks button named, in place (review round) |
 | C66 | `app/lib/engineering/accessible-names.ts` | 779 | — | `const name = nameOf({ surface: rows[0]!.surface, kind: "click"` | a backdrop's closer found by its accessible name (review round) |
 | C67 | `app/components/pcb/GrantedExecutionDialog.tsx` | 55 | — | `<DialogContent className="max-w-xl" finalFocus={promptFocus}>` | [B24-D4, 2026-10-10] the card's return target, in place |
 | C68 | `app/components/pcb/GrantedExecutionDialog.tsx` | 125 | — | `return prompt && !prompt.disabled ? prompt : false;` | [B24-D4, 2026-10-10] the prompt when enabled; [B24-D4 review, 2026-10-10] else no focus move (was: Base UI's default, `: true`) |

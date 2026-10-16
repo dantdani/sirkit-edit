@@ -13,17 +13,30 @@
     "checked_at": "2026-10-14",
     "label": "RECORDED (official page read on the date shown); the repository's MODEL_PRICE_TABLE constant stays null (OD-107): this file prices only the builder's own bounded tests"
   },
-  "builder_requests": [],
-  "builder_spent_known": "0.00",
+  "builder_requests": [
+    {
+      "id": "LR-1",
+      "status": "completed",
+      "reserved_at": "2026-10-14T16:40:00-04:00",
+      "purpose": "checkpoint C acceptance in NORMAL mode: one Build-mode circuit request through the real page on localhost:3000 with the owner's key (synthetic circuit: a 555 LED blinker), to observe the live proposal and the blockers the sync reports; no PCB mutation beyond the explicit review path",
+      "bounds": "SIRKIT_BUILD_ITERATION_CAP=6 on the builder's own dev-server launch config (not the owner's .env.local); the route's 40 s deadline; three loops in flight at most",
+      "worst_case_usd": "1.70",
+      "worst_case_basis": "INFERRED: planner judged single-loop (the owner's 2026-10-11 run of a comparable prompt ran one loop of 13 turns, 28,878 in / 3,211 out): plan call 4,096 output + ~5,000 input; loop 6 turns x 8,192 output = 49,152 and <= 25,000 input per turn = 150,000; at 4.00/20.00 per million -> 0.08 + 0.02 + 0.98 + 0.60 = 1.68; embeddings negligible. A fan-out (planner > 1 block) multiplies the loop term; if the response reports planner.blocks > 1 the actual usage is priced from the durable call records and no second live request is made before the cap is re-evaluated",
+      "actual_usd": "0.19",
+      "actual_basis": "CONFIRMED from the durable llm.call-record.v1 rows of the run window 2026-10-16T03:37:27Z..03:39:03Z (read-only, counts only): build-multi 4 gpt-5.6-sol calls, 17,481 input / 3,171 output tokens (planner single, loop 3 of 6 iterations, 47.7 s); the page's post-approval automatic passes layout-critic (7,779 / 325) and review (1,867 / 301) - 2 calls outside the reservation's scope but inside the cap; 9 Anthropic claude-haiku-4-5 rerank calls refused insufficient_quota (0 tokens, no charge); 17 text-embedding-3-small calls (< 0.001 USD). Priced at 4.00/20.00 per million: 27,127 x 4.00 + 3,797 x 20.00 = 0.108 + 0.076 = 0.184 -> 0.19 rounded up. The fan-out assumption held (planner.state single).",
+      "completed_at": "2026-10-16T03:42:22Z"
+    }
+  ],
+  "builder_spent_known": "0.19",
   "builder_reserved_uncertain": "0.00",
-  "builder_remaining_provable": "5.00",
+  "builder_remaining_provable": "4.81",
   "prior_continuation_paid_calls": {
     "claim": "the prior work in this continuation made no paid calls",
     "verification": "CONFIRMED independently: the durable llm.call-record.v1 rows (65) all belong to the owner's own browser session of 2026-10-11 (routes /api/schematic/build-multi and embeddings, written while the owner tested with the owner's key); no row names a builder script, suite or command; no record-only evaluation command was run (its outputs are absent)",
     "checked_at": "2026-10-14"
   },
   "owner_own_usage_not_counted": {
-    "note": "the owner's own 2026-10-11 session: 13 gpt-5.6-sol calls (28,878 input / 3,211 output tokens) plus 51 embedding calls on one Build request; priced at the basis above ≈ 0.18 USD; the owner's spend on the owner's key, outside the builder's cap"
+    "note": "the owner's own 2026-10-11 session: 13 gpt-5.6-sol calls (28,878 input / 3,211 output tokens) plus 51 embedding calls on one Build request; priced at the basis above ≈ 0.18 USD; the owner's spend on the owner's key, outside the builder's cap Between 2026-10-11 and 2026-10-15 23:53Z the owner's own sessions added 76 more call records (not the builder's; not counted)."
   },
   "worst_case_per_request_note": "a Build request is bounded today only by MAX_ITERATIONS=20 × maxTokens 8,192 output and the route's 45 s deadline: analytically ≈ 3.36 USD output + input, which is not provable under the cap; checkpoint C adds an explicit loop budget before any builder-initiated live Build request"
 }

@@ -49,17 +49,20 @@ describe("[PR-A 1] the Theory request contract", () => {
     expect(generate).not.toHaveBeenCalled();
   });
 
-  it.fails("the Theory client sends the project selector the wrapper requires (through the shared request preparation)", () => {
-    expect(theoryClient).toMatch(/x-sirkit-project-id|projectSelectorHeaders|aiRequestHeaders|prepareAiRequest/);
+  // [PR-C] fixed: lib/apply-netlist.ts prepares its request through app/lib/project/ai-request.ts and takes the lifecycle signal
+  it("the Theory client sends the project selector the wrapper requires (through the shared request preparation)", () => {
+    expect(theoryClient).toMatch(/aiRequestHeaders\(options\.scope\)/);
+    expect(page).toMatch(/generateSchematic\(prompt, \{ scope, signal: scope\.signal/);
   });
 
-  it.fails("the Theory client passes a cancellation signal so a project switch aborts the request", () => {
-    expect(theoryClient).toMatch(/signal:/);
+  it("the Theory client passes a cancellation signal so a project switch aborts the request", () => {
+    expect(theoryClient).toMatch(/signal: options\.signal/);
   });
 });
 
 describe("[PR-A 2] the Build request's partial and skipped results", () => {
-  it.fails("a failed subsystem block is reported as structured status, not only in prose", async () => {
+  // [PR-C] fixed: app/api/schematic/build-multi/route.ts answers the structured contract of app/lib/schematic/build-result.ts
+  it("a failed subsystem block is reported as structured status, not only in prose", async () => {
     const { POST } = await import("@/app/api/schematic/build-multi/route");
     injectAuthorizedPrincipal({ userId: "editor-1", tenantId: "local", projectId: "proj-1", role: "editor" });
     generate.mockResolvedValueOnce({ toolCalls: [{ name: "submit_plan", input: { blocks: [{ name: "Power", brief: "a", sharedNets: ["VCC"] }, { name: "Blinker", brief: "b", sharedNets: ["VCC"] }], rationale: "two blocks" } }], text: "", stopReason: "tool_use" });
@@ -72,14 +75,19 @@ describe("[PR-A 2] the Build request's partial and skipped results", () => {
     expect(body).toMatchObject({ status: "partial", omittedBlocks: ["Blinker"] });
   });
 
-  it.fails("a skipped post-merge electrical check is a structured 'not run' status, never silence", () => {
+  it("a skipped post-merge electrical check is a structured 'not run' status, never silence", () => {
     expect(buildMulti).toMatch(/electricalCheck/);
+    expect(buildMulti).toMatch(/state: "skipped"/);
   });
 });
 
 describe("[PR-A 3] the composer's visible route and submission", () => {
-  it.fails("every composer route has a visible submit control (the ask route included)", () => {
+  // [PR-C] fixed: the control renders for every route with text; its label names the route's action ("Send" for ask)
+  it("every composer route has a visible submit control (the ask route included)", () => {
     expect(page).not.toMatch(/const showComposerButton = composerAction !== "ask" \|\| isGenerating \|\| isEditing;/);
+    expect(page).toMatch(/const showComposerButton = Boolean\(composerText\) \|\| isGenerating \|\| isEditing;/);
+    expect(page).toMatch(/data-testid="composer-submit"/);
+    expect(page).toMatch(/: "Send";/);
   });
 
   it.fails("the empty sheet's circuit-entry hint does not point above a closed chat panel", () => {
@@ -106,7 +114,10 @@ describe("[PR-A 5] decorative design checks", () => {
 });
 
 describe("[PR-A 6] the PCB sync entry never returns without feedback", () => {
-  it.fails("an absent sync client or scope is reported to the user, not swallowed", () => {
+  // [PR-C] fixed: PcbEditor.tsx names the reason (demo scope / scope unavailable) and the unresolved instances before any server call
+  it("an absent sync client or scope is reported to the user, not swallowed", () => {
     expect(pcbEditor).not.toMatch(/if \(!client \|\| !syncIdentity\) return;/);
+    expect(pcbEditor).toMatch(/listUnresolvedInstances\(/);
+    expect(pcbEditor).toMatch(/data-testid="sync-readiness-panel"/);
   });
 });

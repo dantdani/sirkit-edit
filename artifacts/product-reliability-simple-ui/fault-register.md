@@ -53,7 +53,7 @@ services. Ordered by severity, then by chain position.
 ## Refuted or out of scope
 
 - REFUTED: the review claim that "Refresh prices" consumed its force flag in the first aborted StrictMode effect run (`root-causes` B-5; StrictMode double-invokes mount effects only, and the pending tree sent `forceRefresh: true`).
-- OUT OF SCOPE: F-09, the pre-2026-09-07 snapshot digest mismatch (`8746b46`) — a legacy verifier only if the owner asks; note the inputs disagree on the changed file (`physical-binding/stable.ts` in `root-causes` vs `pcb-sync/stable.ts` + `pcb/revision.ts` in the 2026-10-11 report).
+- OUT OF SCOPE: F-09, the pre-2026-09-07 snapshot digest mismatch (`8746b46`) — a legacy verifier only if the owner asks. The file attribution is settled (2026-10-11 ablation, read-only): the commit changed sorts in four files, and swapping in only `physical-binding/stable.ts`'s object-key sort (`canonicalValue`, localeCompare → code-point order) reproduces 0/14 while the other files alone keep 14/14; the 2026-10-11 PCB-path report named `pcb-sync/stable.ts` + `pcb/revision.ts` as changed files, which is true but not the decisive line.
 - OUT OF SCOPE: the owner's legacy projects' qualify 422 (`physical_binding_revisions` has no rows for the local tenant) — old records; a new project takes the normal path.
 - OUT OF SCOPE (resource, not code): the 21-part atomic catalog, no MCU/MOSFET/pot/LDO/USB/barrel-jack authority, and the closed qualification package list (QA:53-63). F-25 covers only the UI/contract side.
 - NOT A DEFECT: `/api/chat` produces no `llm-call-record` (RH:857); its durable evidence is the run trace by design.

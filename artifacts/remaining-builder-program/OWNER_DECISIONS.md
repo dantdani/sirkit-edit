@@ -3221,3 +3221,16 @@ Under the existing OD-217 heading (`:2599`), append:
 - (f) The superseded-statement table: one row per `path:line` an increment's list names, re-resolved at `58c0834` by the statement's own text (the discovery's at `58c0834`'s numbering, a dated line B24-F or the closeout adds not counted), with the increment and its own list's `path:line` (a row's increment is its source's) and one of six note states - `noted`, `noted nearby`, `rewritten`, `not noted`, `never noted in place (checksum-bound)` for a forward migration and `never noted in place (B11-scanned, OD-113)` for a B11-scanned file; never the statement's text (the review round, correctness-1, correctness-4, security-1).
 - (g) The pin Fb's two suites move by joining prompt-to-gerber's selection: `b24-d0-ci-split` 7's count 489 -> 491 (`b24-d0-ci-split.test.ts:501`, the same dated in-place note as Fa's; both suites already set aside by the pattern Fa's move widened); neither suite carries a budget or a yield, so the threshold census does not move for them.
 - (h) The citation rule of `b24-f-verdict-lines` 8: every backticked `path:line` on F's pages resolves - a bare file name against the page's directory or the lead's records, a `:N` continuation against the last path of its paragraph or table row, a runbook line as the runbook's - and case 4's physical-completion check needs the negation on the completion word itself (the review round, correctness-11).
+
+## OD-242 — `build-multi` answers a structured result contract; OD-106's byte pin re-pinned (product reliability C, 2026-10-14)
+
+- **Question:** the owner's assignment `artifacts/astra-guided-pcb/PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.md` (section C) requires
+  `POST /api/schematic/build-multi` to report a partial subsystem merge, a skipped or not-run electrical check, the planner's state and
+  the budget spent as data (fault F-03), and to bound its loops. OD-106's B21-B tripwire pins the route's bytes. Change the route and
+  re-pin, or leave the route as the tripwire recorded it?
+- **Default applied:** the route answers `app/lib/schematic/build-result.ts` (`status`, `omittedBlocks`, `electricalCheck`, `planner`,
+  `budget`; failures carry `reason` and `retryable`), its block loops run three at a time under one deadline, and the tripwire is
+  re-pinned to sha256 `eaf4e8d6c7acab7babba2fd75fff8899400adcb15767bf8e083b0437131c22b1` with a dated note. Everything OD-106 decided stands: the route is outside
+  the B21 DAG, reads no orchestration flag and no orchestration module, and the B21-A import gate keeps every orchestration module from
+  importing it or `runBuildToolLoop`. Retirement stays a separate owner-approved change.
+- **The owner may choose otherwise:** retire the route (OD-106's first alternative), or route it through the B21-B DAG (its second).

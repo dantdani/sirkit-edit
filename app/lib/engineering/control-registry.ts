@@ -194,6 +194,7 @@ export const CONTROL_RULES: readonly ControlRule[] = Object.freeze([
   rule({ id: "view.bom-successor-review", surface: BOM, handler: /^e\.stopPropagation,openSuccessorReview$/, classification: "view", note: "[B19-E E5] Review successor hands a withdrawn line to the page, which opens the PCB component review; nothing is changed from the BOM" }),
   rule({ id: "bom.workbench", surface: BOM, handler: /^(refreshPrices|requestAgain|exportCsv|onGenerate,title\.trim|takeSnapshot|exportForDistributor|onSwap|onViewDiff|onMarkAllRead|onChoiceChange|setRefreshNonce|onJump)$/, classification: "semantic", recordIds: ["bom.workbench"] }), // [B19-E E1] exportForDistributor downloads a file only; the offline Retry and the expired-offer Refresh prices reuse setRefreshNonce
   rule({ id: "view.bom-chrome", surface: BOM, classification: "view", note: "filters, drafts, sort, expand, dialogs and popovers" }),
+  rule({ id: "view.journey-next-action", surface: "app/components/workflow/JourneyStrip.tsx", handler: /^onAction$/, classification: "view", note: "[PR-C] the journey strip's one next action: it opens a workspace tab or focuses the existing human control (apply, qualify, release stay their own clicks); never a mutation" }),
 
   // ── build library / schematic dialogs ─────────────────────────────────────
   rule({ id: "parts.catalog-read", surface: "app/components/editor/BuildLibraryPanel.tsx", handler: /^(openCategory|selectPart|backToCategories|loadMore|onRetry)$/, classification: "semantic", recordIds: ["parts.catalog-read"] }),

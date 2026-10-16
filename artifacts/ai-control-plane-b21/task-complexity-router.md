@@ -396,6 +396,12 @@ Only then does route case 4 run specialists in a chat (the replacement request u
 
 ## 5. `build-multi` untouched and tripwired (OD-106); the gates; D21-33
 
+[Product reliability C, 2026-10-14] OD-242 amends OD-106: `app/api/schematic/build-multi/route.ts` now answers the structured
+result contract (`app/lib/schematic/build-result.ts`: completeness, omitted blocks, the electrical check's state, planner, budget) by the
+owner's assignment; its sha256 is `eaf4e8d6c7acab7babba2fd75fff8899400adcb15767bf8e083b0437131c22b1`, which route case 6 pins and page case 3 recomputes. The B21 facts
+below stand as recorded at B21-B: the route reads no orchestration flag and no orchestration module, and the import gate still keeps
+every orchestration module from importing it; the historical hash is kept as the B21-B measurement.
+
 - `app/api/schematic/build-multi/route.ts` (C27) is byte-identical to HEAD: sha256
   `1655e03595430d9e42b4c3c65800d907e3daaa7ed4d8bc6ac1705fd9640242cb` (git blob `9a29e676ae95b7449f7fcc2402edece8aad79e8d`), pinned by
   route case 6 and by this page (page case 3 recomputes it); it reads no orchestration flag and no orchestration module; A's gate keeps

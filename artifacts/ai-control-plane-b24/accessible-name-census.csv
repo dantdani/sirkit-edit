@@ -248,6 +248,7 @@ app/components/pcb/PcbEditor.tsx|click|button|Enlarge board to fit|enlargeBoardT
 app/components/pcb/PcbEditor.tsx|click|button|Needs an applied durable board — run Schematic → PCB and apply the plan first|Server-side autonomous placement + real FreeRouting + RC01–RC03 verification|handleQualify,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,Qualifying… (runs the real router) Qualify & route
 app/components/pcb/PcbEditor.tsx|click|button|pcb-release-button|handleRelease,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,Releasing… Request release
 app/components/pcb/PcbEditor.tsx|click|button|Placement options|setSyncDialogOpen,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,Placement options
+app/components/pcb/PcbEditor.tsx|click|button|sync-blockers-dismiss|onDismiss,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,Dismiss
 app/components/pcb/PcbEditor.tsx|click|button|sync-schematic-to-pcb|handleSync,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,* Schematic → PCB
 app/components/pcb/PcbEditor.tsx|palette|palette|3d|pcb3d.toggle,app/components/pcb/PcbEditor.tsx,palette,palette,no,named:palette-title,Toggle 3D preview
 app/components/pcb/PcbEditor.tsx|palette|palette|align-*|commit,app/components/pcb/PcbEditor.tsx,palette,palette,no,unnamed,untitled-palette-action
@@ -486,6 +487,7 @@ app/components/spice/SpiceStudio.tsx|shortcut|window|keydown:onKey|onKey,app/com
 app/components/spice/SpiceWaveformPlot.tsx|click|button|(none)|onSignalFocus,app/components/spice/SpiceWaveformPlot.tsx,click,button,no,named:text,*
 app/components/spice/SpiceWaveformPlot.tsx|click|button|Reset zoom|setView,app/components/spice/SpiceWaveformPlot.tsx,click,button,no,named:title,Reset zoom
 app/components/spice/SpiceWaveformPlot.tsx|pointer|canvas|(none)|onPointerDown,app/components/spice/SpiceWaveformPlot.tsx,pointer,canvas,no,unnamed,none
+app/components/workflow/JourneyStrip.tsx|click|button|journey-next-action|onAction,app/components/workflow/JourneyStrip.tsx,click,button,no,named:text,*
 app/lib/pcb/render/scene.ts|gesture|canvas|pointerdown:onDown|onDown,app/lib/pcb/render/scene.ts,gesture,canvas,no,exempt:listener,pointerdown:onDown
 app/lib/pcb/render/scene.ts|gesture|canvas|pointermove:onMove|onMove,app/lib/pcb/render/scene.ts,gesture,canvas,no,exempt:listener,pointermove:onMove
 app/lib/pcb/render/scene.ts|gesture|canvas|pointerup:onUp|onUp,app/lib/pcb/render/scene.ts,gesture,canvas,no,exempt:listener,pointerup:onUp
@@ -528,6 +530,7 @@ app/page.tsx|click|Button|Cancel — change nothing|cancelTier1Proposal,app/page
 app/page.tsx|click|Button|chat-stop|stopChatRun,app/page.tsx,click,Button,yes,named:text,Stop
 "app/page.tsx|click|button|Close pane|e.stopPropagation,onRemove",app/page.tsx,click,button,no,named:title,Close pane
 app/page.tsx|click|button|composer-route-override|overrideComposerRoute,app/page.tsx,click,button,yes,named:text,* instead Ask the assistant instead
+app/page.tsx|click|Button|composer-submit|handleComposerSubmit,app/page.tsx,click,Button,yes,named:text,*
 "app/page.tsx|click|button|Delete project *|window.confirm,deleteProject,checkpointStore().removeProject().catch,checkpointStore().removeProject",app/page.tsx,click,button,yes,named:aria-label,Delete project *
 app/page.tsx|click|Button|Delete|onDelete,app/page.tsx,click,Button,no,named:text,Delete
 app/page.tsx|click|Button|Delete|onDelete#2,app/page.tsx,click,Button,no,named:text,Delete
@@ -540,7 +543,6 @@ app/page.tsx|click|Button|Download raw backup (JSON)|downloadRecoveryBackup,app/
 app/page.tsx|click|button|Expand suggestions|Minimise suggestions|setSuggestionsMinimized,app/page.tsx,click,button,yes,named:text,* suggestion s ready
 app/page.tsx|click|Button|Export as KiCad (.kicad_sch)|handleExportKicad,app/page.tsx,click,Button,no,named:text,Export
 app/page.tsx|click|button|Fit page to view|schematicView.fitPage,app/page.tsx,click,button,no,named:text,Fit
-app/page.tsx|click|Button|Generate a schematic from this prompt|Apply this as an edit to the current schematic|handleComposerSubmit,app/page.tsx,click,Button,yes,named:text,*
 "app/page.tsx|click|Button|Ignore these suggestions|setPendingSuggestions,setSuggestionsMinimized",app/page.tsx,click,Button,yes,named:text,Ignore
 "app/page.tsx|click|button|Independent domain model designs the same request and diffs it (slow, ~1–2 min)|setMoreMenuOpen,handleSecondOpinion",app/page.tsx,click,button,yes,named:text,Second opinion (SchGen)
 "app/page.tsx|click|button|Junction — mark a wire crossing as connected|setTool,setWireDraftStart",app/page.tsx,click,button,no,named:text,J

@@ -156,6 +156,9 @@ import { PlacementSetup } from "./PlacementSetup";
 import { useDimensionTool } from "./hooks/useDimensionTool"; // B08
 import { stackupProfile } from "@/app/lib/pcb/stackup";
 import { AssignmentQueuePanel } from "./AssignmentQueuePanel";
+import { PcbSyncReadinessPanel } from "./PcbSyncReadinessPanel"; // [PR-C F-08] a blocked preflight shown per blocker (message + refs), not as one 6 s toast
+import type { JourneyPcbFacts } from "@/app/lib/workflow/journey"; // [PR-C] the PCB facts reported to the page's journey model
+import { listUnresolvedInstances, unresolvedInstancesRefusal, UNRESOLVED_MISSING_LABEL, type UnresolvedInstance } from "@/app/lib/pcb-sync/unresolved-instances"; // [PR-C F-08] the instances named BEFORE any server call
 
 // Stage 15: 3D preview is client-only and heavy (three.js) — lazy chunk.
 const PcbPreview3D = dynamic(
@@ -189,6 +192,13 @@ type EditorAction =
   // [B17-D] explicit-value forms the view-session bus applies (rebase-safe: the target value is in the action).
   | { type: "set-layer-visible"; layer: LayerId; visible: boolean }
   | { type: "set-grid"; visible: boolean };
+
+// [PR-C F-08] the workflow-stopping refusal of a Schematic → PCB run that must outlive the 6 s toast: either the instances the
+// run refused BEFORE any server call (each with the missing fact and its review path) or the blocked preflight (every blocker
+// with its message and refs). Persists until the user dismisses it or the next Schematic → PCB starts.
+type SyncBlockers =
+  | { kind: "unresolved_instances"; items: UnresolvedInstance[] }
+  | { kind: "preflight"; result: PcbSyncPreflightResult };
 
 const DEFAULT_VISIBLE: Record<LayerId, boolean> = Object.fromEntries(
   LAYERS.map((l) => [l.id, l.defaultVisible]),
@@ -320,6 +330,7 @@ export default function PcbEditor({
   onExecutionGrantProgress,
   onExecutionGrantAttemptRefused,
   onExecutionRecovery, restoredExecutionGrants, pageProject,
+  onJourneyFacts, syncRequestToken = 0,
 }: {
   schematic: SchematicState;
   /** R06: false while the editor is mounted but hidden (another workspace
@@ -374,6 +385,11 @@ export default function PcbEditor({
   currentInterlock?: () => ProjectCommitInterlock | null;
   /** [B17-E] the page-owned project operation timeline this editor records its canonical history operations on. */
   operationTimeline?: ProjectOperationTimeline;
+  /** [PR-C] the facts the page's journey model derives the PCB stages from (display only; never authority). */
+  onJourneyFacts?: (facts: JourneyPcbFacts) => void;
+  /** [PR-C] bumped by the page's "Prepare PCB" action after a schematic approval: starts the SAME Schematic → PCB
+   *  preparation the button starts (bindings → publication → preflight) while no board exists; applying stays explicit. */
+  syncRequestToken?: number;
 }) {
   // Lint note (B08.3): this editor is an imperative orchestrator — canvas
   // scene, gesture tool, and history/session refs are deliberately mutated
@@ -431,6 +447,8 @@ export default function PcbEditor({
   // cannot produce one, the truthful value is null ("unavailable").
   const [toast, setToast] = useState<string | null>(() => init.diagnostics[0]?.summary ?? null);
   const [pendingPreflight, setPendingPreflight] = useState<PcbSyncPreflightResult | null>(null);
+  // [PR-C F-08] the persistent trace of a refused/blocked sync (see SyncBlockers); the toast is never its only trace.
+  const [syncBlockers, setSyncBlockers] = useState<SyncBlockers | null>(null);
   const [authoritativeRecord, setAuthoritativeRecord] = useState<PcbSyncBoardRecord | null>(null);
   const authorityRef = useRef<PcbSyncBoardRecord | null>(null);
   // [B16-C.1] the board this session works on: the lineage ROOT (`board:<project>`) until the server's lineage says a
@@ -836,8 +854,26 @@ export default function PcbEditor({
     }
     placementChoiceRef.current = { centerNewParts: placement?.centerNewParts !== false && placement?.preserveAbsoluteCoordinates !== true };
     lastSyncPlacementRef.current = placement; // [B16-C.3] a rebase re-runs exactly this request
-    if (!client || !syncIdentity) return;
+    // [PR-C F-08] never a silent return: the client is null exactly when the durable scope is (a `?pcbdemo=` board, or the
+    // project scope could not be established at mount) — say which, scoped to what the user can do about it.
+    if (!client || !syncIdentity) {
+      setToast(init.demo
+        ? "Schematic → PCB needs a saved project: demo boards have no durable scope."
+        : "Schematic → PCB could not start: the project scope is not available — reload the page or open the project again.");
+      return;
+    }
     const s = schematicRef.current;
+    // [PR-C F-08] a later sync retires the previous refusal; the run below replaces it with its own outcome when it has one.
+    setSyncBlockers(null);
+    // [PR-C F-08] fail closed BEFORE any server call: an instance without a published exact revision (or without its installed
+    // symbol asset, or a Theory symbol with no physical package) cannot reach the board, so nothing is bound and nothing is
+    // published for it — each one is named with the missing fact and its review path, and the list outlives the toast.
+    const unresolved = listUnresolvedInstances(s);
+    if (unresolved.length > 0) {
+      setSyncBlockers({ kind: "unresolved_instances", items: unresolved });
+      setToast(unresolvedInstancesRefusal(unresolved));
+      return;
+    }
     // Every instance carrying published atomic authority gets its Stage 1
     // physical binding ensured through the ordinary lifecycle
     // (create → select → revalidate → approve) under this user's identity
@@ -937,6 +973,8 @@ export default function PcbEditor({
         setLastSyncHash(syncHash);
         setPendingPreflight(preflighted.plan ? preflighted : null);
         setPlacementWarning(null);
+        // [PR-C F-08] a blocked preflight stays visible per blocker (code, message, refs) after the toast is gone.
+        setSyncBlockers(preflighted.blockers.length > 0 ? { kind: "preflight", result: preflighted } : null);
         setToast(preflighted.status === "ready_to_apply" && preflighted.plan ? "Preflight ready. Review and explicitly apply the durable plan." : preflighted.status === "ready_no_changes" ? "PCB is already synchronized." : `Sync blocked: ${preflighted.blockers.map((item) => `${item.code} ${item.displayRefs.join(",")}`).join("; ") || preflighted.status}`);
         setSyncDialogOpen(false);
       },
@@ -955,21 +993,42 @@ export default function PcbEditor({
     // stale-before-any-server-call run says so; every other outcome already spoke.
     if (run.status === "refused-busy") setToast("Schematic → PCB is already running — wait for it to finish.");
     else if (run.status === "stale" && run.stage === "none") setToast("Schematic → PCB was not started: the board changed while it was starting. Try again.");
-  }, [client, syncIdentity, gateSchematicSync, settleStaleServerCommit, ownedOps, pcbLifecycle, componentReview]);
+  }, [client, syncIdentity, init.demo, gateSchematicSync, settleStaleServerCommit, ownedOps, pcbLifecycle, componentReview]);
 
   const handleApplySync = useCallback(async () => {
-    const plan = pendingPreflight?.plan; if (!client || !syncIdentity || !plan) return;
+    const plan = pendingPreflight?.plan;
+    // [PR-C F-08] never a silent return: the Apply buttons render only with a plan, so the reachable case is the absent durable
+    // scope (a `?pcbdemo=` board, or a project scope that could not be established at mount) — the same sentences as Sync.
+    if (!client || !syncIdentity) {
+      setToast(init.demo
+        ? "Schematic → PCB needs a saved project: demo boards have no durable scope."
+        : "Schematic → PCB could not start: the project scope is not available — reload the page or open the project again.");
+      return;
+    }
+    if (!plan) { setToast("Apply could not start: no preflighted plan is pending — run Schematic → PCB first."); return; }
+    // [PR-C F-08 (e)] set by `commit` when the server refused the plan as stale; consumed by the owned-gated `commitFailed`.
+    let stalePlan = false;
     // B08.3 — request-owned apply: the workflow captures the lifecycle
     // scope at submission, settles a stale server commit truthfully (the
     // server may have committed irreversibly — never called canceled or
     // unchanged), verifies the reloaded authority against the EXACT
     // committed revision+digest+identity, and releases only its own busy
     // record (a zombie finalizer cannot clear a newer request's state).
-    await runVerifiedServerAdoption(ownedOps, "sync-apply", pcbLifecycle, {
+    const run = await runVerifiedServerAdoption(ownedOps, "sync-apply", pcbLifecycle, {
       commit: async () => {
         const result = await client.apply({ requestSchemaVersion: PCB_SYNC_APPLY_REQUEST_VERSION, requestId: `apply:${plan.planId}`, designId: syncIdentity.designId, boardId: syncIdentity.boardId, planId: plan.planId, planDigest: plan.planDigest, expectedPlanLifecycle: "applicable", confirmation: "apply_exact_plan", idempotencyKey: `apply:${plan.planId}`, warningAcknowledgements: plan.prerequisites.filter((item) => !item.blocking).map((item) => item.code), requestedAt: new Date().toISOString() });
-        if (!result.ok || !["applied", "idempotent_replay"].includes(result.value.status)) {
-          return { committed: false, message: `Apply failed: ${result.ok ? result.value.status : `${result.code}${result.detail ? ` — ${result.detail}` : ""}`}` };
+        if (!result.ok) {
+          // [PR-C F-08 (e)] the handler names a stale plan (`code: PS_PLAN_STALE`, or `PS_APPLY_<STATUS>` for a `blocked_stale`
+          // answered 409): the real reason reaches the user and the plan is retired (commitFailed) instead of a bare
+          // PS_API_INVALID_RESPONSE beside a still-live Apply button. Every other failure keeps its code and detail.
+          if (result.code === "PS_PLAN_STALE" || result.kind === "stale") {
+            stalePlan = true;
+            return { committed: false, message: "Apply refused: the plan is stale — the board or schematic changed since preflight. Run Schematic → PCB again." };
+          }
+          return { committed: false, message: `Apply failed: ${result.code}${result.detail ? ` — ${result.detail}` : ""}` };
+        }
+        if (!["applied", "idempotent_replay"].includes(result.value.status)) {
+          return { committed: false, message: `Apply failed: ${result.value.status}` };
         }
         return { committed: true, value: result.value, expected: { revision: result.value.committedBoardRevision ?? "", digest: result.value.committedBoardDigest ?? "" } };
       },
@@ -981,7 +1040,12 @@ export default function PcbEditor({
       recordIdentity: (record) => ({ tenantId: record.tenantId, projectId: record.projectId, branchId: record.branchId, boardId: record.boardId }),
       staleDescription: "The durable PCB plan WAS applied on the server, but this board was replaced locally while it ran. The local board was kept — re-open sync to reconcile with the server authority.",
       verifyFailedDescription: "The durable PCB plan WAS applied on the server, but the authoritative board could not be verified locally. The local board was kept — reload the server authority to reconcile",
-      commitFailed: setToast,
+      // [PR-C F-08 (e)] owned-gated: a stale plan is retired here so the Apply buttons disappear (a Schematic → PCB re-run makes a
+      // fresh plan); every other refusal keeps the plan and shows its text.
+      commitFailed: (message) => {
+        if (stalePlan) setPendingPreflight(null);
+        setToast(message);
+      },
       adopt: (record) => {
         if (!saveAuthoritativeBoardCache(record)) { setToast("Authoritative board committed, but its matching browser cache could not be stored."); }
         setAuthoritativeRecord(record);
@@ -1001,7 +1065,9 @@ export default function PcbEditor({
       },
       settle: settleStaleServerCommit,
     });
-  }, [client, pendingPreflight, syncIdentity, boardCheckpoint, adoptBoardLifecycle, settleStaleServerCommit, ownedOps, pcbLifecycle, bumpManufacturingTruth]);
+    // [PR-C F-08] a click must never do nothing silently: the registry's single-flight refusal says so (every other outcome spoke).
+    if (run.status === "refused-busy") setToast("Apply is already running — wait for it to finish.");
+  }, [client, pendingPreflight, syncIdentity, init.demo, boardCheckpoint, adoptBoardLifecycle, settleStaleServerCommit, ownedOps, pcbLifecycle, bumpManufacturingTruth]);
 
   // ── History + move tool lifecycle ──────────────────────────────────────────
   // Boards arriving from OUTSIDE the history stack (initial load, demo, sync)
@@ -2425,6 +2491,28 @@ export default function PcbEditor({
     return actions;
   };
 
+  // [PR-C] The PCB facts the page's journey strip derives its stages from. Reported, never authority: a missing fact is
+  // reported as unknown (the DRC hook does not record which board revision it ran against, so DRC currency is null).
+  const journeyPreflight: JourneyPcbFacts["preflight"] = pendingPreflight === null ? "none" : pendingPreflight.status === "ready_to_apply" ? "ready_to_apply" : pendingPreflight.status === "ready_no_changes" ? "ready_no_changes" : "blocked";
+  const journeyUnresolved = syncBlockers?.kind === "unresolved_instances" ? syncBlockers.items.length : 0;
+  const journeyWorkflowState = manufacturing.workflow?.state ?? null;
+  const journeyReleased = Boolean(manufacturing.truth?.latestRelease?.current);
+  const journeyBoardExists = state.board !== null;
+  const journeyRoutingStale = routeStaleNotice !== null;
+  const journeyBindingReviewPending = componentReview.pendingCount;
+  useEffect(() => {
+    onJourneyFacts?.({ boardExists: journeyBoardExists, syncing: ownedBusy.syncing, unresolvedCount: journeyUnresolved, bindingReviewPending: journeyBindingReviewPending, preflight: journeyPreflight, applying: ownedBusy.applying, workflowState: journeyWorkflowState, routingStale: journeyRoutingStale, drcCurrent: null, released: journeyReleased });
+  }, [onJourneyFacts, journeyBoardExists, ownedBusy.syncing, ownedBusy.applying, journeyUnresolved, journeyBindingReviewPending, journeyPreflight, journeyWorkflowState, journeyRoutingStale, journeyReleased]);
+  // [PR-C] "Prepare PCB" from the page: the same preparation the button starts, only while no board exists and nothing
+  // runs; each token starts at most one run, and applying the verified plan stays the human's explicit click.
+  const syncRequestSeenRef = useRef(0);
+  useEffect(() => {
+    if (syncRequestToken === 0 || syncRequestSeenRef.current === syncRequestToken) return;
+    syncRequestSeenRef.current = syncRequestToken;
+    if (state.board !== null || ownedBusy.syncing) return;
+    queueMicrotask(() => { void handleSync({ centerNewParts: true, spreadOverlaps: true }); }); // the run starts after this commit, like a click would
+  }, [syncRequestToken, state.board, ownedBusy.syncing, handleSync]);
+
   // ── Empty state: no board yet ─────────────────────────────────────────────
   if (!state.board) {
     return (
@@ -2459,6 +2547,13 @@ export default function PcbEditor({
           {pendingPreflight?.plan && <button type="button" data-testid="apply-sync-plan" onClick={() => void handleApplySync()} disabled={applying} className="mt-3 rounded border border-teal-500 px-3 py-1.5 text-xs text-teal-200 disabled:opacity-50">{applying ? "Applying…" : "Apply verified plan"}</button>}
           {toast && <p className="mt-3 text-xs text-zinc-400">{toast}</p>}
           </div>
+          {/* [PR-C F-08] the refusal that outlives the toast, under the call to action: the instances named before any server
+              call (missing fact + review path each) or the blocked preflight, per blocker. Dismiss or the next sync clears it. */}
+          {syncBlockers && (
+            <div className="mt-4 w-full max-w-2xl px-4">
+              <SyncBlockersPanel blockers={syncBlockers} busy={syncing || applying} onDismiss={() => setSyncBlockers(null)} />
+            </div>
+          )}
           {/* [B16-C.2/C.5] the review handoff is reachable BEFORE any board exists: an editor's first
               Schematic → PCB stops at binding here, and the reviewer decides here too. It sits in the
               flow below the call to action (an overlay covered the button on a small viewport). */}
@@ -2598,6 +2693,13 @@ export default function PcbEditor({
           {routeStaleNotice && (
             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-40 max-w-xl rounded border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-200" data-testid="route-stale-banner">
               Routing evidence is stale: {routeStaleNotice}
+            </div>
+          )}
+          {/* [PR-C F-08] the refusal that outlives the toast, a compact panel under the sync toolbar: the instances named before
+              any server call or the blocked preflight, per blocker. Dismiss or the next sync clears it. */}
+          {syncBlockers && (
+            <div className="absolute top-2 right-2 z-30 w-[24rem] max-w-[calc(100%-1rem)] max-h-[70%] overflow-auto">
+              <SyncBlockersPanel blockers={syncBlockers} busy={syncing || applying} onDismiss={() => setSyncBlockers(null)} />
             </div>
           )}
           {/* [B16.1C §F] the visible manufacturing workflow: durable truth,
@@ -2864,5 +2966,41 @@ export default function PcbEditor({
         onConfirm={(placement) => void handleSync(placement)}
       />
     </div>
+  );
+}
+
+// ─── [PR-C F-08] the sync refusal panel ──────────────────────────────────────
+
+/**
+ * The refusal that outlives the 6 s toast. `unresolved_instances`: one row per refused instance — its reference, the missing
+ * fact and the review path (nothing was bound or published for it). `preflight`: the existing readiness panel, every blocker
+ * with its code, message and refs; it gets no apply control of its own (`onApply` undefined — the editor's Apply buttons stay
+ * where they are) and no derive control (the editor's `derive-board-revision` button already covers protected copper).
+ */
+function SyncBlockersPanel({ blockers, busy, onDismiss }: { blockers: SyncBlockers; busy: boolean; onDismiss: () => void }) {
+  const title = blockers.kind === "unresolved_instances"
+    ? `Schematic → PCB refused: ${blockers.items.length} part(s) cannot reach the board — nothing was bound or published`
+    : `Schematic → PCB blocked: ${blockers.result.blockers.length} blocker(s) in the preflight — nothing was applied`;
+  return (
+    <section aria-label="Schematic → PCB refusal" data-testid="sync-blockers" data-kind={blockers.kind} className="rounded-lg border border-red-900/60 bg-zinc-950/95 p-3 text-left text-xs text-zinc-300 shadow-lg">
+      <div className="flex items-start justify-between gap-3">
+        <p className="font-semibold text-red-300">{title}</p>
+        <button type="button" onClick={onDismiss} data-testid="sync-blockers-dismiss" className="shrink-0 rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-300 hover:border-zinc-500">Dismiss</button>
+      </div>
+      {blockers.kind === "unresolved_instances" ? (
+        <ul data-testid="sync-unresolved-instances" aria-label="Unresolved instances" className="mt-2 space-y-1.5">
+          {blockers.items.map((item) => (
+            <li key={`${item.family}:${item.refDes}`} data-testid={`sync-unresolved-${item.refDes}`} data-missing={item.missing} className="rounded border border-red-950 bg-red-950/20 p-2">
+              <div><span className="font-mono text-zinc-100">{item.refDes}</span><span className="text-red-200"> — {UNRESOLVED_MISSING_LABEL[item.missing]}</span></div>
+              <div className="mt-0.5 text-[11px] text-zinc-400">Review path: {item.reviewPath}</div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="mt-2" data-testid="sync-readiness-panel">
+          <PcbSyncReadinessPanel result={blockers.result} busy={busy} />
+        </div>
+      )}
+    </section>
   );
 }

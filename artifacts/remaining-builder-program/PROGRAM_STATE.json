@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B24",
-  "currentCheckpoint": "Product-reliability assignment (artifacts/astra-guided-pcb/PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.md): A (journey reproduced) and B (corrective foundation verified and closed) done on codex/astra-foundation; C (the vertical slice) next",
+  "currentCheckpoint": "Product-reliability assignment: A, B and C done on codex/astra-foundation (C: the vertical slice proved in the fixture browser and once live in the normal app); D (AI semantic parity) next",
   "status": "in_progress",
   "baseSha": "32b081e152620b46e791f9589256f7d0603f300f",
   "branch": "codex/astra-foundation",
@@ -40,7 +40,7 @@
     "LB-16: BLOCKED-LIVE-QUALIFICATION: live approved external MCP server (discovery, tool calls and hostile tool results through Sirkit's MCP client)",
     "LB-17: BLOCKED-LIVE-QUALIFICATION: kicad-cli live oracle (the exported routed demo loaded and DRC-checked by a real kicad-cli)"
   ],
-  "nextAction": "Commit A+B and push codex/astra-foundation (no PR merge; normal PR after the series); then checkpoint C: Theory request contract through the shared preparation, structured partial/skipped-check status from build-multi, provider-failure classification with reason, bounded loops, a visible route and submission for every composer route, journey stages with next actions, individually named unresolved instances, no silent sync returns. B24 stays PARTIAL; LB-1..LB-17 unchanged; no Astra activation, default-model change or builder provider spend.",
-  "updatedAt": "2026-10-14T15:20:00-04:00",
+  "nextAction": "Commit C and push codex/astra-foundation; then checkpoint D: generate the UI-control -> semantic command -> tool coverage matrix from the registries with evidence-backed dispositions, registry-generated operator manuals with digest pins, drift gates, and the missing high-value shared commands; then E (simplify the interface in place), F, G, H, I. B24 stays PARTIAL; LB-1..LB-17 unchanged; builder live spend 0.19 of 5.00 USD.",
+  "updatedAt": "2026-10-16T00:05:00-04:00",
   "previousChapter": "B23 merged normally into main as 57c3b29 (PR #14, 2026-10-06) after green CI on f663d71; verdict PARTIAL (no provider admitted, LB-11; ordering visibly disabled, its contract tested offline only, LB-12; physical evidence defined, none exists, LB-5; no agent can release, transfer or spend; census 166/163/3/0, counts 47/36/9/27)"
 }

@@ -56,3 +56,33 @@ the editor by `selected.id` (`PadstackPanel.tsx:179`), so A→B is a remount the
 ### Gates on the corrective tree (B.4)
 
 See `validation.md` for the exact commands, exit codes and the whole-repository lint result.
+
+## C — one understandable workflow: what landed per fault (2026-10-14)
+
+| fault | fix | files | tests |
+|---|---|---|---|
+| F-01 Theory selector mismatch | the Theory client prepares its request through the shared `app/lib/project/ai-request.ts` (the selector headers + JSON content type) and passes the lifecycle signal; an answer without `components`/`connections` is refused as invalid local output | `lib/apply-netlist.ts`, `app/lib/project/ai-request.ts`, `app/page.tsx` (call site) | `pr-c-theory-request` (4), `pr-a` [PR-A 1] |
+| F-03 partial results as `ok: true` | `build-multi` answers `app/lib/schematic/build-result.ts`: `status` complete/partial, `omittedBlocks`, `electricalCheck` passed/findings/skipped/not_run, `planner`, `budget`; the page shows the notes as activity steps and in the proposal dialog's validation note | `app/api/schematic/build-multi/route.ts`, `app/lib/schematic/build-result.ts`, `app/page.tsx` | `pr-c-build-multi-status` (19), `pr-a` [PR-A 2] |
+| provider/quota conflated with local output (trace §1 d) | the loop classifies: `provider_unavailable` + `reason` (+ `retryable` false for `insufficient_quota`/`breaker_open`), `build_budget_exhausted`, `build_loop_failed` (bounded, redacted), Theory `build_invalid_output`; `build`, `edit-build` forward `reason`/`retryable`; the shared card withholds Retry on quota | `app/lib/build-loop.ts`, `app/api/schematic/{build,edit-build,route}.ts` | `pr-c-build-loop-budget` (10), `pr-c-theory-route-classification` (8), `b16-0-10-tranche-parity` |
+| unbounded loops (trace §1 f1) | `runBuildToolLoop` takes `budget` (iteration cap ≤ 20, a deadline checked before every model turn); `build-multi` runs block loops three at a time under one 40 s deadline and reports `budget` | `app/lib/build-loop.ts`, `build-multi/route.ts` | `pr-c-build-loop-budget` |
+| F-04 no submit for the ask route; closed chat | a labelled submit for every route ("Send" / "Generate" / "Edit", `composer-submit`); the empty-sheet entry action is checkpoint E | `app/page.tsx` | `pr-a` [PR-A 3] |
+| a pure question on an empty project spent provider budget (trace §1 f2) | routing rule 1b: a question form is "ask" even without a schematic; "can you build…" stays a request | `app/lib/project/composer-routing.ts` | `pr-c-composer-question` (6); `b18-d`, `b21-e4`, `b21-b-router` unchanged |
+| the approver could not see the electrical finding (trace §1 f3) | the drawing check's note and the server's partial/skipped notes travel with the proposal (`validationNote`) | `app/page.tsx` | `pr-a` [PR-A 2] (source), `pr-c-journey` (partial proposal) |
+| no next step after approval (trace §2 d) | the journey model (`app/lib/workflow/journey.ts`) derives ten stages with one next permitted action from page and editor facts; the `JourneyStrip` under the header shows it; "Prepare PCB" starts the same preparation the button starts (bindings → publication → preflight); apply, qualify and release stay their own clicks; the "prepare-pcb" composer hint carries the intent across the approval | `app/lib/workflow/journey.ts`, `app/components/workflow/JourneyStrip.tsx`, `app/page.tsx`, `app/components/pcb/PcbEditor.tsx` (facts bridge, sync request token) | `pr-c-journey` (34), `pr-c-journey-strip` (4) |
+| the proposal was lost on reload (trace §2 a) | a pinned proposal is stored per project and offered again only against the same base digest; approval or discard clears it | `app/lib/project/pending-proposal-store.ts`, `app/page.tsx` | `pr-c-pending-proposal-store` (4) |
+| F-08 silent sync returns; unnamed non-atomic parts (trace §3 a, c, d) | every guard speaks; unresolved instances are listed by refDes with the missing fact and the review path BEFORE any server call (fail closed, nothing published); a blocked preflight mounts the existing readiness panel per blocker | `app/components/pcb/PcbEditor.tsx`, `app/lib/pcb-sync/unresolved-instances.ts` | `pr-c-unresolved-instances` (9), `pr-c-sync-feedback` (9), `pr-a` [PR-A 6] |
+| a stale apply lost its reason (trace §3 e) | the apply 409 carries `code` (the first blocker's, else `PS_APPLY_<STATUS>`) and a sentence; the editor says the plan is stale and withdraws the Apply buttons | `app/api/pcb-sync/handler.ts`, `PcbEditor.tsx` | `pr-c-apply-blocked-code` (7) |
+
+Owner-decision record: OD-242 (OWNER_DECISIONS.md) re-pins OD-106's byte tripwire on `build-multi` to the new sha256; the route
+stays outside the B21 DAG and the import gate is unchanged.
+
+### C — the live journey in normal mode (2026-10-16, CONFIRMED)
+
+One bounded request through the real page with the owner's key (`validation.md` §C, `live-spend.json` LR-1): the circuit
+request became a complete proposal (8 parts, all with atomic authority), the approval applied it, "Prepare PCB" prepared the
+bindings, publication and preflight, the human's apply made the durable board, and the human's "Qualify & route" placed and
+routed it with the bundled FreeRouting (0 unrouted, 0 shorts, parity pass). No stage hung, returned silently or invented a
+pass; the only refusals were Anthropic's rerank calls (no credits), which the part search tolerates. Known limits recorded:
+the loop deadline refuses a new turn but does not abort one in flight (the request took 47.7 s against a 40 s deadline);
+the post-approval automatic passes (layout critic, review) spend provider budget outside the request's reservation; release
+was not exercised live (an administrator's irreversible act; the fixture proves it).

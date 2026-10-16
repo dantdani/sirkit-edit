@@ -17,7 +17,7 @@
  *     holds no button named by a glyph alone inside a DialogContent; the hand-rolled dialogs outside BomView are exactly four;
  *  6. the literals: the transcript is a polite log with aria-busy and its label, the prompt carries its label, the two errors are
  *     alerts, both canvas hosts are images named by their statements, the minimum-width notice is CSS only; each literal once;
- *  7. app/page.tsx has exactly its 3773c6a line count (8459; B21's page suites resolve its line citations);
+ *  7. app/page.tsx has exactly its pinned line count (8459 at 3773c6a; 8556 after product reliability C; B21's page suites resolve its line citations);
  *  8. package.json's dependency names are 3773c6a's (no axe, jest-axe, lighthouse or user-event, OD-215); no statement, notice or
  *     in-scope name matches B19-E's purchase wording;
  *  9. the rule module is imported only by this suite and its generator (importClosure);
@@ -74,8 +74,11 @@ const SELF = "app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts";
 /** [B24-D3, 2026-10-10] The out-of-scope `unnamed` count measured by the rule at 3773c6a, before any D3 fix (accessibility.md
  *  section 5). It may only fall; a new unnamed site anywhere fails, even after regeneration (the generator refuses one too). */
 const OUT_OF_SCOPE_UNNAMED_AT_3773C6A = 111;
-/** [B24-D3, 2026-10-10] app/page.tsx's line count at 3773c6a (8459 at f663d71; unchanged since). */
-const PAGE_LINES_AT_3773C6A = 8459;
+/** [B24-D3, 2026-10-10] app/page.tsx's line count at 3773c6a (8459 at f663d71; unchanged since). [Product reliability C, 2026-10-14] 8556:
+ *  the composer submission for every route, the journey strip and its facts, the proposal notes and the proposal persistence; the citation
+ *  tables that name page lines (accessibility.md, B21's composer-and-first-turn.md) were refreshed in the same change, which is what this
+ *  pin exists to force. */
+const PAGE_LINES_AT_3773C6A = 8556;
 /** [B24-D3, 2026-10-10] package.json's dependency names at 3773c6a (OD-215: no new dependency; an axe devDependency needs the owner). */
 const DEPENDENCIES_AT_3773C6A = ["@anthropic-ai/sdk", "@base-ui/react", "@react-three/drei", "@react-three/fiber", "@supabase/ssr", "@supabase/supabase-js", "@xyflow/react", "class-variance-authority", "clsx", "drizzle-orm", "flatbush", "highlight.js", "immer", "jszip", "katex", "lucide-react", "next", "openai", "pixi-viewport", "pixi.js", "polygon-clipping", "postgres", "radix-ui", "react", "react-dom", "react-markdown", "rehype-highlight", "rehype-katex", "remark-gfm", "remark-math", "tailwind-merge", "three", "tw-animate-css"];
 const DEV_DEPENDENCIES_AT_3773C6A = ["@electric-sql/pglite", "@playwright/test", "@tailwindcss/postcss", "@testing-library/dom", "@testing-library/react", "@types/node", "@types/react", "@types/react-dom", "@types/three", "drizzle-kit", "eslint", "eslint-config-next", "fake-indexeddb", "jsdom", "tailwindcss", "tsx", "typescript", "vitest"];

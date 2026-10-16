@@ -77,6 +77,10 @@ import { compileTier1Proposal, planSchematicDelete, planSchematicReplacement } f
 import { sealTier1Proposal, TIER1_PROPOSAL_SCHEMA, type SealedTier1Proposal } from "@/app/lib/engineering/schematic-proposals";
 import { loadSessionIdentity, sessionAuthorizationBindingFrom, SESSION_IDENTITY_UNAVAILABLE_MESSAGE } from "@/app/lib/project/session-identity";
 import { projectSelectorHeaders } from "@/app/lib/project/project-selector";
+import { completenessNote, electricalCheckNote, type BuildMultiResponse } from "@/app/lib/schematic/build-result"; // [PR-C]
+import { clearPendingProposal, loadPendingProposal, savePendingProposal } from "@/app/lib/project/pending-proposal-store"; // [PR-C]
+import { deriveJourney, type JourneyActionId, type JourneyGenerationFailure, type JourneyPcbFacts } from "@/app/lib/workflow/journey"; // [PR-C] the shared stage model
+import { JourneyStrip } from "@/app/components/workflow/JourneyStrip"; // [PR-C]
 
 /**
  * [B16-C.5] Every authenticated AI request names the ACTIVE project as a
@@ -85,14 +89,10 @@ import { projectSelectorHeaders } from "@/app/lib/project/project-selector";
  * with `AUTH_PROJECT_SELECTOR_REQUIRED` (400) — the page-level browser proof
  * found the Build-mode generation, edit, review, tidy and second-opinion
  * fetches sending none. A selector is never authority: the server still loads
- * the caller's live membership for that scope.
+ * the caller's live membership for that scope. [PR-C] The helper is the shared
+ * `app/lib/project/ai-request.ts`, which the Theory client uses too.
  */
-function aiRequestHeaders(scope: { projectId: string | null; branchId: string }): Record<string, string> {
-  return {
-    "Content-Type": "application/json",
-    ...projectSelectorHeaders(scope.projectId ? { tenantId: "local", projectId: scope.projectId, branchId: scope.branchId } : null),
-  };
-}
+import { aiRequestHeaders } from "@/app/lib/project/ai-request";
 import { createMembershipReauthorizer } from "@/app/lib/project/membership-reauthorization";
 import { applyApprovedTier1Proposal, approvedMutationAudit, type ApprovedMutationReceipt } from "@/app/lib/engineering/approved-agent-mutations";
 import { type ReplacementMutationReceipt } from "@/app/lib/engineering/approved-replacement-mutations";
@@ -2657,6 +2657,12 @@ export default function Home() {
     /** [B16-A F11] a validation note the dialog shows alongside the proposal (never blocks the human's decision). */
     validationNote?: string | null;
   } | null>(null);
+  // [PR-C] The journey's facts the page owns: the PCB editor reports its own (display only), the last generation failure,
+  // whether the user asked for the PCB in the same request, and the "Prepare PCB" request token the editor consumes.
+  const [pcbFacts, setPcbFacts] = useState<JourneyPcbFacts | null>(null);
+  const [preparePcbRequested, setPreparePcbRequested] = useState(false);
+  const [lastGenerationFailure, setLastGenerationFailure] = useState<JourneyGenerationFailure | null>(null);
+  const [syncRequestToken, setSyncRequestToken] = useState(0);
   // [B16.1C §F] what the pending proposal will change, against the LIVE
   // canonical schematic at review time (recomputed when either changes).
   const pendingProposalSummary = useMemo(() => pendingReplace ? describeSchematicProposal(pendingReplace.state, { components, wires, kicadComponents, netLabels }) : null, [pendingReplace, components, wires, kicadComponents, netLabels]);
@@ -2848,6 +2854,8 @@ export default function Home() {
   // hydrated setStates batch together), so the first allowed write is always
   // the hydrated one.
   const pendingHydrationForRef = useRef<string | null>(null);
+  /** [PR-C] restores a persisted proposal once the opened session is ready (bound below, after the helpers it needs exist). */
+  const restorePendingProposalRef = useRef<(projectId: string) => void>(() => {});
   useEffect(() => {
     if (project && pendingHydrationForRef.current === project.id) pendingHydrationForRef.current = null;
   }, [project, components, wires, kicadComponents, netLabels, messages, view]);
@@ -2947,6 +2955,25 @@ export default function Home() {
       setPendingSuggestions(null);
     }
   }, [authoritativeSchematic, pendingSuggestions]);
+
+  // [PR-C] A pinned proposal awaiting approval is kept per project across a reload (browser state, never canonical);
+  // approving or discarding it (pendingReplace → null) clears the record. Proposals without a pin are not persisted.
+  // [PR-C] the persisted proposal's base is the schematic's CONTENT digest (components, wires, catalog instances, labels):
+  // the canonical digest also covers the sheet size, which a fresh project gains on its first save, so a reload would
+  // read every first proposal as stale. The approval itself still checks the full digest through the pin captured at restore.
+  const proposalContentDigest = useCallback((state: SchematicState): string => schematicStateDigest({ components: state.components ?? [], wires: state.wires ?? [], kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [] }), []);
+  const persistedProposalRef = useRef<{ projectId: string } | null>(null); // the record this mount wrote, so only ITS retirement clears it (a fresh mount must not clear before the restore)
+  useEffect(() => {
+    if (pendingReplace?.pin && project) {
+      savePendingProposal({ projectId: project.id, baseDigest: proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()), state: pendingReplace.state, explanation: pendingReplace.explanation, prompt: pendingReplace.prompt, validationNote: pendingReplace.validationNote ?? null });
+      persistedProposalRef.current = { projectId: project.id };
+    } else if (!pendingReplace && persistedProposalRef.current) {
+      clearPendingProposal(persistedProposalRef.current.projectId); // approved, discarded or retired by a project switch: its own project's record goes
+      persistedProposalRef.current = null;
+    }
+  }, [project, pendingReplace, proposalContentDigest]);
+  // [PR-C] ...and offered again after the reload: the restore effect sits after the gate and pin helpers it reads
+  // (`restoredProposalForRef`, below `captureAiRequestOwnership`).
 
   /** User prompts + user-visible responses only — no secrets, no hidden reasoning. */
   function toStoredChat(all: Message[]): StoredChatMessage[] {
@@ -3065,6 +3092,7 @@ export default function Home() {
    */
   const resetTransientProjectState = useCallback((record: SavedProject) => {
     setPendingReplace(null);            // no stale replacement dialog crosses projects
+    setPcbFacts(null); setPreparePcbRequested(false); setLastGenerationFailure(null); setSyncRequestToken(0); // [PR-C] journey facts are per project
     setPendingTier1(null);              // no stale sealed proposal
     setPendingTier1RunId(null);         // B12: clear pending approval origin
     setTier1ApplyBusy(false);           // B12: no in-flight apply crosses projects
@@ -3256,7 +3284,8 @@ export default function Home() {
         case "fresh":
         case "resumed":
         case "rebased-local-newer":
-          break; // session ready; nothing to surface
+          restorePendingProposalRef.current(record.id); // [PR-C] the session is ready: a persisted proposal is offered again against the same base
+          break; // session ready; nothing else to surface
         case "recovered-canonical":
           // B06.2: preserve the superseded projection BEFORE adopting, then
           // adopt the canonical state and prove adoption to the session.
@@ -4859,6 +4888,21 @@ export default function Home() {
     return { isCurrent: () => scope.isCurrent() };
   }, []);
 
+  // [PR-C] A persisted proposal is offered again after a reload ONLY while the authoritative schematic still has the
+  // digest it was produced against (the same exact-base rule the approval enforces); a stale record is discarded. The
+  // session's open outcome calls this once the project is ready (installProject above), never earlier: the install's
+  // transient reset would otherwise wipe a proposal restored too soon.
+  useLayoutEffect(() => {
+    restorePendingProposalRef.current = (projectId: string) => {
+      if (projectRef.current?.id !== projectId) return; // superseded by a later open
+      const stored = loadPendingProposal(projectId);
+      if (!stored) return;
+      if (proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()) !== stored.baseDigest) { clearPendingProposal(projectId); showToast("A schematic proposal from before the reload was discarded: the schematic changed since it was made."); return; }
+      const pin = captureLifecycleInvocationContext();
+      setPendingReplace({ state: stored.state, explanation: stored.explanation, prompt: stored.prompt, promptAlreadyLogged: true, pin, validationNote: [stored.validationNote, "Restored after a reload: the schematic is unchanged since this proposal was made. Approve or discard it."].filter(Boolean).join("\n") });
+    };
+  }, [captureLifecycleInvocationContext, proposalContentDigest]);
+
   /**
    * B07.3 — TRANSACTIONAL machine-schematic application through the
    * lifecycle gateway: validate → canonical adoption (quarantine-first, on
@@ -5006,10 +5050,12 @@ export default function Home() {
     setIsGenerating(true);
     setGenError(null);
     setAiProviderFailure(null);
+    setLastGenerationFailure(null); // [PR-C]
     lastAiRetryRef.current = () => void handleGenerateSchematic(prompt);
     try {
       let state: SchematicState;
       let explanation: string;
+      const proposalNotes: string[] = []; // [PR-C] what the approver must read beside the proposal (partial merge, checks)
 
       if (mode === "build") {
         appendActivityStep(logId, "Generating build netlist");
@@ -5020,10 +5066,15 @@ export default function Home() {
           signal: scope.signal,
         });
         if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => scope.isCurrent() });
-        const data = (await res.json()) as
-          | { ok: true; netlist: BuildLogicalNetlist; explanation: string }
-          | { ok: false; error: string };
+        const data = (await res.json()) as BuildMultiResponse;
         if (!data.ok) throw new Error(data.error || "Generation failed");
+        // [PR-C] the server's structured status: a partial merge and an electrical check that was skipped or not run are
+        // shown as steps now and travel with the proposal (the dialog's validation note), never only as prose.
+        const partialNote = completenessNote({ status: data.status ?? "complete", omittedBlocks: data.omittedBlocks ?? [] });
+        const serverCheckNote = electricalCheckNote(data.electricalCheck ?? { state: "not_run", reason: "the server reported no electrical check" });
+        if (partialNote) appendActivityStep(logId, partialNote, "done");
+        if (serverCheckNote) appendActivityStep(logId, serverCheckNote, "done");
+        proposalNotes.push(...[partialNote, serverCheckNote].filter((note): note is string => note !== null));
 
         // Load every referenced part before laying out (positions come from pins).
         const netlist = data.netlist;
@@ -5043,6 +5094,7 @@ export default function Home() {
         if ((state.kicadComponents?.length ?? 0) === 0) {
           failActivityLog(logId, "No parts produced");
           setScopedGenError(scope, "No parts produced — try a more specific prompt.");
+          if (scope.isCurrent()) setLastGenerationFailure({ code: "no_parts", message: "No parts produced — the model submitted no catalog parts.", retryable: true }); // [PR-C]
           return;
         }
 
@@ -5050,12 +5102,15 @@ export default function Home() {
         // is electrically wrong by netlist after reroute attempts.
         if (!built.validation.ok) {
           const v = built.validation.violations;
-          setScopedGenError(scope, `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`, 12000);
-          appendActivityStep(logId, `Electrical check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
+          const note = `Drawing check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`;
+          setScopedGenError(scope, note, 12000);
+          appendActivityStep(logId, `Drawing check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
+          proposalNotes.push(note); // [PR-C] the approver reads it in the dialog, not only in a 12 s banner
         }
       } else {
         appendActivityStep(logId, "Synthesizing theory schematic");
-        const result = await generateSchematic(prompt, lastAiRetryRef.current ?? undefined, { isCurrent: () => scope.isCurrent() });
+        // [PR-C] the same request preparation as Build mode: the project selector the wrapper requires and the lifecycle signal
+        const result = await generateSchematic(prompt, { scope, signal: scope.signal, retry: lastAiRetryRef.current ?? undefined, ownership: { isCurrent: () => scope.isCurrent() } });
         state = result.state;
         explanation = result.netlist.explanation;
         if (state.components.length === 0) {
@@ -5067,9 +5122,12 @@ export default function Home() {
         // Surface (don't silently ship) an electrically-invalid theory schematic.
         if (!result.validation.ok) {
           const v = result.validation.violations;
-          appendActivityStep(logId, `Electrical check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
-          setScopedGenError(scope, `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`, 12000);
+          const note = `Drawing check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`;
+          appendActivityStep(logId, `Drawing check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
+          setScopedGenError(scope, note, 12000);
+          proposalNotes.push(note); // [PR-C]
         }
+        proposalNotes.push("Electrical check not run: Theory mode has no server-side electrical check. Not checked is not a pass."); // [PR-C]
       }
 
       // B07.4 (failure B) — the replacement dialog may only open while the
@@ -5101,7 +5159,10 @@ export default function Home() {
       // replaced); the pin travels with the pending proposal so confirming
       // later still rejects as stale if the schematic or project moved on.
       finishActivityLog(logId, components.length > 0 || wires.length > 0 || kicadComponents.length > 0 || netLabels.length > 0 ? "Generated replacement; waiting for confirmation" : "Generated schematic proposal; waiting for approval");
-      setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin });
+      const validationNote = proposalNotes.length > 0 ? proposalNotes.join("\n") : null;
+      setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin, validationNote });
+      // [PR-C] persisted NOW, in the same task as the offer (a reload a moment later still finds it; the effect below keeps it current)
+      if (pin.projectId) savePendingProposal({ projectId: pin.projectId, baseDigest: proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()), state, explanation, prompt, validationNote });
     } catch (err) {
       if (isAbortError(err) || !scope.isCurrent()) {
         // Cancellation (project switch/unmount) — not a provider failure;
@@ -5112,6 +5173,7 @@ export default function Home() {
       const msg = err instanceof Error ? err.message : "Generation failed";
       failActivityLog(logId, msg);
       setScopedGenError(scope, msg);
+      setLastGenerationFailure({ code: err instanceof AiProviderUnavailableError ? "provider_unavailable" : "generation_failed", message: msg, retryable: true }); // [PR-C] the journey shows the failed stage, not only a 6 s banner
     } finally {
       // Only THIS request may clear the busy flag it set.
       if (activeGenerationRef.current === scope.requestId) {
@@ -5838,8 +5900,10 @@ export default function Home() {
     if (!text || loading || isGenerating || isEditing) return;
     const hasSchematic = components.length > 0 || kicadComponents.length > 0;
     // [B18-D I1] the shown route, or the user's override — routing only; the server loop or the proposal review decides.
-    const action = composerRouteOverride ?? routeComposerMessage(text, hasSchematic).route;
+    const routing = routeComposerMessage(text, hasSchematic);
+    const action = composerRouteOverride ?? routing.route;
     setComposerRouteOverride(null);
+    if (action === "generate") setPreparePcbRequested(routing.hints.includes("prepare-pcb")); // [PR-C] the intent travels across the approvals; nothing is automatic
     if (action !== "ask") setInput("");
     if (action === "generate") void handleGenerateSchematic(text);
     else if (action === "edit") void handleEditSchematic(text);
@@ -5853,14 +5917,45 @@ export default function Home() {
   const overrideComposerRoute = (): void => setComposerRouteOverride((current) => (current ? null : "ask"));
   const composerBusy = loading || isGenerating || isEditing;
   const composerDisabled = !composerText || composerBusy;
-  const showComposerButton = composerAction !== "ask" || isGenerating || isEditing;
+  // [PR-C] every route has a visible, labelled submission (the ask route had Enter only); Enter still submits
+  const showComposerButton = Boolean(composerText) || isGenerating || isEditing;
   const composerLabel = isGenerating
     ? "Generating..."
     : isEditing
       ? "Editing..."
       : composerAction === "generate"
         ? "Generate"
-        : "Edit";
+        : composerAction === "edit"
+          ? "Edit"
+          : "Send";
+
+  // [PR-C] The journey: the ten stages with a status each and ONE next permitted action, derived from facts the page and
+  // the PCB editor hold. Labels are not authority: every action here opens or focuses an existing human control.
+  const journey = deriveJourney({
+    hasSchematic: hasSchematicForComposer,
+    generating: isGenerating,
+    proposalPending: pendingReplace !== null,
+    proposalPartial: Boolean(pendingReplace?.validationNote?.includes("Partial result")),
+    proposalValidationNote: pendingReplace?.validationNote ?? null,
+    lastGenerationFailure,
+    mode,
+    preparePcbRequested,
+    pcb: pcbFacts,
+  });
+  const focusLater = (selector: string): void => { window.setTimeout(() => document.querySelector<HTMLElement>(selector)?.focus(), 50); };
+  const handleJourneyAction = (actionId: JourneyActionId): void => {
+    switch (actionId) {
+      case "describe_circuit": setChatOpen(true); focusLater('[data-testid="prompt-input"]'); return;
+      case "review_proposal": focusLater('[data-testid="schematic-proposal-approve"]'); return;
+      case "prepare_pcb": workspaceView.open("pcb"); setSyncRequestToken((token) => token + 1); return; // the editor runs the same preparation the button runs; applying stays a click
+      case "review_bindings": workspaceView.open("pcb"); focusLater('[data-testid="review-request-all"]'); return;
+      case "apply_pcb_plan": workspaceView.open("pcb"); focusLater('[data-testid^="apply-sync-plan"]'); return; // focus only: the human clicks Apply
+      case "qualify_route": workspaceView.open("pcb"); focusLater('[data-testid="p2g-qualify"]'); return;
+      case "request_release": workspaceView.open("pcb"); focusLater('[data-testid="p2g-request-release"]'); return;
+      case "fix_blockers": workspaceView.open("pcb"); focusLater('[data-testid="sync-blockers"]'); return;
+      case "open_pcb": workspaceView.open("pcb"); return;
+    }
+  };
 
   /** B07.5 (failure E) — simulation runs are OWNED requests: scope +
    *  request id + captured session generation + authoritative base digest
@@ -6169,6 +6264,11 @@ export default function Home() {
         </div>
       </header>
 
+      {/* [PR-C] the primary task, always visible: ten stages, one next action (opens or focuses the existing control) */}
+      <div className="border-b border-zinc-800 bg-zinc-950 px-3 py-1" data-testid="journey-bar">
+        <JourneyStrip view={journey} onAction={handleJourneyAction} compact />
+      </div>
+
       {/* ── Body ── */}
       <div className="flex-1 flex min-h-0">
         {/* Activity Bar */}
@@ -6434,6 +6534,8 @@ export default function Home() {
                     schematic={authoritativeSchematic}
                     active={view === "pcb"}
                     hydrateToken={pcbHydrateToken}
+                    onJourneyFacts={setPcbFacts} // [PR-C] display only
+                    syncRequestToken={syncRequestToken} // [PR-C] "Prepare PCB" from the journey strip
                     gateSchematicSync={() => schematicConsumerGate("pcb-sync")}
                     aiOwnership={captureAiRequestOwnership}
                     editorContextBridge={editorContextBridgeRef.current!} // B10
@@ -6979,6 +7081,9 @@ export default function Home() {
                   {composerRouting.hints.includes("tier3-release") && (
                     <span data-testid="composer-tier3-hint" className="text-amber-400/90">Release, qualification and ordering are never done by the assistant — use the release workflow.</span>
                   )}
+                  {composerRouting.hints.includes("prepare-pcb") && composerAction === "generate" && (
+                    <span data-testid="composer-prepare-pcb-hint">then offer Prepare PCB after your approval of the schematic (never automatic)</span>
+                  )}
                 </div>
               )}
               <div className="flex items-center justify-between mt-2 gap-2">
@@ -7000,10 +7105,13 @@ export default function Home() {
                   {showComposerButton && (
                     <Button
                       size="sm"
+                      data-testid="composer-submit"
                       title={
                         composerAction === "generate"
                           ? "Generate a schematic from this prompt"
-                          : "Apply this as an edit to the current schematic"
+                          : composerAction === "edit"
+                            ? "Apply this as an edit to the current schematic"
+                            : "Send this message to the assistant"
                       }
                       disabled={composerDisabled}
                       onClick={handleComposerSubmit}

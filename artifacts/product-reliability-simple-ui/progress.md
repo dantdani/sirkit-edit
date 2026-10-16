@@ -71,5 +71,38 @@ Status: DONE, pending commit.
 - Metadata: the pending reconciliation of B24's verdict (section 5.5, metadata only) kept; B24 stays PARTIAL; live blockers
   LB-1..LB-17 unchanged; the ledger carries the A/B entry.
 
-Exact next step: commit A+B as a coherent series on `codex/astra-foundation` (pending corrective tree; A reproductions and
-evidence; B closures), secret-scan, push; then checkpoint C (the vertical slice, see the ledger's "Next").
+Committed as `535760f` (author Dandi Desta, 2026-10-14 15:06 −04:00) and pushed to `origin/codex/astra-foundation` (no PR
+yet; a normal PR follows the series). Tree secret scan before the push: 0 hits.
+
+## Checkpoint C — one understandable workflow (2026-10-14)
+
+Status: IN PROGRESS.
+
+Landed so far (my files): `app/lib/schematic/build-result.ts` (the structured Build result contract: completeness,
+omitted blocks, electrical check state, planner, budget), `app/lib/project/ai-request.ts` (the one request preparation),
+`lib/apply-netlist.ts` (Theory client: selector + signal + invalid-output refusal; `pr-c-theory-request` 4 passed),
+`app/lib/project/pending-proposal-store.ts` (a pinned proposal survives a reload only against the same base digest;
+`pr-c-pending-proposal-store` 4 passed), `app/page.tsx` (a labelled submit for every composer route — "Send" for ask;
+the Build result's partial/skipped-check notes as activity steps and in the proposal dialog's validation note; the
+drawing check's note in the dialog; proposal save/restore effects). `pr-a-journey-reproductions`: [PR-A 1] and the
+composer case flipped to ordinary cases and pass.
+
+Landed since (see `root-causes-and-fixes.md` §C for the per-fault table): server contracts and bounds (`build-loop.ts`
+budget + failure classes; `build-multi` structured result, three loops in flight under one 40 s deadline, the operator's
+`SIRKIT_BUILD_ITERATION_CAP`; `build`/`edit-build` forward `reason`/`retryable`; the Theory route's `build_invalid_output`;
+the apply 409 carries `code`); PCB sync feedback (no silent returns; unresolved instances named per refDes before any
+server call; the readiness panel mounted per blocker; the stale-apply reason and withdrawn Apply); the journey model
+(`journey.ts`, `JourneyStrip` under the header, PcbEditor facts bridge, "Prepare PCB" through the same preparation the
+button runs); the composer's question rule and prepare-PCB hint; OD-242 re-pins OD-106's tripwire. Citation maintenance:
+27 rows re-pointed by content (accessibility.md, B21 composer-and-first-turn.md, evaluation-matrix.md) and the page
+line-count pin 8459 → 8556, each with a dated note.
+
+Done since: whole-repository eslint 0 errors / 33 warnings (prior debt); `e2e/journey-contract.spec.ts` green after three
+diagnosed restore defects; the full browser suite 68 passed / 1 failed → the replay-key cause fixed in the fixture branch
+of the build loop, the two journey specs re-run green; the bounded live run in the normal app went through proposal,
+approval, bindings, plan, board and a real local qualification (0.19 USD; `live-spend.json`).
+
+Status: DONE, pending commit.
+
+Exact next step: secret scan, commit C, push; then checkpoint D (the generated UI↔AI coverage matrix with dispositions,
+registry-generated manuals, drift gates, and the missing high-value shared commands).

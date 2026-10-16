@@ -37,7 +37,7 @@ export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 4
     return Response.json({ ok: true, netlist: result.netlist, explanation: result.explanation });
   }
   return Response.json(
-    { ok: false, error: result.error, code: result.code, provider: result.provider },
+    { ok: false, error: result.error, code: result.code, provider: result.provider, reason: result.reason, retryable: result.retryable }, // [PR-C] the shared card withholds Retry on `insufficient_quota`
     { status: result.status },
   );
 });

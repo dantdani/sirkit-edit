@@ -603,7 +603,7 @@ function ProjectBomView(props: Props) {
       setSettledRequest(requestKey);
     });
     return () => controller.abort();
-  }, [fetchBom, isEmpty, projectKey, pricingChoice, signature, requestKey]);
+  }, [fetchBom, isEmpty, projectKey, pricingChoice, signature, requestKey, refreshNonce]);
 
   const loadSnapshots = useCallback(async (signal?: AbortSignal) => {
     if (!projectKey) return null;

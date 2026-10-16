@@ -5630,3 +5630,31 @@ Assignment: `artifacts/astra-guided-pcb/PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.
   skipped-check status from `build-multi`, provider-failure classification with `reason`, bounded loops, visible route and
   submission for every composer route, the journey stages with next actions, individually named unresolved instances
   (mount the existing readiness panel), no silent sync returns, the real reason on a stale apply.
+
+### Product-reliability assignment, checkpoint C — one understandable workflow (2026-10-14/15)
+
+Branch `codex/astra-foundation` from `535760f`. Evidence: `artifacts/product-reliability-simple-ui/` (root-causes-and-fixes.md §C,
+validation.md §C, workflow-contract.md, fault-register.md, live-spend.json).
+
+- **Contracts (CONFIRMED by suites):** the Theory client prepares its request through the one shared helper
+  (`app/lib/project/ai-request.ts`: selector headers + content type) and carries the lifecycle signal; an answer that is not a
+  netlist is invalid local output. `build-multi` answers `app/lib/schematic/build-result.ts` (`status` complete/partial,
+  `omittedBlocks`, `electricalCheck` passed/findings/skipped/not_run, `planner`, `budget`); the loops are bounded (iteration
+  cap, one 40 s deadline, three blocks in flight; the operator's `SIRKIT_BUILD_ITERATION_CAP` may lower the cap); failures are
+  classified (`provider_unavailable` with `reason`/`retryable`, `build_budget_exhausted`, `build_loop_failed`,
+  `build_invalid_output`) and the shared card withholds Retry on `insufficient_quota`. The apply 409 carries `code`.
+- **Progression (CONFIRMED):** every composer route has a labelled submission ("Send" for ask); a pure question on an empty
+  project is a question (rule 1b); the "prepare-pcb" hint carries the intent; the proposal dialog carries the partial/skipped
+  notes; a pinned proposal survives a reload against the schematic's content digest; the journey model
+  (`app/lib/workflow/journey.ts`) derives ten stages with one next permitted action, shown by `JourneyStrip` under the
+  header; "Prepare PCB" starts the same preparation the PCB tab's button starts; apply, qualify and release stay their own
+  clicks. Unresolved instances are named per refDes before any server call; a blocked preflight is shown per blocker
+  (`PcbSyncReadinessPanel` mounted); no sync entry returns silently; a stale apply says so and withdraws the Apply buttons.
+- **Records:** OD-242 (OWNER_DECISIONS.md) re-pins OD-106's byte tripwire on `build-multi` (sha256 `eaf4e8d6…`); 27
+  citation rows re-pointed by content and the page line-count pin 8459 → 8556 (dated notes).
+- **Gates:** tsc 0; whole-repository eslint 0 errors / 33 warnings (prior debt); C suites + page-citation suites 440 + 48
+  passed; generators 630 controls / 64 surfaces, in scope 168, unnamed 0; `e2e/journey-contract.spec.ts` 1 passed after three
+  diagnosed restore defects (validation.md); the full browser suite 68 passed / 1 failed (`prompt-to-gerber` replay miss from one extra browser id drawn by the new activity step; the fixture's recorded design now carries its electrical report; the two journey specs re-run 2 passed).
+- **Live:** ONE bounded Build request in the normal app with the owner's key (cap 6; 0.19 USD priced from the durable call records; cap 5.00, remaining 4.81) reached a complete 8-part proposal, approval, bindings, a verified plan, the durable board and a real local qualification (routed, 0 unrouted, parity pass); release not exercised live (`validation.md`).
+- **Unchanged:** B24 PARTIAL; LB-1..LB-17; no Astra activation; no default-model change.
+- **Next:** checkpoint D (semantic parity: the generated coverage matrix, dispositions, registry manuals, drift gates).

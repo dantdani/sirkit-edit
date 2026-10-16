@@ -15,7 +15,7 @@ import type {
   NetLabelKind,
 } from "@/lib/schematic-types";
 import { llmRouter } from "@/app/lib/llm/router";
-import { LLMProviderError } from "@/app/lib/llm/errors";
+import { LLMProviderError, type LLMProviderFailureReason } from "@/app/lib/llm/errors";
 import {
   assistantResponseMessage,
   toolResultsMessage,
@@ -87,6 +87,7 @@ import { kgDesignNotes } from "@/lib/kg";
 
 import { BLINKER_NETLIST } from "@/app/lib/fixture-runtime/blinker/catalog";
 import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode";
+import { fixtureContainer } from "@/app/lib/fixture-runtime/container"; // [PR-C] the fixture catalog's pins for the recorded design's electrical report
 const MAX_ITERATIONS = 20;
 const SEARCH_LIMIT = 5;
 const ALTERNATES_LIMIT = 5;
@@ -94,16 +95,50 @@ const ALTERNATES_LIMIT = 5;
 // many times (pin-localized feedback drives self-correction); after that,
 // accept the best effort and surface the report instead of looping forever.
 const MAX_ERC_REJECTIONS = 2;
+// [PR-C] Provider failures a retry cannot help: the account is out of credits, or
+// Sirkit's own provider breaker is open. The page withholds Retry for these.
+const NON_RETRYABLE_REASONS: ReadonlySet<string> = new Set(["insufficient_quota", "breaker_open"]);
+// [PR-C] A local failure's text is bounded and redacted before it leaves the server.
+const FAILURE_TEXT_CHARS = 300;
+
+/** [PR-C] The bounds a caller may put on one loop: an iteration cap (clamped to the
+ *  historical 20) and an absolute deadline (`Date.now()` epoch ms) checked before
+ *  every model turn — a multi-block request hands every loop the same deadline. */
+export type BuildLoopBudget = { maxIterations?: number; deadlineAt?: number };
+
+/** [PR-C] The loop's failure classes. `provider_unavailable` keeps the provider's
+ *  `reason`; the other two are local and always say whether a retry can help. */
+export type BuildLoopFailureCode = "provider_unavailable" | "build_budget_exhausted" | "build_loop_failed";
 
 export type BuildLoopResult =
-  | { ok: true; netlist: BuildLogicalNetlist; explanation: string; erc?: ErcReport }
+  | { ok: true; netlist: BuildLogicalNetlist; explanation: string; erc?: ErcReport; iterationsUsed: number }
   | {
       ok: false;
       error: string;
       status: number;
-      code?: "provider_unavailable";
+      code: BuildLoopFailureCode;
       provider?: LLMProviderId;
+      reason?: LLMProviderFailureReason;
+      retryable: boolean;
+      iterationsUsed: number;
     };
+
+/** The per-loop iteration cap: the caller's request, clamped to [1, MAX_ITERATIONS]. */
+function iterationCapOf(requested: number | undefined): number {
+  if (typeof requested !== "number" || !Number.isFinite(requested)) return MAX_ITERATIONS;
+  return Math.min(MAX_ITERATIONS, Math.max(1, Math.floor(requested)));
+}
+
+function budgetExhausted(error: string, iterationsUsed: number): BuildLoopResult {
+  return { ok: false, error, status: 503, code: "build_budget_exhausted", retryable: true, iterationsUsed };
+}
+
+/** A thrown value as one bounded, redacted sentence — never a stack, never a raw provider body. */
+function boundedFailureText(error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  const text = sanitizeTraceText(redactSecrets(`The build loop failed: ${detail}`), FAILURE_TEXT_CHARS).trim();
+  return text || "The build loop failed before a schematic was submitted.";
+}
 
 /** A connection endpoint is either the ground rail sentinel or a refDes.pin pair. */
 function parseEndpoint(ep: string): { ground: true } | { refDes: string; pin: string } {
@@ -133,21 +168,39 @@ export async function runBuildToolLoop(opts: {
   systemPrompt: string;
   userMessage: string;
   seedParts?: AiPartResult[];
+  /** [PR-C] optional bounds; absent, the historical 20 iterations and no deadline */
+  budget?: BuildLoopBudget;
 }): Promise<BuildLoopResult> {
   // [B16-C §5] fixture runtime: the recorded blinker design is the provider's answer
   // (the same design the deterministic acceptance suite uses) — no model turn.
-  if (fixtureRuntimeEnabled()) return { ok: true, netlist: structuredClone(BLINKER_NETLIST), explanation: BLINKER_NETLIST.explanation } as BuildLoopResult;
+  if (fixtureRuntimeEnabled()) {
+    // [PR-C] the recorded design carries the same electrical report a real loop attaches at acceptance (run on the fixture
+    // catalog's pins), so the page's structured status reads "passed"/"findings" — never "not run" — exactly as live.
+    const netlist = structuredClone(BLINKER_NETLIST);
+    const parts = new Map([...fixtureContainer().catalog.cachedParts.values()].map((part) => [part.id, { name: part.name, pins: part.pins }] as const));
+    return { ok: true, netlist, explanation: netlist.explanation, erc: runErc(netlist, parts), iterationsUsed: 0 } as BuildLoopResult;
+  }
   // Every part surfaced by a search (or seeded). Used to validate the final
   // submission: a partId must have been surfaced, and its pins must exist.
   const returnedParts = new Map<string, AiPartResult>();
   for (const p of opts.seedParts ?? []) returnedParts.set(p.partId, p);
 
   let ercRejections = 0;
+  const iterationCap = iterationCapOf(opts.budget?.maxIterations);
+  const deadlineAt = opts.budget?.deadlineAt;
+  // [PR-C] model turns started; reported on every result so the route can sum a request's budget use.
+  let iterationsUsed = 0;
 
   const messages: LLMMessage[] = [{ role: "user", content: opts.userMessage }];
 
   try {
-    for (let i = 0; i < MAX_ITERATIONS; i++) {
+    for (let i = 0; i < iterationCap; i++) {
+      // [PR-C] the deadline is checked before every model turn: a loop never starts a turn
+      // it has no budget for, and the refusal is its own class (not a provider failure).
+      if (deadlineAt !== undefined && Date.now() >= deadlineAt) {
+        return budgetExhausted(`Build deadline reached after ${iterationsUsed} model turn(s) without a submitted schematic.`, iterationsUsed);
+      }
+      iterationsUsed = i + 1;
       const response = await llmRouter.generate({
         provider: opts.provider,
         // This bounds one structured tool turn, not the input context. Leaving
@@ -295,7 +348,7 @@ export async function runBuildToolLoop(opts: {
               `[build-loop] ERC still failing after ${MAX_ERC_REJECTIONS} rejections — accepting with ${erc.criticalCount} critical finding(s).`,
             );
           }
-          return { ok: true, netlist: result.netlist, explanation: result.explanation, erc };
+          return { ok: true, netlist: result.netlist, explanation: result.explanation, erc, iterationsUsed };
         }
         submitResults.push({
           type: "tool_result",
@@ -309,19 +362,28 @@ export async function runBuildToolLoop(opts: {
     }
   } catch (err) {
     if (err instanceof LLMProviderError) {
+      // [PR-C] the provider's own vocabulary travels with the failure: `reason` decides
+      // whether the page offers Retry (credits out and an open breaker withhold it).
       return {
         ok: false,
         error: err.message,
         status: 503,
         code: err.code,
         provider: err.provider,
+        reason: err.reason,
+        retryable: !NON_RETRYABLE_REASONS.has(err.reason),
+        iterationsUsed,
       };
     }
-    const message = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: message, status: 500 };
+    // [PR-C] any other throw is a local loop failure: the redacted, bounded sentence is
+    // what the client and the log get; the stack stays with the thrown value.
+    const error = boundedFailureText(err);
+    console.error(`[build-loop] ${error}`);
+    return { ok: false, error, status: 500, code: "build_loop_failed", retryable: true, iterationsUsed };
   }
 
-  return { ok: false, error: "Max iterations reached", status: 500 };
+  // [PR-C] the historical "Max iterations reached" is budget exhaustion, not a server fault.
+  return budgetExhausted(`Max iterations reached (${iterationCap}) without a submitted schematic.`, iterationsUsed);
 }
 
 type FinalizeResult =
