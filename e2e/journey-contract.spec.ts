@@ -79,6 +79,10 @@ test("fresh browser: visible next action → question answered, nothing generate
 
   // 6. Prepare PCB from the strip: opens the PCB tab and starts the same preparation the button starts; an editor cannot
   //    publish a binding, so it stops at the review handoff with the reason, and no board exists.
+  // [PR-L step 0, 2026-10-17] the action was read ONCE right after the reload; in CI that read raced the restored project's
+  // schematic load and saw "describe_circuit" (the strip's empty-sheet action, derived before the schematic arrived; it passed
+  // locally twice). Wait until the strip's facts settle on the post-approval action, then read it; the assertions are unchanged.
+  await expect(page.getByTestId("journey-next-action")).toHaveAttribute("data-action-id", /^(open_pcb|prepare_pcb)$/, { timeout: 30_000 });
   let action = await page.getByTestId("journey-next-action").getAttribute("data-action-id");
   if (action === "open_pcb") {
     await page.getByTestId("journey-next-action").click();

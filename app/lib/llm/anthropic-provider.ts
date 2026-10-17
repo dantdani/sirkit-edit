@@ -8,7 +8,7 @@ import type {
   ToolChoice,
 } from "@anthropic-ai/sdk/resources/messages/messages";
 import { composeInstructions } from "./context";
-import { toProviderError } from "./errors";
+import { LLMProviderError, toProviderError } from "./errors";
 import type {
   LLMContentPart,
   LLMChunk,
@@ -116,7 +116,9 @@ export class AnthropicProvider implements LLMProvider {
 
   async generate(request: LLMRequest): Promise<LLMResponse> {
     try {
-      const response = await this.getClient().messages.create(this.params(request));
+      const response = await (request.signal
+        ? this.getClient().messages.create(this.params(request), { signal: request.signal })
+        : this.getClient().messages.create(this.params(request)));
       const text = response.content
         .filter((block) => block.type === "text")
         .map((block) => block.text)
@@ -140,6 +142,7 @@ export class AnthropicProvider implements LLMProvider {
         },
       };
     } catch (error) {
+      if (request.signal?.aborted) throw new LLMProviderError(this.id, "cancelled");
       throw toProviderError(this.id, error);
     }
   }
@@ -147,7 +150,9 @@ export class AnthropicProvider implements LLMProvider {
   async *stream(request: LLMRequest): AsyncIterable<LLMChunk> {
     let stream: ReturnType<AnthropicClient["messages"]["stream"]> | undefined;
     try {
-      stream = this.getClient().messages.stream(this.params(request));
+      stream = request.signal
+        ? this.getClient().messages.stream(this.params(request), { signal: request.signal })
+        : this.getClient().messages.stream(this.params(request));
       for await (const event of stream) {
         if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
           yield { type: "text_delta", text: event.delta.text };
@@ -177,6 +182,7 @@ export class AnthropicProvider implements LLMProvider {
       for (const toolCall of response.toolCalls) yield { type: "tool_call", toolCall };
       yield { type: "done", response };
     } catch (error) {
+      if (request.signal?.aborted) throw new LLMProviderError(this.id, "cancelled");
       throw toProviderError(this.id, error);
     } finally {
       stream?.abort();

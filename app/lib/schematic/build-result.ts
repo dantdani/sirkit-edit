@@ -47,7 +47,7 @@ export interface BuildMultiSuccess {
 
 /** Failure classes the page distinguishes. `provider_unavailable` keeps the provider vocabulary (`reason`) so the shared
  *  card withholds Retry for `insufficient_quota` and `breaker_open`; the others are local and say whether a retry can help. */
-export type BuildFailureCode = "provider_unavailable" | "build_budget_exhausted" | "build_loop_failed" | "build_invalid_output";
+export type BuildFailureCode = "provider_unavailable" | "build_budget_exhausted" | "build_cancelled" | "build_loop_failed" | "build_invalid_output";
 
 export interface BuildMultiFailure {
   ok: false;
@@ -56,6 +56,10 @@ export interface BuildMultiFailure {
   provider?: string;
   reason?: string;
   retryable?: boolean;
+  /** Bounded diagnostics, never raw provider payloads or catalog credentials. */
+  stage?: "planning" | "design";
+  blockFailures?: Array<{ block: string; code: string; error: string; retryable: boolean; iterationsUsed: number }>;
+  budget?: BuildBudgetReport;
 }
 
 export type BuildMultiResponse = BuildMultiSuccess | BuildMultiFailure;
@@ -66,8 +70,9 @@ export const BUILD_BUDGET = Object.freeze({
   iterationCap: 20,
   /** parallel subsystem loops at once */
   concurrencyCap: 3,
-  /** wall clock for the whole request, under the route wrapper's 45 s deadline */
-  deadlineMs: 40_000,
+  /** Finite generation wall clock. The route's 45 s limit bounds BODY READING,
+   * not model execution; 40 s starved normal planner/search/submit workflows. */
+  deadlineMs: 180_000,
 });
 
 /** [PR-C] An operator may lower the per-loop iteration cap for a deployment or a qualification run (never raise it above

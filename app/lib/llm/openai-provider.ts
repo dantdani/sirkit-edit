@@ -10,7 +10,7 @@ import type {
   ToolChoiceOptions,
 } from "openai/resources/responses/responses";
 import { composeInstructions } from "./context";
-import { toProviderError } from "./errors";
+import { LLMProviderError, toProviderError } from "./errors";
 import {
   configuredOpenAIModel,
   configuredOpenAIReasoningEffort, OPENAI_NO_TEMPERATURE_MODEL_FAMILY, // [B21 E1] the rule, named once in openai-config
@@ -178,9 +178,12 @@ export class OpenAIProvider implements LLMProvider {
         ...this.baseParams(request),
         stream: false,
       };
-      const response = await this.getClient().responses.create(params);
+      const response = await (request.signal
+        ? this.getClient().responses.create(params, { signal: request.signal })
+        : this.getClient().responses.create(params));
       return normalizeResponse(response);
     } catch (error) {
+      if (request.signal?.aborted) throw new LLMProviderError(this.id, "cancelled");
       throw toProviderError(this.id, error);
     }
   }
@@ -191,7 +194,9 @@ export class OpenAIProvider implements LLMProvider {
         ...this.baseParams(request),
         stream: true,
       };
-      const stream = await this.getClient().responses.create(params);
+      const stream = await (request.signal
+        ? this.getClient().responses.create(params, { signal: request.signal })
+        : this.getClient().responses.create(params));
       let completed: Response | undefined;
       for await (const event of stream) {
         if (event.type === "response.output_text.delta") {
@@ -214,6 +219,7 @@ export class OpenAIProvider implements LLMProvider {
       if (!completed) throw new Error("OpenAI stream ended before a completed response.");
       yield { type: "done", response: normalizeResponse(completed) };
     } catch (error) {
+      if (request.signal?.aborted) throw new LLMProviderError(this.id, "cancelled");
       throw toProviderError(this.id, error);
     }
   }

@@ -88,7 +88,10 @@ describe("[PR-C] completeness is data", () => {
     loopByBlock({}, exhausted());
     const { status, body } = await build();
     expect(status).toBe(503);
-    expect(body).toMatchObject({ ok: false, code: "build_budget_exhausted", retryable: true, error: "All 2 subsystem blocks failed to design." });
+    expect(body).toMatchObject({ ok: false, code: "build_budget_exhausted", retryable: true, stage: "design" });
+    expect(body.error).toContain("All 2 subsystem blocks failed to design.");
+    expect(body.error).toContain("Max iterations reached");
+    expect(body.blockFailures).toHaveLength(2);
   });
 });
 

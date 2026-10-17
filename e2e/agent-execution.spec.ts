@@ -468,15 +468,30 @@ test("B18-D I9 Stop: Stop during a chat run cancels it and sends nothing; the ch
 
 test("B18-D I11 the agent autonomy in the chat: the editor sees the mode and why it is locked; the administrator changes it through the control (compare-and-set) and back", async () => {
   await openChat();
-  const control = page.getByTestId("autonomy-control");
-  const select = page.getByTestId("autonomy-mode");
+  // [PR-L step 0, 2026-10-17] PR-E (checkpoint E) moved AutonomyModeControl from the chat header into the Workspace settings
+  // dialog (the gear "workspace-settings" opens "workspace-settings-dialog"); the chat keeps a one-line summary
+  // ("chat-settings-summary") and the Tier 3 line. The control is reached through the dialog; every assertion below is unchanged.
+  const dialog = page.getByTestId("workspace-settings-dialog");
+  const openSettings = async (): Promise<void> => {
+    await page.getByTestId("workspace-settings").click();
+    await expect(dialog).toBeVisible();
+  };
+  const closeSettings = async (): Promise<void> => {
+    await dialog.getByRole("button", { name: "Close", exact: true }).first().click();
+    await expect(dialog).toBeHidden();
+  };
+  const control = dialog.getByTestId("autonomy-control");
+  const select = dialog.getByTestId("autonomy-mode");
   // [B18-D review] §1 item 3: the chat header states the Tier 3 boundary for every message, not only when a word matches
   await expect(page.getByTestId("chat-tier3-line")).toHaveText("Release, qualification and ordering are never done by the assistant — use the release workflow.");
+  await expect(page.getByTestId("chat-settings-summary")).toBeVisible();
+  await openSettings();
   // The page is the fixture editor here (the bootstrap ends as the editor): the mode and what it means, locked, with the reason.
   await expect(control).toHaveAttribute("data-mode", "execute_explicit_tier1");
   await expect(select).toBeDisabled();
-  await expect(page.getByTestId("autonomy-note")).toHaveText("An exact request for a reversible Tier 1 edit runs without the card; everything else still asks. Only a project administrator can change this.");
-  await expect(page.getByTestId("autonomy-change")).toHaveCount(0);
+  await expect(dialog.getByTestId("autonomy-note")).toHaveText("An exact request for a reversible Tier 1 edit runs without the card; everything else still asks. Only a project administrator can change this.");
+  await expect(dialog.getByTestId("autonomy-change")).toHaveCount(0);
+  await closeSettings();
   const setting = async (): Promise<{ mode: string; revision: number }> => ((await (await page.request.get("/api/agent/autonomy", { headers: scopeHeaders() })).json()) as { setting: { mode: string; revision: number } }).setting;
   const before = await setting();
   expect(before.mode).toBe("execute_explicit_tier1");
@@ -486,18 +501,20 @@ test("B18-D I11 the agent autonomy in the chat: the editor sees the mode and why
   // The administrator changes it through the control, then back, so the scenarios that follow keep their mode.
   await reloadAs(page, context, "admin", origin, true);
   await openChat();
+  await openSettings();
   await expect(control).toHaveAttribute("data-mode", "execute_explicit_tier1");
   await expect(select).toBeEnabled();
   await select.selectOption("proposal_only");
-  await page.getByTestId("autonomy-change").click();
+  await dialog.getByTestId("autonomy-change").click();
   await expect(control).toHaveAttribute("data-mode", "proposal_only");
-  await expect(page.getByTestId("autonomy-notice")).toHaveText(`Changed to Proposal only (revision ${before.revision + 1}).`);
+  await expect(dialog.getByTestId("autonomy-notice")).toHaveText(`Changed to Proposal only (revision ${before.revision + 1}).`);
   expect(await setting()).toMatchObject({ mode: "proposal_only", revision: before.revision + 1 });
   await page.screenshot({ path: `${EVIDENCE}/autonomy-control-changed.png`, fullPage: false });
   await select.selectOption("execute_explicit_tier1");
-  await page.getByTestId("autonomy-change").click();
+  await dialog.getByTestId("autonomy-change").click();
   await expect(control).toHaveAttribute("data-mode", "execute_explicit_tier1");
   expect(await setting()).toMatchObject({ mode: "execute_explicit_tier1", revision: before.revision + 2 });
+  await closeSettings();
 
   // Back to the editor for the scenarios that follow; the chat log is restored after the page loads.
   await reloadAs(page, context, "editor", origin, true);

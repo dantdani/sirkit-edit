@@ -111,8 +111,12 @@ const BUILD_MULTI = "app/api/schematic/build-multi/route.ts";
  *  of the ONE shared `runBuildMultiGeneration` (app/lib/schematic/build-multi-generation.ts), which the agent's
  *  `sirkit.schematic.generate-proposal` reuses through the chat route's injected port; the route's response is byte-compatible with
  *  OD-242's contract, it still reads no B21 flag and imports no B21 module (its header no longer spells the gate's words), and the B21-A
- *  import gate still keeps every orchestration module from importing it or the build loop. Everything OD-106 decided stands. */
-const BUILD_MULTI_SHA256_AT_HEAD = "fa3ddf58b02834734df1752ab0def3e03c90f9a25fd61b27df058295e23ca8ca";
+ *  import gate still keeps every orchestration module from importing it or the build loop. Everything OD-106 decided stands. At OD-243
+ *  it was fa3ddf58b02834734df1752ab0def3e03c90f9a25fd61b27df058295e23ca8ca. [PR-L step 0, 2026-10-17] OD-251 re-pins: the
+ *  generation-budget correction makes the route forward the canonical wrapper's abort signal (`exposeAbortSignal: true`) into the
+ *  same `runBuildMultiGeneration`; authorization, CSRF, media and body bounds are unchanged, the route still reads no B21 flag and
+ *  imports no B21 module, and the B21-A import gate still keeps every orchestration module from importing it. */
+const BUILD_MULTI_SHA256_AT_HEAD = "8e69576cc0a2f2682a26a36d42f443d8240b6b6ba3c8683f93c993a5b8939989";
 const registry = sirkitToolRegistry();
 const operationClass = (toolId: string): string | undefined => registry.get(toolId)?.operationClass;
 

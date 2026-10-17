@@ -15,7 +15,8 @@ import type {
   NetLabelKind,
 } from "@/lib/schematic-types";
 import { llmRouter } from "@/app/lib/llm/router";
-import { LLMProviderError, type LLMProviderFailureReason } from "@/app/lib/llm/errors";
+import { LLMProviderError, isRetryableReason, type LLMProviderFailureReason } from "@/app/lib/llm/errors";
+import { BuildBoundaryError, withinBuildBoundary } from "@/app/lib/schematic/build-boundary";
 import {
   assistantResponseMessage,
   toolResultsMessage,
@@ -95,20 +96,18 @@ const ALTERNATES_LIMIT = 5;
 // many times (pin-localized feedback drives self-correction); after that,
 // accept the best effort and surface the report instead of looping forever.
 const MAX_ERC_REJECTIONS = 2;
-// [PR-C] Provider failures a retry cannot help: the account is out of credits, or
-// Sirkit's own provider breaker is open. The page withholds Retry for these.
-const NON_RETRYABLE_REASONS: ReadonlySet<string> = new Set(["insufficient_quota", "breaker_open"]);
+// Provider retry advice uses the shared transient-reason classifier below.
 // [PR-C] A local failure's text is bounded and redacted before it leaves the server.
 const FAILURE_TEXT_CHARS = 300;
 
 /** [PR-C] The bounds a caller may put on one loop: an iteration cap (clamped to the
  *  historical 20) and an absolute deadline (`Date.now()` epoch ms) checked before
  *  every model turn — a multi-block request hands every loop the same deadline. */
-export type BuildLoopBudget = { maxIterations?: number; deadlineAt?: number };
+export type BuildLoopBudget = { maxIterations?: number; deadlineAt?: number; signal?: AbortSignal };
 
 /** [PR-C] The loop's failure classes. `provider_unavailable` keeps the provider's
  *  `reason`; the other two are local and always say whether a retry can help. */
-export type BuildLoopFailureCode = "provider_unavailable" | "build_budget_exhausted" | "build_loop_failed";
+export type BuildLoopFailureCode = "provider_unavailable" | "build_budget_exhausted" | "build_cancelled" | "build_loop_failed";
 
 export type BuildLoopResult =
   | { ok: true; netlist: BuildLogicalNetlist; explanation: string; erc?: ErcReport; iterationsUsed: number }
@@ -171,6 +170,20 @@ export async function runBuildToolLoop(opts: {
   /** [PR-C] optional bounds; absent, the historical 20 iterations and no deadline */
   budget?: BuildLoopBudget;
 }): Promise<BuildLoopResult> {
+  if (opts.budget?.deadlineAt === undefined && !opts.budget?.signal) return runBuildToolLoopInternal(opts);
+  let iterationsUsed = 0;
+  try {
+    return await withinBuildBoundary(opts.budget?.deadlineAt, opts.budget?.signal, (signal) =>
+      runBuildToolLoopInternal({ ...opts, budget: { ...opts.budget, signal } }, (used) => { iterationsUsed = used; }));
+  } catch (error) {
+    if (!(error instanceof BuildBoundaryError)) throw error;
+    return error.kind === "cancelled"
+      ? { ok: false, error: "Schematic generation was cancelled.", code: "build_cancelled", status: 408, retryable: false, iterationsUsed }
+      : budgetExhausted("Build deadline reached while waiting for the provider or part search; no schematic was submitted.", iterationsUsed);
+  }
+}
+
+async function runBuildToolLoopInternal(opts: Parameters<typeof runBuildToolLoop>[0], onIteration?: (used: number) => void): Promise<BuildLoopResult> {
   // [B16-C §5] fixture runtime: the recorded blinker design is the provider's answer
   // (the same design the deterministic acceptance suite uses) — no model turn.
   if (fixtureRuntimeEnabled()) {
@@ -197,12 +210,14 @@ export async function runBuildToolLoop(opts: {
     for (let i = 0; i < iterationCap; i++) {
       // [PR-C] the deadline is checked before every model turn: a loop never starts a turn
       // it has no budget for, and the refusal is its own class (not a provider failure).
-      if (deadlineAt !== undefined && Date.now() >= deadlineAt) {
+      if (opts.budget?.signal?.aborted || (deadlineAt !== undefined && Date.now() >= deadlineAt)) {
         return budgetExhausted(`Build deadline reached after ${iterationsUsed} model turn(s) without a submitted schematic.`, iterationsUsed);
       }
       iterationsUsed = i + 1;
+      onIteration?.(iterationsUsed);
       const response = await llmRouter.generate({
         provider: opts.provider,
+        ...(opts.budget?.signal ? { signal: opts.budget.signal } : {}),
         // This bounds one structured tool turn, not the input context. Leaving
         // every parallel turn at the provider's 128K output maximum can reserve
         // enough TPM to rate-limit a multi-block build before it starts.
@@ -212,6 +227,8 @@ export async function runBuildToolLoop(opts: {
         tools: [BUILD_SEARCH_PARTS_TOOL, BUILD_FIND_ALTERNATES_TOOL, BUILD_SUBMIT_SCHEMATIC_TOOL],
         messages,
       });
+
+      if (opts.budget?.signal?.aborted || (deadlineAt !== undefined && Date.now() >= deadlineAt)) return budgetExhausted("Build deadline reached before the model response could be accepted.", iterationsUsed);
 
       messages.push(assistantResponseMessage(response));
 
@@ -237,6 +254,7 @@ export async function runBuildToolLoop(opts: {
               query,
               typeof category === "string" ? category : undefined,
               SEARCH_LIMIT,
+              { signal: opts.budget?.signal },
             );
             for (const r of results) returnedParts.set(r.partId, r);
             return { block, error: null as string | null, results };
@@ -247,6 +265,7 @@ export async function runBuildToolLoop(opts: {
       );
 
       const seenPartIds = new Set<string>();
+      if (opts.budget?.signal?.aborted || (deadlineAt !== undefined && Date.now() >= deadlineAt)) return budgetExhausted("Build deadline reached during part search; no schematic was submitted.", iterationsUsed);
       const searchResults: LLMToolResultPart[] = rawSearches.map(
         ({ block, error, results }) => {
           if (error !== null) {
@@ -301,7 +320,8 @@ export async function runBuildToolLoop(opts: {
           const safeKind = kind === "drop_in" || kind === "fff" ? kind : "all";
           try {
             console.log(`[AI] called find_alternates for partId=${partId} (kind=${safeKind})`);
-            const alternates = await fetchAlternatesForAI(partId, safeKind, ALTERNATES_LIMIT);
+            const alternates = await fetchAlternatesForAI(partId, safeKind, ALTERNATES_LIMIT, { signal: opts.budget?.signal });
+            if (opts.budget?.signal?.aborted || (deadlineAt !== undefined && Date.now() >= deadlineAt)) throw new BuildBoundaryError(opts.budget?.signal?.aborted ? "cancelled" : "deadline");
             const full = await getPartsByIds(alternates.map((a) => a.partId));
             for (const p of full) returnedParts.set(p.partId, p);
             return {
@@ -321,6 +341,7 @@ export async function runBuildToolLoop(opts: {
       );
 
       const submitResults: LLMToolResultPart[] = [];
+      if (opts.budget?.signal?.aborted || (deadlineAt !== undefined && Date.now() >= deadlineAt)) return budgetExhausted("Build deadline reached during alternates lookup; no schematic was submitted.", iterationsUsed);
       for (const block of toolUses.filter((b) => b.name === "submit_schematic")) {
         const result = finalizeSubmission(block.input, returnedParts);
         if (result.ok) {
@@ -371,7 +392,7 @@ export async function runBuildToolLoop(opts: {
         code: err.code,
         provider: err.provider,
         reason: err.reason,
-        retryable: !NON_RETRYABLE_REASONS.has(err.reason),
+        retryable: isRetryableReason(err.reason),
         iterationsUsed,
       };
     }

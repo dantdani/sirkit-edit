@@ -130,6 +130,10 @@ describe("[PR-C] failure classes", () => {
     ["breaker_open", false],
     ["rate_limit", true],
     ["overloaded", true],
+    ["authentication", false],
+    ["model_access", false],
+    ["bad_request", false],
+    ["cancelled", false],
   ] as const)("a provider failure with reason %s keeps the reason; retryable=%s", async (reason, retryable) => {
     harness.failure = new LLMProviderError("openai", reason as never, 429, reason);
     const result = await run();

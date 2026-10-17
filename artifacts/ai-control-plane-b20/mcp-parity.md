@@ -8,7 +8,7 @@ that wrote it (OD-95): change the code and regenerate, never this page.
 ## 1. Identity
 
 - Report schema: `sirkit.mcp-provider-parity.v1`.
-- Registry digest `eng1-39bc5a6b899a0b50`; listing digest (B1's, role-independent: the manifest identity) `eng1-e62d35af690ae0e6`.
+- Registry digest `eng1-3f1901ca333826db`; listing digest (B1's, role-independent: the manifest identity) `eng1-a86fa2cfd563bea2`.
 - 56 registry descriptors, 44 agent-exposed, 9 MCP-exposed, 35 agent-only.
 
 ## 2. The MCP-exposed tools, leg by leg

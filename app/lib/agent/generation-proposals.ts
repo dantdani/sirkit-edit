@@ -59,7 +59,7 @@ export interface SchematicGenerationPortRequest {
   readonly runId: string;
   /** The wall clock the generation may use, in ms (never above `BUILD_BUDGET.deadlineMs`; the port may only tighten further). */
   readonly deadlineMs: number;
-  /** The run's cancellation. The generation itself has no cancellation seam: the service stops waiting; the port's work ends at its deadline. */
+  /** The run's cancellation, forwarded through the generation and its planner/build provider calls. */
   readonly signal: AbortSignal;
 }
 /** The server port: `runBuildMultiGeneration` behind a configured provider (app/api/chat/schematic-generation-runtime.ts); faked in tests. */

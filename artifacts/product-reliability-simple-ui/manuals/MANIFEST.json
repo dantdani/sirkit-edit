@@ -1,6 +1,6 @@
 {
   "schema": "sirkit.tool-manuals-manifest.v1",
-  "registryDigest": "eng1-39bc5a6b899a0b50",
+  "registryDigest": "eng1-3f1901ca333826db",
   "count": 56,
   "manuals": [
     {
@@ -211,7 +211,7 @@
     {
       "toolId": "sirkit.schematic.generate-proposal",
       "version": "1.0.0",
-      "sha256": "332eab4f5447552adeecb291885ce65aecef75f074fbf55a8835ef333fecd8e0"
+      "sha256": "d28028be153d3c312f4a47c5d6bcec9e73c47b320337488442e105f2c638787a"
     },
     {
       "toolId": "sirkit.schematic.inspect",

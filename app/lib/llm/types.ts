@@ -44,6 +44,8 @@ export type LLMToolChoice = "auto" | "required" | "none" | { name: string };
 export interface LLMRequest {
   provider: LLMProviderId;
   messages: LLMMessage[];
+  /** Transport cancellation only; never serialized into provider input. */
+  signal?: AbortSignal;
   system?: string;
   tools?: LLMTool[];
   toolChoice?: LLMToolChoice;

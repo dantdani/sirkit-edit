@@ -2,7 +2,7 @@
  * [PR-D] The ONE Build-mode generation `POST /api/schematic/build-multi` answers and the agent's
  * `sirkit.schematic.generate-proposal` proposes: extracted from the route verbatim (its planner, complexity gate, bounded
  * block pool, deterministic merge, advisory post-merge ERC and the PR-C structured result) so both callers run the SAME
- * code under the SAME bounds (`BUILD_BUDGET`: 20 iterations per loop, 3 loops in flight, one 40 s wall clock), and the
+ * code under the SAME bounds (`BUILD_BUDGET`: 20 iterations per loop, 3 loops in flight, one finite generation clock), and the
  * route's response stays byte-compatible (it only serializes the outcome this function returns).
  *
  * Server-only: it reaches the model router, the build loop, the parts catalog and the ERC. The agent layer never imports
@@ -32,6 +32,7 @@ import {
 } from "@/app/lib/schematic/build-result";
 import { sanitizeTraceText } from "@/app/lib/agent/redaction";
 import { redactSecrets } from "@/app/lib/atomic/security";
+import { BuildBoundaryError, withinBuildBoundary } from "./build-boundary";
 import type { BuildLogicalNetlist } from "@/lib/schematic-types";
 import { runErc, type ErcReport } from "@/lib/erc";
 import {
@@ -66,14 +67,17 @@ export interface BuildMultiGenerationInput {
   environment?: Record<string, string | undefined>;
   /** [PR-D] a caller's tighter wall clock for the loops, in ms; never above `BUILD_BUDGET.deadlineMs` (the route uses the budget's). */
   deadlineMs?: number;
+  signal?: AbortSignal;
 }
 
 async function plan(
   prompt: string,
   provider: LLMProviderId,
+  signal: AbortSignal,
 ): Promise<{ blocks: Block[]; rationale: string; planned: boolean }> {
   const res = await llmRouter.generate({
     provider,
+    signal,
     // Plans are compact JSON. Keep ample reasoning/output room without making
     // this request reserve the model's full 128K output allowance.
     maxTokens: 4_096,
@@ -184,14 +188,33 @@ async function mapWithConcurrency<T, R>(items: readonly T[], limit: number, fn: 
  *   5. Post-merge ERC (advisory), reported as data.
  */
 export async function runBuildMultiGeneration(input: BuildMultiGenerationInput): Promise<BuildMultiGenerationOutcome> {
+  const startedAt = Date.now();
+  const deadlineMs = Math.max(1_000, Math.min(BUILD_BUDGET.deadlineMs, Number.isFinite(input.deadlineMs) ? input.deadlineMs! : BUILD_BUDGET.deadlineMs));
+  let stage: "planning" | "design" = "planning";
+  try {
+    return await withinBuildBoundary(startedAt + deadlineMs, input.signal, (signal) =>
+      generateWithinBoundary({ ...input, signal }, startedAt, deadlineMs, () => { stage = "design"; }));
+  } catch (error) {
+    if (!(error instanceof BuildBoundaryError)) throw error;
+    const cancelled = error.kind === "cancelled";
+    const outcome = failureOutcome({
+      status: cancelled ? 408 : 503,
+      code: cancelled ? "build_cancelled" : "build_budget_exhausted",
+      error: cancelled ? "Schematic generation was cancelled; no proposal was created." : `Schematic generation reached its ${Math.round(deadlineMs / 1000)} s deadline during ${stage}. No complete design was produced.`,
+      retryable: !cancelled,
+    });
+    if (outcome.kind === "failure") outcome.body.stage = stage;
+    return outcome;
+  }
+}
+
+async function generateWithinBoundary(input: BuildMultiGenerationInput & { signal: AbortSignal }, startedAt: number, deadlineMs: number, beginDesign: () => void): Promise<BuildMultiGenerationOutcome> {
   const userPrompt = input.prompt;
   const provider = input.provider;
-  // [PR-C] one wall clock for the whole request, under the route wrapper's 45 s; every
+  // One generation wall clock, independent of the wrapper's BODY-read limit; every
   // loop (single or per block) is handed the same deadline and the iteration cap.
-  const startedAt = Date.now();
   const iterationCap = resolveBuildIterationCap(input.environment ?? process.env); // the operator's lower cap, if any; never above the default
-  const deadlineMs = Math.max(1_000, Math.min(BUILD_BUDGET.deadlineMs, Number.isFinite(input.deadlineMs) ? (input.deadlineMs as number) : BUILD_BUDGET.deadlineMs)); // [PR-D] a caller may only tighten
-  const budget = { maxIterations: iterationCap, deadlineAt: startedAt + deadlineMs };
+  const budget = { maxIterations: iterationCap, deadlineAt: startedAt + deadlineMs, signal: input.signal };
 
   // 1. Plan. A provider failure is the request's failure; any other planner
   // failure falls back to the single loop and says so in `planner`.
@@ -199,7 +222,7 @@ export async function runBuildMultiGeneration(input: BuildMultiGenerationInput):
   let rationale = "";
   let planner: BuildPlannerStatus;
   try {
-    const planned = await plan(userPrompt, provider);
+    const planned = await plan(userPrompt, provider, input.signal);
     ({ blocks, rationale } = planned);
     planner = blocks.length > 1
       ? { state: "planned", blocks: blocks.length }
@@ -210,6 +233,9 @@ export async function runBuildMultiGeneration(input: BuildMultiGenerationInput):
     console.warn(`[build-multi] planner failed; falling back to single loop: ${reason}`);
     planner = { state: "failed_fallback", reason };
   }
+
+  if (input.signal.aborted || Date.now() >= budget.deadlineAt) throw new BuildBoundaryError(input.signal.aborted ? "cancelled" : "deadline");
+  beginDesign();
 
   // 2. Complexity gate — simple circuit (or no plan) → normal single build loop.
   if (blocks.length <= 1) {
@@ -268,7 +294,17 @@ export async function runBuildMultiGeneration(input: BuildMultiGenerationInput):
   if (providerFailure) return failureOutcome(providerFailure.result);
 
   if (ok.length === 0) {
-    return failureOutcome(failed[0]!.result, `All ${blocks.length} subsystem blocks failed to design.`);
+    const blockFailures = failed.slice(0, 12).map(({ name, result }) => ({
+      block: boundedReason(name).slice(0, 80), code: result.code, error: boundedReason(result.error),
+      retryable: result.retryable, iterationsUsed: result.iterationsUsed,
+    }));
+    const outcome = failureOutcome(failed[0]!.result, `All ${blocks.length} subsystem blocks failed to design. ${blockFailures.slice(0, 3).map((item) => `${item.block}: ${item.error}`).join("; ")}`);
+    if (outcome.kind === "failure") {
+      outcome.body.stage = "design";
+      outcome.body.blockFailures = blockFailures;
+      outcome.body.budget = budgetReport(startedAt, designed.map((item) => item.result), iterationCap, deadlineMs);
+    }
+    return outcome;
   }
 
   // 4. Deterministic merge (refDes de-collision; nets join by shared label name).

@@ -531,3 +531,166 @@ Permanent proof must include:
 Record which early-stop behaviors were found and changed, the actual recovery strategy, durable library storage contract, supported rendered formats, source/license limitations and measured remaining spend. A real missing resource can remain blocked; fabricated availability, indefinite looping or a placeholder sold as validated CAD cannot.
 
 **Continue autonomously through useful alternatives and durable checkpoints. Completion means observable progress, a persistent task that does not abandon useful strategies after an arbitrary handful of attempts, and correctly validated/stored/reused parts and 3D assets—not exposed private reasoning, unlimited paid retries or a confident claim that unavailable data was found.**
+
+---
+
+## L — CORRECTIVE OWNER DIRECTIVE: a persistent circuit-building assistant, not a timed request
+
+Added 2026-10-17 after the owner's retry still failed. This is implementation work completing C, D and K, not a new chapter, a replacement roadmap, another Astra expansion, or permission to restart completed work. Preserve A–K and the existing program goals. Prioritize this broken generation journey before optional visual polish or broader orchestration. Execute the increments below in order, verify each, record its state, and continue automatically without asking for another substage prompt.
+
+### L.0 The actual failure and the required change in approach
+
+The owner entered:
+
+```text
+build me a simple drone controlling circuitly with 4 motors just a simple one
+```
+
+The normal Build interface first reported `All 3 subsystem blocks failed to design.` A local correction increased the shared generation deadline from 40 seconds to 180 seconds, added real cancellation, preserved block errors and passed 488 targeted offline tests. The owner retried and received:
+
+```text
+Generating schematic
+Preparing request
+Generating build netlist
+Schematic generation reached its 180 s deadline during design. No complete design was produced.
+```
+
+That second result means the user journey is **still not fixed**. The offline tests established orchestration/cancellation behavior, not a successful live drone design. Read `artifacts/product-reliability-simple-ui/generation-failure-fix-2026-10-17.md` as historical evidence, not a completion certificate. Do not present its test count as proof that the owner's request now works.
+
+The owner wants the useful behavior of a coding assistant: understand the goal, inspect the actual project, select documented tools, execute permitted work, observe the results, revise the approach, retain completed work, explain progress, and continue toward a reviewable result. Implement that behavior. Do not promise the same proprietary model/backend, identical intelligence, exposed private chain-of-thought, guaranteed engineering correctness, or success when required evidence/resources genuinely do not exist.
+
+**Do not solve this by changing 180 seconds to a larger magic number, setting Infinity, removing AbortSignals, disabling all limits, or leaving a browser HTTP request open indefinitely.** Replace the request-lifetime task architecture. Finite provider/tool/worker execution windows must checkpoint, yield and resume the logical task rather than erase it or declare the circuit failed just because a window elapsed. A task should be able to continue for hours, or across days when authorized resources and a running worker permit, without pretending that one model call or one HTTP request lasts that long.
+
+### L.1 Reproduce and explain why useful design work is stalling
+
+Begin with the current absolute checkout, instructions, branch/HEAD, dirty-tree inventory and runtime. Preserve the other builder's work and all approved repairs. The working copy remains `C:\Users\robsa\Desktop\sirkit-edit`; `C:\Users\robsa\sirkit` remains protected unless the owner explicitly changes that designation. Do not kill/restart an unrelated worker or dev server as cleanup.
+
+Source observations checked on 2026-10-17; verify them against the current tree:
+
+- `app/page.tsx::handleGenerateSchematic` starts an activity entry and awaits one `POST /api/schematic/build-multi` fetch. Those few client status labels are not a server progress feed or background job.
+- `app/lib/schematic/build-result.ts::BUILD_BUDGET` currently sets 180,000 ms, 20 turns per loop and three concurrent loops. Its environment override currently only lowers the iteration ceiling.
+- `app/lib/schematic/build-multi-generation.ts::runBuildMultiGeneration` starts one clock before planning, then waits for the whole block pool. Successful blocks and their tool history are not durable checkpoints while another block is stuck.
+- `app/lib/build-loop.ts::runBuildToolLoopInternal` keeps messages, surfaced parts/pins, turn counts and ERC correction state in memory. Persisting only a final netlist cannot resume that loop.
+- `app/lib/agent/contracts.ts::DEFAULT_AGENT_BUDGET` independently sets six model steps, ten tool calls, 15-second normal tool waits and a 120-second run deadline. `app/lib/agent/loop.ts` clamps long-running tools to the remaining run time. `app/lib/agent/generation-proposals.ts::SchematicGenerationProposalService.invoke` further clamps generation to that time and the Build budget. The 185-second generation descriptor does not defeat its shorter parent deadline.
+- `app/lib/schematic/build-boundary.ts`, both provider adapters and `app/lib/parts-search.ts` now carry cancellation/late-result guards. Preserve their actual protections; do not restore the previous late-success or post-cancellation work defects merely to remove a task deadline.
+
+Instrument the real stalled stage with structured, bounded and redacted evidence. For each block, distinguish: waiting on a provider, repeated/no-result catalog queries, incorrect category filters, incompatible candidates, absent authoritative pins/footprints, invalid submission, ERC feedback, an unavailable optional reranker, merge-contract failure, or an actual provider/resource refusal. Record timestamps/durations, operation names, attempt/cursor identities, candidate counts, validation codes, shared-net obligations and public status summaries. Do not dump secrets, private prompts/designs or hidden reasoning into Git or telemetry.
+
+Inspect whether successful provider responses contain search calls but never reach a valid submit. Check result shape, optional-null handling, actual catalog category names, registered tool manuals, pin validation and component-authority eligibility. Do not assume the timeout was the only defect, that the whole catalog contains only its handful of published atomic parts, or that every unqualified component is usable on a PCB. Verify each claim.
+
+Establish the observed cause of this retry if existing logs permit; otherwise label the missing historical detail UNKNOWN and create a deterministic current reproduction. Offline reproductions must not silently make paid calls. Proceed with the architecture and functional repair even if the exact old response was not retained.
+
+### L.2 Separate the durable logical task from a provider turn and worker attempt
+
+Implement one shared, scoped generation-task service reached by both Build and chat. Reuse the actual durable substrate instead of adding a second inconsistent circuit builder.
+
+Inspect and selectively reuse:
+
+- `app/lib/durable-workflow/types.ts::DurableWorkflowRepository`, its scoped commit/loadHead/history contracts, and `app/lib/durable-workflow/server-repository.ts` for revisioned CAS, idempotency and outbox transactions;
+- `app/lib/agent/orchestration/store.ts::DurableOrchestrationRunStore` / `DurableOrchestrationResumeStore`, and `app/api/chat/orchestration-runtime.ts::productionStoreFactory`, as digest-bound scoped persistence/composition-root patterns;
+- `app/lib/agent/orchestration/run-events.ts` for typed, bounded public progress;
+- `app/lib/project/pending-proposal-store.ts` and `generation-proposal-events.ts` for the existing review/intake/currency behavior—not as a substitute for server-side task execution persistence.
+
+Do not claim a worker exists merely because a job type or table exists:
+
+- `app/lib/durable-workflow/outbox.ts::DurableOutboxDispatcher` currently defaults to 30-second leases, sequentially awaits handlers and has no lease-renewal API in its repository contract. Running hours of generation inside one such handler risks duplicate concurrent execution after lease expiry. Implement finite claimed slices or a properly fenced/renewed ownership contract before using it.
+- `app/lib/durable-workflow/effects-runtime.ts` and `/api/engineering-effects` are existing effect dispatch, not proof of an independently supervised generation worker.
+- `app/lib/spice/server/job-store.ts` holds jobs/listeners in `globalThis` Maps. Its SSE/cancel conventions can inform the UI; its lifetime is not restart-safe storage.
+- `app/lib/full-flow/jobs.ts` contains typed state helpers such as `acquireJobLease`, not an executable supervised background service. A `heartbeatAt` field alone is not a heartbeat implementation.
+
+The generation task needs a versioned, validated record with, at minimum: task identity and idempotency key; trusted tenant/project/branch and initiating principal; immutable request/requirements identity; captured schematic base/head and relevant catalog/authority versions; plan/shared interfaces; each block's status and verified intermediate artifacts; pending work/recovery cursor; cumulative attempts/usage/reservations; cancellation and pause intent; worker ownership/fencing; ordered public event cursor; timestamps; and final proposal/result identity. Reuse existing compatible fields/types, not a parallel unvalidated JSON blob.
+
+Store sufficient normalized tool results and surfaced-part/pin identities to resume correctly, with bounded context compaction and provenance. Do not persist or publish private chain-of-thought, credentials or arbitrary opaque SDK objects. If private provider continuation state is genuinely required, use an explicit protected/versioned/retained contract; otherwise reconstruct a valid tool conversation from normalized records. Never replay a model tool result without its corresponding call or fabricate an unobserved provider response.
+
+Suggested states: queued, running, waiting-for-provider, waiting-for-resource, awaiting-review, paused, cancel-requested, cancelled, succeeded, failed, stale. Align with existing vocabulary where appropriate. Define each transition and what evidence justifies it. A running task, a completed generation, a reviewed proposal and an applied circuit are different things.
+
+If durable storage/worker capability is absent, expose the exact setup blocker; do not return a fake accepted job or silently fall back to a process-local Map and advertise recovery. Use isolated test storage and the repository's migration-delivery rules. Do not apply a production migration or invent migration metadata without authorization.
+
+### L.3 Execute many finite slices without abandoning the user's task
+
+Build an actual runnable worker and documented local startup/shutdown path, plus a deployment-appropriate supervision contract. The web server returning 202 is not sufficient. Prove who consumes queued work when the browser closes and how work resumes after a worker/server restart. Do not use unawaited web-route promises, a React component, `setInterval` in a tab, or a detached process with no ownership/recovery as the job engine.
+
+Each claimed slice should perform a bounded unit of useful work, durably commit its normalized result/checkpoint, and schedule the next slice atomically where required. Distinguish taskId, slice/attemptId, provider call identity, block identity and canonical mutation identity. Use monotonic fencing/CAS so a late expired worker cannot overwrite a newer checkpoint or publish a stale result. Avoid claiming a batch whose leases expire while a different item runs sequentially.
+
+Task-level behavior:
+
+- Reaching a worker wall-clock/turn allowance normally yields a checkpoint and queues the next useful slice. It does not become `All blocks failed`, `No complete design was produced`, or an unrecoverable generation error.
+- The current 20-turn Build ceiling and six-step/ten-tool chat limits may remain finite **execution-slice** policies, but they must not masquerade as the total work allowed for a persistent design task. Do not just raise all constants or reset counters to hide repeated work.
+- Keep cumulative accounting and strategy history across slices/resumes/providers. A duplicate start attaches to the existing intended task; an explicit new user request gets its own identity. Retry and resume are not automatically new tasks.
+- A single hung provider/tool call still times out and releases or fences its ownership. It is not allowed to hold a worker forever. Transient failures receive scheduled backoff/jitter and real Retry-After handling; authentication, denied access, quota exhaustion, invalid data, unavailable source credentials and missing evidence have their own actionable states.
+- Save successful blocks immediately. Retry/rework only the missing or invalid block unless a changed shared interface invalidates a dependent one. Do not lose two finished subsystems because the third needs another search.
+- Detect no-progress loops by semantic operation/input, catalog version, failure and learned constraints—not merely different punctuation in a query. Cache equivalent successful lookups. Try a genuinely different authorized strategy when there is one; when alternatives are genuinely exhausted, preserve the task and expose the exact blocker instead of making infinite identical paid calls.
+- Unknown provider completion/charges require reconciliation or retained reservation. Do not claim exactly-once external model billing when the transport cannot guarantee it. Exactly-once canonical effects still require the existing execution/receipt contracts.
+- Cancellation is a durable user action, not simply loss of a stream subscriber. Explicit cancellation stops new work, propagates aborts, fences late completions and settles the task truthfully. Define whether a later user action resumes saved work or starts a new task; do not unexpectedly restart a cancelled task.
+- Revalidate membership, capabilities, revision currency and source/publication eligibility at continuation and before proposals/effects. A principal revoked while a task was queued cannot retain hidden indefinite authority.
+
+### L.4 Replace the blocking fetch with a real task lifecycle in the existing simple UI
+
+Create the smallest typed canonical endpoint/domain-command surface that fits the current architecture: start/attach, inspect, event replay/subscribe, request cancellation, and resume/retry where valid. Endpoint names are design choices, not pre-existing claims. Apply the repository's canonical authorization/body/read boundaries to every method; update route policy/registry coverage rather than creating a new raw-handler escape hatch.
+
+Task creation should return an accepted task reference promptly after durable acceptance, not wait for the design to finish. If a response is lost after acceptance, an idempotent retry must recover that same task. Status/events/results must remain scoped and accessible only to authorized callers; a guessed task ID is not access control.
+
+Use SSE/NDJSON or a suitable existing transport for live events, with a durable cursor and bounded pagination/replay. Polling fallback must work. Heartbeats convey liveness, not invented engineering progress. Reconnecting or reloading cannot start the model again, lose completed blocks, duplicate event effects or replay a mutation. A subscriber disconnect normally detaches observation; it is not the same as the user pressing Cancel.
+
+The existing workspace should clearly show the actual current phase/block and useful public updates such as checking catalog candidates, validating a pin contract, correcting ERC findings, saving a completed block or waiting for an unavailable resource. Show elapsed time, meaningful progress, a visible Stop control and supported Resume/Retry actions. No fabricated percentage, scripted narration, private chain-of-thought or giant debug wall. Remove the false impression of a frozen three-line activity log without redesigning the whole app again.
+
+Project switch and reload must not attach an old task/result to a new project. Reopening the original project can reattach to its existing authorized task. An edited base becomes stale or explicitly needs rebase/review; do not overwrite a newer sheet when an old background task finishes.
+
+Deliver the final netlist through the SAME catalog resolution, layout validation and review dialog used today. Preserve `complete` versus `partial`, omitted blocks and truthful electrical-check state. Task success means a real validated reviewable artifact exists, not that a start request returned 202 or a model said done. Do not apply a design solely because the worker completed.
+
+### L.5 Make chat use the same durable work instead of owning its lifetime
+
+Update the shared semantic tool/service and version its contract as necessary. A chat turn should be able to start or attach to generation, inspect its state, subscribe/report public progress, request the permitted control action and return the real final artifact when available. Its 120-second conversational deadline may end a turn or yield a continuation; it must not kill an independently accepted design task just because the conversation step ended.
+
+Do not leave two implementations: unlimited-looking Build with still-120-second chat, or long-running chat with a still-blocking Build fetch. Preserve shared task authority, the existing proposal receiver, schema-derived arguments, trusted effective actor, editor scope and approval rules. Add real registered/discoverable status/control operations where needed; a model-facing description without an implemented invocation path is not support.
+
+Do not let chat cancellation accidentally cancel unrelated project tasks, or create an unlimited invisible job for an ordinary engineering question. Document the semantics of Stop answer versus Stop design. Extend the coverage matrix/manuals with these precise distinctions. Update any strict tool/event/proposal schema and replay consumer intentionally; do not force a job-accepted event through a validator that expects a completed sealed proposal.
+
+The assistant must inspect the actual schematic, components, task status and available tools; use shared domain operations; evaluate actual tool outcomes; and report what really happened. Do not add arbitrary shell/SQL, browser-control privileges or unrestricted function execution to emulate a coding assistant. An agent need not call a React button to perform the corresponding legitimate command.
+
+### L.6 Resolve real part-search and engineering blockers instead of just waiting longer
+
+Use the stalled-stage evidence from L.1 to fix the actual bottleneck alongside the task lifecycle. Reuse saved approved components before external searches. Make category/query normalization reflect the actual catalog contract, reuse discovered candidates/pin facts across appropriate blocks, and avoid repeated embeddings/reranking for an identical request and catalog identity. An optional provider already known to be unavailable should not be called repeatedly by every search in the same task; preserve truthful fallback and allow a later genuine configuration/recovery change to be detected.
+
+Where a part is genuinely missing, use K's permitted search/download/validate/store/review/reuse path and existing missing-parts work items. Integrate real missing-resource state into this task instead of throwing away its other blocks. This does not authorize making up a manufacturer part, footprint geometry, pin/pad mapping, source license or availability. A documented unverified draft can be a useful output; it is not a published exact component.
+
+For the four-motor example, preserve the requested functional coverage and explicitly record material assumptions, including motor/control type and supply/current requirements when needed. Resolve essential ambiguity through a concise question or disclosed supportable assumptions rather than silently designing a different circuit. Do not count three arbitrary placeholder blocks as a drone controller or imply firmware/flight qualification was supplied. Module/sheet interfaces must represent actual project-wide nets and pin connections, not just matching prose labels.
+
+The owner's developer-test authorization remains US$5 cumulative, as specified above. Read the current shared ledger; do not assume its previous balance is still current. This builder-test ceiling is distinct from whatever task spending the owner explicitly authorizes in the product. Implement clear product task spending/admission policy without silently minting permission for unbounded API bills. Keep uncertain charges reserved and ensure concurrent slices share the same accounting. No default provider/model upgrade, unmetered failover, purchase or production upload is implied. If bounded live qualification cannot be admitted truthfully, finish offline functionality and identify that exact qualification blocker; do not falsify a live success.
+
+### L.7 Prove the real vertical slice and the recovery boundaries
+
+Add permanent tests using the actual production task service/worker/receivers, isolated durable storage and fake provider/catalog seams. At minimum prove:
+
+1. A three-block design that legitimately needs longer than 180 simulated seconds and more than the old single-slice turn/tool allowances eventually reaches a complete reviewable proposal; time-window expiry queues continuation rather than destroying the task.
+2. A 24-hour-or-longer simulated logical task remains valid across many finite slices, worker restart and browser disconnect/reconnect; no need to hold a test open for a real day. This proves lifecycle behavior, not live engineering quality.
+3. A hung turn times out; a new attempt can continue under valid ownership. Lease expiry, duplicate consumers, delayed completion and cancellation prevent an old worker from committing over a new one. Repeated resource or platform failure becomes an honest visible state rather than an infinitely failing queue.
+4. Successful blocks, validated catalog facts, counters, strategy history and spend/reservations survive a crash. Resume does not redo paid or canonical operations merely because a process forgot its state. Ambiguous external completion is handled honestly.
+5. Four or more failed but genuinely different useful strategies can be followed by a successful strategy. Identical no-progress loops cannot burn credits forever. A real missing/evidence/permission/quota blocker retains useful progress with an actionable resolution.
+6. Exact task startup replay, ordered event replay, cursor pagination, subscriber disconnect, missing worker and missing storage behave truthfully. No accepted job that will never be consumed is presented as running successfully.
+7. Explicit Cancel stops further work and late result intake; Stop answer and Stop design have tested distinct semantics. Refresh/project switch cannot duplicate work or misattach results. Revocation, foreign IDs and stale bases refuse correctly.
+8. Build and chat start/inspect/control the SAME production task path; both expose real public progress and reach the same validated review flow. Shared command/tool manuals and the coverage matrix match executable behavior.
+9. A fresh-browser synthetic four-motor request produces the actual expected subsystem content and catalog-resolved schematic, not just a task record. Show completion/partial/blocker state, approval handoff, save/reload and subsequent PCB-preparation handoff. ERC/DRC, unresolved components, canonical approval/apply and release remain truthful and enforced.
+10. Use at least one other supported ordinary circuit request to show this is a general repair, not a hard-coded answer to the owner's sentence. Fake-backed, live-model, live-catalog and live-router evidence must be labeled separately.
+
+Run affected suites and the normal CI/type/lint/generator gates proportionately; capture actual exit codes. When source-citation pins move, update their actual anchors without weakening behavior or rewriting historical evidence. Do not classify a new functional failure as a performance flake. Verify the current normal-mode UI and correct source checkout, not only a fixture API handler.
+
+### L.8 Incremental execution, evidence and completion
+
+Use this order without waiting for more owner prompts:
+
+1. Reproduction and precise stall/limit map.
+2. Validated durable task/checkpoint/ownership contracts and isolated persistence tests.
+3. Runnable supervised worker, finite slices, continuation/recovery, accounting and fencing.
+4. Shared accepted-job API, real progress, visible Stop/Resume and reload/project-switch behavior.
+5. Build/chat semantic parity and final proposal/review integration.
+6. Actual catalog/subsystem bottleneck fixes, missing-resource recovery and complete vertical-slice proof.
+7. Regression gates, concise current evidence, integration and handoff.
+
+Read and keep in working context the active increment and its direct dependencies; maintain a compact durable progress ledger with completed work, actual evidence and the exact next step. Do not reload the entire historical chapter archive every turn or implement every phase in one uncontrolled patch. After verifying a coherent increment, record/commit it according to the current integration instructions, then proceed. Preserve real authorship, real dates and all concurrent work; do not force-push or rewrite unrelated history.
+
+Use `artifacts/product-reliability-simple-ui/persistent-generation/` for a compact evidence package: current limit/stall map, task/worker/recovery contract, changed-files inventory, actual validation commands/results, browser evidence and final verdict with remaining blockers. Reuse the existing matrix/manual generators and ledger. A second set of dozens of repetitive stage reports is not required. Do not claim the entire application/program complete from this fix.
+
+**Stop condition:** the same normal Build/chat request no longer dies merely because 40/120/180 seconds or a small execution-slice allowance elapsed; real work is persisted, progresses through a real worker, is cancellable/resumable, and reaches a valid reviewable artifact or a specific genuine blocker without losing completed work. The owner sees actual progress and can recover without retyping/restarting the whole circuit. No hidden unlimited spend, discarded validation, automatic approval, fabricated component, false success or exposed private reasoning is acceptable.
+
+**Execute this corrective work now, incrementally and autonomously. Do not respond with only another plan, a larger timeout, more tool descriptions or a test count. Demonstrate the repaired user journey, then continue the remaining already-authorized assignment in its existing dependency order. Ask only when a real external resource, additional paid-test authority or irreversible owner decision prevents the next in-scope step.**

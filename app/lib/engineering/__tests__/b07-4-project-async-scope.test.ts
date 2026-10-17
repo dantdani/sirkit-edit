@@ -301,7 +301,13 @@ describe("B07.4 §5 — page wiring (SUPPLEMENT to the behavioral tests above)",
     // global error in the other project.
     expect(genBody).toContain('failActivityLog(logId, "Result discarded — the project changed while generating")');
     // The valid path still opens the dialog (same-project behavior kept).
-    expect(genBody).toContain("setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin })");
+    // [PR-L step 0, 2026-10-17] since PR-C (checkpoint C) the call also carries the proposal's validation note beside the
+    // lifecycle pin; the pin moves to the current call. The point is unchanged: the pending replace is set only after the
+    // scope guard, the integrity check and the base-digest check above.
+    expect(genBody).toContain("setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin, validationNote })");
+    const offeredAt = genBody.indexOf("setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin, validationNote })");
+    expect(genBody.indexOf("if (!scope.isCurrent())")).toBeLessThan(offeredAt);
+    expect(genBody.indexOf("authoritativeDigestNow !== pin.baseDigest")).toBeLessThan(offeredAt);
   });
 
   it("T8+T9: the generation checkpoint is written immediately to the CAPTURED project from the exact adopted candidate — no ambient delayed addCheckpoint remains", () => {

@@ -28,7 +28,7 @@ export function schematicGenerationServable(provider: LLMProviderId, environment
 }
 
 const DEFAULT_FACTORY: SchematicGenerationPortFactory = (provider) => (schematicGenerationServable(provider)
-  ? { generate: (request) => runBuildMultiGeneration({ prompt: request.prompt, provider: request.provider, deadlineMs: request.deadlineMs }) }
+  ? { generate: (request) => runBuildMultiGeneration({ prompt: request.prompt, provider: request.provider, deadlineMs: request.deadlineMs, signal: request.signal }) }
   : null);
 let portFactory: SchematicGenerationPortFactory = DEFAULT_FACTORY;
 

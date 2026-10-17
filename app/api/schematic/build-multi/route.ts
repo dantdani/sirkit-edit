@@ -45,13 +45,13 @@ export const runtime = "nodejs";
 // [B16.0.10] canonical wrapper — authorization -> CSRF -> media -> bounded body
 // (16 MB / 45 s) run inside the wrapper; the callback receives the parsed body
 // only and cannot reach the raw request.
-export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000 }, async ({ body: rawBody }): Promise<Response> => {
+export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000, exposeAbortSignal: true }, async ({ body: rawBody, signal }): Promise<Response> => {
   const { prompt, provider: requested } = rawBody as { prompt?: unknown; provider?: unknown };
   if (typeof prompt !== "string" || prompt.trim() === "") {
     return Response.json({ ok: false, error: "prompt is required" }, { status: 400 });
   }
   const provider = requestedProvider(requested);
-  const outcome = await runBuildMultiGeneration({ prompt, provider });
+  const outcome = await runBuildMultiGeneration({ prompt, provider, signal });
   if (outcome.kind === "provider_error") return providerErrorResponse(outcome.error, provider);
   if (outcome.kind === "failure") return Response.json(outcome.body, { status: outcome.status });
   return Response.json(outcome.body);

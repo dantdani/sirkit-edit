@@ -3422,3 +3422,36 @@ Under the existing OD-217 heading (`:2599`), append:
   prompt-to-gerber and accept a share under 40 % (an amendment of OD-30's line, which this default does not make). The merge gate of
   `ci-split.md` section 9 applies to all 177 moved files: they now fail only in agent-boundary-suites, so a required-status-check
   list on `main` must name it.
+
+## OD-251 — the generation-budget correction (180 s, one cancellation boundary, stage-named failures) is integrated as an interim measure; it is NOT section L's persistent-task fix (PR-L step 0, 2026-10-17)
+
+- **Question:** the owner's four-motor drone request ended in the Build interface with `All 3 subsystem blocks failed to design.`
+  A correction made beside PR #16's head (`5b4a941b`, uncommitted there) raised the shared Build generation budget and added real
+  cancellation. Its retry by the owner then ended with `Schematic generation reached its 180 s deadline during design. No complete
+  design was produced.` The correction moved pinned sources (the OD-106 / OD-243 tripwire on `app/api/schematic/build-multi/route.ts`,
+  B21's C27, B24-A1's C23). Is it kept, and what is it?
+- **Default applied:** integrated at the owner's instruction of 2026-10-17 as an interim measure, as it stands:
+  (1) `BUILD_BUDGET.deadlineMs` 40,000 -> 180,000 (`app/lib/schematic/build-result.ts`); the 20-turn iteration ceiling, the
+  concurrency of three and the operator's ability only to lower the ceiling are unchanged, and a caller's tighter deadline still wins;
+  (2) one wall-clock / cancellation boundary (`app/lib/schematic/build-boundary.ts`) through `build-multi-generation.ts`,
+  `build-loop.ts`, both provider adapters (`app/lib/llm/{openai,anthropic}-provider.ts`, `types.ts`) and `app/lib/parts-search.ts`:
+  pre-aborted work starts nothing, pending provider calls receive the abort, late results cannot become proposals (already-running
+  SQL and embedding requests are not claimed to be cancelled); (3) stage-named failures (`stage` planning / design) with bounded,
+  redacted per-block causes and the new failure class `build_cancelled`; (4) the route forwards the canonical wrapper's abort signal
+  (`exposeAbortSignal: true`; authorization, CSRF, media and the 16 MB / 45 s body bounds unchanged) and the chat's generation port
+  forwards the run's; (5) `sirkit.schematic.generate-proposal`'s descriptor timeout 45 s -> 185 s (the agent run's remaining
+  deadline still tightens it) and its manual lists `build_cancelled`. Its three suites (`generation-recovery`,
+  `generation-request-cancellation`, `parts-search-cancellation`) and its page
+  (`artifacts/product-reliability-simple-ui/generation-failure-fix-2026-10-17.md`) are historical evidence for that narrower
+  correction. Pins moved with dated `[PR-L step 0, 2026-10-17]` notes: route case 6's `BUILD_MULTI_SHA256_AT_HEAD`
+  `fa3ddf58...` -> `8e69576cc0a2f2682a26a36d42f443d8240b6b6ba3c8683f93c993a5b8939989` (OD-106's facts stand: the route reads no
+  orchestration flag and imports no orchestration module), `task-complexity-router.md` section 5 and C27, `environments-and-deployment.md`
+  C23 190 -> 196 with `b24-a1-configuration` case 8 (its note joined onto the pinned line so open-risks' `:368` holds). This is
+  **explicitly NOT the persistent-task fix section L of `artifacts/astra-guided-pcb/PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.md`
+  requires**: L forbids treating a larger deadline as the solution; the generation is still one blocking request whose window, once
+  elapsed, discards the completed blocks, and the owner's request still does not reach a reviewable circuit. Section L replaces that
+  request-lifetime architecture (a durable, resumable task, a real worker, checkpoints, progress, Stop / Resume); until it lands, 180 s
+  is the request's ceiling, not a qualification of any design.
+- **The owner may choose otherwise:** return the budget to 40 s (the starvation the correction's page records comes back); keep 180 s
+  only as one execution slice's window under section L's worker (the default L expects to revisit, never a total task allowance); or
+  keep the cancellation boundary and stage-named failures while L's task lifecycle replaces the deadline-shaped failure text.

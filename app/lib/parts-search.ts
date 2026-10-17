@@ -282,8 +282,10 @@ export async function searchPartsForAI(
   query: string,
   category: string | undefined,
   limit: number,
-  options?: { excludeGenerics?: boolean },
+  options?: { excludeGenerics?: boolean; signal?: AbortSignal },
 ): Promise<AiPartResult[]> {
+  const signal = options?.signal;
+  assertCatalogLookupCurrent(signal);
   const db = getDb();
 
   const trimmedCategory =
@@ -316,8 +318,12 @@ export async function searchPartsForAI(
   // re-validated downstream, so degraded recall can never fabricate a part.
   let queryEmbedding: number[] | null = null;
   try {
+    assertCatalogLookupCurrent(signal);
     queryEmbedding = await embedQuery(query);
+    assertCatalogLookupCurrent(signal);
   } catch (error) {
+    // A cancelled generation must not degrade into another retrieval stage.
+    assertCatalogLookupCurrent(signal);
     console.warn("[parts-search] embedding provider unavailable; using lexical-only recall:", error instanceof Error ? error.message : String(error));
   }
   const distance = queryEmbedding ? cosineDistance(parts.embedding, queryEmbedding) : null;
@@ -335,6 +341,7 @@ export async function searchPartsForAI(
   };
 
   // --- Stage 1a: vector recall (HNSW, semantic) ---
+  assertCatalogLookupCurrent(signal);
   const vectorRows: SearchRow[] = distance
     ? await db
         .select(baseSelect)
@@ -344,6 +351,7 @@ export async function searchPartsForAI(
         .orderBy(distance)
         .limit(VECTOR_POOL)
     : [];
+  assertCatalogLookupCurrent(signal);
 
   // --- Stage 1b: lexical recall (exact tokens over name/mpn/keywords) ---
   // The cosine `similarity` is still computed here so fused rows carry a real
@@ -352,6 +360,7 @@ export async function searchPartsForAI(
   const tokens = lexicalTokens(query);
   let lexicalRows: SearchRow[] = [];
   if (tokens.length > 0) {
+    assertCatalogLookupCurrent(signal);
     const tokenMatch = (t: string): SQL => {
       const p = `%${t}%`;
       return or(ilike(parts.name, p), ilike(parts.mpn, p), ilike(parts.keywords, p))!;
@@ -373,6 +382,7 @@ export async function searchPartsForAI(
       .where(lexWhere)
       .orderBy(desc(lexScore))
       .limit(LEXICAL_POOL);
+    assertCatalogLookupCurrent(signal);
   }
 
   // --- Stage 1c: authority recall (parts that can actually be manufactured) ---
@@ -382,6 +392,7 @@ export async function searchPartsForAI(
   // candidate whenever it matches the query at all.
   let authorityRows: SearchRow[] = [];
   if (tokens.length > 0) {
+    assertCatalogLookupCurrent(signal);
     const anyToken = or(...tokens.map((t) => {
       const p = `%${t}%`;
       return or(ilike(parts.name, p), ilike(parts.mpn, p), ilike(parts.keywords, p), ilike(parts.description, p))!;
@@ -399,6 +410,7 @@ export async function searchPartsForAI(
       .groupBy(parts.id, libraries.mainCategory)
       .orderBy(desc(authScore))
       .limit(AUTHORITY_POOL);
+    assertCatalogLookupCurrent(signal);
   }
 
   // --- Stage 1d: Reciprocal Rank Fusion ---
@@ -422,15 +434,18 @@ export async function searchPartsForAI(
   const fusedAll = [...fused.values()]
     .sort((a, b) => b.score - a.score)
     .map((entry) => toAiPart(entry.row));
+  assertCatalogLookupCurrent(signal);
   if (fusedAll.length === 0) return [];
-  const annotated = await attachOrderableValues(db, fusedAll);
+  const annotated = await attachOrderableValues(db, fusedAll, signal);
+  assertCatalogLookupCurrent(signal);
   const candidates = [
     ...annotated.filter((item) => item.physicalAuthority === "verified"),
     ...annotated.filter((item) => item.physicalAuthority !== "verified"),
   ].slice(0, CANDIDATE_POOL);
 
   // --- Stage 2 + 3: rerank for the role, then trim ---
-  const reranked = await rerankParts(query, candidates, limit);
+  const reranked = await rerankParts(query, candidates, limit, signal);
+  assertCatalogLookupCurrent(signal);
   return reranked.slice(0, limit);
 }
 
@@ -442,13 +457,16 @@ export async function searchPartsForAI(
 async function attachOrderableValues(
   db: ReturnType<typeof getDb>,
   results: AiPartResult[],
+  signal?: AbortSignal,
 ): Promise<AiPartResult[]> {
+  assertCatalogLookupCurrent(signal);
   const ids = results.map((item) => item.partId);
   if (ids.length === 0) return results;
   const links = await db
     .select({ partId: partsAtomicLinks.partId, valueKey: partsAtomicLinks.valueKey, footprintFullName: partsAtomicLinks.footprintFullName })
     .from(partsAtomicLinks)
     .where(and(inArray(partsAtomicLinks.partId, ids), selectableRevisionIdSql(partsAtomicLinks.atomicPartRevisionId))); // [B19-E E3] a withdrawn revision is not orderable authority
+  assertCatalogLookupCurrent(signal);
   if (links.length === 0) return results;
   const byPart = new Map<string, { values: string[]; footprint: string }>();
   for (const link of links) {
@@ -479,13 +497,16 @@ async function rerankParts(
   query: string,
   candidates: AiPartResult[],
   limit: number,
+  signal?: AbortSignal,
 ): Promise<AiPartResult[]> {
+  assertCatalogLookupCurrent(signal);
   if (candidates.length <= 1) return candidates;
 
   let client: Anthropic;
   try {
     client = getAnthropic();
   } catch {
+    assertCatalogLookupCurrent(signal);
     return candidates;
   }
 
@@ -510,7 +531,8 @@ async function rerankParts(
           content: JSON.stringify({ role: query, topN: limit, candidates: list }),
         },
       ],
-    });
+    }, signal);
+    assertCatalogLookupCurrent(signal);
 
     const toolUse = resp.content.find(
       (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
@@ -533,6 +555,7 @@ async function rerankParts(
     }
     return ordered;
   } catch {
+    assertCatalogLookupCurrent(signal);
     return candidates;
   }
 }
@@ -568,7 +591,9 @@ export async function fetchAlternatesForAI(
   partId: string,
   kind: "drop_in" | "fff" | "all",
   limit: number,
+  options?: { signal?: AbortSignal },
 ): Promise<AiAlternateResult[]> {
+  assertCatalogLookupCurrent(options?.signal);
   if (!partId) return [];
   const db = getDb();
 
@@ -591,6 +616,7 @@ export async function fetchAlternatesForAI(
     .where(and(eq(alternates.partId, partId), kindWhere))
     .orderBy(desc(alternates.score))
     .limit(limit);
+  assertCatalogLookupCurrent(options?.signal);
 
   return rows.map((r) => ({
     partId: r.partId,
@@ -610,10 +636,22 @@ export async function fetchAlternatesForAI(
 // call and no record. One record per SDK call; the SDK's own retries are not visible here.
 import { recordModelCall, type ModelCallUsage } from "@/app/lib/observability/llm-call-record";
 
-function recordedRerank(client: Anthropic, body: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message> {
-  return recordModelCall({ provider: "anthropic", model: RERANK_MODEL, kind: "rerank", usage: rerankUsage }, () => client.messages.create(body));
+function recordedRerank(client: Anthropic, body: Anthropic.MessageCreateParamsNonStreaming, signal?: AbortSignal): Promise<Anthropic.Message> {
+  assertCatalogLookupCurrent(signal);
+  // Preserve the historical one-argument SDK call when no signal was supplied.
+  const requestOptions: [options?: { signal: AbortSignal }] = signal ? [{ signal }] : [];
+  return recordModelCall({ provider: "anthropic", model: RERANK_MODEL, kind: "rerank", usage: rerankUsage }, () => {
+    assertCatalogLookupCurrent(signal);
+    return client.messages.create(body, ...requestOptions);
+  });
 }
 /** What a call record keeps of a rerank answer: its model and token counts, never its ranking. */
 function rerankUsage(message: Anthropic.Message): ModelCallUsage {
   return { model: message.model, inputTokens: message.usage?.input_tokens, outputTokens: message.usage?.output_tokens };
+}
+
+/** Stop follow-up catalog work without echoing a caller's arbitrary abort reason.
+ * An already-running SQL/embedding operation is not claimed to be cancelled. */
+function assertCatalogLookupCurrent(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new DOMException("The catalog lookup was cancelled.", "AbortError");
 }
