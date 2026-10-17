@@ -1,6 +1,6 @@
 # Product reliability and the simple workspace — evidence package
 
-Branch `codex/astra-foundation` (base: main `32b081e`, the B24 merge). The owner's assignment:
+Branches `codex/astra-foundation` (A–F) and `codex/product-reliability-g` (G, the pull request's head; base: main `32b081e`, the B24 merge). The owner's assignment:
 `artifacts/astra-guided-pcb/PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.md` (checkpoints A–I; the owner later appended sections J and K,
 which follow after I). Dates: 2026-10-14 … 2026-10-17. Author of record: the owner's configured Git identity; no AI co-author trailers.
 

@@ -39,7 +39,8 @@ keys, database or tools on this machine.
 4. **Admit the generation event to the orchestration coordinator's artifact set** under `SIRKIT_ORCHESTRATION_ENABLED=1` (off by default).
 5. **A durable engineering-notes store** for module contracts. Today the run-log card is the note.
 6. **Persist sealed artifacts in the chat record.** A reloaded draft-request card is a static record; asking again re-issues it.
-7. **The CI-split rule (OD-30).** See section 5.
+7. **The CI split (OD-250, default applied).** The agent-orchestration suites moved to the agent-boundary job to keep OD-30's 40 % line;
+   the owner may prefer amending the line instead.
 8. **Retire `/api/schematic/build-multi`** once the assistant path is the only producer (OD-106's first option; OD-243 kept the route).
 9. **Exposing the placement → routing feedback loop** as an agent tool, or through the sealed layout-experiment request (OD-249).
 
@@ -60,10 +61,12 @@ matrix). Remaining, in the directive's order:
 
 ## 5. Engineering items carried forward
 
-- **CI-split evidence (`b24-d0-ci-split` cases 1 and 7).** The committed junit evidence counts the 471-file selection of 2026-10-09; the
-  tree now selects 496 files. A re-measurement at this tree found the moved set at 35.6 % of the local total, under OD-30's "at least
-  40 %" rule, because the new suites landed in the staying set. Options: amend OD-30's figure for this tree, or move more suites to the
-  agent-boundary job (a workflow edit under ci-split.md section 5's rules). Needs the owner's choice; the evidence is re-measured after.
+- **The drone request failure (2026-10-17).** The owner's four-motor drone request ended with "All 3 subsystem blocks failed to
+  design": checkpoint C's 40-second shared generation budget was too short for a planner, catalog searches and three subsystem loops. A
+  concurrent correction (another agent, uncommitted in the main checkout) raises the budget to 180 seconds and adds a cancellation
+  boundary; it must be committed, combined with this branch and re-run on a complex request.
+- **CI split.** Resolved at G by OD-250's default (all assignment suites admitted to CI; moved share 42.5 %); CI minutes are INFERRED until
+  the first CI run.
 - **Permanent-test gaps** listed in `verification-matrix.md` (35 gap lines): for example browser Cancel and double-click on the proposal
   dialog, a browser proof of the 3D tab with a board present, and browser proofs of the three newer agent artifacts.
 - **Owner-appended runbook sections J and K** (multi-sheet schematics and workload limits; work log, recovery controller, part
