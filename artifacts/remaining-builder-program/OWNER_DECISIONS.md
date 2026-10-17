@@ -3455,3 +3455,23 @@ Under the existing OD-217 heading (`:2599`), append:
 - **The owner may choose otherwise:** return the budget to 40 s (the starvation the correction's page records comes back); keep 180 s
   only as one execution slice's window under section L's worker (the default L expects to revisit, never a total task allowance); or
   keep the cancellation boundary and stage-named failures while L's task lifecycle replaces the deadline-shaped failure text.
+
+## OD-252 — section L's design defaults: durable generation tasks on the existing durable store, a separate worker, finite slices (product reliability L, 2026-10-17)
+
+- **Question:** the section L design (`artifacts/product-reliability-simple-ui/persistent-generation/task-worker-contract.md`, section 11)
+  leaves eleven choices to the owner. The owner's instruction of 2026-10-17 ("complete everything; you are the chief SWE"; section L:
+  "ask only when a real external resource, additional paid-test authority or irreversible owner decision prevents the next step")
+  asks the lead to proceed. Which defaults apply?
+- **Default applied:** (1) the per-task allowance of the contract's section 5 (calls and tokens, reserved worst case at claim, settled
+  at slice end, an unfinished attempt stays charged as uncertain; reaching it parks the task as waiting-for-resource with an explicit
+  "continue with another allowance" action, never a silent extension; an operator may lower it); (2) generation tasks are stored in
+  the EXISTING durable tables of the configured database, as the app already stores its call records there, and the worker runs
+  against that database; no schema change; (3) no migration 0032 (the cross-scope claim filters by topic without an index);
+  (4) generation aggregates are retained, not purged; (5) `pnpm dev` is unchanged, the worker starts with its own script, and a
+  combined local script starts both; without a worker the UI says so ("waiting for a worker"), never "running"; (6) agent stop, pause
+  and resume are confirm chips the human clicks; (7) the worker pump route is enabled behind the worker secret and fails closed when
+  it is unset; (8) `POST /api/schematic/build-multi` stays, unused by the page; (9) no provider failover inside a task; (10) one
+  bounded live four-motor run inside the remaining US$5 builder allowance, worst case reserved in `live-spend.json` first, its task
+  allowance capped below the remaining balance (an allowance stop is a valid, resumable outcome); (11) a partial result is reviewed
+  only through an explicit review-partial action.
+- **The owner may choose otherwise:** each item independently; none is irreversible (no migration, no deletion, no purchase).
