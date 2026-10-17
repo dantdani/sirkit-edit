@@ -293,13 +293,13 @@ describe("[B21 E2] the additive v1 run events (OD-126)", () => {
     expect(ofType(toolless.events, "degraded")).toMatchObject([{ reason: "role_has_no_tools", taskId: "task-1-component-sourcing-evidence", role: "component-sourcing-evidence", provider: "openai", model: null }]);
     expect(ofType(toolless.events, "degraded")[0]!.message).toMatch(/^Orchestration: specialist component-sourcing-evidence not run \(role_has_no_tools, task task-1-component-sourcing-evidence\): /);
     expect(warningsOf(toolless)).toEqual([]);
-    const env = { [ROLE_MODELS_ENV]: JSON.stringify({ "verification-critic": { provider: "openai", model: "gpt-6-astra" } }) };
+    const env = { [ROLE_MODELS_ENV]: JSON.stringify({ "verification-critic": { provider: "openai", model: "gpt-6-luna" } }) }; // [PR-F, 2026-10-17] reviewed pin move: the refused example was gpt-6-astra, now admitted when the role map names it (pr-f-astra-profile); gpt-6-luna is a documented sibling without a profile
     const unqualified = await runE2Dag(["verification-critic"], {}, { providers: { adapterFor: () => new E2Adapter(), admission: PROCESS_LLM_PROVIDER_ADMISSION, environment: env }, adapter: COORDINATOR_ONLY, now: () => T0 });
     const secret = ["sk", "-", "abcdefghijklmnopqrstuvwxyz0123"].join("");
     const invalid = await runE2Dag(["verification-critic"], {}, { coordinator: { userMessage: `Check the board with the key ${secret} please.` } });
     const unbuilt = await runE2Dag(["verification-critic"], {}, { providers: { adapterFor: () => { throw new Error("no client for this route"); }, admission: PROCESS_LLM_PROVIDER_ADMISSION, environment: {} }, adapter: COORDINATOR_ONLY, now: () => T0 });
     const expected: Array<[string, E2Run, string, RegExp]> = [
-      ["model refused", unqualified, "escalated", /^Orchestration: specialist verification-critic not run \(model_unqualified, task task-1-verification-critic\): .*gpt-6-astra/],
+      ["model refused", unqualified, "escalated", /^Orchestration: specialist verification-critic not run \(model_unqualified, task task-1-verification-critic\): .*gpt-6-luna/], // [PR-F, 2026-10-17] the refused example (was gpt-6-astra)
       ["request refused", invalid, "malformed", /^Orchestration: specialist verification-critic malformed \(task task-1-verification-critic, attempt 0\): request_invalid: secret_shaped_text at \$\.objective\.$/],
       ["adapter unbuilt", unbuilt, "escalated", /^Orchestration: specialist verification-critic escalated \(task task-1-verification-critic, attempt 0\): provider_unavailable: the adapter for openai could not be built /],
     ];

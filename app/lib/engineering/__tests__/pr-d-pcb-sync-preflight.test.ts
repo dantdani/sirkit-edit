@@ -174,7 +174,7 @@ describe("PR-D d2 pcb-sync.preflight — UI/AI parity: the report is the editor'
     expect(editor).toContain("const unresolved = listUnresolvedInstances(s);");
     expect(editor).toContain("setToast(unresolvedInstancesRefusal(unresolved));");
     expect(editor).toContain("Boolean(k.atomicPartRevisionId)");
-    expect(editor).toMatch(/import \{ listUnresolvedInstances, unresolvedInstancesRefusal, UNRESOLVED_MISSING_LABEL, type UnresolvedInstance \} from "@\/app\/lib\/pcb-sync\/unresolved-instances"/);
+    expect(editor).toMatch(/import \{ listUnresolvedInstances, unresolvedInstancesRefusal, type UnresolvedInstance \} from "@\/app\/lib\/pcb-sync\/unresolved-instances"/); // [PR-F, 2026-10-17] pin move: UNRESOLVED_MISSING_LABEL is rendered by app/components/pcb/MissingPartsList.tsx now (the checklist rows); the editor still decides with the same two functions
     const report = readFileSync(resolve(process.cwd(), "app/lib/pcb-sync/preflight-read.ts"), "utf8");
     expect(report).toContain('import { listUnresolvedInstances, unresolvedInstancesRefusal, UNRESOLVED_MISSING_LABEL, type UnresolvedInstance } from "./unresolved-instances";');
     expect(report).not.toMatch(/fetch\(|getDb|process\.env|window\./);

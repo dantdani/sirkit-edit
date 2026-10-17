@@ -9,7 +9,7 @@
  *    non-finite file WHOLE, and the summary is checked by the kind's output validator. The evidence is labelled `diagnostic_only`
  *    and `environment_dependent`: never authority, never "verified".
  *  - `sirkit.computation.layout-experiment`: the placement experiment profile in the bounded engine host. Its engine has no worker
- *    entry in this build, so the host refuses it (`ENGINE_UNAVAILABLE`) and nothing runs on the request's thread.
+ *    entry in this build, so the host refuses it (`ENGINE_UNAVAILABLE`) and nothing runs on the request's thread. [PR-F, 2026-10-17] An injected `layoutExperiment` runner (the placement -> routing feedback loop, app/lib/pcb/experiments/placement-routing-feedback.ts, bound by a server composition root this build does not add) replaces the host for this kind only; the kind's wall clock, output bound and output validator still bound and check its answer (runInjectedLayoutExperiment, appended below).
  */
 import { assertCompiledDeckSafe } from "../spice/netlist";
 import { DiagnosticRunnerError, diagnosticProvenance, runDiagnosticNgspice, seedDiagnosticDeck } from "./diagnostic-runner";
@@ -139,10 +139,39 @@ async function runLayoutExperiment(request: SealedComputationRequest, host: Engi
 }
 
 /** The server's executors (the host defaults to the process's one engine host). */
-export function createComputationRequestExecutors(options: { engineHost?: EngineHost } = {}): ComputationRequestExecutors {
+export function createComputationRequestExecutors(options: { engineHost?: EngineHost; layoutExperiment?: LayoutExperimentRunner } = {}): ComputationRequestExecutors { // [PR-F, 2026-10-17] layoutExperiment: the injected feedback-loop runner; absent = the host path, unchanged
   const host = options.engineHost ?? defaultEngineHost();
   return Object.freeze({
     [CIRCUIT_KIND]: (request: SealedComputationRequest, signal?: AbortSignal) => runCircuitAnalysis(request, signal),
-    [EXPERIMENT_KIND]: (request: SealedComputationRequest, signal?: AbortSignal) => runLayoutExperiment(request, host, signal),
+    [EXPERIMENT_KIND]: (request: SealedComputationRequest, signal?: AbortSignal) => (options.layoutExperiment ? runInjectedLayoutExperiment(request, options.layoutExperiment, signal) : runLayoutExperiment(request, host, signal)),
   });
+}
+
+// [PR-F, 2026-10-17] The injected layout-experiment runner: a server composition root (none in this build; OD-159's approval route is
+// still absent) binds the placement -> routing feedback loop over the request's basis (its canonical revision digest resolves the
+// isolated snapshot server-side; the loop itself is app/lib/pcb/experiments/placement-routing-feedback.ts and runs no process of its
+// own). The runner answers the kind's validator body plus provenance; the kind's wall clock (the smaller of the budget and the request's
+// seconds), its output bound and its output validator still apply; a timeout, a cancellation, an invalid answer or a thrown runner is
+// evidence with a refusal, never ok.
+export type LayoutExperimentRunner = (input: { request: SealedComputationRequest; budget: { wallClockMs: number; maxOutputBytes: number }; signal: AbortSignal }) => Promise<{ body: Record<string, unknown>; provenance: Record<string, unknown> | null }>;
+
+async function runInjectedLayoutExperiment(request: SealedComputationRequest, runner: LayoutExperimentRunner, signal?: AbortSignal): Promise<ComputationEvidence> {
+  const kind = computationKind(EXPERIMENT_KIND)!;
+  const budget = { wallClockMs: Math.min(kind.budget.wallClockMs, Number(request.input.budgetSeconds) * 1_000), maxOutputBytes: kind.budget.maxOutputBytes };
+  const controller = new AbortController();
+  const onAbort = (): void => controller.abort();
+  if (signal?.aborted) controller.abort(); else signal?.addEventListener("abort", onAbort, { once: true });
+  const timer = setTimeout(() => controller.abort(), budget.wallClockMs);
+  try {
+    const answer = await runner({ request, budget, signal: controller.signal });
+    if (controller.signal.aborted) return computationEvidence(request, { outcome: signal?.aborted ? "cancelled" : "timeout", refusal: signal?.aborted ? "CANCELLED" : "WALL_CLOCK", result: null, provenance: null });
+    if (validateComputationOutput(kind.outputValidatorId, answer.body).length > 0) return computationEvidence(request, { outcome: "completed", refusal: "OUTPUT_INVALID", result: null, provenance: null });
+    if (JSON.stringify(answer.body).length + JSON.stringify(answer.provenance ?? null).length > budget.maxOutputBytes) return computationEvidence(request, { outcome: "completed", refusal: "OUTPUT_TOO_LARGE", result: null, provenance: null });
+    return computationEvidence(request, { outcome: "completed", refusal: null, result: answer.body, provenance: answer.provenance });
+  } catch {
+    return computationEvidence(request, { outcome: "refused", refusal: "RUNNER_FAILED", result: null, provenance: null });
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
 }

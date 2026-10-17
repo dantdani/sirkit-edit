@@ -585,15 +585,15 @@ the base, for the reader (none of them changed in D2).
 | C35 | `app/lib/agent/orchestration/scheduler.ts` | 685 | — | `export const SEALED_PROPOSALS_RULE = ` | the proposing roles' result rule |
 | C36 | `app/lib/agent/loop.ts` | 178 | — | `if (!context.schematicHeadMark) {` | the schematic proposals' prerequisite, unchanged |
 | C37 | `app/lib/agent/loop.ts` | 171 | — | `if (descriptor.toolId === "sirkit.pcb.propose-bounded-edit") {` | the bounded edit's prerequisite (a board and a basis), unchanged |
-| C38 | `app/lib/agent/loop.ts` | 713 | — | `emitOnce({ type: "proposal_ready", runId: request.runId, toolId: resolved.toolId, proposal: sealedProposal });` | the loop emits a seal event only for a gateway-sealed proposal |
-| C39 | `app/lib/agent/loop.ts` | 690 | — | `emitOnce({ type: "pcb_proposal_ready", runId: request.runId, toolId: resolved.toolId, proposal: sealedPcb });` | the same for the bounded PCB edit |
+| C38 | `app/lib/agent/loop.ts` | 714 | — | `emitOnce({ type: "proposal_ready", runId: request.runId, toolId: resolved.toolId, proposal: sealedProposal });` | the loop emits a seal event only for a gateway-sealed proposal |
+| C39 | `app/lib/agent/loop.ts` | 691 | — | `emitOnce({ type: "pcb_proposal_ready", runId: request.runId, toolId: resolved.toolId, proposal: sealedPcb });` | the same for the bounded PCB edit |
 | C40 | `app/lib/pcb/proposal/sealed-pcb-edit-proposal.ts` | 263 | — | `const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;` | a specialist run id is inside the sealed identifier grammar |
 | C41 | `app/lib/engineering/approved-agent-mutations.ts` | 719 | — | `export async function applyApprovedTier1Proposal(input: ApprovedTier1ApplyInput): Promise<ApprovedTier1ApplyOutcome> {` | the Tier 1 apply boundary the page uses |
 | C42 | `app/lib/engineering/approved-agent-mutations.ts` | 780 | — | `const denial = evaluateMembershipReauthorization(proposal.authorization, liveMembership, SCHEMATIC_APPLY_ROLES);` | its live-principal reauthorization |
 | C43 | `app/lib/project/pcb-edit-approval-controller.internal.ts` | 48 | — | `export async function approveAndApplyPcbEdit(deps: PcbEditApplyDeps): Promise<ApprovedPcbApplyOutcome> {` | the PCB approval controller the editor uses |
 | C44 | `app/api/pcb/apply-authorization/route.ts` | 34 | — | `export const POST = selectorEnvelopeJsonRoute(` | the one reauthorization route both apply paths consult |
 | C45 | `app/lib/project/pcb-proposal-events.ts` | 38 | — | `export function receivePcbProposalReadyEvent(` | the page's full PCB proposal discriminator |
-| C46 | `app/page.tsx` | 4582 | — | `case "proposal_ready": {` | the page's proposal_ready consumer |
+| C46 | `app/page.tsx` | 4585 | — | `case "proposal_ready": {` | the page's proposal_ready consumer |
 | C47 | `app/api/chat/route.ts` | 397 | — | `const replacementFactsSource = resolveReplacementPinFactsSource();` | D21-37: the pin-facts reads, the coordinator's gateway only |
 | C48 | `app/lib/engineering/replacement-proposal-assembler.ts` | 263 | — | `return blocked("current-pin-authority-unavailable",` | D21-37: without them the replacement seal blocks |
 | C49 | `app/lib/agent/gateway.ts` | 393 | — | `currentPinFacts = await this.replacementPinFacts(instance.atomicPartRevisionId, "current");` | D21-37: the gateway reads them only when injected |

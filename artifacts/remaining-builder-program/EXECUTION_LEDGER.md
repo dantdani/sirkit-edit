@@ -5710,3 +5710,26 @@ validation.md §C, workflow-contract.md, fault-register.md, live-spend.json).
 - **Owner's runbook:** sections J and K appended by the owner (the K edit is committed with this checkpoint, unchanged, so it is preserved).
 - **Unchanged:** B24 PARTIAL; LB-1..LB-17; no Astra activation; no default-model change; `SIRKIT_ORCHESTRATION_ENABLED` off by default.
 - **Next:** F (missing parts in the ordinary workflow; the remaining Astra work with exact live blockers), then G, H, I, then J, then K.
+
+### Product-reliability assignment, checkpoint F — missing parts in the ordinary workflow; the first Astra increments (2026-10-17)
+
+- **Scope:** `app/lib/parts/missing-facts.ts` (the one checklist derivation), `app/components/pcb/MissingPartsList.tsx` + `PcbEditor.tsx`
+  (the refusal rows as workflow items), `app/page.tsx` (the sidebar line, the journey wiring), `app/lib/workflow/journey.ts`;
+  `app/lib/agent/missing-facts-reads.ts`, `app/lib/agent/draft-request-proposals.ts` (+ the registries, `parts.draft-request` record);
+  `app/lib/llm/openai-config.ts` (+ provider-policy, deployment configuration mirror: the `gpt-6-astra` profile);
+  `app/lib/engineering/module-contract.ts`, `app/lib/agent/module-contract-proposals.ts`; `app/lib/pcb/placement/intent.ts` (+ types,
+  engine, layout-candidate, layout-proposals, `stackup-candidate.ts`, `app/lib/agent/stackup-proposals.ts`);
+  `app/lib/pcb/experiments/{placement-routing-feedback,routing-capability-matrix}.ts` + `scripts/generate-pr-f-routing-capability-matrix.ts`;
+  `e2e/pr-f-missing-parts.spec.ts`; `playwright.config.ts` (distributor sources operator-disabled for the fixture server); ten new
+  vitest suites (144 tests) and the evidence pages under `artifacts/product-reliability-simple-ui/` (+ `astra/`).
+- **Records:** OD-248 (missing parts; the draft request's own record; the b19-d ratchet amendment accepted), OD-249 (the Astra
+  increments and their exact live blockers; the free models probe); registry 56 / 44 / 9 / 15 (digest `eng1-39bc5a6b899a0b50` at the final
+  regeneration), 108 action records, 932 matrix rows, 56 manuals, capability matrix 18 rows; pin moves with dated notes by the builders
+  (fB 23, fC 7, fD 19, fE 19, fA 6, fF 1) and the lead (the list in validation.md); the B21 pages' rows re-pointed by content; two HEAD
+  digests of `b21-c` re-recorded (the placement descriptor changed under review); page line-count pin 8690 → 8705.
+- **Gates:** files: 383 passed | 3 skipped (386); tests: 4384 passed | 21 skipped (4405); vitest exit 1: 2 unhandled worker error(s) ([vitest-worker] Timeout calling onTaskUpdate under the 383-file load, no test failed); tsc 0; eslint 0 on 80 changed files; fixture Playwright 4 passed (54.8 s) in the integrated run, then simple-workspace 1 passed (15.8 s) after its wait for the post-apply passes; secret scan 0 real hits.
+- **Live:** one zero-cost read-only models probe (names only): `gpt-6-astra` is listed for the owner's key; spend unchanged at 0.19 USD of 5.00.
+- **Unchanged:** B24 PARTIAL; LB-1..LB-17 (LB-F1 account availability resolved; LB-F2/F3 spend and the contract turn open); no Astra
+  activation (the default model stays `gpt-5.6-sol`); no default-model, exposure-list or release-boundary change beyond the reviewed ones.
+- **Next:** G (the whole suite with the CI-split evidence re-measurement, whole-repo eslint, every Playwright config, an e2e spec for the
+  agent generation intake, the live `gpt-6-astra` contract turn), H, I; then J, then K.

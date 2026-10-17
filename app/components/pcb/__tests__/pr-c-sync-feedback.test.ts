@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync("app/components/pcb/PcbEditor.tsx", "utf8");
+const list = readFileSync("app/components/pcb/MissingPartsList.tsx", "utf8"); // [PR-F lead, 2026-10-17] the unresolved rows grew into the Missing parts list (same test ids), rendered by SyncBlockersPanel
 const between = (start: string, end: string): string => {
   const from = source.indexOf(start);
   const to = source.indexOf(end, from + start.length);
@@ -67,12 +68,12 @@ describe("[PR-C 2] unresolved instances are named before any server call", () =>
   });
 
   it("the list renders in the empty state and in the editor with the row testids, and Dismiss clears it", () => {
-    expect(source).toContain('data-testid="sync-unresolved-instances"');
-    expect(source).toContain("data-testid={`sync-unresolved-${item.refDes}`}");
-    expect(source).toContain("{UNRESOLVED_MISSING_LABEL[item.missing]}");
-    expect(source).toContain("Review path: {item.reviewPath}");
+    expect(list).toContain('data-testid="sync-unresolved-instances"'); // [PR-F lead, 2026-10-17] the list component
+    expect(list).toContain("data-testid={`sync-unresolved-${ref}`}"); // [PR-F lead, 2026-10-17] the row id, keyed by the list ref
+    expect(list).toContain("{UNRESOLVED_MISSING_LABEL[item.missing]}"); // [PR-F lead, 2026-10-17] the list component
+    expect(list).toContain("Review path: {item.reviewPath}"); // [PR-F lead, 2026-10-17] the list component
     expect(source).toContain('<button type="button" onClick={onDismiss} data-testid="sync-blockers-dismiss"');
-    expect(source.match(/<SyncBlockersPanel blockers=\{syncBlockers\} busy=\{syncing \|\| applying\} onDismiss=\{\(\) => setSyncBlockers\(null\)\} \/>/g)).toHaveLength(2);
+    expect(source.match(/<SyncBlockersPanel blockers=\{syncBlockers\} busy=\{syncing \|\| applying\} onDismiss=\{\(\) => setSyncBlockers\(null\)\} schematic=\{schematic\} projectScope=\{publisherScope\} \/>/g)).toHaveLength(2); // [PR-F lead, 2026-10-17] the panel hands the rows their schematic facts and the project scope (the Missing parts list)
     // one mount under the empty state's call to action, one in the editor's canvas area
     const emptyState = between('data-testid="pcb-empty-state"', "<SyncPlacementDialog");
     const editor = between('data-testid="pcb-editor"', "<DebugHud scene={scene} />");

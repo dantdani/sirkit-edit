@@ -1029,10 +1029,10 @@ The anchor is what is checked (it occurs exactly once in its file). For `merge.t
 | C34 | `app/lib/engineering/replacement-proposals.ts` | 263 | — | `export function verifySealedReplacementProposal(proposal: SealedReplacementProposal, input: {` | the replacement family's verifier |
 | C35 | `app/lib/pcb/proposal/sealed-pcb-edit-proposal.ts` | 238 | — | `export function verifySealedPcbEditProposalIntegrity(candidate: unknown): PcbProposalVerification {` | the PCB family's integrity verifier |
 | C36 | `app/lib/pcb/proposal/sealed-pcb-edit-proposal.ts` | 817 | — | `export function isPcbEditProposalExpired(proposal: SealedPcbEditProposal, now: number): boolean {` | the PCB family's expiry |
-| C37 | `app/lib/pcb/candidates/layout-candidate.ts` | 296 | — | `export function verifyLayoutCandidate(candidate: LayoutCandidate, board: PcbBoard,` | the layout family's verifier |
+| C37 | `app/lib/pcb/candidates/layout-candidate.ts` | 316 | — | `export function verifyLayoutCandidate(candidate: LayoutCandidate, board: PcbBoard,` | the layout family's verifier |
 | C38 | `app/lib/pcb/candidates/layout-candidate.ts` | 19 | — | `import { commitPcbCandidate } from "../../engineering/pcb-commit-gateway";` | D21-35: the first hop to the executor |
 | C39 | `app/lib/engineering/editor-adapter.ts` | 52 | — | `import { CanonicalExecutor, deriveExecutorLineageId, type ExecutionRejectionCode, type ExecutionResult, REPLAY_COMMAND_ID } from "./executor";` | D21-35: the last hop |
-| C40 | `app/lib/pcb/candidates/layout-candidate.ts` | 40 | — | `export interface LayoutCandidateBase {` | D21-34: the candidate's own base carries no scope |
+| C40 | `app/lib/pcb/candidates/layout-candidate.ts` | 41 | — | `export interface LayoutCandidateBase {` | D21-34: the candidate's own base carries no scope |
 | C41 | `app/lib/engineering/collaboration.ts` | 8 | — | `export function conflictForTransaction(` | the transaction-vs-history comparator whose vocabulary D reuses |
 | C42 | `app/lib/engineering/collaboration.ts` | 20 | — | `...(conflictClass === "unknown_interaction" ? ["rerun_candidate" as const] : [])` | its resolutions |
 | C43 | `app/lib/engineering/types.ts` | 64 | — | `export type ConflictClass =` | the sixteen conflict classes |
@@ -1068,7 +1068,7 @@ The anchor is what is checked (it occurs exactly once in its file). For `merge.t
 | C73 | `app/api/chat/orchestration-runtime.ts` | 394 | — | `for (const stage of MERGED_ENVELOPE_STAGES) {` | the first stage that fits |
 | C74 | `app/api/chat/orchestration-runtime.ts` | 189 | — | `specialistResultsEnvelope RETIRED (D21-36)` | B's envelope superseded (D21-36); [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): retired - this row cites its one-line tombstone] |
 | C75 | `app/lib/pcb/proposal/bounded-edit-compiler.ts` | 419 | — | `return refuse("drc-regression",` | the compiler's regression rules the candidate check mirrors |
-| C76 | `app/lib/pcb/candidates/layout-candidate.ts` | 352 | — | `const command = buildAutorouteImportCommand(board, candidate.routes);` | the apply's routing build the candidate check mirrors |
+| C76 | `app/lib/pcb/candidates/layout-candidate.ts` | 372 | — | `const command = buildAutorouteImportCommand(board, candidate.routes);` | the apply's routing build the candidate check mirrors |
 | C77 | `app/lib/agent/orchestration/merge.ts` | 137 | — | `{ code: "evidence-missing", decision: "accepted"` | [B21 F3] the gap's own code, the LAST row of MERGE_OWN_CODES |
 | C78 | `app/lib/agent/orchestration/merge.ts` | 922 | — | `decisionOf(withEvidenceGap(entry).findings)` | [B21 F3] the gap joins a verdict once every other finding is known, never changing it |
 | C79 | `app/lib/agent/orchestration/merge.ts` | 929 | — | `merge accepted${evidenceGapReason(entry.findings)}` | [B21 F3] the accepted decision record's reason names the gap |

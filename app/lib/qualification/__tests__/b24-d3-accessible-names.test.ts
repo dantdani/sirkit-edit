@@ -81,8 +81,11 @@ const OUT_OF_SCOPE_UNNAMED_AT_3773C6A = 111;
  *  (sheet size, AI brain, autonomy, runtime), the chat header's one-line summary, the computed design checks and the 3D tab's
  *  presentation; the citation tables were refreshed again in the same change. [Product reliability D, 2026-10-16] 8690: the intake of the
  *  agent's Build-mode generation proposal (`generation_proposal_ready` -> the SAFE receiver -> `offerGenerationProposal`, the same review
- *  dialog, pin and pending-proposal store as the composer's Generate; no new control); the citation tables were refreshed in the same change. */
-const PAGE_LINES_AT_3773C6A = 8690;
+ *  dialog, pin and pending-proposal store as the composer's Generate; no new control); the citation tables were refreshed in the same change.
+ *  [PR-F, 2026-10-17] 8705: the Build sidebar's "Missing parts (N)" line beside the design checks (`missing-parts-open`, named by its
+ *  text; opens the PCB tab's Missing parts list through `missingPartsRequestToken`) and the journey's Resolve parts through the same
+ *  path; the citation tables were refreshed in the same change. */
+const PAGE_LINES_AT_3773C6A = 8705;
 /** [B24-D3, 2026-10-10] package.json's dependency names at 3773c6a (OD-215: no new dependency; an axe devDependency needs the owner). */
 const DEPENDENCIES_AT_3773C6A = ["@anthropic-ai/sdk", "@base-ui/react", "@react-three/drei", "@react-three/fiber", "@supabase/ssr", "@supabase/supabase-js", "@xyflow/react", "class-variance-authority", "clsx", "drizzle-orm", "flatbush", "highlight.js", "immer", "jszip", "katex", "lucide-react", "next", "openai", "pixi-viewport", "pixi.js", "polygon-clipping", "postgres", "radix-ui", "react", "react-dom", "react-markdown", "rehype-highlight", "rehype-katex", "remark-gfm", "remark-math", "tailwind-merge", "three", "tw-animate-css"];
 const DEV_DEPENDENCIES_AT_3773C6A = ["@electric-sql/pglite", "@playwright/test", "@tailwindcss/postcss", "@testing-library/dom", "@testing-library/react", "@types/node", "@types/react", "@types/react-dom", "@types/three", "drizzle-kit", "eslint", "eslint-config-next", "fake-indexeddb", "jsdom", "tailwindcss", "tsx", "typescript", "vitest"];

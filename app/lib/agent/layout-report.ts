@@ -41,7 +41,34 @@ export interface PlacementReport {
   /** The objectives the engine could not evaluate — stated, because silence reads as success. */
   unknownObjectives: string[];
   unsupportedObjectives: string[];
+  /** [PR-F fE, 2026-10-17] present only when the candidate carried a placement intent: the scope classification, whether the intent
+   *  was seeded, how many items were satisfied and the CONFLICTS (bounded, in full: component, what was asked, what happened). */
+  intent?: PlacementIntentReport;
 }
+
+/** [PR-F fE] What the intent block may say: counts are exact, the first conflicts travel in full, the rest are counted. */
+export const MAX_REPORTED_INTENT_CONFLICTS = 12;
+export interface PlacementIntentReport {
+  applied: boolean;
+  classification: "qualified" | "unsupported-scope";
+  physicalInstanceCount: number;
+  scopeLimit: number;
+  itemCount: number;
+  seededInstances: number;
+  selectedInitializer: string | null;
+  seededCandidateLegal: boolean | null;
+  satisfied: number;
+  conflicts: number;
+  conflictKinds: string[];
+  /** The first conflicts IN FULL - which component, what the intent asked, what the engine or a lock / keepout did instead. */
+  firstConflicts: Array<{ kind: string; ref: string | null; intent: string; happened: string }>;
+  conflictsReported: number;
+}
+/** [PR-F fE] The intent's honesty rule, told to the model beside the result. */
+export const PLACEMENT_INTENT_NOTE =
+  "The placement intent was passed through the engine's own legalization and validators: every conflict listed is a request the engine, a lock, a keepout or a clearance changed, and the lock or keepout was preserved - name the conflicts to the user, never claim the intent was honoured where one is listed. "
+  + "Critical-net priorities are carried as data only: the placement engine does not enforce them. "
+  + "An unsupported-scope classification means the board exceeds the qualified 50-instance scope: the intent was recorded, not applied, and the candidate is the engine's own run.";
 
 export interface RoutingFailureFact {
   netId: number;
@@ -76,6 +103,7 @@ export function placementReport(candidate: PlacementLayoutCandidate): PlacementR
   // objective, so each id is resolved to its kind (`decoupling`, `thermal_intent`); an id with no metric keeps the id
   // rather than being dropped, because an unevaluated objective nobody can name is still an unevaluated objective.
   const kindOf = (id: string): string => report?.objectives.find((objective) => objective.id === id)?.kind ?? text(id);
+  const intent = candidate.intent;
   return {
     legal: candidate.legal,
     hardViolations: candidate.candidate.hardReport?.violations.length ?? 0,
@@ -83,6 +111,13 @@ export function placementReport(candidate: PlacementLayoutCandidate): PlacementR
     objectiveCount: report?.objectives.length ?? 0,
     unknownObjectives: [...(report?.unknownObjectiveIds ?? [])].slice(0, MAX_REPORTED_OBJECTIVES).map(kindOf),
     unsupportedObjectives: [...(report?.unsupportedObjectiveIds ?? [])].slice(0, MAX_REPORTED_OBJECTIVES).map(kindOf),
+    ...(intent ? { intent: {
+      applied: intent.applied, classification: intent.scope.classification, physicalInstanceCount: intent.scope.physicalInstanceCount, scopeLimit: intent.scope.limit, itemCount: intent.itemCount,
+      seededInstances: intent.seededInstanceIds.length, selectedInitializer: intent.selectedInitializer, seededCandidateLegal: intent.seededCandidate?.legal ?? null,
+      satisfied: intent.satisfied.length, conflicts: intent.conflicts.length, conflictKinds: [...new Set(intent.conflicts.map((conflict) => conflict.kind))].sort(),
+      firstConflicts: intent.conflicts.slice(0, MAX_REPORTED_INTENT_CONFLICTS).map((conflict) => ({ kind: conflict.kind, ref: conflict.component?.ref ?? null, intent: text(conflict.intent), happened: text(conflict.happened) })),
+      conflictsReported: Math.min(intent.conflicts.length, MAX_REPORTED_INTENT_CONFLICTS),
+    } } : {}),
   };
 }
 
@@ -123,7 +158,9 @@ export function layoutCandidateChatLine(candidate: LayoutCandidate): string {
     const report = placementReport(candidate);
     const unknown = report.unknownObjectives.length + report.unsupportedObjectives.length;
     const legality = report.legal ? "It is hard-legal" : `It is NOT hard-legal (${report.hardViolations} violation${report.hardViolations === 1 ? "" : "s"})`;
-    return `${opening} ${legality}; ${report.objectiveCount - unknown} of ${report.objectiveCount} objectives were evaluated${unknown > 0 ? `, ${unknown} could not be` : ""}.`;
+    // [PR-F fE] an intent's conflicts are named here too: the person learns what the engine or a lock changed without opening the panel
+    const intent = report.intent ? report.intent.applied ? ` The placement intent (${report.intent.itemCount} item${report.intent.itemCount === 1 ? "" : "s"}) has ${report.intent.conflicts} conflict${report.intent.conflicts === 1 ? "" : "s"}${report.intent.conflicts > 0 ? ` (${report.intent.conflictKinds.join(", ")}) - the panel lists each` : ""}.` : ` The placement intent was NOT applied: ${report.intent.physicalInstanceCount} physical instances exceed the qualified scope of ${report.intent.scopeLimit} (unsupported-scope).` : "";
+    return `${opening} ${legality}; ${report.objectiveCount - unknown} of ${report.objectiveCount} objectives were evaluated${unknown > 0 ? `, ${unknown} could not be` : ""}.${intent}`;
   }
   const report = routingReport(candidate);
   if (report.unresolved === 0) return `${opening} Every connection in scope was routed (${report.tracks} track${report.tracks === 1 ? "" : "s"}, ${report.vias} via${report.vias === 1 ? "" : "s"}).`;

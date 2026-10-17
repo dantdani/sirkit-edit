@@ -133,7 +133,7 @@ as an allowlist (33 ids, over the bound; [B22-B, 2026-10-01] 36 since the three 
   matches a pattern today and the membership test refuses every other id first (least-privilege case 7).
 - **Without the input** the toolset is byte-identical to HEAD: the declarations and warnings of the coordinator's run and of the
   read-only specialist view, over a board-only and a schematic-plus-board context, equal the four digests RECORDED from HEAD `0396c9e`
-  before `loop.ts` changed (`eng1-fc3f88593a73d586`, `eng1-3f9daa40bdba138b`, `eng1-c722e131c5f5d1d2`, `eng1-b3b19a8ae7577a93`,
+  before `loop.ts` changed (`eng1-ed26606c12130f43`, `eng1-a96784affdeac778`, `eng1-c722e131c5f5d1d2`, `eng1-b3b19a8ae7577a93`,
   `c-record-head.log`; least-privilege case 6). The four `loop.ts` edits sit on existing lines (the deps field, the signature, the
   return, the call site); line 20 is HEAD's import again, and the helpers and the exposure import (on its own line, C43: an import is
   hoisted, and a line-anchored import gate such as the B19-D chat-closure walker sees an import only where a line starts with it,
@@ -290,8 +290,8 @@ routing") can still select the layout variant. **CONFIRMED** by `b21-b-router.te
   (`b04-tool-registry.test.ts:465-476`). Each line was re-read at the base (**CONFIRMED**). [B21 C fix] C's OWN pins join the rule
   (review): `b21-c-least-privilege.test.ts` case 1 spells the reads each role is offered over the suite's context
   (`FULL_CONTEXT_EFFECTIVE`, the coordinator's admitted reads included), and case 6 pins four byte digests over the declarations and
-  warnings of the coordinator's run and the specialist view (`eng1-fc3f88593a73d586`, `eng1-3f9daa40bdba138b`,
-  `eng1-c722e131c5f5d1d2`, `eng1-b3b19a8ae7577a93`, RECORDED from HEAD `0396c9e`): a new read descriptor, or a changed description,
+  warnings of the coordinator's run and the specialist view (`eng1-ed26606c12130f43`, `eng1-a96784affdeac778`,
+  `eng1-c722e131c5f5d1d2`, `eng1-b3b19a8ae7577a93`, RECORDED from HEAD `0396c9e`; [PR-F lead, 2026-10-17] the first two re-recorded at this tree — were `eng1-fc3f88593a73d586`, `eng1-3f9daa40bdba138b` — because the placement proposal descriptor changed under review (1.2.0, the structured intent block) and two descriptions were shortened for the text maxima; the builder is unchanged): a new read descriptor, or a changed description,
   schema bound or withholding warning of an exposed one, moves those too — each is a byte-identity-to-HEAD proof, re-recorded (never
   loosened) in the same reviewed move. C adds NO descriptor: every role row is a subset of the existing 33, so none of them moves.
 - **D21-31 (RECORDED), OD-123:** `schematic.set-property` and `schematic.move-rotate` are in `EXECUTION_FAMILIES` (C30), the closed
@@ -588,8 +588,8 @@ the reader otherwise.
 | C7 | `app/lib/agent/orchestration/role-tools.ts` | 182 | — | `if (entries.length > MAX_ROLE_TOOL_IDS) return refused("over_bound");` | an over-long row admits nothing |
 | C8 | `app/lib/agent/orchestration/role-tools.ts` | 23 | — | `export const PROPOSING_ROLES: readonly SpecialistRole[] = Object.freeze([` | the proposing roles |
 | C9 | `app/lib/agent/loop.ts` | 267 | — | `return buildAgentToolDeclarations(allowedToolIds === undefined ? descriptors : narrowToRunAllowlist(descriptors, allowedToolIds, warn));` | the intersection AFTER every gate |
-| C10 | `app/lib/agent/loop.ts` | 818 | — | `function narrowToRunAllowlist<T extends { toolId: string }>(` | an invalid list approves nothing: an empty toolset and `allowlist_invalid` |
-| C11 | `app/lib/agent/loop.ts` | 793 | — | `export const RUN_ALLOWLIST_MAX_IDS = 32;` | the bound |
+| C10 | `app/lib/agent/loop.ts` | 819 | — | `function narrowToRunAllowlist<T extends { toolId: string }>(` | an invalid list approves nothing: an empty toolset and `allowlist_invalid` |
+| C11 | `app/lib/agent/loop.ts` | 794 | — | `export const RUN_ALLOWLIST_MAX_IDS = 32;` | the bound |
 | C12 | `app/lib/agent/loop.ts` | 351 | — | `toolset = buildRunToolset(deps.registry, deps.context, (message) => emitOnce({ type: "warning", runId: request.runId, message }), deps.allowedToolIds);` | the loop passes the role's list |
 | C13 | `app/lib/agent/loop.ts` | 78 | — | `allowedToolIds?: readonly string[];` | the deps field (absent on every coordinator run) |
 | C14 | `app/lib/agent/orchestration/scheduler.ts` | 195 | — | `export function deriveSpecialistContext(context: AgentRunContext): AgentRunContext {` | the specialist context, field by field |
@@ -616,9 +616,9 @@ the reader otherwise.
 | C35 | `app/lib/agent/orchestration/contracts.ts` | 77 | — | `maxAllowedToolIds: 32,` | the contracts' A4L bound |
 | C36 | `app/lib/agent/orchestration/scheduler.ts` | 85 | — | `export const ROLE_HAS_NO_TOOLS = "role_has_no_tools" as const;` | the drop's reason |
 | C37 | `app/lib/agent/orchestration/scheduler.ts` | 79 | — | `export const SPECIALIST_CONTEXT_REFUSAL_STATUS = "role_context_elevated" as const;` | the elevation refusal |
-| C38 | `app/lib/agent/loop.ts` | 802 | — | `export function approvedRunAllowlist(` | A4L: the judgement, its bound and its never-exposed clause |
+| C38 | `app/lib/agent/loop.ts` | 803 | — | `export function approvedRunAllowlist(` | A4L: the judgement, its bound and its never-exposed clause |
 | C39 | `app/lib/agent/orchestration/scheduler.ts` | 478 | — | `if (allowed.length === 0) {` | a role with no tools: not run, its task's dissent carried on |
 | C40 | `app/lib/agent/orchestration/scheduler.ts` | 387 | — | `const tasks = planTasks(plan.roles);` | the plan and its task ids from the plan's roles only |
 | C41 | `app/lib/agent/orchestration/router.ts` | 105 | — | `const CREATE_NEW = new RegExp(` | a new circuit named from words |
 | C42 | `app/lib/agent/orchestration/router.ts` | 130 | — | `const LAYOUT_ASK = ` | the layout variant's own ask |
-| C43 | `app/lib/agent/loop.ts` | 829 | — | `import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, NEVER_EXPOSED_TOOL_PATTERNS } from "../engineering/agent-exposure";` | the allowlist's ids, imported on their own line at the end |
+| C43 | `app/lib/agent/loop.ts` | 830 | — | `import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, NEVER_EXPOSED_TOOL_PATTERNS } from "../engineering/agent-exposure";` | the allowlist's ids, imported on their own line at the end |

@@ -81,6 +81,8 @@ import { completenessNote, electricalCheckNote, type BuildMultiResponse } from "
 import { clearPendingProposal, loadPendingProposal, savePendingProposal } from "@/app/lib/project/pending-proposal-store"; // [PR-C]
 import { computeDesignChecks, type DesignCheck } from "@/app/lib/schematic/design-checks"; // [PR-E]
 import { deriveJourney, type JourneyActionId, type JourneyGenerationFailure, type JourneyPcbFacts } from "@/app/lib/workflow/journey"; // [PR-C] the shared stage model
+import { listUnresolvedInstances } from "@/app/lib/pcb-sync/unresolved-instances"; // [PR-F fA] the sidebar's Missing parts count: the SAME listing a Schematic → PCB run refuses at
+import { missingPartsWords } from "@/app/lib/parts/missing-facts"; // [PR-F fA]
 import { JourneyStrip } from "@/app/components/workflow/JourneyStrip"; // [PR-C]
 
 /**
@@ -2651,6 +2653,7 @@ export default function Home() {
   const [preparePcbRequested, setPreparePcbRequested] = useState(false);
   const [lastGenerationFailure, setLastGenerationFailure] = useState<JourneyGenerationFailure | null>(null);
   const [syncRequestToken, setSyncRequestToken] = useState(0);
+  const [missingPartsRequestToken, setMissingPartsRequestToken] = useState(0); // [PR-F fA] the PCB tab's Missing parts list, from the sidebar line or the journey
   const [settingsOpen, setSettingsOpen] = useState(false); // [PR-E] the scoped workspace settings dialog
   // [B16.1C §F] what the pending proposal will change, against the LIVE
   // canonical schematic at review time (recomputed when either changes).
@@ -6010,6 +6013,11 @@ export default function Home() {
     for (const instance of authoritativeSchematic.kicadComponents ?? []) { const part = getCachedPart(instance.partId); if (part) parts.set(instance.partId, part); }
     return computeDesignChecks(authoritativeSchematic, parts, schematicStateDigest(authoritativeSchematic), mode);
   }, [authoritativeSchematic, partsLoadedTick, mode]);
+  // [PR-F fA] the missing parts beside the design checks: the instances a Schematic → PCB run would refuse at (the same pure
+  // listing, from the authoritative schematic alone), as a count the line opens in the PCB tab's list; never a pass by itself.
+  const missingPartsCount = useMemo(() => listUnresolvedInstances(authoritativeSchematic).length, [authoritativeSchematic]);
+  const focusLater = (selector: string): void => { window.setTimeout(() => document.querySelector<HTMLElement>(selector)?.focus(), 50); };
+  const openMissingParts = (): void => { workspaceView.open("pcb"); setMissingPartsRequestToken((token) => token + 1); focusLater('[data-testid="sync-blockers"]'); };
   // [PR-E] the computed design checks, shown beneath BOTH library panels (before this, the block sat in the Theory-only branch
   // and Build mode — the default — never showed it; fault F-07)
   const designChecksFooter = (
@@ -6019,6 +6027,13 @@ export default function Home() {
         {designChecks.checks.map((check) => <CheckRow key={check.id} check={check} />)}
         <CheckRow check={{ id: "bom", label: "BOM: not finalized (BOM tab)", state: "not_run", count: 0, findings: [], reason: "informational" }} muted />
       </div>
+      {/* [PR-F fA] the Missing parts line: the count of instances the PCB preparation would refuse at, and the way to the PCB tab's
+          list (checklist + next actions per row); with none missing the line says so and opens nothing. */}
+      <button type="button" onClick={openMissingParts} disabled={missingPartsCount === 0} data-testid="missing-parts-open" data-count={missingPartsCount} title={missingPartsCount === 0 ? "every physical instance carries a published exact revision and its installed symbol asset" : `open the PCB tab's Missing parts list (${missingPartsWords(missingPartsCount)})`} className={`mt-2 flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-xs ${missingPartsCount === 0 ? "text-zinc-500" : "text-amber-300 hover:bg-zinc-800"} disabled:cursor-default`}>
+        {missingPartsCount === 0 ? <Check className="size-3.5 text-emerald-400" aria-hidden="true" /> : <AlertTriangle className="size-3.5 text-amber-400" aria-hidden="true" />}
+        <span className="min-w-0">{missingPartsCount === 0 ? "Missing parts: none" : `Missing parts (${missingPartsCount})`}</span>
+        {missingPartsCount > 0 && <span className="ml-auto shrink-0 text-[10px] text-zinc-500">PCB tab →</span>}
+      </button>
     </div>
   );
 
@@ -6035,7 +6050,6 @@ export default function Home() {
     preparePcbRequested,
     pcb: pcbFacts,
   });
-  const focusLater = (selector: string): void => { window.setTimeout(() => document.querySelector<HTMLElement>(selector)?.focus(), 50); };
   const handleJourneyAction = (actionId: JourneyActionId): void => {
     switch (actionId) {
       case "describe_circuit": setChatOpen(true); focusLater('[data-testid="prompt-input"]'); return;
@@ -6045,7 +6059,7 @@ export default function Home() {
       case "apply_pcb_plan": workspaceView.open("pcb"); focusLater('[data-testid^="apply-sync-plan"]'); return; // focus only: the human clicks Apply
       case "qualify_route": workspaceView.open("pcb"); focusLater('[data-testid="p2g-qualify"]'); return;
       case "request_release": workspaceView.open("pcb"); focusLater('[data-testid="p2g-request-release"]'); return;
-      case "fix_blockers": workspaceView.open("pcb"); focusLater('[data-testid="sync-blockers"]'); return;
+      case "fix_blockers": openMissingParts(); return; // [PR-F fA] the Missing parts list (the refusal rows with their checklists) is shown even when a run has not refused yet
       case "open_pcb": workspaceView.open("pcb"); return;
     }
   };
@@ -6629,6 +6643,7 @@ export default function Home() {
                     hydrateToken={pcbHydrateToken}
                     onJourneyFacts={setPcbFacts} // [PR-C] display only
                     syncRequestToken={syncRequestToken} // [PR-C] "Prepare PCB" from the journey strip
+                    missingPartsRequestToken={missingPartsRequestToken} // [PR-F fA] the Missing parts list from the sidebar line or the journey
                     presentation={view === "3d" ? "3d" : "editor"} // [PR-E] the 3D tab renders the editor's one preview, never a second renderer
                     onOpenPcbTab={() => workspaceView.open("pcb")}
                     gateSchematicSync={() => schematicConsumerGate("pcb-sync")}

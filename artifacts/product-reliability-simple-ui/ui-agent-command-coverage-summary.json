@@ -11,19 +11,19 @@
     "legacy",
     "missing"
   ],
-  "rows": 922,
+  "rows": 933,
   "byKind": {
-    "action": 107,
-    "control": 763,
-    "tool": 52
+    "action": 108,
+    "control": 769,
+    "tool": 56
   },
   "byDisposition": {
-    "callable-now": 47,
-    "proposal-only": 234,
+    "callable-now": 50,
+    "proposal-only": 249,
     "grant-required": 68,
-    "human-admin-only": 95,
+    "human-admin-only": 85,
     "view-session-only": 85,
-    "intentionally-ui-only": 328,
+    "intentionally-ui-only": 331,
     "unavailable": 11,
     "legacy": 0,
     "missing": 54
@@ -31,9 +31,9 @@
   "byKindAndDisposition": {
     "action": {
       "callable-now": 6,
-      "proposal-only": 39,
+      "proposal-only": 41,
       "grant-required": 7,
-      "human-admin-only": 18,
+      "human-admin-only": 17,
       "view-session-only": 6,
       "intentionally-ui-only": 10,
       "unavailable": 7,
@@ -41,19 +41,19 @@
       "missing": 14
     },
     "control": {
-      "callable-now": 19,
-      "proposal-only": 189,
+      "callable-now": 21,
+      "proposal-only": 199,
       "grant-required": 55,
-      "human-admin-only": 73,
+      "human-admin-only": 64,
       "view-session-only": 73,
-      "intentionally-ui-only": 318,
+      "intentionally-ui-only": 321,
       "unavailable": 0,
       "legacy": 0,
       "missing": 36
     },
     "tool": {
-      "callable-now": 22,
-      "proposal-only": 6,
+      "callable-now": 23,
+      "proposal-only": 9,
       "grant-required": 6,
       "human-admin-only": 4,
       "view-session-only": 6,
@@ -67,27 +67,27 @@
   "missing": {
     "rows": 54,
     "withoutGap": 0,
-    "gaps": 167
+    "gaps": 176
   },
   "rowsWithoutTest": {
-    "action": 41,
-    "control": 427,
+    "action": 40,
+    "control": 428,
     "tool": 0
   },
   "actions": {
-    "records": 107,
-    "rows": 107
+    "records": 108,
+    "rows": 108
   },
   "controls": {
-    "sites": 636,
-    "rows": 763,
-    "surfaces": 64,
+    "sites": 640,
+    "rows": 769,
+    "surfaces": 65,
     "recordsReached": 80
   },
   "tools": {
-    "descriptors": 52,
-    "rows": 52,
-    "agentExposed": 40,
+    "descriptors": 56,
+    "rows": 56,
+    "agentExposed": 44,
     "grantedExecutions": 6
   }
 }

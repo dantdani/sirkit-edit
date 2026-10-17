@@ -52,8 +52,7 @@
       "Close AI assist",
       "Design rule check",
       "Run DRC to check the board against the current fab preset.",
-      "Schematic → PCB refusal",
-      "Unresolved instances"
+      "Schematic → PCB refusal"
     ],
     "app/components/pcb/PcbToolbar.tsx": [
       "3D preview",

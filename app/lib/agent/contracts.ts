@@ -352,7 +352,7 @@ export type GatewayInvocationOutcome =
   | { kind: "proposal"; ok: true; toolId: string; version: string; proposal: SealedAgentProposal }
   /** [B15.3] the PCB proposal rides a DISTINCT outcome kind so the schematic
    *  proposal path can never receive one by type or by accident. */
-  | { kind: "pcb-proposal"; ok: true; toolId: string; version: string; proposal: SealedPcbEditProposal } | { kind: "generation-proposal"; ok: true; toolId: string; version: string; proposal: SealedSchematicGenerationProposal } // [PR-D] the Build-mode generation proposal rides its own kind too (OD-243); a failed generation is `proposal-blocked` below, never ok
+  | { kind: "pcb-proposal"; ok: true; toolId: string; version: string; proposal: SealedPcbEditProposal } | { kind: "generation-proposal"; ok: true; toolId: string; version: string; proposal: SealedSchematicGenerationProposal } | { kind: "draft-request-proposal"; ok: true; toolId: string; version: string; proposal: SealedPartDraftRequest } | { kind: "module-contract-proposal"; ok: true; toolId: string; version: string; proposal: SealedModuleContractProposal } /* [PR-F fD] the module contract set rides its own kind too (an engineering note validated against the pinned sheet; no apply path); a refused set is `proposal-blocked` below, never ok */ /* [PR-F] the UNVERIFIED part draft request rides its own kind too; a refused request is `proposal-blocked` below, never ok */ // [PR-D] the Build-mode generation proposal rides its own kind too (OD-243); a failed generation is `proposal-blocked` below, never ok
   | { kind: "proposal-blocked"; ok: false; toolId: string; version: string; blockers: Array<{ code: string; detail: string }> }
   /** [B17-F] a server-VALIDATED view-session command request the BROWSER
    *  executes on the user's own view bus (stale-revision rule, role gate and
@@ -361,7 +361,7 @@ export type GatewayInvocationOutcome =
   /** [B17-F] the shared revision-bound layout candidate (placement or
    *  routing) — an artifact the human previews and applies in the editor's
    *  own panel; producing it changes nothing. */
-  | { kind: "layout-candidate"; ok: true; toolId: string; version: string; candidate: LayoutCandidate }
+  | { kind: "layout-candidate"; ok: true; toolId: string; version: string; candidate: LayoutCandidate } | { kind: "stackup-candidate"; ok: true; toolId: string; version: string; candidate: StackupCandidate } /* [PR-F fE, 2026-10-17] the sealed stackup / via-policy recommendation rides its own kind (never the layout candidate union the editor's store applies); an unsupported request is `proposal-blocked` below, never ok */
   /** [B18-B] a SERVER-MINTED one-shot execution grant for a Tier 1 family:
    *  the browser tenders it (one compare-and-set burn) and commits the
    *  operations through its canonical editor session; the loop awaits the
@@ -414,7 +414,7 @@ export type AgentRunEvent =
    *  overloaded onto the schematic `proposal_ready`. Receiving or displaying
    *  it grants nothing and mutates nothing; apply authority stays behind the
    *  human-gated PCB approval boundary. Emitted at most once per run. */
-  | { type: "pcb_proposal_ready"; runId: string; toolId: string; proposal: SealedPcbEditProposal } | { type: "generation_proposal_ready"; runId: string; toolId: string; proposal: SealedSchematicGenerationProposal } // [PR-D] the Build-mode generation proposal's OWN event (OD-243): never overloaded onto proposal_ready; receiving it mutates nothing; the page's intake (the review dialog) is a later round and ignores it until then
+  | { type: "pcb_proposal_ready"; runId: string; toolId: string; proposal: SealedPcbEditProposal } | { type: "generation_proposal_ready"; runId: string; toolId: string; proposal: SealedSchematicGenerationProposal } | { type: "draft_request_ready"; runId: string; toolId: string; proposal: SealedPartDraftRequest } | { type: "module_contracts_ready"; runId: string; toolId: string; proposal: SealedModuleContractProposal } /* [PR-F fD] the module contracts' OWN event: a sealed engineering note the page shows in the run log as a reviewable note (no apply: the human accepts by continuing); receiving it mutates nothing; until the page names the event its default run-log line shows it */ /* [PR-F] the part draft request's OWN event: a sealed UNVERIFIED review task for a human to file; receiving it mutates nothing; the page has no intake for it yet (its default run-log line) */ // [PR-D] the Build-mode generation proposal's OWN event (OD-243): never overloaded onto proposal_ready; receiving it mutates nothing; the page's intake (the review dialog) is a later round and ignores it until then
   /** [B17-F] a validated view-command request for the browser's view bus.
    *  The page dispatches it on the named editor session with the agent
    *  actor; the bus's own stale-revision / role / session rules decide. */
@@ -422,7 +422,7 @@ export type AgentRunEvent =
   /** [B17-F] a layout candidate for the editor's candidate store — displayed
    *  in the placement / routing panel; apply stays the human's explicit
    *  action through the B17-E apply path. */
-  | { type: "layout_candidate_ready"; runId: string; toolId: string; candidate: LayoutCandidate }
+  | { type: "layout_candidate_ready"; runId: string; toolId: string; candidate: LayoutCandidate } | { type: "stackup_candidate_ready"; runId: string; toolId: string; candidate: StackupCandidate } /* [PR-F fE, 2026-10-17] the stackup / via-policy candidate's OWN event: a sealed recommendation the human reads (the page has no intake for it yet - its default run-log line; the stackup is changed only through the editor's Stackup selector); receiving it mutates nothing */
   /** [B18-B] a server-minted execution grant for the browser's granted-
    *  execution ritual: preview_then_confirm shows the exact preview and
    *  waits for the human; execute_explicit tenders and commits through the
@@ -499,3 +499,9 @@ export function isOrchestrationRunEventType(type: unknown): type is Orchestratio
 
 // [PR-D] the Build-mode generation proposal artifact, imported at the END (a type import is hoisted and erased): no line cited in this file moves
 import type { SealedSchematicGenerationProposal } from "./generation-proposals";
+// [PR-F] the part draft request artifact, imported at the END too (a type import is hoisted and erased): no line cited in this file moves
+import type { SealedPartDraftRequest } from "./draft-request-proposals";
+// [PR-F fE] the stackup / via-policy candidate, imported at the END too (a type import is hoisted and erased): no line cited in this file moves
+import type { StackupCandidate } from "../pcb/candidates/stackup-candidate";
+// [PR-F fD] the module contract artifact, imported at the END too (a type import is hoisted and erased): no line cited in this file moves
+import type { SealedModuleContractProposal } from "./module-contract-proposals";

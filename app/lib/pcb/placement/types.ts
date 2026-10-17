@@ -319,7 +319,7 @@ export interface PlacementCandidate {
   algorithmVersion: typeof PLACEMENT_ALGORITHM_VERSION;
   metricVersion: typeof PLACEMENT_METRIC_VERSION;
   seed: number;
-  initializer: "current" | "constructive" | "hypergraph_force";
+  initializer: "current" | "constructive" | "hypergraph_force" | "intent_seed"; // [PR-F, 2026-10-17] intent_seed: the candidate that started from an explicit placement intent (EngineeringPlacementOptions.intentSeed)
   parentCandidateId?: string;
   placements: Record<string, PlacementTransform>;
   moves: PlacementMoveDiff[];
@@ -368,4 +368,20 @@ export interface EngineeringPlacementOptions {
   timeoutMs?: number;
   allowGeneratedOutlineResize?: boolean;
   objectivePolicy?: PlacementObjectivePolicy;
+  /** [PR-F, 2026-10-17] An explicit placement INTENT seed (app/lib/pcb/placement/intent.ts compiles it from the agent's
+   *  `sirkit.placement-intent.v1`): the transforms MOVABLE instances start from in one extra `intent_seed` candidate. A locked,
+   *  fixed, protected-copper or out-of-scope instance named here is ignored by the engine (its source transform stands; the
+   *  caller reports the conflict); a rotation or side outside the instance's allowed set is ignored the same way. Exact
+   *  legalization, the hard anchors, the hard validator and the objective evaluation run UNCHANGED over the seeded start. */
+  intentSeed?: PlacementIntentSeed;
+}
+
+/** [PR-F, 2026-10-17] The engine-side intent seed (never the model's raw text: the pure compiler binds identities first). */
+export interface PlacementIntentSeed {
+  /** instance id -> the requested transform (any subset of position / rotationDeg / side), integer nanometres in the board's world frame. */
+  placements: Record<string, Partial<PlacementTransform>>;
+  /** Instances whose rotation or side the intent pinned: the orientation refinement leaves them alone (legalization still runs). */
+  orientationPinnedIds: string[];
+  /** Prefer the intent-seeded candidate when it is hard-legal; otherwise the engine's own order (legality, objectives, hash) decides. */
+  preferSeeded: boolean;
 }

@@ -222,6 +222,9 @@ app/components/pcb/ManufacturingWorkflowPanel.tsx|click|button|p2g-request-relea
 app/components/pcb/ManufacturingWorkflowPanel.tsx|click|button|p2g-retry|workflow.retry,app/components/pcb/ManufacturingWorkflowPanel.tsx,click,button,yes,named:text,Retry hydration release
 app/components/pcb/ManufacturingWorkflowPanel.tsx|dialog|Dialog|(none)|workflow.cancelRelease,app/components/pcb/ManufacturingWorkflowPanel.tsx,dialog,Dialog,yes,exempt:dialog-titled,Authorize manufacturing release?
 app/components/pcb/MappingVerificationPanel.tsx|click|button|Verifying…|Verify mapping (read only)|onVerify,app/components/pcb/MappingVerificationPanel.tsx,click,button,yes,named:text,Verifying… Verify mapping (read only)
+app/components/pcb/MissingPartsList.tsx|click|button|missing-action-*-*|run,app/components/pcb/MissingPartsList.tsx,click,button,no,named:text,*… *
+app/components/pcb/MissingPartsList.tsx|click|button|missing-checklist-toggle-*|setExpanded,app/components/pcb/MissingPartsList.tsx,click,button,no,named:aria-label,* the missing-facts checklist for *
+app/components/pcb/MissingPartsList.tsx|click|button|missing-review-close-*|setPublication,app/components/pcb/MissingPartsList.tsx,click,button,no,named:aria-label,Close the publication request for *
 app/components/pcb/padstack/PadstackEditor.tsx|change|input|Drill diameter|stageDim,app/components/pcb/padstack/PadstackEditor.tsx,change,input,no,named:aria-label,Drill diameter
 app/components/pcb/padstack/PadstackEditor.tsx|change|input|Outer diameter|stageDim,app/components/pcb/padstack/PadstackEditor.tsx,change,input,no,named:aria-label,Outer diameter
 app/components/pcb/padstack/PadstackEditor.tsx|change|input|Padstack name|stage,app/components/pcb/padstack/PadstackEditor.tsx,change,input,no,named:aria-label,Padstack name
@@ -551,6 +554,7 @@ app/page.tsx|click|button|Fit page to view|schematicView.fitPage,app/page.tsx,cl
 "app/page.tsx|click|button|Independent domain model designs the same request and diffs it (slow, ~1–2 min)|setMoreMenuOpen,handleSecondOpinion",app/page.tsx,click,button,yes,named:text,Second opinion (SchGen)
 "app/page.tsx|click|button|Junction — mark a wire crossing as connected|setTool,setWireDraftStart",app/page.tsx,click,button,no,named:text,J
 app/page.tsx|click|Button|Keep my local schematic|resolveRecoveryKeepLocal,app/page.tsx,click,Button,no,named:text,Keep my local schematic
+app/page.tsx|click|button|missing-parts-open|openMissingParts,app/page.tsx,click,button,no,named:text,Missing parts: none Missing parts (*) PCB tab →
 app/page.tsx|click|Button|More checks|setMoreMenuOpen,app/page.tsx,click,Button,yes,named:aria-label,More checks
 app/page.tsx|click|button|Move mode (M)|setSimMode,app/page.tsx,click,button,no,named:text,Move M
 "app/page.tsx|click|button|Net label — name a net; same-name labels connect electrically|setTool,setWireDraftStart,setPendingNetLabel",app/page.tsx,click,button,no,named:text,T

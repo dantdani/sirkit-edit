@@ -59,7 +59,7 @@ describe("[B20 C3] T — the first-party descriptor text gate", () => {
   it("T1. every production descriptor passes, and the measured maxima are inside their bounds", () => {
     // [B20 merge] pin move: the A track's A4 adds one agent-exposed descriptor (sirkit.mcp.observation-read), so the
     // registry is 42 and the agent set 33; the MCP subset is unchanged at 9 (B4 withheld every proposal)
-    expect(SIRKIT_TOOL_CATALOG).toHaveLength(52); // [PR-D d2, 2026-10-16] pin move: 49 -> 52, + the Schematic to PCB preflight read, the catalog part inspection and the not-callable component review request (each text passes the gate like every other); // [B22-B, 2026-10-01] pin move (OD-139): + the five named computation descriptors; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; [PR-D, 2026-10-16] pin move (OD-243): + the Build-mode generation proposal (its text passes the gate like every other)
+    expect(SIRKIT_TOOL_CATALOG).toHaveLength(56); // [PR-F fE, 2026-10-17] pin move: 52 -> 56 as the catalog grew on 2026-10-17 - fB's missing-facts read and part draft request, fD's module contract proposal and fE's stackup / via-policy proposal (each text passes the gate like every other; the longest description, fD's, is 990 of the 1000 allowed); // [PR-D d2, 2026-10-16] pin move: 49 -> 52, + the Schematic to PCB preflight read, the catalog part inspection and the not-callable component review request (each text passes the gate like every other); // [B22-B, 2026-10-01] pin move (OD-139): + the five named computation descriptors; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; [PR-D, 2026-10-16] pin move (OD-243): + the Build-mode generation proposal (its text passes the gate like every other)
     const offenders = SIRKIT_TOOL_CATALOG.filter((item) => firstPartyTextIssues(item).length > 0 || annotationFieldIssues(item).length > 0).map((item) => item.toolId);
     expect(offenders).toEqual([]);
     const maxima = SIRKIT_TOOL_CATALOG.reduce((worst, item) => {
@@ -87,7 +87,7 @@ describe("[B20 C3] T — the first-party descriptor text gate", () => {
     }, { description: 0, title: 0, schemaText: 0, schemaStrings: 0 });
     // [B20 merge] pin move: A4's descriptor joined the registry (its description is the longest), so the measured maxima and
     // the registry digest move; the gate, its bounds and the MCP subset are unchanged
-    expect(maxima).toEqual({ description: 844, title: 56, schemaText: 264, schemaStrings: 100 });
+    expect(maxima).toEqual({ description: 990, title: 56, schemaText: 264, schemaStrings: 319 }); // [PR-F fE, 2026-10-17] pin move: schemaStrings 100 -> 319 - the placement proposal's structured intent block (sirkit.placement-intent.v1: nested component / net / region / corridor objects, each name, description, required entry and enum member judged) is the largest judged schema, inside schemaMaxStrings 512; description 844 -> 990 - the longest description is PR-F fD's module contract proposal (fE's stackup proposal is 985), inside descriptionMaxChars 1000
     // [B20 C3 review] the numbers the byte-gated parity page publishes as MEASURED are THESE numbers: the page's block is
     // filled by the gate's own collector, and this independent walker is what proves it (a second walker of its own would
     // let the page publish a smaller reach than the gate actually judges)

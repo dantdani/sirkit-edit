@@ -81,6 +81,9 @@ describe("B09.2 §A — no synthetic canonical authority (R1/R2)", () => {
     // lineage-sealed proposal remains. [PR-D, 2026-10-17] pin move: every CANONICAL read; the Schematic to PCB preflight read
     // (sirkit.pcb-sync.preflight) is a Tier 0 read over the run's verified schematic snapshot that needs no board (its own binding, not B05's).
     expect(toolset.declarations.map((declaration) => declaration.toolId).sort()).toEqual([
+      "sirkit.module.propose-contracts", // [PR-F fD, 2026-10-17] pin move: + the module contract proposal (a Tier 2 sealed engineering note over the pinned sheet; the head mark present here)
+      "sirkit.parts.draft-request", // [PR-F fB, 2026-10-17] pin move: + the part draft request (a Tier 2 sealed UNVERIFIED review task; the head mark present here) and the missing-facts read (a Tier 0 read over the verified schematic, the UI's own derivation; no board, no catalog needed)
+      "sirkit.parts.missing-facts",
       "sirkit.pcb-sync.preflight",
       "sirkit.schematic.propose-tier1-edit",
     ]);

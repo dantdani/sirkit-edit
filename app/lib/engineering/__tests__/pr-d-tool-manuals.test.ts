@@ -239,13 +239,13 @@ describe("PR-D tool manuals - (f) honesty: an excluded tool is never advertised 
       expect(CLASSIFIED_HANDLER_FAMILIES, descriptor.toolId).toContain(family);
       if (descriptor.binding.status === "bound-computation") expect(family).toBe("computation");
       else if (descriptor.binding.status === "bound-external-read") expect(["external-read", "mcp-observation"]).toContain(family);
-      else if (descriptor.operationClass === "read") expect(["read", "pcb-sync-preflight", "catalog-inspection"], descriptor.toolId).toContain(family);
+      else if (descriptor.operationClass === "read") expect(["read", "pcb-sync-preflight", "catalog-inspection", "missing-facts"], descriptor.toolId).toContain(family); // [PR-F fB, 2026-10-17] + the missing-facts family
       else if (descriptor.operationClass === "view-session") expect(family, descriptor.toolId).toBe("view-session");
       else if (descriptor.operationClass === "mutate") expect(family, descriptor.toolId).toBe("granted-execution");
-      else expect(["sealed-proposal", "layout-proposal", "generation-proposal"], descriptor.toolId).toContain(family);
+      else expect(["sealed-proposal", "layout-proposal", "generation-proposal", "draft-request-proposal", "module-contract-proposal", "stackup-proposal"], descriptor.toolId).toContain(family); // [PR-F fE, 2026-10-17] + the stackup family; // [PR-F fD, 2026-10-17] + the module-contract family; // [PR-F fB, 2026-10-17] + the draft-request family
     }
     // The families every B18-C.. PR-D exposure already holds; a new family is admitted only through CLASSIFIED_HANDLER_FAMILIES.
-    for (const family of ["computation", "external-read", "generation-proposal", "granted-execution", "layout-proposal", "mcp-observation", "read", "sealed-proposal", "view-session"]) expect(families.has(family), family).toBe(true);
+    for (const family of ["computation", "external-read", "generation-proposal", "granted-execution", "layout-proposal", "mcp-observation", "read", "sealed-proposal", "view-session", "missing-facts", "draft-request-proposal", "module-contract-proposal", "stackup-proposal"]) expect(families.has(family), family).toBe(true); // [PR-F fE, 2026-10-17] + the stackup family; // [PR-F fD, 2026-10-17] + the module-contract family; // [PR-F fB, 2026-10-17] + the two PR-F families
     expect(families.has("unclassified")).toBe(false);
     expect(families.has("not-callable")).toBe(false);
   });

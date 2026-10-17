@@ -21,6 +21,13 @@ const SIZES = [[1280, 720], [1366, 768], [1440, 900], [1920, 1080]] as const;
 test.describe.configure({ mode: "serial" });
 test.setTimeout(240_000);
 
+/** Open or close the chat by its activity-bar toggle, reading the current state first (the page may have opened it itself). */
+async function setChatOpen(page: Page, open: boolean): Promise<void> {
+  const visible = (await page.getByTestId("prompt-input").count()) > 0;
+  if (visible !== open) await page.getByTestId("activity-ai chat").click();
+  if (open) await expect(page.getByTestId("prompt-input")).toBeVisible(); else await expect(page.getByTestId("prompt-input")).toHaveCount(0);
+}
+
 async function expectEssentialsVisible(page: Page): Promise<void> {
   // the journey strip with its next action, the workspace tabs, the mode toggle and the settings control never scroll away or overlap the canvas
   await expect(page.getByTestId("journey-strip")).toBeVisible();
@@ -82,8 +89,18 @@ test("fresh browser: entry action, settings dialog, 3D unavailable state, comput
   await prompt.fill(BLINKER_ACCEPTANCE_PROMPT);
   await prompt.press("Enter");
   await expect(page.getByTestId("schematic-proposal-review")).toBeVisible({ timeout: 90_000 });
+  // [PR-F, 2026-10-17] the page runs two post-apply AI passes after approval (layout critic, review); under the fixture both answer
+  // 503 and the existing provider-failure card AUTO-OPENS the chat (B07.5). The spec waits for both so the size loop below never races
+  // that auto-open — the behaviour itself is the product's, the waiting is the spec's.
+  const postApply = Promise.all([
+    page.waitForResponse((response) => response.url().includes("/api/schematic/layout-critic"), { timeout: 60_000 }),
+    page.waitForResponse((response) => response.url().includes("/api/schematic/review"), { timeout: 60_000 }),
+  ]);
   await page.getByTestId("schematic-proposal-approve").click();
   await expect(page.getByTestId("schematic-proposal-review")).toBeHidden();
+  const [critic, review] = await postApply;
+  expect([critic.status(), review.status()]).toEqual([503, 503]); // the fixture has no provider: the honest refusal, never a fake pass
+  await expect(page.getByText(/is currently unavailable\./)).toBeVisible(); // the existing card, chat auto-opened
   await expect(page.getByTestId("design-check-floating-nets")).toHaveAttribute("data-state", /pass|findings/, { timeout: 30_000 });
   await expect(page.getByTestId("design-check-supply-rails")).toHaveAttribute("data-state", /pass|findings/);
   const digest = await page.getByTestId("design-checks").getAttribute("data-digest");
@@ -95,10 +112,12 @@ test("fresh browser: entry action, settings dialog, 3D unavailable state, comput
     await page.setViewportSize({ width, height });
     await expectEssentialsVisible(page);
     await page.screenshot({ path: join(SHOTS, `after-${width}x${height}-schematic-chat-open.png`), fullPage: false });
-    await page.getByTestId("activity-ai chat").click(); // close
+    // [PR-F, 2026-10-17] the toggle is made idempotent: after an applied proposal the page's post-apply AI passes answer 503 under the
+    // fixture and the existing provider-failure card AUTO-OPENS the chat (B07.5); a blind second click would toggle it shut again.
+    await setChatOpen(page, false);
     await expect(page.getByTestId("prompt-input")).toHaveCount(0);
     await expectEssentialsVisible(page);
-    await page.getByTestId("activity-ai chat").click(); // open again
+    await setChatOpen(page, true);
     await expect(page.getByTestId("prompt-input")).toBeVisible();
   }
 });

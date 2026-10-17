@@ -3330,3 +3330,58 @@ Under the existing OD-217 heading (`:2599`), append:
   example. The manuals are evidence for operators and reviewers; they are deliberately NOT injected into the model's prompt (no second
   drifting tool list). A handler's NEW failure code is not auto-extracted: the manual says so and the code source table must be updated.
 - **The owner may choose otherwise:** a reviewed run-time exposure that lets the assistant read a manual as a bounded tool.
+
+## OD-248 — missing parts in the ordinary workflow: the checklist, the four actions, the agent's read and sealed draft request, and the publication boundary (product reliability F, 2026-10-17)
+
+- **Question:** section F.1–F.5 of the owner's assignment and CONTINUATION C require that a missing part is a workflow item with a
+  precise missing-facts checklist and the existing search / review / draft paths — never an invented package or pin map — and that
+  the agent has the same information and the same bounded request. How is this surfaced, and what may the agent do?
+- **Default applied:** ONE derivation, `app/lib/parts/missing-facts.ts` (`sirkit.missing-facts-checklist.v1`): identity (manufacturer,
+  exact MPN, package variant), evidence (symbol, footprint, pin-to-pad mapping — the import-review needs) and sourcing (stock, price)
+  kept apart; sourcing never makes identity or evidence known (`ENGINEERING_FACTS_NEVER_PROVEN_BY_SOURCING`); a Theory symbol is "not a
+  physical part"; the actions in order — search the published atomic revisions, search the admitted distributors (an unavailable,
+  paused or refused source returns that state), request component review (the existing review handoff), create an explicitly
+  UNVERIFIED draft (the existing publication request, prefilled; a draft is never PCB-assignable until the deterministic mapping checks
+  and human publication pass) — each available or "not available" with its reason. The UI renders it per unresolved instance inside the
+  existing Schematic → PCB refusal (`MissingPartsList`), the journey strip's parts stage counts "missing parts", and the Build sidebar
+  carries a "Missing parts (N)" line that opens the list. The agent gets `sirkit.parts.missing-facts` (Tier 0 read over the run's
+  verified schematic; the catalog facts only with the chat route's catalog port; MCP withheld) and `sirkit.parts.draft-request` (Tier 2
+  sealed REQUEST carrying the documented facts with their sources and the missing ones; it refuses without a pin table or with
+  conflicting facts; the human submits it through `POST /api/components/atomic/publication`). The draft request has its OWN propose
+  record `parts.draft-request`; B19-E E4 stands — no tool is owned by the human-only `parts.atomic-publication-review` record and no
+  tool publishes. The b19-d chat import-closure ratchet admits two pure acquisition modules (`external-search-contract.ts`,
+  `source-labels.ts`: constants and labels, no connector) with a tripwire — accepted by the lead. The fixture browser proof
+  (`e2e/pr-f-missing-parts.spec.ts`) runs with every distributor source operator-disabled (`playwright.config.ts`), so the fixture
+  server can never reach a vendor; the proof shows the fixture's own no-call source states and no request leaving the origin.
+- **The owner may choose otherwise:** a page intake for `draft_request_ready` that prefills the Build Library's evidence review from the
+  sealed request (today the event reaches the run log; the UI's own draft action prefills the same publication request); a member-callable
+  draft-creation route; re-pointing the three constants out of `app/lib/acquisition/` instead of the ratchet amendment.
+
+## OD-249 — the first Astra increments: a qualifiable `gpt-6-astra` profile behind the role override, module contracts, structured placement intent, stackup / via-policy candidates, the placement → routing feedback loop and its capability matrix (product reliability F, 2026-10-17)
+
+- **Question:** section F's "remaining Astra work" and the owner's additive directive (increments A–E) ask for compatibility, module
+  contracts, evidence-backed placement and stackup proposals and bounded routing feedback — without a second runtime, without widening
+  defaults and without claiming engineering quality from fakes. What landed, and what stays blocked?
+- **Default applied:** (A) `gpt-6-astra` is a `MODEL_PROFILES` entry classified by the existing reasoning / no-temperature family rules and
+  admitted ONLY through `SIRKIT_ORCHESTRATION_ROLE_MODELS`; `DEFAULT_OPENAI_MODEL` stays `gpt-5.6-sol`; the documentation facts are
+  cited in `astra/compatibility.md` (WebFetch reads of 2026-10-17); the rebaseline of every directive section against the tree is
+  `astra/rebaseline.md`. A zero-cost `GET /v1/models` probe with the owner's key on 2026-10-17 listed `gpt-6-astra` (and `gpt-6-sol`,
+  `gpt-6-luna`, `gpt-6.1-sol`): account availability is NOT a blocker; the live contract turn stays subject to the US$5 allowance.
+  (C) `sirkit.module-contract.v1` + validator + the Tier 2 `sirkit.module.propose-contracts` (identities from the pinned sheet only,
+  named nets as ports, every value with units, every recommendation with evidence shape and kind); the artifact is a reviewable note in
+  the run log (no apply). (D) the placement proposal 1.2.0 takes an optional `sirkit.placement-intent.v1` block (groups, regions,
+  coordinates and side, pin proximity, corridors, critical nets; mm, the board frame stated) that seeds one extra candidate through the
+  EXISTING engine; legalization and locks win and every departure from the intent is a listed conflict; boards over 50 physical
+  instances are `unsupported-scope`; `sirkit.stackup.propose` recommends only the qualified profiles the tree defines (today the
+  two-layer `simple-2` with through vias) and refuses everything else as data; a profile change marks dependent approvals invalid.
+  (E) `app/lib/pcb/experiments/placement-routing-feedback.ts` runs the directive's chain over an isolated snapshot through the existing
+  FreeRouting executor port (absent → `routing_engine_unavailable`), bounded, cancellable, resumable by stage, retaining the best valid
+  candidate by a declared ordering and never relaxing clearances, nets or requirements; the generated capability matrix
+  (`astra/routing-capability-matrix.csv`, 18 constraint kinds, every row cited) says which constraints survive export, routing, import
+  and independent checking — differential coupling, skew, impedance and return paths are UNSUPPORTED. All of it is fixture/fake-backed.
+- **Live blockers (exact):** one authorized contract turn with `gpt-6-astra` (≤ ~0.46 USD worst case at the list prices read on
+  2026-10-17; LB-F3); the contained routing platform for real FreeRouting measurements (LB-3 / LB-8); the live-model comparison corpus of
+  directive 13 (LB-7 / LB-9 + spend); four-layer profiles need their own qualification increment.
+- **The owner may choose otherwise:** page intakes for `module_contracts_ready` and `stackup_candidate_ready` (today the run log);
+  exposing the feedback loop as an agent tool or through the layout-experiment request; a user-visible model label in the chat bubble
+  (the trace and events already carry it).

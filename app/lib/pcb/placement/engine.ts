@@ -123,6 +123,26 @@ function constructivePlacement(problem: PlacementProblem, gridNm: number): Recor
   return placements;
 }
 
+/** [PR-F, 2026-10-17] The intent-seeded start: the source record with the seed's transforms applied to MOVABLE instances only
+ *  (a locked, fixed or out-of-scope instance keeps its source transform; a rotation or side outside the allowed set is ignored),
+ *  then the same hard anchors every initializer passes through. Returns how many instances the seed actually moved. */
+function intentSeedPlacement(problem: PlacementProblem, seed: NonNullable<EngineeringPlacementOptions["intentSeed"]>): { placements: Record<string, PlacementTransform>; seeded: number } {
+  const placements = sourcePlacementRecord(problem);
+  let seeded = 0;
+  for (const instance of problem.instances) {
+    const requested = seed.placements[instance.id];
+    if (!requested || !instance.movable) continue;
+    const current = placements[instance.id];
+    const rotationDeg = requested.rotationDeg !== undefined && instance.allowedRotations.includes(requested.rotationDeg) ? requested.rotationDeg : current.rotationDeg;
+    const side = requested.side !== undefined && instance.allowedSides.includes(requested.side) ? requested.side : current.side;
+    const position = requested.position ? { x: Math.round(requested.position.x), y: Math.round(requested.position.y) } : current.position;
+    placements[instance.id] = { position, rotationDeg, side };
+    seeded += 1;
+  }
+  projectHardAnchors(problem, placements);
+  return { placements, seeded };
+}
+
 function forcePlacement(problem: PlacementProblem, seed: number, maxIterations: number, gridNm: number): { placements: Record<string, PlacementTransform>; iterations: number; converged: boolean; incidences: number } {
   const board = structuredClone(problem.board);
   for (const instance of problem.instances) {
@@ -166,9 +186,10 @@ function quickPinHpwl(problem: PlacementProblem, placements: Record<string, Plac
   return result;
 }
 
-function refineOrientation(problem: PlacementProblem, placements: Record<string, PlacementTransform>): Record<string, PlacementTransform> {
+function refineOrientation(problem: PlacementProblem, placements: Record<string, PlacementTransform>, pinned?: ReadonlySet<string>): Record<string, PlacementTransform> {
   const next = structuredClone(placements);
-  for (const instance of problem.instances.filter((candidate) => candidate.movable).sort((left, right) => left.id.localeCompare(right.id))) {
+  // [PR-F, 2026-10-17] an instance whose rotation / side the intent seed pinned keeps it here (legalization still runs over it)
+  for (const instance of problem.instances.filter((candidate) => candidate.movable && !pinned?.has(candidate.id)).sort((left, right) => left.id.localeCompare(right.id))) {
     let best = next[instance.id];
     let bestScore = quickPinHpwl(problem, next, instance.id);
     for (const side of instance.allowedSides) for (const rotationDeg of instance.allowedRotations) {
@@ -316,6 +337,7 @@ export function runEngineeringPlacement(input: { board: PlacementProblem["board"
   const candidateCount = Math.max(2, Math.min(8, Math.round(options.candidateCount ?? 4)));
   const maxIterations = Math.max(1, Math.min(2_000, Math.round(options.maxIterations ?? 400)));
   const specs: Array<{ initializer: PlacementCandidate["initializer"]; seed: number }> = [
+    ...(options.intentSeed ? [{ initializer: "intent_seed" as const, seed: problem.seedSet[0] }] : []), // [PR-F] one extra candidate that starts from the intent
     { initializer: "current", seed: problem.seedSet[0] },
     { initializer: "hypergraph_force", seed: problem.seedSet[0] },
     ...(candidateCount >= 3 ? [{ initializer: "constructive" as const, seed: problem.seedSet[0] }] : []),
@@ -336,6 +358,12 @@ export function runEngineeringPlacement(input: { board: PlacementProblem["board"
     if (spec.initializer === "current") {
       placements = sourcePlacementRecord(problem);
       phaseStats.push({ phase: "current-seed", elapsedMs: 0, iterations: 0, termination: "captured" });
+    } else if (spec.initializer === "intent_seed") {
+      // [PR-F, 2026-10-17] the intent's transforms on movable instances, then the SAME orientation refinement (pinned ids kept),
+      // exact legalization, hard validation and objective evaluation as every other candidate
+      const seeded = intentSeedPlacement(problem, options.intentSeed!);
+      placements = seeded.placements;
+      phaseStats.push({ phase: "intent-seed", elapsedMs: 0, iterations: seeded.seeded, termination: "captured" });
     } else if (spec.initializer === "constructive") {
       placements = constructivePlacement(problem, gridNm);
       phaseStats.push({ phase: "constructive", elapsedMs: 0, iterations: problem.instances.length, termination: "bounded" });
@@ -348,7 +376,7 @@ export function runEngineeringPlacement(input: { board: PlacementProblem["board"
       if (force.incidences !== problem.hyperedges.filter((edge) => edge.kind === "signal").reduce((sum, edge) => sum + edge.memberComponentIds.length, 0)) warnings.push("Force incidences differ from pin-aware hypergraph incidences because the legacy force initializer groups by footprint/net; no pair clique is used.");
     }
     input.observer?.onProgress?.({ phase: "orientation", percent: 20 + Math.round((index / specs.length) * 55), candidate: index + 1, candidateCount: specs.length });
-    placements = refineOrientation(problem, placements);
+    placements = refineOrientation(problem, placements, spec.initializer === "intent_seed" ? new Set(options.intentSeed?.orientationPinnedIds ?? []) : undefined);
     input.observer?.onProgress?.({ phase: "legalize", percent: 25 + Math.round((index / specs.length) * 55), candidate: index + 1, candidateCount: specs.length });
     const legalized = legalize(problem, placements, gridNm);
     placements = legalized.placements;
@@ -361,9 +389,11 @@ export function runEngineeringPlacement(input: { board: PlacementProblem["board"
   }
   input.observer?.onProgress?.({ phase: "select", percent: 92 });
   const sorted = [...candidates].sort((left, right) => compareCandidates(left, right, policy.priorities));
-  const selected = sorted.find((candidate) => candidate.hardReport.legal);
+  // [PR-F, 2026-10-17] a hard-legal intent-seeded candidate is preferred when the seed asks for it; otherwise the order above decides
+  const preferredSeed = options.intentSeed?.preferSeeded ? sorted.find((candidate) => candidate.initializer === "intent_seed" && candidate.hardReport.legal) : undefined;
+  const selected = preferredSeed ?? sorted.find((candidate) => candidate.hardReport.legal);
   const frontier = sorted.filter((candidate) => candidate.hardReport.legal && !sorted.some((other) => other.candidateId !== candidate.candidateId && dominates(other, candidate)));
-  const finalized = sorted.map((candidate) => candidate.candidateId === selected?.candidateId ? { ...candidate, selected: true, selectionReason: timedOut ? "Best legal candidate found before the explicit time budget." : "Selected lexicographically by hard legality, explicit objective priorities, normalized penalties, and stable hash tie-break." } : candidate);
+  const finalized = sorted.map((candidate) => candidate.candidateId === selected?.candidateId ? { ...candidate, selected: true, selectionReason: preferredSeed ? "Intent-seeded candidate preferred: hard-legal after exact legalization (the objective order did not decide)." : timedOut ? "Best legal candidate found before the explicit time budget." : "Selected lexicographically by hard legality, explicit objective priorities, normalized penalties, and stable hash tie-break." } : candidate);
   const result: PlacementRunResult = {
     runId: placementStableId("placement-run", { problemHash: problem.problemHash, candidates: finalized.map((candidate) => candidate.candidateHash), timedOut }),
     problem,

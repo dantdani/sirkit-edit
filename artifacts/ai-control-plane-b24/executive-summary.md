@@ -51,21 +51,29 @@ NOT READY (`eslint .` exits 1, none of its 33 errors introduced by B24), CI read
 | canonical-wrappers | 165 |
 | approved-factories | 3 |
 | raw-handlers | 0 |
-| action-records | 107 |
-| registry-tools | 52 |
-| agent-exposed-tools | 40 |
+| action-records | 108 |
+| registry-tools | 56 |
+| agent-exposed-tools | 44 |
 | mcp-exposed-tools | 9 |
-| agent-only-tools | 31 |
+| agent-only-tools | 35 |
 | agent-exposed-tier-3-tools | 0 |
-| control-sites | 636 |
-| control-surfaces | 64 |
+| control-sites | 640 |
+| control-surfaces | 65 |
 | sql-migrations | 32 |
-| generators | 30 |
+| generators | 31 |
 
 [PR-D, 2026-10-17] Count lines moved with the regenerated map (product reliability D): registry-tools 48 -> 52, agent-exposed-tools
 37 -> 40, agent-only-tools 28 -> 31 (PR-D's four descriptors, OD-243, OD-244; mcp-exposed-tools stays 9); generators 28 -> 30 (PR-D's
 coverage-matrix and tool-manual generators, OD-245, OD-247); control-sites 628 -> 636, control-surfaces 63 -> 64 (the B17-A inventory as
 PR-C 6bdd7f7 and PR-E 390afa4 left it - the simplified workspace's settings dialog and entry action; PR-D adds no control).
+
+[PR-F, 2026-10-17] Count lines moved with the regenerated map (product reliability F): action-records 107 -> 108 (parts.draft-request, the sealed draft request own propose record), registry-tools 52 -> 56, agent-exposed-tools
+40 -> 44, agent-only-tools 31 -> 35 (PR-F's four descriptors; mcp-exposed-tools stays 9); control-sites 636 -> 640, control-surfaces 64 -> 65
+(the Missing parts list and its actions, the B17-A inventory as regenerated); generators 30 -> 31 (the routing capability matrix, moved by fF).
+
+[PR-F, 2026-10-17] Count line moved with the regenerated map (Astra increment E, builder fF): generators 30 -> 31 (the routing
+capability matrix generator `scripts/generate-pr-f-routing-capability-matrix.ts`, directive section 10; the other count lines of this
+table are the concurrent PR-F builders' to move with their descriptors and controls).
 
 ## 4. Earlier verdicts
 

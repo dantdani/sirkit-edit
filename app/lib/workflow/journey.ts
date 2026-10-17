@@ -244,7 +244,9 @@ export function deriveJourney(input: JourneyFactsInput): JourneyView {
     // is applied - in Build mode only (a Theory symbol is not a buildable part: §F).
     if (p.unresolvedCount > 0) {
       status.parts_footprints = "blocked";
-      note.parts_footprints = `${plural(p.unresolvedCount, "unresolved part")}: missing footprint, package or pin-map authority`;
+      // [PR-F fA] the stage says "N missing part(s)" - the words of the sidebar's Missing parts line and of the PCB tab's list that
+      // the one action opens (each row's checklist names what is missing: identity, evidence, stock and pricing kept apart)
+      note.parts_footprints = `${plural(p.unresolvedCount, "missing part")}: no published exact revision, symbol, footprint or pin-map authority`;
       candidate.parts_footprints = action("Resolve parts", "fix_blockers");
     } else if (p.bindingReviewPending > 0) {
       status.parts_footprints = "awaiting_approval";

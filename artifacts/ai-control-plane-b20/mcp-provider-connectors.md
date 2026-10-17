@@ -140,7 +140,7 @@ The policy module enforces nothing and has no production caller. What makes the 
   `app/lib/agent/adapters.ts:74-80` (`normalizeOpenAIStep`) and `app/lib/agent/adapters.ts:175-181` (`normalizeAnthropicStep`).
   The error carries no cause, no provider status, no provider code and no provider message, only one fixed sentence:
   `app/lib/llm/errors.ts:47-48` (`unrequested_output`).
-  The run then fails `provider_unrequested_output`, or `provider_unknown` for a malformed list: `app/lib/agent/loop.ts:773` (`provider_${error.reason}`). [PR-D, 2026-10-17] Both loop citations on this page moved in place, line 85 to 86 and 767 to 773: `535760f` (product reliability A+B, 2026-10-14) inserted lines in `app/lib/agent/loop.ts` above them, and T6 of `b20-a5-connector-tripwires` resolves both (red at `535760f`).
+  The run then fails `provider_unrequested_output`, or `provider_unknown` for a malformed list: `app/lib/agent/loop.ts:774` (`provider_${error.reason}`). [PR-F lead, 2026-10-17] 773 -> 774 (the PR-F loop additions). [PR-D, 2026-10-17] Both loop citations on this page moved in place, line 85 to 86 and 767 to 773: `535760f` (product reliability A+B, 2026-10-14) inserted lines in `app/lib/agent/loop.ts` above them, and T6 of `b20-a5-connector-tripwires` resolves both (red at `535760f`).
   The trace's closed vocabulary admits it: `app/lib/agent/trace.ts:108-111` (`PROVIDER_REASON_PATTERN`).
   The run-failure card offers Retry / Switch, as for every provider failure: `app/lib/agent/run-consumer.ts:19-21` (`isRecoverableProviderFailure`).
   It is not automatically retryable: `app/lib/llm/errors.ts:151-153` (`isRetryableReason`).

@@ -241,15 +241,15 @@ case, so a reviewed subset move moves the sweep with it. As of base `6e3efa7` ([
 
 | quantity | value |
 |---|---|
-| descriptors | 52 |
+| descriptors | 56 |
 | MCP-exposed | 9 |
-| withheld | 11 |
+| withheld | 15 |
 | structurally excluded | 32 |
 | mapped stored roles | 5 |
 
 The served listing is **not uniform across roles**: the viewer, the reviewer, the editor and the admin see the nine
-reads, the commenter the seven its role permits. The sweep is therefore **260 requests**, of which **43 served reads**
-and **217 unknown-tool refusals**.
+reads, the commenter the seven its role permits. The sweep is therefore **280 requests**, of which **43 served reads**
+and **237 unknown-tool refusals** ([PR-F fE, 2026-10-17] updated for PR-F fE's stackup / via-policy proposal `sirkit.stackup.propose`, withheld from MCP: 55 -> 56 descriptors, 14 -> 15 withheld, 32 structurally excluded unchanged; 275 -> 280 requests, 232 -> 237 refusals; the served reads unchanged; [PR-F fD, 2026-10-17] updated for PR-F fD's module contract proposal, withheld from MCP: 54 -> 55 descriptors, 13 -> 14 withheld, 32 structurally excluded unchanged; 270 -> 275 requests, 227 -> 232 refusals; the served reads unchanged; [PR-F fB, 2026-10-17] updated for PR-F's two descriptors, the missing-facts read and the part draft request, both withheld from MCP: 52 -> 54 descriptors, 11 -> 13 withheld, 32 structurally excluded unchanged; 260 -> 270 requests, 217 -> 227 refusals; the served reads unchanged).
 
 ### D2.2 The partition (DEC-5), and why it exists
 

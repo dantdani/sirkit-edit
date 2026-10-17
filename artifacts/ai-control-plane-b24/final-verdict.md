@@ -101,12 +101,12 @@ Counts, from `current-system-map.md` (generated; each pinned count equals its pi
 | canonical-wrappers | 165 |
 | approved-factories | 3 |
 | raw-handlers | 0 |
-| action-records | 107 |
-| registry-tools | 52 |
-| agent-exposed-tools | 40 |
+| action-records | 108 |
+| registry-tools | 56 |
+| agent-exposed-tools | 44 |
 | mcp-exposed-tools | 9 |
 | granted-tier-1-tools | 6 |
-| agent-exposed-proposal-tools | 6 |
+| agent-exposed-proposal-tools | 9 |
 | agent-exposed-tier-3-tools | 0 |
 | sql-migrations | 32 |
 
@@ -115,6 +115,10 @@ Counts, from `current-system-map.md` (generated; each pinned count equals its pi
 agent-exposed), the Schematic-to-PCB preflight read and the catalog part inspection (Tier 0, agent-exposed, withheld from MCP) and the
 component review request (registered, not callable); mcp-exposed-tools stays 9. Section 5's report lines stand as drafted at the
 closeout's final SHA.
+
+[PR-F, 2026-10-17] Count lines moved with the regenerated map (product reliability F): action-records 107 -> 108 (parts.draft-request, the sealed draft request own propose record), registry-tools 52 -> 56, agent-exposed-tools
+40 -> 44, agent-exposed-proposal-tools 6 -> 9 - PR-F's four descriptors: the missing-facts read and the part draft request (missing parts,
+OD-248), the module-contract proposal and the stackup / via-policy proposal (Astra increments C-D, OD-249); the verdict's status lines stand.
 
 BENCHMARK-QUALITY RESULT: BLOCKED (`baseline_missing` while the latest `latency-baseline.json` version is the declared-without-values
 v1, OD-212, OD-30; printed as BLOCKED, never as pass), as `performance-reliability-report.md` section 1 states. [B24-closeout,

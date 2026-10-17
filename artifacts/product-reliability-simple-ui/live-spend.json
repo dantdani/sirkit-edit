@@ -38,5 +38,17 @@
   "owner_own_usage_not_counted": {
     "note": "the owner's own 2026-10-11 session: 13 gpt-5.6-sol calls (28,878 input / 3,211 output tokens) plus 51 embedding calls on one Build request; priced at the basis above ≈ 0.18 USD; the owner's spend on the owner's key, outside the builder's cap Between 2026-10-11 and 2026-10-15 23:53Z the owner's own sessions added 76 more call records (not the builder's; not counted)."
   },
-  "worst_case_per_request_note": "a Build request is bounded today only by MAX_ITERATIONS=20 × maxTokens 8,192 output and the route's 45 s deadline: analytically ≈ 3.36 USD output + input, which is not provable under the cap; checkpoint C adds an explicit loop budget before any builder-initiated live Build request"
+  "worst_case_per_request_note": "a Build request is bounded today only by MAX_ITERATIONS=20 × maxTokens 8,192 output and the route's 45 s deadline: analytically ≈ 3.36 USD output + input, which is not provable under the cap; checkpoint C adds an explicit loop budget before any builder-initiated live Build request",
+  "builder_probes": [
+    {
+      "id": "LP-1",
+      "status": "completed",
+      "at": "2026-10-17T02:05:00-04:00",
+      "purpose": "Astra increment A: does the owner's OpenAI account list gpt-6-astra? (directive 4 / CONTINUATION B: account availability is a precondition of any live turn)",
+      "request": "GET https://api.openai.com/v1/models with the owner's key from .env.local (read in a scratch script outside the repo; the key was never printed or stored)",
+      "result": "200; 135 models; gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-6.1-sol listed beside gpt-5.6-sol/-luna/-terra",
+      "cost_usd": "0.00",
+      "cost_basis": "CONFIRMED: the models list is not metered (no tokens)"
+    }
+  ]
 }

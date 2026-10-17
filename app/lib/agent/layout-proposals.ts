@@ -15,7 +15,8 @@
  * argument keys (authority-shaped arguments are refused by name).
  */
 import type { AutoroutePassExecutor } from "../pcb/autoroute/completion";
-import { runPlacementCandidate, type LayoutCandidate } from "../pcb/candidates/layout-candidate";
+import { runPlacementCandidate, type LayoutCandidate, type PlacementIntentRun } from "../pcb/candidates/layout-candidate";
+import { classifyPlacementScope, compilePlacementIntent } from "../pcb/placement/intent"; // [PR-F, 2026-10-17] the structured placement intent (identity binding, the scope gate)
 import { runRoutingCandidate } from "../pcb/candidates/routing-server";
 import { getPreset } from "../pcb/drc/presets";
 import { discoverTools } from "../engineering/tool-discovery";
@@ -42,6 +43,8 @@ export interface LayoutProposalInput {
 
 export type LayoutProposalOutcome =
   | { status: "candidate"; candidate: LayoutCandidate }
+  /** [PR-F] the whole proposal refused as DATA (an intent naming an unknown component or net, or malformed); the gateway maps it to `proposal-blocked`. */
+  | { status: "blocked"; blockers: Array<{ code: string; detail: string }> }
   | { status: "refused"; failure: string; diagnostics: string[] };
 
 const AUTHORITY_KEYS = new Set(["actor", "actorId", "role", "capability", "capabilities", "authority", "approval", "approvals", "apply", "commit", "generation", "expectedRevision", "revision"]);
@@ -94,7 +97,7 @@ export class LayoutProposalService {
     const clock = (): string => new Date(this.options.now ? this.options.now() : Date.now()).toISOString();
 
     if (isPlacement) {
-      const invalid = strictKeys(input.args, ["instanceIds", "candidateCount", "maxIterations"]);
+      const invalid = strictKeys(input.args, ["instanceIds", "candidateCount", "maxIterations", "intent"]); // [PR-F] + the structured intent
       if (invalid) return refuse("invalid_input", invalid);
       let instanceIds: string[] | undefined;
       if (input.args.instanceIds !== undefined && input.args.instanceIds !== null) {
@@ -108,8 +111,18 @@ export class LayoutProposalService {
       const candidateCount = boundedInteger(input.args.candidateCount, 2, 8);
       const maxIterations = boundedInteger(input.args.maxIterations, 1, 2000);
       if (candidateCount === null || maxIterations === null) return refuse("invalid_input", "candidateCount must be 2–8 and maxIterations 1–2000.");
+      // [PR-F, 2026-10-17] the structured placement intent (sirkit.placement-intent.v1): bound ALL-OR-NOTHING to exact identities of
+      // this board revision (an unknown component or net refuses the whole proposal as blockers data); a qualified scope seeds the
+      // engine through the one options builder, an unsupported scope (> 50 physical instances) is classified in the candidate's data
+      let intent: PlacementIntentRun | undefined;
+      if (input.args.intent !== undefined && input.args.intent !== null) {
+        const compiled = compilePlacementIntent(board, input.args.intent);
+        if (!compiled.ok) return { status: "blocked", blockers: compiled.blockers.map((blocker) => ({ code: blocker.code, detail: blocker.detail })) };
+        intent = { intent: compiled.intent, seed: compiled.seed, scope: classifyPlacementScope(board) };
+      }
       const { candidate, run } = runPlacementCandidate({
         board,
+        ...(intent ? { intent } : {}),
         request: {
           producer: "agent",
           projectId: input.context.projectId,

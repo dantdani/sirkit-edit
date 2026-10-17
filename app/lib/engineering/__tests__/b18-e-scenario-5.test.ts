@@ -142,7 +142,7 @@ describe("[B18-E E17] what the model is told about a layout candidate", () => {
     expect(LAYOUT_CANDIDATE_NOTE, "and the failures are to be named, not counted").toContain("name the unresolved connections");
     // The tool surface really does carry no such argument — the note is not describing a choice the model could make.
     const placement = sirkitToolRegistry().list().find((tool) => tool.toolId === "sirkit.placement.propose")!;
-    expect(Object.keys((placement.inputSchema as { properties: Record<string, unknown> }).properties).sort()).toEqual(["candidateCount", "instanceIds", "maxIterations"]);
+    expect(Object.keys((placement.inputSchema as { properties: Record<string, unknown> }).properties).sort()).toEqual(["candidateCount", "instanceIds", "intent", "maxIterations"]); // [PR-F fE, 2026-10-17] reviewed pin move: + `intent` (sirkit.placement-intent.v1, directive section 8) - explicit geometry, groups, regions, proximity, separation, corridors and net priorities bound to exact identities; still NO compactness, spacing or objective-weight argument, so the note's sentence stays true
   });
 });
 

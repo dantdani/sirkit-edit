@@ -184,7 +184,7 @@ describe("[B20 B4] stop evidence — the placement engine's budget and cancellat
       [ENGINE, null, "checkBudget(startedAt, timeoutMs, input.observer)"],
       [ENGINE, null, "forcePlacement(problem, spec.seed, maxIterations, gridNm)"],
       [ENGINE, null, "Math.max(0, Math.min(3, Math.round(options.localRefinementPasses ?? 1)))"],
-      ["app/lib/pcb/candidates/layout-candidate.ts", null, "runEngineeringPlacement({ board: input.board, options: placementRunOptions(input.board, input.request) })"],
+      ["app/lib/pcb/candidates/layout-candidate.ts", null, "runEngineeringPlacement({ board: input.board, options })"], // [PR-F lead, 2026-10-17] anchor re-pointed: fE builds the options once (the structured intent seed) before the same call
       ["app/lib/agent/layout-proposals.ts", null, "timeoutMs: Math.max(1_000, Math.min(input.timeoutMs, 110_000))"],
       [PREVIEW, null, "[\"candidateCount\", \"maxIterations\", \"localRefinementPasses\", \"gridNm\", \"timeoutMs\"]"],
       [PREVIEW, null, "publicJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000 }"],

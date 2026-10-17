@@ -147,3 +147,24 @@ Exact next step: commit D (with the owner's runbook K edit), push; then F — mi
 search / evidence read / acquisition pipeline; drafts and blockers as workflow items) and the remaining Astra work with exact live
 blockers; then G (the full deterministic suite incl. the CI-split evidence re-measurement, whole-repository eslint, every Playwright
 config, an e2e spec for the agent generation intake), H (README, remaining-blockers, final-verdict, the PR), I.
+
+## Checkpoint F — missing parts and the first Astra increments (2026-10-17): DONE (fixture-backed; live blockers exact)
+
+Landed (OD-248, OD-249): the missing-facts checklist (`app/lib/parts/missing-facts.ts`) rendered per unresolved instance inside the
+Schematic → PCB refusal with the four actions over the existing routes (catalog search, distributor search with honest source states,
+review request, prefilled unverified-draft request), the journey stage and the Build sidebar's "Missing parts (N)" line; the agent's
+`sirkit.parts.missing-facts` read and `sirkit.parts.draft-request` sealed request (its own propose record; publication stays human);
+Astra: the rebaseline of the directive against the tree, the `gpt-6-astra` profile admitted only through the role override (default
+unchanged; account availability confirmed by a free models probe), `sirkit.module-contract.v1` + `sirkit.module.propose-contracts`,
+the placement proposal's structured intent block (conflicts reported, locks win, 50-instance scope gate), `sirkit.stackup.propose`
+over the qualified profiles only, the bounded placement → routing feedback loop with its generated capability matrix (differential
+coupling, skew, impedance, return paths UNSUPPORTED). Registry 56 / 44 / 9 / 15; 108 action records; 932 matrix rows; 56 manuals.
+
+Verified: see `validation.md` (the final gate set, tsc 0, eslint 0, four fixture browser specs). Evidence: `missing-parts.md`,
+`missing-parts-agent.md`, `astra/{rebaseline,compatibility,module-contracts,placement-and-stackup,placement-routing-feedback}.md`,
+`astra/routing-capability-matrix.csv`, screenshot `after-f-missing-parts-1366x768.png`.
+
+Exact next step: commit F, push; then G — the whole deterministic suite with the `b24-d0-ci-split` junit re-measurement,
+whole-repository eslint, every Playwright config, an e2e spec for the agent generation intake, the live `gpt-6-astra` contract turn
+(≤ ~0.46 USD worst case, inside the owner's allowance) recorded in `live-spend.json`; then H (README, remaining-blockers,
+final-verdict, the PR on codex/astra-foundation, never merged by the builder), I; then J, then K.

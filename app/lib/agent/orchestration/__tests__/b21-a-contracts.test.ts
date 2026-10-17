@@ -248,7 +248,7 @@ describe("[B21 A] the canonical orchestration contracts", () => {
       expect(NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(toolId)), toolId).toBe(true);
       expect(EXPOSED).not.toContain(toolId);
     }
-    expect(EXPOSED).toHaveLength(40); // [PR-D d2, 2026-10-16] pin move: 38 -> 40, + the Schematic to PCB preflight read and the catalog part inspection (two Tier 0 reads); [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; [PR-D, 2026-10-16] pin move (OD-243): + the Build-mode generation proposal
+    expect(EXPOSED).toHaveLength(44); // [PR-F lead, 2026-10-17] pin move: 40 -> 44 (the four PR-F descriptors); [PR-D d2, 2026-10-16] pin move: 38 -> 40, + the Schematic to PCB preflight read and the catalog part inspection (two Tier 0 reads); [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; [PR-D, 2026-10-16] pin move (OD-243): + the Build-mode generation proposal
     for (const toolId of EXPOSED) {
       expect(NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(toolId)), toolId).toBe(false);
       expect(validateSpecialistResult(validResult({ requiredTools: [{ toolId, version: "1.0.0", reason: "needed" }] })).ok, toolId).toBe(true);
@@ -284,7 +284,7 @@ describe("[B21 A] the canonical orchestration contracts", () => {
     ]) {
       refused(validateSpecialistRequest(validRequest({ allowedToolIds: list })), "allowed_tool_ids_invalid", "$.allowedToolIds");
     }
-    expect(EXPOSED.length).toBe(40); // [PR-D d2, 2026-10-16] pin move: 38 -> 40, + the Schematic to PCB preflight read and the catalog part inspection (two Tier 0 reads); [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; [PR-D, 2026-10-16] pin move (OD-243): + the Build-mode generation proposal
+    expect(EXPOSED.length).toBe(44); // [PR-F lead, 2026-10-17] pin move: 40 -> 44 (the four PR-F descriptors); [PR-D d2, 2026-10-16] pin move: 38 -> 40, + the Schematic to PCB preflight read and the catalog part inspection (two Tier 0 reads); [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; [PR-D, 2026-10-16] pin move (OD-243): + the Build-mode generation proposal
     const missing = validRequest();
     delete (missing as { allowedToolIds?: unknown }).allowedToolIds;
     refused(validateSpecialistRequest(missing), "missing_key", "$.allowedToolIds");

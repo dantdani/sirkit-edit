@@ -602,18 +602,18 @@ review the lines are as of the corrected modules.
 | C3 | `app/lib/agent/orchestration/contracts.ts` | 85 | — | `export const CAPSULE_DENYLIST_KEYS = Object.freeze([` | the capsule's ten exact keys as data |
 | C4 | `app/lib/agent/orchestration/contracts.ts` | 87 | — | `export const REASONING_SHAPED_STEMS = Object.freeze([` | the four reasoning-shaped stems |
 | C5 | `app/lib/agent/orchestration/contracts.ts` | 220 | — | `return typeof value === "string" && EXPOSED.has(value) && !NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(value));` | the structural tool gate |
-| C6 | `app/lib/agent/orchestration/contracts.ts` | 435 | — | `if (engineeringDigest(payload) !== artifactDigest) refuse("artifact_digest_mismatch", digestPath);` | the artifact digest recomputed over the verbatim payload |
-| C7 | `app/lib/agent/orchestration/contracts.ts` | 500 | — | `const captured = capturePlainJson(input, "$", ORCHESTRATION_BOUNDS.maxSerializedChars);` | capture first, with the document bound |
-| C8 | `app/lib/agent/orchestration/contracts.ts` | 508 | — | `const wholeBody = engineeringDigest({ schema, body: root });` | the whole-body digest |
-| C9 | `app/lib/agent/orchestration/contracts.ts` | 430 | — | `sealedArtifact(payload, payloadPath, 0, false);` | a wrapped artifact walked in full, names and strings at every level, before the digest |
-| C10 | `app/lib/agent/orchestration/contracts.ts` | 381 | — | `if (!sound) refuse("allowed_tool_ids_invalid", path);` | A4L: a malformed list refuses the whole request |
+| C6 | `app/lib/agent/orchestration/contracts.ts` | 439 | — | `if (engineeringDigest(payload) !== artifactDigest) refuse("artifact_digest_mismatch", digestPath);` | the artifact digest recomputed over the verbatim payload |
+| C7 | `app/lib/agent/orchestration/contracts.ts` | 504 | — | `const captured = capturePlainJson(input, "$", ORCHESTRATION_BOUNDS.maxSerializedChars);` | capture first, with the document bound |
+| C8 | `app/lib/agent/orchestration/contracts.ts` | 512 | — | `const wholeBody = engineeringDigest({ schema, body: root });` | the whole-body digest |
+| C9 | `app/lib/agent/orchestration/contracts.ts` | 434 | — | `sealedArtifact(payload, payloadPath, 0, false);` | a wrapped artifact walked in full, names and strings at every level, before the digest |
+| C10 | `app/lib/agent/orchestration/contracts.ts` | 384 | — | `if (!sound) refuse("allowed_tool_ids_invalid", path);` | A4L: a malformed list refuses the whole request |
 | C11 | `app/lib/agent/orchestration/contracts.ts` | 223 | — | `export function isForbiddenOrchestrationKeyName(name: string): boolean {` | the key-name classifier |
 | C12 | `app/lib/agent/orchestration/store.ts` | 37 | — | `export const ORCHESTRATION_AGGREGATE_TYPE = "agent.orchestration-run.v1" as const;` | the aggregate type |
 | C13 | `app/lib/agent/orchestration/store.ts` | 93 | — | `export function orchestrationIdempotencyKey(` | the idempotency key |
-| C14 | `app/lib/agent/orchestration/store.ts` | 227 | — | `throw new Error("AGENT_ORCHESTRATION_RECORD_MISMATCH");` | the one mismatch sentence |
-| C15 | `app/lib/agent/orchestration/store.ts` | 301 | — | `outbox: [],` | no outbox effect |
-| C16 | `app/lib/agent/orchestration/store.ts` | 322 | — | `throw new Error("AGENT_ORCHESTRATION_STORE_UNAVAILABLE");` | the fail-closed default |
-| C17 | `app/lib/agent/orchestration/store.ts` | 178 | — | `if (!known || known.schema !== schema) refuse("unvalidated_document", "$.record.document");` | only a validated snapshot is stored |
+| C14 | `app/lib/agent/orchestration/store.ts` | 240 | — | `throw new Error("AGENT_ORCHESTRATION_RECORD_MISMATCH");` | the one mismatch sentence |
+| C15 | `app/lib/agent/orchestration/store.ts` | 314 | — | `outbox: [],` | no outbox effect |
+| C16 | `app/lib/agent/orchestration/store.ts` | 335 | — | `throw new Error("AGENT_ORCHESTRATION_STORE_UNAVAILABLE");` | the fail-closed default |
+| C17 | `app/lib/agent/orchestration/store.ts` | 165 | — | `if (!known || known.schema !== schema) refuse("unvalidated_document", "$.record.document");` | only a validated snapshot is stored |
 | C18 | `app/lib/agent/orchestration/store.ts` | 105 | — | `const aggregateKey = (scope: OrchestrationRunScope): string => durableWorkflowId("agent-orchestration-run",` | keyed by the run id through durableWorkflowId |
 | C19 | `app/lib/agent/orchestration/store.ts` | 43 | — | `export const ORCHESTRATION_DECISIONS = Object.freeze([` | the six-decision vocabulary |
 | C20 | `app/lib/agent/replay-capsule.ts` | 154 | — | `"client", "sdk", "openai", "anthropic",` | the capsule denylist the ten keys are copied from ([B21 F, 2026-09-28] re-pinned from 128: the capsule v4 grew the file above it) |
@@ -642,9 +642,9 @@ review the lines are as of the corrected modules.
 | C43 | `app/lib/agent/orchestration/contracts.ts` | 94 | — | `export const SEALED_ARTIFACT_DECLARED_NAMES = Object.freeze([` | the sealers' three declared names, exempt from the name check inside a wrapped artifact |
 | C44 | `app/lib/agent/orchestration/contracts.ts` | 68 | — | `export const VALIDATION_BINDING_TOOL_IDS = Object.freeze([` | the five deterministic verifiers a validation request may bind |
 | C45 | `app/lib/agent/orchestration/store.ts` | 102 | — | `export function orchestrationReplayScopeKey(` | the per-run replay partition |
-| C46 | `app/lib/agent/orchestration/store.ts` | 249 | — | `throw new Error("AGENT_ORCHESTRATION_SCOPE_INVALID");` | the one scope sentence of the read path |
-| C47 | `app/lib/agent/orchestration/contracts.ts` | 232 | — | `export function isForbiddenSealedArtifactKeyName(name: string, depth: number, underDeclaredParent: boolean): boolean {` | the artifact key-name rule |
-| C48 | `app/lib/agent/orchestration/contracts.ts` | 314 | — | `if (containsTokenAnchoredSecretShapedText(name)) refuse("secret_shaped_text", path);` | every id scanned for a credential-shaped value |
-| C49 | `app/lib/agent/orchestration/store.ts` | 182 | — | `if (request.taskId !== taskId) refuse("invalid_record", "$.record.document.taskId");` | a stored request bound to its task |
-| C50 | `app/lib/agent/orchestration/store.ts` | 278 | — | `return { ...judged, requestDigest: answered.digest };` | a stored result bound to the request it answers |
+| C46 | `app/lib/agent/orchestration/store.ts` | 262 | — | `throw new Error("AGENT_ORCHESTRATION_SCOPE_INVALID");` | the one scope sentence of the read path |
+| C47 | `app/lib/agent/orchestration/contracts.ts` | 234 | — | `export function isForbiddenSealedArtifactKeyName(name: string, depth: number, underDeclaredParent: boolean): boolean {` | the artifact key-name rule |
+| C48 | `app/lib/agent/orchestration/contracts.ts` | 317 | — | `if (containsTokenAnchoredSecretShapedText(name)) refuse("secret_shaped_text", path);` | every id scanned for a credential-shaped value |
+| C49 | `app/lib/agent/orchestration/store.ts` | 173 | — | `if (request.taskId !== taskId) refuse("invalid_record", "$.record.document.taskId");` | a stored request bound to its task |
+| C50 | `app/lib/agent/orchestration/store.ts` | 291 | — | `return { ...judged, requestDigest: answered.digest };` | a stored result bound to the request it answers |
 | C51 | `app/lib/agent/orchestration/store.ts` | 220 | — | `const captured = capturePlainJson({ scope: own("scope"), taskId: own("taskId"), attempt: own("attempt"), expectedRevision: own("expectedRevision"), at: own("at") }, "$", ENVELOPE_CAPTURE_CHARS);` | the append envelope's scalar fields captured through its own descriptors; the record judged on its own |

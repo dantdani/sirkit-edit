@@ -563,22 +563,22 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   // ── Proposals (real engines; propose-class, never auto-apply) ─────────────
   {
     ...readDefaults,
-    toolId: "sirkit.placement.propose", version: "1.1.0",
+    toolId: "sirkit.placement.propose", version: "1.2.0", // [PR-F fE, 2026-10-17] 1.1.0 -> 1.2.0: the optional structured intent block (schema change, same producer)
     agentExposed: true, // B17-F — the shared revision-bound layout candidate; the HUMAN applies it in the placement panel
     owningCommandId: "placement.auto",
     title: "Propose a placement candidate",
-    description: "Run the engineering placement engine over the CURRENT board and produce a revision-bound placement candidate (sirkit.layout-candidate.v1) that appears in the user's placement panel for review. Receiving the candidate changes nothing; the user applies or discards it explicitly. Optionally restrict to selected footprint ids.",
+    description: "Run the engineering placement engine over the CURRENT board and produce a revision-bound placement candidate (sirkit.layout-candidate.v1) that appears in the user's placement panel for review. Receiving the candidate changes nothing; the user applies or discards it explicitly. Optionally restrict to selected footprint ids. An optional intent block (sirkit.placement-intent.v1: millimetres in the board frame, exact component and net identities) seeds the engine; where legalization, a lock, a keepout or a clearance changed what it asked, the candidate lists each conflict; a board over 50 physical instances is classified unsupported-scope in the candidate's data.",
     category: "placement", operationClass: "propose",
-    inputSchema: obj({ instanceIds: { type: "array", items: { type: "string" }, description: "Restrict the search to these footprint ids; absent = the whole board" }, candidateCount: { type: "number", description: "2–8 (enforced by the service)" }, maxIterations: { type: "number", description: "1–2000 (enforced by the service)" } }), outputSchema: OUT_RESULT,
+    inputSchema: obj({ instanceIds: { type: "array", items: { type: "string" }, description: "Restrict the search to these footprint ids; absent = the whole board" }, candidateCount: { type: "number", description: "2–8 (enforced by the service)" }, maxIterations: { type: "number", description: "1–2000 (enforced by the service)" }, intent: placementIntentInputSchema() /* [PR-F fE] declared at the END (hoisted) */ }), outputSchema: OUT_RESULT,
     sideEffects: "proposal-artifact",
     requiredCapability: "read_project", requiredRoles: ["pcb_editor", "project_admin"],
     requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
     binding: { status: "bound-proposal", module: "app/lib/pcb/candidates/layout-candidate.ts", symbol: "runPlacementCandidate" },
     discovery: "discoverable", callability: "callable",
     timeoutMs: 120_000, budgetClass: "long-running",
-    validationStrategy: "one options builder (placementRunOptions); candidate hard-constraint validation; digest-sealed, pinned to the board revision", verificationStrategy: "applyLayoutCandidate re-verifies revision, hashes and protected copper at apply — the user-facing workflow only",
-    sourceEvidence: ["app/lib/pcb/candidates/layout-candidate.ts", "app/lib/pcb/placement/engine.ts", "app/components/pcb/PlacementSetup.tsx"],
-    versionNotes: "1.1.0 (B17-F): exposed as the shared candidate producer; apply remains the editor's decision.",
+    validationStrategy: "one options builder (placementRunOptions); candidate hard-constraint validation; digest-sealed, pinned to the board revision; [PR-F fE] the intent is compiled all-or-nothing against exact component and net identities of the board revision (compilePlacementIntent: an unknown identity refuses the whole proposal as proposal-blocked data), seeds one extra engine candidate, and is re-measured against the selected candidate (evaluatePlacementIntent: conflicts listed, never dropped); over 50 physical instances the intent is recorded unapplied (unsupported-scope)", verificationStrategy: "applyLayoutCandidate re-verifies revision, hashes and protected copper at apply — the user-facing workflow only",
+    sourceEvidence: ["app/lib/pcb/candidates/layout-candidate.ts", "app/lib/pcb/placement/engine.ts", "app/lib/pcb/placement/intent.ts", "app/components/pcb/PlacementSetup.tsx"],
+    versionNotes: "1.2.0 (PR-F fE, 2026-10-17): the optional structured placement intent (sirkit.placement-intent.v1; directive section 8) passed through the same engine, legalization and validators with a conflict list, and the 50-instance scope gate; 1.1.0 (B17-F): exposed as the shared candidate producer; apply remains the editor's decision.",
   },
   {
     ...readDefaults,
@@ -1057,7 +1057,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     timeoutMs: 5_000,
     sourceEvidence: ["app/lib/pcb/dimensions/commands.ts", "app/lib/pcb/dimensions/geometry.ts", "app/components/pcb/hooks/useDimensionTool.ts", "app/components/pcb/inspectors/DimensionInspector.tsx", "app/lib/engineering/operations.ts", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
     versionNotes: "1.2.0 (B18-C I7): bound and agent-exposed as a reviewed granted execution (confirmation-only: no explicit grammar); re-tiered reversible per the runbook's PCB Tier 1 list (OD-13); deterministic add ids; an update never moves the measured points. 1.1.0 (B09.1): reconciled with B08 truth — implemented and active, no tool adapter.",
-  }, ...COMPUTATION_TOOL_DESCRIPTORS, boardPageInspectDescriptor(), generateProposalDescriptor(), pcbSyncPreflightDescriptor(), catalogInspectDescriptor(), componentReviewRequestDescriptor(), // [B22-B] the five named computations (OD-139), from computation-tool-descriptors.ts; [B24-D2, 2026-10-09] the bounded paged board read (OD-213), its declaration at the END of this file; [PR-D, 2026-10-16] the Build-mode generation proposal (OD-243), its declaration at the END too; [PR-D d2, 2026-10-16] the Schematic to PCB preflight read, the catalog part inspection and the (unavailable) component review request, declared at the END too
+  }, ...COMPUTATION_TOOL_DESCRIPTORS, boardPageInspectDescriptor(), generateProposalDescriptor(), pcbSyncPreflightDescriptor(), catalogInspectDescriptor(), componentReviewRequestDescriptor(), missingFactsDescriptor(), draftRequestDescriptor(), moduleContractsDescriptor(), stackupProposalDescriptor(), /* [PR-F fE, 2026-10-17] the stackup / via-policy proposal, declared at the END too */ /* [PR-F fD, 2026-10-17] the module contract proposal, declared at the END too */ /* [PR-F fB, 2026-10-17] the missing-facts read and the part draft request, declared at the END too */ // [B22-B] the five named computations (OD-139), from computation-tool-descriptors.ts; [B24-D2, 2026-10-09] the bounded paged board read (OD-213), its declaration at the END of this file; [PR-D, 2026-10-16] the Build-mode generation proposal (OD-243), its declaration at the END too; [PR-D d2, 2026-10-16] the Schematic to PCB preflight read, the catalog part inspection and the (unavailable) component review request, declared at the END too
 ] satisfies readonly ToolDescriptor[]);
 
 let cached: ToolRegistry | null = null;
@@ -1231,5 +1231,221 @@ function componentReviewRequestDescriptor(): ToolDescriptor {
     verificationStrategy: "human path only (not invocable here): the durable review-request aggregate's revisions; approval publishes the binding under the reviewer's identity",
     sourceEvidence: ["app/lib/physical-binding/review-handoff.ts", "app/api/physical-bindings/route.ts", "app/components/pcb/hooks/useComponentReview.ts", "app/lib/atomic/publication-review.ts", "app/components/editor/BuildLibraryPanel.tsx"],
     versionNotes: "1.0.0 (PR-D d2): registered not-callable so the coverage matrix shows the component review request with its disposition (unavailable) and reason instead of a missing row; never agent-exposed.",
+  };
+}
+
+/**
+ * [PR-F fB, 2026-10-17] The agent's MISSING-FACTS read, declared at the END too (a function declaration is hoisted), so no line of this
+ * catalog moves. For every instance the editor's own Schematic to PCB refusal list names (`listUnresolvedInstances`), the SAME
+ * checklist the editor's missing-parts list renders: `deriveMissingFacts` (app/lib/parts/missing-facts.ts, the UI's module - ONE
+ * derivation) over the run's verified schematic snapshot (no board, as the preflight read) and, ONLY when the chat route's catalog
+ * port is bound, the catalog part each instance was placed from (identity and the published exact revision per value) through the
+ * SAME port the catalog inspection reads. Without the port every catalog fact is unknown with the source "catalog unavailable": a
+ * footprint hint, a pin count or a vendor text never becomes identity or evidence (ENGINEERING_FACTS_NEVER_PROVEN_BY_SOURCING).
+ */
+function missingFactsDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.parts.missing-facts", version: "1.0.0",
+    agentExposed: true, // [PR-F] a Tier 0 read over the run's verified schematic snapshot and the bound catalog port; nothing placed, bound, published or bought
+    owningCommandId: "pcb.sync-durable",
+    title: "List the missing facts of every unresolved part",
+    description: "For every instance the Schematic to PCB run cannot carry to the board (the editor's own refusal list), derive the SAME missing-facts checklist the editor's missing-parts list shows: identity (manufacturer, exact MPN, package), evidence (symbol, footprint, pin-to-pad mapping - known only from a published exact revision) and stock/pricing (sourcing observations, never proof), each known, unknown or conflicting with its source, plus the next actions in order. Example input: {}. Catalog facts come through the server's catalog port only when it is bound to the run; without it every identity and evidence fact is unknown with the source \"catalog unavailable\" - never guessed from a footprint hint, a pin count or a vendor text. At most 50 instances listed, the rest counted. Nothing is placed, bound or published.",
+    category: "validation", operationClass: "read",
+    inputSchema: obj({}), outputSchema: OUT_REPORT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
+    binding: { status: "bound-read", module: "app/lib/parts/missing-facts.ts", symbol: "deriveMissingFacts", notes: "PR-F: the ONE missing-facts derivation the editor's missing-parts list renders (app/lib/parts/missing-facts.ts), over the editor's own refusal list (listUnresolvedInstances) and the run's verified schematic snapshot; invoked only through MissingFactsReadService (app/lib/agent/missing-facts-reads.ts), which asks the chat route's injected catalog port (app/api/chat/catalog-inspection-runtime.ts, the same port as the catalog inspection) for each placed part only when the server's catalog fact is present, and otherwise reports every catalog fact unknown as catalog unavailable. No second derivation; no distributor call; bounded to 50 instances." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 8_000,
+    validationStrategy: "closed argument surface (no arguments; an authority-shaped key is refused by name) under the B05 input limits; the verified schematic snapshot and its digest are required; discovery, role and capability rechecked per call; the catalog is asked once per distinct placed part id under the call's deadline, a miss, a failure or a late answer being data per instance; the output is schema-checked and bounded (at most 50 checklists, the rest counted)",
+    verificationStrategy: "pure over the run's verified schematic snapshot (the integrity check recomputes its digest before every call; the result names that digest as its source); the catalog facts are a server catalog read at the time of the call and the result says so (schematic-snapshot-verified+catalog-read); every fact carries the source that decided it, and an absent catalog is stated, never inferred",
+    sourceEvidence: ["app/lib/parts/missing-facts.ts", "app/lib/agent/missing-facts-reads.ts", "app/lib/pcb-sync/unresolved-instances.ts", "app/api/chat/catalog-inspection-runtime.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "1.0.0 (PR-F fB): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (its input is the editor's browser-only SchematicState, as OD-244's preflight read).",
+  };
+}
+
+/**
+ * [PR-F fB, 2026-10-17] The agent's part DRAFT REQUEST proposal, declared at the END too. A sealed REQUEST for an explicitly UNVERIFIED
+ * draft of one unresolved part, in the vocabulary of the EXISTING human-only atomic publication request (AtomicPublicationSpec,
+ * app/lib/atomic/publication-review-contract.ts; the route's submit_request admits a person only, ATOMIC_PUBLICATION_HUMAN_REQUIRED),
+ * from the documented facts the request carries, each with its source label or listed as missing; the C.4 blockers of PCB
+ * assignment travel as data; no mapping certificate, approval or publication is ever claimed (CONTINUATION C.4-C.6). The agent
+ * cannot file it (OD-244 stands): a human member pastes it into the Build Library's Request evidence review.
+ */
+function draftRequestDescriptor(): ToolDescriptor {
+  const fact = (what: string): JsonSchema => obj({ value: { type: "string", description: what }, source: { type: "string", description: "The label of the document that states it (manufacturer datasheet revision and section)." } }, ["value", "source"]);
+  return {
+    ...readDefaults,
+    toolId: "sirkit.parts.draft-request", version: "1.0.0",
+    agentExposed: true, // [PR-F] sealed UNVERIFIED draft request ONLY; filing, review, approval and publication stay human-only in the publication review
+    owningCommandId: "parts.draft-request", // [PR-F lead, 2026-10-17] its own propose record: B19-E E4 keeps every tool away from the human-only publication-review record
+    title: "Propose an unverified draft request for one missing part",
+    description: "Seal a REQUEST for an explicitly UNVERIFIED draft of ONE unresolved part from the documented facts it carries (exact MPN, manufacturer, package, pin table, pitch, body dimensions, pin-1 orientation, exposed pad), each given WITH its source label or listed as missing. Example input: {\"refDes\":\"U1\",\"exactMpn\":{\"value\":\"NE555DR\",\"source\":\"TI SLFS022I, page 1\"},\"pinTable\":[{\"number\":\"1\",\"function\":\"ground\",\"source\":\"TI SLFS022I, table 5-1\"}]}. A human files it as a publication request; it lists the missing facts, states that an unknown package variant, pad numbering, pin-1 orientation, pitch, courtyard or exposed-pad mapping BLOCKS PCB assignment, and claims no mapping certificate, approval or publication. It refuses without a pin table, exact MPN and manufacturer, with a fact lacking its source, or with conflicting facts.",
+    category: "parts", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({
+      refDes: { type: "string", description: "The unresolved instance's reference designator, as the missing-facts read lists it." },
+      exactMpn: fact("The exact manufacturer part number as published (every suffix character counts)."),
+      manufacturer: obj({ name: { type: "string" }, domains: { type: "array", items: { type: "string" }, description: "Official manufacturer domains, lower case (optional)." }, source: { type: "string" } }, ["name", "source"]),
+      package: obj({ code: { type: "string", description: "The manufacturer's package code." }, mounting: { type: "string", enum: ["smd", "through_hole"] }, source: { type: "string" } }, ["code", "mounting", "source"]),
+      pinTable: { type: "array", description: "Every pin from the datasheet's pin table: number, name, function, the pads it maps to (default: the pin number) and the source.", items: obj({ number: { type: "string" }, name: { type: "string" }, function: { type: "string" }, pads: { type: "array", items: { type: "string" } }, source: { type: "string" } }, ["number", "function", "source"]) },
+      pitchMm: obj({ value: { type: "number", description: "Pitch in millimetres." }, source: { type: "string" } }, ["value", "source"]),
+      bodyMm: obj({ x: { type: "number" }, y: { type: "number" }, source: { type: "string" } }, ["x", "y", "source"]),
+      pin1Orientation: fact("Where pin 1 sits and how the package marks it."),
+      exposedPad: obj({ pads: { type: "array", items: { type: "string" }, description: "The exposed pad's pad numbers; an empty list documents that there is none." }, source: { type: "string" } }, ["pads", "source"]),
+      datasheet: obj({ locator: { type: "string", description: "The datasheet revision and section cited (a link is never carried)." }, source: { type: "string" } }, ["locator", "source"]),
+      missing: { type: "array", items: { type: "string" }, description: "Facts the documents do not state, in plain words." },
+      profile: { type: "string", enum: ["schematic_only", "pcb_assignable"], description: "The approval profile requested; pcb_assignable needs every package fact documented." },
+    }, ["refDes"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
+    // the loop's B09.1 gate holds for every schematic proposal (a canonical head mark), so discovery requires the revision and the open lineage too; the sealed scope carries the mark
+    requiresExpectedRevision: true, requiresLineage: true,
+    binding: { status: "bound-proposal", module: "app/lib/agent/draft-request-proposals.ts", symbol: "compilePartDraftRequest", notes: "PR-F: the pure compile + seal of the request in the publication path's own vocabulary (AtomicPublicationSpec: exactMpn, profile, terminals, package, datasheet, manufacturer; symbol and footprint references left to the person) against the editor's own refusal list and, through the chat route's injected catalog port when bound, the placed catalog part (identity, package and pin count cross-checked; a different part is never substituted). The server's normalizeAtomicPublicationSpec and assembleAtomicDraft run when the HUMAN submits (app/lib/atomic/publication-review.ts: submitAtomicPublicationRequest admits a person only); PartDraftRequestProposalService (app/lib/agent/draft-request-proposals.ts) seals the artifact (sirkit.part-draft-request.v1, verification unverified) or reports the blockers as proposal-blocked data. Nothing is filed, approved or published here." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 8_000,
+    validationStrategy: "closed argument surface (the request's keys only; authority-shaped keys and KiCad asset references refused by name) under the B05 input limits; the verified schematic snapshot and its digest are required; discovery, role and capability rechecked per call; the compile is all-or-nothing: the instance must be one the editor's refusal list names, the exact MPN and manufacturer and a pin table are required, every given fact carries a source label, pin numbers and pad mappings must not conflict, the placed catalog part's identity, package and pin count must not conflict when the catalog port is bound, and pcb_assignable needs every C.4 fact",
+    verificationStrategy: "the sealed body's identity digest and the request digest are recomputed by verifySealedPartDraftRequestIntegrity; the artifact's verification is the constant unverified and it names the human path (submit_request, humans only), the facts it documents with their sources, the facts missing and the PCB-assignment blockers; the server's own normalizer, the import review, the reviewer's approval, the administrator's publication and the deterministic mapping checks decide later",
+    sourceEvidence: ["app/lib/agent/draft-request-proposals.ts", "app/lib/atomic/publication-review-contract.ts", "app/api/components/atomic/publication/handler.ts", "app/lib/atomic/publication-review.ts", "app/lib/pcb-sync/unresolved-instances.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "1.0.0 (PR-F fB): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (it seals against the editor's browser-only SchematicState, as OD-82's proposals).",
+  };
+}
+
+/**
+ * [PR-F fD, 2026-10-17] The agent's MODULE CONTRACT proposal, declared at the END too (a function declaration is hoisted), so no line
+ * of this catalog moves. The owner's Astra directive (sections 6-7; CONTINUATION E): the model submits a typed, versioned module
+ * contract set (`sirkit.module-contract.v1`) for the run's PINNED schematic - modules with their responsibilities, the components
+ * they own by exact sheet identity, ports on the sheet's named nets with limits, logic levels, impedance and permitted loading,
+ * the requirement topics (bandwidth, gain, noise, timing, accuracy, power, reference, ground, startup, protection) stated with
+ * evidence or listed unknown, footprint / pin authority gaps, placement and routing obligations, tests, and the cross-module
+ * constraints over shared nets - and the ONE validator (app/lib/engineering/module-contract.ts) checks it against that sheet
+ * through the existing identity, netlist and unresolved-instance authorities. A validated set is SEALED as an engineering note
+ * the page shows in the run log (no apply path exists; the human accepts by continuing); a refused set is proposal-blocked data.
+ */
+function moduleContractsDescriptor(): ToolDescriptor {
+  const quantity: JsonSchema = obj({ name: { type: "string" }, value: { type: "number" }, unit: { type: "string", description: "The unit of the value (V, A, ohm, Hz, dB, s, pF, degC, bit); never empty." }, bound: { type: "string", enum: ["min", "max", "typical", "nominal"] } }, ["name", "value", "unit"]);
+  const quantities = (): JsonSchema => ({ type: "array", items: quantity });
+  const evidence: JsonSchema = {
+    type: "array",
+    items: obj({ sourceIdentity: { type: "string", description: "The document that states the recommendation: an exact-part datasheet, a manufacturer layout or application note, a reference design or a primary paper." }, documentRevision: { type: "string" }, section: { type: "string" }, applicability: { type: "string", description: "The component, pin, net, module or operating condition it applies to." }, assumptions: { type: "string" }, uncertainty: { type: "string" }, kind: { type: "string", enum: ["hard-requirement", "approved-policy", "optimization-goal"] } }, ["sourceIdentity", "documentRevision", "section", "applicability", "assumptions", "uncertainty", "kind"]),
+  };
+  const topics = { type: "string", enum: ["bandwidth", "gain", "noise", "timing", "accuracy", "power", "reference", "ground", "startup", "protection"] };
+  const port: JsonSchema = obj({
+    id: { type: "string" }, net: { type: "string", description: "A named net of the pinned schematic: a net label name, or GND." }, direction: { type: "string", enum: ["input", "output", "bidirectional", "power-in", "power-out", "reference", "ground"] },
+    logicLevel: { type: "string" }, voltage: quantities(), current: quantities(), impedance: quantities(), permittedLoading: quantities(),
+    unknown: { type: "array", items: { type: "string", enum: ["voltage", "current", "logicLevel", "impedance", "permittedLoading"] }, description: "The facts of this port that stay unknown; a fact neither stated nor listed here is refused." }, evidence,
+  }, ["id", "net", "direction"]);
+  const requirement: JsonSchema = obj({ topic: topics, statement: { type: "string" }, quantities: quantities(), evidence }, ["topic", "statement", "evidence"]);
+  const test: JsonSchema = obj({ id: { type: "string" }, procedure: { type: "string" }, acceptance: { type: "string" }, quantities: quantities(), evidence }, ["id", "procedure", "acceptance"]);
+  const moduleSchema: JsonSchema = obj({
+    id: { type: "string" }, name: { type: "string" }, responsibility: { type: "string" },
+    components: { type: "array", items: obj({ refDes: { type: "string", description: "The reference designator on the pinned schematic; the exact part and revision ids are read from the sheet." }, partId: { type: "string" }, revisionId: { type: "string" } }, ["refDes"]) },
+    ports: { type: "array", items: port }, requirements: { type: "array", items: requirement },
+    unknown: { type: "array", items: topics }, notApplicable: { type: "array", items: topics },
+    partAuthorityGaps: { type: "array", items: { type: "string" }, description: "Owned reference designators that lack a published exact revision or a physical package (the sheet decides; every such instance is acknowledged here)." },
+    placementRouting: { type: "array", items: { type: "string" } }, tests: { type: "array", items: test },
+  }, ["id", "name", "responsibility", "components", "ports", "requirements"]);
+  const constraint: JsonSchema = obj({
+    id: { type: "string" }, kind: { type: "string", enum: ["interface", "shared-power", "shared-ground", "shared-clock", "shared-reference", "shared-connector", "net-ownership"] }, net: { type: "string" },
+    modules: { type: "array", items: { type: "string" } }, owner: { type: "string", description: "The module that owns the shared net (required for every kind but interface)." }, statement: { type: "string" }, quantities: quantities(),
+    loading: obj({ driver: { type: "string" }, quantities: quantities(), unknown: { type: "string", description: "The reason the loading is unknown (given alone, without driver or quantities)." } }), evidence,
+  }, ["id", "kind", "net", "modules", "statement", "evidence"]);
+  return {
+    ...readDefaults,
+    toolId: "sirkit.module.propose-contracts", version: "1.0.0",
+    agentExposed: true, // [PR-F fD] a sealed engineering note ONLY: no apply path, nothing changes the sheet or a board; the human accepts it by continuing
+    owningCommandId: "cd.architecture.workbench",
+    title: "Propose module contracts for the pinned schematic",
+    description: "Submit a module contract set (sirkit.module-contract.v1) for the current schematic, sealed as an engineering note for human review. A module names its responsibility, the components it owns by reference designator (part and revision ids come from the sheet), its ports on the sheet's named nets (a net label or GND) with voltage and current limits, logic level, impedance and permitted loading, its requirements per topic with evidence, the topics left unknown or not applicable, its part-authority gaps, layout obligations and tests; the constraints state every net two modules share (an interface states its loading or declares it unknown; a shared power, ground, clock, reference or connector net names its owner). Every number carries a unit; every recommendation names its source. Refused as data: an unknown or doubly owned component, an unknown net, a value without a unit, evidence without a source, an unstated interface, over 50 physical instances. Nothing is applied or verified.",
+
+
+
+    category: "schematic", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({ system: obj({ name: { type: "string" }, statement: { type: "string" }, operatingConditions: quantities() }, ["name", "statement"]), modules: { type: "array", items: moduleSchema }, constraints: { type: "array", items: constraint } }, ["system", "modules", "constraints"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
+    // the loop's B09.1 gate holds for every schematic proposal (a canonical head mark): the set is pinned to the sheet's exact base digest and head mark
+    requiresExpectedRevision: true, requiresLineage: true,
+    binding: { status: "bound-proposal", module: "app/lib/engineering/module-contract.ts", symbol: "validateModuleContractSet", notes: "PR-F fD: the ONE validator of a module contract set against the pinned schematic - identities through the sheet's own instances (KiCad part and published exact revision ids; Theory ids and types), nets through the netlist authority's names (app/lib/pcb/netlist-bridge.ts buildNetlist: labels win, ground is GND) united with the sheet's declared labels, footprint / pin authority through the editor's own refusal list (app/lib/pcb-sync/unresolved-instances.ts listUnresolvedInstances), units and evidence shape, single ownership, and the cross-module interface statements (an output meeting an input across modules must state its loading or declare it unknown; a shared reference names its owner). ModuleContractProposalService (app/lib/agent/module-contract-proposals.ts) seals the validated set (sirkit.module-contract-proposal.v1, verification contract-structure-checked, electricalCheck not_run) or reports the blockers as proposal-blocked data. No electrical check runs; nothing is applied." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 8_000,
+    validationStrategy: "closed argument surface (exactly system, modules, constraints; authority-shaped keys refused by name) under the B05 input limits; the verified schematic snapshot, its digest and its canonical head mark are required; discovery, role and capability rechecked per call; the validation is all-or-nothing with every blocker listed: every owned component an exact identity of the sheet owned exactly once (a stated part or revision id must agree), every port and constraint net a named net of the sheet, every quantity with a unit, every stated port fact and requirement with evidence naming a source, every port fact and requirement topic stated or listed unknown (or not applicable), every owned unresolved instance acknowledged as a part-authority gap and none claimed falsely, every shared net stated by a constraint over every module carrying it (a driver-to-receiver net by an interface with its loading; a shared reference with its owner), one owner per net, at most 50 physical instances on the sheet",
+    verificationStrategy: "the sealed body's identity digest and the contract digest are recomputed by verifySealedModuleContractProposalIntegrity; the artifact's verification is the constant contract-structure-checked and its electricalCheck is not_run (no ERC, simulation or electrical check ran; the existing deterministic checks recheck the composed circuit later); the sealed set carries the exact identities read from the pinned sheet, the derived part-authority rows (the editor's refusal list), the coverage (physical instances, owned, unassigned, known and referenced nets, shared nets with their constraints) and the human review task",
+    sourceEvidence: ["app/lib/engineering/module-contract.ts", "app/lib/agent/module-contract-proposals.ts", "app/lib/pcb/netlist-bridge.ts", "app/lib/pcb-sync/unresolved-instances.ts", "app/lib/agent/gateway.ts", "app/lib/agent/loop.ts"],
+    versionNotes: "1.0.0 (PR-F fD): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (it validates against the editor's browser-only SchematicState and seals its head mark, as OD-82's proposals; MCP exposure stays read-only). The page shows the sealed note in the run log; a richer review surface is later work.",
+  };
+}
+
+/**
+ * [PR-F fE, 2026-10-17] The placement INTENT block of `sirkit.placement.propose` (`sirkit.placement-intent.v1`; directive section 8),
+ * built by a hoisted FUNCTION declared at the END (a const here would still be in its temporal dead zone when the catalog array above
+ * evaluates), so no line of this catalog moves. Every length is in millimetres in the board-world frame; every component is
+ * { ref, instanceId } and every net { name, id }, both halves bound to the SAME object of the board revision by the service
+ * (app/lib/pcb/placement/intent.ts compilePlacementIntent); the frame statement the manual prints is that module's.
+ */
+function placementIntentInputSchema(): JsonSchema {
+  const component = obj({ ref: { type: "string", description: "The reference designator exactly as the board shows it (R1, U3, J2)." }, instanceId: { type: "string", description: "The footprint instance id of the SAME component (board-inspect lists it); both must match or the whole intent is refused." } }, ["ref", "instanceId"]);
+  const net = obj({ name: { type: "string", description: "The net name exactly as the board names it." }, id: { type: "integer", description: "The board net id of the SAME net; both must match or the whole intent is refused." } }, ["name", "id"]);
+  const pointMm = obj({ x: { type: "number", description: "millimetres, board-world frame: +x right" }, y: { type: "number", description: "millimetres, board-world frame: +y down" } }, ["x", "y"]);
+  const polygonMm = { type: "array", items: pointMm, description: "3 to 32 corners in millimetres (mm) in the board-world frame (+x right, +y down; the world origin, not the outline corner)." };
+  const regionSide = { type: "string", enum: ["top", "bottom", "both"] };
+  return obj({
+    schema: { type: "string", enum: ["sirkit.placement-intent.v1"] },
+    units: { type: "string", enum: ["mm"], description: "Every length and coordinate below is in millimetres (mm); nothing else is accepted." },
+    frame: { type: "string", enum: ["board-world"], description: "The board's world frame as the PCB model stores it: +x right, +y down, origin at the world (0, 0), a component's position is its footprint origin; rotation in whole degrees, counter-clockwise as seen on screen, 0 | 90 | 180 | 270; side bottom mirrors across x." },
+    regions: { type: "array", description: "Named placement regions (rooms) a group may be assigned to.", items: obj({ id: { type: "string" }, name: { type: "string" }, polygonMm, side: regionSide }, ["id", "polygonMm"]) },
+    groups: { type: "array", description: "Functional groups of exact components; a regionId keeps the group inside that region (members without an explicit coordinate start at the region's centre).", items: obj({ id: { type: "string" }, name: { type: "string" }, members: { type: "array", items: component }, regionId: { type: "string" } }, ["id", "members"]) },
+    placements: { type: "array", description: "Explicit coordinates (and optionally rotation / side) for exact components; the engine's legalization may move them and every move is reported as a conflict.", items: obj({ component, xMm: { type: "number", description: "millimetres, +x right" }, yMm: { type: "number", description: "millimetres, +y down" }, rotationDeg: { type: "integer", enum: [0, 90, 180, 270], description: "whole degrees, counter-clockwise as seen on screen" }, side: { type: "string", enum: ["top", "bottom"] } }, ["component", "xMm", "yMm"]) },
+    proximity: { type: "array", description: "Pin-specific proximity: keep a component (or one of its pads) within a distance of another component (or pad); measured on the candidate and reported.", items: obj({ component, pad: { type: "string", description: "The pad number on component (optional; the footprint origin otherwise)." }, near: component, nearPad: { type: "string" }, maxDistanceMm: { type: "number", description: "millimetres, above 0" }, reason: { type: "string" } }, ["component", "near", "maxDistanceMm"]) },
+    separations: { type: "array", description: "Keep two components' placement envelopes at least this far apart (millimetres); measured on the candidate and reported.", items: obj({ component, from: component, minDistanceMm: { type: "number", description: "millimetres, above 0" }, reason: { type: "string" } }, ["component", "from", "minDistanceMm"]) },
+    corridors: { type: "array", description: "Routing corridors kept free of component envelopes (a polygon in millimetres, optionally for named nets); any component entering one is reported.", items: obj({ id: { type: "string" }, name: { type: "string" }, polygonMm, side: regionSide, nets: { type: "array", items: net } }, ["id", "polygonMm"]) },
+    criticalNets: { type: "array", description: "Net priorities (1 most critical) carried as data for the reviewer and the routing step; the placement engine does not enforce them.", items: obj({ net, priority: { type: "integer", enum: [1, 2, 3] }, reason: { type: "string" } }, ["net", "priority"]) },
+  }, ["schema", "units", "frame"]);
+}
+
+/**
+ * [PR-F fE, 2026-10-17] The agent's STACKUP / VIA-POLICY proposal, declared at the END too (a function declaration is hoisted), so no
+ * line of this catalog moves. A sealed RECOMMENDATION (sirkit.stackup-candidate.v1; directive section 9) of a layer count and layer
+ * roles, reference planes, power distribution and a through-via profile chosen ONLY among the tree's stackup profiles
+ * (app/lib/pcb/stackup.ts STACKUP_PROFILES), its two- and four-layer manufacturing presets (app/lib/pcb/drc/presets with their fab
+ * bundles) and its via padstacks; release qualification is stated per preset (QUALIFIED_RULE_PROFILE_IDS: jlcpcb-2l only). Blind,
+ * buried, micro, via-in-pad or stacked vias, materials, dielectrics, copper weights, thicknesses, impedance and other layer counts
+ * are refused as proposal-blocked data with the one reason "unsupported until the complete chain is proven". Nothing is applied: the
+ * human changes the stackup through the PCB editor's Stackup selector (pcb.board-geometry), and a different layer count or profile is
+ * marked as invalidating dependent approvals with the rules cited inside the candidate.
+ */
+function stackupProposalDescriptor(): ToolDescriptor {
+  const net = obj({ name: { type: "string", description: "The net name exactly as the board names it." }, id: { type: "integer", description: "The board net id of the SAME net." } }, ["name", "id"]);
+  return {
+    ...readDefaults,
+    toolId: "sirkit.stackup.propose", version: "1.0.0",
+    agentExposed: true, // [PR-F fE] sealed recommendation ONLY; the stackup is changed by the human in the PCB editor's Stackup selector
+    owningCommandId: "pcb.board-geometry",
+    title: "Propose a stackup and via policy",
+    description: "Recommend a layer count and layer roles, reference planes and a through-via profile for the CURRENT board, chosen only among the qualified stackup profiles (simple-2, signal-plane-4, all-signal-4, dense-4), the two- and four-layer manufacturing profiles (jlcpcb-2l, jlcpcb-4l, pcbway-standard, oshpark-4l) and the via padstacks this board defines, sealed into a revision-bound candidate. Example input: {\"profileId\":\"signal-plane-4\",\"manufacturingProfileId\":\"jlcpcb-4l\",\"planes\":[{\"layer\":\"in1\",\"net\":{\"name\":\"GND\",\"id\":1}}]}. The candidate states physical and routable signal layer counts apart, whether the manufacturing profile is release-qualified, which via profiles meet the manufacturer's minimum, and that a different layer count or profile invalidates dependent approvals. Blind, buried, micro, via-in-pad or stacked vias, materials, impedance and other layer counts are refused as data: unsupported until the complete chain is proven. Receiving it changes nothing.",
+    category: "pcb", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({
+      profileId: { type: "string", enum: ["simple-2", "signal-plane-4", "all-signal-4", "dense-4"], description: "The stackup profile (layer count and layer roles) as app/lib/pcb/stackup.ts defines it." },
+      manufacturingProfileId: { type: "string", enum: ["jlcpcb-2l", "jlcpcb-4l", "pcbway-standard", "oshpark-4l"], description: "The manufacturing (DRC / fab) preset; its copper layer count must match the profile's. Absent: the run's active preset." },
+      planes: { type: "array", description: "Reference planes: an inner layer that is a plane in the chosen profile and the exact board net it carries.", items: obj({ layer: { type: "string", enum: ["in1", "in2"] }, net }, ["layer", "net"]) },
+      viaPadstackIds: { type: "array", items: { type: "string" }, description: "Via profiles by padstack id among this board's padstacks and the class defaults (via-default, via-power, via-highcurrent); absent: all of them, each checked against the preset's minimum." },
+      viaTechnology: { type: "string", enum: ["through"], description: "Only through vias are qualified; any other technology is refused as data." },
+      rationale: { type: "string", description: "Why this stackup (up to 600 characters); carried as data for the reviewer." },
+    }, ["profileId"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "project_admin"],
+    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
+    binding: { status: "bound-proposal", module: "app/lib/pcb/candidates/stackup-candidate.ts", symbol: "compileStackupCandidate", notes: "PR-F fE: the ONE pure compile over the verified canonical board - the tree's STACKUP_PROFILES (physical vs routable signal layers), the DRC presets with their fab copper bundles (release qualification from QUALIFIED_RULE_PROFILE_IDS), the board's via padstacks and the seeded class defaults checked against the preset's minima, the revision / approval invalidation rules cited; StackupProposalService (app/lib/agent/stackup-proposals.ts) checks the binding, integrity, the board, discovery, role and the closed request, then seals (sirkit.stackup-candidate.v1) or reports the blockers as proposal-blocked data. Nothing is applied here: the human path is PcbEditor's Stackup selector (pcb.board-geometry)." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 8_000,
+    validationStrategy: "closed argument surface (profileId required; manufacturingProfileId, planes, viaPadstackIds, viaTechnology, rationale; authority-shaped keys refused by name; the unsupported-capability keys reach the compiler so their refusal carries the exact reason) under the B05 input limits; a verified canonical board is required; discovery, role and capability rechecked per call; the compile is all-or-nothing against the tree's own profiles, presets, layer roles, board nets and padstacks",
+    verificationStrategy: "the sealed body's content digest is recomputed by stackupCandidateIntact; the candidate is pinned to the board revision and expires; nothing is applied by the tool - the editor's own Stackup selector commits the change as one canonical transaction, after which DRC, the export preflight and the manufacturing qualification re-run from scratch (the cited invalidation rules)",
+    sourceEvidence: ["app/lib/pcb/candidates/stackup-candidate.ts", "app/lib/agent/stackup-proposals.ts", "app/lib/pcb/stackup.ts", "app/lib/pcb/drc/presets/index.ts", "app/lib/pcb/fab/rule-profile.ts", "app/lib/pcb/padstack/defaults.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "1.0.0 (PR-F fE, 2026-10-17): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (a proposal, as OD-82; MCP exposure stays read-only).",
   };
 }
