@@ -2,12 +2,12 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B24",
-  "currentCheckpoint": "Product-reliability assignment: A-F done; G PARTIAL on codex/astra-foundation (deterministic proof of the commit alone done; CI admission of 19 suites, the CI-split re-measurement and the browser re-run carried forward); then H (PR) and I; then the owner's runbook sections J and K. Concurrent: an OpenAI Codex agent is editing the Build generation path in this checkout (uncommitted, excluded from the builder's commits)",
+  "currentCheckpoint": "Product-reliability assignment: A-G done (G on codex/product-reliability-g), H: evidence package and PR #16 open; I: verdict PARTIAL (final-verdict.md); then the owner's runbook sections J and K",
   "status": "in_progress",
   "baseSha": "32b081e152620b46e791f9589256f7d0603f300f",
   "branch": "codex/product-reliability-g (side branch from 6042488: the main checkout is shared with a concurrent agent's uncommitted work)",
   "lastGreenSha": "26dc8b8",
-  "pullRequest": "B24 PR #15 merged normally into main; no corrective PR opened yet",
+  "pullRequest": "PR #16 https://github.com/dantdani/sirkit-edit/pull/16 (codex/product-reliability-g -> main), opened 2026-10-17, not merged by the builder; must be combined with the concurrent agent's generation-budget correction first",
   "mergedProgram": {
     "pullRequest": "https://github.com/dantdani/sirkit-edit/pull/15",
     "headSha": "9dee4fb2d2ea205c3da8b00798a213ce8cea2935",
@@ -40,7 +40,7 @@
     "LB-16: BLOCKED-LIVE-QUALIFICATION: live approved external MCP server (discovery, tool calls and hostile tool results through Sirkit's MCP client)",
     "LB-17: BLOCKED-LIVE-QUALIFICATION: kicad-cli live oracle (the exported routed demo loaded and DRC-checked by a real kicad-cli)"
   ],
-  "nextAction": "Admit the 19 CI-orphaned suites (prompt-to-gerber positional filters + agent-boundary-suites) and re-measure d0-ptg-timing.xml at that tree; open the PR on codex/astra-foundation (never merged by the builder), read its CI, write final-verdict.md; then I",
-  "updatedAt": "2026-10-17T06:40:00-04:00",
+  "nextAction": "Read PR #16's CI and fix any red job; integrate the concurrent agent's generation-budget correction (once committed) with this branch and re-run a complex Build request; then runbook section J (multi-sheet schematics), then K",
+  "updatedAt": "2026-10-17T08:10:00-04:00",
   "previousChapter": "B23 merged normally into main as 57c3b29 (PR #14, 2026-10-06) after green CI on f663d71; verdict PARTIAL (no provider admitted, LB-11; ordering visibly disabled, its contract tested offline only, LB-12; physical evidence defined, none exists, LB-5; no agent can release, transfer or spend; census 166/163/3/0, counts 47/36/9/27)"
 }

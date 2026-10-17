@@ -53,4 +53,6 @@ sanctioned generators re-render. The owner's appended runbook sections J and K h
 
 ## Pull request and CI
 
-Recorded after the pull request is opened.
+Pull request #16 (https://github.com/dantdani/sirkit-edit/pull/16), `codex/product-reliability-g` → `main`, opened on
+2026-10-17; not merged by the builder. Its CI run had not reported when this line was written: the two vitest jobs' minutes stay
+INFERRED, and criterion 7 stays PARTIAL, until that run is read.
