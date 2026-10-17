@@ -447,6 +447,8 @@ app/components/pcb/SnapshotConflictDialog.tsx|click|Button|snapshot-conflict-reb
 app/components/pcb/SnapshotConflictDialog.tsx|click|Button|snapshot-conflict-rebase|onRebase,app/components/pcb/SnapshotConflictDialog.tsx,semantic,pcb.sync-durable,publish_demo_snapshot / preflight / apply_exact_plan / bind_atomic_selection,sirkit.pcb.revision-inspect,true,viewer;commenter;pcb_editor;reviewer;project_admin,coordinator;verification-critic,true,2,0
 app/components/pcb/SnapshotConflictDialog.tsx|click|Button|snapshot-conflict-refresh|onRefresh,app/components/pcb/SnapshotConflictDialog.tsx,view,-,-,-,-,-,-,-,-,-
 app/components/pcb/SnapshotConflictDialog.tsx|dialog|Dialog|(none)|onDismiss,app/components/pcb/SnapshotConflictDialog.tsx,view,-,-,-,-,-,-,-,-,-
+app/components/pcb/StackupCandidatePanel.tsx|click|button|stackup-candidate-accept|onAccept,app/components/pcb/StackupCandidatePanel.tsx,semantic,pcb.board-geometry,update_board_outline / update_stackup (+ stackup-plane zone reconciliation in the SAME transaction) / add|update|remove_keepout,sirkit.stackup.propose,true,pcb_editor;project_admin,coordinator,false,2,2
+app/components/pcb/StackupCandidatePanel.tsx|click|button|stackup-candidate-discard|onDiscard,app/components/pcb/StackupCandidatePanel.tsx,view,-,-,-,-,-,-,-,-,-
 app/components/pcb/SyncButton.tsx|click|button|Schematic to PCB placement options|onOptions,app/components/pcb/SyncButton.tsx,view,-,-,-,-,-,-,-,-,-
 app/components/pcb/SyncButton.tsx|click|button|Schematic to PCB|onSync,app/components/pcb/SyncButton.tsx,semantic,pcb.sync-durable,publish_demo_snapshot / preflight / apply_exact_plan / bind_atomic_selection,sirkit.parts.missing-facts,true,viewer;commenter;pcb_editor;reviewer;project_admin,coordinator,false,2,0
 app/components/pcb/SyncButton.tsx|click|button|Schematic to PCB|onSync,app/components/pcb/SyncButton.tsx,semantic,pcb.sync-durable,publish_demo_snapshot / preflight / apply_exact_plan / bind_atomic_selection,sirkit.pcb-sync.preflight,true,viewer;commenter;pcb_editor;reviewer;project_admin,coordinator,false,2,0
@@ -706,6 +708,7 @@ app/page.tsx|click|Button|Apply bounded support-part fixes via a validated edit|
 app/page.tsx|click|Button|Applying…|Apply exact proposal|applyTier1Proposal,app/page.tsx,semantic,schematic.edit-tier1-apply,schematic_set_component_properties + schematic_delete_component,-,-,-,-,-,2,-
 app/page.tsx|click|Button|Cancel — change nothing|cancelTier1Proposal,app/page.tsx,view,-,-,-,-,-,-,-,-,-
 "app/page.tsx|click|Button|Cancel|finishActivityLog,setPendingReplace",app/page.tsx,view,-,-,-,-,-,-,-,-,-
+app/page.tsx|click|Button|Close|setDraftRequestOpen,app/page.tsx,view,-,-,-,-,-,-,-,-,-
 app/page.tsx|click|Button|Close|setSettingsOpen,app/page.tsx,view,-,-,-,-,-,-,-,-,-
 app/page.tsx|click|Button|Delete|onDelete,app/page.tsx,semantic,schematic.delete-component,schematic_delete_component,-,-,-,-,-,2,-
 app/page.tsx|click|Button|Delete|onDelete#2,app/page.tsx,semantic,schematic.delete-component,schematic_delete_component,-,-,-,-,-,2,-
@@ -744,6 +747,7 @@ app/page.tsx|click|Button|composer-submit|handleComposerSubmit,app/page.tsx,disp
 app/page.tsx|click|Button|composer-submit|handleComposerSubmit,app/page.tsx,dispatcher,schematic.edit-tier1-propose,sealed tier-1 proposal (sirkit.schematic-tier1-proposal.v1),sirkit.schematic.propose-tier1-edit,true,pcb_editor;reviewer;project_admin,coordinator;circuit-topology;schematic,false,2,2
 app/page.tsx|click|Button|composer-submit|handleComposerSubmit,app/page.tsx,dispatcher,schematic.replace-component-propose,sealed replacement proposal (sirkit.schematic-replacement-proposal.v1),sirkit.schematic.propose-component-replacement,true,pcb_editor;reviewer;project_admin,coordinator;schematic,false,2,2
 app/page.tsx|click|Button|composer-submit|handleComposerSubmit,app/page.tsx,dispatcher,agent.execution-grant,-,-,-,-,-,-,1,-
+app/page.tsx|click|Button|draft-request-open|onOpenDraftRequest,app/page.tsx,view,-,-,-,-,-,-,-,-,-
 app/page.tsx|click|Button|new-project|createNewProject,app/page.tsx,semantic,project.switch-create,-,-,-,-,-,-,1,-
 app/page.tsx|click|Button|project-timeline-undo|undoLatestProjectOperation,app/page.tsx,semantic,project.operation-timeline,delegates to SchematicHistory.undo (via the B07.2 coordinator) or the canonical PcbHistory undo,sirkit.project.history-inspect,true,viewer;commenter;pcb_editor;reviewer;project_admin,coordinator;requirements-analyst,false,1,0
 app/page.tsx|click|Button|project-timeline-undo|undoLatestProjectOperation,app/page.tsx,semantic,project.undo-redo,-,-,-,-,-,-,1,-
@@ -811,6 +815,7 @@ app/page.tsx|click|button|change in Settings|setSettingsOpen,app/page.tsx,view,-
 app/page.tsx|click|button|composer-route-override|overrideComposerRoute,app/page.tsx,view,-,-,-,-,-,-,-,-,-
 app/page.tsx|click|button|empty-sheet-describe-circuit|handleJourneyAction,app/page.tsx,view,-,-,-,-,-,-,-,-,-
 app/page.tsx|click|button|missing-parts-open|openMissingParts,app/page.tsx,view,-,-,-,-,-,-,-,-,-
+app/page.tsx|click|button|module-note-toggle|setNoteExpanded,app/page.tsx,view,-,-,-,-,-,-,-,-,-
 app/page.tsx|click|button|view-tab-*|onClick,app/page.tsx,view,view.canvas-navigation,pcb.* / schematic.* / workspace.* on the view-session bus (sirkit.view-command.v1),sirkit.selection.inspect,true,viewer;commenter;pcb_editor;reviewer;project_admin,coordinator;circuit-topology,false,0,0
 app/page.tsx|click|button|view-tab-*|onClick,app/page.tsx,view,view.canvas-navigation,pcb.* / schematic.* / workspace.* on the view-session bus (sirkit.view-command.v1),sirkit.view.canvas-navigation,true,viewer;commenter;pcb_editor;reviewer;project_admin,coordinator,false,0,0
 app/page.tsx|click|button|view-tab-*|onClick,app/page.tsx,view,view.canvas-navigation,pcb.* / schematic.* / workspace.* on the view-session bus (sirkit.view-command.v1),sirkit.view.read-state,true,viewer;commenter;pcb_editor;reviewer;project_admin,coordinator,false,0,0
@@ -820,6 +825,7 @@ app/page.tsx|click|div|Pane **|onSelect,app/page.tsx,view,-,-,-,-,-,-,-,-,-
 app/page.tsx|dialog|Dialog|(none)|cancelTier1Proposal,app/page.tsx,view,-,-,-,-,-,-,-,-,-
 "app/page.tsx|dialog|Dialog|(none)|finishActivityLog,setPendingReplace",app/page.tsx,view,-,-,-,-,-,-,-,-,-
 app/page.tsx|dialog|Dialog|(none)|noop,app/page.tsx,internal,-,-,-,-,-,-,-,-,-
+app/page.tsx|dialog|Dialog|(none)|setDraftRequestOpen,app/page.tsx,view,-,-,-,-,-,-,-,-,-
 app/page.tsx|dialog|Dialog|(none)|setHistoryOpen,app/page.tsx,view,-,-,-,-,-,-,-,-,-
 app/page.tsx|dialog|Dialog|(none)|setSettingsOpen,app/page.tsx,view,-,-,-,-,-,-,-,-,-
 "app/page.tsx|dialog|Dialog|(none)|showToast,setSchematicRecovery",app/page.tsx,view,-,-,-,-,-,-,-,-,-

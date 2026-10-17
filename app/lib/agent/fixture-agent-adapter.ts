@@ -233,7 +233,7 @@ export function planFixtureInstruction(message: string): Planned {
   if (LAYOUT.test(text)) return { kind: "layout-then", routeAsked: /\broute\b/i.test(text) };
   const replay = REPLAY.exec(text);
   if (replay) return { kind: "call", toolId: "sirkit.pcb.undo-redo-granted", args: { direction: replay[1]!.toLowerCase() } };
-  return { kind: "reply", text: "(fixture agent) I follow only the harness's scripted instructions: move or flip a selected part, add silkscreen text, dimension the board (and its mounting holes), resize or retarget the vias on a net, replace a component with the part its authority records, propose a placement, undo, redo, and the refusal scripts (release, qualify, order, a delegation, a double call)." };
+  return planGenerateSchematic(message) ?? { kind: "reply", text: "(fixture agent) I follow only the harness's scripted instructions: move or flip a selected part, add silkscreen text, dimension the board (and its mounting holes), resize or retarget the vias on a net, replace a component with the part its authority records, propose a placement, generate a schematic from a prompt, undo, redo, and the refusal scripts (release, qualify, order, a delegation, a double call)." }; // [PR-G, 2026-10-17] the generation script (appended below) is tried last, on the sentence as written: no earlier pattern opens with "generate", so the order changes nothing
 }
 
 /** [B18-E E14] The name the person used is not a net on this board: say so, and say what the board does have. */
@@ -704,4 +704,24 @@ function scriptedFollowUp(adapter: FixtureAgentAdapter, input: Parameters<Provid
   const sentence = [...input.history].reverse().find((entry) => entry.role === "user")?.text ?? "";
   if (FIXTURE_FOLLOW_UP_FAILURES.includes(fixtureSentenceKey(sentence)) && followUpApprovalOutcome(input.userMessage) === "presented") throw new LLMProviderError(adapter.provider, FIXTURE_FOLLOW_UP_FAILURE.reason, FIXTURE_FOLLOW_UP_FAILURE.status);
   return roleStep(adapter, { text: followUpAnswer(input.userMessage) });
+}
+
+// ─── [PR-G, 2026-10-17] The Build-mode generation turn (G.11, OD-243) ────────────────────────────────────────────────────────────────
+// Appended on purpose (as B21-F and B21-F2b were): a `const` read only when a plan is made and a hoisted function declaration, so no
+// line cited above moves - the ONE in-place hook is `planFixtureInstruction`'s last line. Still never a model: the whole sentence
+// "Generate a schematic: <prompt>" becomes the ONE tool call a model would make, sirkit.schematic.generate-proposal { prompt }, through
+// the REAL loop, gateway, injected generation port and seal (under the fixture runtime the port answers the recorded blinker design:
+// app/api/chat/schematic-generation-runtime.ts -> runBuildMultiGeneration -> runBuildToolLoop's fixture branch, no provider, no credits).
+// The sealed result is answered by the class's plain closing reply ("the tool answered proposal_sealed"); the page's intake offers the
+// artifact in the SAME schematic review dialog as the composer's Generate, where only the human approves it. Every other instruction
+// is byte-identical to before.
+
+/** The instruction, whole: "Generate a schematic: <prompt>" - the prompt is 1 to 4000 characters (the tool's own bound), passed as the
+ *  person wrote it (whitespace collapsed; its own sentence punctuation kept, unlike the PCB scripts' normalized text). */
+const GENERATE_SCHEMATIC = /^(?:please\s+)?generate\s+a\s+schematic\s*:\s*(\S[\s\S]{0,3999})$/i;
+
+/** [PR-G] The generation plan for a whole instruction, or null when the sentence is not one (the plain reply then answers). */
+function planGenerateSchematic(message: string): Extract<Planned, { kind: "call" }> | null {
+  const match = GENERATE_SCHEMATIC.exec(message.replace(/\s+/g, " ").trim());
+  return match ? { kind: "call", toolId: "sirkit.schematic.generate-proposal", args: { prompt: match[1]!.trim() } } : null;
 }

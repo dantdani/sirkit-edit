@@ -29,6 +29,7 @@
  * closeout's one table (OD-221). Every foreign note prefix, tag and claim word is assembled at run time, so this file spells none.
  * Failing first on 6e4e1bb: no note and no matrix exist (qualification-matrix.md part 3). Files are read as text; nothing is written to
  * disk and no process is started. The walks yield between files.
+ * [PR-G, 2026-10-17] The pages not read also hold the owner's own assignment of the post-B24 work (EXCLUDED's note): instruction text.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -198,8 +199,14 @@ function everyFile(dir: string, keep: (name: string) => boolean): string[] {
 }
 const COPY_ROOTS = ["app", "lib", "components", "scripts", "e2e", "e2e-orchestration", "e2e-production-auth"] as const;
 const productionCopy = (): string[] => [...COPY_ROOTS.flatMap((dir) => sources(dir)), ...readdirSync(ROOT, { withFileTypes: true }).filter((entry) => entry.isFile() && SOURCE.test(entry.name)).map((entry) => entry.name)];
-/** The pages not read: the lead's records, B24's README and discovery (the lead's), and the matrix (the claims' home). */
-const EXCLUDED = (path: string): boolean => path.startsWith("artifacts/remaining-builder-program/") || ["artifacts/ai-control-plane-b24/README.md", "artifacts/ai-control-plane-b24/discovery.md", MATRIX].includes(path);
+/** The pages not read: the lead's records, B24's README and discovery (the lead's), and the matrix (the claims' home).
+ *  [PR-G, 2026-10-17] ... and the owner's own assignment of the post-B24 reliability work (OWNER_DIRECTIVE, prepared 2026-10-14, with
+ *  its additive owner requests J and K): the owner's instruction text, not a page a builder states results on, read as the lead's
+ *  records are (its section H forbids relabelling blocked live or physical work because local CI is green: a directive whose negation
+ *  governs a verb four words back, which the local rule does not parse, never a claim). Exactly that one path: the other pages beside it in
+ *  artifacts/astra-guided-pcb/ (README, CONTINUATION, the qualification-census addendum) stay read, and case 2 pins the set. */
+const OWNER_DIRECTIVE = "artifacts/astra-guided-pcb/PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.md";
+const EXCLUDED = (path: string): boolean => path.startsWith("artifacts/remaining-builder-program/") || ["artifacts/ai-control-plane-b24/README.md", "artifacts/ai-control-plane-b24/discovery.md", MATRIX, OWNER_DIRECTIVE].includes(path);
 const pages = (): string[] => [...everyFile("artifacts", (name) => name.endsWith(".md")).filter((path) => !EXCLUDED(path)), ...everyFile("docs", (name) => name.endsWith(".md")), "README.md"];
 const yieldToLoop = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
@@ -315,7 +322,8 @@ describe("[B24-E] no copy claims a live, staging or physical pass the matrix doe
     const paths = pages();
     expect(paths).toEqual(expect.arrayContaining(["README.md", "artifacts/ai-control-plane-b20/final-verdict.md", "artifacts/prompt-to-gerber/r05-e2e01-report.md", "artifacts/ai-control-plane-b24/eval-catalog.md"]));
     expect(paths.filter(EXCLUDED)).toEqual([]);
-    expect(everyFile("artifacts", (name) => name.endsWith(".md")).filter(EXCLUDED).filter((path) => !path.startsWith("artifacts/remaining-builder-program/")).sort()).toEqual(["artifacts/ai-control-plane-b24/README.md", "artifacts/ai-control-plane-b24/discovery.md", MATRIX].sort());
+    expect(everyFile("artifacts", (name) => name.endsWith(".md")).filter(EXCLUDED).filter((path) => !path.startsWith("artifacts/remaining-builder-program/")).sort()).toEqual(["artifacts/ai-control-plane-b24/README.md", "artifacts/ai-control-plane-b24/discovery.md", MATRIX, OWNER_DIRECTIVE].sort()); // [PR-G, 2026-10-17] + the owner's assignment (EXCLUDED's note)
+    expect(paths).toEqual(expect.arrayContaining(["artifacts/astra-guided-pcb/README.md", "artifacts/astra-guided-pcb/CONTINUATION.md", "artifacts/astra-guided-pcb/qualification-census-addendum.md"])); // [PR-G, 2026-10-17] the other pages beside it stay read
     expect(await uncorrected(paths, read, ALLOWED)).toEqual([]);
     // without the allow-list, exactly its one statement is reported: the vocabulary holds no other find at this tree
     expect(await uncorrected(paths, read, [])).toEqual(["artifacts/ai-control-plane-b20/final-verdict.md:59 (g:qualified-on-real-server)"]);

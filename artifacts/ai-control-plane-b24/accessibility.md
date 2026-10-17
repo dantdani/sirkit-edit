@@ -609,17 +609,17 @@ Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on 
 | C10 | `scripts/generate-b24-accessible-names.ts` | 35 | — | `Refused: nothing written. New unnamed controls` | the ratchet (line moved from 26 in the review round) |
 | C11 | `app/lib/accessibility/statements.ts` | 11 | — | `export const EDITOR_MIN_WIDTH_PX = 1280;` | the minimum width |
 | C12 | `app/lib/accessibility/statements.ts` | 14 | — | `export const MIN_WIDTH_NOTICE =` | the notice |
-| C13 | `app/page.tsx` | 2078 | — | `<svg role="img" aria-label="Schematic drawing: pointer-only` | the schematic canvas declared, in place |
-| C14 | `app/page.tsx` | 4841 | — | `setLoading(false); const returnFocus = (frames: number): void =>` | focus back to the prompt, in place |
-| C15 | `app/page.tsx` | 7067 | — | `role="log" aria-live="polite" aria-relevant="additions text" aria-busy={loading} aria-label="Conversation with the assistant"` | the transcript, in place |
-| C16 | `app/page.tsx` | 7081 | — | `<div role="alert" className="px-3 py-1.5 text-xs text-red-400` | the chat error, in place |
-| C17 | `app/page.tsx` | 7188 | — | `data-testid="prompt-input" aria-label="Message to the assistant"` | the prompt, in place |
-| C18 | `app/page.tsx` | 7198 | — | `disabled={loading \|\| isGenerating \|\| isEditing}` | the prompt is disabled while a run streams |
-| C19 | `app/page.tsx` | 6368 | — | `aria-label="Workspace settings" data-testid="workspace-settings"` | the Settings button, named and wired to the workspace settings dialog [Product reliability E, 2026-10-16: the handler-less, unnamed button this row recorded is gone; the citation now anchors the labelled control] |
-| C20 | `app/page.tsx` | 6491 | — | `onMouseDown={(e) => startDrag("left", e)}` | a pointer-only resizer (2.5.7) |
-| C21 | `app/page.tsx` | 6683 | — | `onMouseDown={(e) => startDrag("right", e)}` | the other resizer |
-| C22 | `app/page.tsx` | 1977 | — | `aria-label="Go to component"` | the schematic Go to field |
-| C23 | `app/page.tsx` | 2549 | — | `const [chatOpen, setChatOpen]` | the chat starts closed |
+| C13 | `app/page.tsx` | 2084 | — | `<svg role="img" aria-label="Schematic drawing: pointer-only` | the schematic canvas declared, in place |
+| C14 | `app/page.tsx` | 4923 | — | `setLoading(false); const returnFocus = (frames: number): void =>` | focus back to the prompt, in place |
+| C15 | `app/page.tsx` | 7187 | — | `role="log" aria-live="polite" aria-relevant="additions text" aria-busy={loading} aria-label="Conversation with the assistant"` | the transcript, in place |
+| C16 | `app/page.tsx` | 7201 | — | `<div role="alert" className="px-3 py-1.5 text-xs text-red-400` | the chat error, in place |
+| C17 | `app/page.tsx` | 7308 | — | `data-testid="prompt-input" aria-label="Message to the assistant"` | the prompt, in place |
+| C18 | `app/page.tsx` | 7318 | — | `disabled={loading \|\| isGenerating \|\| isEditing}` | the prompt is disabled while a run streams |
+| C19 | `app/page.tsx` | 6464 | — | `aria-label="Workspace settings" data-testid="workspace-settings"` | the Settings button, named and wired to the workspace settings dialog [Product reliability E, 2026-10-16: the handler-less, unnamed button this row recorded is gone; the citation now anchors the labelled control] |
+| C20 | `app/page.tsx` | 6587 | — | `onMouseDown={(e) => startDrag("left", e)}` | a pointer-only resizer (2.5.7) |
+| C21 | `app/page.tsx` | 6781 | — | `onMouseDown={(e) => startDrag("right", e)}` | the other resizer |
+| C22 | `app/page.tsx` | 1983 | — | `aria-label="Go to component"` | the schematic Go to field |
+| C23 | `app/page.tsx` | 2555 | — | `const [chatOpen, setChatOpen]` | the chat starts closed |
 | C24 | `app/components/pcb/PcbCanvas.tsx` | 40 | — | `role="img" aria-label={PCB_CANVAS_STATEMENT}` | the PCB host declared |
 | C25 | `app/components/pcb/PcbToolbar.tsx` | 375 | — | `aria-label="Go to component"` | the PCB Go to field |
 | C26 | `app/components/pcb/ProviderExchangePanel.tsx` | 171 | — | `<div role="alert" className="mt-1 rounded border border-red-500/40` | the refusal, in place |
@@ -654,14 +654,14 @@ Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on 
 | C55 | `scripts/generate-b24-accessible-names.ts` | 22 | — | `const CENSUS_PATH = "artifacts/ai-control-plane-b24/accessible-name-census.csv";` | the ratchet's baseline, never read from outDir (review round) |
 | C56 | `scripts/generate-b24-accessible-names.ts` | 37 | — | `pass --bootstrap for a tree that has none` | a missing baseline refuses (review round) |
 | C57 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 76 | — | `const OUT_OF_SCOPE_UNNAMED_AT_3773C6A = 111;` | the `3773c6a` record |
-| C58 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 392 | — | `const OUT_OF_SCOPE_UNNAMED_AFTER_D3 = 102;` | the post-D3 pin (review round) |
-| C59 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 396 | — | `const UNNAMED_KEYS_AFTER_D3: readonly string[] = [` | the frozen key list (review round) |
-| C60 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 505 | — | `const BROWSER_SPECS_EXECUTED = true;` | flipped by the lead after the green browser runs (section 5) |
-| C61 | `app/page.tsx` | 2617 | — | `const chatFocusReturnRef = useRef(false);` | the focus-return flag, declared in place (review round) |
-| C62 | `app/page.tsx` | 4487 | — | `setLoading(true); chatFocusReturnRef.current = document.activeElement !== null && document.activeElement === document.querySelector('[data-testid="prompt-input"]');` | set when the run is sent from the prompt, in place (review round) |
-| C63 | `app/page.tsx` | 4841 | — | `if (!chatFocusReturnRef.current \|\| !prompt` | the return checks the flag every frame, in place (review round) |
-| C64 | `app/page.tsx` | 6248 | — | `onPointerDownCapture={() => { chatFocusReturnRef.current = false;` | any pointer press clears it, in place (review round) |
-| C65 | `app/page.tsx` | 7263 | — | `title="More checks" aria-label="More checks"` | the More checks button named, in place (review round) |
+| C58 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 396 | — | `const OUT_OF_SCOPE_UNNAMED_AFTER_D3 = 102;` | the post-D3 pin (review round) |
+| C59 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 400 | — | `const UNNAMED_KEYS_AFTER_D3: readonly string[] = [` | the frozen key list (review round) |
+| C60 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 509 | — | `const BROWSER_SPECS_EXECUTED = true;` | flipped by the lead after the green browser runs (section 5) |
+| C61 | `app/page.tsx` | 2623 | — | `const chatFocusReturnRef = useRef(false);` | the focus-return flag, declared in place (review round) |
+| C62 | `app/page.tsx` | 4523 | — | `setLoading(true); chatFocusReturnRef.current = document.activeElement !== null && document.activeElement === document.querySelector('[data-testid="prompt-input"]');` | set when the run is sent from the prompt, in place (review round) |
+| C63 | `app/page.tsx` | 4923 | — | `if (!chatFocusReturnRef.current \|\| !prompt` | the return checks the flag every frame, in place (review round) |
+| C64 | `app/page.tsx` | 6344 | — | `onPointerDownCapture={() => { chatFocusReturnRef.current = false;` | any pointer press clears it, in place (review round) |
+| C65 | `app/page.tsx` | 7383 | — | `title="More checks" aria-label="More checks"` | the More checks button named, in place (review round) |
 | C66 | `app/lib/engineering/accessible-names.ts` | 779 | — | `const name = nameOf({ surface: rows[0]!.surface, kind: "click"` | a backdrop's closer found by its accessible name (review round) |
 | C67 | `app/components/pcb/GrantedExecutionDialog.tsx` | 55 | — | `<DialogContent className="max-w-xl" finalFocus={promptFocus}>` | [B24-D4, 2026-10-10] the card's return target, in place |
 | C68 | `app/components/pcb/GrantedExecutionDialog.tsx` | 125 | — | `return prompt && !prompt.disabled ? prompt : false;` | [B24-D4, 2026-10-10] the prompt when enabled; [B24-D4 review, 2026-10-10] else no focus move (was: Base UI's default, `: true`) |

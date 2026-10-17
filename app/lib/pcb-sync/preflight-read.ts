@@ -13,7 +13,7 @@
  * Pure: reads the schematic state only - no part cache, no network, no DOM, no board.
  */
 import type { SchematicState } from "@/lib/schematic-types";
-import { theoryPinContract } from "@/app/lib/pcb/netlist-bridge";
+import { theoryPinContract } from "@/app/lib/schematic/theory-physicality"; // [PR-G, 2026-10-17] the shared rule's own module, not the Stage 4 bridge (forbidden in Stage 3 code)
 import { listUnresolvedInstances, unresolvedInstancesRefusal, UNRESOLVED_MISSING_LABEL, type UnresolvedInstance } from "./unresolved-instances";
 
 export const PCB_SYNC_PREFLIGHT_REPORT_SCHEMA = "sirkit.pcb-sync-preflight-report.v1" as const;

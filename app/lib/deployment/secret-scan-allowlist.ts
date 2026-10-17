@@ -57,6 +57,26 @@ export const SECRET_SCAN_ALLOWLIST: readonly SecretScanAllowlistEntry[] = Object
     sha256: "960457ace48b1f8763d0e094812288600a3743899247f06a8befab7848026623",
     reason: "B16-B's database-qualification fixture ENV_LOCAL_STYLE_URL: a pooler URL shaped like an owner's .env.local value, for a project named deadtenant that does not resolve, with a placeholder password; the qualification must refuse it without its marker",
   },
+  // [PR-G lead, 2026-10-17] the three redaction cases PR-D/PR-F added, each read in its test first: a 55-character key-shaped fake
+  // (the alphabet, no key material) inside a thrown error's message, which the gateway's refusal diagnostics must never echo
+  {
+    path: "app/lib/engineering/__tests__/pr-d-catalog-inspect.test.ts",
+    rule: "anthropic-key-shape",
+    sha256: "564faed325f7e6a0976ba69ffe06c8f4e8a4b905c1719645461df4e496781557",
+    reason: "PR-D's catalog-inspect refusal case: the fake catalog port throws 'connection refused' followed by a 55-character key-shaped alphabet placeholder; the read must refuse implementation_failed without the message's secret shape in its diagnostics",
+  },
+  {
+    path: "app/lib/engineering/__tests__/pr-d-generate-proposal.test.ts",
+    rule: "anthropic-key-shape",
+    sha256: "4ac308fec5066095a8b2153307f2c714c48da82f5326474fdf097ce9d4495eeb",
+    reason: "PR-D's generate-proposal failure case: the fake generation port throws 'socket hang up' followed by the same alphabet placeholder; the proposal-blocked data must carry the first words and never the key shape",
+  },
+  {
+    path: "app/lib/parts/__tests__/pr-f-missing-facts-read.test.ts",
+    rule: "anthropic-key-shape",
+    sha256: "564faed325f7e6a0976ba69ffe06c8f4e8a4b905c1719645461df4e496781557",
+    reason: "PR-F's missing-facts read: the fake catalog port throws the same 'connection refused' line (byte-identical to PR-D's catalog-inspect case); the read answers catalog unavailable without the message's secret shape",
+  },
   // [B24-A2F, 2026-10-09] the history-only kind (secret-scan.ts, the end of the file): the one line B24-C3's commit carried and the
   // lead's fix rewrote, which the pull request's history scan still reads; the digest verified by the lead and by this increment
   // against `git show ba4f562:<path> | sed -n 75p` piped into sha256, the line never printed; neither used nor stale in tree mode

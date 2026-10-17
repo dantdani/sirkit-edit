@@ -25,11 +25,23 @@
       "actual_usd": "0.19",
       "actual_basis": "CONFIRMED from the durable llm.call-record.v1 rows of the run window 2026-10-16T03:37:27Z..03:39:03Z (read-only, counts only): build-multi 4 gpt-5.6-sol calls, 17,481 input / 3,171 output tokens (planner single, loop 3 of 6 iterations, 47.7 s); the page's post-approval automatic passes layout-critic (7,779 / 325) and review (1,867 / 301) - 2 calls outside the reservation's scope but inside the cap; 9 Anthropic claude-haiku-4-5 rerank calls refused insufficient_quota (0 tokens, no charge); 17 text-embedding-3-small calls (< 0.001 USD). Priced at 4.00/20.00 per million: 27,127 x 4.00 + 3,797 x 20.00 = 0.108 + 0.076 = 0.184 -> 0.19 rounded up. The fan-out assumption held (planner.state single).",
       "completed_at": "2026-10-16T03:42:22Z"
+    },
+    {
+      "id": "LR-2",
+      "status": "completed",
+      "reserved_at": "2026-10-17T06:20:00-04:00",
+      "purpose": "checkpoint G / Astra increment A (LB-F3): ONE live CONTRACT turn with gpt-6-astra through the repository's OpenAIProvider and the B21-F contract-turn runner (a forced-tool turn with a strict tool; SDK retries 0; the adapters' output ceiling) - proves the API accepts the request the adapter builds and returns a valid tool call; proves nothing about engineering quality",
+      "bounds": "one request (a scratch meter refuses a second); max output = the adapters' ceiling; no capsule cases run (the full live evaluation is NOT invoked)",
+      "worst_case_usd": "0.46",
+      "worst_case_basis": "INFERRED from the list prices read on 2026-10-17 (input 10 / cached 1 / output 50 USD per million): the output ceiling plus a one-tool prompt",
+      "actual_usd": "0.0028",
+      "actual_basis": "CONFIRMED from the adapter's reported usage of the one request (121 input tokens, 0 cached, 31 output tokens) at the list prices read on 2026-10-17 (10 / 1 / 50 USD per million); the record: toolCalled true, nameMatched true, argumentsValid true, verdict valid; wall 2.6 s",
+      "completed_at": "2026-10-17T06:24:00-04:00"
     }
   ],
-  "builder_spent_known": "0.19",
+  "builder_spent_known": "0.1928",
   "builder_reserved_uncertain": "0.00",
-  "builder_remaining_provable": "4.81",
+  "builder_remaining_provable": "4.8072",
   "prior_continuation_paid_calls": {
     "claim": "the prior work in this continuation made no paid calls",
     "verification": "CONFIRMED independently: the durable llm.call-record.v1 rows (65) all belong to the owner's own browser session of 2026-10-11 (routes /api/schematic/build-multi and embeddings, written while the owner tested with the owner's key); no row names a builder script, suite or command; no record-only evaluation command was run (its outputs are absent)",
@@ -50,5 +62,6 @@
       "cost_usd": "0.00",
       "cost_basis": "CONFIRMED: the models list is not metered (no tokens)"
     }
-  ]
+  ],
+  "builder_reserved_open": "0.00"
 }

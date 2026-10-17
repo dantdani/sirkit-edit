@@ -28,6 +28,7 @@ import {
   type AtomicPublicationSpec,
   type ImportReviewFact,
   type ImportReviewLink,
+  type ImportReviewProfile, // [PR-G]
   type ReviewDraftChoices,
   type WithdrawRevisionDraft,
 } from "@/app/lib/atomic/publication-review-contract";
@@ -44,6 +45,15 @@ export interface AtomicPublicationPrefill {
    * [B19-E E4 review follow-up] a default link whose revision was withdrawn (or is missing) counts: it is still the part's link.
    */
   alreadyLinked?: boolean;
+  /** [PR-G, 2026-10-17] the request's remaining fields, prefilled from a sealed agent draft request (app/lib/project/draft-request-events.ts
+   *  `draftRequestPublicationPrefill`): the publication spec in the form's own fields; absent on every other caller (the form starts empty). */
+  profile?: ImportReviewProfile;
+  /** the terminal table as the textarea holds it: one `number function [pads]` line per pin */
+  terminals?: string;
+  packageCode?: string;
+  mounting?: "smd" | "through_hole";
+  datasheetUrl?: string;
+  datasheetLocator?: string;
 }
 
 const STATE_CLASS: Record<string, string> = {
@@ -64,8 +74,12 @@ const inputClass = "rounded border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-
 /** "1 GND" or "1 GND 1,1A" per line: terminal number, function, optional pads (defaults to the terminal number). */
 function parseTerminalTable(text: string): AtomicPublicationSpec["terminals"] {
   return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
-    const [number = "", fn = "", pads = ""] = line.split(/\s+/);
-    return { number, function: fn, pads: pads ? pads.split(",").filter(Boolean) : [number] };
+    // [PR-G, 2026-10-17] `number function [pads]`: the first token is the number, the LAST token the pads when three or more tokens are
+    // given, and everything between is the function (a sealed draft request's "GND: ground" keeps its space; a two-token line is
+    // number + function as before, its pads the number).
+    const [number = "", ...rest] = line.split(/\s+/);
+    const pads = rest.length >= 2 ? rest.pop()! : "";
+    return { number, function: rest.join(" "), pads: pads ? pads.split(",").filter(Boolean) : [number] };
   });
 }
 
@@ -174,10 +188,10 @@ export function AtomicPublicationReviewPanel({ review, prefill }: AtomicPublicat
   const [publishReasons, setPublishReasons] = useState<Record<string, string>>({});
   const [withdrawals, setWithdrawals] = useState<Record<string, WithdrawRevisionDraft>>({}); // [B19-E E5] by request id
   const [draft, setDraft] = useState<SubmitDraft>(() => ({
-    exactMpn: prefill?.exactMpn ?? "", profile: "pcb_assignable",
+    exactMpn: prefill?.exactMpn ?? "", profile: prefill?.profile ?? "pcb_assignable", // [PR-G] a sealed draft request names its profile (schematic_only until every C.4 fact is documented)
     symbolLibrary: prefill?.symbol?.library ?? "", symbolName: prefill?.symbol?.name ?? "",
     footprintLibrary: prefill?.footprint?.library ?? "", footprintName: prefill?.footprint?.name ?? "",
-    terminals: "", packageCode: "", mounting: "smd", datasheetUrl: "", datasheetLocator: "", manufacturer: prefill?.manufacturer ?? "", linkPart: false, reason: "",
+    terminals: prefill?.terminals ?? "", packageCode: prefill?.packageCode ?? "", mounting: prefill?.mounting ?? "smd", datasheetUrl: prefill?.datasheetUrl ?? "", datasheetLocator: prefill?.datasheetLocator ?? "", manufacturer: prefill?.manufacturer ?? "", linkPart: false, reason: "", // [PR-G] the sealed spec's fields, or empty
   }));
 
   const choiceOf = (requestId: string): ReviewDraftChoices => choices[requestId] ?? EMPTY_CHOICES;

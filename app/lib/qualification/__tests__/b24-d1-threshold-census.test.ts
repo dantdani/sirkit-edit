@@ -74,7 +74,7 @@ describe("[B24-D1] the threshold census (D24-28, OD-212)", () => {
     const classified = classifyThresholdCensus(scan.rows, THRESHOLD_CLASSIFICATIONS);
     expect(classified.problems).toEqual([]);
     const counts = censusCounts(classified.rows);
-    expect([counts["elapsed:ci"], counts["moved:ci"], counts["elapsed:none"]]).toEqual([48, 7, 13]); // [B24-D1 review, 2026-10-09] was [47, 6, 12]
+    expect([counts["elapsed:ci"], counts["moved:ci"], counts["elapsed:none"]]).toEqual([48, 7, 15]); // [PR-G, 2026-10-17] reviewed pin move: 13 -> 15 outside CI, the two elapsed bounds PR-C and PR-F added in files no CI job selects (pr-c-composer-question: the empty-project question rule linear on hostile text, < 1,000 ms; pr-f-missing-facts-read: a hanging catalog port meets the read's deadline), unclassified as the other thirteen are (only a CI row needs a class); the CI counts unchanged; [B24-D1 review, 2026-10-09] was [47, 6, 12]
     expect([counts["elapsed:ci:deadline-proof"], counts["elapsed:ci:complexity-proof"], counts["elapsed:ci:performance"] ?? 0, counts["moved:ci:performance"]]).toEqual([33, 15, 0, 7]); // [B24-D1 review, 2026-10-09] was [33, 14, 0, 6]
     expect(THRESHOLD_CLASSIFICATIONS).toHaveLength(55); // [B24-D1 review, 2026-10-09] was 53
     for (const entry of THRESHOLD_CLASSIFICATIONS) {

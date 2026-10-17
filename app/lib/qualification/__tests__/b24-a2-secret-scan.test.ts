@@ -215,6 +215,9 @@ describe("[B24-A2] the scanner (D24-4, OD-195)", () => {
       "app/lib/agent/__tests__/b11-trace-replay-evaluation.test.ts anthropic-key-shape",
       "app/api/__tests__/b16-0-12-tranche-parity.test.ts connection-string-password",
       "app/lib/db/__tests__/b16-b-database-qualification.test.ts connection-string-password",
+      "app/lib/engineering/__tests__/pr-d-catalog-inspect.test.ts anthropic-key-shape", // [PR-G lead, 2026-10-17] reviewed pin move, nine -> twelve: the three redaction cases PR-D/PR-F added (a key-shaped alphabet placeholder inside a thrown error message, asserted never to leak into the refusal diagnostics), each read in its test first
+      "app/lib/engineering/__tests__/pr-d-generate-proposal.test.ts anthropic-key-shape",
+      "app/lib/parts/__tests__/pr-f-missing-facts-read.test.ts anthropic-key-shape",
       "app/lib/qualification/__tests__/b24-c3-trace-read.test.ts connection-string-password", // [B24-A2F, 2026-10-09] reviewed pin move, eight -> nine: the history-only entry for the fake B24-C3 committed at ba4f562:75 and the lead's fix rewrote (aaa6a1b)
     ]);
     expect(allowlistProblems(SECRET_SCAN_ALLOWLIST)).toEqual([]);
@@ -223,10 +226,10 @@ describe("[B24-A2] the scanner (D24-4, OD-195)", () => {
     // the ninth, history-only, is neither used nor stale, so the count stays 8)
     const files = [...new Set(SECRET_SCAN_ALLOWLIST.map((entry) => entry.path))];
     const named = runSecretScan({ entries: files.map((path) => ({ path, text: read(path) })), allowlist: SECRET_SCAN_ALLOWLIST });
-    expect(named).toMatchObject({ exitCode: 0, lines: [], allowlisted: 8 });
+    expect(named).toMatchObject({ exitCode: 0, lines: [], allowlisted: 11 /* [PR-G lead, 2026-10-17] 8 -> 11: the three PR-D/PR-F redaction cases */ });
     // without the allowlist those files hit eight times, and the lines (never the text) say where
     const bare = runSecretScan({ entries: files.map((path) => ({ path, text: read(path) })), allowlist: [], mode: "staged" });
-    expect(bare.lines).toHaveLength(8);
+    expect(bare.lines).toHaveLength(11) /* [PR-G lead, 2026-10-17] 8 -> 11: the three PR-D/PR-F redaction cases */;
     for (const line of bare.lines) expect(line).toMatch(/^app\/[a-z0-9/_.-]+\/__tests__\/[a-z0-9_.-]+\.test\.ts:\d+ [a-z-]+$/); // [B24-A2 review, 2026-10-06] app/lib/ -> app/: one fake is under app/api/__tests__
   });
 });
@@ -584,13 +587,13 @@ describe("[B24-A2F, 2026-10-09] the history-only allowlist entries (OD-195 amend
   });
 
   it("(q) red first on b3a4f2d (eight entries): the committed allowlist's ninth entry is history-only - B24-C3's test path, the connection-string rule, the lead's 64-hex digest over the line as committed at ba4f562, a reason naming ba4f562:75 and aaa6a1b and saying replaced; no line of that file at HEAD carries the digest, so tree mode over it is green with nothing allowlisted and nothing stale, and the eight ordinary entries carry no mark", () => {
-    expect(SECRET_SCAN_ALLOWLIST).toHaveLength(9);
-    const ninth = SECRET_SCAN_ALLOWLIST[8]!;
+    expect(SECRET_SCAN_ALLOWLIST).toHaveLength(12); // [PR-G lead, 2026-10-17] reviewed pin move: 9 -> 12 (the three PR-D/PR-F redaction cases, ordinary entries placed before the history-only one, which stays last)
+    const ninth = SECRET_SCAN_ALLOWLIST[11] /* [PR-G lead, 2026-10-17] the history-only entry stays LAST: index 8 -> 11 after the three ordinary PR-D/PR-F entries */!;
     expect(ninth).toMatchObject({ path: C3_TEST, rule: "connection-string-password", historyOnly: true });
     expect(ninth.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(ninth.sha256).toBe("8bbe84aef14181902a233659797cf030bfd89aceb5f844542df7aee61e584a01");
     for (const word of ["ba4f562:75", "aaa6a1b", "replaced", ["FAKE", "URL"].join("_"), ["FAKE", "CONNECTION"].join("_"), "db.invalid", "no credential"]) expect(ninth.reason).toContain(word);
-    expect(SECRET_SCAN_ALLOWLIST.slice(0, 8).every((entry) => entry.historyOnly === undefined)).toBe(true);
+    expect(SECRET_SCAN_ALLOWLIST.slice(0, 11).every((entry) => entry.historyOnly === undefined)).toBe(true);
     expect(allowlistProblems(SECRET_SCAN_ALLOWLIST)).toEqual([]);
     const current = read(C3_TEST);
     expect(current.split(NEWLINE).map((raw) => lineDigest(raw.endsWith(CR) ? raw.slice(0, -1) : raw))).not.toContain(ninth.sha256);
@@ -609,7 +612,7 @@ describe("[B24-A2F, 2026-10-09] the history-only allowlist entries (OD-195 amend
     for (const fact of ["[B24-A2F, 2026-10-09]", "historyOnly: true", "history"]) expect(sentinel, fact).toContain(fact);
     const stale = header.slice(4, 6).join(" ");
     for (const fact of ["makes its entry stale", "except an entry marked `historyOnly: true`", "[B24-A2F, 2026-10-09]", "(LB-13)"]) expect(stale, fact).toContain(fact);
-    expect(header[66]).toBe("    historyOnly: true as const,");
+    expect(header[86]).toBe("    historyOnly: true as const,"); // [PR-G lead, 2026-10-17] pin move: 66 -> 86, the three ordinary entries (20 lines) sit above the history-only one
   });
 
   it("(s) [B24-A2F review, 2026-10-09] security-3, green at launch - the kind's limit pinned as the page records it (section 15, INFERRED): in --history mode a history-only entry matches its path, rule and digest under every commit of the range, no commit compared, exactly as an ordinary entry does; the id its reason names is checked for shape only, so a numeral of seven digits passes; a `commit` field compared against the `<commit>:` prefix is the lead's choice, not this increment's", () => {

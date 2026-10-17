@@ -36,7 +36,7 @@ import { validateFullFlowProject } from "@/app/lib/full-flow/project";
 
 /** Persisted, user-visible AI interaction — never keys, never hidden reasoning. */
 export type StoredChatMessage =
-  | { id: string; role: "user" | "assistant"; content: string; /** [B19-D I5e row 32] another model's output, shown but not resent */ advisory?: boolean }
+  | { id: string; role: "user" | "assistant"; content: string; /** [B19-D I5e row 32] another model's output, shown but not resent */ advisory?: boolean; /** [PR-G, 2026-10-17] the answer's model label ("answered by <provider> · <model>"), shown under the answer, never resent */ footer?: string }
   | { id: string; role: "log"; title: string; status: "running" | "done" | "error"; entries: { id: string; text: string; status: "running" | "done" | "error" }[] };
 
 /**
@@ -726,7 +726,7 @@ export function isStoredChatMessage(v: unknown): v is StoredChatMessage {
   if (typeof v !== "object" || v === null) return false;
   const m = v as Record<string, unknown>;
   if (typeof m["id"] !== "string") return false;
-  if (m["role"] === "user" || m["role"] === "assistant") return typeof m["content"] === "string" && (m["advisory"] === undefined || typeof m["advisory"] === "boolean");
+  if (m["role"] === "user" || m["role"] === "assistant") return typeof m["content"] === "string" && (m["advisory"] === undefined || typeof m["advisory"] === "boolean") && (m["footer"] === undefined || (typeof m["footer"] === "string" && m["footer"].length <= 1_000)); // [PR-G, 2026-10-17] the optional model label, bounded
   if (m["role"] !== "log") return false;
   return typeof m["title"] === "string"
     && (m["status"] === "running" || m["status"] === "done" || m["status"] === "error")

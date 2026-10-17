@@ -26,7 +26,7 @@
  *     specs are the skip list's; the orchestration spec stays in page-browser-e2e;
  *  4. (iv) `playwright.config.ts` keeps its 71 lines, line 21 still starts `testMatch: /.*\.spec\.ts/,` and holds the reader and a
  *     dated note, every other line is 1fe719e's (the file with line 21 restored hashes to 1fe719e's), and the orchestration config is
- *     1fe719e's byte for byte;
+ *     1fe719e's byte for byte; [PR-G, 2026-10-17] 74 lines since PR-F's three (OD-248), which case 4 takes out by text before the hash;
  *  5. (v) A1's insertion table ends with D4's two rows, the env mapping (`:418`, 2) and the appended job (its first line, its count
  *     including the leading blank line, A2's convention); with D4's lines taken out the workflow is 1fe719e's byte for byte, so no line
  *     was removed, reordered or edited;
@@ -88,7 +88,10 @@ const SHA_WORKFLOW_AT_BASE = "dde22b3d0737a62db577ff5bcd454e8eb6b68c0acf0b03ee0f
 const SHA_CONFIG_AT_BASE = "92f72ee81ef2158dcfb524d961aeb9d60116e1966ade404297c986dd759bf171";
 const SHA_ORCHESTRATION_CONFIG_AT_BASE = "6239dff5e0000229266b56b0bd1e69f8e4bd70df4541e3ff01e203062a7b2701";
 const WORKFLOW_LINES_AT_BASE = 626;
-const CONFIG_LINES = 71;
+const CONFIG_LINES = 74; // [PR-G, 2026-10-17] reviewed pin move: 71 -> 74, PR-F's three lines in the fixture server's env (PR_F_CONFIG_LINES; OD-248: the fixture proof must never reach a vendor), all below line 21, which keeps its place and text
+/** [PR-G, 2026-10-17] PR-F's three inserted lines (OD-248), each read: its dated two-line comment and the operator-disabled distributor sources
+ *  for the fixture server, by their own first words; case 4 takes exactly them out before the base hash, so every other line stays 1fe719e's. */
+const PR_F_CONFIG_LINES = ["      // [PR-F, 2026-10-17] the fixture proof must never reach a vendor: ", "      // fixture server unless the shell names its own set ", "      SIRKIT_ACQUISITION_DISABLED_SOURCES: process.env.SIRKIT_ACQUISITION_DISABLED_SOURCES ?? "] as const;
 const TEST_MATCH = "testMatch: /.*\\.spec\\.ts/,";
 /** Line 21's reader, exactly (the expression the guard mirrors below; any other spelling fails case 4). */
 const SKIP_READER = `testIgnore: (process.env.${SKIP_ENV} ?? "").split(",").map((glob) => glob.trim()).filter(Boolean),`;
@@ -265,7 +268,13 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
     expect(line.startsWith(`  ${TEST_MATCH}`)).toBe(true);
     expect(line.startsWith(`  ${TEST_MATCH} ${SKIP_READER} // [B24-D4, ${DATE}] `), line).toBe(true);
     expect(config.filter((text) => text.includes(SKIP_ENV))).toEqual([line]);
-    expect(sha([...config.slice(0, 20), `  ${TEST_MATCH}`, ...config.slice(21)].join(NEWLINE)), "every other line is 1fe719e's").toBe(SHA_CONFIG_AT_BASE);
+    // [PR-G, 2026-10-17] PR-F's three lines stand together once, below line 21, each starting as PR_F_CONFIG_LINES names it; with them taken out too, the file hashes to 1fe719e's
+    const prF = config.findIndex((text) => text.startsWith(PR_F_CONFIG_LINES[0]));
+    expect(prF).toBeGreaterThan(20);
+    expect(PR_F_CONFIG_LINES.map((first, index) => (config[prF + index] ?? "").startsWith(first))).toEqual([true, true, true]);
+    expect(config.filter((text) => PR_F_CONFIG_LINES.some((first) => text.startsWith(first)))).toHaveLength(3);
+    const base = config.filter((_, index) => index < prF || index >= prF + PR_F_CONFIG_LINES.length);
+    expect(sha([...base.slice(0, 20), `  ${TEST_MATCH}`, ...base.slice(21)].join(NEWLINE)), "every other line is 1fe719e's").toBe(SHA_CONFIG_AT_BASE);
     expect(sha(read(ORCHESTRATION_CONFIG))).toBe(SHA_ORCHESTRATION_CONFIG_AT_BASE);
   });
 

@@ -55,6 +55,7 @@ import { reclassifyBoard } from "./netclass-rules";
 import { pcbSyncDigest, publicationSourceDigest } from "../pcb-sync/stable";
 import type { PcbSyncIssue, PcbSyncSchematicComponent, PcbSyncSchematicNet } from "../pcb-sync/types";
 import { compareCodePoints, compareNatural } from "@/app/lib/stable-compare";
+import { theoryPinContract } from "@/app/lib/schematic/theory-physicality";
 
 // ─── Pinned netlist types ────────────────────────────────────────────────────
 
@@ -133,25 +134,14 @@ export type PartLookup = (partId: string) => NetlistPartData | null;
 
 // ─── Netlist derivation ──────────────────────────────────────────────────────
 
-/** Theory pin name → pad number. Diode pad 1 is the cathode (KiCad convention). */
-const THEORY_PIN_NUMBERS: Record<string, Record<string, string>> = {
-  resistor: { left: "1", right: "2" },
-  capacitor: { left: "1", right: "2" },
-  inductor: { left: "1", right: "2" },
-  diode: { cathode: "1", anode: "2" },
-};
-
 /**
- * [B10.2] THE production physical-theory-component rule, shared so no
- * second divergent pin/physicality definition can exist: a theory
- * component is a PHYSICAL part exactly when it has a theory pin contract
- * here (ground symbols and voltage/current sources are sim stimuli with no
- * board footprint). Returns pinName → pinNumber, or null for non-physical
- * types.
+ * [B10.2] THE production physical-theory-component rule (`theoryPinContract`: theory pin name → pad number, diode pad 1 the
+ * cathode; null for ground symbols and voltage/current sources, which are sim stimuli with no board footprint), re-exported so
+ * every consumer of this module keeps reading it here. [PR-G, 2026-10-17] Its one table now lives in
+ * app/lib/schematic/theory-physicality.ts (moved verbatim), so the Stage 3 preparation reads in app/lib/pcb-sync/ share it
+ * without importing this bridge, which the Stage 3 security property forbids there.
  */
-export function theoryPinContract(type: string): Readonly<Record<string, string>> | null {
-  return THEORY_PIN_NUMBERS[type] ?? null;
-}
+export { theoryPinContract };
 
 const THEORY_REF_PREFIX: Record<string, string> = {
   resistor: "R",
@@ -189,7 +179,7 @@ export function buildNetlist(
   // (`refDes ?? id`), never a positionally synthesized one: identity stays on
   // `id`, presentation follows the editable display reference everywhere.
   for (const c of theoryComps) {
-    const pinMap = THEORY_PIN_NUMBERS[c.type];
+    const pinMap = theoryPinContract(c.type);
     if (!pinMap) continue;
     const pins = Object.entries(pinMap).map(([pinName, number]) => {
       pinSites.push({ componentId: c.id, pinNumber: number, point: pinWorldPos(c, pinName) });

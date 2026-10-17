@@ -130,8 +130,13 @@ describe("B10 — chat request boundary", () => {
     expect(finalText).not.toContain("component-authority");
   });
 
-  it("without an editorContext the browser run is truthfully read-less (zero tools without proposal prerequisites)", async () => {
+  it("without an editorContext the browser run is truthfully read-less (zero tools without proposal prerequisites) [PR-G, 2026-10-17: board-less - no board read and no proposal; only the two schematic-only Tier 0 reads its validated schematic admits]", async () => {
     const finalText = await runTools({ ...BASE, schematicState: SCHEMATIC });
-    expect(finalText).toBe("TOOLS:");
+    // [PR-G, 2026-10-17] reviewed pin move: was "TOOLS:". Since PR-D d2 (sirkit.pcb-sync.preflight) and PR-F fB (sirkit.parts.missing-facts)
+    // two Tier 0 reads are advertised over the run's VERIFIED schematic snapshot alone - no board (pcbSyncPreflightReadAvailable and
+    // missingFactsReadAvailable require only context.schematic + schematicDigest) - and this run carries SCHEMATIC, which passes the
+    // integrity check. The exact list still proves zero board reads (no board-inspect, drc-run or selection.inspect: no editorContext)
+    // and zero proposals (no head mark, no board).
+    expect(finalText).toBe("TOOLS:sirkit.parts.missing-facts;sirkit.pcb-sync.preflight");
   });
 });

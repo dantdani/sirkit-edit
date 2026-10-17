@@ -467,7 +467,7 @@ The per-principal windows stand beside the meters that already bound these rows;
   `searchPartsForAI` are exactly the build loop (by name, or by a namespace or star form), and the routes whose runtime closure reaches
   it are exactly those three, each a per-principal row, however they import - and pins that the tool registered on that binding
   (`sirkit.parts.search`) is exposed to neither the agent nor MCP (`not_agent_exposed`). A module reached from the public footprint
-  route that re-exported `searchPartsForAI` failed it (section 21).
+  route that re-exported `searchPartsForAI` failed it (section 21). [PR-G, 2026-10-17] Four since product reliability D (OD-243): `POST /api/chat` injects the shared Build generation as the agent's generate-proposal port (`app/api/chat/schematic-generation-runtime.ts`), so its closure reaches the build loop too; its bound is its own per-principal chat window (60 runs a minute, taken in `agentStreamRoute`), one generation per run under `BUILD_BUDGET`, and case 8 now lists it and holds it to that window.
 
 ## 18. Part 2: the gate at OD-197's full scope, and its test-first record
 

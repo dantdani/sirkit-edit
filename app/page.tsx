@@ -59,7 +59,7 @@ import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-
 import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
 import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
 import { layoutCandidateChatLine } from "@/app/lib/agent/layout-report"; // [B18-E E17]
-import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, chatResumeFor, chatResumeKeptAfter, chatResumeOfferLine, initialChatResumeObservation, initialRunView, markGrantLineDropped, observeChatResume, orchestrationRunLogLine, resumableChatRun, restoredChatResume, projectRunView, recoveryDisplayAction, replacementChatLines, reduceRunView, refusedLineLabel, restoredEntryGrants, restoredEntryLog, restoredEntryRecovery, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry, type ResumableChatRun } from "@/app/lib/project/chat-run-view"; // [B18-D I6]; [B24-D2B] the recovery result for a live or restored entry
+import { EXECUTION_ENTRY_ID_PREFIX, answerFooter, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, chatResumeFor, chatResumeKeptAfter, chatResumeOfferLine, initialChatResumeObservation, initialRunView, markGrantLineDropped, observeChatResume, orchestrationRunLogLine, resumableChatRun, restoredChatResume, projectRunView, recoveryDisplayAction, replacementChatLines, reduceRunView, refusedLineLabel, restoredEntryGrants, restoredEntryLog, restoredEntryRecovery, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry, type ResumableChatRun } from "@/app/lib/project/chat-run-view"; // [B18-D I6]; [B24-D2B] the recovery result for a live or restored entry
 import { ExecutionEntryActions } from "@/app/components/chat/ExecutionEntryActions"; // [B18-D I8]
 import { AutonomyModeControl } from "@/app/components/chat/AutonomyModeControl"; // [B18-D I11]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
@@ -104,6 +104,11 @@ import { approveAndApplyReplacement } from "@/app/lib/project/replacement-approv
 import { receiveReplacementProposalEvent } from "@/app/lib/project/replacement-proposal-events";
 import { receivePcbProposalReadyEvent } from "@/app/lib/project/pcb-proposal-events";
 import { generationProposalCurrency, receiveGenerationProposalEvent, type ReceivedGenerationProposal } from "@/app/lib/project/generation-proposal-events"; // [PR-D] the agent's Build-mode generation proposal: the SAFE receiver and the intake's currency check
+import { DRAFT_REQUEST_CARD_ID_PREFIX, DRAFT_REQUEST_OPEN_LABEL, draftRequestCardLines, draftRequestCurrency, draftRequestPublicationPrefill, receiveDraftRequestEvent, type ReceivedDraftRequest } from "@/app/lib/project/draft-request-events"; // [PR-G, 2026-10-17] the agent's part draft request (OD-248): the SAFE receiver, the currency check, the review-task card and the publication prefill
+import { MODULE_CONTRACT_NOTE_ID_PREFIX, moduleContractCurrency, moduleContractNoteLines, receiveModuleContractsEvent } from "@/app/lib/project/module-contract-events"; // [PR-G, 2026-10-17] the agent's module contract set (OD-249): the SAFE receiver, the currency check and the engineering-note card
+import { receiveStackupCandidateEvent, stackupCandidateChatLine, verifyStackupCandidateAgainstBoard } from "@/app/lib/project/stackup-candidate-events"; // [PR-G, 2026-10-17] the agent's stackup recommendation (OD-249): the SAFE receiver and the live-board check
+import type { StackupCandidate } from "@/app/lib/pcb/candidates/stackup-candidate"; // [PR-G, 2026-10-17]
+import { AtomicPublicationReviewSection } from "@/app/components/parts/AtomicPublicationReviewPanel"; // [PR-G, 2026-10-17] the EXISTING publication request (the Build Library's and the Missing parts list's), opened prefilled from a sealed draft request
 import { type SealedPcbEditProposal } from "@/app/lib/pcb/proposal/sealed-pcb-edit-proposal";
 import { ReplacementReviewDialog } from "@/app/components/schematic/ReplacementReviewDialog";
 import { fromCanonicalSchematic, schematicStateDigest, validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
@@ -137,7 +142,8 @@ type SchematicSnapshot = {
 };
 type LeftPanel = "projects" | "library" | null;
 // [B19-D I5e row 32] `advisory`: another model's output (build explanation, review, second opinion) — shown, never resent as the assistant's words
-type ChatMessage = { id: string; role: "user" | "assistant"; content: string; advisory?: boolean };
+// [PR-G, 2026-10-17] `footer`: the answer's model label ("answered by <provider> · <model>" from the run's own events, with the fallback disclosure) — shown under the bubble, never part of the content the next run's history carries
+type ChatMessage = { id: string; role: "user" | "assistant"; content: string; advisory?: boolean; footer?: string };
 type ActivityLogEntry = { id: string; text: string; status: "running" | "done" | "error" };
 type ActivityLogMessage = {
   id: string;
@@ -2682,6 +2688,15 @@ export default function Home() {
   // [B17-F] the ONE pending agent layout candidate (placement / routing) narrowed by the SAFE receiver; the PCB
   // editor registers it in its own candidate store after re-verifying it. Display grants nothing.
   const [pendingLayoutCandidate, setPendingLayoutCandidate] = useState<{ candidate: LayoutCandidate; originRunId: string | null } | null>(null);
+  // [PR-G, 2026-10-17] the ONE pending agent stackup recommendation (OD-249) narrowed by the SAFE receiver and checked against the live
+  // board's revision; the PCB editor re-verifies it and shows it as a preview the human accepts (its own Stackup path) or discards.
+  const [pendingStackupCandidate, setPendingStackupCandidate] = useState<{ candidate: StackupCandidate; originRunId: string | null } | null>(null);
+  // [PR-G, 2026-10-17] the LIVE sealed draft requests (OD-248) by proposal id: a review-task card's "Open the publication request" is
+  // offered only while this page holds the sealed artifact (a card restored after a reload is a static record, as execution entries are);
+  // `draftRequestOpen` is the one the existing publication request is open for. Display and prefill only: nothing is submitted here.
+  const liveDraftRequestsRef = useRef<Map<string, ReceivedDraftRequest>>(new Map());
+  const [liveDraftRequests, setLiveDraftRequests] = useState<ReadonlyMap<string, ReceivedDraftRequest>>(() => new Map());
+  const [draftRequestOpen, setDraftRequestOpen] = useState<ReceivedDraftRequest | null>(null);
   // [B18-B] the ONE pending server-minted execution grant narrowed by the SAFE receiver; the PCB editor runs the
   // granted-execution ritual (preview grants wait for the human's Confirm; explicit grants execute once). Display grants nothing.
   const [pendingExecutionGrant, setPendingExecutionGrant] = useState<{ grant: ReceivedExecutionGrant["grant"]; decision: ReceivedExecutionGrant["decision"]; note: string | null; originRunId: string | null } | null>(null);
@@ -2971,7 +2986,7 @@ export default function Home() {
   function toStoredChat(all: Message[]): StoredChatMessage[] {
     return all.slice(-200).map((message) => message.role === "log"
       ? { id: message.id, role: "log" as const, title: message.title, status: message.status, entries: message.entries.map((entry) => ({ id: entry.id, text: entry.text, status: entry.status })) }
-      : { id: message.id, role: message.role, content: message.content, ...(message.advisory ? { advisory: true } : {}) });
+      : { id: message.id, role: message.role, content: message.content, ...(message.advisory ? { advisory: true } : {}), ...(message.footer ? { footer: message.footer } : {}) }); // [PR-G, 2026-10-17] the answer's model label is kept with the answer
   }
 
   /** Reload during a pending operation must show a truthful interrupted state. */
@@ -3090,6 +3105,7 @@ export default function Home() {
     setTier1ApplyBusy(false);           // B12: no in-flight apply crosses projects
     setTier1Receipt(null);              // B12: a receipt belongs to its project
     setPendingPcbProposal(null);        // B15.3: no stale PCB proposal crosses projects
+    setPendingLayoutCandidate(null); setPendingStackupCandidate(null); liveDraftRequestsRef.current.clear(); setLiveDraftRequests(new Map()); setDraftRequestOpen(null); // [PR-G, 2026-10-17] no sealed candidate, draft request or open publication request crosses projects
     setPendingExecutionGrant(null);     // B18-C review: a pending execution grant never crosses projects (it idles out server-side)
     executionEntriesRef.current.clear(); // [B18-D review] no execution entry crosses projects: a late editor callback for the
     setExecutionEntries(new Map());      // previous project's grant finds nothing to write into the new project's chat
@@ -4421,6 +4437,26 @@ export default function Home() {
       return at >= 0 ? [...prev.slice(0, at), message, ...prev.slice(at)] : [...prev, message];
     });
   }, []);
+  // [PR-G, 2026-10-17] A REVIEW CARD in the run log for a sealed agent artifact that is not an execution (a draft request's review task,
+  // a module-contract engineering note): one log message of text rows, inserted just before the run's answer as an execution entry is,
+  // replaced in place when the same artifact arrives again. Text only: a card's one control (the draft request's "Open the publication
+  // request") and the note's collapse are rendered by MessageBubble from the card's id prefix. Saved with the chat like every log.
+  const upsertReviewCard = useCallback((id: string, title: string, lines: readonly string[], insertBeforeId?: string) => {
+    const message: ActivityLogMessage = { id, role: "log", title, status: "done", entries: lines.map((text, index) => ({ id: `${id}:${index}`, text, status: "done" as const })) };
+    setMessages((prev) => {
+      if (prev.some((existing) => existing.id === message.id)) return prev.map((existing) => (existing.id === message.id ? message : existing));
+      const at = insertBeforeId ? prev.findIndex((existing) => existing.id === insertBeforeId) : -1;
+      return at >= 0 ? [...prev.slice(0, at), message, ...prev.slice(at)] : [...prev, message];
+    });
+  }, []);
+  // [PR-G, 2026-10-17] the card's one action: open the EXISTING publication request (AtomicPublicationReviewSection) prefilled from the
+  // sealed request this page still holds; nothing is requested until the person presses its own "Request evidence review".
+  function openDraftRequestPublication(proposalId: string): void {
+    const held = liveDraftRequestsRef.current.get(proposalId);
+    if (!held) { showToast("This draft request is no longer held by this page (a reload or a project switch): ask the assistant for it again."); return; }
+    if (!(held.proposal.expiresAt > Date.now())) { showToast("This draft request expired; ask the assistant for it again. Nothing was changed."); return; }
+    setDraftRequestOpen(held);
+  }
 
   // [B18-D I9] Stop (chat-execution-ux.md §8 I9): send() registers its run here; Stop cancels the response reader and
   // carries nothing — the route aborts the run, and the loop retires its still-issued explicit grants. An AI change the
@@ -4665,6 +4701,52 @@ export default function Home() {
             }
             return;
           }
+          case "stackup_candidate_ready": {
+            // [PR-G, 2026-10-17] the agent's stackup / via-policy recommendation (sirkit.stackup.propose, OD-249) — beside the layout
+            // candidate: the SAFE receiver re-parses the artifact (schema, producer, digest intact); it is checked against the LIVE board's
+            // revision (the editor-context bridge's exact working copy) and its expiry; a current one is handed to the PCB editor, which
+            // re-verifies it and shows it as a PREVIEW the human accepts (the editor's EXISTING Stackup path) or discards. Nothing is written.
+            const stackup = receiveStackupCandidateEvent(event);
+            if (!stackup) { appendActivityStep(logId, "A stackup recommendation the assistant issued was dropped by this page: it failed the integrity checks. Nothing was changed and nothing is offered.", "error"); return; }
+            const liveBoard = editorContextBridgeRef.current!.capture({ tenantId: "local", projectId: scope.projectId ?? projectRef.current?.id ?? "local", branchId: scope.branchId ?? "main" });
+            const stackupVerdict = verifyStackupCandidateAgainstBoard(stackup.candidate, liveBoard?.pcbRevisionId ?? null, Date.now());
+            if (!stackupVerdict.ok) { appendActivityStep(logId, `Stackup recommendation not offered — ${stackupVerdict.detail}`, "error"); return; }
+            setPendingStackupCandidate({ candidate: stackup.candidate, originRunId: stackup.runId });
+            appendActivityStep(logId, stackupCandidateChatLine(stackup.candidate), "done");
+            return;
+          }
+          case "draft_request_ready": {
+            // [PR-G, 2026-10-17] the agent's part draft request (sirkit.parts.draft-request, OD-248): the SAFE receiver verifies the sealed
+            // artifact; the currency check runs against the LIVE editor (scope, head, expiry, the base digest as `send` posted it); a
+            // current one becomes a REVIEW TASK card in the run log — the part, the documented facts with their sources, the missing
+            // facts, the PCB-assignment blockers — with ONE action that opens the EXISTING publication request prefilled from the sealed
+            // spec. Receiving it mutates nothing, binds nothing, publishes nothing and submits nothing; a person does, in the review.
+            const draft = receiveDraftRequestEvent(event);
+            if (!draft) { appendActivityStep(logId, "A part draft request the assistant issued was dropped by this page: it failed the integrity checks. Nothing was changed and no review task is offered.", "error"); return; }
+            const draftVerdict = draftRequestCurrency(draft.proposal, liveSheetForSealedArtifacts());
+            if (!draftVerdict.ok) { appendActivityStep(logId, `Draft request not offered — ${draftVerdict.detail}`, "error"); return; }
+            liveDraftRequestsRef.current.set(draft.proposal.proposalId, draft);
+            setLiveDraftRequests(new Map(liveDraftRequestsRef.current));
+            const card = draftRequestCardLines(draft.proposal);
+            upsertReviewCard(`${DRAFT_REQUEST_CARD_ID_PREFIX}${draft.proposal.proposalId}`, card.title, card.lines, assistantId);
+            appendActivityStep(logId, `Review task: an UNVERIFIED draft request for ${draft.proposal.instance.refDes} (${draft.proposal.draftRequest.exactMpn}) — its card below lists the documented facts with their sources and the missing facts; "${DRAFT_REQUEST_OPEN_LABEL}" there prefills the Build Library's evidence review. Nothing is published, bound or assignable until a person submits it, a reviewer approves and an administrator publishes.`, "done");
+            return;
+          }
+          case "module_contracts_ready": {
+            // [PR-G, 2026-10-17] the agent's module contract set (sirkit.module.propose-contracts, OD-249): the SAFE receiver verifies the
+            // sealed artifact; the currency check runs against the LIVE editor as for the draft request; a current one becomes a
+            // collapsible ENGINEERING NOTE card in the run log (modules, owned components, ports, cross-module constraints, unresolved
+            // part-authority gaps, the validator's result as data). There is NO apply: nothing changes the sheet or a board; the human
+            // accepts by continuing or asks for a revision. No notes store exists in this project, so the card is the note (saved with the chat).
+            const contracts = receiveModuleContractsEvent(event);
+            if (!contracts) { appendActivityStep(logId, "A module contract set the assistant issued was dropped by this page: it failed the integrity checks. Nothing was changed and no note is offered.", "error"); return; }
+            const noteVerdict = moduleContractCurrency(contracts.proposal, liveSheetForSealedArtifacts());
+            if (!noteVerdict.ok) { appendActivityStep(logId, `Module contracts not offered — ${noteVerdict.detail}`, "error"); return; }
+            const note = moduleContractNoteLines(contracts.proposal);
+            upsertReviewCard(`${MODULE_CONTRACT_NOTE_ID_PREFIX}${contracts.proposal.proposalId}`, note.title, [note.summary, ...note.details], assistantId);
+            appendActivityStep(logId, `Engineering note: module contracts for ${contracts.proposal.contractSet.modules.length} module${contracts.proposal.contractSet.modules.length === 1 ? "" : "s"} — read the collapsible note below (this card is the note; it is kept with the project's chat history). Validated for structure only; no electrical check ran; nothing is applied to the sheet or a board.`, "done");
+            return;
+          }
           case "execution_grant_ready": {
             // [B18-B] a server-minted execution grant — the SAFE receiver re-parses it and checks its coherence; the PCB
             // editor (the composition root) runs the granted-execution ritual: preview grants wait for the human's Confirm,
@@ -4768,9 +4850,9 @@ export default function Home() {
       }
       // [B18-D I6] the run's interim notes are released only now, after the run ended — never in the answer.
       if (scope.isCurrent()) {
-        const projected = projectRunView(runView);
+        const projected = projectRunView(runView); const footer = answerFooter(runView, { provider: runProvider, model: aiRuntime?.providers[runProvider]?.model ?? null }); // [PR-G, 2026-10-17] the model label: the run's own provider and model, with the disclosure when they differ from the configured source
         for (const note of [...(projected.status ? [projected.status] : []), ...projected.notes]) appendActivityStep(logId, note, "done"); // [B21 E2] the orchestrated run's ONE status line (OD-127), then the notes
-        if (projected.answer) setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: projected.answer } : m))); const resumable = resumableChatRun(resumeObservation, { terminal: runView.terminal, runId: streamRunId, text, provider: runProvider, projectId: projectScopeRegistryRef.current?.current.projectId ?? "local", branchId: projectScopeRegistryRef.current?.current.branchId ?? "local" }); resumableChatRunRef.current = resumable; if (resumable) appendActivityStep(logId, chatResumeOfferLine(resumable.runId, resumable.provider), "done"); // [B21 E3] the resume offer, a run-log line (OD-127: no control)
+        if (projected.answer) setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: projected.answer, ...(footer ? { footer } : {}) } : m))); /* [PR-G, 2026-10-17] + the model label under the answer, from the run's own events */ const resumable = resumableChatRun(resumeObservation, { terminal: runView.terminal, runId: streamRunId, text, provider: runProvider, projectId: projectScopeRegistryRef.current?.current.projectId ?? "local", branchId: projectScopeRegistryRef.current?.current.branchId ?? "local" }); resumableChatRunRef.current = resumable; if (resumable) appendActivityStep(logId, chatResumeOfferLine(resumable.runId, resumable.provider), "done"); // [B21 E3] the resume offer, a run-log line (OD-127: no control)
       }
       // [B18-D I9, review] a run stopped before it ended says so (a Stop pressed after the run had already ended claims nothing).
       // An AI change already sent to the editor is reported in its entry either way — made, or not made: a grant not yet consumed
@@ -5250,6 +5332,20 @@ export default function Home() {
       if (isAbortError(err) || !scope.isCurrent()) { appendActivityStep(logId, "Generated schematic discarded — the project changed", "error"); return; }
       appendActivityStep(logId, `Generated schematic not offered — ${err instanceof Error ? err.message : "its catalog parts could not be loaded"}. Nothing was changed.`, "error");
     }
+  }
+
+  // [PR-G, 2026-10-17] The LIVE editor as the sheet-artifact currency checks read it (draft request, module contracts): the SAME recipe
+  // offerGenerationProposal's `currency` uses above - the page's scope as the chat run posted it, the session's live head mark and the
+  // digest of the authoritative sheet with the page's sheet-size fallback (what `send` posted and the server digested as-is). The two
+  // recipes must stay byte-identical (pr-g-page-intakes pins it); offerGenerationProposal keeps its own copy so PR-D's pins hold.
+  function liveSheetForSealedArtifacts(): { scope: { tenantId: string; projectId: string; branchId: string }; headMark: SchematicCanonicalMark | null; baseDigest: string; now: number } {
+    const live = gestureCoordinatorRef.current!.authoritativeState();
+    return {
+      scope: { tenantId: "local", projectId: projectScopeRegistryRef.current?.current.projectId ?? "local", branchId: projectScopeRegistryRef.current?.current.branchId ?? "local" },
+      headMark: schematicSessionRef.current?.headMark() ?? null,
+      baseDigest: schematicStateDigest({ ...live, pageSize: live.pageSize ?? liveStateRef.current.pageSize }),
+      now: Date.now(),
+    };
   }
 
   // Tier-1 text editing: attribute-only edits (set value / rename / delete)
@@ -6656,6 +6752,8 @@ export default function Home() {
                     viewSessionBridge={viewSessionBridgeRef.current!} // [B17-F]
                     layoutCandidateIntake={pendingLayoutCandidate} // [B17-F] — display only; apply lives inside PcbEditor
                     onLayoutCandidateSettled={() => setPendingLayoutCandidate(null)}
+                    stackupCandidateIntake={pendingStackupCandidate} // [PR-G, 2026-10-17] — display only; the preview and its Accept (the editor's own Stackup path) live inside PcbEditor
+                    onStackupCandidateSettled={() => setPendingStackupCandidate(null)}
                     executionGrantIntake={pendingExecutionGrant} // [B18-B] — display only; the granted-execution ritual lives inside PcbEditor
                     onExecutionGrantSettled={(grantId, outcome, detail) => {
                       setPendingExecutionGrant((current) => (current && current.grant.grantId === grantId ? null : current));
@@ -6731,6 +6829,28 @@ export default function Home() {
             </div>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setSettingsOpen(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {/* [PR-G, 2026-10-17] the EXISTING publication request (the Build Library's and the Missing parts list's AtomicPublicationReviewSection),
+            opened from a draft-request review card and PREFILLED from the sealed spec (MPN, manufacturer, pin table, package, datasheet,
+            profile; symbol and footprint left to the person). The page submits nothing: the section's own "Request evidence review" does,
+            as a human, and the server's governance, reviewer and administrator rules decide. Closing changes nothing. */}
+        <Dialog open={draftRequestOpen !== null} onOpenChange={(open) => { if (!open) setDraftRequestOpen(null); }}>
+          <DialogContent className="max-w-3xl" data-testid="draft-request-publication-dialog">
+            <DialogHeader>
+              <DialogTitle>Publication request from the assistant&apos;s draft request</DialogTitle>
+            </DialogHeader>
+            {draftRequestOpen && (
+              <div className="space-y-2 text-xs text-zinc-300">
+                <p data-testid="draft-request-publication-note">UNVERIFIED draft for <span className="font-mono text-zinc-100">{draftRequestOpen.proposal.instance.refDes}</span> ({draftRequestOpen.proposal.draftRequest.exactMpn}), prefilled from the sealed request; the symbol and footprint references are yours to pick. Submitting files a request: a reviewer approves and a different administrator publishes before the part is PCB-assignable. {draftRequestOpen.proposal.pcbAssignment.blocked ? `PCB assignment is blocked until these facts are documented: ${draftRequestOpen.proposal.pcbAssignment.blockers.join("; ")}.` : ""}</p>
+                {project
+                  ? <AtomicPublicationReviewSection key={draftRequestOpen.proposal.proposalId} projectScope={{ tenantId: "local", projectId: project.id, branchId: "main" }} prefill={draftRequestPublicationPrefill(draftRequestOpen.proposal)} />
+                  : <p className="text-amber-200">No project is open: the publication request needs the project&apos;s scope. Nothing was changed.</p>}
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setDraftRequestOpen(null)}>Close</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -7071,7 +7191,7 @@ export default function Home() {
                   </p>
                 )}
                 {messages.map((message) => (
-                  <MessageBubble key={message.id} message={message} undoStates={executionUndoStates} onUndoExecution={undoAiChange} />
+                  <MessageBubble key={message.id} message={message} undoStates={executionUndoStates} onUndoExecution={undoAiChange} draftRequests={liveDraftRequests} onOpenDraftRequest={openDraftRequestPublication} /> // [PR-G, 2026-10-17] + the review cards' one action and the answer footer
                 ))}
                 <div ref={chatEndRef} />
               </div>
@@ -8600,7 +8720,8 @@ function ViewTab({ icon: Icon, label, active, onClick }: {
   );
 }
 
-function MessageBubble({ message, undoStates, onUndoExecution }: { message: Message; undoStates?: ReadonlyMap<string, { eligible: boolean; reason: string | null }>; onUndoExecution?: (grantId: string) => Promise<void> }) {
+function MessageBubble({ message, undoStates, onUndoExecution, draftRequests, onOpenDraftRequest }: { message: Message; undoStates?: ReadonlyMap<string, { eligible: boolean; reason: string | null }>; onUndoExecution?: (grantId: string) => Promise<void>; /** [PR-G, 2026-10-17] the sealed draft requests this page still holds (a card's action is offered only for one of them) */ draftRequests?: ReadonlyMap<string, ReceivedDraftRequest>; onOpenDraftRequest?: (proposalId: string) => void }) {
+  const [noteExpanded, setNoteExpanded] = useState(false); // [PR-G, 2026-10-17] a module-contract note card shows its summary row until expanded (view state only)
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
@@ -8615,16 +8736,31 @@ function MessageBubble({ message, undoStates, onUndoExecution }: { message: Mess
     const entryState = entryStateOfLogMessage(message); // [B18-D I6] a chat execution entry (display only; its one control is I8's Undo)
     const entryGrantId = entryState ? message.id.slice(EXECUTION_ENTRY_ID_PREFIX.length) : null;
     const undoState = entryGrantId && entryState === "committed" ? (undoStates?.get(entryGrantId) ?? null) : null; // [B18-D I8] live entries only
+    // [PR-G, 2026-10-17] the two review cards (text rows like every log): a draft request's card carries ONE action, offered while this
+    // page holds the sealed request (a restored card is a static record and says why); a module-contract note shows its summary until expanded.
+    const draftRequestId = message.id.startsWith(DRAFT_REQUEST_CARD_ID_PREFIX) ? message.id.slice(DRAFT_REQUEST_CARD_ID_PREFIX.length) : null;
+    const draftRequestHeld = draftRequestId !== null && (draftRequests?.has(draftRequestId) ?? false);
+    const moduleNote = message.id.startsWith(MODULE_CONTRACT_NOTE_ID_PREFIX);
+    const shownEntries = moduleNote && !noteExpanded ? message.entries.slice(0, 1) : message.entries;
     return (
-      <div className="flex justify-start w-full" {...(entryState ? { "data-testid": "chat-execution-entry", "data-grant-id": message.id.slice(EXECUTION_ENTRY_ID_PREFIX.length), "data-state": entryState, "data-tier": "1" } : {})}>
+      <div className="flex justify-start w-full" {...(entryState ? { "data-testid": "chat-execution-entry", "data-grant-id": message.id.slice(EXECUTION_ENTRY_ID_PREFIX.length), "data-state": entryState, "data-tier": "1" } : draftRequestId !== null ? { "data-testid": "chat-draft-request-card", "data-proposal-id": draftRequestId, "data-held": draftRequestHeld ? "true" : "false" } : moduleNote ? { "data-testid": "chat-module-note-card", "data-expanded": noteExpanded ? "true" : "false" } : {})}>
         <div className="w-full rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs">
           <div className="flex items-center gap-2 text-zinc-300">
             <StatusIcon className={`size-3.5 shrink-0 ${message.status === "running" ? "animate-spin text-teal-300" : message.status === "error" ? "text-red-400" : "text-teal-400"}`} />
             <span className="font-medium">{message.title}</span>
           </div>
           {undoState && entryGrantId && onUndoExecution ? <ExecutionEntryActions eligible={undoState.eligible} reason={undoState.reason} onUndo={() => void onUndoExecution?.(entryGrantId)} /> : null}
-          <div className="mt-2 space-y-1.5">
-            {message.entries.map((entry) => (
+          {draftRequestId !== null && onOpenDraftRequest ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" data-testid="draft-request-open" disabled={!draftRequestHeld} aria-describedby={`${message.id}-action-note`} onClick={() => onOpenDraftRequest(draftRequestId)}>{DRAFT_REQUEST_OPEN_LABEL}</Button>
+              <span id={`${message.id}-action-note`} className="text-[11px] text-zinc-500">{draftRequestHeld ? "opens the Build Library's evidence review prefilled from this sealed request; nothing is requested until you submit it there" : "not available: this page no longer holds the sealed request (reload or project switch) — ask the assistant again"}</span>
+            </div>
+          ) : null}
+          {moduleNote ? (
+            <button type="button" onClick={() => setNoteExpanded((open) => !open)} aria-expanded={noteExpanded} aria-controls={`${message.id}-details`} data-testid="module-note-toggle" className="mt-2 rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-200 hover:border-zinc-500">{noteExpanded ? "Hide details" : `Show details (${Math.max(0, message.entries.length - 1)} rows)`}</button>
+          ) : null}
+          <div id={moduleNote ? `${message.id}-details` : undefined} className="mt-2 space-y-1.5">
+            {shownEntries.map((entry) => (
               <div key={entry.id} className="flex items-start gap-2 text-[11px] leading-relaxed">
                 <span
                   className={`mt-1.5 size-1.5 rounded-full shrink-0 ${
@@ -8648,6 +8784,7 @@ function MessageBubble({ message, undoStates, onUndoExecution }: { message: Mess
     <div className="flex justify-start w-full">
       <div className="w-full rounded-lg px-3 py-2.5 text-xs leading-relaxed bg-zinc-900 border border-zinc-800 overflow-hidden">
         <ChatMarkdown content={message.content} /> {/* [B19-D I5c row 02] images never fetched; links web/mail only */}
+        {message.footer ? <p data-testid="chat-answer-footer" className="mt-1.5 border-t border-zinc-800 pt-1 text-[10px] leading-4 text-zinc-500">{message.footer}</p> : null} {/* [PR-G, 2026-10-17] the model label from the run's own events (never configuration), with the fallback disclosure */}
       </div>
     </div>
   );

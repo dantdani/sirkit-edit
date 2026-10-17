@@ -5733,3 +5733,21 @@ validation.md §C, workflow-contract.md, fault-register.md, live-spend.json).
   activation (the default model stays `gpt-5.6-sol`); no default-model, exposure-list or release-boundary change beyond the reviewed ones.
 - **Next:** G (the whole suite with the CI-split evidence re-measurement, whole-repo eslint, every Playwright config, an e2e spec for the
   agent generation intake, the live `gpt-6-astra` contract turn), H, I; then J, then K.
+
+### Product-reliability assignment, checkpoint G — verification (2026-10-17)
+
+- **Scope:** `app/page.tsx` (three artifact intakes, a draft-request dialog, the chat footer), `app/lib/project/{sheet-artifact-currency,
+  draft-request-events,module-contract-events,stackup-candidate-events}.ts`, `app/lib/project/chat-run-view.ts`, `lib/persistence.ts`
+  (the footer), `app/components/pcb/{PcbEditor,StackupCandidatePanel}.tsx`, `app/components/parts/AtomicPublicationReviewPanel.tsx`
+  (prefill), `app/lib/agent/fixture-agent-adapter.ts` (the generation turn), `e2e/pr-g-agent-generation.spec.ts`,
+  `app/lib/schematic/theory-physicality.ts` (the Stage 3 boundary fix), `app/lib/deployment/secret-scan-allowlist.ts` (+3), the
+  evidence pages `README.md`, `remaining-blockers.md`, `verification-matrix.md`, `agent-artifact-intakes.md`.
+- **Records:** pin moves with dated "[PR-G …]" notes across B10, B18, B21, B22, B23, B24 suites and pages (the builders' and the lead's
+  lists in validation.md); B17 inventory 646 / 66; PR-D matrix 939 rows; threshold census +8 rows; live spend LR-2 0.0028 USD
+  (cumulative 0.1928 of 5.00).
+- **Gates:** worktree HEAD + G: tsc 0; the CI job's full positional selection 486 / 495 files (one explained environment case); this
+  assignment's 110 suites 854 passed; history and tree secret scans exit 0. Main checkout: three cases red only through the concurrent
+  agent's uncommitted edits.
+- **Carried forward:** 19 suites in no CI job → admission + the CI-split re-measurement; the browser re-run after the final page edits.
+- **Concurrent work:** an OpenAI Codex agent edited 15 files from 05:47 (Build generation deadline and cancellation); excluded from
+  this commit, untouched.

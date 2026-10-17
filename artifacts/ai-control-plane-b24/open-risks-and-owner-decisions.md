@@ -368,7 +368,7 @@ one of two states for a line that must never be edited:
 
 Those statements stay recorded here and in their sources only. The discovery's rows are cited at `58c0834`'s numbering: a dated line
 that B24-F or the closeout adds there (`- [B24-F`, `- [B24-closeout`, `- [B24 closeout`) is not counted, so the four closure lines the
-lead adds under D24-37..D24-40 in this commit move none of them (`b24-f-registers` 6 resolves them so). [B24-closeout, 2026-10-10] Since closeout commit 1/2 a row may also read `not noted (<reason>)`, the task's state for a line that cannot carry a note safely: its own source calls the line still true or unchanged, so a superseded note would mislabel it (section 4.1; `b24-f-registers` 10).
+lead adds under D24-37..D24-40 in this commit move none of them (`b24-f-registers` 6 resolves them so). [B24-closeout, 2026-10-10] Since closeout commit 1/2 a row may also read `not noted (<reason>)`, the task's state for a line that cannot carry a note safely: its own source calls the line still true or unchanged, so a superseded note would mislabel it (section 4.1; `b24-f-registers` 10). [PR-G, 2026-10-17] Two rows re-resolved at this tree by their statement's own text, unchanged: `edge-security.md:523` -> `:526` (B24-B3) and `:542` -> `:545` (B24-D0), the page's three secret-scan allowlist rows PR-G added in its section 6 standing above them.
 
 ### 3.1 The sources
 
@@ -465,7 +465,7 @@ lead adds under D24-37..D24-40 in this commit move none of them (`b24-f-register
 | `artifacts/ai-control-plane-b24/environments-and-deployment.md:109` | B24-B3 | `artifacts/ai-control-plane-b24/scenario-map.md:407` | noted |
 | `artifacts/ai-control-plane-b24/edge-security.md:178` | B24-B3 | `artifacts/ai-control-plane-b24/scenario-map.md:407` | noted |
 | `artifacts/ai-control-plane-b24/edge-security.md:183` | B24-B3 | `artifacts/ai-control-plane-b24/scenario-map.md:407` | noted |
-| `artifacts/ai-control-plane-b24/edge-security.md:523` | B24-B3 | `artifacts/ai-control-plane-b24/scenario-map.md:407` | noted |
+| `artifacts/ai-control-plane-b24/edge-security.md:526` | B24-B3 | `artifacts/ai-control-plane-b24/scenario-map.md:407` | noted |
 | `artifacts/ai-control-plane-b24/ci-admission.md:185` | B24-B3 | `artifacts/ai-control-plane-b24/scenario-map.md:407` | noted |
 | `app/lib/evaluation/golden-catalog.ts:200` | B24-B3 | `artifacts/ai-control-plane-b24/scenario-map.md:407` | rewritten |
 | `app/lib/evaluation/golden-catalog.ts:237` | B24-B3 | `artifacts/ai-control-plane-b24/scenario-map.md:407` | rewritten |
@@ -513,7 +513,7 @@ lead adds under D24-37..D24-40 in this commit move none of them (`b24-f-register
 | `artifacts/ai-control-plane-b24/discovery.md:753-756` | B24-C3 | `artifacts/ai-control-plane-b24/observability-and-replay.md:1048` | noted |
 | `artifacts/ai-control-plane-b24/ci-admission.md:189-190` | B24-D0 | `artifacts/ai-control-plane-b24/ci-split.md:476` | noted |
 | `artifacts/ai-control-plane-b24/eval-catalog.md:330` | B24-D0 | `artifacts/ai-control-plane-b24/ci-split.md:476` | noted |
-| `artifacts/ai-control-plane-b24/edge-security.md:542` | B24-D0 | `artifacts/ai-control-plane-b24/ci-split.md:476` | noted |
+| `artifacts/ai-control-plane-b24/edge-security.md:545` | B24-D0 | `artifacts/ai-control-plane-b24/ci-split.md:476` | noted |
 | `artifacts/ai-control-plane-b22/deck-and-secret-corrections.md:285` | B24-D0 | `artifacts/ai-control-plane-b24/ci-split.md:476` | noted |
 | `artifacts/ai-control-plane-b20/mcp-client-boundary.md:41` | B24-D0 | `artifacts/ai-control-plane-b24/ci-split.md:476` | noted |
 | `artifacts/ai-control-plane-b20/mcp-provider-connectors.md:254` | B24-D0 | `artifacts/ai-control-plane-b24/ci-split.md:476` | noted |

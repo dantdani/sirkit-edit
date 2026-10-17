@@ -926,7 +926,9 @@ at the read.
 
 As of this working tree on `0cd3f59` (2026-10-04); the anchor text is the check, the line is for the reader; `b23-b-dfm-quote-flow-page`
 case 8 checks every row. [B23-B3 review, 2026-10-04] Re-pointed after the review round (D1-D13, D29; D8's anchor is the new joined
-reading), and D40-D50 added.
+reading), and D40-D50 added. [PR-G, 2026-10-17] D22-D24 re-pinned `:200` -> `:211`, `:228` -> `:239` and `:252` -> `:263` in place: Product
+reliability C (`6bdd7f7`) inserted eleven lines above them in `app/api/pcb-sync/handler.ts` (an import at `:15`, the refused-apply (409)
+mapping at `:43-51` and one line in the POST handler); the anchors are unchanged.
 
 | # | file | line | anchor |
 |---|---|---|---|
@@ -951,9 +953,9 @@ reading), and D40-D50 added.
 | D19 | `app/api/pcb-sync/manufacturing-summary.ts` | 8 | `[B23-B3, 2026-10-04] D23-17: until B23-B3 only the revision was compared` |
 | D20 | `app/api/pcb-sync/manufacturing-summary.ts` | 83 | `authority.authority.boardDigest === currentBoardDigest);` |
 | D21 | `app/api/pcb-sync/manufacturing-summary.ts` | 142 | `if (read.state === "absent") return null;` |
-| D22 | `app/api/pcb-sync/handler.ts` | 200 | `board: PcbBoard; superseded?: boolean } \| null` |
-| D23 | `app/api/pcb-sync/handler.ts` | 228 | `board: record.board, superseded: lineageSummary?.state === "superseded"` |
-| D24 | `app/api/pcb-sync/handler.ts` | 252 | `export interface PcbSyncManufacturingObservations` |
+| D22 | `app/api/pcb-sync/handler.ts` | 211 | `board: PcbBoard; superseded?: boolean } \| null` |
+| D23 | `app/api/pcb-sync/handler.ts` | 239 | `board: record.board, superseded: lineageSummary?.state === "superseded"` |
+| D24 | `app/api/pcb-sync/handler.ts` | 263 | `export interface PcbSyncManufacturingObservations` |
 | D25 | `app/api/pcb-sync/route.ts` | 33 | `createManufacturingSummaryReader(workflow, { observations: createProviderObservationReader({ exchanges: createProviderExchangeLedger(workflow) }) })` |
 | D26 | `app/lib/pcb-sync/client.ts` | 167 | `function manufacturingObservations(` |
 | D27 | `app/components/pcb/ManufacturingWorkflowPanel.tsx` | 19 | `import { ProviderObservationList } from "./ProviderObservationList";` |

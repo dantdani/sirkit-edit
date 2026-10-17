@@ -110,9 +110,9 @@ export interface RunViewState {
   droppedExecutions: number;
   /** [B18-E validation] tool calls that ended without doing anything — refused before running, or finished not-ok. A run
    *  that tried and failed is a run whose answer may claim otherwise, whether or not the model wrote prose beside the call. */
-  failedAttempts: number; /** [B21 E2] (OD-126, OD-127) pure counters over an orchestrated run's additive events (reduceOrchestrationEvent, appended) - display only, never authority */ orchestrated: boolean; specialistsScheduled: number; specialistsFinished: number; specialistsDegraded: number; partialResult: { usable: number; planned: number } | null;
+  failedAttempts: number; /** [B21 E2] (OD-126, OD-127) pure counters over an orchestrated run's additive events (reduceOrchestrationEvent, appended) - display only, never authority */ orchestrated: boolean; specialistsScheduled: number; specialistsFinished: number; specialistsDegraded: number; partialResult: { usable: number; planned: number } | null; /** [PR-G, 2026-10-17] the run's OWN provider (run_started) and model (run_completed) for the answer's footer label, and its compatible-fallback notices (degraded events) - read from the run's events, never from configuration; display only */ provider: string | null; model: string | null; fallbackNotices: number;
 }
-export const initialRunView = (): RunViewState => ({ answer: "", interim: [], pendingExecutions: 0, resolvedExecutions: 0, pendingReviews: 0, terminal: null, failure: null, receivedExecutions: 0, droppedExecutions: 0, failedAttempts: 0, orchestrated: false, specialistsScheduled: 0, specialistsFinished: 0, specialistsDegraded: 0, partialResult: null });
+export const initialRunView = (): RunViewState => ({ answer: "", interim: [], pendingExecutions: 0, resolvedExecutions: 0, pendingReviews: 0, terminal: null, failure: null, receivedExecutions: 0, droppedExecutions: 0, failedAttempts: 0, orchestrated: false, specialistsScheduled: 0, specialistsFinished: 0, specialistsDegraded: 0, partialResult: null, provider: null, model: null, fallbackNotices: 0 });
 
 /** Fold one raw run event (as the page receives it) into the run view. Unknown events change nothing. */
 export function reduceRunView(state: RunViewState, event: Record<string, unknown>): RunViewState {
@@ -140,12 +140,12 @@ export function reduceRunView(state: RunViewState, event: Record<string, unknown
       return event.status === "settled" || event.status === "retired"
         ? { ...state, resolvedExecutions: Math.min(state.pendingExecutions, state.resolvedExecutions + 1) }
         : state;
-    case "run_completed":
-      return { ...state, terminal: state.terminal ?? "completed" };
+    case "run_completed": // [PR-G, 2026-10-17] + the model the run's own terminal event names ("" on a replayed or refused run: not recorded); run_started's provider is folded in the default (reduceAnswerSource, appended) so the B21-cited lines keep their numbers
+      return { ...state, terminal: state.terminal ?? "completed", model: typeof event.model === "string" ? event.model.slice(0, 120) : state.model };
     case "run_failed":
       return { ...state, terminal: "failed", failure: typeof event.message === "string" && event.message.length > 0 ? event.message.slice(0, 500) : "The assistant run failed." };
     default:
-      return isOrchestrationRunEventType(event.type) ? reduceOrchestrationEvent(state, event) : state; // [B21 E2] the additive v1 orchestration events (OD-126): counters only (appended below)
+      return isOrchestrationRunEventType(event.type) ? reduceOrchestrationEvent(state, event) : reduceAnswerSource(state, event); // [B21 E2] the additive v1 orchestration events (OD-126): counters only (appended below); [PR-G, 2026-10-17] run_started's provider (appended too); any other unknown event changes nothing
   }
 }
 
@@ -155,9 +155,9 @@ export function reduceRunView(state: RunViewState, event: Record<string, unknown
 export const runViewGrantReceived = (state: RunViewState): RunViewState => ({ ...state, receivedExecutions: state.receivedExecutions + 1 });
 export const runViewGrantDropped = (state: RunViewState): RunViewState => ({ ...state, droppedExecutions: state.droppedExecutions + 1 });
 
-export interface RunViewProjection { answer: string; notes: string[]; label: string | null; historyText: string; failure: string | null; /** [B21 E2] the orchestrated run's one status line (OD-127), or null */ status: string | null }
+export interface RunViewProjection { answer: string; notes: string[]; label: string | null; historyText: string; failure: string | null; /** [B21 E2] the orchestrated run's one status line (OD-127), or null */ status: string | null; /** [PR-G, 2026-10-17] the answer's footer label ("answered by <provider> · <model>", from the run's own events) with the fallback disclosure, or null; never part of the history */ footer: string | null }
 
-/** What the page shows and what the next run's history carries. */
+/** What the page shows and what the next run's history carries. [PR-G, 2026-10-17] + `footer`, the run's own answer source (the page adds the configured-source disclosure through `answerFooter(state, configured)`, appended). */
 export function projectRunView(state: RunViewState): RunViewProjection {
   const unresolvedExecution = state.pendingExecutions > state.resolvedExecutions;
   // [B18-D review 2] "the entry above" only when an entry exists: a run whose only grants this page dropped has none
@@ -180,7 +180,7 @@ export function projectRunView(state: RunViewState): RunViewProjection {
     notes: state.terminal ? state.interim.map((text) => `${NOTE_PREFIX}${text}`) : [],
     label,
     historyText: answer,
-    failure: state.terminal === "failed" ? state.failure : null, status: orchestrationStatusLine(state), // [B21 E2] the orchestrated run's one status line (OD-127), or null
+    failure: state.terminal === "failed" ? state.failure : null, status: orchestrationStatusLine(state), footer: answerFooter(state), // [B21 E2] the orchestrated run's one status line (OD-127), or null; [PR-G, 2026-10-17] the model label from the run's own events (appended below)
   };
 }
 
@@ -554,7 +554,7 @@ function reduceOrchestrationEvent(state: RunViewState, event: Record<string, unk
     case "specialist_finished":
       return event.runsAgain === false && event.status !== "stale" ? { ...state, orchestrated: true, specialistsFinished: state.specialistsFinished + 1 } : { ...state, orchestrated: true };
     case "degraded":
-      return { ...state, orchestrated: true, specialistsDegraded: state.specialistsDegraded + 1 };
+      return { ...state, orchestrated: true, specialistsDegraded: state.specialistsDegraded + 1, fallbackNotices: state.fallbackNotices + (event.reason === "compatible_fallback" ? 1 : 0) }; // [PR-G, 2026-10-17] a specialist served by a compatible fallback is disclosed in the footer too
     case "partial_result": {
       const usable = runCount(event.usable);
       const planned = runCount(event.planned);
@@ -804,4 +804,40 @@ function restoredLandedNext<M extends { id: string; entries: ReadonlyArray<{ id:
   const live = `Next: ${refusalSentence(null, true).next}`;
   if (!message.entries.some((row) => row.id.endsWith(":next") && row.text === live)) return message;
   return { ...message, entries: message.entries.map((row) => (row.id.endsWith(":next") && row.text === live ? { ...row, text: CHECK_RECORDS_NEXT } : row)) } as M;
+}
+
+// ─── [PR-G, 2026-10-17] The answer's model label (directive 4: never describe a fallback as Astra-generated) ──────────────────────
+// Appended on purpose: a function declaration is hoisted and the constants are read only when a run ends, so no line cited above moves.
+
+/** The page's configured answer source: the provider the send pinned (`aiBrainRef`) and the runtime's model for it (`/api/ai/runtime`,
+ *  null while it loads). Compared with the run's OWN events; it never supplies the label. */
+export interface ConfiguredAnswerSource { provider: string; model: string | null }
+export const ANSWER_FOOTER_PREFIX = "answered by ";
+/** What the footer says when the run's terminal event recorded no model (a replayed resume, a refused run). */
+export const ANSWER_FOOTER_MODEL_UNRECORDED = "model not recorded by the run";
+
+/**
+ * The footer line under an ended run's answer: `answered by <provider> · <model>` from `run_started.provider` and `run_completed.model`
+ * (the run's own events, never the page's configuration), then the disclosures - the run's provider or model differs from the
+ * configured one (a fallback answered, named as such), and each specialist a `degraded compatible_fallback` notice reported. Null
+ * while the run is open or when it produced no answer (nothing is claimed about text that does not exist). The label never enters
+ * the history (`historyText`), so the model is never told what served it.
+ */
+export function answerFooter(state: RunViewState, configured?: ConfiguredAnswerSource | null): string | null {
+  if (state.terminal === null || state.answer.length === 0) return null;
+  const model = state.model !== null && state.model.length > 0 ? state.model : null;
+  const base = `${ANSWER_FOOTER_PREFIX}${state.provider ?? "an unrecorded provider"} · ${model ?? ANSWER_FOOTER_MODEL_UNRECORDED}`;
+  const disclosures: string[] = [];
+  if (configured && ((state.provider !== null && state.provider !== configured.provider) || (model !== null && configured.model !== null && model !== configured.model))) {
+    disclosures.push(`a fallback answered, not the configured ${configured.provider}${configured.model ? ` · ${configured.model}` : ""}`);
+  }
+  if (state.fallbackNotices > 0) disclosures.push(`${state.fallbackNotices} specialist result${state.fallbackNotices === 1 ? "" : "s"} came from a compatible fallback, not the configured model (the run log above names each)`);
+  return disclosures.length > 0 ? `${base} — ${disclosures.join("; ")}` : base;
+}
+
+/** [PR-G, 2026-10-17] `run_started` (the route's first event) names the provider that serves the run; folded from the reducer's default so
+ *  the lines B21 cites keep their numbers. Any other unknown event changes nothing, exactly as before. */
+function reduceAnswerSource(state: RunViewState, event: Record<string, unknown>): RunViewState {
+  if (event.type !== "run_started") return state;
+  return { ...state, provider: typeof event.provider === "string" && event.provider.length > 0 ? event.provider.slice(0, 40) : state.provider };
 }

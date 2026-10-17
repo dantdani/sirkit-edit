@@ -106,3 +106,16 @@ Open until a live turn (UNKNOWN, not failures): whether `strict: true` on the 40
 gpt-5.6 (the schemas are inside the proven wire subset, `provider-tools.ts:27-29`); whether the account returns `reasoning` output items
 with `encrypted_content` under `store: false` as D4 states; the real `status` / `incomplete_details.reason` values Astra emits at the
 4 096-token ceiling.
+
+## Lead addendum (2026-10-17): the live contract turn ran — LB-F1 and LB-F3 CONFIRMED for the contract only
+
+- LB-F1 (account availability): a zero-cost `GET /v1/models` with the owner's key lists `gpt-6-astra` (also `gpt-6-sol`, `gpt-6-luna`,
+  `gpt-6.1-sol`) beside the gpt-5.6 family — `live-spend.json` LP-1.
+- LB-F3 (one authorized contract turn): run by the lead through the repository's own `OpenAIProvider` and the B21-F contract-turn runner
+  (`runContractTurns`: a forced-tool turn with the strict contract tool, SDK retries 0, the adapters' output ceiling), with a scratch
+  meter that admits exactly one request and the full live evaluation NOT invoked. Record: `toolCalled true, nameMatched true,
+  argumentsValid true, verdict valid`; usage 121 input / 0 cached / 31 output tokens; 2.6 s; priced 0.0028 USD at the list prices
+  above — `live-spend.json` LR-2 (reserved 0.46, actual 0.0028; cumulative spend 0.1928 USD of 5.00).
+- What this proves: the API accepts the request the adapter builds for `gpt-6-astra` (strict tool, pinned reasoning effort, no
+  temperature) and answers it with a well-formed tool call. What it does not prove: anything about Astra's engineering quality, the
+  full orchestration under this model, fallback or quota behaviour, or any PCB outcome (directive 4, 13).

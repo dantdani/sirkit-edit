@@ -1,8 +1,8 @@
 /**
  * [PR-C F-08] The instances a Schematic → PCB run cannot carry to the board, named BEFORE any server call.
  *
- * The durable sync publishes every physical component with a symbol asset (`buildPcbSyncPublicationGraph`,
- * app/lib/pcb/netlist-bridge.ts): a KiCad instance publishes its installed `symbolAssetVersionId`, a Theory part a synthetic
+ * The durable sync publishes every physical component with a symbol asset (`buildPcbSyncPublicationGraph`, the Stage 4
+ * bridge in app/lib/pcb/): a KiCad instance publishes its installed `symbolAssetVersionId`, a Theory part a synthetic
  * `sirkit.theory-symbol:<prefix>:v1`. Until this module the editor learned of an unresolved instance only afterwards — as a bare
  * `PS_SYMBOL_ASSET_REQUIRED` thrown inside the publish port (naming no instance), or as the preflight's `PS_COMPONENT_UNRESOLVED`
  * blockers — in both cases AFTER the physical bindings had already committed durable server state. This pure listing lets
@@ -21,7 +21,7 @@
  */
 import type { SchematicState } from "@/lib/schematic-types";
 import { normalizeRefDes, schDisplayRef } from "@/lib/schematic-types";
-import { theoryPinContract } from "@/app/lib/pcb/netlist-bridge";
+import { theoryPinContract } from "@/app/lib/schematic/theory-physicality"; // [PR-G, 2026-10-17] the shared rule's own module, not the Stage 4 bridge (forbidden in Stage 3 code)
 import { compareNatural } from "@/app/lib/stable-compare";
 
 export type UnresolvedInstanceFamily = "kicad" | "theory";

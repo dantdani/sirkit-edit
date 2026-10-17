@@ -116,3 +116,33 @@ contained routing platform, the live comparison corpus. The three new agent even
 `stackup_candidate_ready`) reach the page's run log through the default branch; richer intakes are recorded as owner options. Deferred
 to G: the whole deterministic suite and the `b24-d0-ci-split` junit re-measurement, an e2e spec for the agent generation intake, the
 vitest worker RPC timeout seen once under the 386-file load (not a test failure; re-run in G).
+
+## Checkpoint G (2026-10-17)
+
+Built by two background workflows (gA page intakes and the chat model label, gB the scripted agent's generation turn and its
+browser proof, gC the G.1–G.12 verification matrix, gD the CI-split re-measurement; then two cleanup builders) and integrated by the
+lead. The commit was verified ALONE: a detached worktree at `6042488` plus exactly the G files, without the concurrent agent's
+uncommitted edits (see the note at the end).
+
+| command | result | exit | kind |
+|---|---|---|---|
+| builder suites: `pr-g-artifact-receivers` (10), `pr-g-page-intakes` (12), `b18-d-chat-run-view` (+3), `b18-c-fixture-agent` (+2) | passed | 0 | deterministic / fake-backed |
+| builder browser proof `playwright test e2e/pr-g-agent-generation.spec.ts` (gB) | 1 passed on its first run (16.8 s): the scripted agent's "Generate a schematic: …" reaches the SAME review dialog; one `POST /api/chat`, zero `POST /api/schematic/build-multi`; no request left the origin | 0 | fixture browser |
+| `pnpm exec tsx scripts/scan-secrets.ts --history 32b081e..HEAD` (lead) | first run: 3 hits, all the redaction tests' key-shaped alphabet placeholders → three reviewed allowlist entries (path, rule, line digest, reason), `b24-a2-secret-scan` pins moved 9 → 12 entries; re-run: tree mode exit 0 (11 allowlisted), history mode exit 0 | 1 → 0 | deterministic |
+| live: ONE forced-tool contract turn with `gpt-6-astra` (lead; `live-spend.json` LR-2; reserved 0.46 USD first) | the API returned a well-formed tool call with valid arguments; 121 input / 31 output tokens; 2.6 s; 0.0028 USD. It shows the adapter's request is accepted for this model; it shows nothing about engineering quality | 0 | live |
+| the CI job's full positional selection (`scratchpad/g/run-ptg-measure.sh`: the 242 entries of prompt-to-gerber without its excludes, two workers), run 1 (gD) | 495 files; 19 failed cases in 14 files → STOP (no evidence written): content pins moved by C–G, one Stage 3 import boundary (`preflight-read.ts`, `unresolved-instances.ts` imported `netlist-bridge`), one statement-scan scope | 1 | deterministic |
+| cleanup (two builders, then the lead): the shared Theory physicality rule moved to `app/lib/schematic/theory-physicality.ts` (netlist-bridge re-exports it; the two Stage 3 modules import the new module); the owner's assignment excluded by path from the claim scan (a reviewed scope note); page rows and count lines re-pointed by content with dated notes (B21, B22, B23, B24 pages); the threshold census, B17 inventory, PR-D matrix and B24 maps regenerated | — | — | deterministic |
+| worktree verification of the commit (HEAD `6042488` + the 64 G files only): `tsc --noEmit` | 0 errors | 0 | deterministic |
+| worktree: the full positional selection | 495 files: 486 passed, 8 skipped, 1 failed — `b22-a3-diagnostic-runner` case 9 builds its "outside the OS temporary directory" path from the working directory, and the verification worktree itself lives under the OS temp folder, so the guard correctly does not fire there; the same case passes in the real checkout (run 2 below). 5610 tests passed, 54 skipped | 1 (explained) | deterministic |
+| main checkout, the full positional selection, run 2 (with the concurrent agent's edits present) | 495 files: 484 passed, 3 failed — `b21-b-page` cases 3 and 5 and `b24-a1-environment-profile` case 14 pin the bytes and lines of `build-multi/route.ts` and `anthropic-provider.ts`, which ONLY the concurrent agent's uncommitted edits changed (they pass at HEAD + G); `b24-f-verdict-lines` cases 6 and 9 (G's own: two count lines, the claim scan's exclusion line) fixed and re-run green | 1 | deterministic |
+| worktree: this assignment's own suites (`pr-a- … pr-g-`, `app/lib/parts`, `app/lib/llm`, `app/lib/workflow`, `app/lib/pcb/experiments`, `app/components/pcb/__tests__`, `app/lib/project/__tests__`) | 110 files, 854 passed, 1 skipped | 0 | deterministic |
+| fixture browser specs after the final page edits | NOT re-run: a `next dev` server from this checkout has listened on :3000 since 05:17 (the concurrent agent's or the owner's) and Next refuses a second dev server in the same project folder; an attempt from the verification worktree was stopped by pnpm's own guard before it could touch the dependency folder (verified intact). Deferred to the PR's CI browser job and to a local re-run once :3000 is free | — | — |
+
+Found by the lead and carried to the next increment: **19 of this assignment's vitest suites are selected by NO CI job** (the
+repository's CI runs selections; 329 of 936 test files overall are in no job). They run locally (the row above) but guard nothing in
+CI until admitted. Admission goes through prompt-to-gerber's positional filters and the agent-boundary job, the mechanism ci-split.md
+section 5 defines, together with the CI-split evidence re-measurement (moved share 35.6 % at this tree, under OD-30's 40 % line).
+
+Concurrent work in this checkout: from 05:47 an OpenAI Codex agent edited 15 files (a deadline and cancellation boundary for the
+Build generation through the route, the build loop and both provider adapters; `app/lib/schematic/build-boundary.ts`; recovery and
+cancellation tests; a read-only diagnostic script). None of them is part of this checkpoint's commit; none was edited or reverted.

@@ -436,7 +436,9 @@ failed preview discards the plan). RECORDED
 
 As of this increment's working tree on `da36d51` after the review round (2026-10-04); the anchor text is the check, the line is for the
 reader; `b23-b-page` case 3 checks every row. [B23-B1 lead, 2026-10-04] C24's anchor moved in place (`keysPerProject: 256`); C32-C36 are
-the three low fixes' lines; every other row holds unchanged.
+the three low fixes' lines; every other row holds unchanged. [PR-G, 2026-10-17] C17 re-pinned `:137` -> `:151` in place: the control
+rules that Product reliability E (`390afa4`, three lines), F (`6042488`, six lines) and G (this working tree, five lines) inserted above
+it in `app/lib/engineering/control-registry.ts`; the anchor is unchanged.
 
 | # | file | line | anchor |
 |---|---|---|---|
@@ -456,7 +458,7 @@ the three low fixes' lines; every other row holds unchanged.
 | C14 | `app/lib/auth/route-resource-classification.ts` | 99 | `"/api/pcb/provider-exchange": { durable: "read", sensitivity: "project-durable", expensive: true },` |
 | C15 | `app/lib/auth/route-resource-classification.ts` | 200 | `outboundEgress: policy.externalTransfer === true ? "files"` |
 | C16 | `app/lib/engineering/action-registry.ts` | 186 | `action({ id: "manufacturing.provider-exchange", version: 1, area: "manufacturing",` |
-| C17 | `app/lib/engineering/control-registry.ts` | 137 | `rule({ id: "manufacturing.provider-exchange", surface: PCB + "ProviderExchangePanel.tsx",` |
+| C17 | `app/lib/engineering/control-registry.ts` | 151 | `rule({ id: "manufacturing.provider-exchange", surface: PCB + "ProviderExchangePanel.tsx",` |
 | C18 | `app/components/pcb/ProviderExchangePanel.tsx` | 122 | `export function ProviderExchangePanel(props: ProviderExchangePanelProps) {` |
 | C19 | `app/components/pcb/ManufacturingWorkflowPanel.tsx` | 122 | `<ProviderExchangePanel scope={workflow.workflow.scope}` |
 | C20 | `app/components/pcb/ManufacturingWorkflowPanel.tsx` | 19 | `import { ProviderExchangePanel } from "./ProviderExchangePanel"; // [B23-B1] appended in place` |

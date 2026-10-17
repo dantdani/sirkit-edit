@@ -142,6 +142,9 @@ import { ComponentReviewPanel } from "./ComponentReviewPanel"; // [B16-C.2]
 import { usePcb3dViewSession } from "./hooks/usePcb3dViewSession"; // [B17-C]
 import { usePcbViewSession } from "./hooks/usePcbViewSession"; // [B17-D]
 import { clearNets, LayoutCandidateStore, netsOfSelection, verifyLayoutCandidate, type LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-E]
+import type { StackupCandidate } from "@/app/lib/pcb/candidates/stackup-candidate"; // [PR-G, 2026-10-17]
+import { verifyStackupCandidateAgainstBoard } from "@/app/lib/project/stackup-candidate-events"; // [PR-G, 2026-10-17] the one check: intact, this board's revision, unexpired
+import { StackupCandidatePanel } from "./StackupCandidatePanel"; // [PR-G, 2026-10-17]
 import type { ViewSessionBridge } from "@/app/lib/agent/view-session-bridge"; // [B17-F]
 import { useViewSessionBridge } from "@/app/components/view-session/useViewSessionBridge"; // [B17-F]
 import { pcbHistoryMark, pcbHistoryStep, type ProjectOperationTimeline, type ProjectStoreHead } from "@/app/lib/project/operation-timeline"; // [B17-E]; [B18-D review 2] the recording step
@@ -154,7 +157,7 @@ import { RoutingRulesPanel } from "./RoutingRulesPanel";
 import { AutorouteSetup } from "./AutorouteSetup";
 import { PlacementSetup } from "./PlacementSetup";
 import { useDimensionTool } from "./hooks/useDimensionTool"; // B08
-import { stackupProfile } from "@/app/lib/pcb/stackup";
+import { stackupProfile, type StackupProfileId } from "@/app/lib/pcb/stackup"; // [PR-G] + the profile id type for applyStackupProfile
 import { AssignmentQueuePanel } from "./AssignmentQueuePanel";
 import { PcbSyncReadinessPanel } from "./PcbSyncReadinessPanel"; // [PR-C F-08] a blocked preflight shown per blocker (message + refs), not as one 6 s toast
 import type { JourneyPcbFacts } from "@/app/lib/workflow/journey"; // [PR-C] the PCB facts reported to the page's journey model
@@ -328,6 +331,7 @@ export default function PcbEditor({
   viewSessionBridge,
   layoutCandidateIntake,
   onLayoutCandidateSettled,
+  stackupCandidateIntake, onStackupCandidateSettled, // [PR-G, 2026-10-17]
   executionGrantIntake,
   onExecutionGrantSettled,
   onExecutionGrantProgress,
@@ -370,6 +374,12 @@ export default function PcbEditor({
    *  a stale candidate is refused with a visible reason. Apply stays the human's explicit action. */
   layoutCandidateIntake?: { candidate: LayoutCandidate; originRunId: string | null } | null;
   onLayoutCandidateSettled?: () => void;
+  /** [PR-G, 2026-10-17] the agent's stackup / via-policy recommendation (sirkit.stackup-candidate.v1) after the page's SAFE receiver and
+   *  live-revision check. This editor re-verifies it (digest, base revision, expiry) and shows it as a PREVIEW; Accept runs the SAME
+   *  stackup change as the toolbar's Stackup selector (`applyStackupProfile`, one canonical pcb.board-geometry transaction) after
+   *  re-checking the revision; Discard drops it. The candidate never writes the board. */
+  stackupCandidateIntake?: { candidate: StackupCandidate; originRunId: string | null } | null;
+  onStackupCandidateSettled?: () => void;
   /** [B18-B] a server-minted execution grant narrowed by the page's SAFE receiver. Display grants nothing; the
    *  granted-execution ritual (tender = one-shot server burn, then ONE canonical transaction) lives behind this
    *  editor's controller — never the chat page or the agent layer. */
@@ -1937,6 +1947,73 @@ export default function PcbEditor({
   }, [layoutCandidateIntake, layoutCandidates, lifecycleGeneration, onLayoutCandidateSettled]);
   useEffect(() => { if (state.board) layoutCandidates.retireStale(state.board, lifecycleGeneration); }, [layoutCandidates, state.board, lifecycleGeneration]);
 
+  // [PR-G, 2026-10-17] The ONE stackup change path (OD-249): the toolbar's Stackup selector and the agent recommendation's Accept both
+  // commit through it - one canonical pcb.board-geometry transaction (board.stackup, board.stackupConfig = stackupProfile(...), the
+  // recommendation's plane nets on the profile's plane layers, reconcileStackupPlaneZones in the SAME transaction; one undo entry).
+  // B08 - no history means no canonical session: refuse truthfully (the former set-stackup dispatch was a silent, non-undoable write).
+  function applyStackupProfile(profileId: StackupProfileId, planes: ReadonlyArray<{ layer: string; net: { id: number } }> = [], label = "Set stackup"): Promise<{ ok: boolean }> {
+    const h = editorRuntime.getHistory();
+    if (!h) { setToast("The board is still loading — the stackup was not changed. Retry in a moment."); return Promise.resolve({ ok: false }); }
+    return commitPcbCandidate(h, {
+      commandId: "pcb.board-geometry",
+      label,
+      buildCandidate: (board) => produce(board, (d) => {
+        const config = stackupProfile(profileId);
+        for (const layer of config.copperLayers) { const plane = planes.find((entry) => entry.layer === layer.id); if (plane && layer.role === "plane") layer.planeNetId = plane.net.id; }
+        d.stackup = config.copperLayers.length === 4 ? 4 : 2;
+        d.stackupConfig = config;
+        reconcileStackupPlaneZones(d);
+      }),
+    }).then((result) => { if (!result.ok) setToast(result.message); return { ok: result.ok }; });
+  }
+  // [PR-G, 2026-10-17] the agent's stackup recommendation enters as a PREVIEW after the re-check against the LIVE board (digest intact, base
+  // revision = this board's pcbRevisionId, unexpired); a stale or altered one is refused visibly and nothing is shown. Nothing is written
+  // on receipt; the page's intake is settled at once (handed over), as the layout intake is.
+  const stackupIntakeRef = useRef<string | null>(null);
+  const [pendingStackupCandidate, setPendingStackupCandidate] = useState<StackupCandidate | null>(null);
+  const [stackupCandidateBusy, setStackupCandidateBusy] = useState(false);
+  useEffect(() => {
+    const intake = stackupCandidateIntake;
+    if (!intake || stackupIntakeRef.current === intake.candidate.candidateId) return;
+    stackupIntakeRef.current = intake.candidate.candidateId;
+    const board = boardRef.current;
+    const verdict = verifyStackupCandidateAgainstBoard(intake.candidate, board ? pcbRevisionId(board) : null, Date.now());
+    if (!verdict.ok) { setToast(`Agent stackup recommendation refused: ${verdict.detail}`); onStackupCandidateSettled?.(); return; }
+    setPendingStackupCandidate(intake.candidate);
+    setToast("Agent stackup recommendation ready — review the preview; the board is unchanged until you accept it.");
+    onStackupCandidateSettled?.();
+  }, [stackupCandidateIntake, onStackupCandidateSettled]);
+  const pendingStackupLiveRevision = useMemo(() => (pendingStackupCandidate && state.board ? pcbRevisionId(state.board) : null), [pendingStackupCandidate, state.board]);
+  // the preview's expiry is time-based: tick while a preview is open so its disable reason stays current (the PCB proposal's pattern)
+  const [stackupPreviewNow, setStackupPreviewNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!pendingStackupCandidate) return;
+    const firstTick = setTimeout(() => setStackupPreviewNow(Date.now()), 0);
+    const timer = setInterval(() => setStackupPreviewNow(Date.now()), 5_000);
+    return () => { clearTimeout(firstTick); clearInterval(timer); };
+  }, [pendingStackupCandidate]);
+  // Accept: the human control. The revision is re-checked against the live board at the click (a stale one is refused and the preview
+  // dropped), then the SAME commit as the toolbar's selector runs with the recommendation's profile and plane nets; the recommended
+  // DRC preset becomes the panel's active preset (a view preference) only when the commit landed and it differs.
+  async function acceptStackupCandidate(): Promise<void> {
+    const candidate = pendingStackupCandidate;
+    if (!candidate || stackupCandidateBusy) return;
+    const board = boardRef.current;
+    const verdict = verifyStackupCandidateAgainstBoard(candidate, board ? pcbRevisionId(board) : null, Date.now());
+    if (!verdict.ok) { setToast(`Stackup recommendation not applied: ${verdict.detail}`); setPendingStackupCandidate(null); return; }
+    setStackupCandidateBusy(true);
+    try {
+      const result = await applyStackupProfile(candidate.recommendation.profileId, candidate.recommendation.planes, `Set stackup ${candidate.recommendation.profileId} (agent recommendation accepted)`);
+      if (result.ok) {
+        if (candidate.recommendation.manufacturing.presetId !== drc.activePresetId) drc.setActivePresetId(candidate.recommendation.manufacturing.presetId);
+        setToast(`Stackup set to ${candidate.recommendation.profileId} (${candidate.recommendation.physicalLayerCount} layers) — one undo entry. ${candidate.invalidation.dependentApprovalsInvalidated ? "Dependent approvals are invalidated: placement / routing candidates retired, qualification and release re-run from scratch." : ""}`);
+      }
+    } finally {
+      setStackupCandidateBusy(false);
+      setPendingStackupCandidate(null);
+    }
+  }
+
   // B08.2 — lifecycle replacement IMMEDIATELY releases the new generation:
   // the adoption already aborted every captured scope's signal (fetches,
   // workers) synchronously; this effect then discards the stale visible
@@ -2639,21 +2716,7 @@ export default function PcbEditor({
           gridOn={state.gridOn}
           onToggleGrid={() => pcbView.toggleGrid()}
           stackup={state.board.stackup}
-          onStackupChange={(stackup) => {
-            const h = editorRuntime.getHistory();
-            // B08 — no history means no canonical session: refuse truthfully
-            // (the former set-stackup dispatch was a silent, non-undoable write).
-            if (!h) { setToast("The board is still loading — the stackup was not changed. Retry in a moment."); return; }
-            void commitPcbCandidate(h, {
-              commandId: "pcb.board-geometry",
-              label: "Set stackup",
-              buildCandidate: (board) => produce(board, (d) => {
-                d.stackup = stackup;
-                d.stackupConfig = stackupProfile(stackup === 4 ? "all-signal-4" : "simple-2");
-                reconcileStackupPlaneZones(d);
-              }),
-            }).then((result) => { if (!result.ok) setToast(result.message); });
-          }}
+          onStackupChange={(stackup) => { void applyStackupProfile(stackup === 4 ? "all-signal-4" : "simple-2"); }} // [PR-G, 2026-10-17] the selector's commit, extracted to applyStackupProfile (the same path the agent recommendation's Accept runs)
           outline={state.board.outline}
           onOutlineChange={(outline) => {
             // R06 Section 10: outline edits must be VISIBLE history entries.
@@ -2752,6 +2815,13 @@ export default function PcbEditor({
           {syncBlockers && (
             <div className="absolute top-2 right-2 z-30 w-[24rem] max-w-[calc(100%-1rem)] max-h-[70%] overflow-auto">
               <SyncBlockersPanel blockers={syncBlockers} busy={syncing || applying} onDismiss={() => setSyncBlockers(null)} schematic={schematic} projectScope={publisherScope} />
+            </div>
+          )}
+          {/* [PR-G, 2026-10-17] the agent's stackup recommendation as a PREVIEW (OD-249): Accept runs the toolbar selector's own commit path
+              after re-checking the live revision; Discard drops it; the board is unchanged until then. Below the sync blockers when both show. */}
+          {pendingStackupCandidate && (
+            <div className={`absolute right-2 z-30 w-[28rem] max-w-[calc(100%-1rem)] max-h-[70%] overflow-auto ${syncBlockers ? "top-[40%]" : "top-2"}`}>
+              <StackupCandidatePanel candidate={pendingStackupCandidate} liveRevision={pendingStackupLiveRevision} now={stackupPreviewNow} busy={stackupCandidateBusy} onAccept={() => void acceptStackupCandidate()} onDiscard={() => setPendingStackupCandidate(null)} />
             </div>
           )}
           {/* [B16.1C §F] the visible manufacturing workflow: durable truth,

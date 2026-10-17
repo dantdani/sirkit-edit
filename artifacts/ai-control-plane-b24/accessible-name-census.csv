@@ -360,6 +360,8 @@ app/components/pcb/SnapshotConflictDialog.tsx|click|Button|snapshot-conflict-dis
 app/components/pcb/SnapshotConflictDialog.tsx|click|Button|snapshot-conflict-rebase|onRebase,app/components/pcb/SnapshotConflictDialog.tsx,click,Button,yes,named:text,Rebase &amp; publish
 app/components/pcb/SnapshotConflictDialog.tsx|click|Button|snapshot-conflict-refresh|onRefresh,app/components/pcb/SnapshotConflictDialog.tsx,click,Button,yes,named:text,Refresh
 app/components/pcb/SnapshotConflictDialog.tsx|dialog|Dialog|(none)|onDismiss,app/components/pcb/SnapshotConflictDialog.tsx,dialog,Dialog,yes,exempt:dialog-titled,Another session published a newer schematic revision
+app/components/pcb/StackupCandidatePanel.tsx|click|button|stackup-candidate-accept|onAccept,app/components/pcb/StackupCandidatePanel.tsx,click,button,no,named:text,Applying… Accept — set this stackup
+app/components/pcb/StackupCandidatePanel.tsx|click|button|stackup-candidate-discard|onDiscard,app/components/pcb/StackupCandidatePanel.tsx,click,button,no,named:aria-label,Discard the stackup recommendation
 app/components/pcb/SyncButton.tsx|click|button|Schematic to PCB placement options|onOptions,app/components/pcb/SyncButton.tsx,click,button,no,named:aria-label,Schematic to PCB placement options
 app/components/pcb/SyncButton.tsx|click|button|Schematic to PCB|onSync,app/components/pcb/SyncButton.tsx,click,button,no,named:aria-label,Schematic to PCB
 app/components/pcb/SyncPlacementDialog.tsx|change|input|(none)|setSpread,app/components/pcb/SyncPlacementDialog.tsx,change,input,no,named:label-wrap,Spread overlapping or unplaced parts Uses courtyard bound…
@@ -534,6 +536,7 @@ app/page.tsx|click|Button|Cancel — change nothing|cancelTier1Proposal,app/page
 app/page.tsx|click|button|change in Settings|setSettingsOpen,app/page.tsx,click,button,yes,named:text,change in Settings
 app/page.tsx|click|Button|chat-stop|stopChatRun,app/page.tsx,click,Button,yes,named:text,Stop
 "app/page.tsx|click|button|Close pane|e.stopPropagation,onRemove",app/page.tsx,click,button,no,named:title,Close pane
+app/page.tsx|click|Button|Close|setDraftRequestOpen,app/page.tsx,click,Button,no,named:text,Close
 app/page.tsx|click|Button|Close|setSettingsOpen,app/page.tsx,click,Button,no,named:text,Close
 app/page.tsx|click|button|composer-route-override|overrideComposerRoute,app/page.tsx,click,button,yes,named:text,* instead Ask the assistant instead
 app/page.tsx|click|Button|composer-submit|handleComposerSubmit,app/page.tsx,click,Button,yes,named:text,*
@@ -546,6 +549,7 @@ app/page.tsx|click|button|Dismiss|setTier1Receipt,app/page.tsx,click,button,no,n
 app/page.tsx|click|button|Dismiss|setToast,app/page.tsx,click,button,no,named:title,Dismiss
 app/page.tsx|click|Button|Download local copy (JSON)|downloadRecoveryBackup,app/page.tsx,click,Button,no,named:text,Download local copy (JSON)
 app/page.tsx|click|Button|Download raw backup (JSON)|downloadRecoveryBackup,app/page.tsx,click,Button,no,named:text,Download raw backup (JSON)
+app/page.tsx|click|Button|draft-request-open|onOpenDraftRequest,app/page.tsx,click,Button,yes,named:text,*
 app/page.tsx|click|button|empty-sheet-describe-circuit|handleJourneyAction,app/page.tsx,click,button,no,named:text,Describe a circuit
 app/page.tsx|click|button|Expand suggestions|Minimise suggestions|setSuggestionsMinimized,app/page.tsx,click,button,yes,named:text,* suggestion s ready
 app/page.tsx|click|Button|Export as KiCad (.kicad_sch)|handleExportKicad,app/page.tsx,click,Button,no,named:text,Export
@@ -555,6 +559,7 @@ app/page.tsx|click|button|Fit page to view|schematicView.fitPage,app/page.tsx,cl
 "app/page.tsx|click|button|Junction — mark a wire crossing as connected|setTool,setWireDraftStart",app/page.tsx,click,button,no,named:text,J
 app/page.tsx|click|Button|Keep my local schematic|resolveRecoveryKeepLocal,app/page.tsx,click,Button,no,named:text,Keep my local schematic
 app/page.tsx|click|button|missing-parts-open|openMissingParts,app/page.tsx,click,button,no,named:text,Missing parts: none Missing parts (*) PCB tab →
+app/page.tsx|click|button|module-note-toggle|setNoteExpanded,app/page.tsx,click,button,yes,named:text,Hide details Show details (* rows)
 app/page.tsx|click|Button|More checks|setMoreMenuOpen,app/page.tsx,click,Button,yes,named:aria-label,More checks
 app/page.tsx|click|button|Move mode (M)|setSimMode,app/page.tsx,click,button,no,named:text,Move M
 "app/page.tsx|click|button|Net label — name a net; same-name labels connect electrically|setTool,setWireDraftStart,setPendingNetLabel",app/page.tsx,click,button,no,named:text,T
@@ -600,6 +605,7 @@ app/page.tsx|click|ViewTab|(none)|workspaceView.open:sim,app/page.tsx,click,View
 app/page.tsx|dialog|Dialog|(none)|cancelTier1Proposal,app/page.tsx,dialog,Dialog,yes,exempt:dialog-titled,AI edit proposal — review before applying
 "app/page.tsx|dialog|Dialog|(none)|finishActivityLog,setPendingReplace",app/page.tsx,dialog,Dialog,yes,exempt:dialog-titled,* Apply the generated schematic?
 app/page.tsx|dialog|Dialog|(none)|noop,app/page.tsx,dialog,Dialog,no,exempt:dialog-titled,Project activation needs recovery
+app/page.tsx|dialog|Dialog|(none)|setDraftRequestOpen,app/page.tsx,dialog,Dialog,no,exempt:dialog-titled,Publication request from the assistant&apos;s draft request
 app/page.tsx|dialog|Dialog|(none)|setHistoryOpen,app/page.tsx,dialog,Dialog,no,exempt:dialog-titled,Revision history
 app/page.tsx|dialog|Dialog|(none)|setSettingsOpen,app/page.tsx,dialog,Dialog,no,exempt:dialog-titled,Workspace settings
 "app/page.tsx|dialog|Dialog|(none)|showToast,setSchematicRecovery",app/page.tsx,dialog,Dialog,no,exempt:dialog-titled,Schematic history needs recovery Schematic failed validat…

@@ -349,8 +349,8 @@ describe("[B24-A3] part 2: the per-principal windows on authenticated spend (D24
     while (queue.length > 0) for (const importer of importersOf.get(queue.shift()!) ?? []) if (!reaching.has(importer)) { reaching.add(importer); queue.push(importer); }
     const routes = listRouteFiles(ROOT).map((file) => ({ file: relative(ROOT, file).replaceAll(String.fromCharCode(92), "/"), path: routePathOf(ROOT, file) }));
     const gatedPaths = routes.filter((route) => reaching.has(route.file)).map((route) => route.path).sort();
-    expect(gatedPaths, "the routes whose runtime closure reaches the build loop").toEqual(["/api/schematic/build", "/api/schematic/build-multi", "/api/schematic/edit-build"]);
-    for (const path of gatedPaths) expect(PRINCIPAL_ABUSE_LIMITS[`POST ${path}`]?.perPrincipal.limit, path).toBe(CREDIT);
+    expect(gatedPaths, "the routes whose runtime closure reaches the build loop").toEqual(["/api/chat", "/api/schematic/build", "/api/schematic/build-multi", "/api/schematic/edit-build"]); // [PR-G, 2026-10-17] reviewed pin move: + /api/chat - since product reliability D (OD-243) the chat route injects the ONE shared Build generation as the agent's generate-proposal port (app/api/chat/schematic-generation-runtime.ts -> app/lib/schematic/build-multi-generation.ts -> build-loop.ts), so its runtime closure reaches searchPartsForAI; it is a PRINCIPAL_ABUSE_LIMITS row (the chat window, taken in agentStreamRoute: case 7), one generation per run under BUILD_BUDGET
+    for (const path of gatedPaths) expect(PRINCIPAL_ABUSE_LIMITS[`POST ${path}`]?.perPrincipal.limit, path).toBe(path === "/api/chat" ? CHAT : CREDIT); // [PR-G, 2026-10-17] the chat row is held to its own window (CHAT), the build routes to the provider-credit window
     // the registered tool whose binding names searchPartsForAI is exposed to neither the agent nor MCP
     const { sirkitToolRegistry } = await import("@/app/lib/engineering/tool-catalog");
     const { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } = await import("@/app/lib/engineering/agent-exposure");

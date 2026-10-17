@@ -566,8 +566,8 @@ added for the low fixes.
 | C48 | `app/components/pcb/ProviderExchangePanel.tsx` | 129 | `data-testid="p2g-ordering-notice">Ordering through Sirkit is turned off.` |
 | C49 | `app/components/pcb/ProviderExchangePanel.tsx` | 122 | `export function ProviderExchangePanel(props: ProviderExchangePanelProps) {` |
 | C50 | `app/components/pcb/ProviderExchangePanel.tsx` | 157 | `data-testid="p2g-provider-carried"` |
-| C51 | `artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv` | 107 | `manufacturing.provider-order,1,manufacturing,` |
-| C52 | `app/lib/manufacturing-providers/__tests__/b23-a-tier3-vocabulary.test.ts` | 272 | `expect(actionIds).toHaveLength(107); // [B24-A1, 2026-10-06] reviewed pin move (D9), was 106` |
+| C51 | `artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv` | 108 | `manufacturing.provider-order,1,manufacturing,` |
+| C52 | `app/lib/manufacturing-providers/__tests__/b23-a-tier3-vocabulary.test.ts` | 272 | `expect(actionIds).toHaveLength(108); // [PR-F lead, 2026-10-17] reviewed pin move (D9), was 107` |
 | C53 | `app/lib/engineering/__tests__/b17-a-control-inventory.test.ts` | 63 | `if (record.status === "missing") expect(reached.has(record.id) \|\| routed.has(record.id)` |
 | C54 | `app/lib/engineering/__tests__/b19-e-no-purchase-tripwire.test.ts` | 26 | `const PURCHASE_WORDING = /add to cart` |
 | C55 | `app/lib/project/__tests__/b18-b-import-gates.test.ts` | 34 | `const MINT_APPROVED = new Set(["app/lib/execution-grant/mint.ts", "app/api/chat/route.ts"]);` |
@@ -584,6 +584,12 @@ added for the low fixes.
 | C66 | `app/lib/manufacturing-providers/order-contract.ts` | 249 | `const claimed = claim !== null; // [B23-C lead, 2026-10-04] every submit of the claiming authorization holds the claim` |
 | C67 | `app/lib/manufacturing-providers/purchase-authorization.ts` | 203 | `const read: unknown = JSON.parse(durableWorkflowJson(binding));` |
 | C68 | `app/lib/manufacturing-providers/order-contract.ts` | 336 | `binding.providerId.normalize("NFC") : undefined;` |
+
+[PR-G, 2026-10-17] C51 re-pinned `:107` -> `:108` in place: Product reliability F (`6042488`) added the `parts.draft-request` record,
+whose generated matrix row sits just above `manufacturing.provider-order`'s; the anchor is unchanged. C52 re-anchored in place on `:272`:
+F's lead moved the `actionIds` length pin 107 -> 108 with its own dated note, so the anchor now quotes that line's current text
+(`toHaveLength(108); // [PR-F lead, 2026-10-17] reviewed pin move (D9), was 107`); the line is unchanged. This note stands below the
+table so that no row moves (`environments-and-deployment.md:326` cites C52 at `:570`).
 
 ## 14. The B23 closeout's export record
 

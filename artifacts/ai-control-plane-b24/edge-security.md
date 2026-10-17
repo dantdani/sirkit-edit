@@ -180,7 +180,7 @@ present only in a comment fails: `NGSPICE_BIN` at `app/api/simulate/route.ts`, `
 | `child-passthrough` | 1 | not declared: handed to a child process, never read for Sirkit | `KICAD_CONFIG_HOME` |
 | `not-an-environment-name` | 3 | not declared: a literal that only looks like a name | `SIRKIT_ANTHROPIC_MODEL_EMPTY`, `SIRKIT_ANTHROPIC_MODEL_PADDED` (refusal codes), `SIRKIT_D1N4148` (a SPICE model name) |
 
-80 rows. [B24-A3 review, 2026-10-08] 80 -> 81: + `SIRKIT_TRUSTED_CLIENT_IP_HEADER` (configuration, the row above). [B24-B3, 2026-10-08] 81 -> 93: + the twelve `qualification-opt-in` names of B24-B3's live-suite registry (its row in the table above). [B24-D1, 2026-10-09] 93 -> 97: + `SIRKIT_B24_BENCHMARK` (`qualification-opt-in`), `SIRKIT_B24_BENCHMARK_DIR`, `SIRKIT_JOB_STARTED_AT` and `GITHUB_STEP_SUMMARY` (`platform`), B24-D1's three names and the runner's step-summary path its two scripts append to (the rows above). [B24-D4, 2026-10-10] 97 -> 98: + `SIRKIT_E2E_SKIP` (`platform`, the row above). [B24-E, 2026-10-10] 98 -> 99: + `SIRKIT_AUTH_QUALIFICATION_TENANT_ID` (`qualification-opt-in`, the row above). `SIRKIT_AUTH_MODE` is `configuration`, declared: it is honoured only outside production (`mode.ts:36-41`) but it is a [PR-D, 2026-10-17] 99 -> 100: + `SIRKIT_BUILD_ITERATION_CAP` (configuration, the row above; PR-C's operator cap, OD-242).
+80 rows. [B24-A3 review, 2026-10-08] 80 -> 81: + `SIRKIT_TRUSTED_CLIENT_IP_HEADER` (configuration, the row above). [B24-B3, 2026-10-08] 81 -> 93: + the twelve `qualification-opt-in` names of B24-B3's live-suite registry (its row in the table above). [B24-D1, 2026-10-09] 93 -> 97: + `SIRKIT_B24_BENCHMARK` (`qualification-opt-in`), `SIRKIT_B24_BENCHMARK_DIR`, `SIRKIT_JOB_STARTED_AT` and `GITHUB_STEP_SUMMARY` (`platform`), B24-D1's three names and the runner's step-summary path its two scripts append to (the rows above). [B24-D4, 2026-10-10] 97 -> 98: + `SIRKIT_E2E_SKIP` (`platform`, the row above). [B24-E, 2026-10-10] 98 -> 99: + `SIRKIT_AUTH_QUALIFICATION_TENANT_ID` (`qualification-opt-in`, the row above). [PR-D, 2026-10-17] 99 -> 100: + `SIRKIT_BUILD_ITERATION_CAP` (configuration, the row above; PR-C's operator cap, OD-242). [PR-G, 2026-10-17] PR-D's note stood inside the next sentence, splitting it; moved before it, unchanged, so the sentence reads whole and the last dated move is still the line's total. `SIRKIT_AUTH_MODE` is `configuration`, declared: it is honoured only outside production (`mode.ts:36-41`) but it is a
 deployment knob, never a fixture.
 
 **The kind -> class map (D16)**, pinned as a constant by `b24-a2-env-names` case 4 and total over A1's nine kinds:
@@ -266,6 +266,9 @@ connection-string rule hits (C31), each read in its test first and characterised
 | `app/lib/agent/__tests__/b11-trace-replay-evaluation.test.ts` | `anthropic-key-shape` | a 29-character fake the recorder must redact |
 | `app/api/__tests__/b16-0-12-tranche-parity.test.ts` | `connection-string-password` | a 66-character line: a database URL whose password is a named SENTINEL, stubbed so the runtime report can be checked for it |
 | `app/lib/db/__tests__/b16-b-database-qualification.test.ts` | `connection-string-password` | a 120-character line: a pooler URL for a project named deadtenant that does not resolve, which the qualification must refuse |
+| `app/lib/engineering/__tests__/pr-d-catalog-inspect.test.ts` | `anthropic-key-shape` | [PR-G lead, 2026-10-17] a 55-character key-shaped alphabet placeholder inside a thrown 'connection refused' message, which the catalog read's refusal diagnostics must never echo |
+| `app/lib/engineering/__tests__/pr-d-generate-proposal.test.ts` | `anthropic-key-shape` | [PR-G lead, 2026-10-17] the same placeholder inside a thrown 'socket hang up' message, which the proposal-blocked data must never echo |
+| `app/lib/parts/__tests__/pr-f-missing-facts-read.test.ts` | `anthropic-key-shape` | [PR-G lead, 2026-10-17] the same 'connection refused' line (byte-identical to the catalog-inspect case), which the missing-facts read answers as catalog unavailable |
 
 **The three modes** (`scripts/scan-secrets.ts`, C27; the only file that runs git, each call `execFileSync` with an argument array and
 no shell, the `scripts/benchmark.ts` precedent; nothing is written; its exit is the scan's, `process.exitCode = result.exitCode;` once
@@ -817,11 +820,11 @@ reported, with the id the reason names required to equal it, is a choice beyond 
 | C39 | `app/lib/deployment/secret-scan.ts` | 150 | `&& (mode === "history" \|\| allowed.historyOnly !== true));` |
 | C40 | `app/lib/deployment/secret-scan.ts` | 162 | `if (used.has(index) \|\| allowed.historyOnly === true) return;` |
 | C41 | `app/lib/deployment/secret-scan.ts` | 399 | `function historyOnlyProblems(` |
-| C42 | `app/lib/deployment/secret-scan-allowlist.ts` | 67 | `historyOnly: true as const,` |
-| C43 | `app/lib/qualification/__tests__/b24-a2-secret-scan.test.ts` | 533 | `describe("[B24-A2F, 2026-10-09] the history-only allowlist entries` |
+| C42 | `app/lib/deployment/secret-scan-allowlist.ts` | 87 | `historyOnly: true as const,` |
+| C43 | `app/lib/qualification/__tests__/b24-a2-secret-scan.test.ts` | 536 | `describe("[B24-A2F, 2026-10-09] the history-only allowlist entries` |
 | C44 | `app/lib/qualification/__tests__/b24-a2-headers.test.ts` | 371 | `it("13. [B24-A2F review, 2026-10-09] section 15 is checked as section 14 is` |
-| C45 | `app/lib/qualification/__tests__/b24-a2-secret-scan.test.ts` | 601 | `it("(r) [B24-A2F review, 2026-10-09] security-1, red first on the review's tree` |
-| C46 | `app/lib/qualification/__tests__/b24-a2-secret-scan.test.ts` | 615 | `it("(s) [B24-A2F review, 2026-10-09] security-3, green at launch` |
+| C45 | `app/lib/qualification/__tests__/b24-a2-secret-scan.test.ts` | 604 | `it("(r) [B24-A2F review, 2026-10-09] security-1, red first on the review's tree` |
+| C46 | `app/lib/qualification/__tests__/b24-a2-secret-scan.test.ts` | 618 | `it("(s) [B24-A2F review, 2026-10-09] security-3, green at launch` |
 
 **Gates** (every vitest run through the lock script, two workers, one job at a time; tsc, eslint and the scanner through the heavy-job
 script; the logs under the scratchpad's `b24/logs/a2f-*`; **CONFIRMED** by execution):

@@ -295,7 +295,7 @@ describe("[B24-F] the verdict lines are the matrix's and the code's (runbook :11
   it("9. b24-e-statements scans every B24-F page: its page set is every artifacts Markdown page but the lead's records, B24's README and discovery and the matrix (deliverable 7)", () => {
     const tripwire = readRepo("app/lib/qualification/__tests__/b24-e-statements.test.ts");
     expect(tripwire).toContain(`const pages = (): string[] => [...everyFile("artifacts", (name) => name.endsWith(".md")).filter((path) => !EXCLUDED(path))`);
-    expect(tripwire).toContain(`const EXCLUDED = (path: string): boolean => path.startsWith("artifacts/remaining-builder-program/") || ["artifacts/ai-control-plane-b24/README.md", "artifacts/ai-control-plane-b24/discovery.md", MATRIX].includes(path);`);
+    expect(tripwire).toContain(`const EXCLUDED = (path: string): boolean => path.startsWith("artifacts/remaining-builder-program/") || ["artifacts/ai-control-plane-b24/README.md", "artifacts/ai-control-plane-b24/discovery.md", MATRIX, OWNER_DIRECTIVE].includes(path);`); // [PR-G, 2026-10-17] reviewed pin move: + OWNER_DIRECTIVE, the owner's assignment (an instruction, never a claim) excluded by path from b24-e's claim scan; the lead's records, B24's README and discovery and the matrix stand
     const excluded = (path: string): boolean => path.startsWith("artifacts/remaining-builder-program/") || [`${B24}README.md`, `${B24}discovery.md`, MATRIX].includes(path);
     for (const page of [...PAGES, `${B24}trust-boundary-map.md`, MAP, `${B24}agent-graph.md`, `${B24}generator-inventory.md`]) {
       expect(excluded(page), page).toBe(false);
