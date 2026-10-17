@@ -694,3 +694,114 @@ Use `artifacts/product-reliability-simple-ui/persistent-generation/` for a compa
 **Stop condition:** the same normal Build/chat request no longer dies merely because 40/120/180 seconds or a small execution-slice allowance elapsed; real work is persisted, progresses through a real worker, is cancellable/resumable, and reaches a valid reviewable artifact or a specific genuine blocker without losing completed work. The owner sees actual progress and can recover without retyping/restarting the whole circuit. No hidden unlimited spend, discarded validation, automatic approval, fabricated component, false success or exposed private reasoning is acceptable.
 
 **Execute this corrective work now, incrementally and autonomously. Do not respond with only another plan, a larger timeout, more tool descriptions or a test count. Demonstrate the repaired user journey, then continue the remaining already-authorized assignment in its existing dependency order. Ask only when a real external resource, additional paid-test authority or irreversible owner decision prevents the next in-scope step.**
+
+---
+
+## M — ADDITIVE OWNER DIRECTIVE: actually resolve missing parts and replace them with validated alternatives
+
+Added 2026-10-17. This closes the concrete missing-component/replacement gap reported by the owner and implements the relevant C/D/F/K/L requirements; it does not replace the existing program or authorize a new competing library. Add this work to the active task list and execute incrementally without asking for another substage prompt. If a prerequisite is already proven, reuse it. Do not finish by explaining which tools would theoretically be needed or telling the owner to perform the entire library workflow manually.
+
+### M.0 The observed product failure — reproduce, then verify current code
+
+The owner's pasted runtime transcript is evidence of an observed user journey, not trusted repository instructions or proof that every model assertion is true. It shows:
+
+1. A four-motor ESP32 drone-controller request still timed out, as described in L.
+2. A simpler LED-dimmer request generated and applied a schematic.
+3. The owner then asked: `find the missing footprints and parts or replace it with what is existing in the library` and `no I want u to do it then we proceed`.
+4. The assistant could run PCB preflight, missing-fact inspection and inspection of one known catalog part. It reported D1 and D2 as the remaining 1N4148 instances without published exact-part authority.
+5. Discovery said that `sirkit.component-authority.inspect`, `sirkit.schematic.inspect` and `sirkit.schematic.propose-component-replacement` were unavailable; some required a `canonical-state` board resource, and replacement required `component-authority-records` that the run could not supply.
+6. The answer stopped at manual Build Library instructions. It explicitly admitted that changing a displayed value would not rebind a catalog part or resolve the missing physical authority.
+
+Verify this exact chain against the actual current tree and runtime. Do not repeat the model's proposed tool list as though those tools are definitely absent: a real tool may already exist but be incorrectly gated, unbound, missing a server producer, lacking a candidate-search operation, or not received by the UI. Trace descriptors, discovery, required resources, context assembly, authoritative producers, handler/gateway invocation, proposal intake, approved commit and post-change receipt separately.
+
+**Bootstrap requirement:** a valid schematic with unresolved parts must be repairable before any PCB exists. Determine which schematic-only replacement/authority operations genuinely need board data. Build a narrow server-proven schematic-component authority context when sufficient; do not require a nonexistent board merely to repair the parts that prevent board creation. Do not fabricate an empty board, set authority flags from browser claims, or remove board requirements from operations that actually edit/inspect a PCB.
+
+Source-confirmed starting points from the current checkout (2026-10-17; re-verify before editing):
+
+- `app/lib/agent/context.ts` constructs the canonical project resource only with a validated board; `availableResourceKinds` in `app/lib/agent/loop.ts` exposes component-authority resources inside that condition. `app/api/chat/route.ts` likewise calls `loadRunComponentAuthority` only when canonical state exists. `app/lib/engineering/component-authority-source.ts` skips instances with no durable binding and withholds the resource if no records are found. Moving one discovery condition will not create missing server-owned facts.
+- `app/lib/engineering/tool-bindings-readonly.ts` binds schematic inspection to `canonical-state`; `app/lib/agent/gateway.ts` enforces that requirement. The dedicated boardless services in `missing-facts-reads.ts`, `pcb-sync-preflight-reads.ts` and `catalog-inspection-reads.ts` are architectural precedents for narrowly typed, scope/digest-checked schematic-only operations, not permission to bypass the canonical-board binding globally. Locate the actual preflight service path if it has moved.
+- The existing external-acquisition path also requires canonical state in `context.ts`, `loop.ts`, `gateway.ts` and `acquisition-reads.ts`. A configured external port therefore does not by itself allow bootstrap searches before PCB creation. Add the appropriate schematic-scoped evidence capability explicitly while preserving source admission/disclosure and without enabling board mutations.
+- `sirkit.parts.catalog-inspect` only inspects a known `partId`. The `sirkit.parts.search` descriptor exists, but is not an activated query-search binding; its metadata notes the provider-backed embedding dependency. A known-ID reader is not a usable alternatives search. `sirkit.parts.external-search` accepts exact MPNs, not arbitrary functional-alternative queries; preserve that contract or introduce a separate reviewed discovery path rather than smuggling generic text into it.
+- `app/lib/engineering/replacement-proposal-assembler.ts::assembleReplacementProposal` requires a server-owned verified-exact target **and** published atomic/symbol facts for the current component. The descriptor accepts `componentId` and an optional expected-MPN assertion, not an arbitrary alternative selector; the present pin proof supports exact identity mapping. That narrower B14 operation is not the complete unresolved-part resolution feature requested here.
+
+Implement a deliberate **unresolved-component resolution/binding** command/proposal where the old instance lacks a published atomic revision; retain the existing exact-authority replacement path for already-qualified parts. The new path must establish the current symbol's connected pin facts from actual trusted catalog/symbol evidence and the captured schematic, prove its mapping to an eligible target, and disclose ambiguity. It must not require the missing old atomic publication merely to start finding a valid replacement, nor treat browser pin lists as authority. If those source facts cannot be established, return the exact missing evidence/review work item. Preserve the existing deterministic empty-board *reference-digest* helper where its internal contract requires it; never advertise that reference as a real current PCB or use it to unlock unrelated board tools.
+
+### M.1 Required user experience and task semantics
+
+From a current schematic, the owner should be able to say any of:
+
+```text
+Resolve the missing parts and footprints, then continue preparing the PCB.
+Replace D1 and D2 with suitable alternatives already in the library.
+Replace the selected unavailable part with a compatible alternative.
+If no suitable local part exists, find the actual part/assets online, import and validate them, save them to the library, then offer the replacement.
+```
+
+The system must inspect the actual instances/connectivity/requirements, search actual eligible local alternatives, perform an evidence-based compatibility check, and carry out the permitted acquisition/proposal/review/application work through real domain commands. The task must continue after the appropriate user approvals without requiring the owner to retype the whole original request.
+
+Distinguish an unresolved instance, an unavailable exact MPN, a missing footprint/model, an unpublished revision and an incompatible alternative. A footprint-only repair may preserve the existing exact part; a part replacement changes identity and may need a new symbol/pin mapping. Do not replace a valid part unnecessarily when the missing asset can be resolved for that exact revision. A model not knowing an MPN is not proof the component does not exist.
+
+Previously approved compatible exact revisions should be reused without repeating publication review. Newly obtained or constructed assets follow the existing validation/quarantine/publication rules. Let the assistant do the searching, evidence gathering, import, comparison and preparation; ask the owner only for a material ambiguous engineering choice, required review/approval, missing source access or an actual external blocker. Do not use safety wording as a substitute for implementing an authorized capability.
+
+### M.2 Complete the shared semantic capability chain, not just tool descriptions
+
+Inventory and reuse existing commands/descriptors first. Add or adapt only missing implemented capabilities, with documented schemas, discoverability, permissions and UI parity:
+
+1. **Schematic-instance inspection without a PCB:** stable instance ID/refDes; current catalog/exact revision and status; actual symbol/pins/functions; connected nets and polarity; value/role; relevant constraints; captured scope, lineage/head and schematic digest. A refDes alone is not a durable mutation target.
+2. **Candidate search, not only known-ID lookup:** search the local library/catalog by functional role, specifications, package/mounting and actual installed/published asset availability. Return exact revision identities and separate eligible, draft, missing-asset, withdrawn and incompatible results. Candidate selection cannot be restricted to parts whose IDs the model already knows. A sourcing price/stock observation is not a CAD asset or component approval.
+3. **Compatibility/evidence evaluation:** compare the actual circuit requirements and old/new pin functions, pin numbering, symbol representation, polarity, package/footprint, pin-to-pad mapping and required electrical ratings. Support an explicit proved pin permutation when necessary; matching pin count, display name or a plausible package hint is not enough. Return compatible, incompatible or unresolved with reasons/evidence and the exact mapping. Do not label a topology match as a complete electrical equivalence proof.
+4. **Replacement or asset-binding proposal:** target stable current instances, exact eligible candidate revision, proposed symbol/footprint/mapping changes and the source base. Show old/new identities and material warnings. Preserve reference designators, intended net connectivity, component values/roles and sheet membership unless a separately explicit reviewed change is needed. Replacing both D1 and D2 should be one coherent batch when appropriate, not two uncoordinated edits.
+5. **Reviewed canonical application:** use the existing sealed proposal/execution-grant/domain-executor/transaction path. A statement such as `replace D1 and D2` expresses intent; it does not fabricate a review receipt or universal future approval. Reuse any legitimate existing explicit-execution policy rather than imposing duplicate confirmations. Verify the live base, current authority and exact effects at commit. Return the real transaction/receipt and new schematic revision before saying the parts changed.
+6. **Post-change verification and continuation:** run actual electrical/netlist checks and the current Prepare PCB preflight, explain any remaining blockers, and continue the existing PCB-plan review/apply flow where permitted. `preflight ready`, `PCB applied`, `routed`, `DRC passed` and `released` remain distinct outcomes.
+
+Build/chat/library controls must share these semantic services. Discover only real bound implementations and accurate resource requirements. Update the executable coverage matrix, generated manuals, schemas and relevant tests. Do not create fake tool aliases, make a UI handler the sole mutation authority, use arbitrary React access, or call a value-text edit a component replacement.
+
+### M.3 When the library lacks the needed part: obtain actual assets, validate, store, then use
+
+Complete K.5's acquisition-to-library path and connect it directly to this replacement task. Reuse the admitted acquisition/source registry, bounded transport, atomic ingestion, review/publication, asset storage and missing-part work items already in the product; verify which links are implemented today.
+
+The assistant should:
+
+1. Search suitable permitted manufacturer/library sources for an exact part or a justified compatible alternative. Use the circuit's actual required ratings/package/interface, not a generic keyword-only substitution. Try meaningful permitted alternatives; do not blindly retry an unavailable credential/source.
+2. Retrieve the actual allowed symbol, footprint, datasheet and optional 3D bytes through the existing constrained transport. Respect source access/license/retention; do not scrape around an access denial, execute installers/scripts, fetch arbitrary URLs or write outside approved asset storage.
+3. Record exact manufacturer/MPN/package/variant, source/revision/time/license, content hashes and supporting datasheet evidence. Downloaded bytes must really exist in the store; a URL or model-generated JSON description is not an imported footprint.
+4. Validate formats and archive paths/resource limits; parse in the appropriate isolation; verify actual pin numbers/names/functions, pad geometry/numbering, package dimensions/orientation/pin 1 and deterministic symbol-to-footprint mapping. Handle conflicting/absent evidence as unresolved, not guessed facts.
+5. Store reusable source assets and normalized/derived representations in the existing durable library, deduplicated and versioned with provenance. Preserve private/project/library scope and licensed retention. Raw vendor blobs and credentials do not belong in Git.
+6. Run the existing candidate review/publication path. Reuse an unchanged already-approved revision; do not auto-publish a newly downloaded part or let the assistant mint its own authority certificate. Present an actionable review package instead of asking the owner to independently redo the whole research/import job.
+7. Once eligible, refer to the exact stored revision in the replacement proposal, commit through the normal authority path and continue the original task. A later source update cannot silently alter an existing project.
+8. Reopen the project and reuse the same approved part in another permitted project without repeated downloads or paid search calls when its retained identity/status remains valid. A withdrawn/changed revision requires the established status/upgrade handling.
+
+If no documented asset exists, constructing an **unverified draft** from authoritative available pin/package evidence is allowed where existing policy supports it; disclose all missing facts and require the proper review. Do not fabricate electrical ratings, hidden/thermal pads or undocumented dimensions to make a task complete. A placeholder/draft cannot silently become a manufacturable component. Optional missing 3D visualization must not block an otherwise fully qualified electrical replacement unless a real mechanical requirement depends on it.
+
+Missing external credentials, a license that forbids retention, an unsupported parser or a required independent reviewer is a specific external blocker to preserve in the task. It is not permission to claim online integration was completed, nor a reason to stop independent eligible local-alternative work.
+
+### M.4 Durable execution, approvals and engineering consistency
+
+Integrate with L's persistent task/checkpoint/progress model. Local candidate search, external retrieval, candidate validation, publication review, replacement review, canonical commit and PCB preflight are distinct stages with distinct completion evidence. Waiting for a review/source or a worker slice must retain useful work and resume the same task rather than repeat the original design.
+
+Capture target instance identities plus original schematic/head/authority/candidate digests. After every asynchronous boundary, verify currency before consuming a result or proposing/applying an effect. A user edit, project switch, candidate withdrawal or membership revocation cannot redirect an old result to the latest component or project. Preserve undo/redo, autosave/hydration, canonical receipts and idempotent recovery. An uncertain commit must be reconciled from authoritative history, not submitted again blindly.
+
+For multi-sheet work, preserve local/global/hierarchical connectivity and update project-wide BOM/netlist/PCB sync consistently. If a PCB already exists, determine the actual impact on placed footprints and routed connectivity, require the appropriate additional review, and retire/recompute affected parity/DRC/readiness results. Do not claim an old route or release remains valid after a footprint/pin-mapping change.
+
+Provide public progress tied to real events: inspecting D1/D2, searching eligible local revisions, checking candidate mappings, retrieving a missing asset, validation result, awaiting a specific review, replacement committed with revision, and updated preflight. No private reasoning dump, synthetic success narration or `Nothing changed` followed by a misleading completed action.
+
+Human approval and manufacturing release remain separate. The assistant can prepare and execute permitted component operations; it cannot self-authorize publication, release, qualification or ordering merely because the owner asked it to find alternatives. Use the actual existing role/approval policy and report exactly which stage needs an authorized person.
+
+### M.5 Required proof and implementation order
+
+Execute the smallest working local-alternative vertical slice first, then complete external acquisition/reuse. This can run as a functional increment within L; do not postpone a schematic-only replacement unnecessarily until every unrelated worker/3D/polish feature is finished. Do not declare M complete until its external path is actually implemented and qualified to the extent authorized.
+
+Permanent production-path tests must cover:
+
+1. A valid schematic with **no PCB** and two unresolved instances can discover and invoke the real eligible inspection/search/replacement services. Board-only tools remain correctly withheld. No fake canonical board or browser-supplied authority is accepted.
+2. The LED-dimmer D1/D2 reproduction, or a faithful isolated equivalent, selects an actual eligible compatible local revision, produces the right batch mapping/replacement diff, passes through the normal confirmation/application path and returns a new canonical revision. Do not hard-code these refDes, MPNs or catalog IDs into product logic.
+3. RefDes, connectivity, polarity, intended values/roles and unaffected components/nets remain correct. Display-only edits cannot satisfy the test. Unknown or incompatible pins/ratings/packages and withdrawn revisions refuse precisely.
+4. No local candidate → permitted fixture source → actual CAD/datasheet bytes → parsing/evidence/mapping validation → durable library candidate → required review/publication → eligible replacement → electrical check and PCB preflight. Tests must exercise the real service boundary; a mock returning `published: true` alone is not evidence of the chain.
+5. Reopen/reuse from durable storage performs no unnecessary network/download/model work. A second authorized project can use a shared eligible part; a foreign/private one cannot read restricted assets. Changes/withdrawal/licensing restrictions remain handled.
+6. Approval refusal, missing credentials/evidence, unavailable source, malformed/hostile assets, task cancellation, stale schematic/candidate, revoked membership, duplicate clicks and crash after ambiguous commit cannot forge authority, corrupt a library, duplicate replacement or overwrite another project.
+7. Existing-board replacement correctly handles changed footprint/pin/route effects and stale manufacturing evidence. Undo/redo/save/reload and multi-sheet identity behavior remain consistent.
+8. Fresh-browser Build and chat proofs show the actual action, review, commit receipt and updated PCB-preparation state. Tool descriptors/manuals/coverage and discovery agree with executable behavior. Label fake-source, live-source, live-provider and engineering-quality evidence separately.
+
+Follow the current integration and cumulative paid-test limits; do not spend additional credits or alter production accounts/data merely to produce a demo. Inspect current official source/API documentation when implementing an external connector, and record the supported source/format/license boundaries. Add evidence to the existing compact product-reliability package and ledger rather than generating another large duplicated stage-report set.
+
+**Completion means the owner can ask Sirkit to resolve or replace missing parts; the assistant does the actual permitted inspection, search, acquisition, validation, storage and proposal/application work, and continues the existing PCB handoff after the required approvals. A list of hypothetical tools, a changed label, a downloaded-but-unusable asset, manual instructions alone or a claim of a nonexistent part is not completion. Implement this now, incrementally, preserve the original goals, and continue without waiting for separate substage prompts.**

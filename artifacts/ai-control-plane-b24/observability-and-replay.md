@@ -1225,9 +1225,9 @@ Each row resolves on the line it names (`b24-c3-recorded-limits` 11): the anchor
 | C49 | `scripts/retention-purge.ts` | 88 | `if (ENTRY_MODULE) void main(process.argv.slice(2), process.env)` |
 | C50 | `.github/workflows/deterministic-manufacturing.yml` | 422 | `app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts` |
 | C51 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 54 | `const CHAPTERS = ["b19-", "b20-", "b21-", "b22-", "b23-", "b24-"] as const;` |
-| C52 | `app/lib/durable-workflow/types.ts` | 45 | `export interface DurableWorkflowRepository {` |
-| C53 | `app/lib/durable-workflow/types.ts` | 50 | `getReplay<TResult extends object = object>(` |
-| C54 | `app/lib/durable-workflow/types.ts` | 55 | `listOutbox(input?:` |
+| C52 | `app/lib/durable-workflow/types.ts` | 50 | `export interface DurableWorkflowRepository {` |
+| C53 | `app/lib/durable-workflow/types.ts` | 55 | `getReplay<TResult extends object = object>(` |
+| C54 | `app/lib/durable-workflow/types.ts` | 60 | `listOutbox(input?:` |
 | C55 | `app/lib/durable-workflow/server-repository.ts` | 14 | `async loadHead<T extends object = object>(value: DurableAggregateIdentity)` |
 | C56 | `app/lib/durable-workflow/server-repository.ts` | 17 | `async history<T extends object = object>(value: DurableAggregateIdentity)` |
 | C57 | `app/lib/durable-workflow/stable.ts` | 18 | `export function canonicalDurableScope(scope: DurableWorkflowScope)` |

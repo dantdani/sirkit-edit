@@ -725,10 +725,10 @@ describe("[B24-C1] the census and the import gates (section 7)", () => {
       expect(closure.filter((file) => NEVER_IN_CALL_POINTS.includes(file)), entry).toEqual([]);
       await new Promise((resolve) => setImmediate(resolve));
     }
-    expect(importersOf(map, SEAM).filter((file) => !file.startsWith("app/lib/observability/"))).toEqual([...CALL_POINTS].sort());
+    expect(importersOf(map, SEAM).filter((file) => !file.startsWith("app/lib/observability/"))).toEqual([...CALL_POINTS, "scripts/generation-worker.ts"].sort()); // [PR-L, 2026-10-17] reviewed pin move (runbook L.3, increment 3): + scripts/generation-worker.ts, the generation worker process's composition root, which enters the call scope (`withLlmCallScope`, route /api/generation-tasks) around each slice it runs - a scope entry like the three route wrappers, not a call point (it makes no SDK call; its provider calls go through the router, a call point); was the four call points alone
     expect(importersOf(map, CALL_STORE).filter((file) => !file.startsWith("app/lib/observability/"))).toEqual([]);
     expect(importersOf(map, CALL_STORE)).toContain(CALL_RUNTIME);
-    expect(importersOf(map, CALL_RUNTIME)).toEqual(["instrumentation.ts"]);
+    expect(importersOf(map, CALL_RUNTIME)).toEqual(["instrumentation.ts", "scripts/generation-worker.ts"]); // [PR-L, 2026-10-17] reviewed pin move (runbook L.3, increment 3): + scripts/generation-worker.ts, the second PROCESS that binds the durable sink (`bindDurableLlmCallRecordSink`): the worker runs outside the Next process instrumentation.ts binds, so without its own binding its calls would be `unbound`; was instrumentation.ts alone
     expect([...map].filter(([, source]) => /new\s+PostgresDurableWorkflowRepository\s*\(/.test(source)).map(([path]) => path).sort()).toEqual(["app/lib/durable-workflow/runtime.ts", "scripts/retention-purge.ts"]); // [B24-C3, 2026-10-09] reviewed pin move (D11): + the purge CLI, whose read mode constructs the PostgreSQL repository for its read-only adapter (b24-c3-trace-read 10 pins the pair); was the durable runtime alone
     const probe = (path: string, append: string): FileMap => new Map(map).set(path, `${map.get(path)!}\n${append}\n`);
     const router = "app/lib/llm/router.ts";
