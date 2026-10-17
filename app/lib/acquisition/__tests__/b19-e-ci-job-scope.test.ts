@@ -228,8 +228,8 @@ describe("[B19-E E2 review] CI job scope", () => {
       "app/lib/agent/orchestration/__tests__/b21-a-page.test.ts",
     ]));
     for (const file of b21) expect(filters.filter((filter) => file.includes(filter)), file).toHaveLength(1);
-    const runs = runBy("prompt-to-gerber"); // [B24-D0, 2026-10-09] and none is excluded: every B21 suite still runs in prompt-to-gerber (OD-30's split moved none)
-    for (const file of b21) expect(runs, file).toContain(file);
+    const runs = runBy("prompt-to-gerber"); const moved = runBy("agent-boundary-suites"); const orchestration = (file: string): boolean => file.startsWith("app/lib/agent/orchestration/__tests__/"); // [PR-G, 2026-10-17] reviewed pin move (OD-250): every B21 suite runs in exactly one offline job - the orchestration suites in agent-boundary-suites, since OD-250 excludes their directory filter from prompt-to-gerber (ci-split.md section 4), every other B21 suite (the route suites, b21-e4-composer-routing) still in prompt-to-gerber; [B24-D0, 2026-10-09] and none is excluded: every B21 suite still runs in prompt-to-gerber (OD-30's split moved none)
+    for (const file of b21) expect([runs.includes(file), moved.includes(file)], file).toEqual(orchestration(file) ? [false, true] : [true, false]);
     expect(b21.filter(startsPostgres)).toEqual([]);
     // no B21 suite under app/lib/engineering/__tests__: benchmark-core would run it a second time on every PR
     expect(b21.filter((file) => file.startsWith("app/lib/engineering/__tests__/"))).toEqual([]);

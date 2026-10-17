@@ -367,7 +367,7 @@ after `page-browser-e2e`, so a job appended after it is allowed.
 
 [B24-A1 check, 2026-10-06] The review round's note here named only B3, C1 and C2 and gave a row of another form; it is replaced by
 the following. The later B24 tasks that insert workflow lines are, by their task files read at this date (section 13):
-A2, A4, B2, B3, C1, C2, C3, D1 and D2 (A3, B1, D3, E and F add none). [B24-D4, 2026-10-10] B24-D4, the lead's corrective increment under OD-30, appends two rows below: page-browser-e2e's `env:` mapping (`SIRKIT_E2E_SKIP`) and the appended `page-browser-e2e-b24` job (its count includes the leading blank line; [B24-D4 lead, 2026-10-10] named for B24's own browser specs, B24-D2's two and B24-D3's two, by the lead's option (b), `ci-split.md` section 11.9).
+A2, A4, B2, B3, C1, C2, C3, D1 and D2 (A3, B1, D3, E and F add none). [B24-D4, 2026-10-10] B24-D4, the lead's corrective increment under OD-30, appends two rows below: page-browser-e2e's `env:` mapping (`SIRKIT_E2E_SKIP`) and the appended `page-browser-e2e-b24` job (its count includes the leading blank line; [B24-D4 lead, 2026-10-10] named for B24's own browser specs, B24-D2's two and B24-D3's two, by the lead's option (b), `ci-split.md` section 11.9). [PR-G, 2026-10-17] PR-G (OD-250: the 19 pr- suites no CI job selected admitted to prompt-to-gerber and moved with the `app/lib/agent/orchestration/__tests__` filter to agent-boundary-suites, `ci-split.md` section 4) appends five rows below in the same form under its own id, `[PR-G, 2026-10-17]` (the row pattern of `b24-a1-environment-profile`, `b24-d0-ci-split` and `b24-d4-browser-split` admits `PR-[A-G]` beside `B24-<id>`), and joins five wrapped lines of section 11 (no word changed) so every line from section 12 on keeps its number.
 None of them rewrites the table above or moves any workflow line number on this page, here or in section 14. For each contiguous
 group of lines it inserts - an appended job, and lines inside `production-smoke` (PROPOSED until its first CI run), included - it
 appends one row to the insertion table below, in insertion order: ``| [B24-<id>, <date>] | <job> | `:<first>` | <count> |``, where
@@ -402,6 +402,11 @@ handover text the lead pastes into the nine task files is in section 13.
 | [B24-D2, 2026-10-09] | database-delivery | `:384` | 1 |
 | [B24-D4, 2026-10-10] | page-browser-e2e | `:418` | 2 |
 | [B24-D4, 2026-10-10] | page-browser-e2e-b24 | `:629` | 35 |
+| [PR-G, 2026-10-17] | prompt-to-gerber | `:294` | 19 |
+| [PR-G, 2026-10-17] | prompt-to-gerber | `:316` | 1 |
+| [PR-G, 2026-10-17] | prompt-to-gerber | `:352` | 19 |
+| [PR-G, 2026-10-17] | agent-boundary-suites | `:622` | 1 |
+| [PR-G, 2026-10-17] | agent-boundary-suites | `:658` | 19 |
 
 ## 11. Gates
 
@@ -414,8 +419,7 @@ handover text the lead pastes into the nine task files is in section 13.
 
 [B24-A1 check, 2026-10-06] `b24-a1-environment-profile` went from 19 to 20 cases (case 20, the handover); the four suites now hold 55.
 
-Every gate below ran through the lock script (two workers), one at a time, every process stopped after; `.next/` was removed before
-the first. Counts are files, then tests.
+Every gate below ran through the lock script (two workers), one at a time, every process stopped after; `.next/` was removed before the first. Counts are files, then tests.
 
 | gate | result |
 |---|---|
@@ -437,16 +441,13 @@ the first. Counts are files, then tests.
 
 Found in the run and fixed before the final gates (each was this increment's own slip, caught by an existing gate):
 - `b23-a-provider-admission` case 8 listed the new B24 files until its one reviewed move (D6) landed;
-- `b23-closeout-statements` case 7 refused `b24-a1-configuration` for spelling B23's deferred retirement (`DC-05R`) in a list of
-  names production must not use; the name was dropped from the list (the closeout's own case pins it);
-- `b23-d-physical-evidence-contract` case 8 refused the flag inventory for spelling the evidence module's path in an exclusion's
-  sites; the exclusion now cites no site and says why.
+- `b23-closeout-statements` case 7 refused `b24-a1-configuration` for spelling B23's deferred retirement (`DC-05R`) in a list of names production must not use; the name was dropped from the list (the closeout's own case pins it);
+- `b23-d-physical-evidence-contract` case 8 refused the flag inventory for spelling the evidence module's path in an exclusion's sites; the exclusion now cites no site and says why.
 No other gate failed; no case timed out and no `Timeout calling onTaskUpdate` was seen.
 
 ### The review round's gates (2026-10-06, the final tree)
 
-The table above is A1's own run. After the review fixes every gate ran again through the lock script, one at a time, with no `.next/`
-present, every process stopped after. **CONFIRMED**:
+The table above is A1's own run. After the review fixes every gate ran again through the lock script, one at a time, with no `.next/` present, every process stopped after. **CONFIRMED**:
 
 | gate | result |
 |---|---|
@@ -465,8 +466,7 @@ present, every process stopped after. **CONFIRMED**:
 | the 21 generators | each exit 0; no drift (status, every changed or new file's hash and the tracked diff identical before and after) |
 | a byte scan of every file the review round changed (control bytes, CR, PEM markers, provider key shapes) | none found |
 
-No gate failed, no case timed out and no `Timeout calling onTaskUpdate` was seen. The slowest new case is `b24-a1-flags` 4 (about
-1.2 s here; it declares a 30 s timeout).
+No gate failed, no case timed out and no `Timeout calling onTaskUpdate` was seen. The slowest new case is `b24-a1-flags` 4 (about 1.2 s here; it declares a 30 s timeout).
 
 ### The check round's gates (2026-10-06, the final tree)
 

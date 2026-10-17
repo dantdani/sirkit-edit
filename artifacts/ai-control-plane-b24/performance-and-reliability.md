@@ -148,7 +148,7 @@ records commit lands green: before the round a legitimate v2 planted into the fi
   (`b24-d1-latency-policy` 8). Its minutes per run are **UNKNOWN** until its first run (locally the two suites take 101.7 s and
   19.8 s); no auto-retry.
 - **The OD-30 steps** (`deterministic-manufacturing.yml`): `prompt-to-gerber`'s start step at `:32` and headroom step at `:344-345`,
-  `page-browser-e2e`'s at `:405` and `:432-433`, `agent-boundary-suites`'s at `:565` and `:624-625` ([B24-D4, 2026-10-10] now `:406` and `:435-436`, `:568` and `:627-628`: +1 after B24-D2's database-delivery entry at `:384`, +2 more for the lines after B24-D4's `env:` mapping at `:418-419`; prompt-to-gerber's stand) (lead decision D19; A1's
+  `page-browser-e2e`'s at `:405` and `:432-433`, `agent-boundary-suites`'s at `:565` and `:624-625` ([B24-D4, 2026-10-10] now `:406` and `:435-436`, `:568` and `:627-628`: +1 after B24-D2's database-delivery entry at `:384`, +2 more for the lines after B24-D4's `env:` mapping at `:418-419`; prompt-to-gerber's stand; [PR-G, 2026-10-17] now `:445` and `:474-475`, `:607` and `:686-687`: +39 after PR-G's 39 prompt-to-gerber lines at `:294-312`, `:316` and `:352-370`, +20 more for agent-boundary-suites' lines at `:622` and `:658-676` (OD-250)) (lead decision D19; A1's
   insertion table carries the six rows). Still exactly two `playwright test` lines ([B24-D4, 2026-10-10] superseded: three, B24-D4's appended `page-browser-e2e-b24` runs the four moved specs ([B24-D4 lead, 2026-10-10] the lead's option (b): B24-D2's two with B24-D3's two), with B24-D1's start and headroom steps; `ci-split.md` section 11); no new line ends in `pnpm exec vitest run`; the
   admission helper derives the three jobs. **CONFIRMED** (`b24-d1-latency-policy` 9, `b19-e-ci-job-scope`).
 - **Headroom.** `page-browser-e2e` (of 30) and `prompt-to-gerber` (of 25) are gated since D1; their headroom on the D1 CI run is the
@@ -446,7 +446,7 @@ The lead's commit gate re-runs each chain; the one red case is the lead's own pi
 
 ### The README rows of B24-C1..C3 and B24-D0
 
-- [B24-D1, 2026-10-09] their workflow lines are `:381`, `:382`, `:383` (C1-C3's database-delivery entries), `:294-331` (D0's `--exclude` lines) and `:557-625` (`agent-boundary-suites`, with D1's start step at `:565` and headroom step at `:624-625`) after B24-D1's OD-30 steps ([B24-D4, 2026-10-10] now `:560-628`, its start step at `:568`, its headroom step at `:627-628`: +1 after B24-D2's entry at `:384`, +2 after B24-D4's `env:` mapping at `:418-419`); the C1-C3 drafts on their pages carry the same dated note.
+- [B24-D1, 2026-10-09] their workflow lines are `:381`, `:382`, `:383` (C1-C3's database-delivery entries), `:294-331` (D0's `--exclude` lines) and `:557-625` (`agent-boundary-suites`, with D1's start step at `:565` and headroom step at `:624-625`) after B24-D1's OD-30 steps ([B24-D4, 2026-10-10] now `:560-628`, its start step at `:568`, its headroom step at `:627-628`: +1 after B24-D2's entry at `:384`, +2 after B24-D4's `env:` mapping at `:418-419`; [PR-G, 2026-10-17] now `:599-687`, its start step at `:607`, its headroom step at `:686-687`, C1-C3's entries at `:420`, `:421`, `:422` and D0's `--exclude` lines at `:313-315` and `:317-351`: +39 after PR-G's 39 prompt-to-gerber lines at `:294-312`, `:316` and `:352-370`, +20 more inside the job at `:622` and `:658-676` (OD-250)); the C1-C3 drafts on their pages carry the same dated note.
 
 ### B24-D1 - Benchmark methodology and latency (2026-10-09 local; increment workflow + lead; this commit)
 

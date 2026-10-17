@@ -184,7 +184,7 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
   it("2. (ii) the SIRKIT_E2E_SKIP value under page-browser-e2e's first browser step names exactly the specs the new job runs, each existing, each glob **/<name>.spec.ts, and no other line names the variable; the helper reads both lists and refuses a malformed glob, a glob naming no spec, a non-e2e argument and a missing or doubled run line", () => {
     const workflow = lines(WORKFLOW);
     const run = workflow.indexOf("      - run: pnpm exec playwright test");
-    expect(run + 1, "page-browser-e2e's first browser step, unmoved (B21's C49)").toBe(ENV_FIRST_LINE - 1);
+    expect(run + 1, "page-browser-e2e's first browser step, unmoved by D4 (B21's C49)").toBe(insertionRows().filter((row) => row.task === "PR-G").reduce((at, row) => (at >= row.first ? at + row.count : at), ENV_FIRST_LINE - 1)); // [PR-G, 2026-10-17] reviewed pin move (OD-250): D4's line carried through PR-G's rows (its 39 prompt-to-gerber lines above this step; was ENV_FIRST_LINE - 1 itself)
     expect(workflow[run + 1]).toBe("        env:");
     const entry = /^ {10}SIRKIT_E2E_SKIP: "([^"]*)" # \[B24-D4\] OD-30: [^\n]+$/.exec(workflow[run + 2]!);
     expect(entry, "the one env entry, quoted, with its dated comment").not.toBeNull();
@@ -281,18 +281,18 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
   it("5. (v) A1's insertion table ends with D4's two rows - the env mapping (:418, 2) inside page-browser-e2e and the appended job (its first line, its count with the leading blank line) - and with D4's lines taken out the workflow is 1fe719e's byte for byte", () => {
     const rows = insertionRows();
     const mine = rows.filter((row) => row.task === "B24-D4");
-    expect(rows.slice(-2)).toEqual(mine);
+    const later = rows.slice(rows.indexOf(mine[0]!) + 2); expect(rows.slice(rows.indexOf(mine[0]!), rows.indexOf(mine[0]!) + 2)).toEqual(mine); expect(later.map((row) => row.task)).toEqual(Array(5).fill("PR-G")); const atD4 = (line: number): number => [...later].reverse().reduce((at, row) => (at >= row.first + row.count ? at - row.count : at), line); // [PR-G, 2026-10-17] reviewed pin move (OD-250): D4's two rows are followed by PR-G's five, the only later rows (was: the table's last two); a line of this tree is read at D4's tree by taking PR-G's rows out
     const workflow = lines(WORKFLOW);
     const start = workflow.indexOf(`  ${JOB}:`);
     let first = start;
     while (/^(?:| {2}# .*)$/.test(workflow[first - 1]!)) first -= 1;
     const count = lineCount(workflow) - first;
-    expect(mine.map((row) => [row.date, row.job, row.first, row.count])).toEqual([[DATE, "page-browser-e2e", ENV_FIRST_LINE, 2], [DATE, JOB, first + 1, count]]);
+    expect(mine.map((row) => [row.date, row.job, row.first, row.count])).toEqual([[DATE, "page-browser-e2e", ENV_FIRST_LINE, 2], [DATE, JOB, atD4(first + 1), count]]); // [PR-G, 2026-10-17] the job's first line at D4's tree (was first + 1: PR-G's rows above it moved it +59)
     expect(workflow[first]).toBe("");
     // every line since A1 is recorded (A1's own check, `b24-a1-environment-profile` 14 and 16)
     expect(rows.reduce((sum, row) => sum + row.count, 0)).toBe(lineCount(workflow) - 435);
     // insertions only: D4's two groups taken out leave 1fe719e's workflow
-    const without = [...workflow.slice(0, ENV_FIRST_LINE - 1), ...workflow.slice(ENV_FIRST_LINE + 1, first + 1 - 1)];
+    const d4Tree = [...later].reverse().reduce((all: string[], row) => [...all.slice(0, row.first - 1), ...all.slice(row.first - 1 + row.count)], workflow); const without = [...d4Tree.slice(0, ENV_FIRST_LINE - 1), ...d4Tree.slice(ENV_FIRST_LINE + 1, atD4(first + 1) - 1)]; // [PR-G, 2026-10-17] reviewed pin move (OD-250): PR-G's groups taken out first (insertions only: the rows, last to first), then D4's
     expect(lineCount([...without, ""])).toBe(WORKFLOW_LINES_AT_BASE);
     expect(sha(`${without.join(NEWLINE)}${NEWLINE}`), "the workflow without D4's lines").toBe(SHA_WORKFLOW_AT_BASE);
   });
@@ -423,17 +423,17 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
     expect(workflow[boundaryHeadroom]).toContain("ci-job-headroom.ts");
     expect(workflow[browserHeadroom]).toContain("ci-job-headroom.ts");
     const reliability = lines("artifacts/ai-control-plane-b24/performance-and-reliability.md");
-    const now = `[B24-D4, ${DATE}] now \`:${browserStart}\` and \`:${browserHeadroom}-${browserHeadroom + 1}\`, \`:${boundaryStart}\` and \`:${boundaryHeadroom}-${boundaryHeadroom + 1}\``;
+    const prG = insertionRows().filter((row) => row.task === "PR-G"); const atD4 = (line: number): number => [...prG].reverse().reduce((at, row) => (at >= row.first + row.count ? at - row.count : at), line); const nowOf = (line: number): number => prG.reduce((at, row) => (at >= row.first ? at + row.count : at), line); const now = `[B24-D4, ${DATE}] now \`:${atD4(browserStart)}\` and \`:${atD4(browserHeadroom)}-${atD4(browserHeadroom) + 1}\`, \`:${atD4(boundaryStart)}\` and \`:${atD4(boundaryHeadroom)}-${atD4(boundaryHeadroom) + 1}\``; const nowPrG = `[PR-G, 2026-10-17] now \`:${browserStart}\` and \`:${browserHeadroom}-${browserHeadroom + 1}\`, \`:${boundaryStart}\` and \`:${boundaryHeadroom}-${boundaryHeadroom + 1}\``; expect(nowOf(atD4(boundaryStart))).toBe(boundaryStart); // [PR-G, 2026-10-17] reviewed pin move (OD-250): D4's note names the lines at D4's tree (PR-G's rows taken out), and a PR-G note names the lines that hold them now
     const steps = reliability.filter((line) => line.includes("`page-browser-e2e`'s at `:405` and `:432-433`, `agent-boundary-suites`'s at `:565` and `:624-625`"));
     expect(steps).toHaveLength(1);
-    expect(steps[0]).toContain(now);
-    const block = `[B24-D4, ${DATE}] now \`:${boundaryFirst}-${boundaryHeadroom + 1}\``;
+    expect(steps[0]).toContain(now); expect(steps[0]).toContain(nowPrG); // [PR-G, 2026-10-17] + the PR-G note
+    const block = `[B24-D4, ${DATE}] now \`:${atD4(boundaryFirst)}-${atD4(boundaryHeadroom) + 1}\``; const blockPrG = `[PR-G, 2026-10-17] now \`:${boundaryFirst}-${boundaryHeadroom + 1}\`, its start step at \`:${boundaryStart}\`, its headroom step at \`:${boundaryHeadroom}-${boundaryHeadroom + 1}\``; // [PR-G, 2026-10-17] reviewed pin move (OD-250): as `now`
     const readme = reliability.filter((line) => line.includes("`:557-625` (`agent-boundary-suites`, with D1's start step at `:565`"));
     expect(readme).toHaveLength(1);
-    expect(readme[0]).toContain(`${block}, its start step at \`:${boundaryStart}\`, its headroom step at \`:${boundaryHeadroom}-${boundaryHeadroom + 1}\``);
+    expect(readme[0]).toContain(`${block}, its start step at \`:${atD4(boundaryStart)}\`, its headroom step at \`:${atD4(boundaryHeadroom)}-${atD4(boundaryHeadroom) + 1}\``); expect(readme[0]).toContain(blockPrG); // [PR-G, 2026-10-17] D4's lines at D4's tree, then the PR-G note
     const d0 = lines(PAGE).filter((line) => line.includes("[B24-D1, 2026-10-09] the block is `:557-625`"));
     expect(d0).toHaveLength(1);
-    expect(d0[0]).toContain(`${block}, its start step at \`:${boundaryStart}\`, its headroom step at \`:${boundaryHeadroom}-${boundaryHeadroom + 1}\``);
+    expect(d0[0]).toContain(`${block}, its start step at \`:${atD4(boundaryStart)}\`, its headroom step at \`:${atD4(boundaryHeadroom)}-${atD4(boundaryHeadroom) + 1}\``); expect(d0[0]).toContain(blockPrG); // [PR-G, 2026-10-17] D4's lines at D4's tree, then the PR-G note
     // [B24-D4 lead, 2026-10-10] the rename: the draft name (assembled, so this file never holds it) is gone from every file D4 edits
     // but its pages, where each line that still names it carries the lead's dated note
     const draft = ["page-browser-e2e", "accessibility"].join("-");
@@ -476,7 +476,7 @@ function insertionRows(): Array<{ task: string; date: string; job: string; first
   const header = ten.indexOf("| task | job | first line | count |");
   const rows: Array<{ task: string; date: string; job: string; first: number; count: number }> = [];
   for (let index = header + 2; index < ten.length && ten[index]!.startsWith("|"); index += 1) {
-    const row = /^\| \[(B24-[A-F]\d*[a-z]?), (\d{4}-\d{2}-\d{2})\] \| ([a-z][a-z0-9-]*) \| `:(\d+)` \| ([1-9]\d*) \|$/.exec(ten[index]!);
+    const row = /^\| \[(B24-[A-F]\d*[a-z]?|PR-[A-G]), (\d{4}-\d{2}-\d{2})\] \| ([a-z][a-z0-9-]*) \| `:(\d+)` \| ([1-9]\d*) \|$/.exec(ten[index]!); // [PR-G, 2026-10-17] reviewed pin move: + PR-[A-G] (OD-250), as b24-a1-environment-profile's
     if (row) rows.push({ task: row[1]!, date: row[2]!, job: row[3]!, first: Number(row[4]), count: Number(row[5]) });
   }
   return rows;

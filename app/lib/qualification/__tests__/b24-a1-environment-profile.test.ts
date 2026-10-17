@@ -434,7 +434,7 @@ const A1_PGLITE_LINE = 302;
 const A1_SHIFT_OLD = [":50-259", ":260-270", ":272-302", ":272-309", ":276", ":285", ":285-302", ":286-302", ":301", ":317", ":317-336", ":319", ":323", ":333", ":336", ":345", ":348"] as const;
 type Insertion = { task: string; job: string; first: number; count: number };
 const INSERTION_HEADER = "| task | job | first line | count |";
-const INSERTION_ROW = /^\| \[(B24-[A-F]\d*[a-z]?), \d{4}-\d{2}-\d{2}\] \| ([a-z][a-z0-9-]*) \| `:(\d+)` \| ([1-9]\d*) \|$/;
+const INSERTION_ROW = /^\| \[(B24-[A-F]\d*[a-z]?|PR-[A-G]), \d{4}-\d{2}-\d{2}\] \| ([a-z][a-z0-9-]*) \| `:(\d+)` \| ([1-9]\d*) \|$/; // [PR-G, 2026-10-17] reviewed pin move: the task id admits PR-[A-G] beside B24-<id> (OD-250: PR-G's five rows, the first workflow insertions after B24); every other check of a row is unchanged
 /** Section 10's insertion table: one row per contiguous group of lines a later task inserted, in insertion order. */
 function insertionTable(page: string): { rows: Insertion[]; problems: string[] } {
   const all = section(page, SECTIONS[10]).split(NEWLINE);
@@ -586,7 +586,7 @@ function simulate(steps: readonly PlannedInsertion[], prose: "moved" | "unmoved"
   const final = origin;
   return { workflow, page, dfm, lineOf: (a1Line) => final.indexOf(a1Line) + 1 };
 }
-const insertionRowsOf = (page: string): string[] => section(page, SECTIONS[10]).split(NEWLINE).filter((line) => line.startsWith("| [B24-"));
+const insertionRowsOf = (page: string): string[] => section(page, SECTIONS[10]).split(NEWLINE).filter((line) => line.startsWith("| [B24-") || line.startsWith("| [PR-")); // [PR-G, 2026-10-17] reviewed pin move: + PR-G's rows (OD-250), as INSERTION_ROW
 
 describe("[B24-A1] the page environments-and-deployment.md", () => {
   it("13. the page states what is proven offline and by which suite, what is BLOCKED under LB-13, the hosting platform UNKNOWN (OD-190), LB-10 still blocked, the INFERRED proxy pass-through, the build history and the durations; its sections are in order and every suite row carries its real it( count", () => {
@@ -640,7 +640,7 @@ describe("[B24-A1] the page environments-and-deployment.md", () => {
     const planned = simulate(remaining);
     expect(lineCount(planned.workflow) - lineCount(lines(WORKFLOW))).toBe(remaining.reduce((sum, step) => sum + step.lines.length, 0));
     expect(insertionRowsOf(planned.page)).toHaveLength(insertionTable(read(PAGE)).rows.length + remaining.length);
-    expect(insertionRowsOf(planned.page)).toHaveLength(19); // [B24-D4, 2026-10-10] reviewed pin move: 17 -> 19, B24-D4's two real rows (page-browser-e2e's env mapping at `:418`, 2 lines, and the appended page-browser-e2e-b24 job at `:629`, 35 lines with its leading blank line; OD-30's split), each appended to the table; [B24-D1, 2026-10-09] reviewed pin move (the lead's): D1's six real rows where A1 planned four groups (lead decision D19 added agent-boundary-suites's two), +2 on D0's 15; [B24-D0, 2026-10-09] reviewed pin move (the lead's): D0's two real rows (the exclusions, the appended job) beside the 13 planned groups (OD-30's split)
+    expect(insertionRowsOf(planned.page)).toHaveLength(24); // [PR-G, 2026-10-17] reviewed pin move: 19 -> 24, PR-G's five real rows (OD-250: the 19 admitted pr- entries at `:294`, the orchestration filter's exclude at `:316`, the 19 excludes at `:352`, the orchestration line and the 19 entries of agent-boundary-suites at `:622` and `:658`); [B24-D4, 2026-10-10] reviewed pin move: 17 -> 19, B24-D4's two real rows (page-browser-e2e's env mapping at `:418`, 2 lines, and the appended page-browser-e2e-b24 job at `:629`, 35 lines with its leading blank line; OD-30's split), each appended to the table; [B24-D1, 2026-10-09] reviewed pin move (the lead's): D1's six real rows where A1 planned four groups (lead decision D19 added agent-boundary-suites's two), +2 on D0's 15; [B24-D0, 2026-10-09] reviewed pin move (the lead's): D0's two real rows (the exclusions, the appended job) beside the 13 planned groups (OD-30's split)
     expect(jobOrderProblems(planned.workflow)).toEqual([]); // A2's appended job (task-A2.md:340) follows production-smoke
     expect(shiftTableProblems(planned.page, planned.workflow)).toEqual([]);
     expect(sectionFourteenWorkflowProblems(planned.page, planned.workflow)).toEqual([]);

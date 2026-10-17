@@ -3385,3 +3385,40 @@ Under the existing OD-217 heading (`:2599`), append:
 - **The owner may choose otherwise:** page intakes for `module_contracts_ready` and `stackup_candidate_ready` (today the run log);
   exposing the feedback loop as an agent tool or through the layout-experiment request; a user-visible model label in the chat bubble
   (the trace and events already carry it).
+
+## OD-250 — the product-reliability suites no CI job selected are admitted to prompt-to-gerber and moved to agent-boundary-suites; the OD-30 split re-measured and kept at OD-30's 40 % with the orchestration filter (product reliability G, 2026-10-17)
+
+- **Question:** at PR-G's tree 19 vitest suites of the assignment (PR-C 10, PR-E 1, PR-F 7, PR-G 1) were selected by no CI job
+  (`_ci-admission.ts`: `ciAdmission().jobsOf(path)` was `[]` for each), and `b24-d0-ci-split` 1 and 7 were red: the committed junit
+  evidence recorded the 2026-10-09 selection (471 files) while the tree's positional selection had grown. Re-measured, the 38 items
+  B24-D0 moved hold 412.94 s of the measured 1147.98 s (36.0 %), 109 files - under OD-30's "at least 40 %" line that case 9 pins. How are the
+  suites admitted, and how does the split meet the line again?
+- **Default applied:** OD-30's rule as it stands, and the split mechanism the lead chose on 2026-10-09 (`ci-split.md` sections 3-5):
+  insertion-only; each moved item one `--exclude` line of prompt-to-gerber, contiguous right before its `--reporter` line, and one
+  line of agent-boundary-suites; no item runs in both jobs; the union of both is prompt-to-gerber's positional selection; no
+  `timeout-minutes` changed. (1) The 19 suites are exact-path positional entries of prompt-to-gerber's folded step, right after its
+  last positional line (`deterministic-manufacturing.yml:294-312`: the reader refuses a positional filter after an `--exclude`).
+  (2) All 19 move to agent-boundary-suites (`--exclude` lines `:352-370`, job lines `:658-676`): fast, provider-free agent and
+  product suites. (3) The share was still under 40 %, and every entry no production record holds that had not moved - 149
+  entries, 43.12 s (3.8 %), 137 of them held by nothing - could not reach it even all together
+  (the 38 items, the 19 and all of them together 458.02 s, 39.9 %, with more than a hundred `--exclude` lines), so the next item by weight that no STOP holds was moved with
+  the production-data edit `ci-split.md` section 2 describes: the `app/lib/agent/orchestration/__tests__` filter (49 files, 72.88 s, 6.3 %;
+  its exclude at `:316`, its job line at `:622`). The two heavier filters, A1's `app/lib/qualification/__tests__` and B23's
+  `app/lib/manufacturing-providers/__tests__`, stay: A1 case 12 wants each line once (section 3's option 3 STOP). The move is recorded
+  in `golden-catalog.ts` (six declarations: the `b21f` helper and five suites, 14 links in `eval-catalog.json`) and `scenario-map.ts` (its two evidence items), both generators
+  re-run twice with zero drift (`catalogDigest` `eng1-4e881a14bfcd1d45`, `mapDigest` `eng1-26176c7eb5877463`); B19-E's [B21 A] case
+  (the orchestration suites in agent-boundary-suites, every other B21 suite in prompt-to-gerber), `b24-e-register` Q15,
+  `b24-b1-catalog` 4 and 9, `b21-f-page` 6 and B21's C39 and C55 (re-anchored on the exclude line, the filter's text no longer
+  standing once) moved with dated notes. Measured at the tree (local, two workers, `b24-d0-ci-split` set aside):
+  514 files, 5848 tests (54 skipped, 0 failures, 0 errors), Duration 791.72s, exit 0;
+  moved: 487.79 s of 1147.98 s (42.5 %, 177 files, 58 items). At CI's ratio 1.078 (20 min 37 s over
+  the local total) prompt-to-gerber about 11 min 51 s of 25 and agent-boundary-suites about 8 min 46 s of 20 -
+  INFERRED until the first CI run, which the lead reads for both jobs. The threshold census classifies the two bounds the admission
+  brought into CI as their neighbours are (pr-c-composer-question's linearity bound a complexity-proof, pr-f-missing-facts-read's
+  port deadline a deadline-proof); A1's insertion table records PR-G's five rows (the row pattern admits `PR-[A-G]`). Recorded on
+  `ci-split.md` (sections 0, 1, 2 and 4) and the evidence `artifacts/ai-control-plane-b24/evidence/d0-ptg-timing.xml`.
+- **The owner may choose otherwise:** move B24-E's or B24-F's heavy qualification suites out of A1's filter instead (A1 case 12 and the
+  filter's single line would need the owner's leave); give the pr- suites a job of their own; keep the orchestration filter in
+  prompt-to-gerber and accept a share under 40 % (an amendment of OD-30's line, which this default does not make). The merge gate of
+  `ci-split.md` section 9 applies to all 177 moved files: they now fail only in agent-boundary-suites, so a required-status-check
+  list on `main` must name it.

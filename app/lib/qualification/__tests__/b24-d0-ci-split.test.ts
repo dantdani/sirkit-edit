@@ -11,7 +11,7 @@
  * unchanged from the first run) and the split to the tree:
  *
  *  1. the committed junit evidence is prompt-to-gerber's own positional selection at this tree: its files are exactly the files the
- *     job's positional filters select (`_ci-admission.ts`'s reader, B19-E's rule), 471 files, 5430 tests, 0 failures, 0 errors, 42 skipped;
+ *     job's positional filters select (`_ci-admission.ts`'s reader, B19-E's rule), 514 files, 5848 tests, 0 failures, 0 errors, 54 skipped ([PR-G, 2026-10-17] re-measured, OD-250; was 471 files, 5430 tests, 42 skipped);
  *  2. the page's measurement tables are the evidence: the totals line, the top 25 files by summed testcase time with the entry that
  *     selects each, and every directory filter's file count, time, share and class;
  *  3. the holders are derived from the tree, not asserted: an entry is held by production data when a file it selects is a catalog
@@ -86,8 +86,8 @@ const REPORTER_NEW = `          --reporter=dot --reporter=junit --outputFile=vit
 const FIRST_EXCLUDE_ROW = 293;
 const JOB_FIRST_LINE_ROW = 551;
 const JOB_LINES_AT_D0 = 66;
-const FIRST_EXCLUDE = 294;
-const JOB_FIRST_LINE = 560; // [B24-D2, 2026-10-09] was 557 (B24-D2's database-delivery entry at `:384`); [B24-D4, 2026-10-10] was 558 (B24-D4's two-line env mapping at `:418-419`, OD-30's split of page-browser-e2e)
+const FIRST_EXCLUDE = 313; // [PR-G, 2026-10-17] reviewed pin move: was 294 (PR-G's 19 admitted positional entries at `:294-312` sit above the first --exclude, OD-250); carry(FIRST_EXCLUDE_ROW, later) through PR-G's rows
+const JOB_FIRST_LINE = 599; // [PR-G, 2026-10-17] reviewed pin move: was 560 (PR-G's 39 prompt-to-gerber lines at `:294-312`, `:316` and `:352-370`, OD-250); [B24-D2, 2026-10-09] was 557 (B24-D2's database-delivery entry at `:384`); [B24-D4, 2026-10-10] was 558 (B24-D4's two-line env mapping at `:418-419`, OD-30's split of page-browser-e2e)
 /** B24-C2's prompt-to-gerber run, 20 min 37 s, the numerator of CI's ratio (task-D0 "What D0 delivers" 6). */
 const CI_SECONDS = 1237;
 /** The lead's set (page section 3, option 2), in prompt-to-gerber's order: B24-B2's 25 unlinked named suites, the 11 unheld files of
@@ -95,7 +95,7 @@ const CI_SECONDS = 1237;
 const MOVED = [
   "app/lib/project/__tests__/b18-b-import-gates.test.ts",
   "app/lib/distributors/__tests__/b19-distributor-egress.test.ts",
-  "app/lib/mcp",
+  "app/lib/mcp", "app/lib/agent/orchestration/__tests__", // [PR-G, 2026-10-17] OD-250: + the orchestration directory filter (prompt-to-gerber's positional line `:133`, the next entry after app/lib/mcp), moved by weight with its production-data edit (ci-split.md section 4)
   "app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts",
   "app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts",
   "app/lib/distributors/__tests__/b19-connector-policy.test.ts",
@@ -130,9 +130,9 @@ const MOVED = [
   "app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts",
   "app/lib/auth/__tests__/b16-0-2-gates.test.ts",
   "app/api/__tests__/b16-0-auth-route-coverage.test.ts",
-  "app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts",
+  "app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts", "app/api/schematic/__tests__/pr-c-build-iteration-cap.test.ts", "app/api/schematic/__tests__/pr-c-build-multi-status.test.ts", "app/api/schematic/__tests__/pr-c-theory-route-classification.test.ts", "app/components/pcb/__tests__/pr-c-sync-feedback.test.ts", "app/components/workflow/__tests__/pr-c-journey-strip.test.tsx", "app/lib/__tests__/pr-c-build-loop-budget.test.ts", "app/lib/project/__tests__/pr-c-composer-question.test.ts", "app/lib/project/__tests__/pr-c-pending-proposal-store.test.ts", "app/lib/project/__tests__/pr-c-theory-request.test.ts", "app/lib/workflow/__tests__/pr-c-journey.test.ts", "app/lib/schematic/__tests__/pr-e-design-checks.test.ts", "app/lib/agent/__tests__/pr-f-placement-intent.test.ts", "app/lib/agent/__tests__/pr-f-stackup-candidate.test.ts", "app/lib/llm/__tests__/pr-f-astra-profile.test.ts", "app/lib/parts/__tests__/pr-f-missing-facts-read.test.ts", "app/lib/parts/__tests__/pr-f-missing-facts.test.ts", "app/lib/pcb/experiments/__tests__/pr-f-capability-matrix.test.ts", "app/lib/pcb/experiments/__tests__/pr-f-placement-routing-feedback.test.ts", "app/lib/project/__tests__/pr-g-artifact-receivers.test.ts", // [PR-G, 2026-10-17] OD-250: + the 19 pr- suites no CI job selected, admitted as exact-path positional entries after the last positional line (`:294-312`) and moved, in that order
 ] as const;
-const MOVED_FILES = 109;
+const MOVED_FILES = 177; // [PR-G, 2026-10-17] reviewed pin move: was 109, + the orchestration filter's 49 files and the 19 admitted pr- suites (OD-250)
 
 /** The test files vitest collects (vitest.config.ts: app/**+/__tests__/*.test.ts(x)), repository-relative, forward slashes, sorted. */
 function testFiles(dir: string, out: string[] = []): string[] {
@@ -265,7 +265,7 @@ const section = (page: string, title: string): string => {
   return start < 0 ? "" : page.slice(start, next < 0 ? undefined : next);
 };
 /** A1's insertion-table row (b24-a1-environment-profile's INSERTION_ROW): task, date, job, first line, count. */
-const INSERTION_ROW = /^\| \[(B24-[A-F]\d*[a-z]?), (\d{4}-\d{2}-\d{2})\] \| ([a-z][a-z0-9-]*) \| `:(\d+)` \| ([1-9]\d*) \|$/;
+const INSERTION_ROW = /^\| \[(B24-[A-F]\d*[a-z]?|PR-[A-G]), (\d{4}-\d{2}-\d{2})\] \| ([a-z][a-z0-9-]*) \| `:(\d+)` \| ([1-9]\d*) \|$/; // [PR-G, 2026-10-17] reviewed pin move: + PR-[A-G] (OD-250), as b24-a1-environment-profile's
 const insertionRows = (): RegExpExecArray[] => {
   const ten = section(read(ENV_PAGE), "10. The workflow shift (old -> new)").split(NEWLINE);
   const header = ten.indexOf("| task | job | first line | count |");
@@ -280,17 +280,17 @@ const insertionRows = (): RegExpExecArray[] => {
 const carry = (line: number, rows: readonly RegExpExecArray[]): number => rows.reduce((at, row) => (at >= Number(row[4]) ? at + Number(row[5]) : at), line);
 
 describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the split", () => {
-  it("1. the committed evidence is prompt-to-gerber's own selection at this tree: its files are exactly what the job's positional filters select, 471 files, 5430 tests, 0 failures, 0 errors, 42 skipped", () => {
+  it("1. the committed evidence is prompt-to-gerber's own selection at this tree: its files are exactly what the job's positional filters select, 514 files, 5848 tests, 0 failures, 0 errors, 54 skipped", () => { // [PR-G, 2026-10-17] reviewed pin move: re-measured at this tree (OD-250), was 471 files, 5430 tests, 0 failures, 0 errors, 42 skipped
     expect(existsSync(join(ROOT, XML))).toBe(true);
     const measured = parseJunit(read(XML));
     const filters = ciAdmission().filters["prompt-to-gerber"];
-    expect(filters).toHaveLength(242);
-    // this suite joined the qualification filter's selection after the measurement ran, so it is the one file set aside
-    expect(measured.map((row) => row.file).sort()).toEqual(positional(filters).filter((file) => file !== SELF && !/\/b24-(?:d[1234]|e|f)-[a-z-]+\.test\.tsx?$/.test(file))); // [B24-F, 2026-10-10] reviewed pin move: B24-F's four suites (generator-inventory, maps, registers, verdict-lines) set aside the same way (the pattern gains `f`); [B24-E, 2026-10-10] reviewed pin move: B24-E's three suites (production-auth-config, register, statements) set aside the same way (the pattern gains `e`); [B24-D1, 2026-10-09] reviewed pin move: B24-D1's four suites joined the qualification filter's selection after the measurement ran, set aside with this one; [B24-D2, 2026-10-09] reviewed pin move: B24-D2's four suites in app/lib/qualification/__tests__ (board-read, memory, process-cleanup, working-copy) set aside the same way; [B24-D3, 2026-10-10] reviewed pin move: B24-D3's two suites (accessible-names, bom-dialogs - a .tsx) set aside the same way; [B24-D4, 2026-10-10] reviewed pin move: b24-d4-browser-split (the guard of OD-30's split of page-browser-e2e) set aside the same way
-    expect(measured).toHaveLength(471);
+    expect(filters).toHaveLength(261); // [PR-G, 2026-10-17] reviewed pin move: was 242, + the 19 admitted pr- entries (OD-250)
+    // this suite pins the evidence the run writes, so it is the one file set aside ([PR-G, 2026-10-17] re-measured with it set aside by --exclude; at the first run it joined the qualification filter after the measurement)
+    expect(measured.map((row) => row.file).sort()).toEqual(positional(filters).filter((file) => file !== SELF)); // [PR-G, 2026-10-17] reviewed pin move: re-measured at this tree, so the B24-D1 to B24-F suites are measured and only this suite is set aside (the pattern dropped); [B24-F, 2026-10-10] reviewed pin move: B24-F's four suites (generator-inventory, maps, registers, verdict-lines) set aside the same way (the pattern gains `f`); [B24-E, 2026-10-10] reviewed pin move: B24-E's three suites (production-auth-config, register, statements) set aside the same way (the pattern gains `e`); [B24-D1, 2026-10-09] reviewed pin move: B24-D1's four suites joined the qualification filter's selection after the measurement ran, set aside with this one; [B24-D2, 2026-10-09] reviewed pin move: B24-D2's four suites in app/lib/qualification/__tests__ (board-read, memory, process-cleanup, working-copy) set aside the same way; [B24-D3, 2026-10-10] reviewed pin move: B24-D3's two suites (accessible-names, bom-dialogs - a .tsx) set aside the same way; [B24-D4, 2026-10-10] reviewed pin move: b24-d4-browser-split (the guard of OD-30's split of page-browser-e2e) set aside the same way
+    expect(measured).toHaveLength(514); // [PR-G, 2026-10-17] reviewed pin move: was 471 (re-measured, OD-250)
     const totals = measured.reduce((all, row) => ({ tests: all.tests + row.tests, failures: all.failures + row.failures, errors: all.errors + row.errors, skipped: all.skipped + row.skipped }), { tests: 0, failures: 0, errors: 0, skipped: 0 });
-    expect(totals).toEqual({ tests: 5430, failures: 0, errors: 0, skipped: 42 });
-    expect(measured.filter((row) => row.tests === row.skipped).map((row) => row.file)).toHaveLength(5); // the opt-in live suites skip whole (OD-222)
+    expect(totals).toEqual({ tests: 5848, failures: 0, errors: 0, skipped: 54 }); // [PR-G, 2026-10-17] reviewed pin move: was { tests: 5430, failures: 0, errors: 0, skipped: 42 } (re-measured, OD-250)
+    expect(measured.filter((row) => row.tests === row.skipped).map((row) => row.file)).toHaveLength(8); // the opt-in live suites skip whole (OD-222); [PR-G, 2026-10-17] reviewed pin move: 5 -> 8, + the 3 B24-D1/D2 suites gated by SIRKIT_B24_BENCHMARK, measured since the re-measurement
     expect(read(XML)).not.toContain(String.fromCharCode(13));
   });
 
@@ -342,7 +342,7 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
       expect(row.class, row.entry).toBe("production-data");
       expect(two, row.entry).toContain(`| \`${row.entry}\` | ${row.files.length} | ${seconds(row.time)} | ${percent(row.time, total)} % |`);
     }
-    expect(heaviest.map((row) => row.entry)).toEqual(["app/lib/manufacturing-providers/__tests__", "app/lib/mcp", "app/lib/qualification/__tests__", "app/lib/agent/orchestration/__tests__", "app/lib/computation/__tests__"]);
+    expect(heaviest.map((row) => row.entry)).toEqual(["app/lib/qualification/__tests__", "app/lib/manufacturing-providers/__tests__", "app/lib/mcp", "app/lib/agent/orchestration/__tests__", "app/lib/computation/__tests__"]); // [PR-G, 2026-10-17] reviewed pin move: the re-measured order (OD-250); was manufacturing-providers, mcp, qualification, orchestration, computation
   });
 
   it("4. [B24-D0, 2026-10-09] reviewed pin move (the lead's decision; was: the tree is unsplit): the tree is split at D0 and the page says so - 38 --exclude lines, the agent-boundary-suites key sixth of seven ([B24-D4, 2026-10-10] was: last among six; B24-D4 appended page-browser-e2e-b24 after it), no timeout-minutes changed; sections in order, the labels, the decision, this suite's row with its it( count, every citation on the line it names, the records for the lead under their headings, no CI time claimed CONFIRMED for the job that has not run", () => {
@@ -429,8 +429,8 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     const indexes = MOVED.map((item) => order.indexOf(item));
     expect(indexes.every((index) => index >= 0)).toBe(true);
     expect([...indexes].sort((a, b) => a - b)).toEqual(indexes);
-    expect(MOVED).toHaveLength(38);
-    expect(MOVED.filter((item) => !isTestFile(item))).toEqual(["app/lib/mcp", "app/lib/computation/__tests__"]);
+    expect(MOVED).toHaveLength(58); // [PR-G, 2026-10-17] reviewed pin move: was 38, + the orchestration filter and the 19 admitted pr- suites (OD-250)
+    expect(MOVED.filter((item) => !isTestFile(item))).toEqual(["app/lib/mcp", "app/lib/agent/orchestration/__tests__", "app/lib/computation/__tests__"]); // [PR-G, 2026-10-17] reviewed pin move: + the orchestration filter (OD-250)
   });
 
   it("6. (ii) prompt-to-gerber's --exclude lines are exactly the new job's items (a directory filter as <dir>/**, a file as its path), 38 contiguous lines at :293-330 right before the --reporter line, each removing at least one positionally selected file; the helper reads them the same way and refuses a bare, unquoted or mis-shaped exclude, another flag, an exclude above a positional filter and one no positional filter touches", () => {
@@ -444,7 +444,7 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     const at = workflow.flatMap((line, index) => (EXCLUDE_LINE.test(line) ? [index + 1] : []));
     expect(at).toEqual(Array.from({ length: MOVED.length }, (_, index) => FIRST_EXCLUDE + index));
     expect(at.every((line) => line > p2g.start + 1 && line <= p2g.end)).toBe(true);
-    expect(workflow[FIRST_EXCLUDE - 2]).toBe("          app/lib/spice/__tests__/worker-integration.test.ts"); // B24-B3's entry, the last positional line, unmoved
+    expect(workflow[FIRST_EXCLUDE - 2]).toBe("          app/lib/project/__tests__/pr-g-artifact-receivers.test.ts"); expect(workflow[FIRST_EXCLUDE - 21]).toBe("          app/lib/spice/__tests__/worker-integration.test.ts"); // [PR-G, 2026-10-17] reviewed pin move (OD-250): the last positional line is PR-G's 19th admitted entry, right after B24-B3's, which stays unmoved; was: B24-B3's entry, the last positional line, unmoved
     expect(workflow[FIRST_EXCLUDE + MOVED.length - 1]).toBe(REPORTER_P2G);
     expect(workflow.slice(FIRST_EXCLUDE - 1, FIRST_EXCLUDE + MOVED.length - 1).map((line) => EXCLUDE_LINE.exec(line)![1])).toEqual(MOVED.map(asPattern));
     const selectedByFilters = positional(admission.filters["prompt-to-gerber"]);
@@ -498,7 +498,7 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     expect(ALL_TESTS.filter((file) => admission.jobsOf(file).includes("database-delivery") && admission.jobsOf(file).includes(NEW_JOB))).toEqual([]);
     for (const file of positional(["app/lib/workflow/prompt-to-gerber/__tests__"])) expect(promptToGerber, file).toContain(file);
     expect(promptToGerber).toContain(SELF);
-    expect(promptToGerber).toHaveLength(491 - MOVED_FILES); // [B24-F, 2026-10-10] reviewed pin move: 487 -> 491, B24-F's four suites in app/lib/qualification/__tests__ (b24-f-generator-inventory, b24-f-maps, b24-f-registers, b24-f-verdict-lines); [B24-E, 2026-10-10] reviewed pin move: 484 -> 487, B24-E's three suites in app/lib/qualification/__tests__ (b24-e-production-auth-config, b24-e-register, b24-e-statements); [B24-D4, 2026-10-10] reviewed pin move: 483 -> 484, b24-d4-browser-split in app/lib/qualification/__tests__ (OD-30's split of page-browser-e2e); [B24-D1, 2026-10-09] reviewed pin move: 472 -> 476, B24-D1's four suites in app/lib/qualification/__tests__ (two of them skipped there, gated by SIRKIT_B24_BENCHMARK); [B24-D2, 2026-10-09] reviewed pin move: 476 -> 480, B24-D2's four suites in app/lib/qualification/__tests__ (board-read, memory, process-cleanup, working-copy; the memory suite skipped there, gated by SIRKIT_B24_BENCHMARK); [B24-D2B, 2026-10-10] reviewed pin move: 480 -> 481, b24-d2-crash-recovery (the crash notice's unit proof); [B24-D3, 2026-10-10] reviewed pin move: 481 -> 483, B24-D3's two suites in app/lib/qualification/__tests__ (b24-d3-accessible-names, b24-d3-bom-dialogs)
+    expect(promptToGerber).toHaveLength(515 - MOVED_FILES); // [PR-G, 2026-10-17] reviewed pin move: 491 -> 515, the five pr- suites PR-A, PR-C, PR-D and PR-G added under prompt-to-gerber's directory filters (pr-a-journey-reproductions, pr-d-page-intake and pr-g-page-intakes in app/lib/qualification/__tests__, pr-c-apply-blocked-code in app/api/pcb-sync/__tests__, pr-c-unresolved-instances in app/lib/pcb-sync/__tests__) and the 19 OD-250 admitted as exact-path entries; [B24-F, 2026-10-10] reviewed pin move: 487 -> 491, B24-F's four suites in app/lib/qualification/__tests__ (b24-f-generator-inventory, b24-f-maps, b24-f-registers, b24-f-verdict-lines); [B24-E, 2026-10-10] reviewed pin move: 484 -> 487, B24-E's three suites in app/lib/qualification/__tests__ (b24-e-production-auth-config, b24-e-register, b24-e-statements); [B24-D4, 2026-10-10] reviewed pin move: 483 -> 484, b24-d4-browser-split in app/lib/qualification/__tests__ (OD-30's split of page-browser-e2e); [B24-D1, 2026-10-09] reviewed pin move: 472 -> 476, B24-D1's four suites in app/lib/qualification/__tests__ (two of them skipped there, gated by SIRKIT_B24_BENCHMARK); [B24-D2, 2026-10-09] reviewed pin move: 476 -> 480, B24-D2's four suites in app/lib/qualification/__tests__ (board-read, memory, process-cleanup, working-copy; the memory suite skipped there, gated by SIRKIT_B24_BENCHMARK); [B24-D2B, 2026-10-10] reviewed pin move: 480 -> 481, b24-d2-crash-recovery (the crash notice's unit proof); [B24-D3, 2026-10-10] reviewed pin move: 481 -> 483, B24-D3's two suites in app/lib/qualification/__tests__ (b24-d3-accessible-names, b24-d3-bom-dialogs)
   });
 
   it("8. (iv) the page's moved-set table equals the xml's figures per item - its workflow line, files, testcase time and share - and in total", () => {
@@ -539,11 +539,11 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     const d0 = rows.indexOf(mine[0]!);
     expect(rows.slice(d0, d0 + 2)).toEqual(mine);
     const later = rows.slice(d0 + 2); // [B24-D1, 2026-10-09] D1's rows, each on a line after D0's or above them (the carry moves D0's lines)
-    expect(later.map((row) => [row[1], row[3], Number(row[4]), Number(row[5])])).toEqual([["B24-D1", "prompt-to-gerber", 32, 1], ["B24-D1", "prompt-to-gerber", 344, 2], ["B24-D1", "page-browser-e2e", 405, 1], ["B24-D1", "page-browser-e2e", 432, 2], ["B24-D1", "agent-boundary-suites", 565, 1], ["B24-D1", "agent-boundary-suites", 624, 2], ["B24-D2", "database-delivery", 384, 1], ["B24-D4", "page-browser-e2e", 418, 2], ["B24-D4", "page-browser-e2e-b24", 629, 35]]); // [B24-D2, 2026-10-09] reviewed pin move: + B24-D2's database-delivery row (the handover's rule (1)); [B24-D4, 2026-10-10] reviewed pin move: + B24-D4's two rows (page-browser-e2e's env mapping, the appended page-browser-e2e-b24 job; OD-30's split)
+    expect(later.map((row) => [row[1], row[3], Number(row[4]), Number(row[5])])).toEqual([["B24-D1", "prompt-to-gerber", 32, 1], ["B24-D1", "prompt-to-gerber", 344, 2], ["B24-D1", "page-browser-e2e", 405, 1], ["B24-D1", "page-browser-e2e", 432, 2], ["B24-D1", "agent-boundary-suites", 565, 1], ["B24-D1", "agent-boundary-suites", 624, 2], ["B24-D2", "database-delivery", 384, 1], ["B24-D4", "page-browser-e2e", 418, 2], ["B24-D4", "page-browser-e2e-b24", 629, 35], ["PR-G", "prompt-to-gerber", 294, 19], ["PR-G", "prompt-to-gerber", 316, 1], ["PR-G", "prompt-to-gerber", 352, 19], ["PR-G", "agent-boundary-suites", 622, 1], ["PR-G", "agent-boundary-suites", 658, 19]]); // [PR-G, 2026-10-17] reviewed pin move: + PR-G's five rows (OD-250: the 19 admitted entries, the orchestration exclude, the 19 excludes; the orchestration line and the 19 entries of this job); [B24-D2, 2026-10-09] reviewed pin move: + B24-D2's database-delivery row (the handover's rule (1)); [B24-D4, 2026-10-10] reviewed pin move: + B24-D4's two rows (page-browser-e2e's env mapping, the appended page-browser-e2e-b24 job; OD-30's split)
     const workflow = lines(WORKFLOW);
     const jobLines = ownBlock(workflow, `  ${NEW_JOB}:`).end - JOB_FIRST_LINE + 1; // [B24-D4, 2026-10-10] reviewed pin move: the job's own region's last line (was the workflow's last line; B24-D4's job follows it)
-    expect(jobLines).toBe(JOB_LINES_AT_D0 + 3); // [B24-D1, 2026-10-09] the job gained its start step and its two headroom lines
-    expect(mine.map((row) => [row[2], row[3], Number(row[4]), Number(row[5])])).toEqual([[DATE, "prompt-to-gerber", FIRST_EXCLUDE_ROW, MOVED.length], [DATE, NEW_JOB, JOB_FIRST_LINE_ROW, JOB_LINES_AT_D0]]);
+    expect(jobLines).toBe(JOB_LINES_AT_D0 + 3 + 20); // [B24-D1, 2026-10-09] the job gained its start step and its two headroom lines; [PR-G, 2026-10-17] reviewed pin move: and PR-G's 20 items (the orchestration filter at `:622`, the 19 admitted pr- suites at `:658-676`, OD-250)
+    expect(mine.map((row) => [row[2], row[3], Number(row[4]), Number(row[5])])).toEqual([[DATE, "prompt-to-gerber", FIRST_EXCLUDE_ROW, MOVED.length - 20], [DATE, NEW_JOB, JOB_FIRST_LINE_ROW, JOB_LINES_AT_D0]]); // [PR-G, 2026-10-17] reviewed pin move: D0's row keeps its 38 lines; the 20 items OD-250 added are PR-G's rows (was MOVED.length)
     expect(carry(FIRST_EXCLUDE_ROW, later)).toBe(FIRST_EXCLUDE);
     expect(carry(JOB_FIRST_LINE_ROW, later)).toBe(JOB_FIRST_LINE);
     expect(EXCLUDE_LINE.test(workflow[FIRST_EXCLUDE - 1]!)).toBe(true);
@@ -569,7 +569,7 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     const onLine = (line: number, anchor: string): void => expect(workflow[line - 1] ?? "", `${WORKFLOW}:${line}`).toContain(anchor);
     // B21's C49, C93, C94 (b21-f-page 6)
     const matrix = lines("artifacts/ai-control-plane-b21/evaluation-matrix.md");
-    for (const [id, line, anchor] of [["C49", 417, "- run: pnpm exec playwright test"], ["C93", 422, "run: pnpm exec playwright test -c playwright.orchestration.config.ts"], ["C94", 431, "playwright-report-orchestration"]] as const) { // [B24-D4, 2026-10-10] reviewed pin move: C93 and C94 +2 (B24-D4's env mapping at `:418-419`); C49 unmoved // [B24-D1, 2026-10-09] reviewed pin move: +4 (B24-D1's OD-30 steps at `:32`, `:344-345` and `:405`); D0's note stays on each row; [B24-D2, 2026-10-09] reviewed pin move: +1 more (B24-D2's database-delivery entry at `:384`)
+    for (const [id, line, anchor] of [["C49", 456, "- run: pnpm exec playwright test"], ["C93", 461, "run: pnpm exec playwright test -c playwright.orchestration.config.ts"], ["C94", 470, "playwright-report-orchestration"]] as const) { // [PR-G, 2026-10-17] reviewed pin move: +39 each (PR-G's prompt-to-gerber lines at `:294-312`, `:316` and `:352-370`, OD-250); [B24-D4, 2026-10-10] reviewed pin move: C93 and C94 +2 (B24-D4's env mapping at `:418-419`); C49 unmoved // [B24-D1, 2026-10-09] reviewed pin move: +4 (B24-D1's OD-30 steps at `:32`, `:344-345` and `:405`); D0's note stays on each row; [B24-D2, 2026-10-09] reviewed pin move: +1 more (B24-D2's database-delivery entry at `:384`)
       const row = matrix.find((candidate) => candidate.startsWith(`| ${id} |`))!;
       expect(row, id).toContain(`| ${id} | \`${WORKFLOW}\` | ${line} | — | \`${anchor}\` |`);
       expect(row, id).toContain(`${note} re-pinned +38`);
@@ -578,19 +578,19 @@ describe("[B24-D0] the OD-30 split of prompt-to-gerber: the measurement and the 
     // B23's C64 and its prose citation (b23-b-dfm-quote-flow-page 3, b24-a1-environment-profile 17)
     const pglite = "app/lib/manufacturing-providers/database/__tests__/b23-b-exchange-ledger-pglite.test.ts";
     // [B24-D1, 2026-10-09] reviewed pin move: C64 and its prose cite `:376` with D1's note before D0's (B24-D1's OD-30 steps at `:32` and `:344-345`)
-    holds("artifacts/ai-control-plane-b23/dfm-quote-flow.md", `| C64 | \`${WORKFLOW}\` | 376 | \`${pglite}\` |`);
-    holds("artifacts/ai-control-plane-b23/dfm-quote-flow.md", `(\`${WORKFLOW}:376\`; [B24-D1, 2026-10-09] was \`:373\` before B24-D1's OD-30 steps at \`:32\` and \`:344-345\`; ${note} was \`:335\` before B24-D0's 38 prompt-to-gerber \`--exclude\` lines at \`:293-330\``);
+    holds("artifacts/ai-control-plane-b23/dfm-quote-flow.md", `| C64 | \`${WORKFLOW}\` | 415 | \`${pglite}\` |`); // [PR-G, 2026-10-17] reviewed pin move: C64 and its prose cite :415, PR-G's note first (OD-250: +39 after its prompt-to-gerber lines); was :376
+    holds("artifacts/ai-control-plane-b23/dfm-quote-flow.md", `(\`${WORKFLOW}:415\`; [PR-G, 2026-10-17] was \`:376\` before PR-G's 39 prompt-to-gerber lines at \`:294-312\`, \`:316\` and \`:352-370\` (OD-250); [B24-D1, 2026-10-09] was \`:373\` before B24-D1's OD-30 steps at \`:32\` and \`:344-345\`; ${note} was \`:335\` before B24-D0's 38 prompt-to-gerber \`--exclude\` lines at \`:293-330\``);
     holds("artifacts/ai-control-plane-b23/dfm-quote-flow.md", `${note} C64 re-pinned \`:335\` -> \`:373\` in place: B24-D0 inserted 38 prompt-to-gerber \`--exclude\` lines at \`:293-330\` (OD-30's split; the moves of B24-B2 and B24-B3 between are noted on the prose citation's line). [B24-D1, 2026-10-09] C64 re-pinned \`:373\` -> \`:376\` in place: B24-D1's OD-30 steps at \`:32\` and \`:344-345\`.`); // [B24-D1 review, 2026-10-09] D0's whole sentence, then D1's as its own: an earlier note is kept, never spliced (review correctness-4)
-    onLine(376, pglite);
+    onLine(415, pglite); // [PR-G, 2026-10-17] reviewed pin move: was 376 (+39, OD-250)
     // B24's pages: ci-admission.md's limit line, C1-C3's database-delivery rows and C50, A4's workflow lines
     holds("artifacts/ai-control-plane-b24/ci-admission.md", `| page-browser-e2e | 30 min (\`:398\`; ${note} was \`:360\` before B24-D0's 38 prompt-to-gerber \`--exclude\` lines at \`:293-330\`;`);
-    onLine(402, "timeout-minutes: 30"); // [B24-D1, 2026-10-09] reviewed pin move: +3 (the page line keeps D0's text and carries D1's note); [B24-D2, 2026-10-09] +1 more (B24-D2's database-delivery entry at `:384`; the page line carries D2's note)
+    onLine(441, "timeout-minutes: 30"); // [PR-G, 2026-10-17] reviewed pin move: was 402 (+39, OD-250); [B24-D1, 2026-10-09] reviewed pin move: +3 (the page line keeps D0's text and carries D1's note); [B24-D2, 2026-10-09] +1 more (B24-D2's database-delivery entry at `:384`; the page line carries D2's note)
     holds("artifacts/ai-control-plane-b24/observability-and-replay.md", `| \`${WORKFLOW}:378\` | one database-delivery line, \`app/lib/qualification/database/__tests__/b24-c1-durable-records-pglite.test.ts\`, after B24-A4's last PGlite entry (\`:377\`; ${note}`);
     holds("artifacts/ai-control-plane-b24/observability-and-replay.md", `(\`deterministic-manufacturing.yml:380\`, C50; ${note}`);
     holds("artifacts/ai-control-plane-b24/observability-and-replay.md", `| \`${WORKFLOW}:380\` | one database-delivery line, \`app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts\`, after C2's entry (\`:379\`; ${note}`);
-    holds("artifacts/ai-control-plane-b24/observability-and-replay.md", `| C50 | \`${WORKFLOW}\` | 383 | \`app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts\` |`); // [B24-D1, 2026-10-09] reviewed pin move: 380 -> 383 (b24-c3-recorded-limits resolves the row)
+    holds("artifacts/ai-control-plane-b24/observability-and-replay.md", `| C50 | \`${WORKFLOW}\` | 422 | \`app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts\` |`); // [PR-G, 2026-10-17] reviewed pin move: 383 -> 422 (+39, OD-250); [B24-D1, 2026-10-09] reviewed pin move: 380 -> 383 (b24-c3-recorded-limits resolves the row)
     holds("artifacts/ai-control-plane-b24/retention-and-deletion.md", `| \`${WORKFLOW}:379\` | one database-delivery line, \`app/lib/qualification/database/__tests__/b24-c2-retention-pglite.test.ts\`, after C1's entry (\`:378\`; ${note}`);
-    for (const [line, anchor] of [[381, "b24-c1-durable-records-pglite.test.ts"], [382, "b24-c2-retention-pglite.test.ts"], [383, "b24-c3-trace-read-pglite.test.ts"], [377, "b24-a4-rls-default-deny.test.ts"], [380, "b24-a4-restore.test.ts"], [349, "timeout-minutes: 15"]] as const) onLine(line, anchor); // [B24-D1, 2026-10-09] reviewed pin move: +3 each (B24-D1's OD-30 steps at `:32` and `:344-345`)
+    for (const [line, anchor] of [[420, "b24-c1-durable-records-pglite.test.ts"], [421, "b24-c2-retention-pglite.test.ts"], [422, "b24-c3-trace-read-pglite.test.ts"], [416, "b24-a4-rls-default-deny.test.ts"], [419, "b24-a4-restore.test.ts"], [388, "timeout-minutes: 15"]] as const) onLine(line, anchor); // [PR-G, 2026-10-17] reviewed pin move: +39 each (OD-250); [B24-D1, 2026-10-09] reviewed pin move: +3 each (B24-D1's OD-30 steps at `:32` and `:344-345`)
     holds("artifacts/ai-control-plane-b24/database-and-recovery.md", `four database-delivery entries at \`deterministic-manufacturing.yml:374-377\`, after B23's PGlite entry (\`:373\`, unmoved); ${note}`);
     holds("artifacts/ai-control-plane-b24/database-and-recovery.md", `\`timeout-minutes: 15\` (\`deterministic-manufacturing.yml:346\`; ${note}`);
     // the statements the split supersedes, each with its dated note on its own line

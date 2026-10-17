@@ -291,9 +291,29 @@ jobs:
           app/lib/auth/__tests__/b16-1b-live-qualification.test.ts
           app/lib/pcb/__tests__/kicad-cli-oracle.test.ts
           app/lib/spice/__tests__/worker-integration.test.ts
+          app/api/schematic/__tests__/pr-c-build-iteration-cap.test.ts
+          app/api/schematic/__tests__/pr-c-build-multi-status.test.ts
+          app/api/schematic/__tests__/pr-c-theory-route-classification.test.ts
+          app/components/pcb/__tests__/pr-c-sync-feedback.test.ts
+          app/components/workflow/__tests__/pr-c-journey-strip.test.tsx
+          app/lib/__tests__/pr-c-build-loop-budget.test.ts
+          app/lib/project/__tests__/pr-c-composer-question.test.ts
+          app/lib/project/__tests__/pr-c-pending-proposal-store.test.ts
+          app/lib/project/__tests__/pr-c-theory-request.test.ts
+          app/lib/workflow/__tests__/pr-c-journey.test.ts
+          app/lib/schematic/__tests__/pr-e-design-checks.test.ts
+          app/lib/agent/__tests__/pr-f-placement-intent.test.ts
+          app/lib/agent/__tests__/pr-f-stackup-candidate.test.ts
+          app/lib/llm/__tests__/pr-f-astra-profile.test.ts
+          app/lib/parts/__tests__/pr-f-missing-facts-read.test.ts
+          app/lib/parts/__tests__/pr-f-missing-facts.test.ts
+          app/lib/pcb/experiments/__tests__/pr-f-capability-matrix.test.ts
+          app/lib/pcb/experiments/__tests__/pr-f-placement-routing-feedback.test.ts
+          app/lib/project/__tests__/pr-g-artifact-receivers.test.ts
           --exclude 'app/lib/project/__tests__/b18-b-import-gates.test.ts'
           --exclude 'app/lib/distributors/__tests__/b19-distributor-egress.test.ts'
           --exclude 'app/lib/mcp/**'
+          --exclude 'app/lib/agent/orchestration/__tests__/**'
           --exclude 'app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts'
           --exclude 'app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts'
           --exclude 'app/lib/distributors/__tests__/b19-connector-policy.test.ts'
@@ -329,6 +349,25 @@ jobs:
           --exclude 'app/lib/auth/__tests__/b16-0-2-gates.test.ts'
           --exclude 'app/api/__tests__/b16-0-auth-route-coverage.test.ts'
           --exclude 'app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts'
+          --exclude 'app/api/schematic/__tests__/pr-c-build-iteration-cap.test.ts'
+          --exclude 'app/api/schematic/__tests__/pr-c-build-multi-status.test.ts'
+          --exclude 'app/api/schematic/__tests__/pr-c-theory-route-classification.test.ts'
+          --exclude 'app/components/pcb/__tests__/pr-c-sync-feedback.test.ts'
+          --exclude 'app/components/workflow/__tests__/pr-c-journey-strip.test.tsx'
+          --exclude 'app/lib/__tests__/pr-c-build-loop-budget.test.ts'
+          --exclude 'app/lib/project/__tests__/pr-c-composer-question.test.ts'
+          --exclude 'app/lib/project/__tests__/pr-c-pending-proposal-store.test.ts'
+          --exclude 'app/lib/project/__tests__/pr-c-theory-request.test.ts'
+          --exclude 'app/lib/workflow/__tests__/pr-c-journey.test.ts'
+          --exclude 'app/lib/schematic/__tests__/pr-e-design-checks.test.ts'
+          --exclude 'app/lib/agent/__tests__/pr-f-placement-intent.test.ts'
+          --exclude 'app/lib/agent/__tests__/pr-f-stackup-candidate.test.ts'
+          --exclude 'app/lib/llm/__tests__/pr-f-astra-profile.test.ts'
+          --exclude 'app/lib/parts/__tests__/pr-f-missing-facts-read.test.ts'
+          --exclude 'app/lib/parts/__tests__/pr-f-missing-facts.test.ts'
+          --exclude 'app/lib/pcb/experiments/__tests__/pr-f-capability-matrix.test.ts'
+          --exclude 'app/lib/pcb/experiments/__tests__/pr-f-placement-routing-feedback.test.ts'
+          --exclude 'app/lib/project/__tests__/pr-g-artifact-receivers.test.ts'
           --reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml
       - name: Upload evidence and diagnostics
         if: always()
@@ -580,6 +619,7 @@ jobs:
           app/lib/project/__tests__/b18-b-import-gates.test.ts
           app/lib/distributors/__tests__/b19-distributor-egress.test.ts
           app/lib/mcp
+          app/lib/agent/orchestration/__tests__
           app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts
           app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts
           app/lib/distributors/__tests__/b19-connector-policy.test.ts
@@ -615,6 +655,25 @@ jobs:
           app/lib/auth/__tests__/b16-0-2-gates.test.ts
           app/api/__tests__/b16-0-auth-route-coverage.test.ts
           app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts
+          app/api/schematic/__tests__/pr-c-build-iteration-cap.test.ts
+          app/api/schematic/__tests__/pr-c-build-multi-status.test.ts
+          app/api/schematic/__tests__/pr-c-theory-route-classification.test.ts
+          app/components/pcb/__tests__/pr-c-sync-feedback.test.ts
+          app/components/workflow/__tests__/pr-c-journey-strip.test.tsx
+          app/lib/__tests__/pr-c-build-loop-budget.test.ts
+          app/lib/project/__tests__/pr-c-composer-question.test.ts
+          app/lib/project/__tests__/pr-c-pending-proposal-store.test.ts
+          app/lib/project/__tests__/pr-c-theory-request.test.ts
+          app/lib/workflow/__tests__/pr-c-journey.test.ts
+          app/lib/schematic/__tests__/pr-e-design-checks.test.ts
+          app/lib/agent/__tests__/pr-f-placement-intent.test.ts
+          app/lib/agent/__tests__/pr-f-stackup-candidate.test.ts
+          app/lib/llm/__tests__/pr-f-astra-profile.test.ts
+          app/lib/parts/__tests__/pr-f-missing-facts-read.test.ts
+          app/lib/parts/__tests__/pr-f-missing-facts.test.ts
+          app/lib/pcb/experiments/__tests__/pr-f-capability-matrix.test.ts
+          app/lib/pcb/experiments/__tests__/pr-f-placement-routing-feedback.test.ts
+          app/lib/project/__tests__/pr-g-artifact-receivers.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-agent-boundary-suites.xml
       - name: Upload diagnostics
         if: always()

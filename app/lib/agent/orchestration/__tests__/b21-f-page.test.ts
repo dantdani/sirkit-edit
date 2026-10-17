@@ -173,7 +173,7 @@ describe("[B21 F] the evaluation-matrix page", () => {
     expect(rows.map((row) => row[1])).toEqual(expect.arrayContaining(SUITES));
     for (const row of rows) expect((read(row[1]!).match(/^\s*it\(/gm) ?? []).length, `${row[1]} it( blocks`).toBe(Number(row[2]));
     const workflow = read(".github/workflows/deterministic-manufacturing.yml");
-    expect(workflow.match(/^ {10}app\/lib\/agent\/orchestration\/__tests__$/gm)).toHaveLength(1);
+    expect(workflow.match(/^ {10}app\/lib\/agent\/orchestration\/__tests__$/gm)).toHaveLength(2); expect(workflow.match(/^ {10}--exclude 'app\/lib\/agent\/orchestration\/__tests__\/\*\*'$/gm)).toHaveLength(1); // [PR-G, 2026-10-17] reviewed pin move (OD-250): was 1 - the filter is prompt-to-gerber's positional line and agent-boundary-suites' line, excluded from the first by its one --exclude and run by the second (ci-split.md section 4); still no explicit entry under it
     for (const suite of SUITES) expect(workflow, suite).not.toContain(suite);
   });
 
