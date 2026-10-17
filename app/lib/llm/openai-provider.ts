@@ -117,7 +117,7 @@ function normalizeResponse(response: Response): LLMResponse {
     model: response.model,
     text: response.output_text,
     toolCalls,
-    stopReason: response.status,
+    stopReason: openAIStopReason(response), // [PR-L, 2026-10-17] an `incomplete` response reports why (openAIStopReason, after the last line)
     usage: response.usage
       ? {
           inputTokens: response.usage.input_tokens,
@@ -223,4 +223,18 @@ export class OpenAIProvider implements LLMProvider {
       throw toProviderError(this.id, error);
     }
   }
+}
+
+// [PR-L, 2026-10-17] Runbook L.6; limit-and-stall-map.md section 4 (block Y: one turn stopped at the 8,192-token output cap). Appended
+// after the last line on purpose (a function declaration is hoisted), so no cited line moves (configuration.ts cites :152-156).
+/**
+ * The response's stop as the router reports it. Every status passes through unchanged except `incomplete`: cut by
+ * `max_output_tokens` it reports `max_tokens` - the value Anthropic's `stop_reason` uses for the same stop (and STEP_STOPS' name for
+ * it, app/lib/agent/contracts.ts), so one consumer check covers both providers - and any other `incomplete` (e.g. `content_filter`)
+ * stays `incomplete`. A function call cut off inside such a response still arrives as `{ _raw }` (its arguments do not parse); the
+ * Build loop refuses a submission from a turn that stopped this way (build-loop.ts `unreadableSubmission`).
+ */
+function openAIStopReason(response: Response): LLMResponse["stopReason"] {
+  if (response.status !== "incomplete") return response.status;
+  return response.incomplete_details?.reason === "max_output_tokens" ? "max_tokens" : "incomplete";
 }

@@ -247,19 +247,21 @@ async function runBuildToolLoopInternal(opts: Parameters<typeof runBuildToolLoop
         searchBlocks.map(async (block) => {
           const { query, category } = block.input as { query?: unknown; category?: unknown };
           if (typeof query !== "string" || query.trim() === "") {
-            return { block, error: "query is required", results: [] as AiPartResult[] };
+            return { block, error: "query is required", results: [] as AiPartResult[], categoryNote: null };
           }
           try {
+            // [PR-L, 2026-10-17] the search says how it read the category; a normalized or unrecognised one is noted to the model
+            const seen: { categoryNote: string | null } = { categoryNote: null };
             const results = await searchPartsForAI(
               query,
               typeof category === "string" ? category : undefined,
               SEARCH_LIMIT,
-              { signal: opts.budget?.signal },
+              { signal: opts.budget?.signal, onOutcome: (outcome) => { seen.categoryNote = outcome.category.note; } },
             );
             for (const r of results) returnedParts.set(r.partId, r);
-            return { block, error: null as string | null, results };
+            return { block, error: null as string | null, results, categoryNote: seen.categoryNote };
           } catch (err) {
-            return { block, error: toolFailure("search_parts", err), results: [] as AiPartResult[] };
+            return { block, error: toolFailure("search_parts", err), results: [] as AiPartResult[], categoryNote: null };
           }
         }),
       );
@@ -267,7 +269,7 @@ async function runBuildToolLoopInternal(opts: Parameters<typeof runBuildToolLoop
       const seenPartIds = new Set<string>();
       if (opts.budget?.signal?.aborted || (deadlineAt !== undefined && Date.now() >= deadlineAt)) return budgetExhausted("Build deadline reached during part search; no schematic was submitted.", iterationsUsed);
       const searchResults: LLMToolResultPart[] = rawSearches.map(
-        ({ block, error, results }) => {
+        ({ block, error, results, categoryNote }) => {
           if (error !== null) {
             return {
               type: "tool_result" as const,
@@ -296,7 +298,8 @@ async function runBuildToolLoopInternal(opts: Parameters<typeof runBuildToolLoop
           return {
             type: "tool_result" as const,
             toolCallId: block.id,
-            output: JSON.stringify(payload),
+            // [PR-L, 2026-10-17] the plain list as before; with a category note, the note and the same list under "results"
+            output: categoryNote ? JSON.stringify({ categoryNote, results: payload }) : JSON.stringify(payload),
           };
         },
       );
@@ -343,7 +346,7 @@ async function runBuildToolLoopInternal(opts: Parameters<typeof runBuildToolLoop
       const submitResults: LLMToolResultPart[] = [];
       if (opts.budget?.signal?.aborted || (deadlineAt !== undefined && Date.now() >= deadlineAt)) return budgetExhausted("Build deadline reached during alternates lookup; no schematic was submitted.", iterationsUsed);
       for (const block of toolUses.filter((b) => b.name === "submit_schematic")) {
-        const result = finalizeSubmission(block.input, returnedParts);
+        const result = finalizeSubmission(block.input, returnedParts, response.stopReason); // [PR-L, 2026-10-17] a turn cut short cannot submit
         if (result.ok) {
           // Deterministic ERC gate (design-level, not drawing-level): critical
           // electrical faults — undriven power pins, shorted rails, fighting
@@ -419,7 +422,11 @@ type FinalizeResult =
 function finalizeSubmission(
   raw: unknown,
   returnedParts: Map<string, AiPartResult>,
+  turnStop?: string | null,
 ): FinalizeResult {
+  // [PR-L, 2026-10-17] a submission that cannot be read whole is refused with a correction, never accepted as an empty block
+  const unreadable = unreadableSubmission(raw, turnStop);
+  if (unreadable !== null) return { ok: false, error: unreadable };
   const input = raw as {
     components?: BuildLogicalComponent[];
     connections?: unknown[];
@@ -530,4 +537,30 @@ function finalizeSubmission(
     netlist: { components, connections: validConnections, explanation: fullExplanation },
     explanation: fullExplanation,
   };
+}
+
+// ─── [PR-L, 2026-10-17] Unreadable submissions (runbook L.6; limit-and-stall-map.md section 4, block Y) ─────────────────────────
+// One 2026-10-17 turn stopped at the 8,192-token output cap. The OpenAI adapter parsed a cut function call as `{ _raw }`, and
+// finalizeSubmission read the missing `components` as [] - so a truncated submit_schematic would have been accepted as an EMPTY
+// successful block (runErc finds nothing wrong with an empty netlist). A refusal goes back to the model as an error tool_result and
+// the loop continues within its turn allowance. Kept beside finalizeSubmission, the one place that judges a submission, for the
+// resumable slice core that is extracted from this file next.
+
+/** Stop reasons meaning the provider cut the turn short: `max_tokens` (Anthropic's `stop_reason`, and the OpenAI adapter's report
+ *  of `incomplete` for `max_output_tokens`), any other OpenAI `incomplete`, and Anthropic's context-window stop. */
+const TRUNCATED_TURN_STOPS: ReadonlySet<string> = new Set(["max_tokens", "incomplete", "model_context_window_exceeded"]);
+
+/** Why a submission cannot be read whole, as the correction the model gets; null when it can. */
+function unreadableSubmission(raw: unknown, turnStop: string | null | undefined): string | null {
+  if (typeof turnStop === "string" && TRUNCATED_TURN_STOPS.has(turnStop)) {
+    return `This submit_schematic was not accepted: the response stopped at the provider's output limit (stop reason "${turnStop}"), so its netlist may be cut off. Call submit_schematic again with the complete netlist; keep the explanation short and use power and ground labels so the call fits.`;
+  }
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw) || "_raw" in raw) {
+    return `This submit_schematic was not accepted: its arguments were not a readable JSON object. Call submit_schematic again with one JSON object holding "components", "connections" and "explanation".`;
+  }
+  const input = raw as { components?: unknown; connections?: unknown };
+  if (!Array.isArray(input.components) || !Array.isArray(input.connections)) {
+    return `This submit_schematic was not accepted: "components" and "connections" must both be arrays (an empty list is []). Call submit_schematic again with the complete netlist.`;
+  }
+  return null;
 }

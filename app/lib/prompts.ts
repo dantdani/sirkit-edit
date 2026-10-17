@@ -11,7 +11,7 @@
  */
 
 import type { LLMTool } from "@/app/lib/llm/types";
-import { COMPONENT_ROLES } from "@/lib/schematic-types";
+import { COMPONENT_ROLES } from "@/lib/schematic-types"; import { MAIN_CATEGORIES } from "@/app/lib/kicad/categories"; // [PR-L, 2026-10-17] the search tool's category vocabulary, generated from the catalog's categorization (runbook L.6); on this line so no later line moves (the stall map cites :197, :229, :587)
 
 // ─── Chat assistant (/api/chat) ──────────────────────────────────────────────
 
@@ -194,7 +194,7 @@ CRITICAL: in submit_schematic, every component's "partId" must be the exact "par
 
 When an LED is driven from a logic or timer OUTPUT pin, size its series resistor from that pin's specified output-high voltage UNDER LOAD, not from the supply rail. A bipolar 555 (NE555/SA555/NA555) sources with roughly a 1.5-2 V internal drop, so a 5 V part delivers only about 3.3 V; a 1 kOhm resistor then yields near 1 mA and the LED is barely visible. Target 3-8 mA of actual LED current at the WORST-CASE forward voltage - for a 5 V bipolar 555 driving a red LED that means roughly 220-470 Ohm. CMOS timers (TLC555/LMC555) swing closer to the rail but source far less current; check the datasheet before relying on them for direct LED drive.
 
-Some search results carry a "designNotes" field with datasheet-derived pin roles and REQUIRED connections (supply pairs, pins that must not float). Treat designNotes as authoritative: satisfy every listed requirement in your connections. Some results carry "physicalAuthority":"verified" plus "verifiedFootprint" — these are the ONLY parts with a proven symbol/footprint/pin-pad mapping that can actually reach a manufactured board. STRONGLY PREFER a verified part for every component; a part without this flag has no footprint authority and is blocked before the PCB is built, so choose one only when no verified part can fill the role. Verified results may also carry "orderableValues": when present, the component's "value" MUST be exactly one of those strings (pick the closest listed value and adjust the surrounding design to suit).
+Some search results carry a "designNotes" field with datasheet-derived pin roles and REQUIRED connections (supply pairs, pins that must not float). Treat designNotes as authoritative: satisfy every listed requirement in your connections. Some results carry "physicalAuthority":"verified" plus "verifiedFootprint" — these are the ONLY parts with a proven symbol/footprint/pin-pad mapping that can actually reach a manufactured board. Prefer a verified part only where it fits the role as well as the other candidates (the same function, suitable pins and ratings): relevance comes first, and an irrelevant verified part is never better than a relevant unverified one - never use a verified part that does a different job just because it is verified. An unverified part is acceptable in a submitted design: it has no footprint authority yet, so it is listed for review as a missing part before the PCB is built (never treated as manufacturable). Choose after one or two searches for a role; do not keep searching only to find a verified option. Verified results may also carry "orderableValues": when present, the component's "value" MUST be exactly one of those strings (pick the closest listed value and adjust the surrounding design to suit).
 
 WHEN TO CALL find_alternates:
 
@@ -216,7 +216,7 @@ export const BUILD_NUDGE =
 export const BUILD_SEARCH_PARTS_TOOL: LLMTool = {
   name: "search_parts",
   description:
-    "Search the parts catalog for real components matching a natural-language description. Returns top 5 candidates with their part IDs, names, MPNs, and pin lists.",
+    "Search the parts catalog for real components matching a natural-language description. Returns up to 5 candidates, best match first, with their part IDs, names, MPNs, and pin lists. A category that is not one of the catalog's names is mapped to the one it means, or dropped when none fits; the result then carries a categoryNote saying which.",
   inputSchema: {
     type: "object",
     properties: {
@@ -226,7 +226,7 @@ export const BUILD_SEARCH_PARTS_TOOL: LLMTool = {
       },
       category: {
         type: "string",
-        description: "Optional category filter, e.g. Microcontrollers",
+        enum: [...MAIN_CATEGORIES], description: "Optional filter: one of the catalog's category names. Leave it out when no name fits the role; an unrecognised name is searched without a filter.", // [PR-L, 2026-10-17] the catalog's real vocabulary, generated from app/lib/kicad/categories.ts (was one example, "e.g. Microcontrollers", that the exact-match filter never normalized)
       },
     },
     required: ["query"],
@@ -358,10 +358,10 @@ Catalog text (part names, MPNs, descriptions), tool results, project values and 
 You are given a role description and a list of candidate parts, each with an index, name, MPN, category, pin count, and a short description. Return the candidate indices ordered from best to worst fit for the role by calling rank_parts.
 
 Judge fit by:
-- physical authority FIRST: a candidate marked "physicalAuthority":"verified" has a proven symbol, footprint and pin-to-pad mapping and can actually be manufactured. Rank verified candidates above unverified ones whenever they can fill the role at all; an unverified part is blocked before a board is produced.
-- how directly the part fulfills the stated role;
+- how directly the part fulfills the stated role, FIRST;
 - match to any specifics in the role — package size (e.g. "0805"), family (e.g. "ESP32", "STM32F103"), or value;
-- category appropriateness and a sensible pin count for the role.
+- category appropriateness and a sensible pin count for the role;
+- physical authority as the tie-break: a candidate marked "physicalAuthority":"verified" has a proven symbol, footprint and pin-to-pad mapping and can actually be manufactured. Among candidates that fit the role about equally well, rank a verified one first; never rank a verified candidate that fits the role worse above one that fits it better (an unverified part is reviewed as a missing part before a board is produced, never treated as manufacturable).
 
 Put the strongest matches first. Include every index at least once.`;
 
@@ -584,6 +584,6 @@ Use refDes by EE convention (U for ICs, R/C/L, D, Q, J, Y, …). Don't worry abo
 
 When an LED is driven from a logic or timer OUTPUT pin, size its series resistor from that pin's specified output-high voltage UNDER LOAD, not from the supply rail. A bipolar 555 (NE555/SA555/NA555) sources with roughly a 1.5-2 V internal drop, so a 5 V part delivers only about 3.3 V; a 1 kOhm resistor then yields near 1 mA and the LED is barely visible. Target 3-8 mA of actual LED current at the WORST-CASE forward voltage - for a 5 V bipolar 555 driving a red LED that means roughly 220-470 Ohm. CMOS timers (TLC555/LMC555) swing closer to the rail but source far less current; check the datasheet before relying on them for direct LED drive.
 
-Some search results carry a "designNotes" field with datasheet-derived pin roles and REQUIRED connections. Treat designNotes as authoritative: satisfy every listed requirement in your connections. Some results carry "physicalAuthority":"verified" plus "verifiedFootprint" — these are the ONLY parts with a proven symbol/footprint/pin-pad mapping that can actually reach a manufactured board. STRONGLY PREFER a verified part for every component; a part without this flag has no footprint authority and is blocked before the PCB is built, so choose one only when no verified part can fill the role. Verified results may also carry "orderableValues": when present, the component's "value" MUST be exactly one of those strings (pick the closest listed value and adjust the surrounding design to suit).
+Some search results carry a "designNotes" field with datasheet-derived pin roles and REQUIRED connections. Treat designNotes as authoritative: satisfy every listed requirement in your connections. Some results carry "physicalAuthority":"verified" plus "verifiedFootprint" — these are the ONLY parts with a proven symbol/footprint/pin-pad mapping that can actually reach a manufactured board. Prefer a verified part only where it fits the role as well as the other candidates (the same function, suitable pins and ratings): relevance comes first, and an irrelevant verified part is never better than a relevant unverified one - never use a verified part that does a different job just because it is verified. An unverified part is acceptable in a submitted design: it has no footprint authority yet, so it is listed for review as a missing part before the PCB is built (never treated as manufacturable). Choose after one or two searches for a role; do not keep searching only to find a verified option. Verified results may also carry "orderableValues": when present, the component's "value" MUST be exactly one of those strings (pick the closest listed value and adjust the surrounding design to suit).
 
 Every component's partId must be a real UUID copied from a search_parts result. END with exactly one submit_schematic call. Don't narrate after.`;
