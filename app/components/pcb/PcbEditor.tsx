@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
-import { CircuitBoard, Loader2, ShieldCheck, X } from "lucide-react";
+import { Box, CircuitBoard, Loader2, ShieldCheck, X } from "lucide-react";
 import type { SchematicState } from "@/lib/schematic-types";
 import type { PcbBoard, BoardOutline, RoutingPreferences } from "@/app/lib/pcb/types";
 import { LAYERS, type LayerId } from "@/app/lib/pcb/layers";
@@ -330,7 +330,7 @@ export default function PcbEditor({
   onExecutionGrantProgress,
   onExecutionGrantAttemptRefused,
   onExecutionRecovery, restoredExecutionGrants, pageProject,
-  onJourneyFacts, syncRequestToken = 0,
+  onJourneyFacts, syncRequestToken = 0, presentation = "editor", onOpenPcbTab,
 }: {
   schematic: SchematicState;
   /** R06: false while the editor is mounted but hidden (another workspace
@@ -390,6 +390,11 @@ export default function PcbEditor({
   /** [PR-C] bumped by the page's "Prepare PCB" action after a schematic approval: starts the SAME Schematic → PCB
    *  preparation the button starts (bindings → publication → preflight) while no board exists; applying stays explicit. */
   syncRequestToken?: number;
+  /** [PR-E] "3d": the workspace's 3D tab — this editor renders its ONE three.js preview full-size from its own board and
+   *  pcb3d controller (the side sheet is not shown at the same time); without a board, an accurate unavailable state. */
+  presentation?: "editor" | "3d";
+  /** [PR-E] the 3D tab's way to the PCB tab when there is no board yet. */
+  onOpenPcbTab?: () => void;
 }) {
   // Lint note (B08.3): this editor is an imperative orchestrator — canvas
   // scene, gesture tool, and history/session refs are deliberately mutated
@@ -2513,6 +2518,33 @@ export default function PcbEditor({
     queueMicrotask(() => { void handleSync({ centerNewParts: true, spreadOverlaps: true }); }); // the run starts after this commit, like a click would
   }, [syncRequestToken, state.board, ownedBusy.syncing, handleSync]);
 
+  // ── [PR-E] 3D presentation: the workspace's 3D tab ──────────────────────────
+  // The same PcbPreview3D the side sheet mounts, driven by the same pcb3d controller (view state, camera, focus, layers,
+  // finish) — never a second renderer. The side sheet is suppressed while this presentation is on, so three.js mounts once.
+  if (presentation === "3d") {
+    if (!state.board) {
+      return (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950" data-testid="pcb-3d-unavailable">
+          <Box className="size-10 text-zinc-700" />
+          <p className="mt-3 text-sm font-medium text-zinc-300">No board to show in 3D yet</p>
+          <p className="mt-1 max-w-sm text-center text-xs text-zinc-500">The 3D view renders the durable board. Prepare the PCB from the schematic first; the view appears here once a board exists.</p>
+          <button type="button" onClick={() => onOpenPcbTab?.()} data-testid="pcb-3d-open-pcb" className="mt-4 rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800">Open the PCB tab</button>
+        </div>
+      );
+    }
+    return (
+      <div className="absolute inset-0 flex flex-col bg-zinc-950" data-testid="pcb-3d-pane">
+        <div className="flex h-9 shrink-0 items-center justify-between border-b border-zinc-800 px-3 text-xs">
+          <span className="font-medium text-zinc-200">3D preview</span>
+          <span className="text-zinc-500">the same scene as the PCB editor&apos;s preview sheet (one renderer)</span>
+        </div>
+        <div className="min-h-0 flex-1">
+          <PcbPreview3D board={state.board} view={pcb3d.view} command={pcb3d.command} />
+        </div>
+      </div>
+    );
+  }
+
   // ── Empty state: no board yet ─────────────────────────────────────────────
   if (!state.board) {
     return (
@@ -2761,7 +2793,7 @@ export default function PcbEditor({
           />
           {/* Stage 15: 3D preview side sheet (three.js mounts only while open) */}
           {preview3dOpen && (
-            <div className="absolute inset-y-0 right-0 z-40 w-[min(560px,85%)] flex flex-col border-l border-zinc-800 bg-zinc-950 shadow-2xl">
+            <div className="absolute inset-y-0 right-0 z-40 w-[min(560px,85%)] flex flex-col border-l border-zinc-800 bg-zinc-950 shadow-sm">
               <div className="flex items-center justify-between h-9 px-3 shrink-0 border-b border-zinc-800 text-xs">
                 <span className="font-medium text-zinc-200">3D preview</span>
                 <button
@@ -2780,7 +2812,7 @@ export default function PcbEditor({
           )}
           {assignmentsOpen && assignmentScope && <AssignmentQueuePanel scope={{ ...assignmentScope, assemblyVariantId: "default" }} onClose={() => setAssignmentsOpen(false)} />}
           {placementWarning && (
-            <div className="absolute bottom-12 left-3 z-50 max-w-md rounded-lg border border-amber-500/35 bg-zinc-900/95 p-3 text-xs text-zinc-200 shadow-xl">
+            <div className="absolute bottom-12 left-3 z-50 max-w-md rounded-lg border border-amber-500/35 bg-zinc-900/95 p-3 text-xs text-zinc-200 shadow-sm">
               <p className="text-amber-200">{placementWarning}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <button type="button" onClick={() => void autoPlace.run()} disabled={autoPlace.state === "running"} className="rounded bg-teal-600 px-2 py-1 text-[11px] text-white hover:bg-teal-500 disabled:opacity-40">Auto-arrange parts</button>
@@ -2790,7 +2822,7 @@ export default function PcbEditor({
             </div>
           )}
           {toast && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 px-3 py-1.5 rounded border border-zinc-700 bg-zinc-900/95 text-xs text-zinc-200 shadow-lg">
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 px-3 py-1.5 rounded border border-zinc-700 bg-zinc-900/95 text-xs text-zinc-200 shadow-sm">
               {toast}
             </div>
           )}
@@ -2812,7 +2844,7 @@ export default function PcbEditor({
           {/* Stage 17 Phase D: floating AI assist (palette-launched; works
               without a selection — the inspector footer has its own box) */}
           {assistOpen && (
-            <div className="absolute bottom-3 right-3 z-40 w-72 rounded-lg border border-zinc-700 bg-zinc-900/95 shadow-xl">
+            <div className="absolute bottom-3 right-3 z-40 w-72 rounded-lg border border-zinc-700 bg-zinc-900/95 shadow-sm">
               <div className="flex items-center justify-between px-3 pt-2">
                 <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
                   AI assist
@@ -2982,7 +3014,7 @@ function SyncBlockersPanel({ blockers, busy, onDismiss }: { blockers: SyncBlocke
     ? `Schematic → PCB refused: ${blockers.items.length} part(s) cannot reach the board — nothing was bound or published`
     : `Schematic → PCB blocked: ${blockers.result.blockers.length} blocker(s) in the preflight — nothing was applied`;
   return (
-    <section aria-label="Schematic → PCB refusal" data-testid="sync-blockers" data-kind={blockers.kind} className="rounded-lg border border-red-900/60 bg-zinc-950/95 p-3 text-left text-xs text-zinc-300 shadow-lg">
+    <section aria-label="Schematic → PCB refusal" data-testid="sync-blockers" data-kind={blockers.kind} className="rounded-lg border border-red-900/60 bg-zinc-950/95 p-3 text-left text-xs text-zinc-300 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <p className="font-semibold text-red-300">{title}</p>
         <button type="button" onClick={onDismiss} data-testid="sync-blockers-dismiss" className="shrink-0 rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-300 hover:border-zinc-500">Dismiss</button>

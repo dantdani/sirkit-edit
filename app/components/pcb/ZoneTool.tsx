@@ -304,7 +304,7 @@ export function ZoneTool({ scene, active, board, getHistory, activeLayer, toast 
   };
 
   return (
-    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 w-56 p-3 rounded border border-zinc-700 bg-zinc-900/95 shadow-lg text-xs flex flex-col gap-2">
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 w-56 p-3 rounded border border-zinc-700 bg-zinc-900/95 shadow-sm text-xs flex flex-col gap-2">
       <p className="font-medium text-zinc-200">New zone</p>
       <NetLayerFields board={board} netId={netId} layer={layer} onNetId={setNetId} onLayer={setLayer} />
       <label className="flex items-center justify-between gap-2">
@@ -368,7 +368,7 @@ export function AddPlaneDialog({
   if (!open) return null;
 
   return (
-    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 w-56 p-3 rounded border border-zinc-700 bg-zinc-900/95 shadow-lg text-xs flex flex-col gap-2">
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 w-56 p-3 rounded border border-zinc-700 bg-zinc-900/95 shadow-sm text-xs flex flex-col gap-2">
       <p className="font-medium text-zinc-200">Fill layer as plane</p>
       <NetLayerFields board={board} netId={netId} layer={layer} onNetId={setNetId} onLayer={setLayer} />
       <div className="flex justify-end gap-2 mt-1">

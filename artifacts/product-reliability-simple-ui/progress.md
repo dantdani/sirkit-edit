@@ -106,3 +106,23 @@ Status: DONE, pending commit.
 
 Exact next step: secret scan, commit C, push; then checkpoint D (the generated UI↔AI coverage matrix with dispositions,
 registry-generated manuals, drift gates, and the missing high-value shared commands).
+
+## Checkpoint E — the interface simplified in place (2026-10-16): DONE
+
+Landed: the empty sheet's entry action; the Workspace settings dialog (the Settings gear named and wired; the chat header's
+settings moved into it with a one-line summary left behind); the 3D tab as a real state of the PCB editor (one renderer); computed
+design checks (`design-checks.ts`) rendered under both library panels; the canvas sheet-size select removed (it duplicated Settings
+and overlapped the rails at ≤1366 px); a class-only styling pass (no blur, flat shadows, flat logo). Three registry rules; the B17
+inventory (636 / 64) and the B24 census (168 in scope, 0 unnamed) regenerated; C19 re-anchored; 29 citation rows re-pointed; the
+page line-count pin 8618 → 8626 → 8612.
+
+Verified: tsc 0; eslint 0 on the touched files; the eight gate suites 81 passed; `e2e/simple-workspace.spec.ts` (new, five steps,
+four sizes, chat open and closed) green after two real defects it found were fixed (F-30 design checks unreachable in Build mode,
+F-31 the canvas select overlap) and one spec defect; 11 fixture specs passed in one run (`simple-workspace`, `journey-contract`,
+`prompt-to-gerber`, `minimum-width` ×3, `keyboard-and-focus` ×5). Details and the honest notes (the fixture's categories 500, the
+post-apply AI passes' 503 → provider card) in `validation.md` and `ui-simplification.md`.
+
+Exact next step: commit E (explicit paths; the D agents' uncommitted edits stay out), push; then checkpoint D — the first
+background workflow (two agents, "commands" and "parity") stopped writing at 00:14 EDT on 2026-10-16 with phase 1 unfinished and
+no completion record; its partial outputs in the tree (`pr-d-parity-*.test.ts`, `build-multi-generation.ts`, the `build-multi`
+route extraction) are assessed and completed under D, then the matrix, the manuals and the drift gates.

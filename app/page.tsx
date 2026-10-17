@@ -79,6 +79,7 @@ import { loadSessionIdentity, sessionAuthorizationBindingFrom, SESSION_IDENTITY_
 import { projectSelectorHeaders } from "@/app/lib/project/project-selector";
 import { completenessNote, electricalCheckNote, type BuildMultiResponse } from "@/app/lib/schematic/build-result"; // [PR-C]
 import { clearPendingProposal, loadPendingProposal, savePendingProposal } from "@/app/lib/project/pending-proposal-store"; // [PR-C]
+import { computeDesignChecks, type DesignCheck } from "@/app/lib/schematic/design-checks"; // [PR-E]
 import { deriveJourney, type JourneyActionId, type JourneyGenerationFailure, type JourneyPcbFacts } from "@/app/lib/workflow/journey"; // [PR-C] the shared stage model
 import { JourneyStrip } from "@/app/components/workflow/JourneyStrip"; // [PR-C]
 
@@ -1202,7 +1203,7 @@ function SchematicEditor({
   placementExactIdentity,
   netLabels,
   pendingNetLabel, setPendingNetLabel,
-  pageSize, setPageSize,
+  pageSize,
   onDeleteComponent,
   graph,
   viewScope,
@@ -1227,7 +1228,6 @@ function SchematicEditor({
   pendingNetLabel: PendingNetLabel | null;
   setPendingNetLabel: (p: PendingNetLabel | null) => void;
   pageSize: PageSize;
-  setPageSize: (p: PageSize) => void;
   /** B06: canonical deletion — the editor never filters state directly. */
   onDeleteComponent: (family: "theory" | "kicad", componentId: string) => void;
   /** B07/B07.1: canonical graph commands + the gesture transaction contract.
@@ -1957,22 +1957,9 @@ function SchematicEditor({
 
   return (
     <div className="absolute inset-0 bg-zinc-950">
-      {/* Page-size + fit-to-page controls (top-right) */}
-      <div className="absolute top-3 right-3 z-10 flex items-center gap-1 bg-zinc-900/90 border border-zinc-800 rounded-md p-1 backdrop-blur-sm shadow-lg">
-        <select
-          value={pageSize}
-          onChange={(e) => setPageSize(e.target.value as PageSize)}
-          title="Sheet size — also sets the KiCad export page"
-          className="h-7 text-xs bg-zinc-800 text-zinc-200 border border-zinc-700 rounded px-1.5 outline-none focus:border-zinc-500 cursor-pointer"
-        >
-          <option value="A5">A5</option>
-          <option value="A4">A4</option>
-          <option value="A3">A3</option>
-          <option value="A2">A2</option>
-          <option value="A1">A1</option>
-          <option value="USLetter">US Letter</option>
-          <option value="USLegal">US Legal</option>
-        </select>
+      {/* Fit-to-page + go-to controls (top-right). [PR-E] the sheet-size select moved to Workspace settings: here it overlapped the
+          schematic toolbar's rail buttons at 1280–1366 px. */}
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-1 bg-zinc-900/90 border border-zinc-800 rounded-md p-1 shadow-sm">
         <button
           title="Fit page to view"
           onClick={() => schematicView.fitPage()}
@@ -1996,7 +1983,7 @@ function SchematicEditor({
       </div>
 
       {/* Floating toolbar */}
-      <div className="absolute top-3 left-3 z-10 flex gap-1 bg-zinc-900/90 border border-zinc-800 rounded-md p-1 backdrop-blur-sm shadow-lg">
+      <div className="absolute top-3 left-3 z-10 flex gap-1 bg-zinc-900/90 border border-zinc-800 rounded-md p-1 shadow-sm">
         <button
           title="Select"
           onClick={() => { setTool("select"); setWireDraftStart(null); }}
@@ -2378,7 +2365,7 @@ function SchematicEditor({
               else if (e.key === "Escape") { e.preventDefault(); setLabelDraft(null); }
             }}
             onBlur={() => setLabelDraft(null)}
-            className="h-6 w-28 bg-zinc-900 border border-teal-600 rounded px-1.5 font-mono text-[11px] uppercase text-zinc-100 placeholder:text-zinc-600 outline-none shadow-lg"
+            className="h-6 w-28 bg-zinc-900 border border-teal-600 rounded px-1.5 font-mono text-[11px] uppercase text-zinc-100 placeholder:text-zinc-600 outline-none shadow-sm"
           />
         </div>
       )}
@@ -2428,7 +2415,7 @@ function PropertiesPanel({
   onReferenceChange: (v: string) => void;
 }) {
   return (
-    <div className="absolute top-14 right-4 w-52 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 backdrop-blur-sm shadow-lg">
+    <div className="absolute top-14 right-4 w-52 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 shadow-sm">
       <div className="text-xs uppercase text-zinc-500 mb-0.5 tracking-wide">
         {SCH_TYPE_LABEL[comp.type]}
       </div>
@@ -2499,7 +2486,7 @@ function KicadPropertiesPanel({
   }, [instance.partId]);
 
   return (
-    <div className="absolute top-14 right-4 w-60 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 backdrop-blur-sm shadow-lg">
+    <div className="absolute top-14 right-4 w-60 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 shadow-sm">
       <div className="text-xs uppercase text-zinc-500 mb-2 tracking-wide truncate">
         {part?.name ?? "KiCad part"}
       </div>
@@ -2663,6 +2650,7 @@ export default function Home() {
   const [preparePcbRequested, setPreparePcbRequested] = useState(false);
   const [lastGenerationFailure, setLastGenerationFailure] = useState<JourneyGenerationFailure | null>(null);
   const [syncRequestToken, setSyncRequestToken] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false); // [PR-E] the scoped workspace settings dialog
   // [B16.1C §F] what the pending proposal will change, against the LIVE
   // canonical schematic at review time (recomputed when either changes).
   const pendingProposalSummary = useMemo(() => pendingReplace ? describeSchematicProposal(pendingReplace.state, { components, wires, kicadComponents, netLabels }) : null, [pendingReplace, components, wires, kicadComponents, netLabels]);
@@ -2802,7 +2790,7 @@ export default function Home() {
   const applyingHistoryRef = useRef(false);
   // Latch the PCB editor mounted the first time it is opened (see the render
   // site: it is hidden, not unmounted, on tab switches).
-  useEffect(() => { if (view === "pcb") setPcbMounted(true); }, [view]);
+  useEffect(() => { if (view === "pcb" || view === "3d") setPcbMounted(true); }, [view]); // [PR-E] the 3D tab shows the editor's own preview, so it mounts the editor too
   const schHistoryRef = useRef<SchematicHistory<SchematicSnapshot> | null>(null);
   // ── [B17-E] the project operation timeline: it REFERENCES the two authoritative histories (schematic snapshots,
   // canonical PCB history) and orders their operations; a project-level undo identifies the latest ELIGIBLE
@@ -5929,6 +5917,33 @@ export default function Home() {
           ? "Edit"
           : "Send";
 
+  // [PR-E] The Build sidebar's design checks are computed from the authoritative schematic and the catalog parts in the
+  // cache (never decorative); a part loading later re-runs them; the result names the digest it was computed on.
+  const [partsLoadedTick, setPartsLoadedTick] = useState(0);
+  useEffect(() => {
+    const ids = [...new Set((authoritativeSchematic.kicadComponents ?? []).map((instance) => instance.partId))];
+    const unsubscribes = ids.map((id) => subscribeToPart(id, () => setPartsLoadedTick((tick) => tick + 1)));
+    for (const id of ids) if (!getCachedPart(id)) void ensurePartLoaded(id).catch(() => {});
+    return () => { for (const unsubscribe of unsubscribes) unsubscribe(); };
+  }, [authoritativeSchematic]);
+  const designChecks = useMemo(() => {
+    void partsLoadedTick;
+    const parts = new Map<string, CachedPart>();
+    for (const instance of authoritativeSchematic.kicadComponents ?? []) { const part = getCachedPart(instance.partId); if (part) parts.set(instance.partId, part); }
+    return computeDesignChecks(authoritativeSchematic, parts, schematicStateDigest(authoritativeSchematic), mode);
+  }, [authoritativeSchematic, partsLoadedTick, mode]);
+  // [PR-E] the computed design checks, shown beneath BOTH library panels (before this, the block sat in the Theory-only branch
+  // and Build mode — the default — never showed it; fault F-07)
+  const designChecksFooter = (
+    <div className="p-3 border-t border-zinc-800 bg-zinc-900/40 shrink-0">
+      <div className="text-xs text-zinc-500 mb-2">Design checks <span className="text-zinc-600">(current schematic)</span></div>
+      <div className="space-y-1.5 text-xs" data-testid="design-checks" data-digest={designChecks.digest}>
+        {designChecks.checks.map((check) => <CheckRow key={check.id} check={check} />)}
+        <CheckRow check={{ id: "bom", label: "BOM: not finalized (BOM tab)", state: "not_run", count: 0, findings: [], reason: "informational" }} muted />
+      </div>
+    </div>
+  );
+
   // [PR-C] The journey: the ten stages with a status each and ONE next permitted action, derived from facts the page and
   // the PCB editor hold. Labels are not authority: every action here opens or focuses an existing human control.
   const journey = deriveJourney({
@@ -6142,7 +6157,7 @@ export default function Home() {
       {/* ── Header ── */}
       <header className="h-12 border-b border-zinc-800 flex items-center px-3 gap-3 shrink-0">
         <div className="flex items-center gap-2 pr-3 border-r border-zinc-800 h-12 -my-px">
-          <div className="size-6 rounded bg-gradient-to-br from-teal-400 to-cyan-700" />
+          <div className="size-6 rounded bg-teal-600" />
           <span className="font-medium text-zinc-100">sirkit</span>
           <Badge variant="secondary" className="text-[10px] h-5 px-1.5 ml-1">preview</Badge>
         </div>
@@ -6258,7 +6273,7 @@ export default function Home() {
           >
             <MessageSquare className="size-3.5" />
           </Button>
-          <Button size="sm" variant="ghost" className="text-zinc-300">
+          <Button size="sm" variant="ghost" className="text-zinc-300" title="Workspace settings" aria-label="Workspace settings" data-testid="workspace-settings" onClick={() => setSettingsOpen(true)}>
             <Settings className="size-3.5" />
           </Button>
         </div>
@@ -6328,7 +6343,10 @@ export default function Home() {
                 </ScrollArea>
               </>
             ) : mode === "build" ? (
-              <BuildLibraryPanel onSelectForPlacement={startKicadPlacement} projectScope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} />
+              <>
+                <BuildLibraryPanel onSelectForPlacement={startKicadPlacement} projectScope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} />
+                {designChecksFooter}
+              </>
             ) : (
               <>
                 <div className="p-3 border-b border-zinc-800">
@@ -6369,14 +6387,7 @@ export default function Home() {
                     </div>
                   )}
                 </ScrollArea>
-                <div className="p-3 border-t border-zinc-800 bg-zinc-900/40">
-                  <div className="text-xs text-zinc-500 mb-2">Design checks</div>
-                  <div className="space-y-1.5 text-xs">
-                    <CheckRow ok label="No floating nets" />
-                    <CheckRow ok label="Supply rails connected" />
-                    <CheckRow label="BOM not finalized" />
-                  </div>
-                </div>
+                {designChecksFooter}
               </>
             )}
           </aside>
@@ -6422,19 +6433,27 @@ export default function Home() {
                     placementExactIdentity={placementExactIdentity}
                     netLabels={netLabels}
                     pendingNetLabel={pendingNetLabel} setPendingNetLabel={setPendingNetLabel}
-                    pageSize={pageSize} setPageSize={changeSheetSize}
+                    pageSize={pageSize}
                     onDeleteComponent={(family, componentId) => void deleteComponentCanonical(family, componentId)}
                     graph={schematicGraphApi}
                     viewScope={{ projectId: project?.id ?? "local", branchId: "main" }}
                     viewSessionBridge={viewSessionBridgeRef.current!} // [B17-F]
                   />
-                  {/* Empty state overlay */}
+                  {/* Empty state: the circuit-entry action is right here ([PR-E]); the canvas keeps its pointer behaviour around it */}
                   {components.length === 0 && wires.length === 0 && kicadComponents.length === 0 && netLabels.length === 0 && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none select-none">
-                      <Sparkles className="size-8 text-zinc-700" />
+                      <Cable className="size-8 text-zinc-700" />
                       <p className="text-zinc-400 text-sm">Empty schematic</p>
+                      <button
+                        type="button"
+                        data-testid="empty-sheet-describe-circuit"
+                        onClick={() => handleJourneyAction("describe_circuit")}
+                        className="pointer-events-auto rounded border border-teal-700 bg-teal-600/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-500"
+                      >
+                        Describe a circuit
+                      </button>
                       <p className="text-zinc-500 text-xs text-center max-w-xs">
-                        Describe a circuit above, or pick a tool from the toolbar to place components manually.
+                        The assistant drafts a schematic you review before it is applied — or place parts yourself from the {mode === "build" ? "Build" : "Theory"} Library and the toolbar.
                       </p>
                     </div>
                   )}
@@ -6511,10 +6530,6 @@ export default function Home() {
                   // [B19-E E5] a withdrawn revision's successor is reviewed and rebound in the PCB component review (a reviewer's act)
                   onReviewSuccessor={(row) => { workspaceView.open("pcb"); showToast(`Review the successor for ${row.refDesList.join(", ")} in the Component review panel: preview the diff, then a reviewer rebinds.`); }}
                 />
-              ) : view !== "pcb" ? (
-                <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm select-none">
-                  {view === "3d"        && "3D view"}
-                </div>
               ) : null}
               {/* R06: the PCB editor stays MOUNTED once opened — unmounting on
                   tab switch destroyed the board state and its undo history.
@@ -6528,7 +6543,7 @@ export default function Home() {
                   identity (tab switches within a project keep the mount, so
                   board state and undo history still survive tab changes). */}
               {(pcbMounted || view === "pcb") && (
-                <div className={view === "pcb" ? "absolute inset-0" : "hidden"}>
+                <div className={view === "pcb" || view === "3d" ? "absolute inset-0" : "hidden"}>{/* [PR-E] the 3D tab is the editor's own preview, presented full-size */}
                   <PcbEditor
                     key={project?.id ?? "unloaded"}
                     schematic={authoritativeSchematic}
@@ -6536,6 +6551,8 @@ export default function Home() {
                     hydrateToken={pcbHydrateToken}
                     onJourneyFacts={setPcbFacts} // [PR-C] display only
                     syncRequestToken={syncRequestToken} // [PR-C] "Prepare PCB" from the journey strip
+                    presentation={view === "3d" ? "3d" : "editor"} // [PR-E] the 3D tab renders the editor's one preview, never a second renderer
+                    onOpenPcbTab={() => workspaceView.open("pcb")}
                     gateSchematicSync={() => schematicConsumerGate("pcb-sync")}
                     aiOwnership={captureAiRequestOwnership}
                     editorContextBridge={editorContextBridgeRef.current!} // B10
@@ -6580,6 +6597,50 @@ export default function Home() {
           </div>
         )}
 
+        {/* [PR-E] Workspace settings: the sheet size, the AI provider and runtime, the project's agent autonomy; nothing invented */}
+        <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+          <DialogContent data-testid="workspace-settings-dialog">
+            <DialogHeader>
+              <DialogTitle>Workspace settings</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 text-sm">
+              <section className="space-y-1.5">
+                <h3 className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">Schematic</h3>
+                <label className="flex items-center justify-between gap-3 text-xs text-zinc-300">
+                  <span>Sheet size (also sets the KiCad export page)</span>
+                  <select aria-label="Sheet size" value={pageSize} onChange={(event) => changeSheetSize(event.target.value as PageSize)} className="h-7 rounded border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-200 outline-none focus:border-teal-500">
+                    {(["A5", "A4", "A3", "A2", "A1", "USLetter", "USLegal"] as const).map((size) => <option key={size} value={size}>{size === "USLetter" ? "US Letter" : size === "USLegal" ? "US Legal" : size}</option>)}
+                  </select>
+                </label>
+              </section>
+              <section className="space-y-1.5">
+                <h3 className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">Assistant</h3>
+                <label className="flex items-center justify-between gap-3 text-xs text-zinc-300">
+                  <span>AI Brain</span>
+                  <select aria-label="AI Brain" value={aiBrain} onChange={(event) => selectAiBrain(event.target.value as LLMProviderId)} className="h-7 rounded border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-200 outline-none focus:border-teal-500">
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                  </select>
+                </label>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px] text-zinc-500">
+                  <dt>Model</dt><dd className="text-zinc-300">{aiRuntime?.providers[aiBrain].label ?? "Loading…"}</dd>
+                  {aiBrain === "openai" && aiRuntime?.providers.openai.contextWindowTokens ? <><dt>Context</dt><dd className="text-zinc-300" title={`${aiRuntime.providers.openai.contextWindowTokens.toLocaleString()} token context; ${aiRuntime.providers.openai.maxOutputTokens?.toLocaleString() ?? "provider-defined"} maximum output`}>{(aiRuntime.providers.openai.contextWindowTokens / 1_000_000).toFixed(2)}M tokens · app cap none</dd></> : null}
+                  <dt>Embeddings</dt><dd className="text-zinc-300">OpenAI</dd>
+                </dl>
+                {/* [B18-D I11] the project's agent autonomy: shown to every member; a project administrator may change it */}
+                <AutonomyModeControl key={project?.id ?? "no-project"} scope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} />
+                <p className="text-[11px] text-zinc-500">Release, qualification and ordering are never done by the assistant — use the release workflow.</p>
+              </section>
+              <section className="space-y-1 text-[11px] text-zinc-500">
+                <h3 className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">Runtime</h3>
+                <p>Authentication: local development identity (not production). Deployment flags are set by the operator, not here.</p>
+              </section>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setSettingsOpen(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         {/* Confirmation dialog for replacing existing schematic */}
         <Dialog
           open={pendingReplace !== null}
@@ -6638,7 +6699,7 @@ export default function Home() {
           onCancel={cancelReplacementProposal}
         />
         {replacementReceipt && (
-          <div className="fixed bottom-28 right-4 z-50 max-w-xs rounded border border-teal-800/60 bg-zinc-900/95 px-3 py-2 text-[11px] text-teal-300 shadow-lg">
+          <div className="fixed bottom-28 right-4 z-50 max-w-xs rounded border border-teal-800/60 bg-zinc-900/95 px-3 py-2 text-[11px] text-teal-300 shadow-sm">
             <div className="font-medium text-teal-200">Exact replacement applied &amp; verified</div>
             <div className="mt-0.5 text-zinc-400">
               {replacementReceipt.sourcePartId} → {replacementReceipt.target.partId} · transaction {replacementReceipt.transactionId.slice(0, 12)}… · undoable
@@ -6653,7 +6714,7 @@ export default function Home() {
         {/* B12: verified-commit confirmation, driven by the receipt — success
             is truthful because it exists only after postcondition verification. */}
         {tier1Receipt && (
-          <div className="fixed bottom-16 right-4 z-50 max-w-xs rounded border border-teal-800/60 bg-zinc-900/95 px-3 py-2 text-[11px] text-teal-300 shadow-lg">
+          <div className="fixed bottom-16 right-4 z-50 max-w-xs rounded border border-teal-800/60 bg-zinc-900/95 px-3 py-2 text-[11px] text-teal-300 shadow-sm">
             <div className="font-medium text-teal-200">Approved edit applied &amp; verified</div>
             <div className="mt-0.5 text-zinc-400">
               transaction {tier1Receipt.transactionId.slice(0, 12)}… · {tier1Receipt.operationCount} operation(s)
@@ -6899,33 +6960,12 @@ export default function Home() {
                   {chatFullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
                 </button>
               </div>
-              <div className="mt-2 flex items-end gap-2 flex-wrap">
-                <label className="flex flex-col gap-1 min-w-28">
-                  <span className="text-[10px] uppercase tracking-wide text-zinc-500">AI Brain</span>
-                  <select
-                    aria-label="AI Brain"
-                    value={aiBrain}
-                    onChange={(event) => selectAiBrain(event.target.value as LLMProviderId)}
-                    className="h-7 rounded border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-200 outline-none focus:border-teal-500"
-                  >
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                  </select>
-                </label>
-                <div className="pb-0.5 text-[10px] leading-4 text-zinc-500">
-                  <div>Brain: <span className="text-teal-300">{aiBrain === "openai" ? "OpenAI" : "Anthropic"}</span></div>
-                  <div>Model: <span className="text-zinc-300">{aiRuntime?.providers[aiBrain].label ?? "Loading…"}</span></div>
-                  {aiBrain === "openai" && aiRuntime?.providers.openai.contextWindowTokens ? (
-                    <div title={`${aiRuntime.providers.openai.contextWindowTokens.toLocaleString()} token context; ${aiRuntime.providers.openai.maxOutputTokens?.toLocaleString() ?? "provider-defined"} maximum output`}>
-                      Context: <span className="text-zinc-300">{(aiRuntime.providers.openai.contextWindowTokens / 1_000_000).toFixed(2)}M</span>
-                      {" · "}App cap: <span className="text-zinc-300">none</span>
-                    </div>
-                  ) : null}
-                  <div>Embeddings: <span className="text-zinc-300">OpenAI</span></div>
-                </div>
-                {/* [B18-D I11] the project's agent autonomy: shown to every member; a project administrator may change it */}
-                <AutonomyModeControl key={project?.id ?? "no-project"} scope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} />
-              </div>
+              {/* [PR-E] provider choice and autonomy live in Workspace settings (secondary); the chat keeps a one-line summary */}
+              <p className="mt-1.5 text-[10px] leading-4 text-zinc-500" data-testid="chat-settings-summary">
+                {aiBrain === "openai" ? "OpenAI" : "Anthropic"} · {aiRuntime?.providers[aiBrain].label ?? "model loading…"} · every AI change waits for your confirmation
+                {" — "}
+                <button type="button" onClick={() => setSettingsOpen(true)} className="underline decoration-zinc-600 hover:text-zinc-300">change in Settings</button>
+              </p>
               {/* [B18-D review] §1 item 3: the static Tier 3 line */}
               <p className="mt-1.5 text-[10px] leading-4 text-zinc-500" data-testid="chat-tier3-line">Release, qualification and ordering are never done by the assistant — use the release workflow.</p>
             </div>
@@ -7135,7 +7175,7 @@ export default function Home() {
                     {moreMenuOpen && (
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setMoreMenuOpen(false)} />
-                        <div className="absolute bottom-full right-0 mb-1 z-50 w-56 rounded-md border border-zinc-800 bg-zinc-900 py-1 shadow-lg">
+                        <div className="absolute bottom-full right-0 mb-1 z-50 w-56 rounded-md border border-zinc-800 bg-zinc-900 py-1 shadow-sm">
                           <button
                             className="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
                             disabled={isReviewing || isTidying || isSecondOpinion || loading || isGenerating || isEditing ||
@@ -7177,7 +7217,7 @@ export default function Home() {
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-md">
           <div
             role="status"
-            className="flex items-start gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-200 shadow-lg"
+            className="flex items-start gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-200 shadow-sm"
           >
             <span className="flex-1">{toast}</span>
             <button
@@ -7977,7 +8017,7 @@ function FloatingPanel({
   return (
     <div
       style={{ position: "absolute", left: layout.x, top: layout.y, width: layout.w, height: layout.h, zIndex: 20 }}
-      className="flex flex-col bg-zinc-900/95 border border-zinc-700 rounded-md shadow-xl backdrop-blur-sm overflow-hidden"
+      className="flex flex-col bg-zinc-900/95 border border-zinc-700 rounded-md shadow-sm overflow-hidden"
     >
       <div
         className="h-8 px-3 flex items-center gap-2 shrink-0 border-b border-zinc-800 cursor-move select-none"
@@ -8106,7 +8146,7 @@ function SimView({
 
       {/* Toolbar — kept above the floating panel so it stays accessible
           even if the user drags the panel over it. */}
-      <div className="absolute top-2 left-2 z-30 flex items-center gap-0.5 bg-zinc-900/95 border border-zinc-800 rounded px-1 py-0.5 backdrop-blur-sm shadow">
+      <div className="absolute top-2 left-2 z-30 flex items-center gap-0.5 bg-zinc-900/95 border border-zinc-800 rounded px-1 py-0.5 shadow">
         <button
           title="Probe mode (P)"
           onClick={() => setSimMode("probe")}
@@ -8329,7 +8369,7 @@ function AnalysisPicker({
       </button>
 
       {open === "type" && (
-        <div className="absolute top-full left-0 mt-1 z-30 min-w-[140px] bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1">
+        <div className="absolute top-full left-0 mt-1 z-30 min-w-[140px] bg-zinc-900 border border-zinc-700 rounded-md shadow-sm py-1">
           {(["tran", "ac", "dc", "op"] as const).map((t) => (
             <button
               key={t}
@@ -8345,7 +8385,7 @@ function AnalysisPicker({
       )}
 
       {open === "settings" && (
-        <div className="absolute top-full left-0 mt-1 z-30 w-64 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl p-3">
+        <div className="absolute top-full left-0 mt-1 z-30 w-64 bg-zinc-900 border border-zinc-700 rounded-md shadow-sm p-3">
           <div className="text-[10px] uppercase text-zinc-500 mb-2 tracking-wide">
             {ANALYSIS_LABELS[config.type]} settings
           </div>
@@ -8554,14 +8594,19 @@ function BuildCategoryRow({ label, count }: { label: string; count: number }) {
   );
 }
 
-function CheckRow({ ok, label }: { ok?: boolean; label: string }) {
+/** [PR-E] A design check with its REAL state: pass, findings (with the first messages in the tooltip) or not run (with the
+ *  reason). Never a decorative pass: a check that did not run shows as not run. */
+function CheckRow({ check, muted = false }: { check: DesignCheck; muted?: boolean }) {
+  const title = check.state === "findings" ? check.findings.join("\n") : check.state === "not_run" ? `Not run: ${check.reason ?? "unknown"}` : "No findings on the current schematic";
   return (
-    <div className="flex items-center gap-2 text-zinc-300">
-      {ok
-        ? <Check         className="size-3.5 text-emerald-400" />
-        : <AlertTriangle className="size-3.5 text-amber-400" />
-      }
-      <span>{label}</span>
+    <div className={`flex items-center gap-2 ${muted ? "text-zinc-500" : "text-zinc-300"}`} title={title} data-testid={`design-check-${check.id}`} data-state={check.state}>
+      {check.state === "pass"
+        ? <Check         className="size-3.5 text-emerald-400" aria-hidden="true" />
+        : check.state === "findings"
+          ? <AlertTriangle className="size-3.5 text-amber-400" aria-hidden="true" />
+          : <Circle className="size-3.5 text-zinc-600" aria-hidden="true" />}
+      <span className="min-w-0">{check.label}</span>
+      <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] text-zinc-500">{check.state === "pass" ? "pass" : check.state === "findings" ? `${check.count} finding${check.count === 1 ? "" : "s"}` : "not run"}</span>
     </div>
   );
 }

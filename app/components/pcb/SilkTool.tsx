@@ -51,7 +51,7 @@ export function SilkTool({ silk, active }: { silk: SilkToolHandle; active: boole
 
   return (
     <>
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 p-2 rounded border border-zinc-700 bg-zinc-900/95 shadow-lg text-xs flex flex-col gap-2 w-64">
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 p-2 rounded border border-zinc-700 bg-zinc-900/95 shadow-sm text-xs flex flex-col gap-2 w-64">
         <div className="flex items-center gap-1">
           {MODES.map((m) => (
             <button
@@ -112,7 +112,7 @@ export function SilkTool({ silk, active }: { silk: SilkToolHandle; active: boole
       </div>
 
       {silk.pendingTextAt && (
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 p-2 rounded border border-zinc-700 bg-zinc-900/95 shadow-lg text-xs flex items-center gap-2">
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 p-2 rounded border border-zinc-700 bg-zinc-900/95 shadow-sm text-xs flex items-center gap-2">
           <input
             ref={inputRef}
             aria-label="Silk text"

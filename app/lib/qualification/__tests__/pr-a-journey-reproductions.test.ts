@@ -90,26 +90,39 @@ describe("[PR-A 3] the composer's visible route and submission", () => {
     expect(page).toMatch(/: "Send";/);
   });
 
-  it.fails("the empty sheet's circuit-entry hint does not point above a closed chat panel", () => {
-    // the closed default (`const [chatOpen, setChatOpen] = useState(false)`) is not the defect by itself: the hint beside it is
+  // [PR-E] fixed: the empty sheet carries the circuit-entry action itself (opens the chat and focuses the composer)
+  it("the empty sheet's circuit-entry hint does not point above a closed chat panel", () => {
     expect(page).not.toMatch(/Describe a circuit above, or pick a tool from the toolbar/);
+    expect(page).toMatch(/data-testid="empty-sheet-describe-circuit"/);
+    expect(page).toMatch(/onClick=\{\(\) => handleJourneyAction\("describe_circuit"\)\}/);
   });
 });
 
 describe("[PR-A 4] dead and placeholder controls", () => {
-  it.fails("the header Settings button has a handler or is withheld with a reason", () => {
+  // [PR-E] fixed: a labelled button opens the workspace settings dialog (sheet size, AI brain, autonomy, runtime)
+  it("the header Settings button has a handler or is withheld with a reason", () => {
     expect(page).not.toMatch(/<Button size="sm" variant="ghost" className="text-zinc-300">\s*<Settings className="size-3\.5" \/>\s*<\/Button>/);
+    expect(page).toMatch(/aria-label="Workspace settings" data-testid="workspace-settings" onClick=\{\(\) => setSettingsOpen\(true\)\}/);
+    expect(page).toMatch(/data-testid="workspace-settings-dialog"/);
   });
 
-  it.fails("the 3D workspace tab renders the existing preview or an accurate unavailable state, never a placeholder literal", () => {
+  // [PR-E] fixed: the 3D tab presents the PCB editor's own preview (one renderer) or says why none exists
+  it("the 3D workspace tab renders the existing preview or an accurate unavailable state, never a placeholder literal", () => {
     expect(page).not.toMatch(/\{view === "3d"\s+&& "3D view"\}/);
+    expect(page).toMatch(/presentation=\{view === "3d" \? "3d" : "editor"\}/);
+    expect(pcbEditor).toMatch(/data-testid="pcb-3d-pane"/);
+    expect(pcbEditor).toMatch(/data-testid="pcb-3d-unavailable"/);
+    expect((pcbEditor.match(/<PcbPreview3D /g) ?? []).length).toBe(2); // the side sheet and the 3D presentation, never mounted together
   });
 });
 
 describe("[PR-A 5] decorative design checks", () => {
-  it.fails("no design-check row is an unconditional pass", () => {
+  // [PR-E] fixed: the rows render computeDesignChecks' real states (pass / findings / not run with the reason)
+  it("no design-check row is an unconditional pass", () => {
     expect(page).not.toMatch(/<CheckRow ok label="No floating nets" \/>/);
     expect(page).not.toMatch(/<CheckRow ok label="Supply rails connected" \/>/);
+    expect(page).toMatch(/computeDesignChecks\(authoritativeSchematic, parts, schematicStateDigest\(authoritativeSchematic\), mode\)/);
+    expect(page).toMatch(/data-testid=\{`design-check-\$\{check\.id\}`\} data-state=\{check\.state\}/);
   });
 });
 

@@ -5658,3 +5658,20 @@ validation.md §C, workflow-contract.md, fault-register.md, live-spend.json).
 - **Live:** ONE bounded Build request in the normal app with the owner's key (cap 6; 0.19 USD priced from the durable call records; cap 5.00, remaining 4.81) reached a complete 8-part proposal, approval, bindings, a verified plan, the durable board and a real local qualification (routed, 0 unrouted, parity pass); release not exercised live (`validation.md`).
 - **Unchanged:** B24 PARTIAL; LB-1..LB-17; no Astra activation; no default-model change.
 - **Next:** checkpoint D (semantic parity: the generated coverage matrix, dispositions, registry manuals, drift gates).
+
+### Product-reliability assignment, checkpoint E — the interface simplified in place (2026-10-16)
+
+- **Scope:** `app/page.tsx` (the empty sheet's entry action; the Workspace settings dialog; the chat header's one-line summary; the
+  3D tab mounted as a PCB-editor presentation; the computed design-checks footer under both library panels; the canvas sheet-size
+  select removed), `app/components/pcb/PcbEditor.tsx` (`presentation`, `onOpenPcbTab`, the 3D pane), `app/lib/schematic/design-checks.ts`
+  (new), `app/lib/engineering/control-registry.ts` (three rules), the class-only styling pass in 15 component files,
+  `e2e/simple-workspace.spec.ts` (new), `pr-e-design-checks` (new), `pr-a` E cases flipped to ordinary cases.
+- **Records:** B17 inventory 636 controls / 64 surfaces; B24 census in scope 168, unnamed 0; accessibility.md C19 re-anchored and
+  29 rows re-pointed (dated notes); page line-count pin 8618 → 8626 → 8612; fault register F-07 FIXED, F-30 and F-31 added and FIXED.
+- **Gates:** tsc 0 (×2); eslint 0 on the touched files; the eight gate suites 81 passed (×3); fixture Playwright 11 passed
+  (`simple-workspace`, `journey-contract`, `prompt-to-gerber`, `minimum-width` ×3, `keyboard-and-focus` ×5); secret scan 0 hits.
+  Two real defects found by the new spec and the screenshots (F-30, F-31) were fixed before the run went green.
+- **Live:** none this checkpoint (spend unchanged: 0.19 USD of 5.00).
+- **Unchanged:** B24 PARTIAL; LB-1..LB-17; no Astra activation; no default-model change.
+- **Next:** checkpoint D — the first background workflow died unfinished at 00:14 EDT (no completion record); assess and complete
+  its partial outputs, then the coverage matrix, the manuals and the drift gates.

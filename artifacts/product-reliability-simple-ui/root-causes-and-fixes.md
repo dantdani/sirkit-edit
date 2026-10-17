@@ -86,3 +86,15 @@ pass; the only refusals were Anthropic's rerank calls (no credits), which the pa
 the loop deadline refuses a new turn but does not abort one in flight (the request took 47.7 s against a 40 s deadline);
 the post-approval automatic passes (layout critic, review) spend provider budget outside the request's reservation; release
 was not exercised live (an administrator's irreversible act; the fixture proves it).
+
+## E — the interface simplified in place: what landed per fault (2026-10-16)
+
+| fault | fix | files | tests |
+|---|---|---|---|
+| R4 the empty-sheet hint pointed "above" at a closed chat | one labelled entry action that opens the chat and focuses the composer through the journey's `describe_circuit` action | `app/page.tsx` | `e2e/simple-workspace` step 1; `pr-a` (source) |
+| R4 / C19 the Settings gear had no handler and no name | **Workspace settings** dialog holding the existing settings (sheet size; AI Brain, model/context/embeddings, agent autonomy, Tier-3 line; runtime); Escape closes, focus returns; the chat header keeps a one-line summary | `app/page.tsx`, `control-registry.ts` (`view.page-settings`) | `e2e/simple-workspace` step 2; `pr-a` (source); b24-d3 |
+| R4 the 3D tab was a placeholder literal | `PcbEditor presentation="3d"`: an accurate unavailable state with "Open the PCB tab" (no board) or the PCB editor's own `PcbPreview3D` (one renderer) | `PcbEditor.tsx`, `app/page.tsx`, `control-registry.ts` (`view.pcb-3d-open-pcb`) | `e2e/simple-workspace` step 3; `pr-a` (source) |
+| F-07 decorative design checks | `computeDesignChecks` from the authoritative schematic and the loaded catalog parts; pass / findings / not run (reason); digest-bound; "not run" is never a pass | `app/lib/schematic/design-checks.ts`, `app/page.tsx` | `pr-e-design-checks` (3); `e2e/simple-workspace` step 4 |
+| F-30 the design checks were unreachable in Build mode (the default): the block sat in the Theory-only JSX branch | one `designChecksFooter` rendered under both library panels (`BuildLibraryPanel` + footer in Build mode) | `app/page.tsx` | `e2e/simple-workspace` step 4 (failed before the fix, passes after) |
+| F-31 the canvas sheet-size select overlapped the toolbar's rails at ≤1366 px and duplicated the Settings control | removed from the canvas chrome; Fit and Go to stay | `app/page.tsx` | `e2e/simple-workspace` step 5 + screenshots; `minimum-width` (3) |
+| visual noise (blur, heavy shadows, gradient logo) | class-only styling pass in 15 files | `app/components/**` | eslint; the full fixture specs above |

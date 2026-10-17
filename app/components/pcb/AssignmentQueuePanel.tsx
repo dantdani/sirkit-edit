@@ -124,7 +124,7 @@ function ScopedAssignmentQueuePanel({ scope: suppliedScope, onClose }: { scope: 
     return () => { session.mounted = false; controller.abort(); session.generation++; };
   }, [scope, applyPage]);
 
-  return <aside aria-label="Footprint assignment queue" className="absolute inset-y-0 right-0 z-50 flex w-[min(760px,94%)] flex-col border-l border-zinc-700 bg-zinc-950 shadow-2xl">
+  return <aside aria-label="Footprint assignment queue" className="absolute inset-y-0 right-0 z-50 flex w-[min(760px,94%)] flex-col border-l border-zinc-700 bg-zinc-950 shadow-sm">
     <header className="flex h-11 shrink-0 items-center justify-between border-b border-zinc-800 px-4"><div><h2 className="text-sm font-semibold text-zinc-100">Physical assignment workbench</h2><p className="text-[10px] text-zinc-500">Explicit decisions only · PCB unchanged</p></div><div className="flex items-center gap-2"><button type="button" onClick={() => void load()} aria-label="Refresh assignment queue" className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white"><RefreshCw className="size-4" /></button><button type="button" onClick={onClose} aria-label="Close assignment queue" className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white"><X className="size-4" /></button></div></header>
     {error && <div role="alert" className="m-3 rounded border border-red-900 bg-red-950/30 p-2 text-xs text-red-200">{error}</div>}
     {loading && items.length === 0 ? <div className="flex flex-1 items-center justify-center gap-2 text-sm text-zinc-500"><Loader2 className="size-4 animate-spin" />Loading current blockers…</div> : <div className="grid min-h-0 flex-1 grid-cols-[260px_1fr]">

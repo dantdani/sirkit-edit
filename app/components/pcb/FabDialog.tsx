@@ -102,7 +102,7 @@ export function FabDialog({
         tabIndex={-1}
         role="dialog"
         aria-label="Send to fab"
-        className="w-[46rem] max-w-[92vw] max-h-[84vh] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-4 text-xs shadow-xl flex flex-col gap-3 outline-none"
+        className="w-[46rem] max-w-[92vw] max-h-[84vh] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-4 text-xs shadow-sm flex flex-col gap-3 outline-none"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === "Escape" && !busy) {

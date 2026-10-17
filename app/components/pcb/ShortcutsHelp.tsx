@@ -90,7 +90,7 @@ export function ShortcutsHelp({ open, onClose }: { open: boolean; onClose: () =>
             onClose();
           }
         }}
-        className="w-[30rem] max-h-[85vh] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-4 text-xs shadow-xl outline-none"
+        className="w-[30rem] max-h-[85vh] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-4 text-xs shadow-sm outline-none"
       >
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-medium text-zinc-100">Keyboard shortcuts</p>

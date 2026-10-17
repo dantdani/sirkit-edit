@@ -933,7 +933,7 @@ function ProjectBomView(props: Props) {
           {exportMenuOpen && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => setExportMenuOpen(false)} />
-              <div className="absolute z-40 left-0 top-full mt-1 w-60 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl py-1 text-xs">
+              <div className="absolute z-40 left-0 top-full mt-1 w-60 rounded-md border border-zinc-700 bg-zinc-900 shadow-sm py-1 text-xs">
                 {(["digikey", "mouser", "lcsc"] as CartDistributor[]).map((d) => (
                   <button
                     key={d}
@@ -972,7 +972,7 @@ function ProjectBomView(props: Props) {
           {snapPopoverOpen && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => setSnapPopoverOpen(false)} />
-              <div className="absolute z-40 left-0 top-full mt-1 w-60 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl p-2.5">
+              <div className="absolute z-40 left-0 top-full mt-1 w-60 rounded-md border border-zinc-700 bg-zinc-900 shadow-sm p-2.5">
                 <label className="block text-[11px] text-zinc-400 mb-2">
                   Label (optional)
                   <input
@@ -1440,7 +1440,7 @@ function SourcingWorksheetModal({
     // [B24-D3] OD-215: the shared dialog (Base UI) names it by its heading, moves focus inside, closes on Escape and returns
     // focus to the "Export for distributor ▾" trigger; its default Close joins the form's Cancel.
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent finalFocus={finalFocus} className="block w-[380px] max-w-[calc(100%-2rem)] sm:max-w-[380px] rounded-lg border border-zinc-700 bg-zinc-950 p-4 text-zinc-100 shadow-2xl ring-0">
+      <DialogContent finalFocus={finalFocus} className="block w-[380px] max-w-[calc(100%-2rem)] sm:max-w-[380px] rounded-lg border border-zinc-700 bg-zinc-950 p-4 text-zinc-100 shadow-sm ring-0">
         <DialogTitle className="text-sm font-medium text-zinc-100 mb-1 pr-8">Sourcing worksheet (CSV, unverified)</DialogTitle>
         <div className="text-[11px] text-zinc-500 mb-3">
           Priced from cached offers, each with its source and when it was observed. Not verified procurement; no order is placed.
@@ -1557,7 +1557,7 @@ function DiffView({
 
 /** [B24-D3] The BOM drawers on the shared dialog: a right-hand sheet over the viewport (DialogContent's centring overridden by
  *  className only; its width is added per drawer). */
-const BOM_DRAWER_CLASS = "top-0 right-0 left-auto h-full max-h-full max-w-full translate-x-0 translate-y-0 rounded-none border-l border-zinc-800 bg-zinc-950 p-0 text-zinc-100 ring-0 shadow-2xl flex flex-col gap-0";
+const BOM_DRAWER_CLASS = "top-0 right-0 left-auto h-full max-h-full max-w-full translate-x-0 translate-y-0 rounded-none border-l border-zinc-800 bg-zinc-950 p-0 text-zinc-100 ring-0 shadow-sm flex flex-col gap-0";
 
 function HistoryPanel({
   snapshots,
@@ -1994,7 +1994,7 @@ function RiskBadge({ row, isWithheld, withheldWord }: { row: BomRow; isWithheld:
         {risk.total}
       </span>
       {/* Hover breakdown */}
-      <div className="hidden group-hover:block absolute z-30 left-0 top-full mt-1 w-60 p-2.5 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl text-left">
+      <div className="hidden group-hover:block absolute z-30 left-0 top-full mt-1 w-60 p-2.5 rounded-md border border-zinc-700 bg-zinc-900 shadow-sm text-left">
         <div className="text-[11px] font-medium text-zinc-200 mb-1.5">
           Risk: {risk.total} / 100 <span className={g.text}>({g.label})</span>
         </div>

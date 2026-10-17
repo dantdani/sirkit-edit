@@ -628,7 +628,7 @@ function PreviewPanel({
     if (exactIdentity) onPlace?.(partId, { exactIdentity });
   }
   return (
-    <aside className="absolute top-0 left-full h-full w-96 z-30 bg-zinc-950 border-l border-zinc-800 shadow-2xl flex flex-col">
+    <aside className="absolute top-0 left-full h-full w-96 z-30 bg-zinc-950 border-l border-zinc-800 shadow-sm flex flex-col">
       <div className="h-10 px-3 flex items-center gap-2 border-b border-zinc-800 shrink-0">
         <span className="text-sm text-zinc-200 font-medium flex-1 truncate">
           {detail?.name ?? "Part preview"}

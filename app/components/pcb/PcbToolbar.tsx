@@ -333,7 +333,7 @@ export function PcbToolbar({
         <summary title="Edit history" aria-label="Edit history" className={`${iconButtonClass(false)} list-none cursor-pointer`}>
           <History className="size-3.5" />
         </summary>
-        <div className="absolute left-0 top-8 z-[90] w-72 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl">
+        <div className="absolute left-0 top-8 z-[90] w-72 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 shadow-sm">
           <div className="border-b border-zinc-800 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-zinc-400">Session edit history</div>
           {historyEntries.length === 0 ? (
             <p className="px-3 py-4 text-[11px] text-zinc-500">No board edits in this session.</p>

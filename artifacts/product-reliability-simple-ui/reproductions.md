@@ -75,3 +75,12 @@ credential value was read or printed.
   router) → admin release → download and independent verification → reload → duplicate click → cross-project isolation →
   bounded refusal.
 - Label: CONFIRMED for the fixture only. It proves nothing about a live model, live authentication or real routing.
+
+## R8 — The design checks never rendered in Build mode (found by the E spec, 2026-10-16)
+
+Fresh browser under the fixture runtime, Build mode (the default), the Build Library opened from the activity bar: the panel
+shows the categories (or the fixture's "Could not load categories") and nothing else — no "Design checks" block, so the decorative
+checks R5 recorded could only ever be seen in Theory mode, where there are no catalog pins to check. Found when
+`e2e/simple-workspace.spec.ts` step 4 waited 20 s for `design-checks` after opening the panel (run 2, validation.md). Cause: the
+block was a sibling of the Theory list inside the else-branch of `mode === "build" ? <BuildLibraryPanel/> : (…)`. Fixed by one
+footer under both panels (F-30 in the fault register).

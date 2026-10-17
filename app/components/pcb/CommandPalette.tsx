@@ -110,7 +110,7 @@ function OpenCommandPalette({ actions, onClose }: { actions: PaletteAction[]; on
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-[26rem] max-w-[90%] rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden">
+      <div className="w-[26rem] max-w-[90%] rounded-lg border border-zinc-700 bg-zinc-900 shadow-sm overflow-hidden">
         <div className="flex items-center gap-2 px-3 border-b border-zinc-800">
           <Search className="size-3.5 shrink-0 text-zinc-500" />
           <input
