@@ -9,7 +9,7 @@ the lead decided (the OD-87 default): **B20 serves no proposal over MCP.** All f
 ratchet move, each with its reason; the structural rule (`mcp-exposure.ts`), the registry and every descriptor are
 unchanged (registry digest `eng1-4aacd63c7e0a6193`, as on the base 4299067), so only the two lists, the MCP tool manifest and
 the pages moved.
-The MCP subset is 9 tools: the 9 served reads; 8 tools are withheld: 2 reads and the 5 proposals, and B24-D2's 1 paged board read ([B24-D2, 2026-10-09] 7 until B24-D2 withheld its paged board read by choice, OD-235; its row is in section 14, appended so no line of this page moved).
+The MCP subset is 9 tools: the 9 served reads; 11 tools are withheld: 2 reads and the 5 proposals, and B24-D2's 1 paged board read, and PR-D's 1 generation proposal and 2 d2 reads, `sirkit.pcb-sync.preflight` and `sirkit.parts.catalog-inspect` ([B24-D2, 2026-10-09] 7 until B24-D2 withheld its paged board read by choice, OD-235; its row is in section 14, appended so no line of this page moved; [PR-D, 2026-10-16] 8 until PR-D withheld its Build-mode generation proposal, OD-243; its row is in section 14 too; [PR-D, 2026-10-17] 9 until PR-D d2 withheld its two Tier 0 reads - the preflight read for browser-only state, as OD-69, and the catalog inspection by choice, as OD-235; their rows are in section 14 too).
 MCP exposure in B20 is read-only. Closes D20-34's placement half and UNKNOWN 4; defers D20-8 by owner decision (not
 closed); D20-10's proposal half does not apply in B20. The propose delegation, the returned projection, the proposal
 pool, windows, replay and trace designed for B4 (OD-50's projection, OD-83 to OD-86, OD-88) are NOT built; their design is
@@ -356,8 +356,11 @@ B24-D2 added one agent-exposed Tier 0 read, `sirkit.pcb.board-page-inspect` (OD-
 board-inspect's own snapshot, a page at a time). The structural rule admits it, and it IS servable from durable state
 (`canonical-state`, `durable-server-board`, `board-present`) - unlike B3's two withheld reads. It is withheld by a reviewed
 choice, not an inability: paged answers and their cursors were never reviewed for MCP clients (OD-48, OD-54). The MCP subset
-stays the 9 served reads; restoring the read needs an owner decision.
+stays the 9 served reads; restoring the read needs an owner decision. [PR-D, 2026-10-17] PR-D d2 added two more agent-exposed Tier 0 reads, both withheld from MCP (11 withheld): `sirkit.pcb-sync.preflight`, whose only input is the editor's browser-only `SchematicState` (as B3's OD-69 reads), and `sirkit.parts.catalog-inspect`, servable from the catalog tables in principle but withheld by choice (as OD-235) - the MCP server binds no catalog port and its catalog reads were never reviewed for MCP clients. Their rows are below, appended so no line of this page moved; the MCP subset stays the 9 served reads.
 
 | tool | class | MCP | increment | decision | reason |
 |---|---|---|---|---|---|
 | `sirkit.pcb.board-page-inspect` | read | withheld | B24-D2 | OD-235 | servable from the durable server board, withheld by choice: paged answers and their cursors were never reviewed for MCP clients (OD-48, OD-54) |
+| `sirkit.schematic.generate-proposal` | propose | withheld | PR-D | OD-243 | seals against the editor's browser-only SchematicState and head mark (as B4's OD-82 proposals) and runs a provider generation of up to 40 s that an MCP call may not start (as B4's OD-87 engines); the agent reaches it through the chat route's injected port only |
+| `sirkit.pcb-sync.preflight` | read | withheld | PR-D d2 | — | its only input is the editor's `SchematicState`, which lives in browser storage; no durable table holds it (as B3's OD-69 reads); the agent reaches it through the loop's bound read wherever a validated schematic exists |
+| `sirkit.parts.catalog-inspect` | read | withheld | PR-D d2 | — | a choice, not an inability: servable from the catalog tables in principle (as OD-235's read), but the MCP server binds no catalog port and its catalog reads were never reviewed for MCP clients; restoring it needs an owner decision and a served port |

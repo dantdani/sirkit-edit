@@ -31,7 +31,7 @@ describe("[B20 C3] X — C3's first-party gate against A2's foreign-text matcher
   it("X1. A2's matcher finds no directive in any production id, title, description or judged schema string", () => {
     // [B20 merge] pin move: the A track's A4 adds one agent-exposed descriptor (sirkit.mcp.observation-read), so the
     // registry is 42 and the agent set 33; the MCP subset is unchanged at 9 (B4 withheld every proposal)
-    expect(SIRKIT_TOOL_CATALOG).toHaveLength(48); // [B22-B, 2026-10-01] pin move (OD-139): + the five named computation descriptors; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read
+    expect(SIRKIT_TOOL_CATALOG).toHaveLength(52); // [PR-D d2, 2026-10-16] pin move: 49 -> 52, + the Schematic to PCB preflight read, the catalog part inspection and the not-callable component review request (each text passes A2's matcher like every other); // [B22-B, 2026-10-01] pin move (OD-139): + the five named computation descriptors; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; [PR-D, 2026-10-16] pin move (OD-243): + the Build-mode generation proposal (its text passes A2's matcher like every other)
     const offenders: string[] = [];
     for (const item of SIRKIT_TOOL_CATALOG) {
       // the ID too: A2 runs `carriesDirective` over a FOREIGN tool's name (foreign-tools.ts), and MCP serves ours as the

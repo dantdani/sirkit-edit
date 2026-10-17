@@ -40,17 +40,20 @@
       "Save project to a local .sirkit.json file",
       "Schematic drawing: pointer-only, not readable by assistive technology. From the keyboard, use Go to component in the schematic toolbar to select a component by its reference designator.",
       "Select",
-      "Sheet size — also sets the KiCad export page",
+      "Sheet size",
       "Stop the assistant's run",
       "Toggle AI chat",
       "Undo schematic action",
-      "Wire"
+      "Wire",
+      "Workspace settings"
     ],
     "app/components/pcb/PcbEditor.tsx": [
       "Close 3D preview",
       "Close AI assist",
       "Design rule check",
-      "Run DRC to check the board against the current fab preset."
+      "Run DRC to check the board against the current fab preset.",
+      "Schematic → PCB refusal",
+      "Unresolved instances"
     ],
     "app/components/pcb/PcbToolbar.tsx": [
       "3D preview",

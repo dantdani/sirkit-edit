@@ -116,10 +116,10 @@ describe("B09.3 §B — the registered resource path is the ONLY read path (R3)"
   it("boardless toolset contains ONLY the proposal tool when its schematic/head prerequisites exist; ZERO tools when they are absent", () => {
     const withMark = assemble({ board: undefined });
     const toolset = buildRunToolset(sirkitToolRegistry(), withMark.context, () => undefined);
-    expect(toolset.declarations.map((declaration) => declaration.toolId)).toEqual([PROPOSAL_ID]);
+    expect(toolset.declarations.map((declaration) => declaration.toolId)).toEqual(["sirkit.pcb-sync.preflight", PROPOSAL_ID]); // [PR-D, 2026-10-17] pin move: + the Schematic to PCB preflight read, a Tier 0 read over the run's verified schematic snapshot (no board; its own binding, not a B05 canonical read)
 
     const noMark = assemble({ board: undefined, mark: undefined });
-    expect(buildRunToolset(sirkitToolRegistry(), noMark.context, () => undefined).declarations).toEqual([]);
+    expect(buildRunToolset(sirkitToolRegistry(), noMark.context, () => undefined).declarations.map((declaration) => declaration.toolId)).toEqual(["sirkit.pcb-sync.preflight"]); // [PR-D, 2026-10-17] pin move: was [] - the preflight read needs the verified schematic snapshot only (no head mark: a Tier 0 read seals nothing, so it carries no lineage requirement); the proposal still needs the mark
     const nothing = assemble({ board: undefined, schematic: undefined, mark: undefined });
     expect(buildRunToolset(sirkitToolRegistry(), nothing.context, () => undefined).declarations).toEqual([]);
   });
@@ -281,7 +281,7 @@ describe("B09.3 §D — catalog and generated runtime truth (R4)", () => {
       // validated working-copy resources — never unconditional, never
       // withheld when the board is genuinely present and valid.
       expect(tool.browserRuntimeAvailability, tool.toolId).toBe("conditional");
-      if (tool.toolId.startsWith("sirkit.computation.")) expect(tool.requiredRuntimeResources, tool.toolId).toBe("computation-port"); else expect(tool.requiredRuntimeResources, tool.toolId).toContain("canonical-state"); // [B22-B, 2026-10-01] reviewed pin move (OD-139): a named computation read is conditional on the computation port the chat route binds alone (an equation needs no board; a board parse refuses without the run's canonical state)
+      if (tool.toolId.startsWith("sirkit.computation.")) expect(tool.requiredRuntimeResources, tool.toolId).toBe("computation-port"); else if (tool.toolId === "sirkit.pcb-sync.preflight") expect(tool.requiredRuntimeResources, tool.toolId).toBe("validated-schematic"); else if (tool.toolId === "sirkit.parts.catalog-inspect") expect(tool.requiredRuntimeResources, tool.toolId).toBe("catalog-port"); else expect(tool.requiredRuntimeResources, tool.toolId).toContain("canonical-state"); // [PR-D, 2026-10-17] reviewed branches (OD-244): the preflight read needs the validated schematic only (no board); the catalog read needs the chat route's catalog port; // [B22-B, 2026-10-01] reviewed pin move (OD-139): a named computation read is conditional on the computation port the chat route binds alone (an equation needs no board; a board parse refuses without the run's canonical state)
       expect(tool.bindingResolved, tool.toolId).toBe(true);
     }
     const selection = exposed.find((entry) => entry.toolId === "sirkit.selection.inspect")!;
@@ -295,9 +295,9 @@ describe("B09.3 §D — catalog and generated runtime truth (R4)", () => {
   it("the manifest truth matches RUNTIME behavior for the boardless browser request shape (scope + schematic + mark, NO board)", () => {
     const browserShaped = assemble({ board: undefined });
     const withMark = buildRunToolset(sirkitToolRegistry(), browserShaped.context, () => undefined);
-    expect(withMark.declarations.map((declaration) => declaration.toolId)).toEqual([PROPOSAL_ID]);
+    expect(withMark.declarations.map((declaration) => declaration.toolId)).toEqual(["sirkit.pcb-sync.preflight", PROPOSAL_ID]); // [PR-D, 2026-10-17] pin move: + the preflight read (as section B above)
     const noMark = assemble({ board: undefined, mark: undefined });
-    expect(buildRunToolset(sirkitToolRegistry(), noMark.context, () => undefined).declarations).toEqual([]);
+    expect(buildRunToolset(sirkitToolRegistry(), noMark.context, () => undefined).declarations.map((declaration) => declaration.toolId)).toEqual(["sirkit.pcb-sync.preflight"]); // [PR-D, 2026-10-17] pin move: was [] - the preflight read needs the verified schematic snapshot only (no head mark: a Tier 0 read seals nothing, so it carries no lineage requirement); the proposal still needs the mark
   });
 
   it("every catalog sourceEvidence path still exists (preserved gate)", () => {

@@ -387,3 +387,147 @@ Required permanent tests and browser evidence:
 Add concise implementation notes, coverage/manual updates, migration evidence, real screenshots and exact validation results to the existing evidence package, under a `multi-sheet/` subdirectory if useful. Preserve the current source-generated census/drift gates. Do not produce a large duplicate report set instead of finishing the feature.
 
 **Completion means the user can navigate and edit actual connected subsystem sheets and obtain one correct project-wide circuit/PCB. Schema fields, sheet metadata, AI prose, disconnected tabs or attractive overview boxes alone are not completion. Continue autonomously after each verified increment; ask only for a genuine missing owner decision or external resource.**
+
+---
+
+## K — ADDITIVE OWNER REQUEST: visible progress, persistent recovery, reusable parts and real 3D assets
+
+Added 2026-10-16. Append-only extension: preserve the ongoing builder's work and all earlier checkpoints. Finish the current checkpoint; implement this continuation incrementally, reusing already completed functionality instead of duplicating it. This is a product implementation request, not permission to claim success from a rewritten system prompt.
+
+### K.1 What the owner wants
+
+The assistant should visibly explain what it is doing, keep working intelligently when an initial approach fails, find missing parts/assets from appropriate online sources, validate and import them, use eligible assets in the circuit, and retain them in a reusable library. The same workflow must cover real component 3D models.
+
+Do not give up merely because three or four attempts occurred. Do not promise that an unavailable part or missing evidence can always be found. Persistence means pursuing materially different useful strategies and preserving progress, not repeating an identical failing request forever, fabricating results or treating money and CPU as unlimited.
+
+Prioritize working functionality and clear UX. Do not start a separate compliance/hardening program here; retain the product's existing essential boundaries while implementing the feature.
+
+### K.2 Public progress narration, not private chain-of-thought
+
+Add a live, concise **Work log** to the existing assistant/task UI, expandable for details:
+
+- A brief task/approach summary, followed by observable progress such as “Searching the saved library,” “Checking the exact package,” “Trying the manufacturer's documentation,” “Downloading the footprint,” “Validating pin-to-pad mapping,” “Saved to your library,” and “Waiting for component approval.”
+- Short decision summaries based on facts: “This candidate has the wrong package,” “The pin table disagrees with the footprint,” or “The exact revision is already cached.” Explain the relevant evidence and uncertainty without exposing a token-by-token deliberation.
+- Source/evidence links, the affected part/sheet/task, stage status, meaningful attempt count and a clear next action when blocked. Do not expose credentials, signed download URLs, private prompts, hidden instructions or unrestricted raw tool payloads.
+- Honest separation of intent, tool dispatch, received result, validation, storage, proposal and committed use. “I will import” is not “imported”; a dispatched request is not a completed action; a model sentence is not a receipt.
+
+This is **public progress and reasoning summaries**, not access to the model's private internal chain-of-thought. Never decode or expose provider reasoning/encrypted continuation items, ask the model to reveal hidden deliberations, or simulate a private thinking transcript. If concise public explanations are model-generated, label them as summaries and ground action/completion claims in actual events.
+
+Inspect and reuse `app/lib/agent/contracts.ts`, `loop.ts`, `run-consumer.ts`, `app/lib/agent/orchestration/run-events.ts`, `trace-recorder.ts`, and `app/lib/project/chat-run-view.ts`. The existing loop already emits tool-started/finished/refused events and distinguishes interim versus final text; orchestration has plan/specialist/degraded/partial events. Extend that typed event path and its UI reducer rather than adding an independent stream with conflicting outcomes. Existing interim-text safeguards must not be removed just to make prose appear live.
+
+Emit progress at real stage transitions and useful long-running milestones, not on fake timers that imply nonexistent work. Include stable run/task/call identity, ordering/deduplication and project/sheet ownership. Late events from a retired run cannot update another project. Cancellation, disconnect and recovery have explicit truthful states; opening the task later should recover stored progress rather than replay actions. Keep the default UI quiet and readable; do not replace the simplified workspace with a wall of logs.
+
+### K.3 Replace arbitrary early failure with a persistent recovery controller
+
+First reproduce where the reported three/four-attempt failure actually occurs. Distinguish model steps, identical-call cycle detection, per-request network retries, source pagination, distinct-source searches, candidate validation and whole-task recovery. They are not one global attempt counter.
+
+Current source examples to inspect, not blindly delete:
+
+- `app/lib/atomic/ingestion.ts::collectAdapterPages` defaults to two retries per page and clamps the configured retry count, under a request deadline. That is transport recovery, not the entire missing-part strategy.
+- Source-registry/distributor policies can prohibit automatic retries; agent live-MPN budgets and provider quota shares are separate accounting constraints.
+- Specialist/loop attempt and time caps are bounded worker executions. A logical task can continue through a persisted queue without keeping one HTTP request or model loop alive indefinitely.
+
+Implement an explicit task record containing requirement/target identity, current strategy, candidates and rejection reasons, attempted sources/queries, evidence references, pending work, next eligible retry time, cancellation state, budget reservations and checkpoint version. Reuse existing durable task/job mechanisms where suitable; do not claim durability from component state or a process-local Map.
+
+Recovery policy:
+
+1. Search the validated local library/cache first. A cache hit should not cause another paid model call or vendor download.
+2. When missing, resolve manufacturer, exact MPN, package variant and needed asset/evidence. Use alternate identifiers only with justified identity equivalence; never silently substitute a different part/package.
+3. Try permitted alternate sources, manufacturer documents, supported library sources and materially improved queries. Record what changed and why. Exact-MPN sourcing alone may be insufficient when the user supplied only a functional requirement; add an evidence-backed identity-resolution stage rather than inventing an MPN.
+4. Retry transient network/server failures with bounded backoff where the source permits it. Respect the actual `Retry-After`; for a long wait, checkpoint/defer until eligible instead of clipping the wait and hammering the server.
+5. Treat an empty search, incompatible package or failed candidate validation as a reason to change strategy/candidate—not endlessly retry the same bytes. Preserve rejected evidence so the next pass does not repeat it.
+6. Authentication failures, missing credentials, source terms, withdrawn assets, denied access and exhausted provider credit/quota need the appropriate external remedy or another independently permitted source. Do not evade these through alternate identities, account rotation or uncontrolled mirrors.
+7. Before a worker deadline expires, checkpoint useful progress and resume in a bounded follow-on task. Preserve exact project/revision context, cancellation and single-owner/CAS semantics. Check the current base again before applying any result obtained later.
+8. A genuine exhausted search ends with a precise unsatisfied requirement and the remaining useful options: an evidenced alternative, a draft-creation task, an owner-supplied document/source, or waiting for a named resource. Never manufacture a successful answer merely to avoid a failed status.
+
+Remove arbitrary “three failures means abandon the entire task” behavior where it exists. Keep identical-call cycle guards, finite per-request resources and no-progress detection; route their terminal worker result into the higher-level recovery policy when a distinct useful strategy remains. Cosmetic query changes do not count as new strategies. Do not weaken duplicate suppression to make a retry counter larger.
+
+Expose Cancel, Resume and a useful progress/remaining-work view. Use the existing app job infrastructure; do not create an unrelated OS scheduled task, hidden polling service or Codex automation. Deferred work must be explicit and owned by the user's task.
+
+### K.4 Spending should not require constant micromanagement, but must remain controlled
+
+Do not stop a funded, authorized task merely because the model guesses another attempt might cost something. Let the owner choose a task/project workload policy once, then continue within it without asking for approval on every ordinary retry.
+
+However, “keep trying” is not a new numeric spending ceiling or permission for unbounded charges. Preserve the existing cumulative US$5 synthetic-qualification allowance unless the owner explicitly configures a different limit. Show the remaining allowance and the exact blocker when it is reached; checkpoint rather than discard the task. A new run, resumed worker, alternate provider or subagent does not reset cumulative accounting. Unknown charges remain reserved. No paid API calls are authorized merely by editing this prompt.
+
+Separate free/cache/local work from paid model/vendor operations; continue independent permitted work while a paid stage is blocked. Token counts alone are not a monetary cap. Do not hide provider rate limits or silently route to a more expensive provider. Use the existing spend/admission controls and approved fallback policy.
+
+### K.5 Complete missing-part acquisition: search → obtain → validate → store → use
+
+Build a real acquisition-to-library path, not a browser download button or a model's claim that a footprint exists.
+
+Reuse and inspect:
+
+- `app/lib/acquisition/source-registry.ts`, `external-search.ts`, `agent-read-port.ts`, `admission-control.ts`, `quarantine.ts` and `import-review.ts`;
+- `app/lib/distributors/egress.ts` and `app/lib/net/outbound-fetch.ts` for source-constrained transport;
+- `app/lib/atomic/ingestion.ts`, `kicad-assets.ts`, `publication-review.ts`, `server-repository.ts` and `server-catalog.ts`;
+- the existing source/license/raw-content/evidence/versioned asset schema in `app/lib/db/schema.ts`.
+
+The current external-search/evidence-read agent port is read-only: sourcing observations are not proof of a symbol, footprint, pin mapping or 3D asset. Fill the actual missing integration with dedicated authorized domain commands and reviewed asset sources. Do not disguise a price/stock result as downloadable CAD.
+
+For each candidate:
+
+1. Obtain permitted symbol, footprint, datasheet and model assets from appropriate manufacturer/library services. Use existing admitted sources or add a concrete reviewed source adapter where necessary. Surface unavailable credentials/terms once with an actionable setup path; do not endlessly call an unconfigured source.
+2. Download the actual bytes through bounded transport. Verify declared/actual format, size, digest and archive paths; no executable installers, scripts, arbitrary filesystem writes or implicit external-resource fetches. Do not run hostile parsers against the unsandboxed host as a shortcut.
+3. Preserve manufacturer/MPN/package/revision, source URL/record/version, retrieval time, license/retention policy, content hashes and evidence links. A hash proves byte identity, not electrical correctness.
+4. Parse and validate the actual symbol and footprint. Confirm pin numbers/names/functions, pad mapping, package variant, orientation/pin 1, documented pitch/dimensions, exposed/thermal pads and supported geometry. Equal pin count or a similar-looking picture is insufficient. Show unresolved/conflicting evidence and do not make it assignable.
+5. Store the raw assets and normalized versions in the existing appropriate durable library/object store, deduplicated by content plus versioned source identity. A URL, chat message, temporary file or browser cache alone is not storage of a reusable part.
+6. Reuse previously approved exact revisions automatically where permissions allow. For a newly acquired candidate, use the existing quarantine/review/publication path; download or structural validity must not auto-mint an approval or mapping certificate. Avoid repetitive review of an unchanged already-approved revision.
+7. Return an actual stored revision/asset reference and confirmed publication/eligibility state. The circuit uses that precise eligible revision through the canonical component-binding/proposal path. Pin it so a later vendor update cannot silently change an old project.
+8. On reuse, verify hash/status/withdrawal and applicable license freshness. Retain the previous approved version for existing projects under its legitimate retention rules; show a reviewed upgrade/withdrawal path rather than silently substituting new bytes.
+
+If a documented asset genuinely cannot be obtained, support creation of an **unverified draft** from available authoritative pin/dimension evidence, with missing facts explicitly listed. Do not guess hidden pads, body dimensions or pin roles. Draft construction and publication are separate states; ambiguous geometry or mapping cannot be promoted just to finish a circuit.
+
+Expose a simple reusable library with search, source/evidence, asset availability, validation/review status and “Use in project.” Keep project/private/library access scopes explicit. Do not expose one user's licensed/private assets to unrelated users. Online availability does not imply permission to store or redistribute an asset forever; distributor offer-cache retention is not a CAD-asset license. Keep credentials and restricted raw blobs out of Git and public reports.
+
+### K.6 Do the same for real 3D component models
+
+On source inspection, `app/lib/atomic/kicad-assets.ts::createModelAsset` records STEP/VRML metadata and hashes, but its `inspected` flag is not a real geometry inspection. `app/lib/pcb/3d/build-scene.ts` currently builds placeholder component boxes through `geom/footprint-mesh.ts`, whose header explicitly says there is no STEP/VRML loading. Allowed reference extensions and model records therefore do not establish real CAD rendering. Verify the active code before extending it.
+
+Implement the missing complete path:
+
+- Search for a model for the exact package/manufacturer variant, download it from an appropriate licensed source, and retain its original versioned bytes/provenance in the library.
+- Parse/inspect supported formats using an appropriately isolated and resource-bounded implementation. Where conversion to a browser-renderable mesh is needed, store a derived artifact linked to source digest, converter/version/options and diagnostics. Metadata ingestion or an HTTP 200 is not a successful conversion.
+- Validate units, scale, origin, rotation, coordinate convention, seating plane, top/bottom transforms, body dimensions and useful pin-1 alignment against the footprint/package evidence. Reject a plausible but incompatible model. Do not change footprint pads to fit an incorrect visual model.
+- Attach the model to the correct footprint/atomic revision with explicit transforms. Render the actual model in the existing 3D viewer. Preserve camera controls, board selection, layer visibility and the existing view-session command path.
+- Cache by immutable asset/conversion identity, load lazily and bound mesh/texture complexity. Prevent remote scripts/textures/references and unsafe archive expansion. Dispose GPU/resources correctly when models/boards are retired; a late model load from project A cannot attach to project B.
+- Distinguish `missing`, `downloaded`, `parsed`, `package-matched`, `renderable`, `approximate`, `unsupported` and any genuinely proven mechanical qualification. Do not set `safe`/`verified` because an AI requested it or a boolean was supplied by the browser.
+- A clearly labeled generated body/placeholder is an acceptable fallback for visualization. It is not a manufacturer CAD model, a proven height envelope or mechanical clearance evidence. Lack of optional visual CAD should not block an otherwise valid electrical design unless a required mechanical constraint genuinely depends on it.
+- Reopening the project or using the same eligible part in another permitted project should reuse the saved model without repeated searching/downloads or paid model calls.
+
+Do not create a second 3D viewer or claim mechanical collision/fit checks passed unless they were actually implemented and run over qualified geometry.
+
+### K.7 Visible end-to-end experience
+
+A typical successful task should show real events resembling:
+
+```text
+Checking the saved library for the required part/package.
+The first source has no matching footprint; trying another permitted source.
+Candidate found. Checking its datasheet and exact pin/pad mapping.
+Footprint validated; saved as a versioned library candidate.
+Component review required before this new revision can be used.
+Approved revision attached to the schematic/PCB through the normal workflow.
+Matching 3D model imported and rendered; available for future projects.
+```
+
+This is an example of public status wording, not a script to display regardless of results. If only a draft or placeholder exists, say so. If approval, evidence, an external account or a resource is missing, identify that exact state and preserve the useful completed work. Never replace failure with generic “Done” narration.
+
+### K.8 Incremental implementation and acceptance
+
+Implement in this order: current behavior/reproductions → typed public progress UI → persisted recovery strategy → durable part acquisition/reuse → real 3D import/render/reuse → full journey and failure-path tests. Reuse existing behavior where already complete. Maintain the shared command registry, manuals, evidence and progress ledger; no need for another large duplicated report set.
+
+Permanent proof must include:
+
+1. Live action summaries arrive before the final answer, match actual events, remain readable, survive task inspection/reload and never expose hidden reasoning/secrets or claim an uncommitted mutation succeeded.
+2. Three unsuccessful source/strategy attempts followed by a valid different strategy can complete the logical task. Identical no-progress retries, auth denial, real `Retry-After`, rate limits, cancellation and spent/uncertain budget remain correctly handled.
+3. A worker timeout/checkpoint followed by resume preserves evidence, cost accounting and target identity; it does not redownload, republish or apply the same effect twice. Test disconnect and ambiguous completion explicitly.
+4. Missing local part → permitted online fixture source → actual bytes → parse/evidence validation → durable quarantine/review/publication → exact circuit binding. Reopen and reuse with zero external calls on the valid cache-hit path.
+5. Wrong package, conflicting pin table, unavailable source, invalid license/retention, oversized/malformed file, hostile content, expired/withdrawn revision and unavailable credentials produce precise states, not guessed assets or repeated blind requests.
+6. Real supported 3D fixture bytes convert/load/render at the correct scale/orientation on top and bottom; wrong-package and unsupported models refuse; placeholders are labeled. Reopen/reuse and late-load retirement are tested.
+7. Cross-project/private-library isolation, source disclosure, existing publication/approval boundaries and canonical revision/history rules remain intact. No new arbitrary URL fetcher, shell/SQL tool, automatic purchase or unrestricted asset execution is introduced.
+8. Fresh-browser progress → acquisition → review handoff → schematic/PCB use → real 3D display → save/reload → library reuse is shown with artifacts and exact test results. Label fake-source/fixture proof separately from any authorized live external-source/model proof.
+
+Record which early-stop behaviors were found and changed, the actual recovery strategy, durable library storage contract, supported rendered formats, source/license limitations and measured remaining spend. A real missing resource can remain blocked; fabricated availability, indefinite looping or a placeholder sold as validated CAD cannot.
+
+**Continue autonomously through useful alternatives and durable checkpoints. Completion means observable progress, a persistent task that does not abandon useful strategies after an arbitrary handful of attempts, and correctly validated/stored/reused parts and 3D assets—not exposed private reasoning, unlimited paid retries or a confident claim that unavailable data was found.**

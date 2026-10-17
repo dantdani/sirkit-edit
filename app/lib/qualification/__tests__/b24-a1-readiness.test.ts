@@ -304,9 +304,9 @@ describe("[B24-A1] health and readiness (D24-9, OD-198)", () => {
     }
     expect({ total, canonical, factories, raw }).toEqual({ total: 168, canonical: 165, factories: 3, raw: 0 });
     for (const path of ["app/api/health/route.ts", "app/api/ready/route.ts"]) expect(classifyRouteMethodForm(read(path), "GET", join(ROOT, path), ROOT).form, path).toBe("canonical-wrapper");
-    expect(sirkitToolRegistry().list()).toHaveLength(48); // [B24-D2, 2026-10-09] reviewed pin move (OD-213): + the paged board read, a tool and not a route (the census above is unchanged)
+    expect(sirkitToolRegistry().list()).toHaveLength(52); // [PR-D d2, 2026-10-16] reviewed pin move: 49 -> 52, + the Schematic to PCB preflight read, the catalog part inspection and the not-callable component review request - tools, not routes (the census above is unchanged); // [B24-D2, 2026-10-09] reviewed pin move (OD-213): + the paged board read, a tool and not a route (the census above is unchanged); [PR-D, 2026-10-16] reviewed pin move (OD-243): + the Build-mode generation proposal, a tool and not a route (the census above is unchanged)
     expect(sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed)).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(37); // [B24-D2, 2026-10-09] reviewed pin move (OD-213): + the paged board read
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(40); // [PR-D d2, 2026-10-16] reviewed pin move: 38 -> 40, + the Schematic to PCB preflight read and the catalog part inspection; [B24-D2, 2026-10-09] reviewed pin move (OD-213): + the paged board read; [PR-D, 2026-10-16] reviewed pin move (OD-243): + the Build-mode generation proposal
   });
 
   it("10. /api/ready reports the deployment configuration's digest, built once per process: the same digest on every call, the record's; [B24-A1 review] regressions-1 / tests-3: with DATABASE_URL in the process (as a shell export puts it) the route's probe is the suite's guard port, never the database client", async () => {

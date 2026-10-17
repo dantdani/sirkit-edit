@@ -5675,3 +5675,38 @@ validation.md §C, workflow-contract.md, fault-register.md, live-spend.json).
 - **Unchanged:** B24 PARTIAL; LB-1..LB-17; no Astra activation; no default-model change.
 - **Next:** checkpoint D — the first background workflow died unfinished at 00:14 EDT (no completion record); assess and complete
   its partial outputs, then the coverage matrix, the manuals and the drift gates.
+
+### Product-reliability assignment, checkpoint D — AI semantic parity (2026-10-16/17)
+
+- **Scope:** the shared commands `sirkit.schematic.generate-proposal` (OD-243; `app/lib/schematic/build-multi-generation.ts` extracted
+  from the route, `app/lib/agent/generation-proposals.ts`, `app/api/chat/schematic-generation-runtime.ts`), `sirkit.pcb-sync.preflight`,
+  `sirkit.parts.catalog-inspect`, `sirkit.component.review-request` (unavailable) (OD-244; `app/lib/pcb-sync/preflight-read.ts`,
+  `app/lib/agent/pcb-sync-preflight-reads.ts`, `app/lib/atomic/catalog-part-detail.ts`, `app/lib/agent/catalog-inspection-reads.ts`,
+  `app/api/chat/catalog-inspection-runtime.ts`); the registries (`tool-catalog`, `tool-registry`, `tool-discovery`, `agent-exposure`,
+  `mcp-exposure-review`), the agent runtime (`contracts`, `context`, `gateway`, `loop`, `orchestration/scheduler`), `app/api/chat/route.ts`;
+  the page intake (`app/page.tsx`, `app/lib/project/generation-proposal-events.ts`; OD-246); the coverage matrix (`parity-matrix.ts`,
+  `scripts/generate-pr-d-coverage-matrix.ts`, OD-245) and the manuals (`tool-manual.ts`, `scripts/generate-pr-d-tool-manuals.ts`, OD-247);
+  the B09 manifest generator taught the two read bindings; `SIRKIT_BUILD_ITERATION_CAP` inventoried (flag inventory, environment-name
+  census, `.env.example`, the A1 and census pages).
+- **Records:** OD-243 … OD-247; OD-106's tripwire re-pinned to sha256 `fa3ddf58b02834734df1752ab0def3e03c90f9a25fd61b27df058295e23ca8ca`;
+  registry 52 descriptors / 40 agent-exposed / 9 MCP-exposed / 11 withheld, digest `eng1-17588a420afaec9f`; the sanctioned generators
+  re-run (B01, B04, B05, B09, B10, B11, B16-0-4, B20, B21, B24 maps, PR-D matrix and manuals); the two new generator scripts rows of the
+  generator inventory; B11 capsules expect the preflight read wherever a schematic is (`evaluation-cases.ts`); page line-count pin
+  8612 → 8690 (d5). Pin moves with dated "[PR-D, 2026-10-16/17]" notes: b04 (exposure tripwire for the two non-B05 read bindings; artifacts),
+  b09-1 (13 → 14 declarations), b09-2/b09-3/b10/b19-e (the board-less toolset holds the preflight read beside the Tier 1 proposal; b10's
+  runtime-availability csv regenerated), b09-3 case D (two reviewed branches), b20-b1/b20-b4/b20-d2 pages (49 → 52, 9 → 11 withheld,
+  partition and sweep counts), b20-b2 (body-boundary matrix regenerated), b20-a2/b20-a5 (citations re-pointed), b20-c1/b20-c3 (counts,
+  descriptor-text maxima kept by shortening two descriptions), b21-c (the coordinator row; the A4L bound +5 → +8; case 6's technique
+  extended, HEAD digests untouched), b21-e2 (the event list; markup counts 38/77 → 40/81, no new control), b21-e2b/b21-f (the
+  evaluation-cases.ts digest), b21 specialist pages (loop.ts/gateway.ts rows re-pointed), b22-b (31 → 32), b23-a (48 → 52 census),
+  b24-a1/a2 (67 → 68 flags; 99 → 100 census rows; configuration 28 → 29), b24-f maps and verdict lines (D9 literals), four B21 pages'
+  page.tsx rows re-pointed by content, 37 CRLF-smudged working files renormalized to LF.
+- **Gates:** the 304-file gate set 3754 passed (2 skipped); tsc 0; eslint 0 on 93 changed files; fixture Playwright 3 passed; the matrix
+  and manuals drift gates green over the final tree; secret scan 0 hits. Deferred to G: `b24-d0-ci-split` (the 471-file junit evidence
+  must be re-measured by the full selection run); the whole suite; an e2e spec for the agent generation intake.
+- **Live:** none this checkpoint (spend unchanged: 0.19 USD of 5.00). Fixture/fake-backed throughout: the generation and catalog ports are
+  fakes in the tests; the production port was only proven to resolve under the fixture runtime and to be null without a key.
+- **Pre-existing breaks fixed in passing:** the B20 A2/A5 citation rows commit 535760f moved; the `b24-a1-flags` census red since PR-C.
+- **Owner's runbook:** sections J and K appended by the owner (the K edit is committed with this checkpoint, unchanged, so it is preserved).
+- **Unchanged:** B24 PARTIAL; LB-1..LB-17; no Astra activation; no default-model change; `SIRKIT_ORCHESTRATION_ENABLED` off by default.
+- **Next:** F (missing parts in the ordinary workflow; the remaining Astra work with exact live blockers), then G, H, I, then J, then K.

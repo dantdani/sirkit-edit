@@ -87,7 +87,7 @@ export const TOOL_BUDGET_CLASSES = ["interactive", "batch", "long-running"] as c
 export type ToolBudgetClass = (typeof TOOL_BUDGET_CLASSES)[number];
 
 /** [B17-F] `*-surface`: the editor surface exists in the user's browser session (captured view context). */
-export const TOOL_PROJECT_STATES = ["board-present", "schematic-present", "authoritative-board", "catalog-available", "pcb-surface", "pcb3d-surface", "schematic-surface", "workspace-surface"] as const;
+export const TOOL_PROJECT_STATES = ["board-present", "schematic-present", "authoritative-board", "catalog-available", "pcb-surface", "pcb3d-surface", "schematic-surface", "workspace-surface", "schematic-build-mode"] as const; // [PR-D] schematic-build-mode: the validated schematic holds no Theory component (an empty or Build sheet) - the server's fact for the editor's Build mode, which the chat body does not carry (context.ts derives it)
 export type ToolProjectState = (typeof TOOL_PROJECT_STATES)[number];
 
 export const TOOL_SELECTION_KINDS = ["footprint", "track", "via", "zone", "text", "pad"] as const;
@@ -95,7 +95,7 @@ export type ToolSelectionKind = (typeof TOOL_SELECTION_KINDS)[number];
 
 /** [B19-E E6] `external-observation`: the server bound an external acquisition port to this chat run (never a body claim).
  *  [B20 A4] `external-mcp-observation`: the server bound the external tool port (approved MCP servers) to this chat run. */
-export const TOOL_AUTHORITY_SOURCES = ["durable-server-board", "local-working-copy", "catalog", "external-observation", "external-mcp-observation", "computation-engine", "none"] as const; // [B22-B] computation-engine: the server bound the named computation port (the bounded engine host) to this chat run
+export const TOOL_AUTHORITY_SOURCES = ["durable-server-board", "local-working-copy", "catalog", "external-observation", "external-mcp-observation", "computation-engine", "schematic-generation", "none"] as const; // [B22-B] computation-engine: the server bound the named computation port (the bounded engine host) to this chat run; [PR-D] schematic-generation: the server bound the Build-mode generation port (runBuildMultiGeneration behind a configured provider) to this chat run (OD-243)
 export type ToolAuthoritySource = (typeof TOOL_AUTHORITY_SOURCES)[number];
 
 export type JsonSchema = Record<string, unknown>;
@@ -289,7 +289,7 @@ export function validateToolDescriptor(descriptor: ToolDescriptor, knownCommandI
     err("the external-observation authority belongs to bound-external-read tools only");
   } else if (Array.isArray(descriptor.requiredAuthority) && descriptor.requiredAuthority.includes("external-mcp-observation")) {
     err("the external-mcp-observation authority belongs to bound-external-read tools only"); // [B20 A4]
-  } for (const issue of computationBindingIssues(descriptor, binding)) err(issue); // [B22-B] the bound-computation rule (OD-139), at the end of this file
+  } for (const issue of computationBindingIssues(descriptor, binding)) err(issue); for (const issue of generationAuthorityIssues(descriptor, binding)) err(issue); for (const issue of catalogAuthorityIssues(descriptor, binding)) err(issue); // [B22-B] the bound-computation rule (OD-139), at the end of this file; [PR-D] the schematic-generation authority rule (OD-243), beside it; [PR-D d2] the catalog authority rule, beside them
   if (descriptor.lifecycle === "deprecated" && !descriptor.deprecation?.reason) err("deprecated tools must carry deprecation metadata");
   if (descriptor.lifecycle === "retired" && descriptor.discovery !== "internal-only") err("retired tools cannot remain discoverable");
   if (descriptor.operationClass === "release" && descriptor.agentExposed) err("release tools can never be agent-exposed"); for (const issue of externalTransferIssues(descriptor)) err(issue); // [B23-A2] the external-transfer rule (OD-173), at the end of this file
@@ -503,4 +503,40 @@ function computationBindingIssues(descriptor: ToolDescriptor, binding: ToolImple
  *  never be agent-exposed, whatever its class says (OD-173). Both port-bound read bindings already refuse the side effect (above). */
 function externalTransferIssues(descriptor: ToolDescriptor): string[] {
   return descriptor.sideEffects === "external-transfer" && descriptor.agentExposed ? ["an external-transfer tool can never be agent-exposed (Tier 3: data leaves Sirkit, OD-173)"] : [];
+}
+
+/** [PR-D] The `schematic-generation` authority (the chat route's injected generation port, OD-243) belongs to the ONE proposal bound
+ *  to the shared Build-mode generation (`app/lib/schematic/build-multi-generation.ts`) and nothing else: a sealed proposal artifact
+ *  (propose class, proposal-artifact side effects, no approval tier of its own - Tier 2 by derivation) that requires exactly that
+ *  authority; a tool bound to the generation requires it, and no other tool may claim it. */
+function generationAuthorityIssues(descriptor: ToolDescriptor, binding: ToolImplementationBinding): string[] {
+  const issues: string[] = [];
+  const authority = Array.isArray(descriptor.requiredAuthority) ? descriptor.requiredAuthority : [];
+  const generationBound = binding.status === "bound-proposal" && binding.module === "app/lib/schematic/build-multi-generation.ts";
+  if (generationBound) {
+    if (descriptor.operationClass !== "propose") issues.push("a tool bound to the Build-mode generation is propose class only");
+    if (descriptor.sideEffects !== "proposal-artifact") issues.push("a tool bound to the Build-mode generation has proposal-artifact side effects only");
+    if (descriptor.approvalTier !== "none") issues.push("a tool bound to the Build-mode generation carries no approval tier of its own (Tier 2 by derivation)");
+    if (authority.length !== 1 || authority[0] !== "schematic-generation") issues.push("a tool bound to the Build-mode generation requires exactly the schematic-generation authority");
+  } else if (authority.includes("schematic-generation")) {
+    issues.push("the schematic-generation authority belongs to the tool bound to the Build-mode generation only");
+  }
+  return issues;
+}
+
+/** [PR-D d2] The `catalog` authority (B04's own source for the parts tools; since PR-D d2 the chat route's injected catalog inspection
+ *  port, app/api/chat/catalog-inspection-runtime.ts) belongs to Tier 0 reads only: read class, no side effect beyond a derived cache, no
+ *  approval tier. An AGENT-EXPOSED tool that requires it must bind exactly the ONE shared catalog part detail loader
+ *  (`app/lib/atomic/catalog-part-detail.ts#loadCatalogPartDetail`, the parts route's own read), so no other exposed tool rides the port. */
+function catalogAuthorityIssues(descriptor: ToolDescriptor, binding: ToolImplementationBinding): string[] {
+  const authority = Array.isArray(descriptor.requiredAuthority) ? descriptor.requiredAuthority : [];
+  if (!authority.includes("catalog")) return [];
+  const issues: string[] = [];
+  if (descriptor.operationClass !== "read") issues.push("a tool requiring the catalog authority is read class only");
+  if (descriptor.sideEffects !== "none" && descriptor.sideEffects !== "derived-cache") issues.push("a tool requiring the catalog authority has no side effects beyond a derived cache");
+  if (descriptor.approvalTier !== "none") issues.push("a tool requiring the catalog authority carries no approval tier");
+  if (descriptor.agentExposed && (binding.status !== "bound-read" || binding.module !== "app/lib/atomic/catalog-part-detail.ts" || binding.symbol !== "loadCatalogPartDetail")) {
+    issues.push("an agent-exposed tool requiring the catalog authority must bind the shared catalog part detail loader (app/lib/atomic/catalog-part-detail.ts#loadCatalogPartDetail)");
+  }
+  return issues;
 }

@@ -126,3 +126,24 @@ Exact next step: commit E (explicit paths; the D agents' uncommitted edits stay 
 background workflow (two agents, "commands" and "parity") stopped writing at 00:14 EDT on 2026-10-16 with phase 1 unfinished and
 no completion record; its partial outputs in the tree (`pr-d-parity-*.test.ts`, `build-multi-generation.ts`, the `build-multi`
 route extraction) are assessed and completed under D, then the matrix, the manuals and the drift gates.
+
+## Checkpoint D — AI semantic parity (2026-10-16/17): DONE
+
+Landed (OD-243 … OD-247): `sirkit.schematic.generate-proposal` (the Build composer's generation as a sealed proposal through the chat port;
+the route is a thin caller of the ONE extracted generation; OD-106's tripwire re-pinned), `sirkit.pcb-sync.preflight` and
+`sirkit.parts.catalog-inspect` (Tier 0 reads over the same domain functions the UI calls), `sirkit.component.review-request` registered
+unavailable with its reason; the page's intake of the generated proposal in the SAME review dialog; the registry-derived coverage matrix
+(922 rows, every row with a disposition and a registry-fact reason, 14 action records honestly `missing`) with a byte drift gate; 52
+registry-generated manuals with validated examples and a digest pin; B11's recorded capsules and every registry/exposure/toolset pin
+moved with dated notes; the PR-C operator cap flag inventoried. Registry 52 / 40 / 9 / 11.
+
+Verified: gate set 304 files, 3754 passed; tsc 0; eslint 0 on 93 files; fixture Playwright 3 passed. Details, the two pre-existing
+breaks fixed in passing and the deferred `b24-d0-ci-split` evidence in `validation.md`.
+
+Owner's runbook: sections J (multi-sheet schematics, workload limits; 2026-10-15) and K (work log, persistent recovery, part acquisition,
+real 3D; 2026-10-16) were appended by the owner; both say finish the current work first. Order: F, G, H, I, then J, then K.
+
+Exact next step: commit D (with the owner's runbook K edit), push; then F — missing parts in the ordinary workflow (reuse the external
+search / evidence read / acquisition pipeline; drafts and blockers as workflow items) and the remaining Astra work with exact live
+blockers; then G (the full deterministic suite incl. the CI-split evidence re-measurement, whole-repository eslint, every Playwright
+config, an e2e spec for the agent generation intake), H (README, remaining-blockers, final-verdict, the PR), I.

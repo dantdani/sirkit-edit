@@ -237,19 +237,19 @@ cases 2 and 3. D2 cites those two by title and asserts the titles still exist; i
 ### D2.1 The derived population
 
 Every number below is computed from the landed registry and the landed reviewed lists at run time, never typed into a
-case, so a reviewed subset move moves the sweep with it. As of base `6e3efa7` ([B22-B, 2026-10-01] updated for the five named computations, OD-139: 42 -> 47 descriptors, 26 -> 31 structurally excluded under the new `computation` reason; 210 -> 235 requests, 167 -> 192 refusals; the served reads unchanged; [B24-D2, 2026-10-09] updated for the paged board read, OD-235: 47 -> 48 descriptors, 7 -> 8 withheld (the read withheld from MCP by choice), 31 structurally excluded unchanged; 235 -> 240 requests, 192 -> 197 refusals; the served reads unchanged):
+case, so a reviewed subset move moves the sweep with it. As of base `6e3efa7` ([B22-B, 2026-10-01] updated for the five named computations, OD-139: 42 -> 47 descriptors, 26 -> 31 structurally excluded under the new `computation` reason; 210 -> 235 requests, 167 -> 192 refusals; the served reads unchanged; [B24-D2, 2026-10-09] updated for the paged board read, OD-235: 47 -> 48 descriptors, 7 -> 8 withheld (the read withheld from MCP by choice), 31 structurally excluded unchanged; 235 -> 240 requests, 192 -> 197 refusals; the served reads unchanged; [PR-D, 2026-10-17] updated for PR-D's four descriptors, OD-243 and d2: 48 -> 52 descriptors (the Build-mode generation proposal and d2's two Tier 0 reads, all three withheld from MCP; the not-callable component review request, structurally excluded as `not_agent_exposed`), 8 -> 11 withheld, 31 -> 32 structurally excluded; 240 -> 260 requests, 197 -> 217 refusals; the served reads unchanged):
 
 | quantity | value |
 |---|---|
-| descriptors | 48 |
+| descriptors | 52 |
 | MCP-exposed | 9 |
-| withheld | 8 |
-| structurally excluded | 31 |
+| withheld | 11 |
+| structurally excluded | 32 |
 | mapped stored roles | 5 |
 
 The served listing is **not uniform across roles**: the viewer, the reviewer, the editor and the admin see the nine
-reads, the commenter the seven its role permits. The sweep is therefore **240 requests**, of which **43 served reads**
-and **197 unknown-tool refusals**.
+reads, the commenter the seven its role permits. The sweep is therefore **260 requests**, of which **43 served reads**
+and **217 unknown-tool refusals**.
 
 ### D2.2 The partition (DEC-5), and why it exists
 

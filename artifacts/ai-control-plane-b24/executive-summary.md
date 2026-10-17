@@ -52,15 +52,20 @@ NOT READY (`eslint .` exits 1, none of its 33 errors introduced by B24), CI read
 | approved-factories | 3 |
 | raw-handlers | 0 |
 | action-records | 107 |
-| registry-tools | 48 |
-| agent-exposed-tools | 37 |
+| registry-tools | 52 |
+| agent-exposed-tools | 40 |
 | mcp-exposed-tools | 9 |
-| agent-only-tools | 28 |
+| agent-only-tools | 31 |
 | agent-exposed-tier-3-tools | 0 |
-| control-sites | 628 |
-| control-surfaces | 63 |
+| control-sites | 636 |
+| control-surfaces | 64 |
 | sql-migrations | 32 |
-| generators | 28 |
+| generators | 30 |
+
+[PR-D, 2026-10-17] Count lines moved with the regenerated map (product reliability D): registry-tools 48 -> 52, agent-exposed-tools
+37 -> 40, agent-only-tools 28 -> 31 (PR-D's four descriptors, OD-243, OD-244; mcp-exposed-tools stays 9); generators 28 -> 30 (PR-D's
+coverage-matrix and tool-manual generators, OD-245, OD-247); control-sites 628 -> 636, control-surfaces 63 -> 64 (the B17-A inventory as
+PR-C 6bdd7f7 and PR-E 390afa4 left it - the simplified workspace's settings dialog and entry action; PR-D adds no control).
 
 ## 4. Earlier verdicts
 

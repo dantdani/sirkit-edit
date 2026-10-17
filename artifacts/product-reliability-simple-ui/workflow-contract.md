@@ -105,3 +105,15 @@ row 3 is a recorded netlist (BL:139), rows 9-15 use in-memory stores and role co
 - `SIRKIT_PCB_SYNC_STAGE3`: trace-authority treats the owner's value as UNKNOWN by design; the 2026-10-11 report states it resolved to `authoritative_safe_profile`. Treated as UNKNOWN today.
 - Wrapper order: the assignment text implies identity → membership → CSRF; source order is production blocker → CSRF (production only) → identity → selector → membership → role (TRC:63-112). CONFIRMED.
 - `aiRequestHeaders` is cited at P:89-94, P:90-95 and P:90 across inputs — ±1 line drift, same function.
+
+## Addendum D (2026-10-17) — the assistant's generation path
+
+The assistant can now produce the Build generation itself: `sirkit.schematic.generate-proposal` runs the same `runBuildMultiGeneration`
+the composer's Generate runs (through the chat route's injected port, under the run's remaining wall clock, one generation per run) and
+seals the outcome as a proposal with completeness, omitted blocks, the electrical check, the planner and the budget as data. The page
+receives it as `generation_proposal_ready`, verifies base digest, scope, head mark and expiry against the live editor, lays it out with
+the catalog parts and offers it in the SAME review dialog as the composer's proposal, pinned to the same base and persisted by the same
+pending-proposal store. Approval stays the human's click; nothing is applied by the tool. Before PCB preparation the assistant can read
+the same pre-server preflight the Prepare PCB button runs (`sirkit.pcb-sync.preflight`: unresolved instances per refDes, server stages
+not run) and inspect one catalog part (`sirkit.parts.catalog-inspect`). A component review request is not an agent command (registered
+unavailable). Stage ownership, approval boundaries and recovery behaviour above are unchanged.

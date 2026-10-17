@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B24",
-  "currentCheckpoint": "Product-reliability assignment: A, B, C and E done on codex/astra-foundation (E: the interface simplified in place, verified by e2e/simple-workspace.spec.ts at four desktop sizes); D (AI semantic parity) in progress — the first background workflow stopped unfinished on 2026-10-16 00:14 EDT, partial outputs in the tree",
+  "currentCheckpoint": "Product-reliability assignment: A, B, C, D and E done on codex/astra-foundation (D: AI semantic parity — the shared generate-proposal / preflight / catalog-inspect commands, the registry-derived coverage matrix with its drift gate, 52 registry-generated manuals, the page intake in the same review dialog; OD-243..OD-247); F next; the owner appended runbook sections J (multi-sheet schematics) and K (work log, recovery, acquisition, 3D) to follow after I",
   "status": "in_progress",
   "baseSha": "32b081e152620b46e791f9589256f7d0603f300f",
   "branch": "codex/astra-foundation",
@@ -40,7 +40,7 @@
     "LB-16: BLOCKED-LIVE-QUALIFICATION: live approved external MCP server (discovery, tool calls and hostile tool results through Sirkit's MCP client)",
     "LB-17: BLOCKED-LIVE-QUALIFICATION: kicad-cli live oracle (the exported routed demo loaded and DRC-checked by a real kicad-cli)"
   ],
-  "nextAction": "Commit and push E; assess and complete the D partial outputs (pr-d-parity tests, build-multi generation extraction), generate the UI-to-AI coverage matrix with dispositions, the registry manuals and the drift gates; then F, G, H (PR on codex/astra-foundation, never merged by the builder), I",
-  "updatedAt": "2026-10-16T21:50:00-04:00",
+  "nextAction": "Commit and push D; then F (missing parts in the ordinary workflow via the existing acquisition/evidence pipeline; remaining Astra work with exact live blockers), G (full deterministic suite incl. the CI-split evidence re-measurement, whole-repo eslint, every Playwright config, an e2e spec for the agent generation intake), H (README, remaining-blockers, final-verdict, PR on codex/astra-foundation never merged by the builder), I; then J, then K",
+  "updatedAt": "2026-10-17T01:40:00-04:00",
   "previousChapter": "B23 merged normally into main as 57c3b29 (PR #14, 2026-10-06) after green CI on f663d71; verdict PARTIAL (no provider admitted, LB-11; ordering visibly disabled, its contract tested offline only, LB-12; physical evidence defined, none exists, LB-5; no agent can release, transfer or spend; census 166/163/3/0, counts 47/36/9/27)"
 }

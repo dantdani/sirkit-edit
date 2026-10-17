@@ -90,7 +90,7 @@ describe("[B21 C] the per-role tool allowlist", () => {
     expect(PROPOSING_ROLES).toEqual(["coordinator", "circuit-topology", "schematic", "pcb-placement-routing"]);
     expect(INTENTIONAL_ROLE_TOOL_IDS["cost-latency-router"]).toEqual([]);
     expect(INTENTIONAL_ROLE_TOOL_IDS.coordinator).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS);
-    expect(INTENTIONAL_ROLE_TOOL_IDS.coordinator).toHaveLength(37); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads (the row IS the exposure list); [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; no specialist row moves
+    expect(INTENTIONAL_ROLE_TOOL_IDS.coordinator).toHaveLength(40); // [PR-D d2, 2026-10-16] pin move: 38 -> 40, + the Schematic to PCB preflight read and the catalog part inspection (the coordinator's own row only; no specialist row holds them); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads (the row IS the exposure list); [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; no specialist row moves; [PR-D, 2026-10-16] pin move (OD-243): + the Build-mode generation proposal (the coordinator's own row only; no specialist row holds it)
     expect(roleAllowedToolIds("coordinator")).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS);
     expect(roleAllowedToolIds("not-a-role")).toEqual([]);
     expect(Object.isFrozen(roleAllowedToolIds("not-a-role"))).toBe(true);

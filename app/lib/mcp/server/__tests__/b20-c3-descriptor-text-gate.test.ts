@@ -59,7 +59,7 @@ describe("[B20 C3] T — the first-party descriptor text gate", () => {
   it("T1. every production descriptor passes, and the measured maxima are inside their bounds", () => {
     // [B20 merge] pin move: the A track's A4 adds one agent-exposed descriptor (sirkit.mcp.observation-read), so the
     // registry is 42 and the agent set 33; the MCP subset is unchanged at 9 (B4 withheld every proposal)
-    expect(SIRKIT_TOOL_CATALOG).toHaveLength(48); // [B22-B, 2026-10-01] pin move (OD-139): + the five named computation descriptors; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read
+    expect(SIRKIT_TOOL_CATALOG).toHaveLength(52); // [PR-D d2, 2026-10-16] pin move: 49 -> 52, + the Schematic to PCB preflight read, the catalog part inspection and the not-callable component review request (each text passes the gate like every other); // [B22-B, 2026-10-01] pin move (OD-139): + the five named computation descriptors; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; [PR-D, 2026-10-16] pin move (OD-243): + the Build-mode generation proposal (its text passes the gate like every other)
     const offenders = SIRKIT_TOOL_CATALOG.filter((item) => firstPartyTextIssues(item).length > 0 || annotationFieldIssues(item).length > 0).map((item) => item.toolId);
     expect(offenders).toEqual([]);
     const maxima = SIRKIT_TOOL_CATALOG.reduce((worst, item) => {

@@ -81,7 +81,8 @@ describe("[B19-D I5b review] every reader of stored offers applies the exact-MPN
     expect(readFileSync(resolve(process.cwd(), file), "utf8")).toMatch(pattern);
   });
 
-  it.each(["app/lib/parts-search.ts", "app/api/parts/search/route.ts", "app/api/parts/[id]/route.ts", "app/api/parts/[id]/alternates/route.ts", "scripts/refresh-bom-pricing.ts"])("%s reads lifecycle through the expiring expression", (file) => {
+  /* [PR-D d2, 2026-10-16] pin move: the parts detail route's read moved UNCHANGED into app/lib/atomic/catalog-part-detail.ts (loadCatalogPartDetail), which the route and the agent's sirkit.parts.catalog-inspect share (one reader); the expiring expression is read there, and the route is a thin caller */
+  it.each(["app/lib/parts-search.ts", "app/api/parts/search/route.ts", "app/lib/atomic/catalog-part-detail.ts", "app/api/parts/[id]/alternates/route.ts", "scripts/refresh-bom-pricing.ts"])("%s reads lifecycle through the expiring expression", (file) => {
     const source = readFileSync(resolve(process.cwd(), file), "utf8");
     expect(source).not.toMatch(/lifecycleStatus:\s*parts\.lifecycleStatus/);
     expect(source).toMatch(/partLifecycleStatus/);

@@ -398,7 +398,7 @@ Only then does route case 4 run specialists in a chat (the replacement request u
 
 [Product reliability C, 2026-10-14] OD-242 amends OD-106: `app/api/schematic/build-multi/route.ts` now answers the structured
 result contract (`app/lib/schematic/build-result.ts`: completeness, omitted blocks, the electrical check's state, planner, budget) by the
-owner's assignment; its sha256 is `eaf4e8d6c7acab7babba2fd75fff8899400adcb15767bf8e083b0437131c22b1`, which route case 6 pins and page case 3 recomputes. The B21 facts
+owner's assignment; its sha256 was `eaf4e8d6c7acab7babba2fd75fff8899400adcb15767bf8e083b0437131c22b1`. [PR-D, 2026-10-16] OD-243 re-pins again: the route is now a thin caller of the ONE shared `runBuildMultiGeneration` (`app/lib/schematic/build-multi-generation.ts`), which the agent's `sirkit.schematic.generate-proposal` reuses through the chat route's injected port; its sha256 is `fa3ddf58b02834734df1752ab0def3e03c90f9a25fd61b27df058295e23ca8ca`, which route case 6 pins and page case 3 recomputes. The B21 facts
 below stand as recorded at B21-B: the route reads no orchestration flag and no orchestration module, and the import gate still keeps
 every orchestration module from importing it; the historical hash is kept as the B21-B measurement.
 

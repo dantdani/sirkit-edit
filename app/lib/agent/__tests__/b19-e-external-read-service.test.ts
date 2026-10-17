@@ -125,7 +125,7 @@ describe("[B19-E E6] b — discovery and integrity", () => {
     expect(boardless.canonicalState).toBeNull();
     expect(boardless.externalAcquisitionAvailable ?? false).toBe(false);
     expect(boardless.discovery.availableAuthority).not.toContain("external-observation");
-    expect(toolIds(boardless)).toEqual([PROPOSAL]);
+    expect(toolIds(boardless)).toEqual(["sirkit.pcb-sync.preflight", PROPOSAL]); // [PR-D, 2026-10-17] pin move: + the Schematic to PCB preflight read, a Tier 0 read over the verified schematic snapshot (no board, no port); the external reads stay withheld
   });
 
   it("the automation channel never discovers them, even when the authority is claimed", () => {

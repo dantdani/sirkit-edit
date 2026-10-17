@@ -85,8 +85,8 @@ describe("[B20 A4] 6.5 the external tool read descriptor", () => {
 
   it("3. it is in the reviewed intentional list and the exposure report is clean", () => {
     expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toContain(MCP_OBSERVATION_TOOL_ID);
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(37); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read
-    expect(agentExposureReport(registry)).toMatchObject({ ok: true, missing: [], unexpected: [], classViolations: [], executionViolations: [], count: 37 }); // [B24-D2, 2026-10-09] 36 + the paged board read
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(40); // [PR-D d2, 2026-10-16] pin move: 38 -> 40, + the Schematic to PCB preflight read and the catalog part inspection; [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; [PR-D, 2026-10-16] pin move (OD-243): + the Build-mode generation proposal
+    expect(agentExposureReport(registry)).toMatchObject({ ok: true, missing: [], unexpected: [], classViolations: [], executionViolations: [], count: 40 }); // [PR-D d2, 2026-10-16] 38 + the two Tier 0 reads; // [B24-D2, 2026-10-09] 36 + the paged board read; [PR-D, 2026-10-16] 37 + the generation proposal
   });
 
   it("4. it matches no never-exposed pattern and no Tier 3 family", () => {

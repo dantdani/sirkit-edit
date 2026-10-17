@@ -63,6 +63,7 @@ const ALL_READS = [
   "sirkit.validation.drc-run",
 ];
 const PROPOSE = "sirkit.schematic.propose-tier1-edit";
+const PREFLIGHT = "sirkit.pcb-sync.preflight"; // [PR-D d2, 2026-10-17] pin move: the Tier 0 Schematic-to-PCB preflight read is discovered wherever a validated schematic is (no board needed)
 /** [B17-F] the shared layout candidates: exposed whenever a verified canonical board exists (project_admin actor). */
 const LAYOUT_PROPOSALS = ["sirkit.placement.propose", "sirkit.routing.propose"];
 const SELECTION = "sirkit.selection.inspect";
@@ -135,8 +136,8 @@ export function buildEvaluationCases(pins: TraceDigestPins): EvaluationCase[] {
 
     // 2 — schematic + head mark only: proposal availability exact.
     define("e02-schematic-only", "Schematic-only context: proposal only, no reads", "discovery",
-      capsule({ caseId: "e02-schematic-only", context: { schematic: SCHEMATIC, schematicHeadMark: MARK }, steps: [step()], discoveredTools: [PROPOSE], toolOutcomes: [], terminal: { outcome: "completed", failureReason: null }, pins }),
-      [checks.toolsExactly([PROPOSE]), ...ALL_READS.map((toolId) => checks.toolAbsent(toolId))]),
+      capsule({ caseId: "e02-schematic-only", context: { schematic: SCHEMATIC, schematicHeadMark: MARK }, steps: [step()], discoveredTools: [PREFLIGHT, PROPOSE].sort(), toolOutcomes: [], terminal: { outcome: "completed", failureReason: null }, pins }),
+      [checks.toolsExactly([PREFLIGHT, PROPOSE]), ...ALL_READS.map((toolId) => checks.toolAbsent(toolId))]),
 
     // 3 — valid board context: reads are exact and succeed.
     define("e03-valid-board", "Valid board context: board/DRC/connectivity/readiness reads exact", "tool-selection",
@@ -144,19 +145,19 @@ export function buildEvaluationCases(pins: TraceDigestPins): EvaluationCase[] {
         caseId: "e03-valid-board",
         context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK },
         steps: [callStep("sirkit.pcb.board-inspect"), callStep("sirkit.validation.drc-run"), step()],
-        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE].sort(),
+        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE].sort(),
         toolOutcomes: [
           { toolId: "sirkit.pcb.board-inspect", outcomeClass: "read", status: "succeeded" },
           { toolId: "sirkit.validation.drc-run", outcomeClass: "read", status: "succeeded" },
         ],
         terminal: { outcome: "completed", failureReason: null }, pins,
       }),
-      [checks.toolsExactly([...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE]), checks.outcomeStatus("sirkit.pcb.board-inspect", "succeeded"), checks.traceIsClean()]),
+      [checks.toolsExactly([...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE]), checks.outcomeStatus("sirkit.pcb.board-inspect", "succeeded"), checks.traceIsClean()]),
 
     // 4 — invalid board: canonical resource and dependent tools withheld.
     define("e04-invalid-board", "Invalid board: canonical resource and dependent tools withheld", "resource-withholding",
-      capsule({ caseId: "e04-invalid-board", context: { schematic: SCHEMATIC, board: invalidBoard(), schematicHeadMark: MARK }, steps: [step()], discoveredTools: [PROPOSE], toolOutcomes: [], terminal: { outcome: "completed", failureReason: null }, pins }),
-      [checks.toolsExactly([PROPOSE]), checks.toolAbsent("sirkit.pcb.board-inspect")]),
+      capsule({ caseId: "e04-invalid-board", context: { schematic: SCHEMATIC, board: invalidBoard(), schematicHeadMark: MARK }, steps: [step()], discoveredTools: [PREFLIGHT, PROPOSE].sort(), toolOutcomes: [], terminal: { outcome: "completed", failureReason: null }, pins }),
+      [checks.toolsExactly([PREFLIGHT, PROPOSE]), checks.toolAbsent("sirkit.pcb.board-inspect")]),
 
     // 5 — unavailable resource at the invocation boundary: fail closed.
     define("e05-resource-fail-closed", "Absent canonical resource: direct read refuses authority_unavailable", "refusal",
@@ -164,27 +165,27 @@ export function buildEvaluationCases(pins: TraceDigestPins): EvaluationCase[] {
         caseId: "e05-resource-fail-closed",
         context: { schematic: SCHEMATIC, schematicHeadMark: MARK },
         steps: [callStep("sirkit.pcb.board-inspect"), step()],
-        discoveredTools: [PROPOSE],
+        discoveredTools: [PREFLIGHT, PROPOSE].sort(),
         toolOutcomes: [],
         terminal: { outcome: "completed", failureReason: null }, pins,
       }),
       // The tool is not exposed, so the model's call resolves to nothing:
       // the loop refuses it as an unknown tool and records no invocation.
-      [checks.toolsExactly([PROPOSE]), checks.toolAbsent("sirkit.pcb.board-inspect")]),
+      [checks.toolsExactly([PREFLIGHT, PROPOSE]), checks.toolAbsent("sirkit.pcb.board-inspect")]),
 
     // 6 — selection resource absent / malformed / valid.
     define("e06a-selection-absent", "Selection resource absent: selection.inspect withheld", "resource-withholding",
-      capsule({ caseId: "e06a-selection-absent", context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK }, steps: [step()], discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE].sort(), toolOutcomes: [], terminal: { outcome: "completed", failureReason: null }, pins }),
+      capsule({ caseId: "e06a-selection-absent", context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK }, steps: [step()], discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE].sort(), toolOutcomes: [], terminal: { outcome: "completed", failureReason: null }, pins }),
       [checks.toolAbsent(SELECTION)]),
     define("e06b-selection-malformed", "Selection resource malformed: withheld, other reads unaffected", "resource-withholding",
-      capsule({ caseId: "e06b-selection-malformed", context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK, selection: { refs: [{ kind: "track", id: "" }], primary: null } }, steps: [step()], discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE].sort(), toolOutcomes: [], terminal: { outcome: "completed", failureReason: null }, pins }),
-      [checks.toolAbsent(SELECTION), checks.toolsExactly([...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE])]),
+      capsule({ caseId: "e06b-selection-malformed", context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK, selection: { refs: [{ kind: "track", id: "" }], primary: null } }, steps: [step()], discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE].sort(), toolOutcomes: [], terminal: { outcome: "completed", failureReason: null }, pins }),
+      [checks.toolAbsent(SELECTION), checks.toolsExactly([...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE])]),
     define("e06c-selection-valid", "Selection resource valid: selection.inspect available and succeeds", "tool-selection",
       capsule({
         caseId: "e06c-selection-valid",
         context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK, selection: { refs: [{ kind: "track", id: "t1" }], primary: null } },
         steps: [callStep(SELECTION), step()],
-        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE, SELECTION].sort(),
+        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE, SELECTION].sort(),
         toolOutcomes: [{ toolId: SELECTION, outcomeClass: "read", status: "succeeded" }],
         terminal: { outcome: "completed", failureReason: null }, pins,
       }),
@@ -192,10 +193,10 @@ export function buildEvaluationCases(pins: TraceDigestPins): EvaluationCase[] {
 
     // 7 — theory netlist proven vs forged withheld.
     define("e07a-netlist-proven", "Theory netlist proven by server derivation: sealed", "resource-withholding",
-      capsule({ caseId: "e07a-netlist-proven", context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK, netlist: validNetlist, editorSchematicDigest: digest }, steps: [callStep("sirkit.manufacturing.readiness-inspect"), step()], discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE].sort(), toolOutcomes: [{ toolId: "sirkit.manufacturing.readiness-inspect", outcomeClass: "read", status: "succeeded" }], terminal: { outcome: "completed", failureReason: null }, pins }),
+      capsule({ caseId: "e07a-netlist-proven", context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK, netlist: validNetlist, editorSchematicDigest: digest }, steps: [callStep("sirkit.manufacturing.readiness-inspect"), step()], discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE].sort(), toolOutcomes: [{ toolId: "sirkit.manufacturing.readiness-inspect", outcomeClass: "read", status: "succeeded" }], terminal: { outcome: "completed", failureReason: null }, pins }),
       [checks.outcomeStatus("sirkit.manufacturing.readiness-inspect", "succeeded")]),
     define("e07b-netlist-forged", "Forged/omitted netlist: withheld, readiness still runs", "resource-withholding",
-      capsule({ caseId: "e07b-netlist-forged", context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK, netlist: forgedNetlist, editorSchematicDigest: digest }, steps: [callStep("sirkit.manufacturing.readiness-inspect"), step()], discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE].sort(), toolOutcomes: [{ toolId: "sirkit.manufacturing.readiness-inspect", outcomeClass: "read", status: "succeeded" }], terminal: { outcome: "completed", failureReason: null }, pins }),
+      capsule({ caseId: "e07b-netlist-forged", context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK, netlist: forgedNetlist, editorSchematicDigest: digest }, steps: [callStep("sirkit.manufacturing.readiness-inspect"), step()], discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE].sort(), toolOutcomes: [{ toolId: "sirkit.manufacturing.readiness-inspect", outcomeClass: "read", status: "succeeded" }], terminal: { outcome: "completed", failureReason: null }, pins }),
       [{
         id: "netlist-withheld-warning",
         evaluate: ({ trace }) => {
@@ -206,7 +207,7 @@ export function buildEvaluationCases(pins: TraceDigestPins): EvaluationCase[] {
 
     // 8 — KiCad netlist without server authority: withheld.
     define("e08-kicad-netlist-withheld", "KiCad netlist without server pin authority: withheld", "resource-withholding",
-      capsule({ caseId: "e08-kicad-netlist-withheld", context: { schematic: KICAD_SCHEMATIC, board: boardWithTrack(), netlist: { schema: "sirkit.agent-netlist-projection.v1", components: [{ id: "u1-id", ref: "U1", pins: [{ number: "1" }] }], nets: [] }, editorSchematicDigest: schematicStateDigest(KICAD_SCHEMATIC) }, steps: [step()], discoveredTools: [...ALL_READS.filter((toolId) => toolId !== "sirkit.schematic.inspect"), ...LAYOUT_PROPOSALS, "sirkit.schematic.inspect"].sort(), toolOutcomes: [], terminal: { outcome: "completed", failureReason: null }, pins }),
+      capsule({ caseId: "e08-kicad-netlist-withheld", context: { schematic: KICAD_SCHEMATIC, board: boardWithTrack(), netlist: { schema: "sirkit.agent-netlist-projection.v1", components: [{ id: "u1-id", ref: "U1", pins: [{ number: "1" }] }], nets: [] }, editorSchematicDigest: schematicStateDigest(KICAD_SCHEMATIC) }, steps: [step()], discoveredTools: [...ALL_READS.filter((toolId) => toolId !== "sirkit.schematic.inspect"), ...LAYOUT_PROPOSALS, PREFLIGHT, "sirkit.schematic.inspect"].sort(), toolOutcomes: [], terminal: { outcome: "completed", failureReason: null }, pins }),
       [{
         id: "kicad-pin-authority-withheld",
         evaluate: ({ trace }) => {
@@ -221,7 +222,7 @@ export function buildEvaluationCases(pins: TraceDigestPins): EvaluationCase[] {
         caseId: "e09-mutation-not-exposed",
         context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK },
         steps: [callStep("sirkit.pcb.move-footprint"), step()],
-        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE].sort(),
+        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE].sort(),
         toolOutcomes: [],
         terminal: { outcome: "completed", failureReason: null }, pins,
       }),
@@ -236,7 +237,7 @@ export function buildEvaluationCases(pins: TraceDigestPins): EvaluationCase[] {
         caseId: "e10-proposal-only",
         context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK },
         steps: [callStep(PROPOSE, JSON.stringify({ ops: [{ op: "set-value", target: "r1", value: "1k" }] })), step()],
-        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE].sort(),
+        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE].sort(),
         toolOutcomes: [{ toolId: PROPOSE, outcomeClass: "proposal", status: "proposal_sealed" }],
         terminal: { outcome: "completed", failureReason: null }, pins,
       }),
@@ -255,7 +256,7 @@ export function buildEvaluationCases(pins: TraceDigestPins): EvaluationCase[] {
         caseId: "e11-terminal-safety",
         context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK },
         steps: Array.from({ length: 6 }, () => callStep("sirkit.pcb.board-inspect")),
-        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE].sort(),
+        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE].sort(),
         // Cycle detection caps identical calls at maxIdenticalCalls (2);
         // later repeats are refused BEFORE invocation, so only two
         // invocations are traced before the step budget stops the run.
@@ -276,7 +277,7 @@ export function buildEvaluationCases(pins: TraceDigestPins): EvaluationCase[] {
         caseId: "e12-provider-quota",
         context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK },
         steps: [step({ failure: { reason: "insufficient_quota", message: "quota exhausted" } })],
-        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE].sort(),
+        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE].sort(),
         toolOutcomes: [],
         terminal: { outcome: "failed", failureReason: "provider_insufficient_quota" }, pins,
       }),
@@ -290,7 +291,7 @@ export function buildEvaluationCases(pins: TraceDigestPins): EvaluationCase[] {
         provider: "anthropic",
         context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK },
         steps: [step({ failure: { reason: "rate_limit", message: "slow down" } })],
-        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE].sort(),
+        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE].sort(),
         toolOutcomes: [],
         terminal: { outcome: "failed", failureReason: "provider_rate_limit" }, pins,
       }),
@@ -304,7 +305,7 @@ export function buildEvaluationCases(pins: TraceDigestPins): EvaluationCase[] {
         provider: "anthropic",
         context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK },
         steps: [callStep("sirkit.pcb.board-inspect"), callStep("sirkit.validation.drc-run"), step()],
-        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE].sort(),
+        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE].sort(),
         toolOutcomes: [
           { toolId: "sirkit.pcb.board-inspect", outcomeClass: "read", status: "succeeded" },
           { toolId: "sirkit.validation.drc-run", outcomeClass: "read", status: "succeeded" },
@@ -324,7 +325,7 @@ export function buildEvaluationCases(pins: TraceDigestPins): EvaluationCase[] {
         // before execution (proven in the B11.1 suite).
         context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK, selection: { refs: [{ kind: "track", id: "t-does-not-exist" }], primary: null } },
         steps: [step()],
-        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE, SELECTION].sort(),
+        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE, SELECTION].sort(),
         toolOutcomes: [],
         terminal: { outcome: "completed", failureReason: null }, pins,
       }),
@@ -336,7 +337,7 @@ export function buildEvaluationCases(pins: TraceDigestPins): EvaluationCase[] {
         caseId: "e16-recorder-safety",
         context: { schematic: SCHEMATIC, board: boardWithTrack(), schematicHeadMark: MARK },
         steps: [callStep("sirkit.pcb.board-inspect"), step()],
-        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PROPOSE].sort(),
+        discoveredTools: [...ALL_READS, ...LAYOUT_PROPOSALS, PREFLIGHT, PROPOSE].sort(),
         toolOutcomes: [{ toolId: "sirkit.pcb.board-inspect", outcomeClass: "read", status: "succeeded" }],
         terminal: { outcome: "completed", failureReason: null }, pins,
       }),

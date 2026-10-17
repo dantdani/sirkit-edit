@@ -1,0 +1,267 @@
+{
+  "schema": "sirkit.tool-manuals-manifest.v1",
+  "registryDigest": "eng1-17588a420afaec9f",
+  "count": 52,
+  "manuals": [
+    {
+      "toolId": "sirkit.component-authority.inspect",
+      "version": "1.0.0",
+      "sha256": "643588f52303ea30442f3ebb8114c2aeedbab26d1290f59e110e8a928cec87f3"
+    },
+    {
+      "toolId": "sirkit.component.review-request",
+      "version": "1.0.0",
+      "sha256": "f42ab868836b848693251da3397785da30b3a3dc5f3b1c63b1f13ca758eee4d4"
+    },
+    {
+      "toolId": "sirkit.computation.analytical-equation",
+      "version": "1.0.0",
+      "sha256": "2e834e408abbda7838e554e75c90628bb9c29a98574b7770569be48f80c58402"
+    },
+    {
+      "toolId": "sirkit.computation.artifact-compare",
+      "version": "1.0.0",
+      "sha256": "8962617d8f9ce93f2d49bf4d3fda9913458c318d8bc6a5109dac1102a1ff9e6d"
+    },
+    {
+      "toolId": "sirkit.computation.artifact-parse",
+      "version": "1.0.0",
+      "sha256": "ab6ff95f055b3ad147ac964b0ef6bf7fc3bafd2a0370c5acb3ae64d771e1e920"
+    },
+    {
+      "toolId": "sirkit.computation.circuit-analysis",
+      "version": "1.0.0",
+      "sha256": "527790c00045a18b86eda6e401d7085a817721899fa952c5fbda1f064ef28c44"
+    },
+    {
+      "toolId": "sirkit.computation.layout-experiment",
+      "version": "1.0.0",
+      "sha256": "d0a755c11ffbbe78806144b362fb2d48b5ae73af3f1f0db68cb467f5fcc4bde6"
+    },
+    {
+      "toolId": "sirkit.manufacturing.readiness-inspect",
+      "version": "1.0.0",
+      "sha256": "8c2f69b846fec20622165a57b829b699100851707b805b335611aae95de3515c"
+    },
+    {
+      "toolId": "sirkit.manufacturing.release",
+      "version": "1.0.0",
+      "sha256": "bb7ccb5ce4746023a7fac46776363d3904c91d0c536b890ba05be04e6df813da"
+    },
+    {
+      "toolId": "sirkit.mcp.observation-read",
+      "version": "1.0.0",
+      "sha256": "0ef627dc54d720ff23e248227f84a84e6dddaa1247a7fc63e298afb18995474a"
+    },
+    {
+      "toolId": "sirkit.parts.catalog-inspect",
+      "version": "1.0.0",
+      "sha256": "03e5035701d67843efefa94244d6588c2b1f841833c7a4350807602a722a8748"
+    },
+    {
+      "toolId": "sirkit.parts.evidence-read",
+      "version": "1.0.0",
+      "sha256": "7cc8c65ff15009fb7bd4176757902a4bfa5ec2bb29be3f3ca2c6936bb70887ef"
+    },
+    {
+      "toolId": "sirkit.parts.external-search",
+      "version": "1.0.0",
+      "sha256": "56a1b6af2209ca8e29576e2f20a1f350ba5a529b3019e75d72a9de6e91421849"
+    },
+    {
+      "toolId": "sirkit.parts.search",
+      "version": "1.0.0",
+      "sha256": "07343590b46694591ec3b03fdeecc9a3c62074ae260e5abcee0ef8965dc98fd7"
+    },
+    {
+      "toolId": "sirkit.pcb-sync.preflight",
+      "version": "1.0.0",
+      "sha256": "ee48a8db2933c59923ea3c9390e0d56ab19f12149d280733823065baa6707296"
+    },
+    {
+      "toolId": "sirkit.pcb.arrange",
+      "version": "1.1.1",
+      "sha256": "e2878c5e7c9b8747f088798696e856d1bebf82e64ffb2ee30ffa1e591c00525e"
+    },
+    {
+      "toolId": "sirkit.pcb.board-inspect",
+      "version": "1.1.0",
+      "sha256": "f251fe51f3bc5601b40604142994f94eb8aaae3084afd29740f81bf3569e2782"
+    },
+    {
+      "toolId": "sirkit.pcb.board-page-inspect",
+      "version": "1.0.0",
+      "sha256": "b60d7244ff3afa1feacdab349946c852295217919825184a430b24d7ffccedfa"
+    },
+    {
+      "toolId": "sirkit.pcb.create-via",
+      "version": "1.1.0",
+      "sha256": "41614280ec4b17f9e407aecbe6fddcd5386e561bcec7210038a95b311293ca53"
+    },
+    {
+      "toolId": "sirkit.pcb.delete-item",
+      "version": "1.0.0",
+      "sha256": "efe6073970031d652ab18737a16f67c257b1d8c2c5de99902c6a877ab4c156a6"
+    },
+    {
+      "toolId": "sirkit.pcb.dimension",
+      "version": "1.2.0",
+      "sha256": "a29698a674e75c6cd2daeea1e23c9a7d535449d382e1ef8b67a139f6addfc2a2"
+    },
+    {
+      "toolId": "sirkit.pcb.edit-track",
+      "version": "1.0.0",
+      "sha256": "e5da8789982b2a2f2360ce798e88ec7624df5ea2435ae2acd965c8ecd7608e23"
+    },
+    {
+      "toolId": "sirkit.pcb.mechanical-inspect",
+      "version": "1.0.0",
+      "sha256": "fab5af730cb48fa8d0e0cb2fb4cd668aeadeef05cd66ba64891a4fb54420a5f8"
+    },
+    {
+      "toolId": "sirkit.pcb.move-footprint",
+      "version": "1.1.1",
+      "sha256": "e790b37a156e1280d5fc5a3738c8d86dca745ab8cbead76a629b70160b987b8a"
+    },
+    {
+      "toolId": "sirkit.pcb.propose-bounded-edit",
+      "version": "1.0.0",
+      "sha256": "7bfb7801ff9a123c4e001d64f5a32ebbf354b95e3b8dd2abde07db389ec4a3d2"
+    },
+    {
+      "toolId": "sirkit.pcb.repair-plan",
+      "version": "1.0.0",
+      "sha256": "1f6e37d04a0d475f2bf083b86bd8f0ce0002243c1e1f4e8809ce0b8f77534a73"
+    },
+    {
+      "toolId": "sirkit.pcb.revision-inspect",
+      "version": "1.0.0",
+      "sha256": "e5ecb2dac3f7a4a5214d87c73621e6dea5a7e2d5707dfd7dd1c79884535dfcd0"
+    },
+    {
+      "toolId": "sirkit.pcb.rotate-side-footprint",
+      "version": "1.2.1",
+      "sha256": "264493e676cc13b9d451dddbc571162a8fbf9497b6c358d3a96aa7777666d654"
+    },
+    {
+      "toolId": "sirkit.pcb.silkscreen-text",
+      "version": "1.0.1",
+      "sha256": "3cf5f070001660828c3566bf1f6e9eb7813c819a1d0abcc17caceda8698d4f8e"
+    },
+    {
+      "toolId": "sirkit.pcb.undo-redo-canonical",
+      "version": "1.0.0",
+      "sha256": "b5957eac4de04fe5e3076e4f709dfe9483cb267c48c4e9b9c5ef5336af9798b8"
+    },
+    {
+      "toolId": "sirkit.pcb.undo-redo-granted",
+      "version": "1.0.1",
+      "sha256": "e0080d27d71553b7ca0dbddd0e17e1098436c0e79db63466f97f7f6c3aace150"
+    },
+    {
+      "toolId": "sirkit.pcb.via-inspect",
+      "version": "1.0.0",
+      "sha256": "654eb0f977e055e8f25781a6191ee241391611f6be657853aedc0c48dfcb437b"
+    },
+    {
+      "toolId": "sirkit.pcb.zone-edit",
+      "version": "1.1.0",
+      "sha256": "c7b42295e8fde7ca342f4fcef0ea18bb79656d8f11132e14eace342c6220b646"
+    },
+    {
+      "toolId": "sirkit.placement.propose",
+      "version": "1.1.0",
+      "sha256": "e687d6220bf617bace010c42962f23ff851fd505e62dc02ece1045b0c979ae89"
+    },
+    {
+      "toolId": "sirkit.project.canonical-revision-inspect",
+      "version": "1.0.0",
+      "sha256": "1874c027343fba33429aeeeb1036d364f763652e27a59bb8f4cc3c31a90069a5"
+    },
+    {
+      "toolId": "sirkit.project.history-inspect",
+      "version": "1.0.0",
+      "sha256": "04274e235765dfd2c085599eae576140165e687d33c2ed749049f8ace2fad344"
+    },
+    {
+      "toolId": "sirkit.routing.propose",
+      "version": "1.1.0",
+      "sha256": "c7e8b746eaed9091a10c53ae8704a95a7910d163e23708fd02475ed8a8d7f5a4"
+    },
+    {
+      "toolId": "sirkit.schematic.add-component",
+      "version": "1.0.0",
+      "sha256": "c6c528eb86643e817d76ec469cd9f93e3b2bc2963b596ef7a3f64c638eaa99d4"
+    },
+    {
+      "toolId": "sirkit.schematic.generate-proposal",
+      "version": "1.0.0",
+      "sha256": "821996e36f9c026ebfe1652edc637199ae5efd263052ad400858e3dbda471cb9"
+    },
+    {
+      "toolId": "sirkit.schematic.inspect",
+      "version": "1.1.0",
+      "sha256": "a347d73e9266e2bd7f445ef862040e271a6570b28999b98cfaf65f0c79371fc6"
+    },
+    {
+      "toolId": "sirkit.schematic.propose-component-replacement",
+      "version": "1.0.0",
+      "sha256": "9243756a00452c969ce208c4c8b7638f128287ef0a7495ae54776480d82be84b"
+    },
+    {
+      "toolId": "sirkit.schematic.propose-tier1-edit",
+      "version": "1.1.0",
+      "sha256": "85653b530f52b74d4a1d0081a2db2deafd21c2f045be31e8faff3429d6386b4c"
+    },
+    {
+      "toolId": "sirkit.selection.control",
+      "version": "1.0.0",
+      "sha256": "031532dc9544605007a22c7f08fac90fafdad54063f2f5f59fd4a4a87dd1b2ac"
+    },
+    {
+      "toolId": "sirkit.selection.inspect",
+      "version": "1.1.0",
+      "sha256": "c11ac94d4c9b1f6927cae016d9f39a046c3ac37bd73edeb286aeeae7d1e79fc8"
+    },
+    {
+      "toolId": "sirkit.validation.connectivity-verify",
+      "version": "1.0.0",
+      "sha256": "f31118f8c415f2ce2a6ab753df28dca003d0a17be2157eb5970f0084ebdf0b1b"
+    },
+    {
+      "toolId": "sirkit.validation.drc-run",
+      "version": "1.0.0",
+      "sha256": "d00d5bb73f2cc33f24ff6606342d206e8a35c04afdf6c481ce3f86c731059658"
+    },
+    {
+      "toolId": "sirkit.view.canvas-navigation",
+      "version": "1.1.0",
+      "sha256": "1f0c73fc480ebe5895e5d9036bbb92e6415dd7bac8b0d9e1a9b2de9af8b812c0"
+    },
+    {
+      "toolId": "sirkit.view.layers",
+      "version": "1.0.0",
+      "sha256": "2b6966c15d380dc44b8dd0c915be848e0a07ebcc303b4d39d6b77ce70429261d"
+    },
+    {
+      "toolId": "sirkit.view.measure",
+      "version": "1.0.0",
+      "sha256": "39687d2342a0efb943e5660a09d316bcd68811160fcd29a6229ded479b5bd7e0"
+    },
+    {
+      "toolId": "sirkit.view.pcb3d",
+      "version": "1.0.0",
+      "sha256": "9a4234fb804aab64f8a7fee0938ad6e5405ea73b9f104235a7c91b03b5c730e6"
+    },
+    {
+      "toolId": "sirkit.view.read-state",
+      "version": "1.0.0",
+      "sha256": "12a8890f88c4894b8514f5d5d5e3c77be5f659e63de1df555b65a90cae820b3a"
+    },
+    {
+      "toolId": "sirkit.view.reveal-finding",
+      "version": "1.0.0",
+      "sha256": "e5faca5531b64036c0a61850a0912c0b3aa99854383f94ad40c880607fe64303"
+    }
+  ]
+}

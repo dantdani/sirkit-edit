@@ -88,7 +88,7 @@ describe("[B21 E2] the run view: pure counters and one status line (OD-126, OD-1
     expect(start).toBeGreaterThan(0);
     const body = page.slice(start, end);
     const cases = [...body.matchAll(/^\s*case "([a-z_]+)":/gm)].map((match) => match[1]!);
-    expect(cases).toEqual(["text_delta", "tool_started", "tool_finished", "tool_refused", "proposal_ready", "pcb_proposal_ready", "view_command_ready", "layout_candidate_ready", "execution_grant_ready", "execution_settled", "warning", "run_failed"]);
+    expect(cases).toEqual(["text_delta", "tool_started", "tool_finished", "tool_refused", "proposal_ready", "pcb_proposal_ready", "generation_proposal_ready", "view_command_ready", "layout_candidate_ready", "execution_grant_ready", "execution_settled", "warning", "run_failed"]); // [PR-D, 2026-10-17] pin move (OD-246): + generation_proposal_ready, the page's intake of the agent's Build-mode generation proposal (sirkit.schematic.generate-proposal, OD-243) - a case beside pcb_proposal_ready's that offers the verified sealed proposal in the existing review dialog; still no case for any of the five orchestration events (asserted next)
     for (const type of ORCHESTRATION_RUN_EVENT_TYPES) expect(cases).not.toContain(type);
     expect(body).toMatch(/default:\n\s*\{ const line = orchestrationRunLogLine\(event\); if \(line\) appendActivityStep\(logId, line\.text, line\.status\); return; \}/);
     expect(page.match(/orchestrationRunLogLine\(/g)).toHaveLength(1);
@@ -106,7 +106,7 @@ describe("[B21 E2] the run view: pure counters and one status line (OD-126, OD-1
   it("5. no new control (OD-127): the page's control markup counts are HEAD's (recorded from 3a32317), the E2 wires are text rows through the existing run-log step, and the chat components are untouched", () => {
     const page = readFileSync(join(ROOT, "app/page.tsx"), "utf8");
     const counts = Object.fromEntries(["onClick=", "<button", "<input", "<select", "onChange=", "<textarea"].map((token) => [token, page.split(token).length - 1]));
-    expect(counts).toEqual({ "onClick=": 77, "<button": 38, "<input": 3, "<select": 2, "onChange=": 19, "<textarea": 0 });
+    expect(counts).toEqual({ "onClick=": 81, "<button": 40, "<input": 3, "<select": 2, "onChange=": 19, "<textarea": 0 }); // [PR-D, 2026-10-17] pin move: onClick= 77 -> 81, <button 38 -> 40 - HEAD's counts since PR-E 390afa4 (the settings dialog and the entry action, inventoried there: the B17-A summary 630/64 -> 636/64; PR-C 6bdd7f7 had moved the inventory 628/63 -> 630/64 with these counts unchanged); PR-D's generation-proposal intake (OD-246) adds no control markup and the B17-A inventory is byte-identical to HEAD
     for (const line of page.split("\n").filter((text) => text.includes("[B21 E2]"))) expect(line, line.slice(0, 80)).not.toMatch(/<[A-Za-z]|onClick|onChange|disabled=/);
     expect(page.split("\n").filter((text) => text.includes("[B21 E2]"))).toHaveLength(2);
     for (const file of ["AutonomyModeControl.tsx", "ExecutionEntryActions.tsx", "ChatMarkdown.tsx"]) expect(readFileSync(join(ROOT, "app/components/chat", file), "utf8"), file).not.toMatch(/orchestration|specialist/i);

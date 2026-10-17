@@ -689,22 +689,22 @@ in its file - and, for every production file E3 changed, it is on the line state
 | C103 | `app/lib/project/chat-run-view.ts` | 636 | — | `export function chatResumeKeptAfter(` | kept or spent |
 | C104 | `app/lib/project/chat-run-view.ts` | 653 | — | `export function restoredChatResume(` | [fix: coverage-1] the offer read back from the saved run log |
 | C105 | `app/page.tsx` | 62 | — | `chatResumeKeptAfter, chatResumeOfferLine` | the import, in place |
-| C106 | `app/page.tsx` | 2567 | — | `const resumableChatRunRef = useRef<ResumableChatRun` | the offer's ref - in place |
-| C107 | `app/page.tsx` | 3103 | — | `resumableChatRunRef.current = null; // retries (and` | cleared on a project switch - in place |
-| C108 | `app/page.tsx` | 4450 | — | `const offeredResume = resumableChatRunRef.current ?? restoredChatResume(messages,` | [fix: coverage-1] every send spends it; read back after a reload - in place |
-| C109 | `app/page.tsx` | 4473 | — | `if (chatResume) appendActivityStep(logId, chatResume.line, "done");` | the resuming line - in place |
-| C110 | `app/page.tsx` | 4519 | — | `...(chatResume ? { resumeRunId: chatResume.runId } : {})` | the key, only for a resume - in place |
-| C111 | `app/page.tsx` | 4523 | — | `resumableChatRunRef.current = chatResumeKeptAfter(` | a transient refusal keeps it and says so - in place |
-| C112 | `app/page.tsx` | 4524 | — | `const streamRunId = res.headers.get("X-Sirkit-Run-Id");` | the run id the route issued - in place |
-| C113 | `app/page.tsx` | 4544 | — | `resumeObservation = observeChatResume(resumeObservation, event);` | beside the run view - in place |
-| C114 | `app/page.tsx` | 4741 | — | `if (resumable) appendActivityStep(logId, chatResumeOfferLine(resumable.runId, resumable.provider), "done");` | the offer, a run-log line - in place |
+| C106 | `app/page.tsx` | 2555 | — | `const resumableChatRunRef = useRef<ResumableChatRun` | the offer's ref - in place |
+| C107 | `app/page.tsx` | 3120 | — | `resumableChatRunRef.current = null; // retries (and` | cleared on a project switch - in place |
+| C108 | `app/page.tsx` | 4468 | — | `const offeredResume = resumableChatRunRef.current ?? restoredChatResume(messages,` | [fix: coverage-1] every send spends it; read back after a reload - in place |
+| C109 | `app/page.tsx` | 4491 | — | `if (chatResume) appendActivityStep(logId, chatResume.line, "done");` | the resuming line - in place |
+| C110 | `app/page.tsx` | 4537 | — | `...(chatResume ? { resumeRunId: chatResume.runId } : {})` | the key, only for a resume - in place |
+| C111 | `app/page.tsx` | 4541 | — | `resumableChatRunRef.current = chatResumeKeptAfter(` | a transient refusal keeps it and says so - in place |
+| C112 | `app/page.tsx` | 4542 | — | `const streamRunId = res.headers.get("X-Sirkit-Run-Id");` | the run id the route issued - in place |
+| C113 | `app/page.tsx` | 4562 | — | `resumeObservation = observeChatResume(resumeObservation, event);` | beside the run view - in place |
+| C114 | `app/page.tsx` | 4770 | — | `if (resumable) appendActivityStep(logId, chatResumeOfferLine(resumable.runId, resumable.provider), "done");` | the offer, a run-log line - in place |
 | C115 | `.github/workflows/deterministic-manufacturing.yml` | 152 | — | `app/api/chat/__tests__/b21-e3-chat-resume.test.ts` | the route suite's one explicit entry [B24-D1, 2026-10-09] re-pinned +1: B24-D1's prompt-to-gerber start step at `:32` (OD-30) |
 | C116 | `app/api/chat/route.ts` | 14 | — | `No silent cross-provider fallback exists;` | the route header stands |
-| C117 | `app/page.tsx` | 4470 | — | `lastAiRetryRef.current = () => void send(text);` | the Retry IS `send(text)` (unchanged) |
+| C117 | `app/page.tsx` | 4488 | — | `lastAiRetryRef.current = () => void send(text);` | the Retry IS `send(text)` (unchanged) |
 | C118 | `app/api/chat/route.ts` | 331 | — | `const authority = await loadRunComponentAuthority(source, {` | the authority loaded for THIS request (unchanged) |
 | C119 | `app/api/chat/route.ts` | 311 | — | `const recomputed = pcbRevisionId(assembly.context.canonicalState.pcb);` | the revision recomputed server-side (unchanged) |
 | C120 | `app/api/chat/route.ts` | 208 | — | `if (editorContext.authoritySource !== "local-working-copy") {` | the editor context is the local working copy (unchanged) |
-| C121 | `app/page.tsx` | 4766 | — | `startNewRun: () => void send(text),` | the card's Retry, the same send (unchanged) |
+| C121 | `app/page.tsx` | 4795 | — | `startNewRun: () => void send(text),` | the card's Retry, the same send (unchanged) |
 | C122 | `app/api/chat/orchestration-runtime.ts` | 799 | — | `async function markUnknownClaim(` | [lead] a claim of unknown outcome marks only its own end |
 | C123 | `app/api/chat/orchestration-runtime.ts` | 790 | — | `function resumeClaimId(` | [lead] a request's own claim id |
 | C124 | `app/lib/agent/orchestration/store.ts` | 491 | — | `if (entry.kind === "resume" && !isOrchestrationDigest(entry.claim))` | [lead] a start without its claim id is refused - in place |

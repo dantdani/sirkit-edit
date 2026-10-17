@@ -38,4 +38,7 @@ export const MCP_WITHHELD_TOOL_IDS: readonly string[] = Object.freeze([
   "sirkit.schematic.propose-component-replacement", // B4 (OD-82): compiles against the editor's SchematicState and head mark, which are browser-only (as B3's OD-69)
   "sirkit.schematic.propose-tier1-edit",          // B4 (OD-82): compiles against the editor's SchematicState and head mark, which are browser-only (as B3's OD-69)
   "sirkit.pcb.board-page-inspect",                // B24-D2 (OD-235): a choice, not an inability - it is servable from the durable board, but paged answers and their cursors were never reviewed for MCP clients (OD-48, OD-54)
+  "sirkit.schematic.generate-proposal",           // PR-D (OD-243): seals against the editor's SchematicState and head mark, which are browser-only (as B4's OD-82), and runs a provider generation of up to 40 s that an MCP call may not start (as B4's OD-87 engines)
+  "sirkit.pcb-sync.preflight",                    // PR-D d2: its only input is the editor's SchematicState, which lives in browser storage; no durable table holds it (as B3's OD-69 reads)
+  "sirkit.parts.catalog-inspect",                 // PR-D d2: a choice, not an inability - servable from the catalog tables in principle (as OD-235's read), but the MCP server binds no catalog port and its catalog reads were never reviewed for MCP clients; restoring it needs an owner decision and a served port
 ].sort());

@@ -149,7 +149,7 @@ export interface AgentRunContext {
   externalAcquisitionAvailable?: boolean;
   /** [B20 A4] SERVER fact: the chat route bound the external tool port (approved MCP servers) to this run AND a verified canonical
    *  state exists. Present (true) exactly when the discovery context advertises the external-mcp-observation authority. */
-  mcpObservationAvailable?: boolean; /** [B22-B] SERVER fact: the chat route bound the named computation port (the bounded engine host) to this run; present (true) exactly when the discovery context advertises the computation-engine authority. */ computationAvailable?: boolean;
+  mcpObservationAvailable?: boolean; /** [B22-B] SERVER fact: the chat route bound the named computation port (the bounded engine host) to this run; present (true) exactly when the discovery context advertises the computation-engine authority. */ computationAvailable?: boolean; /** [PR-D] SERVER fact: the chat route bound the Build-mode generation port (runBuildMultiGeneration behind a configured provider) to this run AND a validated schematic exists; present (true) exactly when the discovery context advertises the schematic-generation authority (OD-243). */ schematicGenerationAvailable?: boolean; /** [PR-D d2] SERVER fact: the chat route bound the catalog inspection port (the shared catalog part detail loader behind the parts route, app/api/chat/catalog-inspection-runtime.ts) to this run; present (true) exactly when the discovery context advertises the catalog authority. */ catalogInspectionAvailable?: boolean;
 }
 
 /** [B15.3] see `AgentRunContext.pcbProposalBasis`. */
@@ -352,7 +352,7 @@ export type GatewayInvocationOutcome =
   | { kind: "proposal"; ok: true; toolId: string; version: string; proposal: SealedAgentProposal }
   /** [B15.3] the PCB proposal rides a DISTINCT outcome kind so the schematic
    *  proposal path can never receive one by type or by accident. */
-  | { kind: "pcb-proposal"; ok: true; toolId: string; version: string; proposal: SealedPcbEditProposal }
+  | { kind: "pcb-proposal"; ok: true; toolId: string; version: string; proposal: SealedPcbEditProposal } | { kind: "generation-proposal"; ok: true; toolId: string; version: string; proposal: SealedSchematicGenerationProposal } // [PR-D] the Build-mode generation proposal rides its own kind too (OD-243); a failed generation is `proposal-blocked` below, never ok
   | { kind: "proposal-blocked"; ok: false; toolId: string; version: string; blockers: Array<{ code: string; detail: string }> }
   /** [B17-F] a server-VALIDATED view-session command request the BROWSER
    *  executes on the user's own view bus (stale-revision rule, role gate and
@@ -414,7 +414,7 @@ export type AgentRunEvent =
    *  overloaded onto the schematic `proposal_ready`. Receiving or displaying
    *  it grants nothing and mutates nothing; apply authority stays behind the
    *  human-gated PCB approval boundary. Emitted at most once per run. */
-  | { type: "pcb_proposal_ready"; runId: string; toolId: string; proposal: SealedPcbEditProposal }
+  | { type: "pcb_proposal_ready"; runId: string; toolId: string; proposal: SealedPcbEditProposal } | { type: "generation_proposal_ready"; runId: string; toolId: string; proposal: SealedSchematicGenerationProposal } // [PR-D] the Build-mode generation proposal's OWN event (OD-243): never overloaded onto proposal_ready; receiving it mutates nothing; the page's intake (the review dialog) is a later round and ignores it until then
   /** [B17-F] a validated view-command request for the browser's view bus.
    *  The page dispatches it on the named editor session with the agent
    *  actor; the bus's own stale-revision / role / session rules decide. */
@@ -496,3 +496,6 @@ export type OrchestrationRunEvent =
 export function isOrchestrationRunEventType(type: unknown): type is OrchestrationRunEventType {
   return typeof type === "string" && (ORCHESTRATION_RUN_EVENT_TYPES as readonly string[]).includes(type);
 }
+
+// [PR-D] the Build-mode generation proposal artifact, imported at the END (a type import is hoisted and erased): no line cited in this file moves
+import type { SealedSchematicGenerationProposal } from "./generation-proposals";

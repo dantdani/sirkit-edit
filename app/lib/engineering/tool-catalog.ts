@@ -1057,7 +1057,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     timeoutMs: 5_000,
     sourceEvidence: ["app/lib/pcb/dimensions/commands.ts", "app/lib/pcb/dimensions/geometry.ts", "app/components/pcb/hooks/useDimensionTool.ts", "app/components/pcb/inspectors/DimensionInspector.tsx", "app/lib/engineering/operations.ts", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
     versionNotes: "1.2.0 (B18-C I7): bound and agent-exposed as a reviewed granted execution (confirmation-only: no explicit grammar); re-tiered reversible per the runbook's PCB Tier 1 list (OD-13); deterministic add ids; an update never moves the measured points. 1.1.0 (B09.1): reconciled with B08 truth — implemented and active, no tool adapter.",
-  }, ...COMPUTATION_TOOL_DESCRIPTORS, boardPageInspectDescriptor(), // [B22-B] the five named computations (OD-139), from computation-tool-descriptors.ts; [B24-D2, 2026-10-09] the bounded paged board read (OD-213), its declaration at the END of this file
+  }, ...COMPUTATION_TOOL_DESCRIPTORS, boardPageInspectDescriptor(), generateProposalDescriptor(), pcbSyncPreflightDescriptor(), catalogInspectDescriptor(), componentReviewRequestDescriptor(), // [B22-B] the five named computations (OD-139), from computation-tool-descriptors.ts; [B24-D2, 2026-10-09] the bounded paged board read (OD-213), its declaration at the END of this file; [PR-D, 2026-10-16] the Build-mode generation proposal (OD-243), its declaration at the END too; [PR-D d2, 2026-10-16] the Schematic to PCB preflight read, the catalog part inspection and the (unavailable) component review request, declared at the END too
 ] satisfies readonly ToolDescriptor[]);
 
 let cached: ToolRegistry | null = null;
@@ -1099,5 +1099,137 @@ function boardPageInspectDescriptor(): ToolDescriptor {
     verificationStrategy: "derived from the canonical board revision through buildAIPcbSnapshot; membership by layer (footprints with a pad on it, pads with copper on it, tracks on it, vias whose span includes it, zones on it, keepouts listing it), by net (the net, footprints with a pad on it, its pads, tracks, vias and zones) or by region (footprint body bounds, pad and via positions, track segments, zone and keepout polygon bounding boxes meeting the rectangle); kinds in a fixed order, ids by code point; each page's result within BOARD_PAGE_MAX_RESULT_CHARS, and following nextCursor visits every selected item once; an item larger than a whole page is refused by kind and id (item_over_budget), never truncated; a cursor from another revision or selector is refused (stale_cursor)",
     sourceEvidence: ["app/lib/pcb/ai/board-pages.ts", "app/lib/pcb/ai/snapshot.ts", "app/lib/engineering/tool-bindings-readonly.ts"],
     versionNotes: "1.0.0 (B24-D2): first exposure, reviewed in `agent-exposure.ts` (OD-213); withheld from MCP by a reviewed choice in `mcp-exposure-review.ts` although it is servable from the durable board. It states nothing board-inspect does not already state; it exists because board-inspect's whole snapshot does not fit in one tool result on a routed board.",
+  };
+}
+
+/**
+ * [PR-D, 2026-10-16] OD-243: the agent's Build-mode GENERATION proposal, declared at the END (a function declaration is hoisted; the
+ * defaults above are initialized before the catalog calls it), so no line of this catalog moves. It is the semantic equivalent of
+ * the Build composer's Generate: the page POSTs /api/schematic/build-multi and offers the result in the schematic review dialog; the
+ * agent runs the SAME `runBuildMultiGeneration` through the chat route's injected port (app/api/chat/schematic-generation-runtime.ts)
+ * and seals the outcome into a proposal the human approves in the same dialog (the page's intake is a later round; the contract is
+ * app/lib/agent/generation-proposals.ts). Discovery requires Build mode (`schematic-build-mode`: the validated sheet holds no Theory
+ * component), a project with a validated schematic and its canonical head mark (the base the proposal replaces), and a generation
+ * provider bound to the run (`schematic-generation`: the server's port fact, never a body claim); the run's remaining wall clock is
+ * the budget the service checks before anything runs, and the loop's proposal single-flight allows one generation per run.
+ */
+function generateProposalDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.schematic.generate-proposal", version: "1.0.0",
+    agentExposed: true, // [PR-D] sealed generation proposal ONLY; approval stays human-only in the schematic review dialog
+    owningCommandId: "schematic.generate",
+    title: "Propose a generated Build-mode schematic",
+    description: "Generate a Build-mode schematic (real catalog parts) from a one-paragraph circuit request through the SAME planner, bounded build loops, merge and electrical check the Build composer's Generate runs, sealed into a proposal. Example input: {\"prompt\":\"A 555 timer LED blinker powered from a 9 V battery through a 5 V linear regulator.\"}. The proposal carries the netlist, its completeness (complete, or partial with the omitted blocks), the electrical check's state (not checked is not a pass), the planner's state and the budget used, as data. Receiving it changes NOTHING: a human reviews it in the schematic review dialog and explicitly approves or discards it. One generation per run, within the run's remaining time; a failed generation is reported as data (failure class, provider reason, whether a retry can help), not as a proposal.",
+    category: "schematic", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({ prompt: { type: "string", description: "The circuit request in plain words (1 to 4000 characters): what the circuit does, its supply, its inputs and outputs, and named parts where they matter." } }, ["prompt"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present", "schematic-build-mode"], requiredAuthority: ["schematic-generation"],
+    requiresExpectedRevision: true,
+    // the sealed artifact carries the editor's canonical head mark (the tier-1 scope contract), so discovery requires an open lineage
+    requiresLineage: true,
+    binding: { status: "bound-proposal", module: "app/lib/schematic/build-multi-generation.ts", symbol: "runBuildMultiGeneration", notes: "PR-D: the ONE Build-mode generation the route and the agent share (planner, complexity gate, bounded block pool, deterministic merge, advisory post-merge ERC, the PR-C structured result). The agent reaches it only through the chat route's injected port (app/api/chat/schematic-generation-runtime.ts); SchematicGenerationProposalService (app/lib/agent/generation-proposals.ts) checks the binding, integrity, discovery, role, base and budget, then seals the outcome (sirkit.schematic-generation-proposal.v1) or reports the failure as proposal-blocked data. Nothing is applied here." },
+    discovery: "discoverable", callability: "callable",
+    // BUILD_BUDGET.deadlineMs (40 s) plus the service's margin; a long-running tool runs within the run's REMAINING deadline
+    timeoutMs: 45_000, budgetClass: "long-running",
+    validationStrategy: "closed argument surface (exactly prompt, 1-4000 characters; authority-shaped keys refused by name) under the B05 input limits; the server's port fact and a validated schematic with its canonical head mark are required; the run's remaining wall clock must hold a generation (budget_exhausted otherwise); the generation's own gates (planner, complexity, bounded loops, merge, advisory ERC) run unchanged",
+    verificationStrategy: "the sealed body's identity digest and the netlist digest are recomputed at intake (verifySealedSchematicGenerationProposalIntegrity); the page re-checks the base schematic digest, scope, head mark and expiry against the live editor before offering the proposal, and lays the netlist out through the same autoLayoutBuildValidated the Build composer uses",
+    sourceEvidence: ["app/lib/schematic/build-multi-generation.ts", "app/lib/agent/generation-proposals.ts", "app/api/chat/schematic-generation-runtime.ts", "app/api/schematic/build-multi/route.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "1.0.0 (PR-D, OD-243): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (it seals against the editor's browser-only SchematicState and head mark, and runs a provider generation). The route's response is byte-compatible with PR-C: it serializes the same outcome this proposal seals.",
+  };
+}
+
+/**
+ * [PR-D d2, 2026-10-16] The agent's Schematic → PCB PREFLIGHT read, declared at the END (a function declaration is hoisted), so no line
+ * of this catalog moves. It is the semantic equivalent of what the editor's Prepare PCB (`PcbEditor.handleSync`; the journey strip's
+ * `prepare_pcb`) decides BEFORE its first server call: the SAME `listUnresolvedInstances` / `unresolvedInstancesRefusal` / row texts,
+ * and the same bind filter, through the ONE pure report function (app/lib/pcb-sync/preflight-read.ts) over the run's verified
+ * schematic snapshot - board-less, as the editor's own run is (Prepare PCB exists to make the first board), so it travels its own Tier 0
+ * service (app/lib/agent/pcb-sync-preflight-reads.ts) and not the B05 canonical-state binding. The server stages (bindings,
+ * publication, the durable preflight and its blockers) travel as `not_run` data: not checked is not a pass.
+ */
+function pcbSyncPreflightDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.pcb-sync.preflight", version: "1.0.0",
+    agentExposed: true, // [PR-D d2] a Tier 0 read over the run's verified schematic snapshot; nothing is bound, published or applied
+    owningCommandId: "pcb.sync-durable",
+    title: "Check what blocks Prepare PCB before any server call",
+    description: "Run the checks the editor's Prepare PCB (Schematic to PCB) runs BEFORE it calls the server, over the run's verified schematic: every instance that cannot reach the board (no published exact revision, a published revision without its installed symbol asset, or a Theory symbol with no physical package), each with the missing fact and the review path the editor shows, the refusal sentence the editor would show, and a census of the instances the server preparation would bind. Example input: {}. The server stages (bindings, publication, the durable preflight and its blockers) are reported as not run: not checked is not a pass, and no board is prepared, bound or applied by this read; the user runs Prepare PCB in the PCB editor.",
+    category: "validation", operationClass: "read",
+    inputSchema: obj({}), outputSchema: OUT_REPORT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
+    binding: { status: "bound-read", module: "app/lib/pcb-sync/preflight-read.ts", symbol: "buildPcbSyncPreflightReport", notes: "PR-D d2: the SAME listUnresolvedInstances / unresolvedInstancesRefusal / UNRESOLVED_MISSING_LABEL / UNRESOLVED_REVIEW_PATH the editor's handleSync calls (app/components/pcb/PcbEditor.tsx) and the same Boolean(atomicPartRevisionId) bind filter, in one pure report; invoked only through PcbSyncPreflightReadService (app/lib/agent/pcb-sync-preflight-reads.ts) over the run's verified schematic snapshot (digest-pinned by the gateway's integrity check), board-less like the editor's own run. No second checker; no server stage runs." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 2_000,
+    validationStrategy: "closed argument surface (no arguments; an authority-shaped key is refused by name) under the B05 input limits; the verified schematic snapshot and its digest are required; discovery, role and capability rechecked per call; the output is schema-checked and bounded (at most 200 unresolved rows listed, the rest counted)",
+    verificationStrategy: "pure over the run's verified schematic snapshot (the integrity check recomputes its digest before every call; the result names that digest as its source); the server stages are stated as not run, never inferred",
+    sourceEvidence: ["app/lib/pcb-sync/preflight-read.ts", "app/lib/pcb-sync/unresolved-instances.ts", "app/components/pcb/PcbEditor.tsx", "app/lib/agent/pcb-sync-preflight-reads.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "1.0.0 (PR-D d2): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (its only input is the editor's browser-only SchematicState, as OD-69's reads).",
+  };
+}
+
+/**
+ * [PR-D d2, 2026-10-16] The agent's CATALOG PART INSPECTION read, declared at the END too. ONE part of Sirkit's own parts catalog by
+ * its id, through the SAME `loadCatalogPartDetail` the parts detail route answers the browser's part cache with (extracted from
+ * app/api/parts/[id]/route.ts into app/lib/atomic/catalog-part-detail.ts: one reader) plus the published revision status read; the
+ * agent reaches them only through the chat route's injected catalog port (app/api/chat/catalog-inspection-runtime.ts), advertised
+ * as the `catalog` authority ONLY with the server's fact. Bounded, closed output; never a distributor call.
+ */
+function catalogInspectDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.parts.catalog-inspect", version: "1.0.0",
+    agentExposed: true, // [PR-D d2] a Tier 0 read of ONE catalog part through the chat route's injected catalog port; no distributor call; nothing placed, bound or published
+    owningCommandId: "parts.catalog-read",
+    title: "Inspect one catalog part by id",
+    description: "Read ONE part of Sirkit's own parts catalog by its part id (a placed KiCad instance's partId): name, manufacturer part number, manufacturer, library and category, the footprint hint and normalized package, the lifecycle and RoHS status, the symbol's pins (number, name, type; at most 128 listed, the rest counted), and its published exact atomic revisions per value key with each revision's catalog status (published, deprecated, superseded or revoked; selectable; pinnable) and the value keys whose link points at a withdrawn or missing revision. Example input: {\"partId\":\"3f2a9c1e-0b7d-4e5a-9c21-7d8e6f5a4b3c\"}. The answer is catalog data read on the server, never a distributor lookup and never engineering authority: a part that is not in the catalog is reported as not found, and nothing is placed, bound or published.",
+    category: "parts", operationClass: "read",
+    inputSchema: obj({ partId: { type: "string", description: "The catalog part id (1 to 128 characters: letters, digits, dot, underscore, colon or hyphen), as a placed KiCad instance's partId." } }, ["partId"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: [], requiredAuthority: ["catalog"],
+    binding: { status: "bound-read", module: "app/lib/atomic/catalog-part-detail.ts", symbol: "loadCatalogPartDetail", notes: "PR-D d2: the ONE catalog part read the parts detail route (app/api/parts/[id]/route.ts) answers the browser's part cache with, plus the published revision status read (loadAtomicRevisionStatus, app/lib/atomic/server-catalog.ts); the agent reaches them only through the chat route's injected port (app/api/chat/catalog-inspection-runtime.ts), and CatalogInspectionReadService (app/lib/agent/catalog-inspection-reads.ts) checks the binding, integrity, the server's fact, discovery and role, then answers a closed bounded projection. No live distributor call." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 8_000,
+    validationStrategy: "closed argument surface (exactly partId, 1-128 characters of the id alphabet; authority-shaped keys refused by name) under the B05 input limits; the server's catalog fact and port are required; discovery, role and capability rechecked per call; the port's answer is projected through a closed allowlist (no raw symbol text, no properties blob, no links) and schema-checked",
+    verificationStrategy: "a server catalog read at the time of the call (never pinned to a project revision): the loader's id shape check runs before any database read, a miss is data (found false), a failure is a refusal with a closed code",
+    sourceEvidence: ["app/lib/atomic/catalog-part-detail.ts", "app/lib/atomic/server-catalog.ts", "app/api/parts/[id]/route.ts", "app/lib/agent/catalog-inspection-reads.ts", "app/api/chat/catalog-inspection-runtime.ts"],
+    versionNotes: "1.0.0 (PR-D d2): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (the MCP server binds no catalog port; servable from durable state in principle, as OD-235's read).",
+  };
+}
+
+/**
+ * [PR-D d2, 2026-10-16] The component REVIEW REQUEST, declared at the END too, registered NOT callable so the coverage matrix shows the
+ * operation with its disposition (unavailable) and its honest reason instead of a missing row. The editor's two review paths - the
+ * Component review panel's Request review (physical-bindings request_atomic_review, app/lib/physical-binding/review-handoff.ts) and the
+ * Build Library's Request evidence review (the atomic publication review, app/lib/atomic/publication-review.ts) - both refuse any
+ * non-human actor on the server (assertHuman; the publication review admits no AI actor at any step), so no server-owned service
+ * exists that an agent may call, and inventing one would be a second, agent-callable review path. Restoring it needs an owner decision.
+ */
+function componentReviewRequestDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.component.review-request", version: "1.0.0",
+    owningCommandId: "pcb.component-review",
+    title: "Component review request (human-only path; unavailable)",
+    description: "The editor's Request review (Component review panel; the reviewer handoff of Prepare PCB's bind step) files a durable review request for one component's exact atomic candidate, which a reviewer approves or rejects (physical-bindings request_atomic_review). UNAVAILABLE to the assistant, because the server's requestComponentReview admits a human requester only and the parts evidence review (Build Library, Request evidence review) is the human-only atomic publication review. No server-owned review-request service accepts an agent actor, so no binding exists and this descriptor is not callable; the assistant may only name the handoff for the user.",
+    category: "pcb", operationClass: "mutate",
+    inputSchema: obj({ componentInstanceId: { type: "string" }, reason: { type: "string" } }, ["componentInstanceId"]), outputSchema: OUT_RESULT,
+    sideEffects: "engineering-state",
+    requiredCapability: "edit_components", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    approvalTier: "reversible",
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["durable-server-board"],
+    requiresExpectedRevision: false, idempotency: "required-key", requiresLineage: false,
+    binding: { status: "unbound", notes: "[PR-D d2] disposition unavailable, by honest reason: the existing review paths (app/lib/physical-binding/review-handoff.ts requestComponentReview; app/lib/atomic/publication-review.ts submitAtomicPublicationRequest) refuse any non-human actor, so a tool here would have no service to call, and a new agent-callable review service would be a second review path. Restoring it needs an owner decision on an agent-filed review request (the requester of record, what the reviewer sees) - recorded for the lead." },
+    discovery: "discoverable", callability: "not-callable",
+    timeoutMs: 5_000, audit: "event-log",
+    validationStrategy: "human path only (not invocable here): the route's closed request shape, the server-projected evidence digest, REVIEW_REQUESTER_ROLES, retirement on revocation or role change",
+    verificationStrategy: "human path only (not invocable here): the durable review-request aggregate's revisions; approval publishes the binding under the reviewer's identity",
+    sourceEvidence: ["app/lib/physical-binding/review-handoff.ts", "app/api/physical-bindings/route.ts", "app/components/pcb/hooks/useComponentReview.ts", "app/lib/atomic/publication-review.ts", "app/components/editor/BuildLibraryPanel.tsx"],
+    versionNotes: "1.0.0 (PR-D d2): registered not-callable so the coverage matrix shows the component review request with its disposition (unavailable) and reason instead of a missing row; never agent-exposed.",
   };
 }

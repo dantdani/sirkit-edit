@@ -245,7 +245,7 @@ export function buildRunToolset(registry: ToolRegistry, context: AgentRunContext
           return false;
         }
         return true;
-      } if (descriptor.binding.status === "bound-computation") return computationReadAvailable(descriptor, context, warn); // [B22-B] a named computation read: its own binding and the server's computation fact
+      } if (descriptor.binding.status === "bound-computation") return computationReadAvailable(descriptor, context, warn); if (resolvePcbSyncPreflightBinding(descriptor).state === "resolved") return pcbSyncPreflightReadAvailable(descriptor, context, warn); if (resolveCatalogInspectionBinding(descriptor).state === "resolved") return catalogInspectionReadAvailable(descriptor, context, warn); // [B22-B] a named computation read: its own binding and the server's computation fact; [PR-D d2] the Schematic to PCB preflight read (its own binding and a verified schematic snapshot, no board) and the catalog inspection (its own binding and the server's catalog fact): neither has a B05 read binding
       const resolution = resolveReadBinding(descriptor);
       if (resolution.state !== "resolved") {
         warn(`Tool ${descriptor.toolId} unavailable: no resolved read binding.`);
@@ -724,7 +724,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
             }),
             isError: false,
           });
-        } else if (outcome.kind === "proposal-blocked") {
+        } else if (outcome.kind === "generation-proposal" && outcome.ok) { proposalIssued = true; const sealedGeneration = outcome.proposal; const generated = sealedGeneration.generation; recordTrace("proposal", "proposal_sealed", { proposal: { proposalId: sealedGeneration.proposalId, operationsDigest: sealedGeneration.netlistDigest } }); emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier, ok: true, status: "proposal_sealed" }); emitOnce({ type: "generation_proposal_ready", runId: request.runId, toolId: resolved.toolId, proposal: sealedGeneration }); results.push({ callId: call.callId, outputText: resultText({ ok: true, status: "proposal_sealed", proposalId: sealedGeneration.proposalId, baseSchematicDigest: sealedGeneration.baseSchematicDigest, generation: { status: generated.status, omittedBlocks: generated.omittedBlocks, electricalCheck: generated.electricalCheck, planner: generated.planner, budget: generated.budget, components: generated.netlist.components.length, connections: generated.netlist.connections.length, explanation: generated.explanation.slice(0, 2_000) }, note: "The generated schematic is a sealed proposal awaiting explicit human review in the schematic review dialog - NOTHING has been changed. Tell the user what was generated, whether it is complete and what the electrical check found (not checked is not a pass); never claim it was applied." }), isError: false }); /* [PR-D] the Build-mode generation proposal: its own event (as the PCB proposal), the trace keeps identity and the netlist digest only, the model is told the result's DATA (completeness, checks, planner, budget), never the netlist (OD-243) */ } else if (outcome.kind === "proposal-blocked") {
           recordTrace("proposal_blocked", "proposal_blocked"); // the TRACE keeps carrying the code only — never content
           // [B18-E E12] the user is told WHY, in the compiler's own words: the first blocker's detail rides the display
           // event (the model already receives every blocker below). Without it the chat showed a bare code and the human
@@ -846,3 +846,8 @@ function computationReadAvailable(descriptor: ToolDescriptor, context: AgentRunC
   }
   return true;
 }
+
+// [PR-D d2] the Schematic to PCB preflight read and the catalog inspection read: their bindings and per-run availability rules, on their own
+// lines at the END (imports are hoisted), as B22-B's import above: no cited line moves
+import { pcbSyncPreflightReadAvailable, resolvePcbSyncPreflightBinding } from "./pcb-sync-preflight-reads";
+import { catalogInspectionReadAvailable, resolveCatalogInspectionBinding } from "./catalog-inspection-reads";

@@ -84,7 +84,7 @@ const ROWS: readonly EnvironmentNameRow[] = [
   declared("SIRKIT_ANTHROPIC_MODEL", "configuration", "app/lib/llm/anthropic-config.ts"),
   declared("SIRKIT_ATOMIC_CATALOG_PROJECT_ID", "configuration", "app/lib/atomic/publication-review.ts"),
   declared("SIRKIT_ATOMIC_CATALOG_TENANT_ID", "configuration", "app/lib/atomic/publication-review.ts"),
-  declared("SIRKIT_AUTH_MODE", "configuration", "app/lib/auth/mode.ts"),
+  declared("SIRKIT_AUTH_MODE", "configuration", "app/lib/auth/mode.ts"), /* [PR-D, 2026-10-17] PR-C's operator cap of the Build generation's model turns (6bdd7f7), read in production and never censused; appended on this line so no line moves */ declared("SIRKIT_BUILD_ITERATION_CAP", "configuration", "app/lib/schematic/build-result.ts"),
   declared("SIRKIT_DB_POOL_MAX", "configuration", "app/lib/db/client.ts"),
   declared("SIRKIT_DEPLOYMENT_ENV", "configuration", "app/lib/auth/deployment-profile.ts"),
   declared("SIRKIT_EXPECTED_ORIGIN", "configuration", "app/lib/auth/expected-origin.ts"),

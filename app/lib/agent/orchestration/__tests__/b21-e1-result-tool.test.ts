@@ -51,8 +51,8 @@ describe("[B21 E1] the strict result tool (OD-116)", () => {
     expect(REGISTRY.list().map((descriptor) => agentProviderName(descriptor.toolId))).not.toContain(SPECIALIST_RESULT_TOOL_NAME);
     expect(REGISTRY.list().map((descriptor) => descriptor.toolId)).not.toContain(SPECIALIST_RESULT_TOOL_ID);
     expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).not.toContain(SPECIALIST_RESULT_TOOL_ID);
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(37); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read
-    expect(REGISTRY.list()).toHaveLength(48); // [B22-B, 2026-10-01] pin move (OD-139): + the five named computation descriptors; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(40); // [PR-D d2, 2026-10-16] pin move: 38 -> 40, + the Schematic to PCB preflight read and the catalog part inspection; [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; [PR-D, 2026-10-16] pin move (OD-243): + the Build-mode generation proposal
+    expect(REGISTRY.list()).toHaveLength(52); // [PR-D d2, 2026-10-16] pin move: 49 -> 52, + the two reads and the not-callable component review request; // [B22-B, 2026-10-01] pin move (OD-139): + the five named computation descriptors; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; [PR-D, 2026-10-16] pin move (OD-243): + the Build-mode generation proposal
     for (const role of SPECIALIST_ROLES.filter((entry) => entry !== "coordinator")) {
       const declaration = specialistResultToolDeclaration(role);
       expect(declaration).toMatchObject({ providerName: SPECIALIST_RESULT_TOOL_NAME, toolId: SPECIALIST_RESULT_TOOL_ID, version: "1.0.0" });

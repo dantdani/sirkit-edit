@@ -21,6 +21,8 @@ import { sirkitToolRegistry } from "../app/lib/engineering/tool-catalog";
 import { ACTIVATED_READ_BINDINGS, resolveReadBinding } from "../app/lib/engineering/tool-bindings-readonly";
 import { resolveExternalReadBinding } from "../app/lib/agent/acquisition-reads"; // [B19-E E6]
 import { resolveMcpObservationBinding } from "../app/lib/agent/mcp-observation-reads"; // [B20 A4]
+import { resolvePcbSyncPreflightBinding } from "../app/lib/agent/pcb-sync-preflight-reads"; // [PR-D, 2026-10-17] OD-244
+import { resolveCatalogInspectionBinding } from "../app/lib/agent/catalog-inspection-reads"; // [PR-D, 2026-10-17] OD-244
 import { canonicalJson } from "../app/lib/engineering/stable";
 import { buildAgentToolDeclarations, renderAgentProviderParity, strictCompatibility } from "../app/lib/agent/provider-tools";
 
@@ -49,6 +51,10 @@ function requiredRuntimeResources(item: Descriptor): string {
   if (resolveMcpObservationBinding(item).state === "resolved") return "canonical-state;external-tool-port";
   // [B19-E E6] a bound external read needs the verified board and the external acquisition port the chat route binds
   if (item.binding.status === "bound-external-read") return "canonical-state;external-acquisition-port"; if (item.binding.status === "bound-computation") return "computation-port"; // [B22-B] a named computation read needs only the computation port the chat route binds
+  // [PR-D, 2026-10-17] OD-244: the Schematic to PCB preflight read needs only the run request's validated schematic snapshot (no board);
+  // the catalog part inspection needs the catalog port the chat route binds
+  if (resolvePcbSyncPreflightBinding(item).state === "resolved") return "validated-schematic";
+  if (resolveCatalogInspectionBinding(item).state === "resolved") return "catalog-port";
   if (item.operationClass === "read") {
     const binding = ACTIVATED_READ_BINDINGS.find((entry) => entry.toolId === item.toolId);
     return binding ? [...binding.requiredResources].join(";") : "";
@@ -75,6 +81,8 @@ function browserRuntimeAvailability(item: Descriptor): { availability: string; r
       reason: "BOUND EXTERNAL READ (B19-E E6): requires the editorContext's validated board (canonical-state) AND an external acquisition port bound by /api/chat through app/api/chat/external-acquisition-runtime.ts (a server with its database; withheld in the fixture runtime); labels only while every source's agentDisclosure is unknown (OD-36); exact MPNs only, at most 5 live MPNs per run (OD-40); withheld per run otherwise",
     };
   } if (item.binding.status === "bound-computation") return { availability: "conditional", reason: "BOUND COMPUTATION READ (B22-B): requires a computation port bound by /api/chat through app/api/chat/computation-runtime.ts (the server opts in with SIRKIT_NAMED_COMPUTATIONS exactly 1, OD-158; off by default); one closed engine in the bounded engine host, stopped hard at the kind's budget; no board needed (a board parse refuses without the run's canonical state); evidence, never authority; withheld per run otherwise" }; // [B22-B]
+  if (resolvePcbSyncPreflightBinding(item).state === "resolved") return { availability: "conditional", reason: "BOUND PREFLIGHT READ (PR-D, OD-244): requires the run request's validated schematic snapshot and its digest (validated-schematic), no board; withheld per run when the browser publishes no validated schematic" }; // [PR-D, 2026-10-17]
+  if (resolveCatalogInspectionBinding(item).state === "resolved") return { availability: "conditional", reason: "BOUND CATALOG READ (PR-D, OD-244): requires a catalog port bound by /api/chat through app/api/chat/catalog-inspection-runtime.ts (a server with its catalog database, or the fixture runtime); withheld per run when the server publishes no catalog fact" }; // [PR-D, 2026-10-17]
   if (item.operationClass === "read") {
     const required = requiredRuntimeResources(item);
     if (required.includes("selection-snapshot")) {
@@ -131,7 +139,7 @@ const rows = registry.list().map((item) => {
     bindingSymbol: item.binding.symbol ?? "",
     discovery: item.discovery,
     staticallyExposed: item.agentExposed,
-    bindingResolved: resolveMcpObservationBinding(item).state === "resolved" ? true : item.binding.status === "bound-computation" ? resolveComputationBinding(item).state === "resolved" : item.binding.status === "bound-external-read" ? resolveExternalReadBinding(item).state === "resolved" : item.operationClass === "read" ? resolveReadBinding(item).state === "resolved" : item.operationClass === "mutate" ? item.agentExposed && item.binding.status === "bound-mutation-editor-session" : item.binding.status === "bound-proposal",
+    bindingResolved: resolveMcpObservationBinding(item).state === "resolved" ? true : resolvePcbSyncPreflightBinding(item).state === "resolved" || resolveCatalogInspectionBinding(item).state === "resolved" ? true : item.binding.status === "bound-computation" ? resolveComputationBinding(item).state === "resolved" : item.binding.status === "bound-external-read" ? resolveExternalReadBinding(item).state === "resolved" : item.operationClass === "read" ? resolveReadBinding(item).state === "resolved" : item.operationClass === "mutate" ? item.agentExposed && item.binding.status === "bound-mutation-editor-session" : item.binding.status === "bound-proposal",
     requiredRuntimeResources: requiredRuntimeResources(item),
     browserRuntimeAvailability: runtime.availability,
     requiredProjectState: [...item.requiredProjectState].join(";"),

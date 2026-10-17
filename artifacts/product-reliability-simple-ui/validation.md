@@ -61,3 +61,30 @@ memory pressure (another application held several GB). The result was read from 
 
 Note: the checkpoint D background agents' uncommitted edits (`app/api/schematic/build-multi/route.ts`, `app/lib/schematic/build-multi-generation.ts`,
 `pr-d-parity-*.test.ts`) were present in the working tree during these runs; they are not part of the E commit and are assessed under D.
+
+## Checkpoint D (2026-10-16/17)
+
+Built by two background workflows of builders (five, then three for the pin triage) and integrated by the lead; every row below
+is a command the lead ran at the end over the integrated tree unless it says "builder".
+
+| command | result | exit | kind |
+|---|---|---|---|
+| builder suites while building (targeted, one process at a time): `pr-d-generate-proposal` (19), `pr-d-coverage-matrix` (13), `pr-d-pcb-sync-preflight` (11), `pr-d-catalog-inspect` (13), `pr-d-review-request-unavailable` (3), `pr-d-tool-manuals` (17), `pr-d-page-intake` (11), the four `pr-d-parity-*` (25) | all passed in the builders' final runs | 0 | fake-backed (fake generation/catalog ports through the real gateway, loop and sealer; the preflight read over in-test schematics) |
+| sanctioned generators, serially: `generate-tool-registry-artifacts`, `generate-agent-artifacts` (twice: the second after teaching it the two PR-D read bindings), `generate-read-invocation-artifacts`, `generate-action-toolability-matrix`, `generate-b10-artifacts`, `generate-b16-0-4-artifacts`, `generate-b20-mcp-tool-manifest`, `generate-b20-mcp-parity`, `generate-b11-artifacts`, `generate-b21-artifacts`, `generate-b24-maps`, `generate-pr-d-coverage-matrix` (last), `generate-pr-d-tool-manuals` | 52 descriptors / 40 agent-exposed / 9 MCP-exposed / 11 withheld, registry digest `eng1-17588a420afaec9f`; B11 19/19 cases, 62/62 checks after the preflight read joined the expected discovered tools; matrix 922 rows (107 action, 763 control, 52 tool; `missing` 54, unexplained 0); 52 manuals + manifest | 0 (B11 first 15/19 → the four pins moved → 19/19) | deterministic |
+| CRLF renormalization of the working copy (`git ls-files --eol`: index LF, worktree CRLF after the Python edits) | 37 files rewritten to LF; 0 left; the LF-only page gates pass again | 0 | deterministic |
+| gate set by path filter (`vitest run b04- b05- b06-1- b09- b10-editor-context b11- b15-3- b16-0-1- b16-0-4- b16-1c- b17- b18-a- b18-c- b19-d-external b19-e- b20- b21- b22-b- b23-a- b24-a1- b24-a2- b24-b1- b24-d2-crash b24-d2-working b24-d3- b24-f- pr-a- pr-c- pr-d- pr-e-`), run 1 (before the triage) | 297 files: 19 failed / 277 passed, 26 failing cases — the pins the new reads and the generation moved (runtime toolsets, B20 pages and matrices, B11 file hashes, page counts, the A4L bound) | 1 | deterministic |
+| the pin triage (three builders): 24 cases moved with dated notes (listed in the ledger entry), 2 left failing on purpose and fixed by the lead: the B09 manifest generator had to learn the two PR-D read bindings (`requiredRuntimeResources` validated-schematic / catalog-port, `bindingResolved`, reasons) and `b09-3` case D gained two reviewed branches; `SIRKIT_BUILD_ITERATION_CAP` (PR-C's operator cap, red in `b24-a1-flags` since 6bdd7f7) is now INVENTORIED (flag inventory, environment-name census, `.env.example`, the A1 page's section 3 note 67 → 68, the census page 99 → 100 rows, configuration 28 → 29) rather than excluded | — | deterministic |
+| the same gate set, run 2 (after the triage and the two lead fixes) | 304 files: 303 passed, 1 skipped; 3757 tests: 3754 passed, 2 skipped, 1 failed = the coverage matrix's own drift gate (the test-presence index changed under the triage edits) → the matrix regenerated last → `pr-d-coverage-matrix`, `pr-d-tool-manuals`, `b24-f-generator-inventory` 36 passed | 1 → 0 | deterministic |
+| `pnpm exec tsc --noEmit -p tsconfig.json` | 0 errors | 0 | deterministic |
+| `pnpm exec eslint <93 changed .ts/.tsx files>` | 0 problems | 0 | deterministic |
+| `playwright test e2e/simple-workspace.spec.ts e2e/journey-contract.spec.ts e2e/prompt-to-gerber.spec.ts` (fixture; the page intake and the chat route changed) | 3 passed (43.7 s) | 0 | fake-backed |
+| secret scan over the whole D change set (PEM markers, key-like strings, JWT-like strings, env assignments, cookies) | 0 real hits; the only matches are the redaction test's alphabet placeholder (`sk-ant-api03-ABCDEFGHIJ…`) in `pr-d-generate-proposal.test.ts`, asserted NOT to leak | 0 | deterministic |
+
+Pre-existing breaks fixed in passing (recorded, not claimed as D work): the B20 A2 / A5 citation rows that commit 535760f moved without
+re-pointing; the `b24-a1-flags` census red since PR-C. Known and deferred to checkpoint G: `b24-d0-ci-split` cases 1 and 7 (the committed
+prompt-to-gerber selection evidence counts 471 test files; the tree now has more — the junit evidence is re-measured by the full
+selection run in G). Known stale historical prose not read by any test (left dated): `artifacts/ai-control-plane-b24/final-verdict.md`
+§5's tool counts (37 of 48) and `test-and-validation-report.md:186`.
+
+Not run: the whole vitest suite (G), any live provider, any database. The agent's generation path has no browser proof yet (the fixture
+agent does not script a generate-proposal turn; an e2e spec is G work).

@@ -3234,3 +3234,99 @@ Under the existing OD-217 heading (`:2599`), append:
   the B21 DAG, reads no orchestration flag and no orchestration module, and the B21-A import gate keeps every orchestration module from
   importing it or `runBuildToolLoop`. Retirement stays a separate owner-approved change.
 - **The owner may choose otherwise:** retire the route (OD-106's first alternative), or route it through the B21-B DAG (its second).
+
+## OD-243 — `build-multi` is a thin caller of the ONE shared generation; the agent's generate-proposal reuses it through the chat port; OD-106's byte pin re-pinned (product reliability D, 2026-10-16)
+
+- **Question:** the owner's assignment `artifacts/astra-guided-pcb/PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.md` (section D) requires
+  the AI to share the UI's semantic commands through the same domain authority and validations. The Build composer's Generate POSTs
+  `/api/schematic/build-multi`; the route's generation lived inline in the route, which OD-106's B21-B tripwire pins byte for byte. Give
+  the agent its own second generation, or extract the route's generation into one shared function and re-pin?
+- **Default applied:** the generation is extracted verbatim into `app/lib/schematic/build-multi-generation.ts` (`runBuildMultiGeneration`:
+  the planner, the complexity gate, the bounded block pool, the deterministic merge, the advisory post-merge ERC and OD-242's structured
+  result, under the same `BUILD_BUDGET`); the route is a thin caller that serializes its outcome exactly as before (PR-C's suites pass
+  unchanged), and the agent's `sirkit.schematic.generate-proposal` (a Tier 2 sealed proposal, `sirkit.schematic-generation-proposal.v1`,
+  reviewed in `agent-exposure.ts`, withheld from MCP in `mcp-exposure-review.ts`) runs the SAME function through the chat route's injected
+  port (`app/api/chat/schematic-generation-runtime.ts`, resolved only for a configured provider or the fixture runtime, as the external
+  reads and the named computations are injected), behind the server's `schematicGenerationAvailable` fact and the `schematic-generation`
+  authority. Discovery requires Build mode (`schematic-build-mode`: the validated sheet holds no Theory component, the server's fact for a
+  mode the chat body does not carry), a validated schematic with its canonical head mark, and the port fact; the run's remaining wall
+  clock is the budget; one generation per run. A complete or partial generation is sealed with completeness, omitted blocks, the
+  electrical check, the planner and the budget as data; a failed one is `proposal-blocked` data (class, retryable, provider, reason),
+  never ok; nothing is applied by the tool (the page's intake of the artifact is a later round). The tripwire is re-pinned to sha256
+  `fa3ddf58b02834734df1752ab0def3e03c90f9a25fd61b27df058295e23ca8ca` with a dated note, and the route's header no longer spells the gate's
+  words. Everything OD-106 decided stands: the route is outside the B21 DAG, reads no B21 flag and imports no B21 module (it imports the
+  generation directly, never the chat runtime), and the B21-A import gate keeps every orchestration module from importing it, the
+  generation or `runBuildToolLoop`. Retirement stays a separate owner-approved change.
+- **The owner may choose otherwise:** retire the route (OD-106's first alternative) once the agent path is the only producer; route it
+  through the B21-B DAG (its second); or admit `generation_proposal_ready` to `COORDINATOR_ARTIFACT_EVENTS` so a coordinator's generation
+  counts as the run's one artifact under the flag (today the loop's proposal single-flight bounds it; the flag is off by default).
+
+## OD-244 — three further shared commands for the AI: the Schematic-to-PCB preflight read, the catalog part inspection, and the component review request registered as unavailable (product reliability D, 2026-10-17)
+
+- **Question:** section D of the owner's assignment names sync preflight, part inspection and component review requests among the
+  missing high-value shared commands. Give the agent each as a tool over the same domain functions the UI uses, or leave them UI-only?
+- **Default applied:** (1) `sirkit.pcb-sync.preflight` (Tier 0 read, `app/lib/pcb-sync/preflight-read.ts`): the Prepare PCB pre-server
+  checks over the run's verified schematic through the editor's own `listUnresolvedInstances` / `unresolvedInstancesRefusal` (no second
+  checker), board-less, the server stages reported `not_run`; withheld from MCP because it reads browser-only `SchematicState` (as OD-69).
+  (2) `sirkit.parts.catalog-inspect` (Tier 0 read): one catalog part by id through the chat route's injected catalog port over the parts
+  route's read, extracted into `app/lib/atomic/catalog-part-detail.ts` (one reader for the route and the tool); B04's `catalog` authority
+  is the port's fact; withheld from MCP by choice (as OD-235). (3) `sirkit.component.review-request` is registered NOT callable
+  (disposition `unavailable`, reason in its descriptor): no server-owned review-request service exists that an agent may call — the
+  evidence review lives in the Build Library's import-review path, which a human drives; restoring it needs a domain service with its
+  own authority and tests, not a tool over React state. The registry is 52 descriptors, 40 agent-exposed, 9 MCP-exposed, 11 withheld.
+- **The owner may choose otherwise:** expose either read over MCP once a server-side schematic source exists; implement the review
+  request as a domain service and lift the tool's binding.
+
+## OD-245 — the generated UI↔AI coverage matrix: dispositions derived from the registries, tests by presence, and the fourteen honestly `missing` records (product reliability D, 2026-10-17)
+
+- **Question:** section D.1–2 requires a current coverage matrix with a disposition per meaningful operation and no unexplained row.
+  Hand-maintain it, or derive it from the registries with a drift gate?
+- **Default applied:** `app/lib/engineering/parity-matrix.ts` + `scripts/generate-pr-d-coverage-matrix.ts` derive every row at run time
+  from `ACTION_COVERAGE_REGISTRY`, `API_ROUTE_COVERAGE`, the live control scan (the B17 generator's), `sirkitToolRegistry()`,
+  `agent-exposure.ts`, `granted-execution-families.ts`, `permission-tiers.ts`, `mcp-exposure.ts` and `authorization.ts`; no id is
+  hard-coded; the disposition set is closed (callable-now, proposal-only, grant-required, human-admin-only, view-session-only,
+  intentionally-ui-only, unavailable, legacy, missing) and every reason names the registry fact that decided it. Precedence as reviewed by
+  the lead: B01 `toolExposure` preview-apply / structured-route chat-router exposures count as the AI's live path (proposal-only, the
+  human applies); `domainCommand === null` with UI controls is intentionally-ui-only (hydrate, undo/redo, checkpoint, autosave, files,
+  footprint resolution, KiCad export, BOM workbench); sources under `app/api/auth` / `app/lib/auth` and `app/lib/agent/autonomy-*` are
+  human-admin-only; sources under `app/lib/execution-grant/` are grant-required. `tests` is file presence by whole dotted token under
+  `app/**/__tests__/**` and `e2e/**` (directories listed), never a declaration; the gate names an exposed id without a test. The gate
+  byte-compares the committed CSV and summary (drift), so a new actionable control, route or tool without a classified row fails.
+  Fourteen action records are `missing` with their gaps listed, read by the lead as: human-only by policy (`pcb.sync-durable` apply,
+  `pcb.physical-binding`, `pcb.board-revision`, `pcb.routed-board-revision`, `pcb.component-review`, `pcb.assignment-queue`), UI/session
+  plumbing (`pcb.placement-settings`, `schematic.sheet-size`, `project.operation-timeline`, `schematic.import-export-kicad`), and
+  genuinely absent shared commands (`pcb.clear-nets`, `pcb.create-via`, `pcb.autonomous-layout`, `computation.request`). They stay
+  `missing` in the data rather than being relabelled by a hand table.
+- **The owner may choose otherwise:** add a reviewed restriction table (never a permissive one) that narrows those fourteen to their
+  policy dispositions; or implement the four absent commands.
+
+## OD-246 — the agent's generated schematic is reviewed in the SAME dialog as the composer's Generate; the Build-mode fact is the sheet's (product reliability D, 2026-10-17)
+
+- **Question:** OD-243 left the page's intake of `generation_proposal_ready` to a later round. A second dialog, auto-apply, or the
+  existing review path?
+- **Default applied:** `app/page.tsx` receives the event through `app/lib/project/generation-proposal-events.ts` (verifies integrity,
+  base digest, scope, head mark and expiry against the live editor), lays the netlist out through `autoLayoutBuildValidated` with the
+  catalog parts, and offers it through the existing `pendingReplace` review dialog (`schematic-proposal-review` / `-approve`, the
+  validation note as data, the exact-base pin, the pending-proposal store); nothing is applied by the tool or the intake; a stale,
+  foreign or expired artifact is refused with its run-log sentence. The base digest is the posted sheet's content digest (authoritative
+  state with the sheet-size fallback). The Build-mode discovery fact `schematic-build-mode` is "the validated sheet holds no Theory
+  component", because the chat body carries no editor mode (`ALLOWED_BODY_KEYS`); a Theory-mode user on an empty sheet is therefore
+  offered the Build generation, and the intake treats the artifact as the Build Generate path. `generation_proposal_ready` is NOT
+  admitted to `COORDINATOR_ARTIFACT_EVENTS` (the flag-on DAG path), so under `SIRKIT_ORCHESTRATION_ENABLED=1` a coordinator's generation
+  does not count as the run's one artifact; the loop's proposal single-flight still bounds it.
+- **The owner may choose otherwise:** send the editor mode in the chat body (a body key, route validation, context input) and derive
+  the fact from the toggle; admit the event to `COORDINATOR_ARTIFACT_EVENTS` (pin moves in B21-D2/E3 suites and pages).
+
+## OD-247 — registry-generated tool manuals are artifacts with a digest pin, not a second tool list in the prompt (product reliability D, 2026-10-17)
+
+- **Question:** section D.9 requires concise registry-backed manuals with validated examples and a digest pin. Where do they live and
+  what reads them?
+- **Default applied:** `app/lib/engineering/tool-manual.ts` + `scripts/generate-pr-d-tool-manuals.ts` render one Markdown manual per
+  catalog descriptor (ID/version; schema with examples validated by the project's own input validator; units and coordinate frame from
+  the descriptor, the schema field names or the domain modules — "not declared" otherwise, never invented; preconditions; exact effects;
+  permissions and approval; budget; failure codes read from the handlers and gate-verified to be quoted in the cited files;
+  postconditions) under `artifacts/product-reliability-simple-ui/manuals/` with `MANIFEST.json` (registry digest, sha256 per manual).
+  The gate regenerates in memory and compares, requires a manual for every exposed id, refuses a stale manual, and validates every
+  example. The manuals are evidence for operators and reviewers; they are deliberately NOT injected into the model's prompt (no second
+  drifting tool list). A handler's NEW failure code is not auto-extracted: the manual says so and the code source table must be updated.
+- **The owner may choose otherwise:** a reviewed run-time exposure that lets the assistant read a manual as a bounded tool.

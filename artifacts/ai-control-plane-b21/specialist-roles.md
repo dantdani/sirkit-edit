@@ -587,11 +587,11 @@ the reader otherwise.
 | C6 | `app/lib/agent/orchestration/role-tools.ts` | 37 | — | `export const ROLE_TOOL_VIOLATIONS = Object.freeze([` | the seven-reason vocabulary |
 | C7 | `app/lib/agent/orchestration/role-tools.ts` | 182 | — | `if (entries.length > MAX_ROLE_TOOL_IDS) return refused("over_bound");` | an over-long row admits nothing |
 | C8 | `app/lib/agent/orchestration/role-tools.ts` | 23 | — | `export const PROPOSING_ROLES: readonly SpecialistRole[] = Object.freeze([` | the proposing roles |
-| C9 | `app/lib/agent/loop.ts` | 266 | — | `return buildAgentToolDeclarations(allowedToolIds === undefined ? descriptors : narrowToRunAllowlist(descriptors, allowedToolIds, warn));` | the intersection AFTER every gate |
-| C10 | `app/lib/agent/loop.ts` | 812 | — | `function narrowToRunAllowlist<T extends { toolId: string }>(` | an invalid list approves nothing: an empty toolset and `allowlist_invalid` |
-| C11 | `app/lib/agent/loop.ts` | 787 | — | `export const RUN_ALLOWLIST_MAX_IDS = 32;` | the bound |
-| C12 | `app/lib/agent/loop.ts` | 350 | — | `toolset = buildRunToolset(deps.registry, deps.context, (message) => emitOnce({ type: "warning", runId: request.runId, message }), deps.allowedToolIds);` | the loop passes the role's list |
-| C13 | `app/lib/agent/loop.ts` | 77 | — | `allowedToolIds?: readonly string[];` | the deps field (absent on every coordinator run) |
+| C9 | `app/lib/agent/loop.ts` | 267 | — | `return buildAgentToolDeclarations(allowedToolIds === undefined ? descriptors : narrowToRunAllowlist(descriptors, allowedToolIds, warn));` | the intersection AFTER every gate |
+| C10 | `app/lib/agent/loop.ts` | 818 | — | `function narrowToRunAllowlist<T extends { toolId: string }>(` | an invalid list approves nothing: an empty toolset and `allowlist_invalid` |
+| C11 | `app/lib/agent/loop.ts` | 793 | — | `export const RUN_ALLOWLIST_MAX_IDS = 32;` | the bound |
+| C12 | `app/lib/agent/loop.ts` | 351 | — | `toolset = buildRunToolset(deps.registry, deps.context, (message) => emitOnce({ type: "warning", runId: request.runId, message }), deps.allowedToolIds);` | the loop passes the role's list |
+| C13 | `app/lib/agent/loop.ts` | 78 | — | `allowedToolIds?: readonly string[];` | the deps field (absent on every coordinator run) |
 | C14 | `app/lib/agent/orchestration/scheduler.ts` | 195 | — | `export function deriveSpecialistContext(context: AgentRunContext): AgentRunContext {` | the specialist context, field by field |
 | C15 | `app/lib/agent/orchestration/scheduler.ts` | 246 | — | `export function specialistContextClaims(context: AgentRunContext): SpecialistContextClaim[] {` | the eight claims |
 | C16 | `app/lib/agent/orchestration/scheduler.ts` | 296 | — | `const claims = specialistContextClaims(input.context);` | checked first, before any tool is looked at |
@@ -602,8 +602,8 @@ the reader otherwise.
 | C21 | `app/lib/agent/orchestration/router.ts` | 59 | — | `export const FULL_CIRCUIT_TRIM = Object.freeze({` | the fixed trim (OD-107 resolved) |
 | C22 | `app/lib/agent/orchestration/router.ts` | 55 | — | `export const FULL_CIRCUIT_RUNBOOK_ROLES = Object.freeze([` | the runbook's six, as data |
 | C23 | `app/lib/agent/orchestration/router.ts` | 180 | — | `return facts.hasBoard && LAYOUT_ASK.test(message) ? dag("D-full-circuit-layout", DAG_ROLE_LISTS["full-circuit-layout"]) : dag("D-full-circuit-creation", DAG_ROLE_LISTS["full-circuit-creation"]);` | the layout variant first |
-| C24 | `app/lib/agent/gateway.ts` | 92 | — | `export function verifyAgentContextIntegrity(context: AgentRunContext): string[] {` | the integrity check, unchanged |
-| C25 | `app/lib/agent/gateway.ts` | 105 | — | `const grantable = context.executionGrantsAvailable === true` | grant fields accepted when they agree (D21-8) |
+| C24 | `app/lib/agent/gateway.ts` | 93 | — | `export function verifyAgentContextIntegrity(context: AgentRunContext): string[] {` | the integrity check, unchanged |
+| C25 | `app/lib/agent/gateway.ts` | 106 | — | `const grantable = context.executionGrantsAvailable === true` | grant fields accepted when they agree (D21-8) |
 | C26 | `app/lib/agent/context.ts` | 492 | — | `const grantable = input.executionGrantsAvailable === true` | grantability from server facts at assembly |
 | C27 | `app/lib/engineering/agent-exposure.ts` | 30 | — | `export const INTENTIONAL_AGENT_EXPOSED_TOOL_IDS: readonly string[] = Object.freeze([` | the one reviewed 33-id list |
 | C28 | `app/lib/engineering/granted-execution-families.ts` | 74 | — | `export const NEVER_EXPOSED_TOOL_PATTERNS: readonly RegExp[] = Object.freeze([` | the never-exposed patterns |
@@ -616,9 +616,9 @@ the reader otherwise.
 | C35 | `app/lib/agent/orchestration/contracts.ts` | 77 | — | `maxAllowedToolIds: 32,` | the contracts' A4L bound |
 | C36 | `app/lib/agent/orchestration/scheduler.ts` | 85 | — | `export const ROLE_HAS_NO_TOOLS = "role_has_no_tools" as const;` | the drop's reason |
 | C37 | `app/lib/agent/orchestration/scheduler.ts` | 79 | — | `export const SPECIALIST_CONTEXT_REFUSAL_STATUS = "role_context_elevated" as const;` | the elevation refusal |
-| C38 | `app/lib/agent/loop.ts` | 796 | — | `export function approvedRunAllowlist(` | A4L: the judgement, its bound and its never-exposed clause |
+| C38 | `app/lib/agent/loop.ts` | 802 | — | `export function approvedRunAllowlist(` | A4L: the judgement, its bound and its never-exposed clause |
 | C39 | `app/lib/agent/orchestration/scheduler.ts` | 478 | — | `if (allowed.length === 0) {` | a role with no tools: not run, its task's dissent carried on |
 | C40 | `app/lib/agent/orchestration/scheduler.ts` | 387 | — | `const tasks = planTasks(plan.roles);` | the plan and its task ids from the plan's roles only |
 | C41 | `app/lib/agent/orchestration/router.ts` | 105 | — | `const CREATE_NEW = new RegExp(` | a new circuit named from words |
 | C42 | `app/lib/agent/orchestration/router.ts` | 130 | — | `const LAYOUT_ASK = ` | the layout variant's own ask |
-| C43 | `app/lib/agent/loop.ts` | 823 | — | `import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, NEVER_EXPOSED_TOOL_PATTERNS } from "../engineering/agent-exposure";` | the allowlist's ids, imported on their own line at the end |
+| C43 | `app/lib/agent/loop.ts` | 829 | — | `import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, NEVER_EXPOSED_TOOL_PATTERNS } from "../engineering/agent-exposure";` | the allowlist's ids, imported on their own line at the end |

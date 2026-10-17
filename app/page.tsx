@@ -101,6 +101,7 @@ import { type SealedReplacementProposal } from "@/app/lib/engineering/replacemen
 import { approveAndApplyReplacement } from "@/app/lib/project/replacement-approval-controller.internal";
 import { receiveReplacementProposalEvent } from "@/app/lib/project/replacement-proposal-events";
 import { receivePcbProposalReadyEvent } from "@/app/lib/project/pcb-proposal-events";
+import { generationProposalCurrency, receiveGenerationProposalEvent, type ReceivedGenerationProposal } from "@/app/lib/project/generation-proposal-events"; // [PR-D] the agent's Build-mode generation proposal: the SAFE receiver and the intake's currency check
 import { type SealedPcbEditProposal } from "@/app/lib/pcb/proposal/sealed-pcb-edit-proposal";
 import { ReplacementReviewDialog } from "@/app/components/schematic/ReplacementReviewDialog";
 import { fromCanonicalSchematic, schematicStateDigest, validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
@@ -4625,6 +4626,17 @@ export default function Home() {
             }
             return;
           }
+          case "generation_proposal_ready": {
+            // [PR-D] the agent's Build-mode generation proposal (sirkit.schematic.generate-proposal). The SAFE receiver verifies
+            // the sealed artifact (schema, exact key set, both digests); a fabricated or altered event is dropped and says so.
+            // Receiving it mutates NOTHING: offerGenerationProposal lays it out through the SAME path as the composer's Generate
+            // and offers it in the SAME review dialog (approve/discard), pinned to the same base and persisted by the same store.
+            const generation = receiveGenerationProposalEvent(event);
+            if (!generation) { appendActivityStep(logId, "A generated schematic the assistant issued was dropped by this page: it failed the integrity checks. Nothing was changed and no proposal is offered.", "error"); return; }
+            appendActivityStep(logId, `Generated schematic received — ${generation.proposal.generation.netlist.components.length} part(s), ${generation.proposal.generation.status === "partial" ? "partial result" : "complete"}; preparing it for your review`, "done");
+            void offerGenerationProposal(generation, { logId, scope });
+            return;
+          }
           case "view_command_ready": {
             // [B17-F] a server-VALIDATED view command for the user's own view bus. The bridge re-checks the
             // request shape, expiry, the live surface and the session id; the bus applies its stale-revision
@@ -5168,6 +5180,72 @@ export default function Home() {
         activeGenerationRef.current = null;
         setIsGenerating(false);
       }
+    }
+  }
+
+  // [PR-D] The agent's Build-mode generation proposal (sirkit.schematic.generate-proposal, received in `send` as
+  // `generation_proposal_ready`) enters the SAME review boundary as the composer's Generate (handleGenerateSchematic, Build
+  // branch): the same entry gate, the same catalog loading, the same layout and validation (autoLayoutBuildValidated), the same
+  // notes as data (partial merge, electrical check, drawing check), the same dialog (schematic-proposal-review / -approve,
+  // driven by pendingReplace), the same exact-base pin and the same persisted pending-proposal record. No second dialog and
+  // no auto-apply: nothing changes until the human approves it there. Currency is checked against the LIVE editor before the
+  // catalog loads and again before the offer: the sealed scope, the canonical head mark, the expiry and the base digest the
+  // proposal was sealed against - the digest of the sheet `send` posted (the authoritative state with the page's sheet-size
+  // fallback, `pageSize: chatSnapshot.pageSize ?? pageSize`), which the server digested as-is.
+  async function offerGenerationProposal(received: ReceivedGenerationProposal, run: { logId: string; scope: ProjectAsyncScope }) {
+    const { proposal } = received;
+    const { logId, scope } = run;
+    const entryGate = schematicConsumerGate("edit");
+    if (!entryGate.allowed) { appendActivityStep(logId, `Generated schematic not offered — ${entryGate.reason}`, "error"); return; }
+    const currency = () => {
+      const live = gestureCoordinatorRef.current!.authoritativeState();
+      return generationProposalCurrency(proposal, {
+        scope: { tenantId: "local", projectId: projectScopeRegistryRef.current?.current.projectId ?? "local", branchId: projectScopeRegistryRef.current?.current.branchId ?? "local" },
+        headMark: schematicSessionRef.current?.headMark() ?? null,
+        baseDigest: schematicStateDigest({ ...live, pageSize: live.pageSize ?? liveStateRef.current.pageSize }),
+        now: Date.now(),
+      });
+    };
+    const before = currency();
+    if (!before.ok) { appendActivityStep(logId, `Generated schematic not offered — ${before.detail}`, "error"); return; }
+    const proposalNotes: string[] = []; // what the approver must read beside the proposal (partial merge, checks), collected as the composer's path collects them
+    const partialNote = completenessNote({ status: proposal.generation.status, omittedBlocks: proposal.generation.omittedBlocks });
+    const serverCheckNote = electricalCheckNote(proposal.generation.electricalCheck);
+    if (partialNote) appendActivityStep(logId, partialNote, "done");
+    if (serverCheckNote) appendActivityStep(logId, serverCheckNote, "done");
+    proposalNotes.push(...[partialNote, serverCheckNote].filter((note): note is string => note !== null));
+    try {
+      const netlist = proposal.generation.netlist;
+      const partIds = [...new Set(netlist.components.map((c) => c.partId))];
+      const parts = new Map<string, CachedPart>();
+      appendActivityStep(logId, `Loading ${partIds.length} catalog part${partIds.length === 1 ? "" : "s"}`);
+      await Promise.all(partIds.map(async (id) => { parts.set(id, await ensurePartLoaded(id)); }));
+      if (!scope.isCurrent()) { appendActivityStep(logId, "Generated schematic discarded — the project changed while its parts were loading", "error"); return; }
+      appendActivityStep(logId, "Laying out and validating schematic");
+      const built = autoLayoutBuildValidated(netlist, parts);
+      const state = built.state;
+      if ((state.kicadComponents?.length ?? 0) === 0) { appendActivityStep(logId, "No parts produced — the generated schematic holds no catalog part; nothing is offered.", "error"); return; }
+      if (!built.validation.ok) {
+        const v = built.validation.violations;
+        const note = `Drawing check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`;
+        appendActivityStep(logId, `Drawing check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
+        proposalNotes.push(note); // the approver reads it in the dialog, as on the composer's path
+      }
+      const resultIssues = validateSchematicStateIntegrity(state);
+      if (resultIssues.length > 0) { appendActivityStep(logId, `Generated schematic failed validation (${resultIssues[0]}) — nothing is offered.`, "error"); return; }
+      const after: ReturnType<typeof currency> | { ok: false; detail: string } = scope.isCurrent() ? currency() : { ok: false, detail: "the project changed while the schematic was laid out; nothing was changed." };
+      if (!after.ok) { appendActivityStep(logId, `Generated schematic not offered — ${after.detail}`, "error"); return; }
+      const pin = captureLifecycleInvocationContext(); // the exact-base pin the approval re-checks: the same capture the composer's path and the restore use
+      proposalNotes.push(`Proposed by the assistant (${proposal.provenance.provider}) for your request; approving replaces the sheet it was generated against. Nothing has been changed yet.`);
+      const validationNote = proposalNotes.join("\n");
+      const explanation = proposal.generation.explanation;
+      const prompt = proposal.request.prompt;
+      setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin, validationNote });
+      if (pin.projectId) savePendingProposal({ projectId: pin.projectId, baseDigest: proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()), state, explanation, prompt, validationNote }); // persisted NOW, as the composer's path does (the effect keeps it current)
+      appendActivityStep(logId, "Generated schematic proposal — waiting for your approval in the review dialog; nothing has been changed", "done");
+    } catch (err) {
+      if (isAbortError(err) || !scope.isCurrent()) { appendActivityStep(logId, "Generated schematic discarded — the project changed", "error"); return; }
+      appendActivityStep(logId, `Generated schematic not offered — ${err instanceof Error ? err.message : "its catalog parts could not be loaded"}. Nothing was changed.`, "error");
     }
   }
 

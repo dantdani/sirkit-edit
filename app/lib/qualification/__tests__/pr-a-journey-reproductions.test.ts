@@ -28,6 +28,7 @@ const page = readFileSync("app/page.tsx", "utf8");
 const theoryClient = readFileSync("lib/apply-netlist.ts", "utf8");
 const pcbEditor = readFileSync("app/components/pcb/PcbEditor.tsx", "utf8");
 const buildMulti = readFileSync("app/api/schematic/build-multi/route.ts", "utf8");
+const buildMultiGeneration = readFileSync("app/lib/schematic/build-multi-generation.ts", "utf8"); // [PR-D, 2026-10-16] the generation the route and the agent share
 
 const SEL = { "x-sirkit-tenant-id": "local", "x-sirkit-project-id": "proj-1", "x-sirkit-branch-id": "main" };
 const generate = vi.fn();
@@ -75,9 +76,12 @@ describe("[PR-A 2] the Build request's partial and skipped results", () => {
     expect(body).toMatchObject({ status: "partial", omittedBlocks: ["Blinker"] });
   });
 
+  // [PR-D, 2026-10-16] the generation moved out of the route into app/lib/schematic/build-multi-generation.ts (the ONE function the
+  // route and the agent's generate-proposal share); the route still answers the structured contract, the skipped state lives in the module
   it("a skipped post-merge electrical check is a structured 'not run' status, never silence", () => {
     expect(buildMulti).toMatch(/electricalCheck/);
-    expect(buildMulti).toMatch(/state: "skipped"/);
+    expect(buildMulti).toMatch(/runBuildMultiGeneration\(/);
+    expect(buildMultiGeneration).toMatch(/state: "skipped"/);
   });
 });
 

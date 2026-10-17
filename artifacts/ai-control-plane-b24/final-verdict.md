@@ -102,13 +102,19 @@ Counts, from `current-system-map.md` (generated; each pinned count equals its pi
 | approved-factories | 3 |
 | raw-handlers | 0 |
 | action-records | 107 |
-| registry-tools | 48 |
-| agent-exposed-tools | 37 |
+| registry-tools | 52 |
+| agent-exposed-tools | 40 |
 | mcp-exposed-tools | 9 |
 | granted-tier-1-tools | 6 |
-| agent-exposed-proposal-tools | 5 |
+| agent-exposed-proposal-tools | 6 |
 | agent-exposed-tier-3-tools | 0 |
 | sql-migrations | 32 |
+
+[PR-D, 2026-10-17] Count lines moved with the regenerated map (product reliability D): registry-tools 48 -> 52, agent-exposed-tools
+37 -> 40, agent-exposed-proposal-tools 5 -> 6 - PR-D's four descriptors (OD-243, OD-244): the Build-mode generation proposal (Tier 2,
+agent-exposed), the Schematic-to-PCB preflight read and the catalog part inspection (Tier 0, agent-exposed, withheld from MCP) and the
+component review request (registered, not callable); mcp-exposed-tools stays 9. Section 5's report lines stand as drafted at the
+closeout's final SHA.
 
 BENCHMARK-QUALITY RESULT: BLOCKED (`baseline_missing` while the latest `latency-baseline.json` version is the declared-without-values
 v1, OD-212, OD-30; printed as BLOCKED, never as pass), as `performance-reliability-report.md` section 1 states. [B24-closeout,

@@ -1,5 +1,6 @@
 tool_id,version,operation_class,permission_tier,binding,exposed,exclusion_reason,read_only_hint,idempotent_hint,output_schema
 sirkit.component-authority.inspect,1.0.0,read,0,bound-read,yes,,true,true,declared
+sirkit.component.review-request,1.0.0,mutate,1,unbound,no,not_agent_exposed,,,
 sirkit.computation.analytical-equation,1.0.0,read,0,bound-computation,no,computation,,,
 sirkit.computation.artifact-compare,1.0.0,read,0,bound-computation,no,computation,,,
 sirkit.computation.artifact-parse,1.0.0,read,0,bound-computation,no,computation,,,
@@ -8,9 +9,11 @@ sirkit.computation.layout-experiment,1.0.0,propose,2,unbound,no,computation,,,
 sirkit.manufacturing.readiness-inspect,1.0.0,read,0,bound-read,yes,,true,true,declared
 sirkit.manufacturing.release,1.0.0,release,3,unbound,no,tier3,,,
 sirkit.mcp.observation-read,1.0.0,read,0,bound-external-read,no,external_read,,,
+sirkit.parts.catalog-inspect,1.0.0,read,0,bound-read,no,withheld,,,
 sirkit.parts.evidence-read,1.0.0,read,0,bound-external-read,no,external_read,,,
 sirkit.parts.external-search,1.0.0,read,0,bound-external-read,no,external_read,,,
 sirkit.parts.search,1.0.0,read,0,bound-read,no,not_agent_exposed,,,
+sirkit.pcb-sync.preflight,1.0.0,read,0,bound-read,no,withheld,,,
 sirkit.pcb.arrange,1.1.1,mutate,1,bound-mutation-editor-session,no,granted_execution,,,
 sirkit.pcb.board-inspect,1.1.0,read,0,bound-read,yes,,true,true,declared
 sirkit.pcb.board-page-inspect,1.0.0,read,0,bound-read,no,withheld,,,
@@ -34,6 +37,7 @@ sirkit.project.canonical-revision-inspect,1.0.0,read,0,bound-read,yes,,true,true
 sirkit.project.history-inspect,1.0.0,read,0,bound-read,no,withheld,,,
 sirkit.routing.propose,1.1.0,propose,2,bound-proposal,no,withheld,,,
 sirkit.schematic.add-component,1.0.0,mutate,2,unbound,no,not_agent_exposed,,,
+sirkit.schematic.generate-proposal,1.0.0,propose,2,bound-proposal,no,withheld,,,
 sirkit.schematic.inspect,1.1.0,read,0,bound-read,no,withheld,,,
 sirkit.schematic.propose-component-replacement,1.0.0,propose,2,bound-proposal,no,withheld,,,
 sirkit.schematic.propose-tier1-edit,1.1.0,propose,2,bound-proposal,no,withheld,,,
