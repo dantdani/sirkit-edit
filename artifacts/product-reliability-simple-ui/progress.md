@@ -169,7 +169,7 @@ whole-repository eslint, every Playwright config, an e2e spec for the agent gene
 (≤ ~0.46 USD worst case, inside the owner's allowance) recorded in `live-spend.json`; then H (README, remaining-blockers,
 final-verdict, the PR on codex/astra-foundation, never merged by the builder), I; then J, then K.
 
-## Checkpoint G — verification (2026-10-17): PARTIAL (deterministic proof done; CI admission and the browser re-run carried forward)
+## Checkpoint G — verification (2026-10-17): PARTIAL (deterministic and browser proof done; CI admission carried forward)
 
 Landed: the page's intakes for the assistant's draft request, module contracts and stackup candidate (review cards and the existing
 stackup selector; nothing applied by an artifact); the chat answer's model label from the run's own events; the scripted agent's
@@ -179,9 +179,8 @@ Stage 3 import boundary (the shared Theory physicality rule in its own module); 
 `remaining-blockers.md` of the evidence package.
 
 Verified: the commit's tree alone (HEAD + G) type-checks and passes the CI job's full positional selection (one explained case) and
-all 110 of this assignment's suites. Not verified here: the five fixture browser specs after the final page edits (a dev server owned by
-the concurrent agent or the owner occupies the checkout).
+all 110 of this assignment's suites. The five fixture browser specs pass on this tree (run in the side worktree of the commit, 2026-10-17).
 
 Exact next step: admit the 19 CI-orphaned suites through the prompt-to-gerber / agent-boundary mechanism and re-measure the CI-split
-evidence at that tree (OD-30's 40 % line); re-run the browser specs when :3000 is free; then H — the PR on codex/astra-foundation
+evidence at that tree (OD-30's 40 % line); then H — the PR on codex/astra-foundation
 (never merged by the builder), its CI, `final-verdict.md`; then I.

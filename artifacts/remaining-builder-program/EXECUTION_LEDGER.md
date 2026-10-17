@@ -5748,6 +5748,7 @@ validation.md §C, workflow-contract.md, fault-register.md, live-spend.json).
 - **Gates:** worktree HEAD + G: tsc 0; the CI job's full positional selection 486 / 495 files (one explained environment case); this
   assignment's 110 suites 854 passed; history and tree secret scans exit 0. Main checkout: three cases red only through the concurrent
   agent's uncommitted edits.
-- **Carried forward:** 19 suites in no CI job → admission + the CI-split re-measurement; the browser re-run after the final page edits.
+- **Browser:** the five fixture specs passed on the commit's tree in the side worktree (`codex/product-reliability-g`).
+- **Carried forward:** 19 suites in no CI job → admission + the CI-split re-measurement.
 - **Concurrent work:** an OpenAI Codex agent edited 15 files from 05:47 (Build generation deadline and cancellation); excluded from
   this commit, untouched.
