@@ -49,6 +49,9 @@ app/components/bom/BomView.tsx|dialog|Dialog|(none)|onClose#4,app/components/bom
 app/components/chat/AutonomyModeControl.tsx|change|select|autonomy-mode|setTarget,app/components/chat/AutonomyModeControl.tsx,change,select,yes,named:aria-label,Agent autonomy
 app/components/chat/AutonomyModeControl.tsx|click|Button|autonomy-change|change,app/components/chat/AutonomyModeControl.tsx,click,Button,yes,named:text,Change
 app/components/chat/ExecutionEntryActions.tsx|click|Button|execution-undo|onUndo,app/components/chat/ExecutionEntryActions.tsx,click,Button,yes,named:text,Undo this change
+app/components/chat/GenerationTaskStatus.tsx|click|Button|generation-task-*|onAction,app/components/chat/GenerationTaskStatus.tsx,click,Button,yes,named:text,*
+app/components/chat/GenerationTaskStatus.tsx|click|Button|generation-task-retry-*|onAction,app/components/chat/GenerationTaskStatus.tsx,click,Button,yes,named:text,Retry block *
+app/components/chat/GenerationTaskStatus.tsx|click|Button|generation-task-start-again|onStartAgain,app/components/chat/GenerationTaskStatus.tsx,click,Button,yes,named:text,Start again
 app/components/circuit-verification/CircuitVerificationWorkspace.tsx|change|select|(none)|setCategory,app/components/circuit-verification/CircuitVerificationWorkspace.tsx,change,select,no,unnamed,none
 app/components/circuit-verification/CircuitVerificationWorkspace.tsx|change|select|(none)|setResult,app/components/circuit-verification/CircuitVerificationWorkspace.tsx,change,select,no,unnamed,none
 app/components/editor/BuildLibraryPanel.tsx|change|Input|Distributor search query|setExternalQuery,app/components/editor/BuildLibraryPanel.tsx,change,Input,yes,named:aria-label,Distributor search query
@@ -532,7 +535,7 @@ app/page.tsx|click|Button|Apply bounded support-part fixes via a validated edit|
 app/page.tsx|click|Button|Applying…|Apply exact proposal|applyTier1Proposal,app/page.tsx,click,Button,yes,named:text,Applying… Apply exact proposal
 app/page.tsx|click|button|Build|setMode,app/page.tsx,click,button,no,named:text,Build
 app/page.tsx|click|Button|Cancel — change nothing|cancelTier1Proposal,app/page.tsx,click,Button,yes,named:text,Cancel — change nothing
-"app/page.tsx|click|Button|Cancel|finishActivityLog,setPendingReplace",app/page.tsx,click,Button,yes,named:text,Cancel
+"app/page.tsx|click|Button|Cancel|finishActivityLog,reportGenerationReview,setPendingReplace",app/page.tsx,click,Button,yes,named:text,Cancel
 app/page.tsx|click|button|change in Settings|setSettingsOpen,app/page.tsx,click,button,yes,named:text,change in Settings
 app/page.tsx|click|Button|chat-stop|stopChatRun,app/page.tsx,click,Button,yes,named:text,Stop
 "app/page.tsx|click|button|Close pane|e.stopPropagation,onRemove",app/page.tsx,click,button,no,named:title,Close pane
@@ -603,7 +606,7 @@ app/page.tsx|click|ViewTab|(none)|workspaceView.open:pcb,app/page.tsx,click,View
 app/page.tsx|click|ViewTab|(none)|workspaceView.open:schematic,app/page.tsx,click,ViewTab,no,named:forwarded,label to text: Schematic
 app/page.tsx|click|ViewTab|(none)|workspaceView.open:sim,app/page.tsx,click,ViewTab,no,named:forwarded,label to text: SPICE
 app/page.tsx|dialog|Dialog|(none)|cancelTier1Proposal,app/page.tsx,dialog,Dialog,yes,exempt:dialog-titled,AI edit proposal — review before applying
-"app/page.tsx|dialog|Dialog|(none)|finishActivityLog,setPendingReplace",app/page.tsx,dialog,Dialog,yes,exempt:dialog-titled,* Apply the generated schematic?
+"app/page.tsx|dialog|Dialog|(none)|finishActivityLog,reportGenerationReview,setPendingReplace",app/page.tsx,dialog,Dialog,yes,exempt:dialog-titled,* Apply the generated schematic?
 app/page.tsx|dialog|Dialog|(none)|noop,app/page.tsx,dialog,Dialog,no,exempt:dialog-titled,Project activation needs recovery
 app/page.tsx|dialog|Dialog|(none)|setDraftRequestOpen,app/page.tsx,dialog,Dialog,no,exempt:dialog-titled,Publication request from the assistant&apos;s draft request
 app/page.tsx|dialog|Dialog|(none)|setHistoryOpen,app/page.tsx,dialog,Dialog,no,exempt:dialog-titled,Revision history

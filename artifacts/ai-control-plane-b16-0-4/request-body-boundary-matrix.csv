@@ -75,6 +75,12 @@ POST,/api/footprint-resolution,auth+csrf,authenticated,authenticatedJsonRoute(�
 POST,/api/full-flow/propose,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,FULL_FLOW_API_MAX_BYTES,FULL_FLOW_API_DEADLINE_MS,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/full-flow/run,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,FULL_FLOW_API_MAX_BYTES,FULL_FLOW_API_DEADLINE_MS,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/full-flow/transition,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,FULL_FLOW_API_MAX_BYTES,FULL_FLOW_API_DEADLINE_MS,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/generation-tasks/[id]/control,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,8000,10000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/generation-tasks/[id]/events,auth,authenticated,authenticatedRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/generation-tasks/[id],auth,authenticated,authenticatedRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/generation-tasks,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,GENERATION_TASK_START_MAX_BYTES,10000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/generation-tasks,auth,authenticated,authenticatedRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/generation-worker,auth,worker,workerRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 GET,/api/health,public,public,publicRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
 POST,/api/interfaces/allocate,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,8000000,30000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/interfaces/alternatives,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,8000000,30000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior

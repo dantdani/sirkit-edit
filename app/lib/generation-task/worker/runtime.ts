@@ -7,9 +7,11 @@
  *    through `DATABASE_URL`) and runs every slice in its own process. Refused - with nothing claimed - when `DATABASE_URL` is absent
  *    (`GENERATION_TASK_STORE_UNAVAILABLE`) or under the fixture runtime, whose in-memory store lives only in the dev server's process
  *    (`GENERATION_WORKER_NEEDS_PUMP`); a process-local store is never presented as a recoverable task store.
- *  - `pump` (SEAM, increment 4): each tick POSTs `/api/generation-worker` with the worker secret and the route claims and runs ONE slice
- *    inside the server, with the same slice code (`runGenerationSlice`). The route does not exist yet, so `createPumpTransport` refuses
- *    (`GENERATION_WORKER_PUMP_UNAVAILABLE`) instead of pretending to consume work.
+ *  - `pump` ([PR-L, 2026-10-17] increment 4, was a refusing seam): each tick POSTs `/api/generation-worker` with the worker secret
+ *    (`Authorization: Bearer`), and the route claims and runs ONE slice inside the server to its settlement (`runPumpedSlice`, the same
+ *    `GenerationWorker` and slice code as `direct`), awaited and bounded by the slice window. This is the transport the fixture runtime
+ *    needs (its store lives only in the dev server's process); it works against any server whose route is enabled behind the secret. The
+ *    client loop is `pump-transport.ts` (the worker script's only), so no route's closure reaches a network client through this module.
  *
  * Continuation re-check (section 3.2 step 3, L.3 "revalidate membership ... at continuation"): before ANY provider call of every slice,
  * the initiating principal's live membership and role are read again; a revoked or demoted principal's task becomes `failed` /
@@ -27,12 +29,16 @@ import { GenerationTaskStore, type GenerationSliceRevalidator } from "../store";
 import type { GenerationLlmAdmission } from "./accounting";
 import type { GenerationSliceReport } from "./slices";
 import { GenerationWorker, type GenerationScopeRunner, type GenerationTickReport, type GenerationWorkerHealth } from "./worker";
+import type { GenerationSlicePorts } from "./slices";
+import { fixtureGenerationCatalogPort, fixtureGenerationLlmPort } from "../../fixture-runtime/generation-ports";
+import { isoOf } from "../vocabulary";
 
 /** The route that admits a generation task (increment 4): its provider calls are recorded under this route id (`withLlmCallScope`). */
 export const GENERATION_TASK_ROUTE = Object.freeze({ routeId: "/api/generation-tasks", method: "POST" } as const);
 
 export class GenerationWorkerSetupError extends Error {
-  constructor(readonly code: "GENERATION_TASK_STORE_UNAVAILABLE" | "GENERATION_WORKER_NEEDS_PUMP" | "GENERATION_WORKER_PUMP_UNAVAILABLE" | "GENERATION_WORKER_MEMBERSHIP_UNAVAILABLE", message: string) {
+  // [PR-L, 2026-10-17] GENERATION_WORKER_PUMP_UNAVAILABLE (the refusing pump seam of increment 3) is gone with the seam: the pump refuses only without its secret
+  constructor(readonly code: "GENERATION_TASK_STORE_UNAVAILABLE" | "GENERATION_WORKER_NEEDS_PUMP" | "GENERATION_WORKER_MEMBERSHIP_UNAVAILABLE" | "GENERATION_WORKER_SECRET_UNSET", message: string) {
     super(message);
     this.name = "GenerationWorkerSetupError";
   }
@@ -41,7 +47,7 @@ export class GenerationWorkerSetupError extends Error {
 /** Why a DIRECT worker cannot run in this environment, or null. Reads the environment's names only, never prints a value. */
 export function directWorkerRefusal(environment: Record<string, string | undefined>): GenerationWorkerSetupError | null {
   if (fixtureRuntimeEnabled(environment)) {
-    return new GenerationWorkerSetupError("GENERATION_WORKER_NEEDS_PUMP", "The fixture runtime keeps the task store inside the dev server's process; a separate worker reaches it only through the HTTP pump (POST /api/generation-worker), which increment 4 builds. No slice was claimed.");
+    return new GenerationWorkerSetupError("GENERATION_WORKER_NEEDS_PUMP", "The fixture runtime keeps the task store inside the dev server's process; a separate worker reaches it only through the HTTP pump: --transport pump --origin <the dev server> (POST /api/generation-worker). No slice was claimed.");
   }
   if (!(environment.DATABASE_URL ?? "").trim()) {
     return new GenerationWorkerSetupError("GENERATION_TASK_STORE_UNAVAILABLE", "DATABASE_URL is not set, so the durable task store is unavailable and there is nothing a worker can consume. No slice was claimed.");
@@ -122,13 +128,56 @@ export function createDirectTransport(options: DirectTransportOptions): Generati
   };
 }
 
-/**
- * SEAM (increment 4) - the HTTP pump transport. Under the fixture runtime the task store lives in the dev server's process, so a worker
- * process drives it by POSTing `/api/generation-worker` (`Authorization: Bearer $SIRKIT_WORKFLOW_WORKER_SECRET`, fail closed when unset;
- * the route is a canonical `workerRoute` that claims ONE slice and runs it to settlement with `runGenerationSlice`, bounded by the slice
- * window - the `/api/engineering-effects` precedent). That route is built with the other generation-task routes in increment 4; until
- * then this transport REFUSES rather than run a loop that consumes nothing.
- */
-export function createPumpTransport(options: { origin: string }): GenerationWorkerTransport {
-  throw new GenerationWorkerSetupError("GENERATION_WORKER_PUMP_UNAVAILABLE", `The HTTP pump transport needs POST ${options.origin}/api/generation-worker, which increment 4 builds; use the direct transport (DATABASE_URL, fixture runtime off). No slice was claimed.`);
+// ─── [PR-L, 2026-10-17] The pump (increment 4) ───────────────────────────────────────────────────────────────────────────
+
+/** The route the pump transport drives. */
+export const GENERATION_WORKER_PUMP_ROUTE = Object.freeze({ path: "/api/generation-worker", method: "POST" } as const);
+
+/** The slice ports a server-side slice uses: the fixture runtime's scripted provider and committed catalog (zero credits), or the
+ *  production ports with the process meters. A test setter exists with a deterministic reset; it is never a production path. */
+export type GenerationSlicePortsFactory = () => GenerationSlicePorts;
+const DEFAULT_PORTS_FACTORY: GenerationSlicePortsFactory = () => (fixtureRuntimeEnabled()
+  ? { llm: fixtureGenerationLlmPort(), catalog: fixtureGenerationCatalogPort() }
+  : { llm: productionBuildLlmPort(), catalog: productionBuildCatalogPort(), admission: PROCESS_GENERATION_ADMISSION });
+let portsFactory: GenerationSlicePortsFactory = DEFAULT_PORTS_FACTORY;
+export function setGenerationSlicePortsFactory(factory: GenerationSlicePortsFactory): void { portsFactory = factory; }
+export function resetGenerationSlicePortsFactory(): void { portsFactory = DEFAULT_PORTS_FACTORY; }
+export function resolveGenerationSlicePorts(): GenerationSlicePorts { return portsFactory(); }
+
+export interface PumpedSliceInput {
+  store: GenerationTaskStore;
+  ports: GenerationSlicePorts;
+  revalidate: GenerationSliceRevalidator;
+  /** the task clock - the SAME clock the store uses */
+  clock: () => number;
+  /** the pump request's signal: an aborted request (the pump worker stopping, or its request bound) is a worker SHUTDOWN - running
+   *  slices yield at their next turn boundary and the rest are released after the grace - never the user's cancel */
+  signal?: AbortSignal;
+  runInScope?: GenerationScopeRunner;
+  workerId?: string;
+  graceMs?: number;
+  log?: (line: string) => void;
 }
+export interface PumpedSliceAnswer { tick: GenerationTickReport; ran: GenerationSliceReport | null }
+
+/** The SERVER side of the pump: claim at most ONE slice and run it to its settlement, awaited, inside this request (the slice window
+ *  bounds it). The same `GenerationWorker`, claim, fencing, lease renewal and slice code as the direct transport. */
+export async function runPumpedSlice(input: PumpedSliceInput): Promise<PumpedSliceAnswer> {
+  const workerId = input.workerId ?? `generation-pump-${Math.floor(input.clock()).toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  if (input.signal?.aborted) return { tick: { at: isoOf(input.clock()), claims: [], started: [] }, ran: null };
+  const worker = new GenerationWorker({
+    store: input.store, workerId, ports: input.ports, revalidate: input.revalidate, clock: input.clock, policy: { concurrency: 1 },
+    ...(input.runInScope ? { runInScope: input.runInScope } : {}), ...(input.log ? { log: input.log } : {}),
+  });
+  const onAbort = (): void => { void worker.stop({ graceMs: input.graceMs ?? 10_000 }); };
+  input.signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    const { tick, slices } = await worker.runOnce();
+    return { tick, ran: slices[0] ?? null };
+  } finally {
+    input.signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+/** [PR-L, 2026-10-17] The pump's CLIENT side (`createPumpTransport`, the worker process's HTTP loop) lives in `pump-transport.ts`, imported
+ *  only by the worker script: no route reaches a network client through this module (the B23 transport census). */

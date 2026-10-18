@@ -67,6 +67,11 @@ path,methods,auth_class,identity_source,migrated
 /api/full-flow/propose,POST,authenticated-propose,trusted-context,yes
 /api/full-flow/run,POST,authenticated-propose,trusted-context,yes
 /api/full-flow/transition,POST,authenticated-mutation,trusted-context,yes
+/api/generation-tasks,GET;POST,authenticated-propose,trusted-context,yes
+/api/generation-tasks/[id],GET,authenticated-read,trusted-context,yes
+/api/generation-tasks/[id]/control,POST,authenticated-mutation,trusted-context,yes
+/api/generation-tasks/[id]/events,GET,authenticated-read,trusted-context,yes
+/api/generation-worker,POST,internal-worker,worker-secret,yes
 /api/health,GET,public,none,no
 /api/interfaces/allocate,POST,authenticated-propose,trusted-context,yes
 /api/interfaces/alternatives,POST,authenticated-propose,trusted-context,yes

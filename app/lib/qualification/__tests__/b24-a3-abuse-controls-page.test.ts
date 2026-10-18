@@ -80,7 +80,7 @@ describe("[B24-A3] the page abuse-controls.md", () => {
   it("4. the authenticated rows listed as unlimited after part 1 are exactly the census's authenticated provider-credit or expensive rows (40), /api/chat among them", () => {
     const listed = [...section(page(), 11).matchAll(/^- `((?:GET|POST|PUT|PATCH|DELETE) \/[^`]+)`/gm)].map((match) => match[1]!);
     const census = routeResourceClassification().filter((row) => !row.isPublic && (row.providerCredit || row.expensive)).map((row) => `${row.method} ${row.path}`);
-    expect(census).toHaveLength(40);
+    expect(census).toHaveLength(41); // [PR-L, 2026-10-17] reviewed census move (runbook L.4): + POST /api/generation-tasks, the durable generation task's start (provider credit, its own per-principal window): was 40 (section 11 lists it with a dated note)
     expect([...listed].sort()).toEqual([...census].sort());
     expect(listed).toContain("POST /api/chat");
   });

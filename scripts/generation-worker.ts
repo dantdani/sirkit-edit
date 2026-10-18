@@ -22,6 +22,7 @@ import { createServer, type Server } from "node:http";
 import { loadEnvLocal } from "../app/lib/load-env-local";
 import { sanitizeTraceText } from "../app/lib/agent/redaction";
 import { GENERATION_WORKER_USAGE, defaultGenerationWorkerId, parseGenerationWorkerArguments } from "../app/lib/generation-task/worker/cli";
+// [PR-L, 2026-10-17] the pump's secret NAME comes from pump-transport.ts (GENERATION_WORKER_SECRET_ENV): a worker process never imports a server auth module (B16.0.1)
 
 const out = (line: string): void => { process.stdout.write(`[generation-worker] ${line}\n`); };
 const fail = (line: string): void => { process.stderr.write(`[generation-worker] ${line}\n`); };
@@ -49,18 +50,22 @@ async function main(): Promise<number> {
   if (args.envFile) loadEnvLocal();
 
   // loaded only now: the LLM router builds its providers from the environment when its module loads
-  const [runtime, callRecords, seam, generation] = await Promise.all([
+  const [runtime, callRecords, seam, generation, pump] = await Promise.all([
     import("../app/lib/generation-task/worker/runtime"),
     import("../app/lib/observability/llm-call-record-runtime"),
     import("../app/lib/observability/llm-call-record"),
     import("../app/api/chat/schematic-generation-runtime"),
+    import("../app/lib/generation-task/worker/pump-transport"), // [PR-L, 2026-10-17] the pump's client loop (increment 4)
   ]);
-  callRecords.bindDurableLlmCallRecordSink();
+  // [PR-L, 2026-10-17] the pump runs no provider call in this process (the server's route does, and records it there): only the direct
+  // transport binds the durable call-record sink
+  if (args.transport === "direct") callRecords.bindDurableLlmCallRecordSink();
   const workerId = args.workerId ?? defaultGenerationWorkerId(hostname(), process.pid);
   let transport: import("../app/lib/generation-task/worker/runtime").GenerationWorkerTransport;
   try {
     transport = args.transport === "pump"
-      ? runtime.createPumpTransport({ origin: args.origin! })
+      // [PR-L, 2026-10-17] increment 4: the HTTP pump (POST <origin>/api/generation-worker with the worker secret, never printed)
+      ? pump.createPumpTransport({ origin: args.origin!, workerId, secret: process.env[pump.GENERATION_WORKER_SECRET_ENV], concurrency: args.concurrency, log: out })
       : runtime.createDirectTransport({
         workerId, concurrency: args.concurrency,
         providerServable: (provider) => generation.schematicGenerationServable(provider),

@@ -93,6 +93,11 @@ const CONFIG_LINES = 74; // [PR-G, 2026-10-17] reviewed pin move: 71 -> 74, PR-F
  *  for the fixture server, by their own first words; case 4 takes exactly them out before the base hash, so every other line stays 1fe719e's. */
 const PR_F_CONFIG_LINES = ["      // [PR-F, 2026-10-17] the fixture proof must never reach a vendor: ", "      // fixture server unless the shell names its own set ", "      SIRKIT_ACQUISITION_DISABLED_SOURCES: process.env.SIRKIT_ACQUISITION_DISABLED_SOURCES ?? "] as const;
 const TEST_MATCH = "testMatch: /.*\\.spec\\.ts/,";
+/** [PR-L, 2026-10-17] reviewed pin move (runbook L.4, increment 4): the fixture web server starts through scripts/dev-with-worker.mjs, so the
+ *  browser proofs have a generation worker beside next dev (the pump transport under the fixture runtime). ONE line changed IN PLACE, by its
+ *  own first words, with a dated note; case 4 maps it back to its base text before the base hash, so every other line stays 1fe719e's. */
+const PR_L_COMMAND_LINE = "    command: `node scripts/dev-with-worker.mjs --port ${PORT}`, // [PR-L, 2026-10-17] ";
+const BASE_COMMAND_LINE = "    command: `pnpm exec next dev --port ${PORT}`,";
 /** Line 21's reader, exactly (the expression the guard mirrors below; any other spelling fails case 4). */
 const SKIP_READER = `testIgnore: (process.env.${SKIP_ENV} ?? "").split(",").map((glob) => glob.trim()).filter(Boolean),`;
 /** The first inserted line: right after page-browser-e2e's first browser step (`:417` at 1fe719e, B21's C49). */
@@ -273,7 +278,9 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
     expect(prF).toBeGreaterThan(20);
     expect(PR_F_CONFIG_LINES.map((first, index) => (config[prF + index] ?? "").startsWith(first))).toEqual([true, true, true]);
     expect(config.filter((text) => PR_F_CONFIG_LINES.some((first) => text.startsWith(first)))).toHaveLength(3);
-    const base = config.filter((_, index) => index < prF || index >= prF + PR_F_CONFIG_LINES.length);
+    expect(config.filter((text) => text.startsWith(PR_L_COMMAND_LINE)), "[PR-L, 2026-10-17] the one changed command line").toHaveLength(1);
+    expect(config.filter((text) => text.trimStart().startsWith("command:")), "one web server command").toHaveLength(1);
+    const base = config.filter((_, index) => index < prF || index >= prF + PR_F_CONFIG_LINES.length).map((text) => (text.startsWith(PR_L_COMMAND_LINE) ? BASE_COMMAND_LINE : text)); // [PR-L, 2026-10-17] the command line read at its base text
     expect(sha([...base.slice(0, 20), `  ${TEST_MATCH}`, ...base.slice(21)].join(NEWLINE)), "every other line is 1fe719e's").toBe(SHA_CONFIG_AT_BASE);
     expect(sha(read(ORCHESTRATION_CONFIG))).toBe(SHA_ORCHESTRATION_CONFIG_AT_BASE);
   });

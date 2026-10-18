@@ -130,13 +130,13 @@ describe("B10 — chat request boundary", () => {
     expect(finalText).not.toContain("component-authority");
   });
 
-  it("without an editorContext the browser run is truthfully read-less (zero tools without proposal prerequisites) [PR-G, 2026-10-17: board-less - no board read and no proposal; only the two schematic-only Tier 0 reads its validated schematic admits]", async () => {
+  it("without an editorContext the browser run is truthfully read-less (zero tools without proposal prerequisites) [PR-G, 2026-10-17: board-less - no board read and no proposal; only the two schematic-only Tier 0 reads its validated schematic admits] [PR-M, 2026-10-18: three since the schematic-instance inspection, still no board read and no proposal]", async () => {
     const finalText = await runTools({ ...BASE, schematicState: SCHEMATIC });
     // [PR-G, 2026-10-17] reviewed pin move: was "TOOLS:". Since PR-D d2 (sirkit.pcb-sync.preflight) and PR-F fB (sirkit.parts.missing-facts)
     // two Tier 0 reads are advertised over the run's VERIFIED schematic snapshot alone - no board (pcbSyncPreflightReadAvailable and
     // missingFactsReadAvailable require only context.schematic + schematicDigest) - and this run carries SCHEMATIC, which passes the
     // integrity check. The exact list still proves zero board reads (no board-inspect, drc-run or selection.inspect: no editorContext)
     // and zero proposals (no head mark, no board).
-    expect(finalText).toBe("TOOLS:sirkit.parts.missing-facts;sirkit.pcb-sync.preflight");
+    expect(finalText).toBe("TOOLS:sirkit.parts.missing-facts;sirkit.pcb-sync.preflight;sirkit.schematic.instance-inspect"); // [PR-M, 2026-10-18] reviewed pin move (runbook M.2.1): + sirkit.schematic.instance-inspect, the third schematic-only Tier 0 read - its descriptor declares exactly the two reads' discovery requirements (read_project, schematic-present, local-working-copy, no board, no catalog authority) and instanceInspectionReadAvailable admits it over the verified schematic snapshot alone (the catalog port optional), as missing-facts and preflight; still zero board reads and zero proposals (the candidate search and the resolution proposal need the server's catalog facts, absent without a configured catalog)
   });
 });

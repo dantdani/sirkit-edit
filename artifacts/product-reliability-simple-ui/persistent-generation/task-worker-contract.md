@@ -1,6 +1,6 @@
 # Generation task, worker and recovery contract (runbook L.2-L.5)
 
-Status: DESIGN, not implemented. Written 2026-10-17 against `codex/astra-foundation` at `5b4a941b` plus the uncommitted 180 s
+Status: IMPLEMENTED in increments 2-4 (see progress.md); this contract remains the design reference. Written 2026-10-17 against `codex/astra-foundation` at `5b4a941b` plus the uncommitted 180 s
 correction (`build-boundary.ts`, provider-adapter cancellation, `parts-search.ts`). It governs L.8 increments 2-7; L.1's stall
 map (`limit-and-stall-map.md`) feeds increment 6. Labels: **CONFIRMED** = read in source at the cited line; **DECIDED** = this
 contract's choice, justified from the cited source; **OWNER** = must be decided by the owner before the dependent step ships

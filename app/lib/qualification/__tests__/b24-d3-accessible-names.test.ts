@@ -88,8 +88,11 @@ const OUT_OF_SCOPE_UNNAMED_AT_3773C6A = 111;
  *  artifacts (`stackup_candidate_ready` -> the PCB editor's preview; `draft_request_ready` -> a review-task card whose one action
  *  `draft-request-open` opens the existing publication request prefilled; `module_contracts_ready` -> a collapsible engineering-note card,
  *  `module-note-toggle`), the draft-request publication dialog and the answer's model footer; the citation tables were refreshed in the
- *  same change. */
-const PAGE_LINES_AT_3773C6A = 8842;
+ *  same change. [PR-L, 2026-10-17] 9040: the composer's Generate as a durable design task (runbook L.4, increment 4: start or
+ *  attach, the task's milestones and its status card in the activity entry - `GenerationTaskStatus`, whose buttons are named by their text -,
+ *  reattach after a reload or a project switch, the result through the extracted `offerBuildResult` / `offerSchematicProposal` intake, the
+ *  review recorded on the task); the citation tables were refreshed in the same change. */
+const PAGE_LINES_AT_3773C6A = 9040;
 /** [B24-D3, 2026-10-10] package.json's dependency names at 3773c6a (OD-215: no new dependency; an axe devDependency needs the owner). */
 const DEPENDENCIES_AT_3773C6A = ["@anthropic-ai/sdk", "@base-ui/react", "@react-three/drei", "@react-three/fiber", "@supabase/ssr", "@supabase/supabase-js", "@xyflow/react", "class-variance-authority", "clsx", "drizzle-orm", "flatbush", "highlight.js", "immer", "jszip", "katex", "lucide-react", "next", "openai", "pixi-viewport", "pixi.js", "polygon-clipping", "postgres", "radix-ui", "react", "react-dom", "react-markdown", "rehype-highlight", "rehype-katex", "remark-gfm", "remark-math", "tailwind-merge", "three", "tw-animate-css"];
 const DEV_DEPENDENCIES_AT_3773C6A = ["@electric-sql/pglite", "@playwright/test", "@tailwindcss/postcss", "@testing-library/dom", "@testing-library/react", "@types/node", "@types/react", "@types/react-dom", "@types/three", "drizzle-kit", "eslint", "eslint-config-next", "fake-indexeddb", "jsdom", "tailwindcss", "tsx", "typescript", "vitest"];

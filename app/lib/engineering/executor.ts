@@ -142,7 +142,7 @@ export const KERNEL_OPERATION_BINDINGS = Object.freeze({
   ],
   // ── B06 — canonical schematic semantic mutations ───────────────────────────
   "schematic.delete-component": ["schematic_delete_component"],
-  "schematic.replace-component": ["schematic_replace_component"],
+  "schematic.replace-component": ["schematic_replace_component"], "schematic.resolve-components": ["schematic_replace_component"], // [PR-M, 2026-10-17] the reviewed component RESOLUTION batch: N exact replacements in ONE transaction, each under its own B06.2-verified runtime grant (app/lib/component-resolution/approved-resolution-mutations.ts)
   "schematic.set-property": ["schematic_set_component_properties"],
   // B07: one completed drag/stretch gesture commits component transforms
   // together with attached wire geometry and label moves — one transaction.

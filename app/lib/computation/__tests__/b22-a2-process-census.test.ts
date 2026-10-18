@@ -314,7 +314,7 @@ describe("[B22-A2] the process census (D22-18)", () => {
     expect(production.get("app/lib/computation/engine-host.ts")).toMatch(/new Worker\(entry, options\)/);
     // the census covers every route file, and the route files are exactly the policy table's paths (168 rows over these paths; [B24-A1, 2026-10-06] was 166: + GET /api/health and GET /api/ready, which reach no spawner; [B23-B1, 2026-10-03] was 165: + POST /api/pcb/provider-exchange, which reaches no spawner)
     expect(routeEntries.map((entry) => entry.path).sort()).toEqual([...new Set(routeResourceClassification().map((row) => row.path))].sort());
-    expect(routeResourceClassification().length).toBe(168); // [B24-A1, 2026-10-06] reviewed census move (OD-198), was 166; [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
+    expect(routeResourceClassification().length).toBe(174); // [PR-L, 2026-10-17] reviewed census move (runbook L.4), was 168: + the six generation-task methods, none reaches a spawner; [B24-A1, 2026-10-06] reviewed census move (OD-198), was 166; [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
   });
 
   it("2. the census walks the gates' edges: for every route that reaches a spawner, its closure is exactly importClosure's", { timeout: 120_000 }, () => {

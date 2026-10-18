@@ -1,10 +1,10 @@
 {
   "schemaVersion": "sirkit.ui-control-inventory-summary.v1",
-  "sites": 646,
-  "surfaces": 66,
+  "sites": 649,
+  "surfaces": 67,
   "byKind": {
     "change": 178,
-    "click": 363,
+    "click": 366,
     "context-menu": 1,
     "dialog": 17,
     "double-click": 1,
@@ -18,8 +18,8 @@
   "byClassification": {
     "dispatcher": 22,
     "internal": 8,
-    "semantic": 291,
-    "view": 325
+    "semantic": 296,
+    "view": 323
   },
   "recordsReached": [
     "agent.autonomy-setting",

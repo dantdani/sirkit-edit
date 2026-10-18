@@ -31,7 +31,7 @@ export const GENERATION_WORKER_USAGE = [
   "  --worker-id <id>       the worker id leases carry (default <host>-<pid>)",
   "  --health-port <port>   serve GET /healthz on 127.0.0.1:<port>",
   "  --transport direct     the durable store through DATABASE_URL (the default; the fixture runtime needs the pump)",
-  "  --transport pump --origin <url>   reserved: the HTTP pump transport (POST /api/generation-worker, increment 4)",
+  "  --transport pump --origin <url>   the HTTP pump: POST <url>/api/generation-worker with SIRKIT_WORKFLOW_WORKER_SECRET (the fixture runtime needs it)",
   "  --grace-ms <ms>        on SIGINT/SIGTERM, how long slices may take to reach a turn boundary (default 10000)",
   "  --no-env-file          do not read .env.local",
   "Stop with Ctrl+C (SIGINT) or SIGTERM: running slices yield at a turn boundary, the rest are released for another worker.",

@@ -233,7 +233,7 @@ function isAuthorizationIdentityShaped(value: unknown): value is { principalId: 
 
 const ENG_DIGEST = /^eng1-[0-9a-f]{8,64}$/;
 /** [B14] `prop-` (Tier-1) and `rprop-` (replacement) proposal identities. */
-const PROPOSAL_ID = /^r?prop-[0-9a-f]{8,64}$/;
+const PROPOSAL_ID = /^(?:r|c)?prop-[0-9a-f]{8,64}$/; // [PR-M, 2026-10-17] + `cprop-`: the component RESOLUTION batch (app/lib/component-resolution/resolution-proposal.ts), the third family sharing this journal
 const LINEAGE_ID = /^lin1-[0-9a-f]{8,64}$/;
 const SCOPE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
@@ -406,7 +406,7 @@ function validateEntry(raw: unknown, scope: { tenantId: string; projectId: strin
       if (!committedComplete || entry.receipt !== null) return null;
       break;
     case "receipt-finalized": {
-      if (!committedComplete || entry.receipt === null || (!isReceiptShaped(entry.receipt) && !isReplacementReceiptShaped(entry.receipt))) return null;
+      if (!committedComplete || entry.receipt === null || (!isReceiptShaped(entry.receipt) && !isReplacementReceiptShaped(entry.receipt) && !isResolutionReceiptShaped(entry.receipt))) return null; // [PR-M, 2026-10-17] + the resolution receipt (its shape check is appended at the end of this file)
       const receipt = entry.receipt as ApprovedMutationReceipt;
       // The persisted receipt must be COHERENT with its own entry.
       if (receipt.proposalId !== entry.proposalId || receipt.operationsDigest !== entry.operationsDigest) return null;
@@ -732,4 +732,60 @@ export class ApprovedMutationJournal {
       return { ...(body as unknown as Omit<ApprovedMutationJournalEntry, "integrity">), state: "poisoned", receipt: null };
     });
   }
+}
+
+// ─── [PR-M, 2026-10-17] the component RESOLUTION receipt (section M.2.5), appended so no cited line above moves ─────────────
+const RESOLUTION_RECEIPT_KEYS = [...RECEIPT_KEYS, "items", "authorityLinkage", "approvalActor"] as const;
+const RESOLUTION_TARGET_KEYS = ["catalogPartId", "valueKey", "exactMpn", "manufacturer", "atomicPartRevisionId", "symbolAssetVersionId", "footprintAssetVersionId", "mappingCertificateId", "footprintFullName", "evidenceDigest"] as const;
+const RESOLUTION_LINKAGE_KEYS = ["operationsDigest", "impactDigest", "connectivityDigest", "authorityResourceId", "authorityResourceDigest", "canonicalResourceId", "canonicalResourceDigest", "consumedAuthorityDigest"] as const;
+
+/** [PR-M] Structural check of a persisted RESOLUTION receipt: the B12 core linkage keys, one item per resolved instance (1-20,
+ *  each with its closed target identity; the item count equals the operation count), the closed authority linkage and the human
+ *  approval actor. Tier-1 and replacement receipts keep their own checks above. */
+function isResolutionReceiptShaped(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const receipt = value as Record<string, unknown>;
+  if (!isExactKeys(receipt, RESOLUTION_RECEIPT_KEYS)) return false;
+  if (receipt.schema !== "sirkit.approved-resolution-receipt.v1") return false;
+  if (typeof receipt.receiptId !== "string" || !/^acr-[0-9a-f]{16,64}$/.test(receipt.receiptId)) return false;
+  if (typeof receipt.proposalId !== "string" || !/^cprop-[0-9a-f]{8,64}$/.test(receipt.proposalId)) return false;
+  if (typeof receipt.operationsDigest !== "string" || !ENG_DIGEST.test(receipt.operationsDigest)) return false;
+  if (receipt.originRunId !== null && !isBoundedString(receipt.originRunId)) return false;
+  if (!isAuthorizationIdentityShaped(receipt.authorization)) return false;
+  if (receipt.commandId !== "schematic.resolve-components") return false;
+  for (const key of ["tenantId", "projectId", "branchId"] as const) {
+    if (typeof receipt[key] !== "string" || !SCOPE_ID.test(receipt[key] as string)) return false;
+  }
+  if (typeof receipt.lineageId !== "string" || !LINEAGE_ID.test(receipt.lineageId)) return false;
+  if (!isHeadMark(receipt.headBefore) || !isHeadMark(receipt.headAfter)) return false;
+  for (const key of ["schematicDigestBefore", "schematicDigestAfter"] as const) {
+    if (typeof receipt[key] !== "string" || !ENG_DIGEST.test(receipt[key] as string)) return false;
+  }
+  if (!isBoundedString(receipt.transactionId)) return false;
+  if (typeof receipt.operationCount !== "number" || !Number.isSafeInteger(receipt.operationCount) || receipt.operationCount < 1 || receipt.operationCount > 20) return false;
+  if (receipt.destructive !== true || receipt.postconditions !== "verified") return false;
+  const undo = receipt.undoReference;
+  if (typeof undo !== "object" || undo === null || Array.isArray(undo)) return false;
+  const undoRecord = undo as Record<string, unknown>;
+  if (!isExactKeys(undoRecord, ["kind", "transactionId"]) || undoRecord.kind !== "canonical-transaction" || undoRecord.transactionId !== receipt.transactionId) return false;
+  if (!isFiniteAt(receipt.completedAt)) return false;
+  if (!Array.isArray(receipt.items) || receipt.items.length !== receipt.operationCount) return false;
+  for (const item of receipt.items as unknown[]) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) return false;
+    const record = item as Record<string, unknown>;
+    if (!isExactKeys(record, ["componentInstanceId", "refDes", "sourcePartId", "target"])) return false;
+    if (!isBoundedString(record.componentInstanceId, 200) || !isBoundedString(record.refDes, 64) || !isBoundedString(record.sourcePartId, 200)) return false;
+    const target = record.target;
+    if (typeof target !== "object" || target === null || Array.isArray(target)) return false;
+    const targetRecord = target as Record<string, unknown>;
+    if (!isExactKeys(targetRecord, RESOLUTION_TARGET_KEYS)) return false;
+    for (const key of RESOLUTION_TARGET_KEYS) if (key !== "valueKey" && !isBoundedString(targetRecord[key], 512)) return false;
+    if (typeof targetRecord.valueKey !== "string" || targetRecord.valueKey.length > 64) return false;
+  }
+  const linkage = receipt.authorityLinkage;
+  if (typeof linkage !== "object" || linkage === null || Array.isArray(linkage)) return false;
+  const linkageRecord = linkage as Record<string, unknown>;
+  if (!isExactKeys(linkageRecord, RESOLUTION_LINKAGE_KEYS)) return false;
+  for (const key of RESOLUTION_LINKAGE_KEYS) if (!isBoundedString(linkageRecord[key], 512)) return false;
+  return receipt.approvalActor === "human:interactive";
 }

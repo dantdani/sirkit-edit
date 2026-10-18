@@ -535,7 +535,7 @@ function catalogAuthorityIssues(descriptor: ToolDescriptor, binding: ToolImpleme
   if (descriptor.operationClass !== "read") issues.push("a tool requiring the catalog authority is read class only");
   if (descriptor.sideEffects !== "none" && descriptor.sideEffects !== "derived-cache") issues.push("a tool requiring the catalog authority has no side effects beyond a derived cache");
   if (descriptor.approvalTier !== "none") issues.push("a tool requiring the catalog authority carries no approval tier");
-  if (descriptor.agentExposed && (binding.status !== "bound-read" || binding.module !== "app/lib/atomic/catalog-part-detail.ts" || binding.symbol !== "loadCatalogPartDetail")) {
+  if (descriptor.agentExposed && !(binding.status === "bound-read" && ((binding.module === "app/lib/atomic/catalog-part-detail.ts" && binding.symbol === "loadCatalogPartDetail") || (binding.module === "app/lib/component-resolution/candidate-search.ts" && binding.symbol === "searchResolutionCandidates")))) { // [PR-M, 2026-10-17] reviewed amendment: exactly ONE more admitted binding - the resolution candidate search, whose every result is re-read through the SAME shared catalog part detail loader (its port) before it is classified; every other exposed catalog-authority binding is still refused
     issues.push("an agent-exposed tool requiring the catalog authority must bind the shared catalog part detail loader (app/lib/atomic/catalog-part-detail.ts#loadCatalogPartDetail)");
   }
   return issues;

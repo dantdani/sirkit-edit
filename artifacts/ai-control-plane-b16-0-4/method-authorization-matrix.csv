@@ -75,6 +75,12 @@ POST,/api/footprint-resolution,auth+csrf,authenticated,authenticatedJsonRoute(�
 POST,/api/full-flow/propose,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/full-flow/run,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/full-flow/transition,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
+POST,/api/generation-tasks/[id]/control,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
+GET,/api/generation-tasks/[id]/events,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+GET,/api/generation-tasks/[id],auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+POST,/api/generation-tasks,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
+GET,/api/generation-tasks,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+POST,/api/generation-worker,auth,worker,workerRoute(…),load-bearing,wrapper,workerRoute
 GET,/api/health,public,public,publicRoute(…),n/a(public),-,-
 POST,/api/interfaces/allocate,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/interfaces/alternatives,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute

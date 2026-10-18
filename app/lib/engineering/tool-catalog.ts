@@ -1057,7 +1057,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     timeoutMs: 5_000,
     sourceEvidence: ["app/lib/pcb/dimensions/commands.ts", "app/lib/pcb/dimensions/geometry.ts", "app/components/pcb/hooks/useDimensionTool.ts", "app/components/pcb/inspectors/DimensionInspector.tsx", "app/lib/engineering/operations.ts", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
     versionNotes: "1.2.0 (B18-C I7): bound and agent-exposed as a reviewed granted execution (confirmation-only: no explicit grammar); re-tiered reversible per the runbook's PCB Tier 1 list (OD-13); deterministic add ids; an update never moves the measured points. 1.1.0 (B09.1): reconciled with B08 truth — implemented and active, no tool adapter.",
-  }, ...COMPUTATION_TOOL_DESCRIPTORS, boardPageInspectDescriptor(), generateProposalDescriptor(), pcbSyncPreflightDescriptor(), catalogInspectDescriptor(), componentReviewRequestDescriptor(), missingFactsDescriptor(), draftRequestDescriptor(), moduleContractsDescriptor(), stackupProposalDescriptor(), /* [PR-F fE, 2026-10-17] the stackup / via-policy proposal, declared at the END too */ /* [PR-F fD, 2026-10-17] the module contract proposal, declared at the END too */ /* [PR-F fB, 2026-10-17] the missing-facts read and the part draft request, declared at the END too */ // [B22-B] the five named computations (OD-139), from computation-tool-descriptors.ts; [B24-D2, 2026-10-09] the bounded paged board read (OD-213), its declaration at the END of this file; [PR-D, 2026-10-16] the Build-mode generation proposal (OD-243), its declaration at the END too; [PR-D d2, 2026-10-16] the Schematic to PCB preflight read, the catalog part inspection and the (unavailable) component review request, declared at the END too
+  }, ...COMPUTATION_TOOL_DESCRIPTORS, boardPageInspectDescriptor(), generateProposalDescriptor(), pcbSyncPreflightDescriptor(), catalogInspectDescriptor(), componentReviewRequestDescriptor(), missingFactsDescriptor(), draftRequestDescriptor(), moduleContractsDescriptor(), stackupProposalDescriptor(), instanceInspectDescriptor(), candidateSearchDescriptor(), componentResolutionDescriptor(), /* [PR-M, 2026-10-17] the schematic-instance inspection, the candidate search and the component resolution proposal, declared at the END too */ /* [PR-F fE, 2026-10-17] the stackup / via-policy proposal, declared at the END too */ /* [PR-F fD, 2026-10-17] the module contract proposal, declared at the END too */ /* [PR-F fB, 2026-10-17] the missing-facts read and the part draft request, declared at the END too */ // [B22-B] the five named computations (OD-139), from computation-tool-descriptors.ts; [B24-D2, 2026-10-09] the bounded paged board read (OD-213), its declaration at the END of this file; [PR-D, 2026-10-16] the Build-mode generation proposal (OD-243), its declaration at the END too; [PR-D d2, 2026-10-16] the Schematic to PCB preflight read, the catalog part inspection and the (unavailable) component review request, declared at the END too
 ] satisfies readonly ToolDescriptor[]);
 
 let cached: ToolRegistry | null = null;
@@ -1447,5 +1447,111 @@ function stackupProposalDescriptor(): ToolDescriptor {
     verificationStrategy: "the sealed body's content digest is recomputed by stackupCandidateIntact; the candidate is pinned to the board revision and expires; nothing is applied by the tool - the editor's own Stackup selector commits the change as one canonical transaction, after which DRC, the export preflight and the manufacturing qualification re-run from scratch (the cited invalidation rules)",
     sourceEvidence: ["app/lib/pcb/candidates/stackup-candidate.ts", "app/lib/agent/stackup-proposals.ts", "app/lib/pcb/stackup.ts", "app/lib/pcb/drc/presets/index.ts", "app/lib/pcb/fab/rule-profile.ts", "app/lib/pcb/padstack/defaults.ts", "app/lib/agent/gateway.ts"],
     versionNotes: "1.0.0 (PR-F fE, 2026-10-17): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (a proposal, as OD-82; MCP exposure stays read-only).",
+  };
+}
+/**
+ * [PR-M, 2026-10-17] Section M.2.1: the agent's SCHEMATIC-INSTANCE INSPECTION, declared at the END too (a function declaration is
+ * hoisted), so no line of this catalog moves. A Tier 0 read over the run's VALIDATED schematic snapshot and the server catalog
+ * facts of the placed parts (the catalog inspection's own port), board-less like the editor's Prepare PCB: the one derivation is
+ * app/lib/component-resolution/instance-facts.ts `inspectSchematicInstances`; the pins come from the catalog symbol, never a
+ * browser pin list, and without the catalog port every pin is reported unavailable.
+ */
+function instanceInspectDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.schematic.instance-inspect", version: "1.0.0",
+    agentExposed: true, // [PR-M] a Tier 0 read over the run's verified schematic and the bound catalog port; no board; nothing placed, bound or applied
+    owningCommandId: "schematic.review-advisory",
+    title: "Inspect schematic instances without a PCB",
+    description: "Inspect schematic component instances WITHOUT a PCB: for each, the stable instance id (the only durable target - a reference designator is a label), reference, value, the catalog part and exact atomic revision with its catalog status, whether Prepare PCB would refuse it and why, the published revision its own part links for its value, the symbol's pins (number, name, electrical type, function) from the server catalog symbol, each pin's net and members, and anode / cathode nets of a polar part, with the captured schematic digest and head mark. Example input: {\"componentIds\":[\"D1\",\"D2\"]}; omit componentIds for every unresolved instance. Without the catalog port every pin is unavailable (never guessed). Nothing is placed, bound or applied.",
+    category: "schematic", operationClass: "read",
+    inputSchema: obj({ componentIds: { type: "array", items: { type: "string" }, description: "Optional: up to 50 stable instance ids or reference designators to inspect; omitted, every instance Prepare PCB would refuse." } }),
+    outputSchema: OUT_REPORT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
+    binding: { status: "bound-read", module: "app/lib/component-resolution/instance-facts.ts", symbol: "inspectSchematicInstances", notes: "PR-M: the ONE schematic-instance derivation (the editor's own refusal rule listUnresolvedInstances, the production netlist union-find buildNetlist over the server catalog's pins, the published link rule valueKeyLink); invoked only through InstanceInspectionReadService (app/lib/agent/instance-inspection-reads.ts) over the run's verified schematic snapshot and the chat route's injected catalog port (app/api/chat/catalog-inspection-runtime.ts, the same port as the catalog inspection). Board-less by design: it reads what blocks the first board. No second derivation." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 8_000,
+    validationStrategy: "closed argument surface (only componentIds: 1-50 stable ids or references; authority-shaped keys such as pins, nets or partId refused by name) under the B05 input limits; the verified schematic snapshot and its digest are required; discovery, role and capability rechecked per call; the catalog is asked once per distinct placed part under the call's deadline (a miss, a failure or a late answer is data per part); the output is schema-checked and bounded",
+    verificationStrategy: "pure over the run's verified schematic snapshot (the integrity check recomputes its digest before every call; the result names it as its source and carries the head mark); pins and their functions only from the server catalog symbol (schematic-snapshot-verified+catalog-read), otherwise reported unavailable",
+    sourceEvidence: ["app/lib/component-resolution/instance-facts.ts", "app/lib/component-resolution/pin-functions.ts", "app/lib/agent/instance-inspection-reads.ts", "app/lib/pcb/netlist-bridge.ts", "app/lib/pcb-sync/unresolved-instances.ts", "app/api/chat/catalog-inspection-runtime.ts"],
+    versionNotes: "1.0.0 (PR-M, 2026-10-17): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (its input is the editor's browser-only SchematicState, as OD-244's preflight read).",
+  };
+}
+
+/**
+ * [PR-M, 2026-10-17] Section M.2.2: the agent's CANDIDATE SEARCH BY REQUIREMENTS, declared at the END too. Its recall is the Build
+ * loop's own hybrid catalog search (app/lib/parts-search.ts searchPartsForAI, embedding-backed, over the catalog's real category
+ * vocabulary) through the chat route's injected search port; every hit is re-read through the catalog port and the published
+ * revision evidence port and classified by the one compatibility evaluation. Requires the catalog authority (the server's facts).
+ */
+function candidateSearchDescriptor(): ToolDescriptor {
+  const rating: JsonSchema = obj({ property: { type: "string", description: "The published claim property, lower case (e.g. reverse_voltage, forward_current)." }, dimension: { type: "string", enum: ["dimensionless", "voltage", "current", "resistance", "capacitance", "inductance", "power", "frequency", "time", "temperature", "length", "mass"] }, min: { type: "number", description: "Minimum in SI base units." }, max: { type: "number", description: "Maximum in SI base units." } }, ["property", "dimension"]);
+  return {
+    ...readDefaults,
+    toolId: "sirkit.parts.candidate-search", version: "1.0.0",
+    agentExposed: true, // [PR-M] a Tier 0 read of the local catalog by requirements through the chat route's injected ports; no distributor; nothing placed, bound or published
+    owningCommandId: "parts.catalog-read",
+    title: "Search the local catalog for replacement candidates",
+    description: "Search Sirkit's local catalog by functional role, specifications and package text for exact published revisions that could resolve ONE instance (componentId), and sort every result into eligible (published, selectable, symbol + footprint + approved mapping, every connected pin mapped by function), draft, missing-asset, withdrawn, incompatible or unresolved, each with its reasons, warnings and the proved pin mapping. The instance's own part is considered first (binding its published revision changes no part). Example input: {\"componentId\":\"D1\",\"query\":\"small-signal fast switching diode 100 V 150 mA\",\"functionalClass\":\"diode\",\"limit\":8}. At most 3 searches per turn. A hit is a candidate, never authority; no distributor is called; compatible is not electrical equivalence.",
+    category: "parts", operationClass: "read",
+    sideEffects: "derived-cache", // the search's own embedding memo and reranker refusal memo
+    inputSchema: obj({
+      componentId: { type: "string", description: "The stable instance id (or reference) of the instance to resolve; omitted, assets are classified but suitability is not evaluated." },
+      query: { type: "string", description: "The functional role and specifications to search for (1-300 printable characters)." },
+      category: { type: "string", description: "Optional catalog category name or request (normalized onto the catalog vocabulary; an unrecognised one filters nothing)." },
+      functionalClass: { type: "string", enum: ["diode", "schottky-diode", "zener-diode", "tvs-diode", "led", "resistor", "capacitor", "inductor", "transistor", "integrated-circuit", "connector"], description: "Optional class the replacement must have; omitted, the instance's own class." },
+      mounting: { type: "string", enum: ["smd", "through_hole"], description: "Optional required mounting." },
+      packageCode: { type: "string", description: "Optional package code the footprint must be (e.g. SOD-123)." },
+      ratings: { type: "array", items: rating, description: "Optional stated rating requirements; each must be proven by a published claim." },
+      limit: { type: "integer", description: "1-10 search hits to classify (default 10)." },
+    }, ["query"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: [], requiredAuthority: ["catalog"],
+    binding: { status: "bound-read", module: "app/lib/component-resolution/candidate-search.ts", symbol: "searchResolutionCandidates", notes: "PR-M: recall through the chat route's injected search port over the Build loop's own searchPartsForAI (app/lib/parts-search.ts; embedding-backed, the catalog's category vocabulary, the reranker refusal memo); every hit re-read through the catalog inspection port (loadCatalogPartDetail) and the revision evidence port (loadSelectablePortableSnapshot + loadAtomicRevisionStatus), then classified by evaluateCompatibility (app/lib/component-resolution/compatibility.ts). Invoked only through CandidateSearchReadService (app/lib/agent/candidate-search-reads.ts); at most 3 searches per run." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 15_000, budgetClass: "batch",
+    validationStrategy: "closed argument surface (componentId, query, category, functionalClass, mounting, packageCode, ratings, limit; authority-shaped keys such as atomicPartRevisionId, pins or mapping refused by name) under the B05 input limits; the server's catalog, search and evidence facts and ports are required; discovery, role and capability rechecked per call; at most 3 searches per run, charged before the search port is asked; every port call bounded by the call's deadline",
+    verificationStrategy: "every result is re-read from the server catalog and the published revision evidence at the time of the call; eligibility needs a published, selectable revision whose catalog link names exactly its symbol, footprint and approved complete mapping, a catalog symbol drawing the published pins, the same functional class and every connected pin mapped by function to a pad; a stated rating needs a published claim; the output is schema-checked",
+    sourceEvidence: ["app/lib/component-resolution/candidate-search.ts", "app/lib/component-resolution/compatibility.ts", "app/lib/agent/candidate-search-reads.ts", "app/lib/parts-search.ts", "app/api/chat/component-resolution-runtime.ts", "app/lib/atomic/server-catalog.ts"],
+    versionNotes: "1.0.0 (PR-M, 2026-10-17): first exposure, reviewed in agent-exposure.ts; the second binding admitted by the catalog authority rule (tool-registry.ts catalogAuthorityIssues); withheld from MCP by a reviewed choice in mcp-exposure-review.ts (the MCP server binds no catalog or search port, as OD-235's catalog read).",
+  };
+}
+
+/**
+ * [PR-M, 2026-10-17] Sections M.0 (last paragraph) and M.2.4: the agent's UNRESOLVED-COMPONENT RESOLUTION proposal, declared at the
+ * END too. A sealed batch the human reviews and applies through schematic.resolve-components; separate from, and never replacing,
+ * the narrower B14 exact replacement above (which keeps its durable-binding requirement for already-qualified parts).
+ */
+function componentResolutionDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.schematic.propose-component-resolution", version: "1.0.0",
+    agentExposed: true, // [PR-M] sealed batch proposal ONLY; applying it is the human's reviewed schematic.resolve-components and never provider-callable
+    owningCommandId: "schematic.resolve-components-propose",
+    title: "Propose eligible parts for unresolved components",
+    description: "Seal ONE coherent batch that resolves unresolved KiCad instances (no published exact revision) to exact eligible revisions from the candidate search: one item per stable instance id with the candidate part and the exact revision the search reported (an assertion the server must reproduce). The server re-reads the catalog and published evidence, proves each pin mapping by function over the approved certificate (a permutation only when proved), keeps references, values, placements and every net, and seals the identities, mapping and material warnings. Example input: {\"items\":[{\"componentId\":\"kc-3a9f01\",\"candidatePartId\":\"part-1n4148w\",\"atomicPartRevisionId\":\"rev-1n4148w-1\"}]}. Receiving it changes NOTHING; a human reviews and applies it. Missing pin evidence returns the missing-facts / draft-request work item instead.",
+    category: "schematic", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({
+      items: { type: "array", description: "1-20 instances to resolve together, each naming the candidate the candidate search reported for it.", items: obj({ componentId: { type: "string", description: "The stable instance id (not the reference designator)." }, candidatePartId: { type: "string", description: "The candidate's catalog part id." }, atomicPartRevisionId: { type: "string", description: "The exact revision the candidate search reported for this instance (an assertion, never a choice)." } }, ["componentId", "candidatePartId", "atomicPartRevisionId"]) },
+      functionalClass: { type: "string", enum: ["diode", "schottky-diode", "zener-diode", "tvs-diode", "led", "resistor", "capacitor", "inductor", "transistor", "integrated-circuit", "connector"], description: "Optional class every replacement must have." },
+      mounting: { type: "string", enum: ["smd", "through_hole"], description: "Optional required mounting." },
+      packageCode: { type: "string", description: "Optional package code every footprint must be (e.g. SOD-123)." },
+      ratings: { type: "array", items: obj({ property: { type: "string" }, dimension: { type: "string", enum: ["dimensionless", "voltage", "current", "resistance", "capacitance", "inductance", "power", "frequency", "time", "temperature", "length", "mass"] }, min: { type: "number" }, max: { type: "number" } }, ["property", "dimension"]), description: "Optional stated rating requirements (SI base units), each proven by a published claim." },
+    }, ["items"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present", "catalog-available"], requiredAuthority: ["local-working-copy"], // catalog-available: the server's catalog fact (context.ts claims the state exactly with it), so without the catalog facts this proposal is withheld at discovery, as the catalog reads are
+    // the loop's B09.1 gate holds for every schematic proposal (a canonical head mark), so discovery requires the revision and the open lineage too
+    requiresExpectedRevision: true, requiresLineage: true,
+    binding: { status: "bound-proposal", module: "app/lib/component-resolution/resolution-assembler.ts", symbol: "assembleResolutionProposal", notes: "PR-M: the ONE resolution assembler over server facts read through the chat route's injected ports (the catalog inspection port for the sheet's and the candidates' parts; the revision evidence port for the published snapshot projection and status): the instance inspection, evaluateCompatibility, the catalog-sourced resolution authority (one fresh runtime grant per item, retired before the artifact leaves), the ONE planSchematicReplacement with the proved mapping, zero dropped connections, no doubly-moved wire end or label, and the sheet's net partition proved unchanged; ComponentResolutionProposalService (app/lib/agent/component-resolution-proposals.ts) seals sirkit.component-resolution-proposal.v1 or returns the blockers as proposal-blocked data. Nothing applied here." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 15_000, budgetClass: "batch",
+    validationStrategy: "closed argument surface (items with componentId, candidatePartId, atomicPartRevisionId; functionalClass, mounting, packageCode, ratings; authority-shaped keys such as pins, mapping, asset ids or grants refused by name; a reference designator refused with its stable id named); a verified schematic, its head mark and the server's catalog and evidence facts are required; discovery, role and capability rechecked per call; all-or-nothing over the batch",
+    verificationStrategy: "the sealed batch's operations, impact and identity digests are re-verified at apply (verifySealedResolutionProposal) against the live session head; the apply re-reads fresh server facts through its one-shot channel, recompiles the whole batch and byte-matches the reviewed operations and impact, then proves the postconditions (identities, kept references / values / placements, moved wire ends and labels, unaffected instances, the connectivity digest) inside the canonical transaction",
+    sourceEvidence: ["app/lib/component-resolution/resolution-assembler.ts", "app/lib/component-resolution/resolution-proposal.ts", "app/lib/component-resolution/compatibility.ts", "app/lib/component-resolution/approved-resolution-mutations.ts", "app/lib/agent/component-resolution-proposals.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "1.0.0 (PR-M, 2026-10-17): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (it seals against the editor's browser-only SchematicState and head mark, as OD-82's proposals).",
   };
 }

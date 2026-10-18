@@ -77,7 +77,9 @@ import { compileTier1Proposal, planSchematicDelete, planSchematicReplacement } f
 import { sealTier1Proposal, TIER1_PROPOSAL_SCHEMA, type SealedTier1Proposal } from "@/app/lib/engineering/schematic-proposals";
 import { loadSessionIdentity, sessionAuthorizationBindingFrom, SESSION_IDENTITY_UNAVAILABLE_MESSAGE } from "@/app/lib/project/session-identity";
 import { projectSelectorHeaders } from "@/app/lib/project/project-selector";
-import { completenessNote, electricalCheckNote, type BuildMultiResponse } from "@/app/lib/schematic/build-result"; // [PR-C]
+import { completenessNote, electricalCheckNote, type ElectricalCheckStatus } from "@/app/lib/schematic/build-result"; // [PR-C] [PR-L, 2026-10-17] the Build result now arrives from a durable generation task (generation-task-client), not a build-multi response
+import { controlGenerationTask, fetchActiveGenerationTask, fetchGenerationTask, generationTaskBusy, generationTaskRestartable, generationTaskStatusText, generationActivityLineId, newGenerationClientActionId, newGenerationClientRequestId, reduceGenerationTaskView, startGenerationTask, subscribeGenerationTask, type GenerationTaskClientAction, type GenerationTaskSnapshotView, type GenerationTaskUpdate, type GenerationTaskView } from "@/app/lib/project/generation-task-client"; // [PR-L, 2026-10-17] runbook L.4: the durable design task (start or attach, progress, control, result)
+import { GenerationTaskStatus } from "@/app/components/chat/GenerationTaskStatus"; // [PR-L, 2026-10-17] the task's live status card in its activity entry
 import { clearPendingProposal, loadPendingProposal, savePendingProposal } from "@/app/lib/project/pending-proposal-store"; // [PR-C]
 import { computeDesignChecks, type DesignCheck } from "@/app/lib/schematic/design-checks"; // [PR-E]
 import { deriveJourney, type JourneyActionId, type JourneyGenerationFailure, type JourneyPcbFacts } from "@/app/lib/workflow/journey"; // [PR-C] the shared stage model
@@ -153,6 +155,8 @@ type ActivityLogMessage = {
   entries: ActivityLogEntry[];
 };
 type Message = ChatMessage | ActivityLogMessage;
+/** [PR-L, 2026-10-17] the durable design task the page follows (runbook L.4): bound to the project generation that attached it. */
+interface AttachedGenerationTask { taskId: string; logId: string; prompt: string; scope: ProjectAsyncScope; view: GenerationTaskView | null; unsubscribe: () => void; offered: Set<string>; settled: boolean }
 type AiProviderFailureState = { provider: LLMProviderId; retryOffered: boolean }; // [B21 E1 fix] false: the Retry is withheld (quota, an open breaker), the Switch still re-sends
 type AiRuntimeProviderInfo = {
   model: string;
@@ -2616,6 +2620,13 @@ export default function Home() {
   const [isTidying, setIsTidying]       = useState(false);
   const [isSecondOpinion, setIsSecondOpinion] = useState(false);
   const activeGenerationRef = useRef<string | null>(null);
+  // [PR-L, 2026-10-17] the project's followed durable design task: its live view (the status card) and the entry that owns it
+  const [generationTask, setGenerationTask] = useState<{ logId: string; view: GenerationTaskView } | null>(null);
+  const [generationTaskControlBusy, setGenerationTaskControlBusy] = useState(false);
+  const generationTaskRef = useRef<AttachedGenerationTask | null>(null);
+  const generationTaskUpdateRef = useRef<(entry: AttachedGenerationTask, update: GenerationTaskUpdate) => void>(() => {});
+  /** [PR-L, 2026-10-17] reattaches the opened project's active design task once its session is ready (bound below, after the helpers). */
+  const reattachGenerationTaskRef = useRef<(projectId: string) => void>(() => {});
   const activeEditRef = useRef<string | null>(null);
   const activeReviewRef = useRef<string | null>(null);
   const activeTidyRef = useRef<string | null>(null);
@@ -2652,6 +2663,8 @@ export default function Home() {
     skipAutoRun?: boolean;
     /** [B16-A F11] a validation note the dialog shows alongside the proposal (never blocks the human's decision). */
     validationNote?: string | null;
+    /** [PR-L, 2026-10-17] the durable design task whose validated result this is: its review is recorded on it (record-review). */
+    task?: { taskId: string; resultDigest: string };
   } | null>(null);
   // [PR-C] The journey's facts the page owns: the PCB editor reports its own (display only), the last generation failure,
   // whether the user asked for the PCB in the same request, and the "Prepare PCB" request token the editor consumes.
@@ -2972,7 +2985,7 @@ export default function Home() {
   const persistedProposalRef = useRef<{ projectId: string } | null>(null); // the record this mount wrote, so only ITS retirement clears it (a fresh mount must not clear before the restore)
   useEffect(() => {
     if (pendingReplace?.pin && project) {
-      savePendingProposal({ projectId: project.id, baseDigest: proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()), state: pendingReplace.state, explanation: pendingReplace.explanation, prompt: pendingReplace.prompt, validationNote: pendingReplace.validationNote ?? null });
+      savePendingProposal({ projectId: project.id, baseDigest: proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()), state: pendingReplace.state, explanation: pendingReplace.explanation, prompt: pendingReplace.prompt, validationNote: pendingReplace.validationNote ?? null, task: pendingReplace.task ?? null }); // [PR-L, 2026-10-17] + the durable task the result belongs to
       persistedProposalRef.current = { projectId: project.id };
     } else if (!pendingReplace && persistedProposalRef.current) {
       clearPendingProposal(persistedProposalRef.current.projectId); // approved, discarded or retired by a project switch: its own project's record goes
@@ -3137,7 +3150,7 @@ export default function Home() {
     setGenError(null);                  // provider errors never cross projects
     setAiProviderFailure(null);
     lastAiRetryRef.current = null; resumableChatRunRef.current = null; // retries (and, [B21 E3], a resume) never replay across projects
-    setIsGenerating(false); activeGenerationRef.current = null;
+    setIsGenerating(false); activeGenerationRef.current = null; generationTaskRef.current?.unsubscribe(); generationTaskRef.current = null; setGenerationTask(null); setGenerationTaskControlBusy(false); // [PR-L, 2026-10-17] a followed design task never crosses projects (it keeps running; reopening its project reattaches)
     setIsEditing(false); activeEditRef.current = null;
     setIsReviewing(false); activeReviewRef.current = null;
     setIsTidying(false); activeTidyRef.current = null;
@@ -3293,6 +3306,7 @@ export default function Home() {
         case "resumed":
         case "rebased-local-newer":
           restorePendingProposalRef.current(record.id); // [PR-C] the session is ready: a persisted proposal is offered again against the same base
+          reattachGenerationTaskRef.current(record.id); // [PR-L, 2026-10-17] and the project's active design task is followed again (never another project's)
           break; // session ready; nothing else to surface
         case "recovered-canonical":
           // B06.2: preserve the superseded projection BEFORE adopting, then
@@ -4364,7 +4378,7 @@ export default function Home() {
     return id;
   }
 
-  function appendActivityStep(logId: string, text: string, status: ActivityLogEntry["status"] = "running") {
+  function appendActivityStep(logId: string, text: string, status: ActivityLogEntry["status"] = "running", lineId?: string) { // [PR-L, 2026-10-17] + lineId: a design task's own lines (generationActivityLineId) draw no crypto.randomUUID, so they never shift the editor's id sequence
     setMessages((prev) =>
       prev.map((message) => {
         if (message.role !== "log" || message.id !== logId) return message;
@@ -4375,14 +4389,14 @@ export default function Home() {
             ...message.entries.map((entry) =>
               entry.status === "running" ? { ...entry, status: "done" as const } : entry,
             ),
-            { id: crypto.randomUUID(), text, status },
+            { id: lineId ?? crypto.randomUUID(), text, status },
           ],
         };
       }),
     );
   }
 
-  function finishActivityLog(logId: string, text?: string) {
+  function finishActivityLog(logId: string, text?: string, lineId?: string) { // [PR-L, 2026-10-17] + lineId, as appendActivityStep
     setMessages((prev) =>
       prev.map((message) => {
         if (message.role !== "log" || message.id !== logId) return message;
@@ -4392,13 +4406,13 @@ export default function Home() {
         return {
           ...message,
           status: "done",
-          entries: text ? [...entries, { id: crypto.randomUUID(), text, status: "done" as const }] : entries,
+          entries: text ? [...entries, { id: lineId ?? crypto.randomUUID(), text, status: "done" as const }] : entries,
         };
       }),
     );
   }
 
-  function failActivityLog(logId: string, text: string) {
+  function failActivityLog(logId: string, text: string, lineId?: string) { // [PR-L, 2026-10-17] + lineId, as appendActivityStep
     setMessages((prev) =>
       prev.map((message) => {
         if (message.role !== "log" || message.id !== logId) return message;
@@ -4408,7 +4422,7 @@ export default function Home() {
         return {
           ...message,
           status: "error",
-          entries: [...entries, { id: crypto.randomUUID(), text, status: "error" as const }],
+          entries: [...entries, { id: lineId ?? crypto.randomUUID(), text, status: "error" as const }],
         };
       }),
     );
@@ -4984,9 +4998,30 @@ export default function Home() {
       if (!stored) return;
       if (proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()) !== stored.baseDigest) { clearPendingProposal(projectId); showToast("A schematic proposal from before the reload was discarded: the schematic changed since it was made."); return; }
       const pin = captureLifecycleInvocationContext();
-      setPendingReplace({ state: stored.state, explanation: stored.explanation, prompt: stored.prompt, promptAlreadyLogged: true, pin, validationNote: [stored.validationNote, "Restored after a reload: the schematic is unchanged since this proposal was made. Approve or discard it."].filter(Boolean).join("\n") });
+      setPendingReplace({ state: stored.state, explanation: stored.explanation, prompt: stored.prompt, promptAlreadyLogged: true, pin, validationNote: [stored.validationNote, "Restored after a reload: the schematic is unchanged since this proposal was made. Approve or discard it."].filter(Boolean).join("\n"), ...(stored.task ? { task: stored.task } : {}) }); // [PR-L, 2026-10-17] + its durable task
     };
   }, [captureLifecycleInvocationContext, proposalContentDigest]);
+
+  // [PR-L, 2026-10-17] Runbook L.4: once an opened project's session is ready, its ACTIVE design task (the store's, for exactly this
+  // project's scope) is followed again in a new activity entry - a reload or a project switch reattaches, it never starts the model
+  // again and never attaches another project's task. The update hook is rebound every render, so a late subscription callback runs the
+  // current render's code.
+  useLayoutEffect(() => {
+    generationTaskUpdateRef.current = applyGenerationTaskUpdate;
+    reattachGenerationTaskRef.current = (projectId: string) => {
+      if (projectRef.current?.id !== projectId) return; // superseded by a later open
+      const scope = projectScopeRegistryRef.current!.capture();
+      const requestScope = { projectId, branchId: scope.branchId };
+      void fetchActiveGenerationTask(requestScope, { signal: scope.signal }).then(async (answer) => {
+        if (!scope.isCurrent() || projectRef.current?.id !== projectId || !answer.ok || !answer.active) return;
+        if (generationTaskRef.current?.taskId === answer.active.taskId) return; // already followed
+        const detail = await fetchGenerationTask(requestScope, answer.active.taskId, { signal: scope.signal });
+        if (!scope.isCurrent() || generationTaskRef.current?.taskId === answer.active.taskId) return;
+        const logId = startActivityLog("Generating schematic", "Reattached to this project's design task: it kept running without this page, and nothing was started again");
+        attachGenerationTask(detail.ok ? detail.task : answer.active, { logId, prompt: detail.ok ? (detail.task.prompt ?? "") : "", scope });
+      });
+    };
+  });
 
   /**
    * B07.3 — TRANSACTIONAL machine-schematic application through the
@@ -5138,116 +5173,53 @@ export default function Home() {
     setLastGenerationFailure(null); // [PR-C]
     lastAiRetryRef.current = () => void handleGenerateSchematic(prompt);
     try {
-      let state: SchematicState;
-      let explanation: string;
-      const proposalNotes: string[] = []; // [PR-C] what the approver must read beside the proposal (partial merge, checks)
-
       if (mode === "build") {
-        appendActivityStep(logId, "Generating build netlist");
-        const res = await fetch("/api/schematic/build-multi", {
-          method: "POST",
-          headers: aiRequestHeaders(scope),
-          body: JSON.stringify({ prompt, provider: aiBrainRef.current }),
-          signal: scope.signal,
-        });
-        if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => scope.isCurrent() });
-        const data = (await res.json()) as BuildMultiResponse;
-        if (!data.ok) throw new Error(data.error || "Generation failed");
-        // [PR-C] the server's structured status: a partial merge and an electrical check that was skipped or not run are
-        // shown as steps now and travel with the proposal (the dialog's validation note), never only as prose.
-        const partialNote = completenessNote({ status: data.status ?? "complete", omittedBlocks: data.omittedBlocks ?? [] });
-        const serverCheckNote = electricalCheckNote(data.electricalCheck ?? { state: "not_run", reason: "the server reported no electrical check" });
-        if (partialNote) appendActivityStep(logId, partialNote, "done");
-        if (serverCheckNote) appendActivityStep(logId, serverCheckNote, "done");
-        proposalNotes.push(...[partialNote, serverCheckNote].filter((note): note is string => note !== null));
-
-        // Load every referenced part before laying out (positions come from pins).
-        const netlist = data.netlist;
-        const partIds = [...new Set(netlist.components.map((c) => c.partId))];
-        const parts = new Map<string, CachedPart>();
-        appendActivityStep(logId, `Loading ${partIds.length} catalog part${partIds.length === 1 ? "" : "s"}`);
-        await Promise.all(
-          partIds.map(async (id) => {
-            parts.set(id, await ensurePartLoaded(id));
-          }),
-        );
-        appendActivityStep(logId, "Laying out and validating schematic");
-        const built = autoLayoutBuildValidated(netlist, parts);
-        state = built.state;
-        explanation = data.explanation;
-
-        if ((state.kicadComponents?.length ?? 0) === 0) {
-          failActivityLog(logId, "No parts produced");
-          setScopedGenError(scope, "No parts produced — try a more specific prompt.");
-          if (scope.isCurrent()) setLastGenerationFailure({ code: "no_parts", message: "No parts produced — the model submitted no catalog parts.", retryable: true }); // [PR-C]
+        // [PR-L, 2026-10-17] runbook L.4, increment 4: a Build design is a DURABLE generation task, not one request that must finish
+        // inside a deadline (the page called POST /api/schematic/build-multi and awaited it here). The start is answered the moment it
+        // is durably accepted; a generation worker designs it in finite slices that checkpoint and continue; this page follows the
+        // task's real public progress in this activity entry (attachGenerationTask) and offers its validated result through the SAME
+        // intake as before (offerBuildResult -> the review dialog), once. Closing or reloading the page never stops it; Stop design does.
+        appendActivityStep(logId, "Starting a durable design task");
+        // the task's base is the sheet's CONTENT digest (the pending-proposal recipe: a fresh project's first save adds its sheet size, which is not
+        // design content and must not make a result stale across a reload); the exact-base apply still checks the full pin when it is offered
+        const started = await startGenerationTask({ scope, clientRequestId: newGenerationClientRequestId(), prompt, provider: aiBrainRef.current, base: { schematicDigest: proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()), recipe: "build-pin", headMark: schematicSessionRef.current?.headMark() ?? undefined }, signal: scope.signal });
+        if (!scope.isCurrent()) { failActivityLog(logId, "Canceled — the project changed"); return; }
+        if (!started.ok && started.code === "GENERATION_TASK_ACTIVE" && started.activeTask) {
+          // one design at a time per project: the running one is followed (and offered when ready) instead of a second start
+          appendActivityStep(logId, "A design is already running for this project; following it instead of starting another", "done", generationActivityLineId());
+          activeGenerationRef.current = generationTaskOwner(started.activeTask.taskId);
+          attachGenerationTask(started.activeTask, { logId, prompt, scope });
           return;
         }
-
-        // Electrical validation: surface (don't silently ship) a schematic that
-        // is electrically wrong by netlist after reroute attempts.
-        if (!built.validation.ok) {
-          const v = built.validation.violations;
-          const note = `Drawing check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`;
-          setScopedGenError(scope, note, 12000);
-          appendActivityStep(logId, `Drawing check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
-          proposalNotes.push(note); // [PR-C] the approver reads it in the dialog, not only in a 12 s banner
-        }
-      } else {
-        appendActivityStep(logId, "Synthesizing theory schematic");
-        // [PR-C] the same request preparation as Build mode: the project selector the wrapper requires and the lifecycle signal
-        const result = await generateSchematic(prompt, { scope, signal: scope.signal, retry: lastAiRetryRef.current ?? undefined, ownership: { isCurrent: () => scope.isCurrent() } });
-        state = result.state;
-        explanation = result.netlist.explanation;
-        if (state.components.length === 0) {
-          failActivityLog(logId, "No components produced");
-          setScopedGenError(scope, "No components produced — try a more specific prompt.");
-          return;
-        }
-
-        // Surface (don't silently ship) an electrically-invalid theory schematic.
-        if (!result.validation.ok) {
-          const v = result.validation.violations;
-          const note = `Drawing check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`;
-          appendActivityStep(logId, `Drawing check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
-          setScopedGenError(scope, note, 12000);
-          proposalNotes.push(note); // [PR-C]
-        }
-        proposalNotes.push("Electrical check not run: Theory mode has no server-side electrical check. Not checked is not a pass."); // [PR-C]
-      }
-
-      // B07.4 (failure B) — the replacement dialog may only open while the
-      // ORIGINATING project/session generation is still active, the
-      // authoritative base still equals the invocation pin, and the result
-      // validates. A stale response marks only its own activity log (id-
-      // keyed, so it is a no-op after a switch) and touches NOTHING else in
-      // the now-active project.
-      const resultIssues = validateSchematicStateIntegrity(state);
-      if (!scope.isCurrent()) {
-        failActivityLog(logId, "Result discarded — the project changed while generating");
+        if (!started.ok) throw new Error(started.code === "GENERATION_TASK_STORE_UNAVAILABLE" || started.code === "GENERATION_PROVIDER_UNAVAILABLE" ? started.message : `The design was not started: ${started.message}`);
+        appendActivityStep(logId, started.attached ? "Attached to the design already accepted for this request (the same task; nothing was started twice)" : "Design accepted; a generation worker runs it in saved steps — leaving or reloading this page does not stop it", "done", generationActivityLineId());
+        if (started.durability === "process-memory") appendActivityStep(logId, "Fixture runtime: the design task lives in this dev server's memory and is lost if the server restarts", "done", generationActivityLineId());
+        activeGenerationRef.current = generationTaskOwner(started.task.taskId); // the task owns the busy state now: the finally below leaves it
+        attachGenerationTask(started.task, { logId, prompt, scope });
         return;
       }
-      if (resultIssues.length > 0) {
-        failActivityLog(logId, "Generated schematic failed validation — nothing applied");
-        setScopedGenError(scope, `The generated schematic failed validation (${resultIssues[0]}). Nothing was changed.`);
+      const proposalNotes: string[] = []; // [PR-C] what the approver must read beside the proposal (partial merge, checks)
+      appendActivityStep(logId, "Synthesizing theory schematic");
+      // [PR-C] the same request preparation as Build mode: the project selector the wrapper requires and the lifecycle signal
+      const result = await generateSchematic(prompt, { scope, signal: scope.signal, retry: lastAiRetryRef.current ?? undefined, ownership: { isCurrent: () => scope.isCurrent() } });
+      const state: SchematicState = result.state;
+      const explanation = result.netlist.explanation;
+      if (state.components.length === 0) {
+        failActivityLog(logId, "No components produced");
+        setScopedGenError(scope, "No components produced — try a more specific prompt.");
         return;
       }
-      const authoritativeDigestNow = schematicStateDigest(gestureCoordinatorRef.current!.authoritativeState());
-      if (authoritativeDigestNow !== pin.baseDigest) {
-        failActivityLog(logId, "Result is stale — the schematic changed while generating. Nothing was applied.");
-        setScopedGenError(scope, "The schematic changed while generating — the result is stale and was not applied.");
-        return;
+
+      // Surface (don't silently ship) an electrically-invalid theory schematic.
+      if (!result.validation.ok) {
+        const v = result.validation.violations;
+        const note = `Drawing check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`;
+        appendActivityStep(logId, `Drawing check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
+        setScopedGenError(scope, note, 12000);
+        proposalNotes.push(note); // [PR-C]
       }
-      // [B16.1C §F] EVERY generated schematic is a proposal that waits for the
-      // human's explicit approval in the review dialog — including the first
-      // generation onto an empty sheet, which used to apply itself. The
-      // dialog states what will change (parts, wires, labels, what is
-      // replaced); the pin travels with the pending proposal so confirming
-      // later still rejects as stale if the schematic or project moved on.
-      finishActivityLog(logId, components.length > 0 || wires.length > 0 || kicadComponents.length > 0 || netLabels.length > 0 ? "Generated replacement; waiting for confirmation" : "Generated schematic proposal; waiting for approval");
-      const validationNote = proposalNotes.length > 0 ? proposalNotes.join("\n") : null;
-      setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin, validationNote });
-      // [PR-C] persisted NOW, in the same task as the offer (a reload a moment later still finds it; the effect below keeps it current)
-      if (pin.projectId) savePendingProposal({ projectId: pin.projectId, baseDigest: proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()), state, explanation, prompt, validationNote });
+      proposalNotes.push("Electrical check not run: Theory mode has no server-side electrical check. Not checked is not a pass."); // [PR-C]
+      offerSchematicProposal({ state, explanation, prompt, logId, pin, scope, proposalNotes });
     } catch (err) {
       if (isAbortError(err) || !scope.isCurrent()) {
         // Cancellation (project switch/unmount) — not a provider failure;
@@ -5266,6 +5238,228 @@ export default function Home() {
         setIsGenerating(false);
       }
     }
+  }
+
+  // [PR-L, 2026-10-17] The Build result's intake, extracted from handleGenerateSchematic (it ran after the build-multi fetch): the
+  // server's structured status as notes (a partial merge, an electrical check skipped or not run), every referenced catalog part
+  // loaded, the layout and its drawing validation (autoLayoutBuildValidated), then the ONE offer below. A durable design task's
+  // validated result arrives here once per (task, result digest).
+  async function offerBuildResult(data: { netlist: BuildLogicalNetlist; explanation: string; status: "complete" | "partial"; omittedBlocks: string[]; electricalCheck: ElectricalCheckStatus }, run: { logId: string; scope: ProjectAsyncScope; pin: ReturnType<typeof captureLifecycleInvocationContext>; prompt: string; task?: { taskId: string; resultDigest: string } }): Promise<boolean> {
+    const { logId, scope } = run;
+    const proposalNotes: string[] = []; // [PR-C] what the approver must read beside the proposal (partial merge, checks)
+    try {
+      // [PR-C] the server's structured status: a partial merge and an electrical check that was skipped or not run are
+      // shown as steps now and travel with the proposal (the dialog's validation note), never only as prose.
+      const partialNote = completenessNote({ status: data.status ?? "complete", omittedBlocks: data.omittedBlocks ?? [] });
+      const serverCheckNote = electricalCheckNote(data.electricalCheck ?? { state: "not_run", reason: "the server reported no electrical check" });
+      if (partialNote) appendActivityStep(logId, partialNote, "done");
+      if (serverCheckNote) appendActivityStep(logId, serverCheckNote, "done");
+      proposalNotes.push(...[partialNote, serverCheckNote].filter((note): note is string => note !== null));
+
+      // Load every referenced part before laying out (positions come from pins).
+      const netlist = data.netlist;
+      const partIds = [...new Set(netlist.components.map((c) => c.partId))];
+      const parts = new Map<string, CachedPart>();
+      appendActivityStep(logId, `Loading ${partIds.length} catalog part${partIds.length === 1 ? "" : "s"}`);
+      await Promise.all(
+        partIds.map(async (id) => {
+          parts.set(id, await ensurePartLoaded(id));
+        }),
+      );
+      appendActivityStep(logId, "Laying out and validating schematic");
+      const built = autoLayoutBuildValidated(netlist, parts);
+      const state = built.state;
+      const explanation = data.explanation;
+
+      if ((state.kicadComponents?.length ?? 0) === 0) {
+        failActivityLog(logId, "No parts produced");
+        setScopedGenError(scope, "No parts produced — try a more specific prompt.");
+        if (scope.isCurrent()) setLastGenerationFailure({ code: "no_parts", message: "No parts produced — the model submitted no catalog parts.", retryable: true }); // [PR-C]
+        return false;
+      }
+
+      // Electrical validation: surface (don't silently ship) a schematic that
+      // is electrically wrong by netlist after reroute attempts.
+      if (!built.validation.ok) {
+        const v = built.validation.violations;
+        const note = `Drawing check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`;
+        setScopedGenError(scope, note, 12000);
+        appendActivityStep(logId, `Drawing check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
+        proposalNotes.push(note); // [PR-C] the approver reads it in the dialog, not only in a 12 s banner
+      }
+      return offerSchematicProposal({ state, explanation, prompt: run.prompt, logId, pin: run.pin, scope, proposalNotes, ...(run.task ? { task: run.task } : {}) });
+    } catch (err) {
+      if (isAbortError(err) || !scope.isCurrent()) { failActivityLog(logId, "Canceled — the project changed"); return false; }
+      const msg = err instanceof Error ? err.message : "The generated schematic could not be prepared";
+      failActivityLog(logId, msg);
+      setScopedGenError(scope, msg);
+      return false;
+    }
+  }
+
+  // [PR-L, 2026-10-17] The ONE offer of a generated schematic (Build result or Theory), moved unchanged from the tail of
+  // handleGenerateSchematic so the durable task's result takes exactly the same guards and dialog.
+  function offerSchematicProposal(input: { state: SchematicState; explanation: string; prompt: string; logId: string; pin: ReturnType<typeof captureLifecycleInvocationContext>; scope: ProjectAsyncScope; proposalNotes: readonly string[]; task?: { taskId: string; resultDigest: string } }): boolean {
+    const { state, explanation, prompt, logId, pin, scope } = input;
+    // B07.4 (failure B) — the replacement dialog may only open while the
+    // ORIGINATING project/session generation is still active, the
+    // authoritative base still equals the invocation pin, and the result
+    // validates. A stale response marks only its own activity log (id-
+    // keyed, so it is a no-op after a switch) and touches NOTHING else in
+    // the now-active project.
+    const resultIssues = validateSchematicStateIntegrity(state);
+    if (!scope.isCurrent()) {
+      failActivityLog(logId, "Result discarded — the project changed while generating");
+      return false;
+    }
+    if (resultIssues.length > 0) {
+      failActivityLog(logId, "Generated schematic failed validation — nothing applied");
+      setScopedGenError(scope, `The generated schematic failed validation (${resultIssues[0]}). Nothing was changed.`);
+      return false;
+    }
+    const authoritativeDigestNow = schematicStateDigest(gestureCoordinatorRef.current!.authoritativeState());
+    if (authoritativeDigestNow !== pin.baseDigest) {
+      failActivityLog(logId, "Result is stale — the schematic changed while generating. Nothing was applied.");
+      setScopedGenError(scope, "The schematic changed while generating — the result is stale and was not applied.");
+      return false;
+    }
+    // [B16.1C §F] EVERY generated schematic is a proposal that waits for the
+    // human's explicit approval in the review dialog — including the first
+    // generation onto an empty sheet, which used to apply itself. The
+    // dialog states what will change (parts, wires, labels, what is
+    // replaced); the pin travels with the pending proposal so confirming
+    // later still rejects as stale if the schematic or project moved on.
+    finishActivityLog(logId, components.length > 0 || wires.length > 0 || kicadComponents.length > 0 || netLabels.length > 0 ? "Generated replacement; waiting for confirmation" : "Generated schematic proposal; waiting for approval");
+    const validationNote = input.proposalNotes.length > 0 ? input.proposalNotes.join("\n") : null;
+    setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin, validationNote });
+    if (input.task) { const task = input.task; setPendingReplace((current) => (current && current.state === state ? { ...current, task } : current)); } // [PR-L, 2026-10-17] the durable task this result belongs to (its review is reported to it)
+    // [PR-C] persisted NOW, in the same task as the offer (a reload a moment later still finds it; the effect below keeps it current)
+    if (pin.projectId) savePendingProposal({ projectId: pin.projectId, baseDigest: proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()), state, explanation, prompt, validationNote });
+    return true;
+  }
+
+  // ─── [PR-L, 2026-10-17] the project's durable generation task (runbook L.4, increment 4) ─────────────────────────────────
+  // ONE task followed per page (one active task per project and branch is the store's rule); bound to the project generation that
+  // attached it: a project switch aborts the scope (the subscription stops, the design keeps running) and resets the state; reopening
+  // the project reattaches to ITS active task (reattachGenerationTaskRef, after the session opens), never another project's.
+
+  /** The busy-state owner token of a followed task (activeGenerationRef: a start request's id, then its task's). */
+  function generationTaskOwner(taskId: string): string { return `generation-task:${taskId}`; }
+
+  /** Follow a design task in its activity entry: its milestones as entries, its live status card, its busy state, its result offer. */
+  function attachGenerationTask(task: GenerationTaskSnapshotView, run: { logId: string; prompt: string; scope: ProjectAsyncScope }): void {
+    generationTaskRef.current?.unsubscribe();
+    const entry: AttachedGenerationTask = { taskId: task.taskId, logId: run.logId, prompt: run.prompt, scope: run.scope, view: null, unsubscribe: () => {}, offered: new Set(), settled: false };
+    generationTaskRef.current = entry;
+    const onUpdate = (update: GenerationTaskUpdate): void => generationTaskUpdateRef.current(entry, update);
+    onUpdate({ task, events: [], gap: false });
+    if (entry.settled || task.state === "awaiting-review") return;
+    entry.unsubscribe = subscribeGenerationTask({
+      scope: { projectId: run.scope.projectId, branchId: run.scope.branchId }, taskId: task.taskId, after: 0, onUpdate,
+      onError: (failure) => { if (run.scope.isCurrent() && generationTaskRef.current === entry) appendActivityStep(run.logId, `Progress is not reachable right now (${failure.code}); still following the design`, "done", generationActivityLineId()); },
+    });
+    run.scope.signal.addEventListener("abort", () => entry.unsubscribe(), { once: true }); // a project switch only stops observing: the design keeps running
+  }
+
+  /** One update of the followed task (bound through generationTaskUpdateRef, so a late callback runs the current render's code). */
+  function applyGenerationTaskUpdate(entry: AttachedGenerationTask, update: GenerationTaskUpdate): void {
+    if (!entry.scope.isCurrent() || generationTaskRef.current !== entry || entry.settled) return;
+    const { view, added } = reduceGenerationTaskView(entry.view, update);
+    entry.view = view;
+    for (const event of added) appendActivityStep(entry.logId, event.message, event.type === "failed" ? "error" : "done", generationActivityLineId());
+    setGenerationTask({ logId: entry.logId, view });
+    const owner = generationTaskOwner(view.taskId);
+    if (generationTaskBusy(view)) {
+      if (activeGenerationRef.current === null) activeGenerationRef.current = owner;
+      if (activeGenerationRef.current === owner) setIsGenerating(true);
+    } else if (activeGenerationRef.current === owner) {
+      activeGenerationRef.current = null;
+      setIsGenerating(false);
+    }
+    if (view.state === "awaiting-review" && view.result) { void offerGenerationTaskResult(entry, view); return; }
+    if (!view.terminal) return;
+    entry.settled = true;
+    entry.unsubscribe();
+    if (view.state === "failed") { failActivityLog(entry.logId, generationTaskStatusText(view), generationActivityLineId()); setLastGenerationFailure({ code: "generation_failed", message: generationTaskStatusText(view), retryable: true }); }
+    else if (view.state === "stale") failActivityLog(entry.logId, generationTaskStatusText(view), generationActivityLineId());
+    else finishActivityLog(entry.logId, generationTaskStatusText(view), generationActivityLineId());
+  }
+
+  /** The validated result of an `awaiting-review` task, offered ONCE per (task, result digest) through the composer's own intake; never
+   *  over a newer sheet (a moved base is reported: the task becomes stale and nothing is offered). Nothing is applied here. */
+  async function offerGenerationTaskResult(entry: AttachedGenerationTask, view: GenerationTaskView): Promise<void> {
+    const result = view.result!;
+    const key = `${view.taskId}:${result.resultDigest}`;
+    if (entry.offered.has(key)) return;
+    entry.offered.add(key);
+    entry.unsubscribe(); // nothing moves until the review, which this page reports (record-review)
+    const projectId = entry.scope.projectId;
+    const stored = projectId ? loadPendingProposal(projectId) : null;
+    if (stored?.task && stored.task.taskId === view.taskId && stored.task.resultDigest === result.resultDigest) { appendActivityStep(entry.logId, "This design's result is already waiting in the review dialog", "done", generationActivityLineId()); return; }
+    const liveDigest = proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()); // the task's base recipe (build-pin): the sheet's content
+    if (liveDigest !== view.base.schematicDigest) { await reportGenerationBaseMoved(entry, liveDigest); return; }
+    appendActivityStep(entry.logId, "Design ready: fetching its validated result", "running", generationActivityLineId());
+    const fetched = await fetchGenerationTask({ projectId, branchId: entry.scope.branchId }, view.taskId, { includeResult: true, signal: entry.scope.signal });
+    if (!entry.scope.isCurrent() || generationTaskRef.current !== entry) return;
+    if (!fetched.ok || !fetched.result || fetched.result.resultDigest !== result.resultDigest) {
+      entry.offered.delete(key);
+      failActivityLog(entry.logId, `The design's result could not be read (${fetched.ok ? "it did not match the task" : fetched.code}); nothing was offered. Reload to try again.`, generationActivityLineId());
+      return;
+    }
+    const movedTo = proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState());
+    if (movedTo !== view.base.schematicDigest) { await reportGenerationBaseMoved(entry, movedTo); return; } // the sheet moved while the result was fetched
+    const offerPin = captureLifecycleInvocationContext(); // the exact-base pin the approval re-checks, taken now: the content is the task's base (checked above)
+    const offered = await offerBuildResult({ netlist: fetched.result.netlist, explanation: fetched.result.explanation, status: fetched.result.status, omittedBlocks: fetched.result.omittedBlocks, electricalCheck: fetched.result.electricalCheck as ElectricalCheckStatus }, { logId: entry.logId, scope: offerPin.scope, pin: offerPin, prompt: fetched.task.prompt ?? entry.prompt, task: { taskId: view.taskId, resultDigest: result.resultDigest } });
+    if (!offered) entry.offered.delete(key);
+  }
+
+  /** The sheet moved since the task's base: the result is never laid over it. The task is told (report-base -> stale). */
+  async function reportGenerationBaseMoved(entry: AttachedGenerationTask, liveDigest: string): Promise<void> {
+    const answer = await controlGenerationTask({ projectId: entry.scope.projectId, branchId: entry.scope.branchId }, entry.taskId, { action: "report-base", clientActionId: newGenerationClientActionId(), liveBase: { schematicDigest: liveDigest, recipe: "build-pin" } });
+    if (!entry.scope.isCurrent() || generationTaskRef.current !== entry) return;
+    if (answer.ok) { const { view } = reduceGenerationTaskView(entry.view, { task: answer.task, events: [], gap: false }); entry.view = view; setGenerationTask({ logId: entry.logId, view }); }
+    entry.settled = true;
+    failActivityLog(entry.logId, "The sheet changed while this design ran, so its result was not offered (it would replace a newer sheet). Start again to design against the current sheet.", generationActivityLineId());
+  }
+
+  /** A control action the task's card offers (the store judges it); the snapshot it answers is shown at once. */
+  async function runGenerationTaskAction(action: GenerationTaskClientAction, blockId?: string): Promise<void> {
+    const entry = generationTaskRef.current;
+    if (!entry || !entry.scope.isCurrent() || generationTaskControlBusy) return;
+    setGenerationTaskControlBusy(true);
+    const answer = await controlGenerationTask({ projectId: entry.scope.projectId, branchId: entry.scope.branchId }, entry.taskId, { action, clientActionId: newGenerationClientActionId(), ...(blockId ? { blockId } : {}) }, { signal: entry.scope.signal });
+    setGenerationTaskControlBusy(false);
+    if (!entry.scope.isCurrent() || generationTaskRef.current !== entry) return;
+    if (!answer.ok) { appendActivityStep(entry.logId, `That action was not accepted: ${answer.message}`, "error", generationActivityLineId()); return; }
+    if (entry.settled) return;
+    generationTaskUpdateRef.current(entry, { task: answer.task, events: [], gap: false });
+  }
+
+  /** "Start again": a NEW design (a new request id) from the same request, once the followed task can do nothing more. */
+  function startGenerationAgain(): void {
+    const entry = generationTaskRef.current;
+    if (!entry?.view || !generationTaskRestartable(entry.view) || !entry.prompt.trim()) return;
+    void handleGenerateSchematic(entry.prompt);
+  }
+
+  /** The review of a durable task's result (the dialog's approve, cancel or close): recorded on the task, which then settles. An approval
+   *  the editor could not apply reports the live base instead: the store marks the task stale only when the sheet's content moved from
+   *  the task's base (otherwise nothing changes, and reopening the project offers the result again). */
+  function reportGenerationReview(task: { taskId: string; resultDigest: string } | undefined, outcome: "applied" | "discarded" | "not-applied"): void {
+    if (!task) return;
+    const projectId = projectRef.current?.id ?? null;
+    const entry = generationTaskRef.current;
+    const liveDigest = proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()); // the build-pin recipe: the sheet's content
+    const request = outcome === "not-applied"
+      ? { action: "report-base" as const, clientActionId: newGenerationClientActionId(), liveBase: { schematicDigest: liveDigest, recipe: "build-pin" as const } }
+      : { action: "record-review" as const, clientActionId: newGenerationClientActionId(), review: { outcome, resultDigest: task.resultDigest, ...(outcome === "applied" ? { headMark: schematicSessionRef.current?.headMark() ?? undefined } : {}) } };
+    void controlGenerationTask({ projectId, branchId: "main" }, task.taskId, request).then((answer) => {
+      if (!answer.ok || !entry || entry.taskId !== task.taskId || generationTaskRef.current !== entry) return;
+      const { view } = reduceGenerationTaskView(entry.view, { task: answer.task, events: [], gap: false });
+      entry.view = view;
+      entry.settled = true;
+      setGenerationTask({ logId: entry.logId, view });
+    });
   }
 
   // [PR-D] The agent's Build-mode generation proposal (sirkit.schematic.generate-proposal, received in `send` as
@@ -6860,6 +7054,7 @@ export default function Home() {
           onOpenChange={(open) => {
             if (!open) {
               if (pendingReplace?.logId) finishActivityLog(pendingReplace.logId, "Replacement discarded");
+              reportGenerationReview(pendingReplace?.task, "discarded"); // [PR-L, 2026-10-17] a durable task's result: the discard is recorded on its task
               setPendingReplace(null);
             }
           }}
@@ -6879,6 +7074,7 @@ export default function Home() {
                 variant="ghost"
                 onClick={() => {
                   if (pendingReplace?.logId) finishActivityLog(pendingReplace.logId, "Replacement discarded");
+                  reportGenerationReview(pendingReplace?.task, "discarded"); // [PR-L, 2026-10-17] a durable task's result: the discard is recorded on its task
                   setPendingReplace(null);
                 }}
               >
@@ -6897,6 +7093,7 @@ export default function Home() {
                       if (adopted) finishActivityLog(pending.logId, "Applied replacement to canvas");
                       else failActivityLog(pending.logId, "Replacement not applied (stale or rejected)");
                     }
+                    reportGenerationReview(pending.task, adopted ? "applied" : "not-applied"); // [PR-L, 2026-10-17] a durable task's result: the review (with the post-apply head mark) is recorded on its task
                   });
                 }
               }}>{pendingProposalSummary?.replaces ? "Replace" : "Apply"}</Button>
@@ -7191,7 +7388,7 @@ export default function Home() {
                   </p>
                 )}
                 {messages.map((message) => (
-                  <MessageBubble key={message.id} message={message} undoStates={executionUndoStates} onUndoExecution={undoAiChange} draftRequests={liveDraftRequests} onOpenDraftRequest={openDraftRequestPublication} /> // [PR-G, 2026-10-17] + the review cards' one action and the answer footer
+                  <MessageBubble key={message.id} message={message} undoStates={executionUndoStates} onUndoExecution={undoAiChange} draftRequests={liveDraftRequests} onOpenDraftRequest={openDraftRequestPublication} generationTask={generationTask} onGenerationTaskAction={(action, blockId) => void runGenerationTaskAction(action, blockId)} onGenerationTaskStartAgain={startGenerationAgain} generationTaskControlBusy={generationTaskControlBusy} /> // [PR-G, 2026-10-17] + the review cards' one action and the answer footer
                 ))}
                 <div ref={chatEndRef} />
               </div>
@@ -8720,7 +8917,7 @@ function ViewTab({ icon: Icon, label, active, onClick }: {
   );
 }
 
-function MessageBubble({ message, undoStates, onUndoExecution, draftRequests, onOpenDraftRequest }: { message: Message; undoStates?: ReadonlyMap<string, { eligible: boolean; reason: string | null }>; onUndoExecution?: (grantId: string) => Promise<void>; /** [PR-G, 2026-10-17] the sealed draft requests this page still holds (a card's action is offered only for one of them) */ draftRequests?: ReadonlyMap<string, ReceivedDraftRequest>; onOpenDraftRequest?: (proposalId: string) => void }) {
+function MessageBubble({ message, undoStates, onUndoExecution, draftRequests, onOpenDraftRequest, generationTask, onGenerationTaskAction, onGenerationTaskStartAgain, generationTaskControlBusy }: { message: Message; undoStates?: ReadonlyMap<string, { eligible: boolean; reason: string | null }>; onUndoExecution?: (grantId: string) => Promise<void>; /** [PR-G, 2026-10-17] the sealed draft requests this page still holds (a card's action is offered only for one of them) */ draftRequests?: ReadonlyMap<string, ReceivedDraftRequest>; onOpenDraftRequest?: (proposalId: string) => void; /** [PR-L, 2026-10-17] the followed durable design task: its status card is shown in ITS activity entry */ generationTask?: { logId: string; view: GenerationTaskView } | null; onGenerationTaskAction?: (action: GenerationTaskClientAction, blockId?: string) => void; onGenerationTaskStartAgain?: () => void; generationTaskControlBusy?: boolean }) {
   const [noteExpanded, setNoteExpanded] = useState(false); // [PR-G, 2026-10-17] a module-contract note card shows its summary row until expanded (view state only)
   if (message.role === "user") {
     return (
@@ -8775,6 +8972,7 @@ function MessageBubble({ message, undoStates, onUndoExecution, draftRequests, on
               </div>
             ))}
           </div>
+          {generationTask && generationTask.logId === message.id && onGenerationTaskAction && onGenerationTaskStartAgain ? <GenerationTaskStatus view={generationTask.view} onAction={onGenerationTaskAction} onStartAgain={onGenerationTaskStartAgain} busy={generationTaskControlBusy ?? false} /> : null} {/* [PR-L, 2026-10-17] the design task's live state, counts, blocks and its valid actions */}
         </div>
       </div>
     );

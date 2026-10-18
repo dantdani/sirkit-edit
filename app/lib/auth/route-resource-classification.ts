@@ -96,7 +96,7 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   // [B20 B2] the token route returns a credential bound to the caller's own identity and live membership; nothing is stored
   "/api/mcp/token": { durable: "none", sensitivity: "session-identity" },
   // [B23-B1] reads the authority head, the board head and lineage and the release ledger, and regenerates the release (no ledger write) [B23-B2 review, 2026-10-04] regressions-3: the commit composes the durable exchange record (mfg.provider-exchange.v1), which writes only past a reviewed transfer descriptor; none exists, so the row stays read; the revision adding the first descriptor moves it to read-write (b23-b-exchange-ledger case 21 fails until it does)
-  "/api/pcb/provider-exchange": { durable: "read", sensitivity: "project-durable", expensive: true }, "/api/ready": { durable: "none", sensitivity: "none" }, // [B24-A1] OD-198: appended in place - readiness reads the configuration and a bounded select 1, no project or caller data, and writes nothing
+  "/api/pcb/provider-exchange": { durable: "read", sensitivity: "project-durable", expensive: true }, "/api/ready": { durable: "none", sensitivity: "none" }, "/api/generation-tasks": { durable: "read-write", sensitivity: "project-durable" }, "/api/generation-tasks/[id]": { durable: "read", sensitivity: "project-durable" }, "/api/generation-tasks/[id]/events": { durable: "read", sensitivity: "project-durable" }, "/api/generation-tasks/[id]/control": { durable: "read-write", sensitivity: "project-durable" }, "/api/generation-worker": { durable: "read-write", sensitivity: "project-durable" }, // [B24-A1] OD-198: appended in place - readiness reads the configuration and a bounded select 1, no project or caller data, and writes nothing | [PR-L, 2026-10-17] the durable generation task aggregates (schematic.generation-task.v1 and its index, block, facts, result and activity records) read and written in the trusted scope, appended in place
 };
 
 /**
@@ -132,7 +132,7 @@ const MODEL_EGRESS_PATHS: ReadonlySet<string> = new Set([
   "/api/component-selection/propose", "/api/interfaces/propose", "/api/parts/search", "/api/pcb/ai-rules/from-brief", "/api/pcb/assign/suggest",
   "/api/pcb/edit/assist", "/api/pcb/footprints/search", "/api/pcb/repair/agent", "/api/power/propose", "/api/schematic", "/api/schematic-compiler/propose",
   "/api/schematic/build", "/api/schematic/build-multi", "/api/schematic/edit", "/api/schematic/edit-build", "/api/schematic/layout-critic",
-  "/api/schematic/review", "/api/spice/ai",
+  "/api/schematic/review", "/api/spice/ai", "/api/generation-worker", // [PR-L, 2026-10-17] appended in place: the generation worker pump runs a queued task's slice in this process, whose provider calls send the task's prompt and block conversation to its provider (the task was admitted, with its credit declared, by POST /api/generation-tasks)
 ]);
 /** [B23-A2 review] Reviewed: the PUBLIC paths that send a model input, one reason each (`outboundEgressViolations`). Both embed the
  *  anonymous caller's search text with OpenAI; nothing else of the caller's leaves. Recorded, not changed: A2 adds no route change. [B24-A3, 2026-10-06] Changed since: both rows declare provider credit and expensive and each meets its public windows and the embedding meter (OD-197, answering OD-174's question). */
@@ -157,7 +157,7 @@ export const KNOWN_DURABLE_SOURCE_SYMBOLS: readonly string[] = [
   "resolveExecutionGrantStore",
   "createExecutionGrantMinter",
   // [B20 B3] the MCP endpoint's read dependencies (the durable board reader, component authority, membership re-check)
-  "resolveMcpReadDependencies",
+  "resolveMcpReadDependencies", "resolveGenerationTaskService", "resolveGenerationTaskRuntime", // [PR-L, 2026-10-17] the generation-task store's composition root (durable-workflow aggregates of the trusted scope), appended in place
 ];
 
 export interface RouteResourceRow {

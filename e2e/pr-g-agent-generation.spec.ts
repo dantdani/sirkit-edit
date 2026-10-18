@@ -40,13 +40,13 @@ test("fresh browser, empty Build sheet: 'Generate a schematic: …' to the assis
   const originHost = new URL(origin).hostname;
   const leftOrigin: string[] = [];
   const chatBodies: ChatBody[] = [];
-  let composerGenerations = 0; // POST /api/schematic/build-multi: the composer's own Generate, which this journey must never take
+  let composerGenerations = 0; // POST /api/schematic/build-multi: the composer's own Generate, which this journey must never take ([PR-L, 2026-10-17] and POST /api/generation-tasks, its durable start since runbook L.4)
   page.on("request", (request: Request) => {
     const url = new URL(request.url());
     if (url.hostname !== originHost && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") leftOrigin.push(request.url());
     if (request.method() !== "POST") return;
     if (url.pathname === "/api/chat") { try { chatBodies.push(request.postDataJSON() as ChatBody); } catch { /* not JSON */ } }
-    if (url.pathname === "/api/schematic/build-multi") composerGenerations += 1;
+    if (url.pathname === "/api/schematic/build-multi" || url.pathname === "/api/generation-tasks") composerGenerations += 1; // [PR-L, 2026-10-17] the composer's Generate starts a durable design task (POST /api/generation-tasks) since runbook L.4; both routes count
   });
   mkdirSync(SHOTS, { recursive: true });
   await page.setViewportSize({ width: 1366, height: 768 });

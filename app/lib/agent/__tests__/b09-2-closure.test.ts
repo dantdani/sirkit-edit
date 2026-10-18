@@ -84,7 +84,7 @@ describe("B09.2 §A — no synthetic canonical authority (R1/R2)", () => {
       "sirkit.module.propose-contracts", // [PR-F fD, 2026-10-17] pin move: + the module contract proposal (a Tier 2 sealed engineering note over the pinned sheet; the head mark present here)
       "sirkit.parts.draft-request", // [PR-F fB, 2026-10-17] pin move: + the part draft request (a Tier 2 sealed UNVERIFIED review task; the head mark present here) and the missing-facts read (a Tier 0 read over the verified schematic, the UI's own derivation; no board, no catalog needed)
       "sirkit.parts.missing-facts",
-      "sirkit.pcb-sync.preflight",
+      "sirkit.pcb-sync.preflight", "sirkit.schematic.instance-inspect", // [PR-M, 2026-10-17] pin move: + the schematic-instance inspection (a Tier 0 read over the verified schematic; no board; the catalog optional) - the candidate search and the resolution proposal need the server's catalog facts, absent here
       "sirkit.schematic.propose-tier1-edit",
     ]);
     const again = buildRunToolset(sirkitToolRegistry(), schematicOnly.context, () => undefined);

@@ -23,6 +23,9 @@ export interface StoredPendingProposal {
   prompt: string;
   validationNote: string | null;
   savedAt: string;
+  /** [PR-L, 2026-10-17] optional: the durable generation task whose validated result this proposal is (runbook L.4), so the page offers
+   *  one result once and reports the review (record-review) to the task that produced it; absent on proposals made any other way. */
+  task?: { taskId: string; resultDigest: string } | null;
 }
 
 const key = (projectId: string): string => `sirkit:pending-proposal:${projectId}`;
@@ -37,7 +40,8 @@ function valid(value: unknown, projectId: string): value is StoredPendingProposa
   return isRecord(value) && value.version === PENDING_PROPOSAL_STORE_VERSION && value.projectId === projectId
     && typeof value.baseDigest === "string" && isRecord(value.state) && Array.isArray((value.state as { components?: unknown }).components)
     && typeof value.explanation === "string" && typeof value.prompt === "string"
-    && (value.validationNote === null || typeof value.validationNote === "string") && typeof value.savedAt === "string";
+    && (value.validationNote === null || typeof value.validationNote === "string") && typeof value.savedAt === "string"
+    && (value.task === undefined || value.task === null || (isRecord(value.task) && typeof value.task.taskId === "string" && value.task.taskId.length <= 200 && typeof value.task.resultDigest === "string" && value.task.resultDigest.length <= 100)); // [PR-L, 2026-10-17]
 }
 
 /** Persist the proposal; false when it could not be (too large, no storage, quota). */

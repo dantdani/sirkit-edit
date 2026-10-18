@@ -698,14 +698,14 @@ checks it; for every other file the line is as of the base. C61-C72 and the re-a
 | C52 | `app/api/chat/route.ts` | 14 | — | `No silent cross-provider fallback exists;` | the coordinator never switches provider (stands) |
 | C53 | `app/lib/ai-preferences.ts` | 193 | — | `export const PROVIDER_FAILURES_WITHOUT_RETRY = Object.freeze(` | the failures without Retry: the ONE list, beside the owned dispatch |
 | C54 | `app/lib/agent/run-consumer.ts` | 42 | — | `retry: input.startNewRun, ownership: input.ownership, ...(providerRetryOffered(input.reason) ? {} : { retryOffered: false as const })` | the chat settlement: the new-run closure kept, the Retry withheld |
-| C55 | `app/page.tsx` | 7214 | — | `disabled={!lastAiRetryRef.current || !aiProviderFailure.retryOffered}` | the card's existing Retry reads the withheld flag |
+| C55 | `app/page.tsx` | 7411 | — | `disabled={!lastAiRetryRef.current || !aiProviderFailure.retryOffered}` | the card's existing Retry reads the withheld flag |
 | C56 | `app/lib/agent/adapters.ts` | 122 | — | `tool_choice: tools.length > 0 ? "auto" : undefined,` | OpenAI: `auto` |
 | C57 | `app/lib/agent/adapters.ts` | 224 | — | `tool_choice: tools.length > 0 ? { type: "auto", disable_parallel_tool_use: true } : undefined,` | Anthropic: `auto`, never `any` / `tool` |
 | C58 | `app/lib/mcp/__tests__/b20-a5-provider-request-shape.test.ts` | 52 | — | `const OPENAI_PARAM_KEYS = ` | the pinned request key sets, untouched |
 | C59 | `app/api/chat/__tests__/b19-d-external-text-injection-route.test.ts` | 128 | — | `admission-control\.ts$` | the closure gate's reviewed exemption of the meters |
 | C60 | `.github/workflows/deterministic-manufacturing.yml` | 150 | — | `app/api/chat/__tests__/b21-e1-chat-provider.test.ts` | the route suite's one explicit CI entry [B24-D1, 2026-10-09] re-pinned +1: B24-D1's prompt-to-gerber start step at `:32` (OD-30) |
 | C61 | `app/lib/ai-preferences.ts` | 176 | — | `typeof data.reason === "string" && providerRetryWithheld(` | the shared card's JSON 503 path withholds Retry the same way |
-| C62 | `app/page.tsx` | 7230 | — | `startNewRun: lastAiRetryRef.current,` | the Switch hands the kept closure to performProviderSwitch (it re-sends on the other provider) |
+| C62 | `app/page.tsx` | 7427 | — | `startNewRun: lastAiRetryRef.current,` | the Switch hands the kept closure to performProviderSwitch (it re-sends on the other provider) |
 | C63 | `app/lib/agent/orchestration/provider-policy.ts` | 61 | — | `const duplicate = duplicateKeyOf(raw);` | a key named twice refuses the whole map |
 | C64 | `app/lib/agent/orchestration/scheduler.ts` | 550 | — | `{ runId, provider: route?.provider ?? coordinator.provider, history: [],` | the run carries the provider it runs on: its seals name it |
 | C65 | `app/lib/acquisition/admission-control.ts` | 400 | — | `const trial = state.openUntil !== 0 && state.openUntil <= now;` | an admitted call's ticket: its generation, whether it is the trial |

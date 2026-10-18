@@ -75,6 +75,12 @@ path,method,is_public,durable_access,project_data_sensitivity,provider_credit,ex
 /api/full-flow/propose,POST,false,none,caller-supplied-only,false,,false,false,false,false,none,false
 /api/full-flow/run,POST,false,none,caller-supplied-only,false,,false,false,false,false,none,false
 /api/full-flow/transition,POST,false,write,project-durable,false,,false,true,false,false,none,false
+/api/generation-tasks,GET,false,read-write,project-durable,false,,false,false,false,false,none,false
+/api/generation-tasks,POST,false,read-write,project-durable,true,,false,false,false,false,none,false
+/api/generation-tasks/[id],GET,false,read,project-durable,false,,false,false,false,false,none,false
+/api/generation-tasks/[id]/control,POST,false,read-write,project-durable,false,,false,true,false,false,none,false
+/api/generation-tasks/[id]/events,GET,false,read,project-durable,false,,false,false,false,false,none,false
+/api/generation-worker,POST,false,read-write,project-durable,false,,false,true,false,false,none,true
 /api/health,GET,true,none,none,false,,false,false,false,true,none,false
 /api/interfaces/allocate,POST,false,none,caller-supplied-only,false,,false,false,false,false,none,false
 /api/interfaces/alternatives,POST,false,none,caller-supplied-only,true,,false,false,false,false,none,false

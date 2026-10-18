@@ -100,13 +100,13 @@ describe("B16.0.23 §J — execution boundary (models/smoke-test + worker + stor
 });
 
 describe("B16.0.23 §J — header-less query-selector confinement", () => {
-  it("querySelector is declared ONLY by the five run-family GET readers (repo-wide)", () => {
+  it("querySelector is declared ONLY by the five run-family GET readers and the generation task's event stream (repo-wide)", () => {
     const adopters = listRouteFiles(ROOT)
       .filter((file) => readFileSync(file, "utf8").includes("querySelector"))
       .map((file) => file.replace(/\\/g, "/").split("/app/api/")[1]!)
       .sort();
     expect(adopters).toEqual([
-      "spice/runs/[id]/bundle/route.ts",
+      "generation-tasks/[id]/events/route.ts", "spice/runs/[id]/bundle/route.ts", // [PR-L, 2026-10-17] reviewed pin move (runbook L.4), appended in place: + the durable generation task's GET event stream, on the SPICE events route's precedent - an EventSource cannot set the selector headers, so the selector rides the query (never authority: the trusted scope still resolves the task, a foreign id is the uniform 404)
       "spice/runs/[id]/events/route.ts",
       "spice/runs/[id]/route.ts",
       "spice/runs/[id]/waveforms/route.ts",

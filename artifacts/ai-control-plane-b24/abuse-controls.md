@@ -262,8 +262,7 @@ held). The failures were assertions on today's tree, not only a missing module:
 
 ## 11. The authenticated rows, unlimited after part 1
 
-At the A3a tree these 40 authenticated rows are provider credit (33) or expensive (7) and had no window of their own (39 use
-`authenticatedJsonRoute`, `/api/chat` uses `agentStreamRoute`); part 2 gives each a per-principal window (section 15):
+At the A3a tree these 40 authenticated rows are provider credit (33) or expensive (7) and had no window of their own (39 use `authenticatedJsonRoute`, `/api/chat` uses `agentStreamRoute`); part 2 gives each a per-principal window (section 15). [PR-L, 2026-10-17] 41 since runbook L.4: + `POST /api/generation-tasks` (provider credit, `authenticatedJsonRoute`), the durable generation task's start, which has its own per-principal window from the start (this paragraph is one line so that the page's line citations stand):
 
 - `POST /api/architecture/alternatives`
 - `POST /api/architecture/candidates`
@@ -275,6 +274,7 @@ At the A3a tree these 40 authenticated rows are provider credit (33) or expensiv
 - `POST /api/circuit-knowledge/propose`
 - `POST /api/circuit-verification/propose`
 - `POST /api/component-selection/propose`
+- `POST /api/generation-tasks`
 - `POST /api/interfaces/alternatives`
 - `POST /api/interfaces/candidates`
 - `POST /api/interfaces/compare`
@@ -403,6 +403,7 @@ never a body field (`PRINCIPAL_ABUSE_LIMITS`, C40; one constant per kind, C41). 
 | `POST /api/circuit-knowledge/propose` | provider-credit | 60 | 60 s | 10,000 | `[tenantId, projectId, principalId]` |
 | `POST /api/circuit-verification/propose` | provider-credit | 60 | 60 s | 10,000 | `[tenantId, projectId, principalId]` |
 | `POST /api/component-selection/propose` | provider-credit | 60 | 60 s | 10,000 | `[tenantId, projectId, principalId]` |
+| `POST /api/generation-tasks` | provider-credit | 60 | 60 s | 10,000 | `[tenantId, projectId, principalId]` |
 | `POST /api/interfaces/alternatives` | provider-credit | 60 | 60 s | 10,000 | `[tenantId, projectId, principalId]` |
 | `POST /api/interfaces/candidates` | provider-credit | 60 | 60 s | 10,000 | `[tenantId, projectId, principalId]` |
 | `POST /api/interfaces/compare` | provider-credit | 60 | 60 s | 10,000 | `[tenantId, projectId, principalId]` |

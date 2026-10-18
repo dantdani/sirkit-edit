@@ -16,7 +16,8 @@ catalog ports, in-memory and PGlite durable stores, a simulated clock) and is la
 | accounting | `worker/accounting.ts` | additive usage per commit, uncertain calls at the worst case, the cached catalog over the task's facts, full-jitter backoff that honours Retry-After, the process LLM meters (purpose `agent`) |
 | progress | `worker/progress.ts` | the semantic progress judgement and the strategy ladder S1-S6 |
 | composition | `worker/runtime.ts`, `worker/cli.ts` | production ports, the continuation re-check (membership, role, provider), the transports, the command line |
-| local launcher | `scripts/dev-with-worker.mjs` (`pnpm run dev:with-worker`) | `next dev` and the worker together, signals forwarded; `pnpm dev` is unchanged |
+| local launcher | `scripts/dev-with-worker.mjs` (`pnpm run dev:with-worker`) | `next dev` and the worker together, signals forwarded; `pnpm dev` is unchanged. [PR-L, 2026-10-17] increment 4: under the fixture runtime it starts the worker with the pump transport (a per-launch secret shared by the two children only, `--concurrency 1`); the Playwright fixture server starts through it |
+| the pump route | `app/api/generation-worker/route.ts` (increment 4) | `POST /api/generation-worker`: the worker secret first (fail closed when unset), then ONE awaited slice in the server's process through `runPumpedSlice` (the same `GenerationWorker` and slice code); an aborted request is a worker shutdown for the slice, never a cancel |
 
 The worker is never a React component, a tab interval, an instrumentation-hosted loop or an unawaited route promise. Closing every
 browser changes nothing: the queued slices are rows in the durable outbox and the worker consumes them.
@@ -38,6 +39,9 @@ pnpm run worker:generation -- --concurrency 1        # slices in flight (1..3, d
 pnpm run worker:generation -- --health-port 7071     # GET http://127.0.0.1:7071/healthz
 pnpm run worker:generation -- --help
 ```
+
+[PR-L, 2026-10-17] Increment 4: a worker can also drive a server's store over HTTP - `pnpm run worker:generation -- --transport pump --origin http://localhost:3100`
+with `SIRKIT_WORKFLOW_WORKER_SECRET` set in its environment (the server holds the same value) - which is how the fixture runtime is served.
 
 Or, INSTEAD of `pnpm dev` (never beside it on the same port): `pnpm run dev:with-worker` (`-- --port 3005` for another port,
 `-- --dry-run` to print the two commands). It spawns both children with node directly (no shell); on Ctrl+C or SIGTERM, or when either
@@ -129,13 +133,16 @@ A separately supervised, long-lived service running `pnpm run worker:generation`
 | `l3-crash-resume.test.ts` | item 4: a crash inside a call, in memory and on PostgreSQL (PGlite) with fresh modules: no repeated search or saved block, the dead call uncertain; an ambiguous commit applied once; a crash at acknowledgement; a facts delta beyond the facts bound dropped (the facts are a cache) without wedging the slice |
 | `l3-strategies.test.ts` | item 5: S1-S4 fail differently and S5 succeeds; an identical loop stops at `no_progress`; a missing part at S6 kept as partial-available, then found by S3 after a retry; partial only by review; a quota refusal |
 | `l3-worker-process.test.ts` | the REAL process (tsx) against PGlite over a loopback wire bridge and an in-test model endpoint: `--once` consumes the plan slice and records the call under `/api/generation-tasks`; a restarted worker resumes from durable state, serves `/healthz` and shuts down on request; the store-unavailable refusal |
+| `app/api/generation-tasks/__tests__/l4-routes.test.ts` | [PR-L, 2026-10-17] increment 4: the pump route behind the worker secret (fail closed), one awaited slice per request to a reviewable result, the pump transport against the route (case 6); the fixture composition through the real slice core (case 8); `dev-with-worker.mjs` starts a pump worker under the fixture runtime instead of refusing, the secret never printed (case 9); the browser run of `e2e/l4-generation-task.spec.ts` uses that launcher |
 
 `l3-crash-resume` and `l3-worker-process` start PGlite: their CI admission belongs to the database-delivery job (a line-pinned workflow
 edit, F20), with the other `l2-*` / `l3-*` suites in increment 7.
 
 ## 7. Limits and seams (stated, not hidden)
 
-- SEAM - the HTTP pump transport (`createPumpTransport`) refuses with `GENERATION_WORKER_PUMP_UNAVAILABLE`: under the fixture runtime the
+- [PR-L, 2026-10-17] Implemented in increment 4 (was the seam below): `createPumpTransport` POSTs `/api/generation-worker` and refuses only
+  without the worker secret (`GENERATION_WORKER_SECRET_UNSET`); `l4-routes` case 6 drives it against the route. The superseded text:
+  SEAM - the HTTP pump transport (`createPumpTransport`) refuses with `GENERATION_WORKER_PUMP_UNAVAILABLE`: under the fixture runtime the
   store lives in the dev server's process and needs `POST /api/generation-worker`, which increment 4 builds with the other routes.
 - SEAM - S6 records the missing-part facts (the empty searches, in the block's checkpoint, the task's facts and the milestone) but does
   not yet open K's missing-part work item; that integration is increment 6.

@@ -181,7 +181,7 @@ const PRINCIPAL_REASONS: Readonly<Record<PrincipalLimitKind, string>> = Object.f
 const principalEntry = (kind: PrincipalLimitKind): PrincipalAbuseLimit =>
   Object.freeze({ kind, perPrincipal: kind === "chat" ? PRINCIPAL_CHAT_LIMIT : kind === "expensive" ? PRINCIPAL_EXPENSIVE_LIMIT : PRINCIPAL_CREDIT_LIMIT, reason: PRINCIPAL_REASONS[kind] });
 
-/** The 32 authenticated provider-credit rows other than `/api/chat` (the classification's, at the A3a tree). */
+/** The 32 authenticated provider-credit rows other than `/api/chat` (the classification's, at the A3a tree). [PR-L, 2026-10-17] 33 since increment 4 of runbook L: + POST /api/generation-tasks. */
 const PRINCIPAL_CREDIT_ROWS = Object.freeze([
   "POST /api/architecture/alternatives", "POST /api/architecture/candidates", "POST /api/architecture/compare", "POST /api/architecture/propose",
   "POST /api/bom", "POST /api/calculation/propose", "POST /api/circuit-knowledge/propose", "POST /api/circuit-verification/propose",
@@ -190,7 +190,7 @@ const PRINCIPAL_CREDIT_ROWS = Object.freeze([
   "POST /api/pcb/edit/assist", "POST /api/pcb/repair/agent", "POST /api/power/alternatives", "POST /api/power/candidates",
   "POST /api/power/compare", "POST /api/power/propose", "POST /api/schematic", "POST /api/schematic-compiler/propose",
   "POST /api/schematic/build", "POST /api/schematic/build-multi", "POST /api/schematic/cross-verify", "POST /api/schematic/edit",
-  "POST /api/schematic/edit-build", "POST /api/schematic/layout-critic", "POST /api/schematic/review", "POST /api/spice/ai",
+  "POST /api/schematic/edit-build", "POST /api/schematic/layout-critic", "POST /api/schematic/review", "POST /api/spice/ai", "POST /api/generation-tasks", // [PR-L, 2026-10-17] + the durable generation task start (runbook L.4), appended in place: 32 -> 33
 ] as const);
 /** The 7 authenticated expensive rows (none of them is provider credit). */
 const PRINCIPAL_EXPENSIVE_ROWS = Object.freeze([
@@ -198,7 +198,7 @@ const PRINCIPAL_EXPENSIVE_ROWS = Object.freeze([
   "POST /api/simulate", "POST /api/spice/models/smoke-test",
 ] as const);
 
-/** The reviewed per-principal windows, keyed `<METHOD> <path>`: the 40 authenticated provider-credit or expensive rows. */
+/** The reviewed per-principal windows, keyed `<METHOD> <path>`: the 40 authenticated provider-credit or expensive rows ([PR-L, 2026-10-17] 41 with POST /api/generation-tasks). */
 export const PRINCIPAL_ABUSE_LIMITS: Readonly<Record<string, PrincipalAbuseLimit>> = Object.freeze(Object.fromEntries([
   ...PRINCIPAL_CREDIT_ROWS.map((key) => [key, principalEntry("provider-credit")] as const),
   ...PRINCIPAL_EXPENSIVE_ROWS.map((key) => [key, principalEntry("expensive")] as const),

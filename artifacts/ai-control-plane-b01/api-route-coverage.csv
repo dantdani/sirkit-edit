@@ -67,6 +67,11 @@ path,methods,record_id,class
 /api/full-flow/propose,POST,full-flow.run,propose
 /api/full-flow/run,POST,full-flow.run,propose
 /api/full-flow/transition,POST,full-flow.run,mutate
+/api/generation-tasks,GET;POST,schematic.generate,mutate
+/api/generation-tasks/[id],GET,schematic.generate,read
+/api/generation-tasks/[id]/control,POST,schematic.generate,mutate
+/api/generation-tasks/[id]/events,GET,schematic.generate,read
+/api/generation-worker,POST,schematic.generate,mutate
 /api/health,GET,project.service-health,read
 /api/interfaces/allocate,POST,cd.interfaces.workbench,propose
 /api/interfaces/alternatives,POST,cd.interfaces.workbench,propose

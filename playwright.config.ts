@@ -38,7 +38,7 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: `pnpm exec next dev --port ${PORT}`,
+    command: `node scripts/dev-with-worker.mjs --port ${PORT}`, // [PR-L, 2026-10-17] next dev AND a generation worker (under the fixture runtime the pump transport with a per-launch secret): the browser proofs run the real durable task lifecycle
     url: `http://localhost:${PORT}/api/ai/runtime`,
     reuseExistingServer: !process.env.CI,
     timeout: 240_000,

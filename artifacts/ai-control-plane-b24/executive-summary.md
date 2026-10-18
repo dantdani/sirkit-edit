@@ -47,18 +47,18 @@ NOT READY (`eslint .` exits 1, none of its 33 errors introduced by B24), CI read
 
 | count | value |
 |---|---|
-| route-methods | 168 |
-| canonical-wrappers | 165 |
+| route-methods | 174 |
+| canonical-wrappers | 171 |
 | approved-factories | 3 |
 | raw-handlers | 0 |
-| action-records | 108 |
-| registry-tools | 56 |
-| agent-exposed-tools | 44 |
+| action-records | 110 |
+| registry-tools | 59 |
+| agent-exposed-tools | 47 |
 | mcp-exposed-tools | 9 |
-| agent-only-tools | 35 |
+| agent-only-tools | 38 |
 | agent-exposed-tier-3-tools | 0 |
-| control-sites | 646 |
-| control-surfaces | 66 |
+| control-sites | 649 |
+| control-surfaces | 67 |
 | sql-migrations | 32 |
 | generators | 31 |
 
@@ -78,6 +78,10 @@ B17-A inventory as regenerated); the descriptor counts stand.
 [PR-F, 2026-10-17] Count line moved with the regenerated map (Astra increment E, builder fF): generators 30 -> 31 (the routing
 capability matrix generator `scripts/generate-pr-f-routing-capability-matrix.ts`, directive section 10; the other count lines of this
 table are the concurrent PR-F builders' to move with their descriptors and controls).
+
+[PR-L, 2026-10-17] Count lines moved with the regenerated map (runbook L.4, increment 4): route-methods 168 -> 174 and canonical-wrappers 165 -> 171 (the durable generation task's six canonical-wrapper methods: POST/GET /api/generation-tasks, GET /api/generation-tasks/[id], GET .../events, POST .../control and the worker pump POST /api/generation-worker; 3 factories and 0 raw unchanged); control-sites 646 -> 649 and control-surfaces 66 -> 67 (the design task's status card `GenerationTaskStatus.tsx`, a new surface, as the B17-A inventory is regenerated); the descriptor and action-record rows are the concurrent section M builder's to move with its descriptors and records.
+
+[PR-M, 2026-10-17] Count lines moved with the regenerated map (runbook section M, increment M1): action-records 108 -> 110 (schematic.resolve-components-propose, the sealed resolution batch, and schematic.resolve-components, its reviewed destructive apply), registry-tools 56 -> 59, agent-exposed-tools 44 -> 47, agent-only-tools 35 -> 38 and agent-exposed-proposal-tools 9 -> 10 - PR-M's three descriptors: the schematic-instance inspection and the resolution candidate search (Tier 0 reads) and the component resolution proposal (Tier 2), all three agent-exposed and withheld from MCP; mcp-exposed-tools stays 9; the verdict's status lines stand.
 
 ## 4. Earlier verdicts
 
