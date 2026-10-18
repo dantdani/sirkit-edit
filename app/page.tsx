@@ -105,7 +105,7 @@ import { type SealedReplacementProposal } from "@/app/lib/engineering/replacemen
 import { approveAndApplyReplacement } from "@/app/lib/project/replacement-approval-controller.internal";
 import { receiveReplacementProposalEvent } from "@/app/lib/project/replacement-proposal-events";
 import { receivePcbProposalReadyEvent } from "@/app/lib/project/pcb-proposal-events";
-import { generationProposalCurrency, receiveGenerationProposalEvent, type ReceivedGenerationProposal } from "@/app/lib/project/generation-proposal-events"; // [PR-D] the agent's Build-mode generation proposal: the SAFE receiver and the intake's currency check
+import { GENERATION_TASK_CONTROL_CARD_ID_PREFIX, generationTaskAttachDecision, generationTaskControlCardLines, generationTaskControlCurrency, receiveGenerationTaskControlEvent, receiveGenerationTaskEvent, type ReceivedGenerationTask, type ReceivedGenerationTaskControl } from "@/app/lib/project/generation-proposal-events"; import { GENERATION_START_TOOL_ID, STOP_ANSWER_SEMANTICS } from "@/app/lib/agent/generation-task-tools"; // [PR-D] the agent's Build-mode generation: the SAFE receivers; [PR-L, 2026-10-18] runbook L.5: a durable task reference (followed with the same status card and review intake as a Build start) and a sealed control request (a confirm chip)
 import { DRAFT_REQUEST_CARD_ID_PREFIX, DRAFT_REQUEST_OPEN_LABEL, draftRequestCardLines, draftRequestCurrency, draftRequestPublicationPrefill, receiveDraftRequestEvent, type ReceivedDraftRequest } from "@/app/lib/project/draft-request-events"; // [PR-G, 2026-10-17] the agent's part draft request (OD-248): the SAFE receiver, the currency check, the review-task card and the publication prefill
 import { MODULE_CONTRACT_NOTE_ID_PREFIX, moduleContractCurrency, moduleContractNoteLines, receiveModuleContractsEvent } from "@/app/lib/project/module-contract-events"; // [PR-G, 2026-10-17] the agent's module contract set (OD-249): the SAFE receiver, the currency check and the engineering-note card
 import { receiveStackupCandidateEvent, stackupCandidateChatLine, verifyStackupCandidateAgainstBoard } from "@/app/lib/project/stackup-candidate-events"; // [PR-G, 2026-10-17] the agent's stackup recommendation (OD-249): the SAFE receiver and the live-board check
@@ -113,7 +113,7 @@ import type { StackupCandidate } from "@/app/lib/pcb/candidates/stackup-candidat
 import { AtomicPublicationReviewSection } from "@/app/components/parts/AtomicPublicationReviewPanel"; // [PR-G, 2026-10-17] the EXISTING publication request (the Build Library's and the Missing parts list's), opened prefilled from a sealed draft request
 import { type SealedPcbEditProposal } from "@/app/lib/pcb/proposal/sealed-pcb-edit-proposal";
 import { ReplacementReviewDialog } from "@/app/components/schematic/ReplacementReviewDialog";
-import { ComponentResolutionReceiptNotice, ComponentResolutionReviewDialog } from "@/app/components/schematic/ComponentResolutionReviewDialog"; import { approveAndApplyResolution } from "@/app/lib/project/resolution-approval-controller.internal"; import { componentResolutionCurrency, componentResolutionReview, findReplacementSentence, receiveComponentResolutionEvent, resolutionAftermathLines, resolutionLines, resolutionProgressLine, type ReceivedComponentResolution, type ResolutionReceiptView } from "@/app/lib/project/component-resolution-events"; import { buildPcbSyncPreflightReport } from "@/app/lib/pcb-sync/preflight-read"; // [PR-M, 2026-10-18] the component resolution (runbook M.2.5-M.2.6): the review dialog and its receipt, the trusted apply controller, the SAFE receiver with the run log's sentences, and the Prepare PCB preflight read the aftermath reports
+import { ComponentResolutionReceiptNotice, ComponentResolutionReviewDialog } from "@/app/components/schematic/ComponentResolutionReviewDialog"; import { approveAndApplyResolution } from "@/app/lib/project/resolution-approval-controller.internal"; import { componentResolutionCurrency, componentResolutionReview, findReplacementSentence, receiveComponentResolutionEvent, resolutionAftermathLines, resolutionLines, resolutionProgressLine, type ReceivedComponentResolution, type ResolutionReceiptView } from "@/app/lib/project/component-resolution-events"; import { buildPcbSyncPreflightReport } from "@/app/lib/pcb-sync/preflight-read"; import { noteResolutionApplied } from "@/app/lib/project/cad-acquisition-client"; // [PR-M, 2026-10-18] M2: + the acquisition task's applied-receipt record (in place: no line moves); [PR-M, 2026-10-18] the component resolution (runbook M.2.5-M.2.6): the review dialog and its receipt, the trusted apply controller, the SAFE receiver with the run log's sentences, and the Prepare PCB preflight read the aftermath reports
 import { fromCanonicalSchematic, schematicStateDigest, validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
 import { schematicMarkPatch } from "@/app/lib/engineering/schematic-projection";
 import { diffSchematicGraphOps, nextTheoryDisplayRef, type SchematicGraphAfter } from "@/app/lib/engineering/schematic-graph";
@@ -2615,7 +2615,7 @@ export default function Home() {
   // request's finally block may clear it (a stale completion can never
   // clear a newer request's busy state). The project-transition reset
   // clears all of them explicitly.
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false); const [designTaskBusy, setDesignTaskBusy] = useState(false); // [PR-L, 2026-10-18] runbook L.5: a followed durable design task that is still working is its OWN busy state (it blocks a second generation or an edit, never the chat: a later turn inspects and controls the same task)
   const [isEditing, setIsEditing]       = useState(false);
   const [isReviewing, setIsReviewing]   = useState(false);
   const [isTidying, setIsTidying]       = useState(false);
@@ -2715,6 +2715,7 @@ export default function Home() {
   // `draftRequestOpen` is the one the existing publication request is open for. Display and prefill only: nothing is submitted here.
   const liveDraftRequestsRef = useRef<Map<string, ReceivedDraftRequest>>(new Map());
   const [liveDraftRequests, setLiveDraftRequests] = useState<ReadonlyMap<string, ReceivedDraftRequest>>(() => new Map());
+  const liveGenerationControlsRef = useRef<Map<string, ReceivedGenerationTaskControl>>(new Map()); const [liveGenerationControls, setLiveGenerationControls] = useState<ReadonlyMap<string, ReceivedGenerationTaskControl>>(() => new Map()); // [PR-L, 2026-10-18] the design control chips this page holds (a restored card is a static record)
   const [draftRequestOpen, setDraftRequestOpen] = useState<ReceivedDraftRequest | null>(null);
   // [B18-B] the ONE pending server-minted execution grant narrowed by the SAFE receiver; the PCB editor runs the
   // granted-execution ritual (preview grants wait for the human's Confirm; explicit grants execute once). Display grants nothing.
@@ -3124,7 +3125,7 @@ export default function Home() {
     setTier1ApplyBusy(false);           // B12: no in-flight apply crosses projects
     setTier1Receipt(null);              // B12: a receipt belongs to its project
     setPendingPcbProposal(null);        // B15.3: no stale PCB proposal crosses projects
-    setPendingLayoutCandidate(null); setPendingStackupCandidate(null); liveDraftRequestsRef.current.clear(); setLiveDraftRequests(new Map()); setDraftRequestOpen(null); setPendingResolution(null); setResolutionReceipt(null); // [PR-G, 2026-10-17] no sealed candidate, draft request or open publication request crosses projects; [PR-M, 2026-10-18] nor a resolution batch or its receipt
+    setPendingLayoutCandidate(null); setPendingStackupCandidate(null); liveDraftRequestsRef.current.clear(); setLiveDraftRequests(new Map()); liveGenerationControlsRef.current.clear(); setLiveGenerationControls(new Map()); setDraftRequestOpen(null); setPendingResolution(null); setResolutionReceipt(null); // [PR-G, 2026-10-17] no sealed candidate, draft request or open publication request crosses projects; [PR-M, 2026-10-18] nor a resolution batch or its receipt
     setPendingExecutionGrant(null);     // B18-C review: a pending execution grant never crosses projects (it idles out server-side)
     executionEntriesRef.current.clear(); // [B18-D review] no execution entry crosses projects: a late editor callback for the
     setExecutionEntries(new Map());      // previous project's grant finds nothing to write into the new project's chat
@@ -3156,7 +3157,7 @@ export default function Home() {
     setGenError(null);                  // provider errors never cross projects
     setAiProviderFailure(null);
     lastAiRetryRef.current = null; resumableChatRunRef.current = null; // retries (and, [B21 E3], a resume) never replay across projects
-    setIsGenerating(false); activeGenerationRef.current = null; generationTaskRef.current?.unsubscribe(); generationTaskRef.current = null; setGenerationTask(null); setGenerationTaskControlBusy(false); // [PR-L, 2026-10-17] a followed design task never crosses projects (it keeps running; reopening its project reattaches)
+    setIsGenerating(false); setDesignTaskBusy(false); activeGenerationRef.current = null; generationTaskRef.current?.unsubscribe(); generationTaskRef.current = null; setGenerationTask(null); setGenerationTaskControlBusy(false); // [PR-L, 2026-10-17] a followed design task never crosses projects (it keeps running; reopening its project reattaches)
     setIsEditing(false); activeEditRef.current = null;
     setIsReviewing(false); activeReviewRef.current = null;
     setIsTidying(false); activeTidyRef.current = null;
@@ -3986,7 +3987,7 @@ export default function Home() {
           setSelectedId(null);
           setSelectedKicadId(null);
           finishActivityLog(pending.logId, resolutionLines.committed(outcome.receipt, outcome.status === "already-applied"));
-          void resolutionAftermath(pending.logId, scope);
+          void resolutionAftermath(pending.logId, scope); void noteResolutionApplied({ tenantId: "local", projectId: currentProjectId, branchId: scope.branchId }, outcome.receipt, currentSchematicState()); // [PR-M, 2026-10-18] M2: a batch that applies an acquisition task's offered replacement records its receipt and the server's preflight on that task (best effort; in place)
         } else {
           // a stale base, a withdrawn candidate, a revoked membership: the batch can never apply now; another apply in flight or a
           // gesture owning the editor keeps it for another try
@@ -4683,7 +4684,7 @@ export default function Home() {
       let runFailure: { reason: string; message: string } | null = null;
       // [B18-D I6] the page half of Rule 2: every event folds into the run view; the answer bubble shows ONLY the final text
       // (labelled while a change the run started is unresolved); interim text is released as notes when the run ends.
-      let runView = initialRunView();
+      let runView = initialRunView(); let generationStartAsked = false; let generationTaskSeen = false; // [PR-L, 2026-10-18] the run asked to start a design / received its reference
       const boardForRefs = chatEditorContext?.board ?? null;
       const refOf = (objectId: string): string | null => boardForRefs?.footprints.find((footprint) => footprint.id === objectId)?.ref ?? null;
       const applyAgentEvent = (event: Record<string, unknown>): void => {
@@ -4696,7 +4697,7 @@ export default function Home() {
             return;
           }
           case "tool_started": {
-            const tag = typeof event.tier === "number" ? `T${event.tier} · ` : "";
+            const tag = typeof event.tier === "number" ? `T${event.tier} · ` : ""; if (event.toolId === GENERATION_START_TOOL_ID) generationStartAsked = true; // [PR-L, 2026-10-18]
             appendActivityStep(logId, resolutionProgressLine(event) ?? `Running Sirkit tool: ${tag}${typeof event.title === "string" ? event.title : "tool"}`); // [PR-M, 2026-10-18] a resolution step's public progress line (inspecting, searching, checking mappings)
             return;
           }
@@ -4755,15 +4756,30 @@ export default function Home() {
             }
             return;
           }
-          case "generation_proposal_ready": {
-            // [PR-D] the agent's Build-mode generation proposal (sirkit.schematic.generate-proposal). The SAFE receiver verifies
-            // the sealed artifact (schema, exact key set, both digests); a fabricated or altered event is dropped and says so.
-            // Receiving it mutates NOTHING: offerGenerationProposal lays it out through the SAME path as the composer's Generate
-            // and offers it in the SAME review dialog (approve/discard), pinned to the same base and persisted by the same store.
-            const generation = receiveGenerationProposalEvent(event);
-            if (!generation) { appendActivityStep(logId, "A generated schematic the assistant issued was dropped by this page: it failed the integrity checks. Nothing was changed and no proposal is offered.", "error"); return; }
-            appendActivityStep(logId, `Generated schematic received — ${generation.proposal.generation.netlist.components.length} part(s), ${generation.proposal.generation.status === "partial" ? "partial result" : "complete"}; preparing it for your review`, "done");
-            void offerGenerationProposal(generation, { logId, scope });
+          case "generation_task_ready": {
+            // [PR-L, 2026-10-18] runbook L.5: the assistant started or attached the project's DURABLE design task
+            // (sirkit.schematic.generate-proposal@2.0.0). The SAFE receiver reads a task REFERENCE only - never a design and never authority:
+            // followChatGenerationTask re-reads the task through this page's own authorized route and follows it with the SAME status card
+            // and the SAME review intake as a Build start (offerBuildResult -> the review dialog), once per (task, result digest).
+            const started = receiveGenerationTaskEvent(event);
+            if (!started) { appendActivityStep(logId, "A design task reference the assistant issued was dropped by this page: it was malformed. This page follows nothing for it and nothing was changed.", "error"); return; }
+            generationTaskSeen = true;
+            appendActivityStep(logId, started.task.disposition === "attached-active" ? "The assistant attached to the design already running for this project (nothing new was started); following it below" : `Design task ${started.task.disposition === "started" ? "started" : "attached"} from the chat; a generation worker runs it in saved steps - this answer ending (or Stop answer) does not stop it`, "done");
+            void followChatGenerationTask(started, { scope });
+            return;
+          }
+          case "generation_task_control_ready": {
+            // [PR-L, 2026-10-18] runbook L.5 (OD-252 item 6): a SEALED control request becomes a confirm chip; only the human's click sends
+            // it to the task's control route, under the human's authorization. Receiving it changes nothing.
+            const control = receiveGenerationTaskControlEvent(event);
+            if (!control) { appendActivityStep(logId, "A design control request the assistant issued was dropped by this page: it failed the integrity checks. Nothing was sent and nothing was changed.", "error"); return; }
+            const controlVerdict = generationTaskControlCurrency(control.request, { projectId: scope.projectId ?? null, branchId: scope.branchId ?? "main", now: Date.now() });
+            if (!controlVerdict.ok) { appendActivityStep(logId, `Design control request not offered - ${controlVerdict.detail}`, "error"); return; }
+            liveGenerationControlsRef.current.set(control.request.requestId, control);
+            setLiveGenerationControls(new Map(liveGenerationControlsRef.current));
+            const controlCard = generationTaskControlCardLines(control.request);
+            upsertReviewCard(`${GENERATION_TASK_CONTROL_CARD_ID_PREFIX}${control.request.requestId}`, controlCard.title, controlCard.lines, assistantId);
+            appendActivityStep(logId, `The assistant asks: ${control.request.label} - confirm or dismiss it on the card below; nothing happens to the design until you confirm`, "done");
             return;
           }
           case "view_command_ready": {
@@ -4962,9 +4978,10 @@ export default function Home() {
       // is retired run_cancelled, so "it still finishes" would not be true.
       if (stoppedEarly && scope.isCurrent()) {
         const stopped = "Stopped. An AI change already sent to your editor is reported in its entry: made, or not made.";
-        appendActivityStep(logId, "Stopped by you — the assistant's run was cancelled.", "done");
+        appendActivityStep(logId, `Stopped by you — the assistant's answer (Stop answer) was cancelled. ${STOP_ANSWER_SEMANTICS}`, "done"); // [PR-L, 2026-10-18] runbook L.5: Stop answer vs Stop design
         setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: m.content ? `${m.content}\n\n${stopped}` : stopped } : m)));
       }
+      if (generationStartAsked && !generationTaskSeen && scope.isCurrent() && scope.projectId) reattachGenerationTaskRef.current(scope.projectId); // [PR-L, 2026-10-18] the turn ended before the task reference arrived (a stop, a deadline): a start that landed is the project's active task - follow it, never start another
       if (runFailure !== null && scope.isCurrent()) {
         const failure = runFailure as { reason: string; message: string };
         failActivityLog(logId, failure.message);
@@ -5276,14 +5293,14 @@ export default function Home() {
         if (!started.ok && started.code === "GENERATION_TASK_ACTIVE" && started.activeTask) {
           // one design at a time per project: the running one is followed (and offered when ready) instead of a second start
           appendActivityStep(logId, "A design is already running for this project; following it instead of starting another", "done", generationActivityLineId());
-          activeGenerationRef.current = generationTaskOwner(started.activeTask.taskId);
+          activeGenerationRef.current = generationTaskOwner(started.activeTask.taskId); setIsGenerating(false); // [PR-L, 2026-10-18] the task's own busy state takes over (designTaskBusy, from its updates)
           attachGenerationTask(started.activeTask, { logId, prompt, scope });
           return;
         }
         if (!started.ok) throw new Error(started.code === "GENERATION_TASK_STORE_UNAVAILABLE" || started.code === "GENERATION_PROVIDER_UNAVAILABLE" ? started.message : `The design was not started: ${started.message}`);
         appendActivityStep(logId, started.attached ? "Attached to the design already accepted for this request (the same task; nothing was started twice)" : "Design accepted; a generation worker runs it in saved steps — leaving or reloading this page does not stop it", "done", generationActivityLineId());
         if (started.durability === "process-memory") appendActivityStep(logId, "Fixture runtime: the design task lives in this dev server's memory and is lost if the server restarts", "done", generationActivityLineId());
-        activeGenerationRef.current = generationTaskOwner(started.task.taskId); // the task owns the busy state now: the finally below leaves it
+        activeGenerationRef.current = generationTaskOwner(started.task.taskId); setIsGenerating(false); // the task owns the busy state now: the finally below leaves it; [PR-L, 2026-10-18] as designTaskBusy, from its updates, so the chat stays usable
         attachGenerationTask(started.task, { logId, prompt, scope });
         return;
       }
@@ -5333,7 +5350,7 @@ export default function Home() {
   // server's structured status as notes (a partial merge, an electrical check skipped or not run), every referenced catalog part
   // loaded, the layout and its drawing validation (autoLayoutBuildValidated), then the ONE offer below. A durable design task's
   // validated result arrives here once per (task, result digest).
-  async function offerBuildResult(data: { netlist: BuildLogicalNetlist; explanation: string; status: "complete" | "partial"; omittedBlocks: string[]; electricalCheck: ElectricalCheckStatus }, run: { logId: string; scope: ProjectAsyncScope; pin: ReturnType<typeof captureLifecycleInvocationContext>; prompt: string; task?: { taskId: string; resultDigest: string } }): Promise<boolean> {
+  async function offerBuildResult(data: { netlist: BuildLogicalNetlist; explanation: string; status: "complete" | "partial"; omittedBlocks: string[]; electricalCheck: ElectricalCheckStatus }, run: { logId: string; scope: ProjectAsyncScope; pin: ReturnType<typeof captureLifecycleInvocationContext>; prompt: string; task?: { taskId: string; resultDigest: string }; note?: string }): Promise<boolean> {
     const { logId, scope } = run;
     const proposalNotes: string[] = []; // [PR-C] what the approver must read beside the proposal (partial merge, checks)
     try {
@@ -5376,6 +5393,7 @@ export default function Home() {
         appendActivityStep(logId, `Drawing check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
         proposalNotes.push(note); // [PR-C] the approver reads it in the dialog, not only in a 12 s banner
       }
+      if (run.note) proposalNotes.push(run.note); // [PR-L, 2026-10-18] who proposed it (a chat-started task), last, as the v1 intake did
       return offerSchematicProposal({ state, explanation, prompt: run.prompt, logId, pin: run.pin, scope, proposalNotes, ...(run.task ? { task: run.task } : {}) });
     } catch (err) {
       if (isAbortError(err) || !scope.isCurrent()) { failActivityLog(logId, "Canceled — the project changed"); return false; }
@@ -5460,10 +5478,10 @@ export default function Home() {
     const owner = generationTaskOwner(view.taskId);
     if (generationTaskBusy(view)) {
       if (activeGenerationRef.current === null) activeGenerationRef.current = owner;
-      if (activeGenerationRef.current === owner) setIsGenerating(true);
+      if (activeGenerationRef.current === owner) setDesignTaskBusy(true); // [PR-L, 2026-10-18] its own busy state (was isGenerating)
     } else if (activeGenerationRef.current === owner) {
       activeGenerationRef.current = null;
-      setIsGenerating(false);
+      setDesignTaskBusy(false);
     }
     if (view.state === "awaiting-review" && view.result) { void offerGenerationTaskResult(entry, view); return; }
     if (!view.terminal) return;
@@ -5485,8 +5503,8 @@ export default function Home() {
     const projectId = entry.scope.projectId;
     const stored = projectId ? loadPendingProposal(projectId) : null;
     if (stored?.task && stored.task.taskId === view.taskId && stored.task.resultDigest === result.resultDigest) { appendActivityStep(entry.logId, "This design's result is already waiting in the review dialog", "done", generationActivityLineId()); return; }
-    const liveDigest = proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()); // the task's base recipe (build-pin): the sheet's content
-    if (liveDigest !== view.base.schematicDigest) { await reportGenerationBaseMoved(entry, liveDigest); return; }
+    const liveDigest = generationLiveBaseDigest(view.base.recipe); // [PR-L, 2026-10-18] the task's base recipe: build-pin (the sheet's content) or chat-sheet (the sheet as the chat run posted it)
+    if (liveDigest !== view.base.schematicDigest) { await reportGenerationBaseMoved(entry, liveDigest, view.base.recipe); return; }
     appendActivityStep(entry.logId, "Design ready: fetching its validated result", "running", generationActivityLineId());
     const fetched = await fetchGenerationTask({ projectId, branchId: entry.scope.branchId }, view.taskId, { includeResult: true, signal: entry.scope.signal });
     if (!entry.scope.isCurrent() || generationTaskRef.current !== entry) return;
@@ -5495,16 +5513,16 @@ export default function Home() {
       failActivityLog(entry.logId, `The design's result could not be read (${fetched.ok ? "it did not match the task" : fetched.code}); nothing was offered. Reload to try again.`, generationActivityLineId());
       return;
     }
-    const movedTo = proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState());
-    if (movedTo !== view.base.schematicDigest) { await reportGenerationBaseMoved(entry, movedTo); return; } // the sheet moved while the result was fetched
+    const movedTo = generationLiveBaseDigest(view.base.recipe);
+    if (movedTo !== view.base.schematicDigest) { await reportGenerationBaseMoved(entry, movedTo, view.base.recipe); return; } // the sheet moved while the result was fetched
     const offerPin = captureLifecycleInvocationContext(); // the exact-base pin the approval re-checks, taken now: the content is the task's base (checked above)
-    const offered = await offerBuildResult({ netlist: fetched.result.netlist, explanation: fetched.result.explanation, status: fetched.result.status, omittedBlocks: fetched.result.omittedBlocks, electricalCheck: fetched.result.electricalCheck as ElectricalCheckStatus }, { logId: entry.logId, scope: offerPin.scope, pin: offerPin, prompt: fetched.task.prompt ?? entry.prompt, task: { taskId: view.taskId, resultDigest: result.resultDigest } });
+    const offered = await offerBuildResult({ netlist: fetched.result.netlist, explanation: fetched.result.explanation, status: fetched.result.status, omittedBlocks: fetched.result.omittedBlocks, electricalCheck: fetched.result.electricalCheck as ElectricalCheckStatus }, { logId: entry.logId, scope: offerPin.scope, pin: offerPin, prompt: fetched.task.prompt ?? entry.prompt, task: { taskId: view.taskId, resultDigest: result.resultDigest }, ...(view.origin === "chat" ? { note: `Proposed by the assistant (${view.provider}) for your request; approving replaces the sheet it was generated against. Nothing has been changed yet.` } : {}) }); // [PR-L, 2026-10-18] a chat-started task says who proposed it, as the v1 intake did
     if (!offered) entry.offered.delete(key);
   }
 
   /** The sheet moved since the task's base: the result is never laid over it. The task is told (report-base -> stale). */
-  async function reportGenerationBaseMoved(entry: AttachedGenerationTask, liveDigest: string): Promise<void> {
-    const answer = await controlGenerationTask({ projectId: entry.scope.projectId, branchId: entry.scope.branchId }, entry.taskId, { action: "report-base", clientActionId: newGenerationClientActionId(), liveBase: { schematicDigest: liveDigest, recipe: "build-pin" } });
+  async function reportGenerationBaseMoved(entry: AttachedGenerationTask, liveDigest: string, recipe: string): Promise<void> {
+    const answer = await controlGenerationTask({ projectId: entry.scope.projectId, branchId: entry.scope.branchId }, entry.taskId, { action: "report-base", clientActionId: newGenerationClientActionId(), liveBase: { schematicDigest: liveDigest, recipe: recipe === "chat-sheet" ? "chat-sheet" : "build-pin" } }); // [PR-L, 2026-10-18] the task's recipe
     if (!entry.scope.isCurrent() || generationTaskRef.current !== entry) return;
     if (answer.ok) { const { view } = reduceGenerationTaskView(entry.view, { task: answer.task, events: [], gap: false }); entry.view = view; setGenerationTask({ logId: entry.logId, view }); }
     entry.settled = true;
@@ -5538,9 +5556,9 @@ export default function Home() {
     if (!task) return;
     const projectId = projectRef.current?.id ?? null;
     const entry = generationTaskRef.current;
-    const liveDigest = proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()); // the build-pin recipe: the sheet's content
+    const recipe = entry && entry.taskId === task.taskId && entry.view?.base.recipe === "chat-sheet" ? "chat-sheet" as const : "build-pin" as const; const liveDigest = generationLiveBaseDigest(recipe); // [PR-L, 2026-10-18] the followed task's recipe (build-pin: the sheet's content; chat-sheet: the sheet as the chat run posted it)
     const request = outcome === "not-applied"
-      ? { action: "report-base" as const, clientActionId: newGenerationClientActionId(), liveBase: { schematicDigest: liveDigest, recipe: "build-pin" as const } }
+      ? { action: "report-base" as const, clientActionId: newGenerationClientActionId(), liveBase: { schematicDigest: liveDigest, recipe } }
       : { action: "record-review" as const, clientActionId: newGenerationClientActionId(), review: { outcome, resultDigest: task.resultDigest, ...(outcome === "applied" ? { headMark: schematicSessionRef.current?.headMark() ?? undefined } : {}) } };
     void controlGenerationTask({ projectId, branchId: "main" }, task.taskId, request).then((answer) => {
       if (!answer.ok || !entry || entry.taskId !== task.taskId || generationTaskRef.current !== entry) return;
@@ -5551,76 +5569,74 @@ export default function Home() {
     });
   }
 
-  // [PR-D] The agent's Build-mode generation proposal (sirkit.schematic.generate-proposal, received in `send` as
-  // `generation_proposal_ready`) enters the SAME review boundary as the composer's Generate (handleGenerateSchematic, Build
-  // branch): the same entry gate, the same catalog loading, the same layout and validation (autoLayoutBuildValidated), the same
-  // notes as data (partial merge, electrical check, drawing check), the same dialog (schematic-proposal-review / -approve,
-  // driven by pendingReplace), the same exact-base pin and the same persisted pending-proposal record. No second dialog and
-  // no auto-apply: nothing changes until the human approves it there. Currency is checked against the LIVE editor before the
-  // catalog loads and again before the offer: the sealed scope, the canonical head mark, the expiry and the base digest the
-  // proposal was sealed against - the digest of the sheet `send` posted (the authoritative state with the page's sheet-size
-  // fallback, `pageSize: chatSnapshot.pageSize ?? pageSize`), which the server digested as-is.
-  async function offerGenerationProposal(received: ReceivedGenerationProposal, run: { logId: string; scope: ProjectAsyncScope }) {
-    const { proposal } = received;
-    const { logId, scope } = run;
-    const entryGate = schematicConsumerGate("edit");
-    if (!entryGate.allowed) { appendActivityStep(logId, `Generated schematic not offered — ${entryGate.reason}`, "error"); return; }
-    const currency = () => {
-      const live = gestureCoordinatorRef.current!.authoritativeState();
-      return generationProposalCurrency(proposal, {
-        scope: { tenantId: "local", projectId: projectScopeRegistryRef.current?.current.projectId ?? "local", branchId: projectScopeRegistryRef.current?.current.branchId ?? "local" },
-        headMark: schematicSessionRef.current?.headMark() ?? null,
-        baseDigest: schematicStateDigest({ ...live, pageSize: live.pageSize ?? liveStateRef.current.pageSize }),
-        now: Date.now(),
-      });
-    };
-    const before = currency();
-    if (!before.ok) { appendActivityStep(logId, `Generated schematic not offered — ${before.detail}`, "error"); return; }
-    const proposalNotes: string[] = []; // what the approver must read beside the proposal (partial merge, checks), collected as the composer's path collects them
-    const partialNote = completenessNote({ status: proposal.generation.status, omittedBlocks: proposal.generation.omittedBlocks });
-    const serverCheckNote = electricalCheckNote(proposal.generation.electricalCheck);
-    if (partialNote) appendActivityStep(logId, partialNote, "done");
-    if (serverCheckNote) appendActivityStep(logId, serverCheckNote, "done");
-    proposalNotes.push(...[partialNote, serverCheckNote].filter((note): note is string => note !== null));
-    try {
-      const netlist = proposal.generation.netlist;
-      const partIds = [...new Set(netlist.components.map((c) => c.partId))];
-      const parts = new Map<string, CachedPart>();
-      appendActivityStep(logId, `Loading ${partIds.length} catalog part${partIds.length === 1 ? "" : "s"}`);
-      await Promise.all(partIds.map(async (id) => { parts.set(id, await ensurePartLoaded(id)); }));
-      if (!scope.isCurrent()) { appendActivityStep(logId, "Generated schematic discarded — the project changed while its parts were loading", "error"); return; }
-      appendActivityStep(logId, "Laying out and validating schematic");
-      const built = autoLayoutBuildValidated(netlist, parts);
-      const state = built.state;
-      if ((state.kicadComponents?.length ?? 0) === 0) { appendActivityStep(logId, "No parts produced — the generated schematic holds no catalog part; nothing is offered.", "error"); return; }
-      if (!built.validation.ok) {
-        const v = built.validation.violations;
-        const note = `Drawing check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`;
-        appendActivityStep(logId, `Drawing check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
-        proposalNotes.push(note); // the approver reads it in the dialog, as on the composer's path
-      }
-      const resultIssues = validateSchematicStateIntegrity(state);
-      if (resultIssues.length > 0) { appendActivityStep(logId, `Generated schematic failed validation (${resultIssues[0]}) — nothing is offered.`, "error"); return; }
-      const after: ReturnType<typeof currency> | { ok: false; detail: string } = scope.isCurrent() ? currency() : { ok: false, detail: "the project changed while the schematic was laid out; nothing was changed." };
-      if (!after.ok) { appendActivityStep(logId, `Generated schematic not offered — ${after.detail}`, "error"); return; }
-      const pin = captureLifecycleInvocationContext(); // the exact-base pin the approval re-checks: the same capture the composer's path and the restore use
-      proposalNotes.push(`Proposed by the assistant (${proposal.provenance.provider}) for your request; approving replaces the sheet it was generated against. Nothing has been changed yet.`);
-      const validationNote = proposalNotes.join("\n");
-      const explanation = proposal.generation.explanation;
-      const prompt = proposal.request.prompt;
-      setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin, validationNote });
-      if (pin.projectId) savePendingProposal({ projectId: pin.projectId, baseDigest: proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()), state, explanation, prompt, validationNote }); // persisted NOW, as the composer's path does (the effect keeps it current)
-      appendActivityStep(logId, "Generated schematic proposal — waiting for your approval in the review dialog; nothing has been changed", "done");
-    } catch (err) {
-      if (isAbortError(err) || !scope.isCurrent()) { appendActivityStep(logId, "Generated schematic discarded — the project changed", "error"); return; }
-      appendActivityStep(logId, `Generated schematic not offered — ${err instanceof Error ? err.message : "its catalog parts could not be loaded"}. Nothing was changed.`, "error");
-    }
+  // [PR-D] The agent's Build-mode generation enters the SAME review boundary as the composer's Generate. [PR-L, 2026-10-18] Runbook L.5:
+  // the assistant starts or attaches the project's DURABLE design task (generation_task_ready), and this page follows THAT task exactly as
+  // it follows a Build start: the same status card (attachGenerationTask), the same once-per-(task, result digest) offer
+  // (offerGenerationTaskResult -> offerBuildResult -> the review dialog), the same exact-base pin and pending-proposal record. The v1 intake
+  // of a design sealed inside the chat run (v1's own intake function) is removed with that path. The reference is a pointer only: the task
+  // is re-read through this page's own authorized GET /api/generation-tasks/[id] in the project's scope.
+  async function followChatGenerationTask(received: ReceivedGenerationTask, run: { scope: ProjectAsyncScope }): Promise<void> {
+    const { task } = received;
+    const { scope } = run;
+    const decision = generationTaskAttachDecision(task, { projectId: scope.projectId ?? null, branchId: scope.branchId ?? "main", followedTaskId: generationTaskRef.current?.taskId ?? null, pendingTask: scope.projectId ? (loadPendingProposal(scope.projectId)?.task ?? null) : null });
+    if (decision.kind !== "attach") return; // a foreign reference, a task already followed (its card shows it) or a result already in the dialog
+    const detail = await fetchGenerationTask({ projectId: scope.projectId, branchId: scope.branchId }, task.taskId, { signal: scope.signal });
+    if (!scope.isCurrent() || generationTaskRef.current?.taskId === task.taskId) return;
+    const logId = startGenerationTaskLog(task.disposition === "attached-active" ? "Generating schematic (already running)" : "Generating schematic (started from the chat)");
+    if (!detail.ok) { failActivityLog(logId, `The design task could not be read (${detail.code}); it keeps running server-side. Reopen the project to follow it.`, generationActivityLineId()); return; }
+    if (task.durability === "process-memory") appendActivityStep(logId, "Fixture runtime: the design task lives in this dev server's memory and is lost if the server restarts", "done", generationActivityLineId());
+    attachGenerationTask(detail.task, { logId, prompt: detail.task.prompt ?? "", scope });
   }
 
-  // [PR-G, 2026-10-17] The LIVE editor as the sheet-artifact currency checks read it (draft request, module contracts): the SAME recipe
-  // offerGenerationProposal's `currency` uses above - the page's scope as the chat run posted it, the session's live head mark and the
-  // digest of the authoritative sheet with the page's sheet-size fallback (what `send` posted and the server digested as-is). The two
-  // recipes must stay byte-identical (pr-g-page-intakes pins it); offerGenerationProposal keeps its own copy so PR-D's pins hold.
+  /** [PR-L, 2026-10-18] An activity entry for a design task this page did not start itself, with ids that draw no random UUID (the editor's id sequence is unchanged). */
+  function startGenerationTaskLog(title: string): string {
+    const id = generationActivityLineId();
+    setMessages((prev) => [...prev, { id, role: "log", title, status: "running", entries: [{ id: generationActivityLineId(), text: "Following the project's design task: it runs in a generation worker, and leaving or reloading this page does not stop it", status: "running" }] }]);
+    return id;
+  }
+
+  /** [PR-L, 2026-10-18] The live sheet's digest under a design task's base recipe: `build-pin` is the sheet's content (the composer's pin);
+   *  `chat-sheet` is the sheet as the chat run posts it (the authoritative state with the page's sheet-size fallback, which the server
+   *  digested as-is) - the SAME recipe as liveSheetForSealedArtifacts below. */
+  function generationLiveBaseDigest(recipe: string): string {
+    const live = gestureCoordinatorRef.current!.authoritativeState();
+    return recipe === "chat-sheet" ? schematicStateDigest({ ...live, pageSize: live.pageSize ?? liveStateRef.current.pageSize }) : proposalContentDigest(live);
+  }
+
+  /** [PR-L, 2026-10-18] The confirm chip: the human's click sends the sealed request's action to the task's control route (the human's
+   *  authorization, CSRF and the store's judgement), once; Dismiss sends nothing. The card records what happened. */
+  async function confirmGenerationControl(requestId: string): Promise<void> {
+    const held = liveGenerationControlsRef.current.get(requestId);
+    if (!held) return;
+    liveGenerationControlsRef.current.delete(requestId);
+    setLiveGenerationControls(new Map(liveGenerationControlsRef.current));
+    const cardId = `${GENERATION_TASK_CONTROL_CARD_ID_PREFIX}${requestId}`;
+    const card = generationTaskControlCardLines(held.request);
+    const scope = projectScopeRegistryRef.current!.capture();
+    const verdict = generationTaskControlCurrency(held.request, { projectId: scope.projectId ?? null, branchId: scope.branchId ?? "main", now: Date.now() });
+    if (!verdict.ok) { upsertReviewCard(cardId, card.title, [...card.lines, `Not sent - ${verdict.detail}`]); return; }
+    const answer = await controlGenerationTask({ projectId: scope.projectId, branchId: scope.branchId }, held.request.taskId, { action: held.request.action, clientActionId: newGenerationClientActionId(), ...(held.request.blockId ? { blockId: held.request.blockId } : {}) }, { signal: scope.signal });
+    if (!scope.isCurrent()) return;
+    if (!answer.ok) { upsertReviewCard(cardId, card.title, [...card.lines, `Not accepted by the server: ${answer.message}`]); return; }
+    const { view } = reduceGenerationTaskView(null, { task: answer.task, events: [], gap: false });
+    upsertReviewCard(cardId, card.title, [...card.lines, `Confirmed: ${held.request.label}. ${generationTaskStatusText(view)}`]);
+    const entry = generationTaskRef.current;
+    if (entry && entry.taskId === held.request.taskId) { if (!entry.settled) generationTaskUpdateRef.current(entry, { task: answer.task, events: [], gap: false }); return; }
+    attachGenerationTask(answer.task, { logId: startGenerationTaskLog("Generating schematic"), prompt: "", scope }); // the task this page did not follow yet is followed now
+  }
+  function dismissGenerationControl(requestId: string): void {
+    const held = liveGenerationControlsRef.current.get(requestId);
+    if (!held) return;
+    liveGenerationControlsRef.current.delete(requestId);
+    setLiveGenerationControls(new Map(liveGenerationControlsRef.current));
+    const card = generationTaskControlCardLines(held.request);
+    upsertReviewCard(`${GENERATION_TASK_CONTROL_CARD_ID_PREFIX}${requestId}`, card.title, [...card.lines, "Dismissed: nothing was sent and the design is unchanged."]);
+  }
+
+  // [PR-G, 2026-10-17] The LIVE editor as the sheet-artifact currency checks read it (draft request, module contracts): the page's scope
+  // as the chat run posted it, the session's live head mark and the digest of the authoritative sheet with the page's sheet-size fallback
+  // (what `send` posted and the server digested as-is). [PR-L, 2026-10-18] The same recipe as generationLiveBaseDigest's `chat-sheet`
+  // above (the removed v1 intake held the third copy); the two must stay byte-identical (pr-g-page-intakes pins it).
   function liveSheetForSealedArtifacts(): { scope: { tenantId: string; projectId: string; branchId: string }; headMark: SchematicCanonicalMark | null; baseDigest: string; now: number } {
     const live = gestureCoordinatorRef.current!.authoritativeState();
     return {
@@ -6316,7 +6332,7 @@ export default function Home() {
   // and autoLayoutBuildValidated checks them. We never graft SchGen's netlist raw.
   async function handleApplySuggestions() {
     const batch = pendingSuggestions;
-    if (!batch || batch.items.length === 0 || isEditing || isGenerating) return;
+    if (!batch || batch.items.length === 0 || isEditing || isGenerating || designTaskBusy) return;
     // B07.4 (failure A) — a suggestion batch is applicable ONLY while its
     // exact project/session generation AND authoritative base digest still
     // match. Anything else is refused truthfully BEFORE any request is
@@ -6350,6 +6366,7 @@ export default function Home() {
     // [B18-D I1] the shown route, or the user's override — routing only; the server loop or the proposal review decides.
     const routing = routeComposerMessage(text, hasSchematic);
     const action = composerRouteOverride ?? routing.route;
+    if (designTaskBusy && action !== "ask") return; // [PR-L, 2026-10-18] while a design task works, the composer still asks the assistant (inspect, control); a second generation or an edit waits
     setComposerRouteOverride(null);
     if (action === "generate") setPreparePcbRequested(routing.hints.includes("prepare-pcb")); // [PR-C] the intent travels across the approvals; nothing is automatic
     if (action !== "ask") setInput("");
@@ -6363,11 +6380,11 @@ export default function Home() {
   const composerRouting = routeComposerMessage(composerText, hasSchematicForComposer);
   const composerAction = composerRouteOverride ?? composerRouting.route;
   const overrideComposerRoute = (): void => setComposerRouteOverride((current) => (current ? null : "ask"));
-  const composerBusy = loading || isGenerating || isEditing;
+  const composerBusy = loading || isGenerating || isEditing || (designTaskBusy && composerAction !== "ask"); // [PR-L, 2026-10-18] a working design task blocks only the generate / edit routes
   const composerDisabled = !composerText || composerBusy;
   // [PR-C] every route has a visible, labelled submission (the ask route had Enter only); Enter still submits
   const showComposerButton = Boolean(composerText) || isGenerating || isEditing;
-  const composerLabel = isGenerating
+  const composerLabel = isGenerating || (designTaskBusy && composerAction !== "ask")
     ? "Generating..."
     : isEditing
       ? "Editing..."
@@ -6420,7 +6437,7 @@ export default function Home() {
   // the PCB editor hold. Labels are not authority: every action here opens or focuses an existing human control.
   const journey = deriveJourney({
     hasSchematic: hasSchematicForComposer,
-    generating: isGenerating,
+    generating: isGenerating || designTaskBusy,
     proposalPending: pendingReplace !== null,
     proposalPartial: Boolean(pendingReplace?.validationNote?.includes("Partial result")),
     proposalValidationNote: pendingReplace?.validationNote ?? null,
@@ -7480,7 +7497,7 @@ export default function Home() {
                   </p>
                 )}
                 {messages.map((message) => (
-                  <MessageBubble key={message.id} message={message} undoStates={executionUndoStates} onUndoExecution={undoAiChange} draftRequests={liveDraftRequests} onOpenDraftRequest={openDraftRequestPublication} generationTask={generationTask} onGenerationTaskAction={(action, blockId) => void runGenerationTaskAction(action, blockId)} onGenerationTaskStartAgain={startGenerationAgain} generationTaskControlBusy={generationTaskControlBusy} /> // [PR-G, 2026-10-17] + the review cards' one action and the answer footer
+                  <MessageBubble key={message.id} message={message} undoStates={executionUndoStates} onUndoExecution={undoAiChange} draftRequests={liveDraftRequests} onOpenDraftRequest={openDraftRequestPublication} generationTask={generationTask} onGenerationTaskAction={(action, blockId) => void runGenerationTaskAction(action, blockId)} onGenerationTaskStartAgain={startGenerationAgain} generationTaskControlBusy={generationTaskControlBusy} generationControls={liveGenerationControls} onConfirmGenerationControl={(requestId) => void confirmGenerationControl(requestId)} onDismissGenerationControl={dismissGenerationControl} /> // [PR-G, 2026-10-17] + the review cards' one action and the answer footer; [PR-L, 2026-10-18] + the design control chip
                 ))}
                 <div ref={chatEndRef} />
               </div>
@@ -7547,7 +7564,7 @@ export default function Home() {
                       size="sm"
                       variant="ghost"
                       title="Apply bounded support-part fixes via a validated edit"
-                      disabled={isEditing || isGenerating || loading || isSecondOpinion || isReviewing || isTidying}
+                      disabled={isEditing || isGenerating || designTaskBusy || loading || isSecondOpinion || isReviewing || isTidying}
                       onClick={handleApplySuggestions}
                     >
                       <Check className="size-3.5 mr-1" />
@@ -7640,8 +7657,8 @@ export default function Home() {
                 </div>
                 <div className="flex items-center flex-wrap justify-end gap-2">
                   {loading && (
-                    <Button size="sm" variant="outline" data-testid="chat-stop" title="Stop the assistant's run" onClick={stopChatRun}>
-                      Stop
+                    <Button size="sm" variant="outline" data-testid="chat-stop" title="Stop the assistant's answer (a design task it started keeps running; Stop design on its card stops that)" onClick={stopChatRun}>
+                      Stop answer
                     </Button>
                   )}
                   {showComposerButton && (
@@ -7658,7 +7675,7 @@ export default function Home() {
                       disabled={composerDisabled}
                       onClick={handleComposerSubmit}
                     >
-                      {(isGenerating || isEditing) && <Loader2 className="size-3.5 mr-1 animate-spin" />}
+                      {(isGenerating || isEditing || (designTaskBusy && composerAction !== "ask")) && <Loader2 className="size-3.5 mr-1 animate-spin" />}
                       {composerLabel}
                     </Button>
                   )}
@@ -7680,7 +7697,7 @@ export default function Home() {
                         <div className="absolute bottom-full right-0 mb-1 z-50 w-56 rounded-md border border-zinc-800 bg-zinc-900 py-1 shadow-sm">
                           <button
                             className="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
-                            disabled={isReviewing || isTidying || isSecondOpinion || loading || isGenerating || isEditing ||
+                            disabled={isReviewing || isTidying || isSecondOpinion || loading || isGenerating || designTaskBusy || isEditing ||
                               (components.length === 0 && kicadComponents.length === 0)}
                             onClick={() => { setMoreMenuOpen(false); handleReview(); }}
                           >
@@ -7688,7 +7705,7 @@ export default function Home() {
                           </button>
                           <button
                             className="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
-                            disabled={isTidying || isReviewing || isSecondOpinion || loading || isGenerating || isEditing ||
+                            disabled={isTidying || isReviewing || isSecondOpinion || loading || isGenerating || designTaskBusy || isEditing ||
                               kicadComponents.length === 0}
                             onClick={() => { setMoreMenuOpen(false); handleTidyLayout(); }}
                           >
@@ -7697,7 +7714,7 @@ export default function Home() {
                           <button
                             className="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
                             title="Independent domain model designs the same request and diffs it (slow, ~1–2 min)"
-                            disabled={isSecondOpinion || isReviewing || isTidying || loading || isGenerating || isEditing ||
+                            disabled={isSecondOpinion || isReviewing || isTidying || loading || isGenerating || designTaskBusy || isEditing ||
                               kicadComponents.length === 0}
                             onClick={() => { setMoreMenuOpen(false); handleSecondOpinion(); }}
                           >
@@ -9009,7 +9026,7 @@ function ViewTab({ icon: Icon, label, active, onClick }: {
   );
 }
 
-function MessageBubble({ message, undoStates, onUndoExecution, draftRequests, onOpenDraftRequest, generationTask, onGenerationTaskAction, onGenerationTaskStartAgain, generationTaskControlBusy }: { message: Message; undoStates?: ReadonlyMap<string, { eligible: boolean; reason: string | null }>; onUndoExecution?: (grantId: string) => Promise<void>; /** [PR-G, 2026-10-17] the sealed draft requests this page still holds (a card's action is offered only for one of them) */ draftRequests?: ReadonlyMap<string, ReceivedDraftRequest>; onOpenDraftRequest?: (proposalId: string) => void; /** [PR-L, 2026-10-17] the followed durable design task: its status card is shown in ITS activity entry */ generationTask?: { logId: string; view: GenerationTaskView } | null; onGenerationTaskAction?: (action: GenerationTaskClientAction, blockId?: string) => void; onGenerationTaskStartAgain?: () => void; generationTaskControlBusy?: boolean }) {
+function MessageBubble({ message, undoStates, onUndoExecution, draftRequests, onOpenDraftRequest, generationTask, onGenerationTaskAction, onGenerationTaskStartAgain, generationTaskControlBusy, generationControls, onConfirmGenerationControl, onDismissGenerationControl }: { message: Message; undoStates?: ReadonlyMap<string, { eligible: boolean; reason: string | null }>; onUndoExecution?: (grantId: string) => Promise<void>; /** [PR-G, 2026-10-17] the sealed draft requests this page still holds (a card's action is offered only for one of them) */ draftRequests?: ReadonlyMap<string, ReceivedDraftRequest>; onOpenDraftRequest?: (proposalId: string) => void; /** [PR-L, 2026-10-17] the followed durable design task: its status card is shown in ITS activity entry */ generationTask?: { logId: string; view: GenerationTaskView } | null; onGenerationTaskAction?: (action: GenerationTaskClientAction, blockId?: string) => void; onGenerationTaskStartAgain?: () => void; generationTaskControlBusy?: boolean; /** [PR-L, 2026-10-18] the design control chips this page holds (a chip's buttons only for one of them) */ generationControls?: ReadonlyMap<string, ReceivedGenerationTaskControl>; onConfirmGenerationControl?: (requestId: string) => void; onDismissGenerationControl?: (requestId: string) => void }) {
   const [noteExpanded, setNoteExpanded] = useState(false); // [PR-G, 2026-10-17] a module-contract note card shows its summary row until expanded (view state only)
   if (message.role === "user") {
     return (
@@ -9030,9 +9047,10 @@ function MessageBubble({ message, undoStates, onUndoExecution, draftRequests, on
     const draftRequestId = message.id.startsWith(DRAFT_REQUEST_CARD_ID_PREFIX) ? message.id.slice(DRAFT_REQUEST_CARD_ID_PREFIX.length) : null;
     const draftRequestHeld = draftRequestId !== null && (draftRequests?.has(draftRequestId) ?? false);
     const moduleNote = message.id.startsWith(MODULE_CONTRACT_NOTE_ID_PREFIX);
+    const controlRequestId = message.id.startsWith(GENERATION_TASK_CONTROL_CARD_ID_PREFIX) ? message.id.slice(GENERATION_TASK_CONTROL_CARD_ID_PREFIX.length) : null; const controlHeld = controlRequestId !== null ? (generationControls?.get(controlRequestId) ?? null) : null; // [PR-L, 2026-10-18] a design control chip: its buttons only while this page holds the sealed request
     const shownEntries = moduleNote && !noteExpanded ? message.entries.slice(0, 1) : message.entries;
     return (
-      <div className="flex justify-start w-full" {...(entryState ? { "data-testid": "chat-execution-entry", "data-grant-id": message.id.slice(EXECUTION_ENTRY_ID_PREFIX.length), "data-state": entryState, "data-tier": "1" } : draftRequestId !== null ? { "data-testid": "chat-draft-request-card", "data-proposal-id": draftRequestId, "data-held": draftRequestHeld ? "true" : "false" } : moduleNote ? { "data-testid": "chat-module-note-card", "data-expanded": noteExpanded ? "true" : "false" } : {})}>
+      <div className="flex justify-start w-full" {...(entryState ? { "data-testid": "chat-execution-entry", "data-grant-id": message.id.slice(EXECUTION_ENTRY_ID_PREFIX.length), "data-state": entryState, "data-tier": "1" } : draftRequestId !== null ? { "data-testid": "chat-draft-request-card", "data-proposal-id": draftRequestId, "data-held": draftRequestHeld ? "true" : "false" } : moduleNote ? { "data-testid": "chat-module-note-card", "data-expanded": noteExpanded ? "true" : "false" } : controlRequestId !== null ? { "data-testid": "generation-task-control-card", "data-request-id": controlRequestId, "data-held": controlHeld ? "true" : "false" } : {})}>
         <div className="w-full rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs">
           <div className="flex items-center gap-2 text-zinc-300">
             <StatusIcon className={`size-3.5 shrink-0 ${message.status === "running" ? "animate-spin text-teal-300" : message.status === "error" ? "text-red-400" : "text-teal-400"}`} />
@@ -9043,6 +9061,12 @@ function MessageBubble({ message, undoStates, onUndoExecution, draftRequests, on
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Button size="sm" variant="outline" data-testid="draft-request-open" disabled={!draftRequestHeld} aria-describedby={`${message.id}-action-note`} onClick={() => onOpenDraftRequest(draftRequestId)}>{DRAFT_REQUEST_OPEN_LABEL}</Button>
               <span id={`${message.id}-action-note`} className="text-[11px] text-zinc-500">{draftRequestHeld ? "opens the Build Library's evidence review prefilled from this sealed request; nothing is requested until you submit it there" : "not available: this page no longer holds the sealed request (reload or project switch) — ask the assistant again"}</span>
+            </div>
+          ) : null}
+          {controlRequestId !== null && controlHeld && onConfirmGenerationControl && onDismissGenerationControl ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button size="sm" variant={controlHeld.request.action === "cancel" ? "destructive" : "outline"} data-testid="generation-task-control-confirm" onClick={() => onConfirmGenerationControl(controlRequestId)}>Confirm: {controlHeld.request.label}</Button>
+              <Button size="sm" variant="outline" data-testid="generation-task-control-dismiss" onClick={() => onDismissGenerationControl(controlRequestId)}>Dismiss</Button>
             </div>
           ) : null}
           {moduleNote ? (

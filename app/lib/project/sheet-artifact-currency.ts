@@ -2,8 +2,8 @@
  * [PR-G, 2026-10-17] The ONE currency check the page runs on a sealed SHEET artifact before it offers it - the agent's part draft
  * request (`sirkit.part-draft-request.v1`) and its module contract set (`sirkit.module-contract-proposal.v1`) are both sealed under
  * the tier-1 scope contract (tenant / project / branch + the editor's canonical head mark), a base schematic digest and an expiry,
- * exactly as the Build-mode generation proposal is (app/lib/project/generation-proposal-events.ts: `generationProposalCurrency`,
- * whose order and sentences this keeps). Checked against the LIVE editor: the sealed scope must be this project's, the sealed head
+ * as the v1 Build-mode generation proposal was (its `generationProposalCurrency`, whose order and sentences this keeps; [PR-L, 2026-10-18]
+ * removed with the in-turn generation by runbook L.5). Checked against the LIVE editor: the sealed scope must be this project's, the sealed head
  * mark the session's live head, the artifact unexpired, and the base digest the sheet's digest as the chat run posted it. Every
  * refusal carries the run-log sentence the page shows, worded for the artifact (`noun`). Pure and node-free.
  */

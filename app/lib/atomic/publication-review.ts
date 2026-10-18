@@ -28,7 +28,7 @@ import type { EngineeringActor, ProjectRole } from "../engineering/types";
 import { inertExternalText } from "../net/external-href";
 import { buildEvidenceBundle, candidateFromObservation, type ExternalObservation, type NormalizedCandidate } from "../acquisition/quarantine";
 import { buildImportReviewEvidence } from "../acquisition/import-review";
-import { assembleAtomicDraft, AtomicAuthoringError, authoringCandidates, normalizeAtomicPublicationLinks, normalizeAtomicPublicationSpec, terminalTableText, type AssembledAtomicDraft, type AtomicAuthoringIdentity, type BundledKicadLibrary } from "./authoring";
+import { assembleAtomicDraft, AtomicAuthoringError, authoringCandidates, normalizeAtomicPublicationLinks, normalizeAtomicPublicationSpec, terminalTableText, type AcquiredKicadAssets, type AssembledAtomicDraft, type AtomicAuthoringIdentity, type BundledKicadLibrary } from "./authoring";
 import { catalogActorKey, isHumanCatalogActorId, TRANSITIONS, type CatalogActorRole } from "./catalog";
 import { ATOMIC_REVISION_ID_PATTERN, isWithdrawalState, type AtomicCatalogStatus, type AtomicWithdrawalState } from "./revision-status";
 import { canonicalExactMpn } from "./identity";
@@ -215,8 +215,11 @@ export interface AtomicPublicationDeps {
   library: BundledKicadLibrary;
   /** The offer cache's observations for one exact MPN: a read, never a vendor call. */
   loadObservations(exactMpn: string, now: Date): Promise<readonly ExternalObservation[]>;
-  /** Registered engineering sources beyond the request's own references (none in production today). */
-  registeredCandidates?(exactMpn: string): Promise<readonly NormalizedCandidate[]>;
+  /** Registered engineering sources beyond the request's own references. [PR-M, 2026-10-18] M2.4: the route composes the acquisition
+   *  handoff's pin table here (given the spec, so the handoff it names is the one read); none without an acquired reference. */
+  registeredCandidates?(exactMpn: string, spec?: AtomicPublicationSpec): Promise<readonly NormalizedCandidate[]>;
+  /** [PR-M, 2026-10-18] M2.4: the acquired assets a spec names, read from the governance scope's object store (never egress); absent: none. */
+  acquired?(spec: AtomicPublicationSpec): Promise<AcquiredKicadAssets | null>;
   loadIdentity(input: { exactMpn: string; manufacturerName: string | null }): Promise<AtomicAuthoringIdentity>;
   /** [B19-E E4 review] The catalog parts links name (MPN, KiCad symbol, value keys already linked): a read. */
   loadLinkTargets(partIds: readonly string[]): Promise<ReadonlyMap<string, AtomicLinkTarget>>;
@@ -227,7 +230,7 @@ export interface AtomicPublicationDeps {
    * The publication transaction. [B19-E E4 review follow-up] A rejection raised at or after its COMMIT carries
    * `commitOutcomeUnknown: true` (see `publicationCommitOutcomeUnknown`): the revision may commit after the answer was lost.
    */
-  publish(input: { snapshot: PortableAtomicSnapshot; actorId: string; actorRole: "publisher" | "admin"; requiredProfile: ApprovalProfile; reason: string; links: readonly AtomicPublicationLink[] }): Promise<{ revisionId: string; auditId: string }>;
+  publish(input: { snapshot: PortableAtomicSnapshot; actorId: string; actorRole: "publisher" | "admin"; requiredProfile: ApprovalProfile; reason: string; links: readonly AtomicPublicationLink[]; /** [PR-M, 2026-10-18] M2.5: one discovery catalog row and its link, in the same transaction */ discovery?: { valueKey: string } }): Promise<{ revisionId: string; auditId: string }>;
   clock?(): Date;
 }
 
@@ -309,8 +312,9 @@ async function reviewLinks(deps: Pick<AtomicPublicationDeps, "loadLinkTargets">,
 async function assembleEvidence(deps: AtomicPublicationDeps, spec: AtomicPublicationSpec, links: readonly AtomicPublicationLink[], requestedBy: string, requestedAt: string, at: Date): Promise<{ evidence: ImportReviewEvidence; linkRefusals: AtomicLinkRefusalCode[] }> {
   const identityKey = canonicalExactMpn(spec.exactMpn);
   const observations = (await deps.loadObservations(spec.exactMpn, at)).filter((observation) => candidateFromObservation(observation).identityKey === identityKey);
-  const registered = deps.registeredCandidates ? (await deps.registeredCandidates(spec.exactMpn)).filter((candidate) => candidate.identityKey === identityKey) : [];
-  const authored = authoringCandidates(spec, { authoredBy: requestedBy, authoredAt: requestedAt, identity: NO_IDENTITY, library: deps.library });
+  const registered = deps.registeredCandidates ? (await deps.registeredCandidates(spec.exactMpn, spec)).filter((candidate) => candidate.identityKey === identityKey) : [];
+  const acquired = deps.acquired ? await deps.acquired(spec) : null; // [PR-M, 2026-10-18] M2.4: the stored objects a spec's acquired references name
+  const authored = authoringCandidates(spec, { authoredBy: requestedBy, authoredAt: requestedAt, identity: NO_IDENTITY, library: deps.library, acquired });
   const bundle = buildEvidenceBundle([...observations.map(candidateFromObservation), ...registered, ...authored.candidates], at);
   const linked = await reviewLinks(deps, spec, links);
   return { evidence: buildImportReviewEvidence(bundle, observations, spec.profile, authored.diagnostics, linked.links), linkRefusals: linked.refusals };
@@ -452,6 +456,8 @@ export interface SubmitAtomicPublicationInput {
   links: unknown;
   reason: unknown;
   idempotencyKey?: string;
+  /** [PR-M, 2026-10-18] M2.5: `true` writes one discovery catalog row for an acquired part (pcb_assignable, acquired references only) */
+  discovery?: unknown;
 }
 
 export async function submitAtomicPublicationRequest(deps: AtomicPublicationDeps, input: SubmitAtomicPublicationInput): Promise<{ stored: StoredAtomicPublication; created: boolean }> {
@@ -464,6 +470,9 @@ export async function submitAtomicPublicationRequest(deps: AtomicPublicationDeps
   const { spec } = normalized;
   // a link needs a footprint and a pin-to-pad mapping (parts_atomic_links carries both)
   if (links.value.length > 0 && spec.profile !== "pcb_assignable") throw new AtomicPublicationError("ATOMIC_PUBLICATION_INPUT_INVALID", ["links"]);
+  // [PR-M, 2026-10-18] M2.5: the discovery row is an acquired part's (a bundled reference already names a catalog part), pcb_assignable only
+  if (input.discovery !== undefined && input.discovery !== null && input.discovery !== false && (input.discovery !== true || spec.profile !== "pcb_assignable" || !spec.symbol?.acquired)) throw new AtomicPublicationError("ATOMIC_PUBLICATION_INPUT_INVALID", ["discovery"]);
+  const discovery = input.discovery === true ? { valueKey: "" } : null;
   const reason = reasonText(input.reason);
   const at = now(deps);
   const requestedAt = at.toISOString();
@@ -473,7 +482,7 @@ export async function submitAtomicPublicationRequest(deps: AtomicPublicationDeps
   const current = existing ? await retireIfAuthorityLost(deps, existing, requestedAt) : null;
   if (current && (current.request.status === "pending" || current.request.status === "approved")) {
     // [B19-E E4 review] the same request again is idempotent; different evidence is refused, naming the open request
-    if (canonicalJson({ spec: current.request.spec, links: current.request.links }) === canonicalJson({ spec, links: links.value })) return { stored: current, created: false };
+    if (canonicalJson({ spec: current.request.spec, links: current.request.links, discovery: current.request.discovery ?? null }) === canonicalJson({ spec, links: links.value, discovery })) return { stored: current, created: false };
     throw new AtomicPublicationError("ATOMIC_PUBLICATION_REQUEST_OPEN", [current.request.requestId]);
   }
 
@@ -488,6 +497,7 @@ export async function submitAtomicPublicationRequest(deps: AtomicPublicationDeps
     status: "pending", requestedBy: structuredClone(input.actor), requestedAt, requestReason: reason,
     requesterMembershipRevision: input.membershipRevision,
     spec, links: links.value, evidence,
+    ...(discovery ? { discovery } : {}),
   });
   const stored = await deps.store.put(request, { expectedRevision: current?.revision ?? 0, idempotencyKey: callerKey(input.actor, "submit_request", key, input.idempotencyKey) ?? `atomic-publication-submit:${key}:${current?.revision ?? 0}`, committedAt: requestedAt });
   return { stored, created: stored.request.requestId === request.requestId };
@@ -571,8 +581,9 @@ function manufacturerFor(request: AtomicPublicationRequest, resolutions: readonl
 async function assembleDraft(deps: AtomicPublicationDeps, request: AtomicPublicationRequest, resolutions: readonly AtomicPublicationResolution[]): Promise<AssembledAtomicDraft> {
   const manufacturer = manufacturerFor(request, resolutions);
   const identity = await deps.loadIdentity({ exactMpn: request.spec.exactMpn, manufacturerName: manufacturer.canonicalName });
+  const acquired = deps.acquired ? await deps.acquired(request.spec) : null; // [PR-M, 2026-10-18] M2.4
   try {
-    return assembleAtomicDraft(request.spec, { authoredBy: request.requestedBy.actorId, authoredAt: request.requestedAt, identity, library: deps.library, manufacturer });
+    return assembleAtomicDraft(request.spec, { authoredBy: request.requestedBy.actorId, authoredAt: request.requestedAt, identity, library: deps.library, acquired, manufacturer });
   } catch (error) {
     if (error instanceof AtomicAuthoringError) throw new AtomicPublicationError("ATOMIC_PUBLICATION_APPROVAL_BLOCKED", error.detail);
     throw error;
@@ -708,7 +719,7 @@ export async function publishAtomicPublicationRequest(deps: AtomicPublicationDep
   if (marked.request.publishing?.revisionId !== revisionId) throw new AtomicPublicationError("ATOMIC_PUBLICATION_CONCURRENT_CHANGE");
   let result: { revisionId: string; auditId: string };
   try {
-    result = await deps.publish({ snapshot, actorId: input.actor.actorId, actorRole: "publisher", requiredProfile: request.profile, reason, links: request.links });
+    result = await deps.publish({ snapshot, actorId: input.actor.actorId, actorRole: "publisher", requiredProfile: request.profile, reason, links: request.links, ...(request.discovery ? { discovery: request.discovery } : {}) });
   } catch (error) {
     // [B19-E E4 review] the answer can be lost after the commit: what the catalog holds decides
     const outcome = await publicationOutcome(deps, revisionId);

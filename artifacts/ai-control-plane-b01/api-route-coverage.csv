@@ -95,6 +95,7 @@ path,methods,record_id,class
 /api/model-simulation/readiness,POST,cd.model-simulation.workbench,propose
 /api/parts/[id],GET,parts.catalog-read,read
 /api/parts/[id]/alternates,GET,parts.catalog-read,read
+/api/parts/acquisitions,GET;POST,parts.cad-acquisition,mutate
 /api/parts/categories,GET,parts.catalog-read,read
 /api/parts/external-search,POST,parts.external-observation-read,read
 /api/parts/search,POST,parts.catalog-read,read

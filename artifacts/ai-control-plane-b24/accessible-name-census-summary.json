@@ -1,7 +1,7 @@
 {
   "schemaVersion": "sirkit.accessible-name-census-summary.v1",
-  "sites": 654,
-  "surfaces": 68,
+  "sites": 663,
+  "surfaces": 70,
   "byStatus": {
     "exempt:backdrop": 1,
     "exempt:canvas-gesture": 5,
@@ -9,17 +9,17 @@
     "exempt:dialog-titled": 18,
     "exempt:form-submit": 3,
     "exempt:listener": 25,
-    "named:aria-label": 141,
+    "named:aria-label": 143,
     "named:forwarded": 10,
     "named:label-for": 3,
     "named:label-wrap": 37,
     "named:palette-title": 22,
-    "named:text": 270,
+    "named:text": 277,
     "named:title": 12,
     "unnamed": 102
   },
   "inScope": {
-    "sites": 173,
+    "sites": 175,
     "surfaces": 23,
     "byStatus": {
       "exempt:backdrop": 1,
@@ -27,13 +27,13 @@
       "named:aria-label": 39,
       "named:label-for": 3,
       "named:label-wrap": 13,
-      "named:text": 106,
+      "named:text": 108,
       "named:title": 3
     },
     "structuralProblems": 0
   },
   "outOfScope": {
-    "sites": 481,
+    "sites": 488,
     "unnamed": 102
   }
 }

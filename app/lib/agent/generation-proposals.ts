@@ -1,318 +1,384 @@
 /**
- * [PR-D] The agent's Build-mode GENERATION proposal: `sirkit.schematic.generate-proposal`, the semantic equivalent of the Build
- * composer's Generate (app/page.tsx POSTs /api/schematic/build-multi and offers the result in the schematic review dialog).
- * Both run the ONE function `runBuildMultiGeneration` (app/lib/schematic/build-multi-generation.ts) under the SAME bounds
- * (`BUILD_BUDGET`): the route serializes its outcome, this service seals it into an INERT proposal. Nothing here generates:
- * the server port is INJECTED into the gateway by the chat route through its one approved runtime boundary
- * (app/api/chat/schematic-generation-runtime.ts), behind the server's own generation fact (`schematicGenerationAvailable`),
- * exactly as the external reads (acquisition-reads.ts) and the named computations (computation-reads.ts) are.
+ * [PR-D] The agent's Build-mode GENERATION, `sirkit.schematic.generate-proposal`, the semantic equivalent of the Build composer's
+ * Generate. [PR-L, 2026-10-18] Runbook L.5, increment 5 (task-worker-contract.md section 8; OD-252 items 6 and 8): version 2.0.0 no
+ * longer runs a design inside the chat turn. The in-turn path (the run's ~120 s clamped `runBuildMultiGeneration` sealed into a v1
+ * artifact) is REMOVED from the agent tool; the deprecated synchronous `POST /api/schematic/build-multi` route keeps its own copy for
+ * compatibility and nothing in the chat reaches it. One durable generation now serves Build and chat alike:
  *
- * Per invocation: the exact allowlisted binding, the context integrity check, the server's fact AND port, a fresh discovery
- * check, the role and capability recheck against the effective actor, a validated schematic with its canonical head mark (the
- * sheet the proposal would REPLACE - the page's pin), the closed argument surface (exactly `prompt`), the run's remaining wall
- * clock (the budget: a generation that cannot fit is refused `budget_exhausted` before anything runs), then the port under a
- * deadline composed with the run's cancellation. A complete OR partial generation is SEALED - completeness, omitted blocks,
- * the electrical check's state, the planner's state and the budget spent travel as DATA inside the artifact, never as prose;
- * a failed generation is `proposal-blocked` with the failure class, the provider's reason and whether a retry can help as its
- * blockers (`generationFailureBlockers`), never `ok: true`. Nothing is ever applied here: the human approves or discards the
- * proposal in the review dialog (the page's intake of this artifact is a later round; its contract is this file).
+ *  - `SchematicGenerationProposalService` (generate-proposal@2.0.0, propose) STARTS OR ATTACHES the scope's durable generation task
+ *    through the SAME `GenerationTaskService.start` the start route `POST /api/generation-tasks` calls (the chat route's injected port,
+ *    app/api/chat/schematic-generation-runtime.ts): the same closed request, the same idempotency (a client request id derived from the
+ *    run and the provider call, so a retried call attaches to its own task), one active task per project and branch (a running design
+ *    is ATTACHED, never duplicated), the same editor roles, the same provider-servable rule and the same per-task allowance. It answers
+ *    a task REFERENCE (`generation-task` outcome, `generation_task_ready` event) within milliseconds; the design runs in a generation
+ *    worker in finite, checkpointed slices. The chat's run deadline ends the TURN; it never touches the accepted task.
+ *  - `GenerationTaskInspectService` (`sirkit.generation.task-inspect@1.0.0`, Tier 0 read): the task's PUBLIC snapshot (state, phase,
+ *    liveness, blocks, counts, blocker, valid actions) and, when a result exists, a bounded summary of it - never the prompt, the
+ *    conversation, a tool output, hidden reasoning or the netlist.
+ *  - `GenerationTaskControlProposalService` (`sirkit.generation.task-control@1.0.0`, propose): a SEALED control request (cancel, pause,
+ *    resume, retry one block) the page shows as a confirm chip; only the human's click sends it to the task's control route under the
+ *    human's own authorization (OD-252 item 6). Nothing here changes a task.
+ *
+ * Every service checks, per invocation: the exact allowlisted binding, the context integrity, the server's generation fact AND port,
+ * fresh discovery, the role and capability of the effective actor, and a closed argument surface. The scope and the principal come from
+ * the server-assembled run context only; a task id names a task only inside that scope (a foreign or guessed id is the uniform
+ * not_found). Nothing is ever applied here: the result reaches the page's ONE review intake (offerBuildResult -> the schematic review
+ * dialog), once per (task, result digest), where only the human approves it.
  */
 import type { LLMProviderId } from "../llm/types";
-import { LLMProviderError, isRetryableReason } from "../llm/errors";
-import type { BuildLogicalNetlist } from "@/lib/schematic-types";
-import type { BuildMultiGenerationOutcome } from "../schematic/build-multi-generation";
-import { BUILD_BUDGET, type BuildBudgetReport, type BuildCompleteness, type BuildMultiFailure, type BuildMultiSuccess, type BuildPlannerStatus, type ElectricalCheckStatus } from "../schematic/build-result";
+import type { ProjectRole } from "../engineering/types";
 import { discoverTools } from "../engineering/tool-discovery";
-import { assertSafeJsonValue, DEFAULT_INPUT_LIMITS } from "../engineering/tool-io-validation";
+import { assertSafeJsonValue, DEFAULT_INPUT_LIMITS, DEFAULT_OUTPUT_LIMITS, validateAgainstSchema } from "../engineering/tool-io-validation";
 import type { ToolDescriptor, ToolRegistry } from "../engineering/tool-registry";
 import { engineeringDigest } from "../engineering/stable";
-import { buildAuthorizationBinding, isWellFormedAuthorizationBinding, type SchematicProposalAuthorizationBinding } from "../engineering/proposal-authorization";
-import { validateSchematicCanonicalMark } from "../engineering/schematic-projection";
-import type { Tier1ProposalScope } from "../engineering/schematic-proposals";
 import type { AgentRunContext, GatewayInvocationOutcome } from "./contracts";
 import { sanitizeTraceText } from "./redaction";
+import {
+  GENERATION_TASK_CONTROL_LABELS, GENERATION_TASK_CONTROL_TOOL_ACTIONS, GENERATION_TASK_CONTROL_TOOL_ID, GENERATION_TASK_ID_PATTERN, GENERATION_TASK_INSPECT_MAX_CHARS, GENERATION_TASK_INSPECT_TOOL_ID,
+  GENERATION_TASK_INSPECTION_SCHEMA, GENERATION_TASK_REF_SCHEMA, GENERATION_TASK_BLOCK_IDS, GENERATION_START_TOOL_ID, generationChatClientRequestId, sealGenerationTaskControlRequest,
+  type GenerationTaskControlToolAction, type GenerationTaskDisposition, type GenerationTaskReference, type GenerationTaskScopeRef, type SealedGenerationTaskControlRequest,
+} from "./generation-task-tools";
 
-export const AGENT_GENERATION_PROPOSAL_TOOL_ID = "sirkit.schematic.generate-proposal" as const;
-/** The sealed artifact's schema id (discriminate on `schema`, as for every other sealed proposal family). */
-export const GENERATION_PROPOSAL_SCHEMA = "sirkit.schematic-generation-proposal.v1" as const;
-/** A generation proposal expires like a tier-1 proposal; an expired one can only be regenerated. */
-export const GENERATION_PROPOSAL_TTL_MS = 10 * 60 * 1000;
-/** The authority source the descriptor requires: advertised ONLY when the chat route bound the generation port to the run. */
+export const AGENT_GENERATION_PROPOSAL_TOOL_ID = GENERATION_START_TOOL_ID;
+/** The authority source the three generation tools require: advertised ONLY when the chat route bound the durable generation-task port
+ *  to the run (a durable task store here and the run's provider servable) and a validated schematic exists. */
 export const GENERATION_AUTHORITY = "schematic-generation" as const;
-/** The ONE proven implementation the descriptor binds (the route's own function; `resolveGenerationBinding` matches it exactly). */
-export const GENERATION_BINDING = Object.freeze({ module: "app/lib/schematic/build-multi-generation.ts", symbol: "runBuildMultiGeneration" });
-/** The prompt bound (the composer's request is one paragraph; the B05 input limits bound the raw argument first). */
+/** [PR-L, 2026-10-18] The ONE implementation all three descriptors bind: the shared durable generation-task service the routes call. */
+export const GENERATION_BINDING = Object.freeze({ module: "app/lib/generation-task/service.ts", symbol: "GenerationTaskService" });
+/** The generation tools' ids (generate, inspect, control): the registry's schematic-generation authority belongs to exactly these. */
+export const GENERATION_TASK_TOOL_IDS = Object.freeze([AGENT_GENERATION_PROPOSAL_TOOL_ID, GENERATION_TASK_INSPECT_TOOL_ID, GENERATION_TASK_CONTROL_TOOL_ID] as const);
+/** The prompt bound (the composer's request is one paragraph; the store refuses more; the B05 input limits bound the raw argument first). */
 export const MAX_GENERATION_PROMPT_CHARS = 4_000;
-/** The run must have at least this much wall clock left for a generation to start (one planner turn and one loop turn). */
-export const MIN_GENERATION_BUDGET_MS = 5_000;
-/** The generation's own deadline ends this much before the tool's race timer, so the loops stop before the race does. */
-export const GENERATION_DEADLINE_MARGIN_MS = 1_000;
 /** The descriptor's valid input example (the manual's example; pr-d-generate-proposal validates it against the schema). */
 export const GENERATE_PROPOSAL_INPUT_EXAMPLE = Object.freeze({ prompt: "A 555 timer LED blinker powered from a 9 V battery through a 5 V linear regulator." });
+export const GENERATION_TASK_INSPECT_INPUT_EXAMPLE = Object.freeze({});
+export const GENERATION_TASK_CONTROL_INPUT_EXAMPLE = Object.freeze({ action: "cancel" });
+/** The verification label of an inspection (the task store's own record, read in the trusted scope). */
+export const GENERATION_TASK_INSPECT_VERIFICATION = "generation-task-store-read" as const;
+/** The constant membership revision of an actor that carries none (the local-only build; the store needs an identifier). */
+export const UNREVISIONED_MEMBERSHIP = "membership-unrevisioned" as const;
 
 // ─── The port the chat route injects ────────────────────────────────────────────────────────────────────────────────────────
 
-export interface SchematicGenerationPortRequest {
-  readonly prompt: string;
-  readonly provider: LLMProviderId;
-  readonly scope: { readonly tenantId: string; readonly projectId: string; readonly branchId: string };
-  readonly runId: string;
-  /** The wall clock the generation may use, in ms (never above `BUILD_BUDGET.deadlineMs`; the port may only tighten further). */
-  readonly deadlineMs: number;
-  /** The run's cancellation, forwarded through the generation and its planner/build provider calls. */
-  readonly signal: AbortSignal;
+export interface GenerationTaskPortPrincipal { principalId: string; role: ProjectRole; membershipRevision: string }
+/** A service answer: the HTTP status the route would answer and its JSON body (app/lib/generation-task/service.ts). */
+export interface GenerationTaskPortAnswer { status: number; body: Record<string, unknown> }
+export interface GenerationTaskPortStart {
+  scope: GenerationTaskScopeRef;
+  principal: GenerationTaskPortPrincipal;
+  /** the chat run that asked (recorded on the task as its initiator's run) */
+  chatRunId: string;
+  /** the start route's CLOSED body, exactly */
+  body: { clientRequestId: string; prompt: string; provider: LLMProviderId; base: { schematicDigest: string; recipe: "chat-sheet"; headMark?: unknown } };
 }
-/** The server port: `runBuildMultiGeneration` behind a configured provider (app/api/chat/schematic-generation-runtime.ts); faked in tests. */
+/** The server port: `GenerationTaskService` over the resolved durable store (app/api/chat/schematic-generation-runtime.ts); faked in tests. */
 export interface SchematicGenerationPort {
-  generate(request: SchematicGenerationPortRequest): Promise<BuildMultiGenerationOutcome>;
+  readonly durability: "durable" | "process-memory";
+  start(input: GenerationTaskPortStart): Promise<GenerationTaskPortAnswer>;
+  list(scope: GenerationTaskScopeRef): Promise<GenerationTaskPortAnswer>;
+  inspect(scope: GenerationTaskScopeRef, taskId: string, options: { includeResult: boolean }): Promise<GenerationTaskPortAnswer>;
 }
 
-// ─── The sealed artifact ────────────────────────────────────────────────────────────────────────────────────────────────────
-
-/** What the generation produced, as DATA (app/lib/schematic/build-result.ts): the page renders completeness and checks beside the proposal. */
-export interface SchematicGenerationResult {
-  status: BuildCompleteness;
-  netlist: BuildLogicalNetlist;
-  explanation: string;
-  omittedBlocks: string[];
-  electricalCheck: ElectricalCheckStatus;
-  planner: BuildPlannerStatus;
-  budget: BuildBudgetReport;
-}
-
-/**
- * The sealed Build-mode generation proposal. Receiving or displaying one mutates NOTHING. It binds, under one whole-body identity
- * digest: the tool, the scope (tenant/project/branch + the editor's canonical head mark, the tier-1 scope contract), the
- * authorization binding (verified principal + membership revision), the base schematic digest (the sheet the generation would
- * REPLACE - the page's `pin.baseDigest`), the request, the generation result, the netlist digest, actor and effective actor,
- * provenance, creation and expiry. The page's intake lays the netlist out through the SAME `autoLayoutBuildValidated` the Build
- * composer uses and offers it in the SAME review dialog, refusing it when the base digest no longer matches (stale), when the
- * scope or head mark differ (foreign/stale-head), or past `expiresAt`.
- */
-export interface SealedSchematicGenerationProposal {
-  schema: typeof GENERATION_PROPOSAL_SCHEMA;
-  proposalId: string;
-  toolId: typeof AGENT_GENERATION_PROPOSAL_TOOL_ID;
-  version: string;
-  scope: Tier1ProposalScope;
-  authorization: SchematicProposalAuthorizationBinding;
-  /** `schematicStateDigest` of the validated sheet the generation replaces. */
-  baseSchematicDigest: string;
-  /** The generation is a Build-mode result (real catalog parts); the intake treats it as the Build Generate path. */
-  mode: "build";
-  request: { prompt: string; provider: LLMProviderId };
-  generation: SchematicGenerationResult;
-  /** Digest over the base and the generated netlist; the trace records it as the proposal's operations digest. */
-  netlistDigest: string;
-  actor: { actorId: string; kind: "ai" };
-  /** the verified principal the proposal is sealed for (`human`: a session principal or the local build's owner; `worker`: a machine principal) */
-  effectiveActor: { actorId: string; kind: "human" | "worker" };
-  provenance: { provider: string; runId: string; note: string; instruction: string };
-  createdAt: number;
-  expiresAt: number;
-}
-
-const IDENTITY_DIGEST_SCHEMA = "sirkit.schematic-generation-proposal-id.v1";
-const NETLIST_DIGEST_SCHEMA = "sirkit.schematic-generation-netlist.v1";
-const PROPOSAL_KEYS = Object.freeze(["schema", "proposalId", "toolId", "version", "scope", "authorization", "baseSchematicDigest", "mode", "request", "generation", "netlistDigest", "actor", "effectiveActor", "provenance", "createdAt", "expiresAt"] as const);
-const GENERATION_KEYS = Object.freeze(["status", "netlist", "explanation", "omittedBlocks", "electricalCheck", "planner", "budget"] as const);
-
-function deepFreeze<T>(value: T): T {
-  if (value && typeof value === "object") {
-    for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
-    Object.freeze(value);
-  }
-  return value;
-}
-
-export function generationNetlistDigest(baseSchematicDigest: string, netlist: BuildLogicalNetlist): string {
-  return engineeringDigest({ schema: NETLIST_DIGEST_SCHEMA, base: baseSchematicDigest, netlist });
-}
-
-export type GenerationProposalVerification =
-  | { ok: true }
-  | { ok: false; code: "malformed" | "wrong-version" | "altered"; detail: string };
-
-/** INTEGRITY-ONLY verification (the page's intake runs it first): schema, exact shape, both sealed digests. Currency (the live
- *  base digest, scope, head mark and expiry) is the intake's own check against the live editor, as for the tier-1 proposal. */
-export function verifySealedSchematicGenerationProposalIntegrity(candidate: unknown): GenerationProposalVerification {
-  if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) return { ok: false, code: "malformed", detail: "The proposal is not an object." };
-  const proposal = candidate as Record<string, unknown>;
-  if (proposal.schema !== GENERATION_PROPOSAL_SCHEMA) return { ok: false, code: "wrong-version", detail: "The proposal is not a sirkit.schematic-generation-proposal.v1 artifact." };
-  const keys = Object.keys(proposal).sort();
-  if (keys.join(",") !== [...PROPOSAL_KEYS].sort().join(",")) return { ok: false, code: "malformed", detail: "The proposal does not carry exactly the sealed key set." };
-  if (proposal.toolId !== AGENT_GENERATION_PROPOSAL_TOOL_ID || proposal.mode !== "build") return { ok: false, code: "malformed", detail: "The proposal names another tool or mode." };
-  const scope = proposal.scope as Partial<Tier1ProposalScope> | null;
-  if (!scope || typeof scope !== "object" || typeof scope.tenantId !== "string" || typeof scope.projectId !== "string" || typeof scope.branchId !== "string" || validateSchematicCanonicalMark(scope.headMark) === null) {
-    return { ok: false, code: "malformed", detail: "The proposal scope or its canonical head mark is malformed." };
-  }
-  if (!isWellFormedAuthorizationBinding(proposal.authorization) || proposal.authorization.tenantId !== scope.tenantId || proposal.authorization.projectId !== scope.projectId || proposal.authorization.branchId !== scope.branchId) {
-    return { ok: false, code: "malformed", detail: "The authorization binding is malformed or does not agree with the sealed scope." };
-  }
-  const generation = proposal.generation as Record<string, unknown> | null;
-  if (!generation || typeof generation !== "object" || Object.keys(generation).sort().join(",") !== [...GENERATION_KEYS].sort().join(",")) return { ok: false, code: "malformed", detail: "The generation result does not carry exactly its key set." };
-  if ((generation.status !== "complete" && generation.status !== "partial") || !Array.isArray(generation.omittedBlocks)) return { ok: false, code: "malformed", detail: "The generation's completeness is malformed." };
-  const netlist = generation.netlist as Partial<BuildLogicalNetlist> | null;
-  if (!netlist || typeof netlist !== "object" || !Array.isArray(netlist.components) || !Array.isArray(netlist.connections)) return { ok: false, code: "malformed", detail: "The generated netlist is malformed." };
-  if (typeof proposal.baseSchematicDigest !== "string" || typeof proposal.netlistDigest !== "string" || typeof proposal.proposalId !== "string") return { ok: false, code: "malformed", detail: "A sealed digest is missing." };
-  if (generationNetlistDigest(proposal.baseSchematicDigest, netlist as BuildLogicalNetlist) !== proposal.netlistDigest) return { ok: false, code: "altered", detail: "The netlist digest does not match the sealed netlist." };
-  const { proposalId, ...body } = proposal;
-  if (`genprop-${engineeringDigest({ schema: IDENTITY_DIGEST_SCHEMA, body }).slice(5)}` !== proposalId) return { ok: false, code: "altered", detail: "The proposal body does not match its sealed identity." };
-  return { ok: true };
-}
-
-// ─── Failures as data ───────────────────────────────────────────────────────────────────────────────────────────────────────
-
-/** A failed generation as the `proposal-blocked` blockers the loop already carries to the model and the page: the failure class
- *  (`code`: build_budget_exhausted / build_loop_failed / build_invalid_output / provider_unavailable) with its sentence, whether a
- *  retry can help (`retryable` / `not_retryable`), the provider and its reason (`insufficient_quota`, `breaker_open`, ...) when known. */
-export function generationFailureBlockers(failure: BuildMultiFailure): Array<{ code: string; detail: string }> {
-  const retryable = failure.retryable !== false;
-  return [
-    { code: failure.code, detail: sanitizeTraceText(failure.error, 300) },
-    { code: retryable ? "retryable" : "not_retryable", detail: retryable ? "A retry can help; nothing was generated or changed." : "A retry will not help until the cause is resolved; nothing was generated or changed." },
-    ...(failure.provider ? [{ code: "provider", detail: failure.provider }] : []),
-    ...(failure.reason ? [{ code: "provider_reason", detail: sanitizeTraceText(failure.reason, 120) }] : []),
-  ];
-}
-
-/** The planner's provider failure as the same failure contract the route answers (503 `provider_unavailable`, the provider's reason). */
-export function providerFailureOf(error: unknown, provider: LLMProviderId): BuildMultiFailure {
-  const normalized = error instanceof LLMProviderError ? error : null;
-  return {
-    ok: false,
-    code: "provider_unavailable",
-    error: sanitizeTraceText(normalized?.message ?? (error instanceof Error ? error.message : String(error)), 300) || "The provider request failed.",
-    provider: normalized?.provider ?? provider,
-    reason: normalized?.reason ?? "unknown",
-    retryable: normalized ? isRetryableReason(normalized.reason) : false,
-  };
-}
-
-// ─── Binding resolution ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// ─── Binding resolution and the run toolset's availability rule ────────────────────────────────────────────────────────────
 
 export type GenerationBindingResolution = { state: "resolved" } | { state: "not_callable"; reason: string };
 
-/** Allowlist-only: the descriptor is callable here only as the one generation proposal over the one shared function. */
+/** Allowlist-only: one of the three generation tools, of its exact class, over the one shared service, requiring exactly its authority. */
 export function resolveGenerationBinding(descriptor: ToolDescriptor): GenerationBindingResolution {
-  if (descriptor.toolId !== AGENT_GENERATION_PROPOSAL_TOOL_ID) return { state: "not_callable", reason: "Only the generation proposal is invocable here." };
-  if (descriptor.operationClass !== "propose" || descriptor.sideEffects !== "proposal-artifact" || descriptor.approvalTier !== "none") return { state: "not_callable", reason: "The generation proposal is a sealed proposal artifact (propose class, proposal-artifact side effects, no approval tier of its own)." };
-  if (descriptor.binding.status !== "bound-proposal" || descriptor.binding.module !== GENERATION_BINDING.module || descriptor.binding.symbol !== GENERATION_BINDING.symbol) return { state: "not_callable", reason: "The descriptor does not bind the one shared generation function." };
-  if (descriptor.requiredAuthority.length !== 1 || descriptor.requiredAuthority[0] !== GENERATION_AUTHORITY) return { state: "not_callable", reason: "The generation proposal requires exactly the schematic-generation authority." };
+  if (!(GENERATION_TASK_TOOL_IDS as readonly string[]).includes(descriptor.toolId)) return { state: "not_callable", reason: "Only the three generation tools are invocable here." };
+  const read = descriptor.toolId === GENERATION_TASK_INSPECT_TOOL_ID;
+  if (read ? (descriptor.operationClass !== "read" || descriptor.sideEffects !== "none" || descriptor.approvalTier !== "none") : (descriptor.operationClass !== "propose" || descriptor.sideEffects !== "proposal-artifact" || descriptor.approvalTier !== "none")) {
+    return { state: "not_callable", reason: read ? "The task inspection is a Tier 0 read with no side effects." : "A generation start or control request is a sealed artifact (propose class, proposal-artifact side effects, no approval tier of its own)." };
+  }
+  if ((descriptor.binding.status !== (read ? "bound-read" : "bound-proposal")) || descriptor.binding.module !== GENERATION_BINDING.module || descriptor.binding.symbol !== GENERATION_BINDING.symbol) return { state: "not_callable", reason: "The descriptor does not bind the one shared durable generation-task service." };
+  if (descriptor.requiredAuthority.length !== 1 || descriptor.requiredAuthority[0] !== GENERATION_AUTHORITY) return { state: "not_callable", reason: "The generation tools require exactly the schematic-generation authority." };
   return { state: "resolved" };
 }
+export function resolveGenerationTaskInspectBinding(descriptor: ToolDescriptor): GenerationBindingResolution {
+  return descriptor.toolId === GENERATION_TASK_INSPECT_TOOL_ID ? resolveGenerationBinding(descriptor) : { state: "not_callable", reason: "Only the task inspection is invocable here." };
+}
 
-// ─── The service ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/** The loop's per-run rule for the inspection (a read with no B05 binding): its binding resolves and the server's generation fact is set. */
+export function generationTaskInspectAvailable(descriptor: ToolDescriptor, context: AgentRunContext, warn: (message: string) => void): boolean {
+  if (resolveGenerationTaskInspectBinding(descriptor).state !== "resolved") { warn(`Tool ${descriptor.toolId} unavailable: no resolved generation-task binding.`); return false; }
+  if (context.schematicGenerationAvailable !== true) { warn(`Tool ${descriptor.toolId} unavailable: no durable generation-task store and servable provider for this run.`); return false; }
+  return true;
+}
 
-const AUTHORITY_KEYS = new Set(["actor", "actorId", "role", "capability", "capabilities", "authority", "approval", "approvals", "apply", "commit", "scope", "headMark", "revision", "expectedRevision", "lineageId", "provider", "netlist", "schematic", "budget", "deadline"]);
+// ─── Shared gates ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export interface SchematicGenerationProposalServiceOptions {
-  /** The server port, injected by the composition root; absent: the generation proposal refuses authority_unavailable. */
+export interface GenerationServiceOptions {
+  /** the server port, injected by the composition root; absent: every generation tool refuses authority_unavailable */
   port?: SchematicGenerationPort;
-  /** The gateway's context integrity check (injected so this module never imports the gateway). */
+  /** the gateway's context integrity check (injected so this module never imports the gateway) */
   integrity: (context: AgentRunContext) => readonly string[];
   now?: () => number;
 }
-export interface SchematicGenerationProposalInput { toolId: string; version: string; args: Record<string, unknown>; context: AgentRunContext; runId: string; provider: LLMProviderId; timeoutMs: number; signal?: AbortSignal }
+export interface GenerationInvocationInput { toolId: string; version: string; args: Record<string, unknown>; context: AgentRunContext; runId: string; provider: LLMProviderId; timeoutMs: number; signal?: AbortSignal; callId?: string }
 
-class GenerationTimeout { readonly kind = "timeout"; }
-class GenerationCancelled { readonly kind = "cancelled"; }
+const AUTHORITY_KEYS = new Set(["actor", "actorId", "role", "capability", "capabilities", "authority", "approval", "approvals", "apply", "commit", "scope", "tenantId", "projectId", "branchId", "headMark", "revision", "expectedRevision", "lineageId", "provider", "netlist", "schematic", "budget", "deadline", "clientRequestId", "base", "principal", "worker", "lease", "allowance", "review", "liveBase", "extendAllowance"]);
+type Refusal = (status: string, diagnostics: string[]) => GatewayInvocationOutcome;
+const refusalFor = (input: GenerationInvocationInput): Refusal => (status, diagnostics) => ({ kind: "refused", ok: false, toolId: input.toolId, version: input.version, status, diagnostics });
+const blockedFor = (input: GenerationInvocationInput) => (blockers: Array<{ code: string; detail: string }>): GatewayInvocationOutcome => ({ kind: "proposal-blocked", ok: false, toolId: input.toolId, version: input.version, blockers });
+const scopeOf = (context: AgentRunContext): GenerationTaskScopeRef => ({ tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId });
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const NOT_FOUND_SENTENCE = "No such design task in this project (a task id names a task only inside the project and branch it was started in).";
 
-export class SchematicGenerationProposalService {
-  constructor(private readonly registry: ToolRegistry, private readonly options: SchematicGenerationProposalServiceOptions) {}
+/** The common prelude: descriptor, binding, integrity, the server's fact and port, fresh discovery, role and capability. */
+function prelude(registry: ToolRegistry, options: GenerationServiceOptions, input: GenerationInvocationInput, expectedToolId: string): { ok: true; descriptor: ToolDescriptor; port: SchematicGenerationPort } | { ok: false; outcome: GatewayInvocationOutcome } {
+  const refuse = refusalFor(input);
+  const descriptor = registry.get(input.toolId, input.version);
+  if (!descriptor) return { ok: false, outcome: refuse("not_registered", ["Unknown tool."]) };
+  if (descriptor.toolId !== expectedToolId) return { ok: false, outcome: refuse("not_callable", ["This generation service does not serve that tool."]) };
+  const resolution = resolveGenerationBinding(descriptor);
+  if (resolution.state !== "resolved") return { ok: false, outcome: refuse("not_callable", [resolution.reason]) };
+  const integrity = options.integrity(input.context);
+  if (integrity.length > 0) return { ok: false, outcome: refuse("context_integrity", integrity.slice(0, 5)) };
+  const port = options.port;
+  if (!port || input.context.schematicGenerationAvailable !== true) return { ok: false, outcome: refuse("authority_unavailable", ["No durable generation-task store and servable provider are bound to this run; the generation tools are unavailable and nothing was started or read."]) };
+  const discovery = discoverTools(registry, input.context.discovery);
+  if (!discovery.included.some((item) => item.toolId === descriptor.toolId && item.version === descriptor.version)) {
+    const reason = discovery.excluded.find((entry) => entry.toolId === descriptor.toolId)?.reason ?? "not discoverable";
+    return { ok: false, outcome: refuse("not_discoverable", [`Tool is not discoverable in the current context (${reason}).`]) };
+  }
+  const actor = input.context.actor;
+  if (!descriptor.requiredRoles.includes(actor.actorRole) || !actor.grantedCapabilities.includes(descriptor.requiredCapability)) {
+    return { ok: false, outcome: refuse("unauthorized", [`Role ${actor.actorRole} / capability ${descriptor.requiredCapability} is not permitted for this tool.`]) };
+  }
+  const safety = assertSafeJsonValue(input.args, DEFAULT_INPUT_LIMITS, "args");
+  if (safety.length > 0) return { ok: false, outcome: refuse("invalid_input", safety.slice(0, 5)) };
+  return { ok: true, descriptor, port };
+}
 
-  async invoke(input: SchematicGenerationProposalInput): Promise<GatewayInvocationOutcome> {
-    const refuse = (status: string, diagnostics: string[]): GatewayInvocationOutcome => ({ kind: "refused", ok: false, toolId: input.toolId, version: input.version, status, diagnostics });
-    const blocked = (blockers: Array<{ code: string; detail: string }>): GatewayInvocationOutcome => ({ kind: "proposal-blocked", ok: false, toolId: input.toolId, version: input.version, blockers });
-    const descriptor = this.registry.get(input.toolId, input.version);
-    if (!descriptor) return refuse("not_registered", ["Unknown tool."]);
-    const resolution = resolveGenerationBinding(descriptor);
-    if (resolution.state !== "resolved") return refuse("not_callable", [resolution.reason]);
-    const integrity = this.options.integrity(input.context);
-    if (integrity.length > 0) return refuse("context_integrity", integrity.slice(0, 5));
-    const context = input.context;
-    const port = this.options.port;
-    if (!port || context.schematicGenerationAvailable !== true) return refuse("authority_unavailable", ["No schematic generation provider is bound to this run; the generation proposal is unavailable."]);
-    const discovery = discoverTools(this.registry, context.discovery);
-    if (!discovery.included.some((item) => item.toolId === descriptor.toolId && item.version === descriptor.version)) {
-      const reason = discovery.excluded.find((entry) => entry.toolId === descriptor.toolId)?.reason ?? "not discoverable";
-      return refuse("not_discoverable", [`Tool is not discoverable in the current context (${reason}).`]);
-    }
-    if (!descriptor.requiredRoles.includes(context.actor.actorRole) || !context.actor.grantedCapabilities.includes(descriptor.requiredCapability)) {
-      return refuse("unauthorized", [`Role ${context.actor.actorRole} / capability ${descriptor.requiredCapability} is not permitted for this tool.`]);
-    }
-    // The base the proposal replaces: a validated schematic with its canonical head mark (the tier-1 scope contract).
-    if (!context.schematic || !context.schematicDigest) return refuse("authority_unavailable", ["No verified schematic snapshot is available for this run; the generation proposal is unavailable."]);
-    const headMark = context.schematicHeadMark ? validateSchematicCanonicalMark(context.schematicHeadMark) : null;
-    if (!headMark) return refuse("authority_unavailable", ["No canonical schematic head mark is available for this run; the generation proposal is unavailable until the editor session is ready."]);
-    // The closed argument surface: exactly `prompt`; authority-shaped keys are refused by name.
-    const safety = assertSafeJsonValue(input.args, DEFAULT_INPUT_LIMITS, "args");
-    if (safety.length > 0) return refuse("invalid_input", safety.slice(0, 5));
-    for (const key of Object.keys(input.args)) {
-      if (key === "prompt") continue;
-      return refuse("invalid_input", [AUTHORITY_KEYS.has(key) ? `Argument "${key.slice(0, 40)}" is an authority-shaped claim - the generation proposal accepts only prompt.` : `Unexpected argument "${key.slice(0, 40)}" - the generation proposal accepts only prompt.`]);
-    }
-    const prompt = typeof input.args.prompt === "string" ? input.args.prompt.trim() : "";
-    if (prompt.length === 0 || prompt.length > MAX_GENERATION_PROMPT_CHARS) return refuse("invalid_input", [`prompt must be 1 to ${MAX_GENERATION_PROMPT_CHARS} characters of plain text describing the circuit.`]);
-    // The budget: the run's remaining wall clock (the loop hands a long-running tool min(its timeout, the run's remaining time)).
-    if (input.signal?.aborted) return refuse("cancelled", ["The run was cancelled before the generation started; nothing was generated or changed."]);
-    if (!Number.isFinite(input.timeoutMs) || input.timeoutMs < MIN_GENERATION_BUDGET_MS) return refuse("budget_exhausted", [`The run's remaining wall clock (${Math.max(0, Math.floor(input.timeoutMs))} ms) cannot hold a Build-mode generation (at least ${MIN_GENERATION_BUDGET_MS} ms); nothing was generated or changed.`]);
-    const deadlineMs = Math.max(1_000, Math.min(BUILD_BUDGET.deadlineMs, Math.floor(input.timeoutMs) - GENERATION_DEADLINE_MARGIN_MS));
-    const controller = new AbortController();
-    const onAbort = (): void => controller.abort();
-    input.signal?.addEventListener("abort", onAbort, { once: true });
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let outcome: BuildMultiGenerationOutcome | GenerationTimeout | GenerationCancelled;
-    try {
-      outcome = await Promise.race<BuildMultiGenerationOutcome | GenerationTimeout | GenerationCancelled>([
-        port.generate({ prompt, provider: input.provider, scope: { tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId }, runId: input.runId, deadlineMs, signal: controller.signal }),
-        new Promise<GenerationTimeout>((resolve) => { timer = setTimeout(() => resolve(new GenerationTimeout()), Math.floor(input.timeoutMs)); }),
-        new Promise<GenerationCancelled>((resolve) => { controller.signal.addEventListener("abort", () => resolve(new GenerationCancelled()), { once: true }); }),
-      ]);
-    } catch (error) {
-      return refuse("implementation_failed", [`The generation failed internally: ${sanitizeTraceText(error instanceof Error ? error.message : String(error), 200) || "unknown error"}. Nothing was generated or changed.`]);
-    } finally {
-      if (timer !== undefined) clearTimeout(timer);
-      input.signal?.removeEventListener("abort", onAbort);
-    }
-    if (outcome instanceof GenerationTimeout) return refuse("timeout", [`The generation did not finish within the run's remaining ${Math.floor(input.timeoutMs)} ms; nothing was generated or changed.`]);
-    if (outcome instanceof GenerationCancelled) return refuse("cancelled", ["The run was cancelled while generating; nothing was generated or changed."]);
-    if (outcome.kind === "provider_error") return blocked(generationFailureBlockers(providerFailureOf(outcome.error, input.provider)));
-    if (outcome.kind === "failure") return blocked(generationFailureBlockers(outcome.body));
-    const now = this.options.now ? this.options.now() : Date.now();
-    return { kind: "generation-proposal", ok: true, toolId: input.toolId, version: input.version, proposal: sealGenerationProposal({ body: outcome.body, prompt, provider: input.provider, runId: input.runId, context, headMark, descriptor, now }) };
+/** Exactly the allowed keys (authority-shaped keys refused by name); null when the surface is clean. */
+function closedSurface(args: Record<string, unknown>, allowed: readonly string[], tool: string): string | null {
+  for (const key of Object.keys(args)) {
+    if (allowed.includes(key)) continue;
+    return AUTHORITY_KEYS.has(key) ? `Argument "${key.slice(0, 40)}" is an authority-shaped claim - ${tool} accepts only ${allowed.join(", ") || "no arguments"}; the scope, principal, base and provider come from the server.` : `Unexpected argument "${key.slice(0, 40)}" - ${tool} accepts only ${allowed.join(", ") || "no arguments"}.`;
+  }
+  return null;
+}
+
+/** The public snapshot a service answer carries (the service's `buildGenerationTaskSnapshot`), or null. */
+const snapshotOf = (value: unknown): Record<string, unknown> | null => (isRecord(value) && value.schema === "sirkit.generation-task-snapshot.v1" && typeof value.taskId === "string" && GENERATION_TASK_ID_PATTERN.test(value.taskId) ? value : null);
+
+/** A refusal or blocker for a service answer that is not a success, in the service's own closed codes (never its free text). */
+function answerFailure(input: GenerationInvocationInput, answer: GenerationTaskPortAnswer): GatewayInvocationOutcome {
+  const refuse = refusalFor(input), blocked = blockedFor(input);
+  const code = typeof answer.body.code === "string" ? answer.body.code : "";
+  const sentence = sanitizeTraceText(typeof answer.body.error === "string" ? answer.body.error : "", 240);
+  switch (code) {
+    case "GENERATION_TASK_NOT_FOUND": return refuse("not_found", [NOT_FOUND_SENTENCE]);
+    case "GENERATION_TASK_FORBIDDEN": return refuse("unauthorized", [sentence || "Your project role cannot start or control a design."]);
+    case "GENERATION_TASK_INVALID_REQUEST": return refuse("invalid_input", [`The design request is not valid (${sanitizeTraceText(typeof answer.body.issue === "string" ? answer.body.issue : "refused", 160)}); nothing was started.`]);
+    case "GENERATION_PROVIDER_UNAVAILABLE": return blocked([{ code: "provider_unavailable", detail: "No model provider is configured for this design; nothing was started." }, { code: "not_retryable", detail: "A retry will not help until a provider is configured on the server; nothing was started or changed." }]);
+    case "GENERATION_TASK_CONTENDED": return blocked([{ code: "task_contended", detail: "The project's design task was busy; nothing was started." }, { code: "retryable", detail: "A retry can help; nothing was started or changed." }]);
+    case "IDEMPOTENCY_KEY_REUSED": return refuse("idempotency_conflict", ["This chat call's request id was already used for a different request; nothing was started."]);
+    case "GENERATION_TASK_INVALID_PERSISTED_STATE": return refuse("implementation_failed", ["The stored design task failed validation and is not used; nothing was started or changed."]);
+    default: return refuse("implementation_failed", [`The design task service answered ${Number.isInteger(answer.status) ? answer.status : "an unknown status"}${code ? ` (${code.slice(0, 60)})` : ""}; nothing was started or changed.`]);
   }
 }
 
-/** Seal a complete or partial generation. Pure; the caller supplied every server-derived fact. */
-export function sealGenerationProposal(input: { body: BuildMultiSuccess; prompt: string; provider: LLMProviderId; runId: string; context: AgentRunContext; headMark: Tier1ProposalScope["headMark"]; descriptor: Pick<ToolDescriptor, "version">; now: number }): SealedSchematicGenerationProposal {
-  const { context } = input;
-  const baseSchematicDigest = context.schematicDigest!;
-  const generation: SchematicGenerationResult = {
-    status: input.body.status,
-    netlist: structuredClone(input.body.netlist),
-    explanation: input.body.explanation,
-    omittedBlocks: [...input.body.omittedBlocks],
-    electricalCheck: structuredClone(input.body.electricalCheck),
-    planner: structuredClone(input.body.planner),
-    budget: { ...input.body.budget },
+/** The task reference a start answers (identity, scope and state; never the prompt). */
+export function generationTaskReferenceOf(snapshot: Record<string, unknown>, disposition: GenerationTaskDisposition, durability: SchematicGenerationPort["durability"]): GenerationTaskReference {
+  const scope = isRecord(snapshot.scope) ? snapshot.scope : {};
+  const liveness = isRecord(snapshot.liveness) ? snapshot.liveness : {};
+  const base = isRecord(snapshot.base) ? snapshot.base : {};
+  const result = isRecord(snapshot.result) && (snapshot.result.status === "complete" || snapshot.result.status === "partial") && typeof snapshot.result.resultDigest === "string"
+    ? { status: snapshot.result.status as "complete" | "partial", omittedBlocks: Array.isArray(snapshot.result.omittedBlocks) ? snapshot.result.omittedBlocks.filter((entry): entry is string => typeof entry === "string").slice(0, 8) : [], resultDigest: snapshot.result.resultDigest }
+    : null;
+  return {
+    schema: GENERATION_TASK_REF_SCHEMA,
+    taskId: String(snapshot.taskId),
+    scope: { tenantId: String(scope.tenantId ?? ""), projectId: String(scope.projectId ?? ""), branchId: String(scope.branchId ?? "") },
+    disposition,
+    sameRequest: disposition !== "attached-active",
+    state: String(snapshot.state ?? ""),
+    phase: typeof snapshot.phase === "string" ? snapshot.phase : null,
+    origin: snapshot.origin === "build" ? "build" : "chat",
+    liveness: typeof liveness.state === "string" ? liveness.state : "idle",
+    base: { schematicDigest: String(base.schematicDigest ?? ""), recipe: String(base.recipe ?? "") },
+    result,
+    durability,
+    createdAt: String(snapshot.createdAt ?? ""),
   };
-  const body = {
-    schema: GENERATION_PROPOSAL_SCHEMA,
-    toolId: AGENT_GENERATION_PROPOSAL_TOOL_ID,
-    version: input.descriptor.version,
-    scope: { tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId, headMark: { ...input.headMark } },
-    authorization: buildAuthorizationBinding({ principalId: context.actor.actorId, ...(context.actor.membershipRevision ? { membershipRevision: context.actor.membershipRevision } : {}), scope: { tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId } }),
-    baseSchematicDigest,
-    mode: "build" as const,
-    request: { prompt: input.prompt, provider: input.provider },
-    generation,
-    netlistDigest: generationNetlistDigest(baseSchematicDigest, generation.netlist),
-    actor: { actorId: `agent:${input.provider}`, kind: "ai" as const },
-    effectiveActor: { actorId: context.actor.actorId, kind: (context.actor.source === "verified-worker" ? "worker" : "human") as "human" | "worker" },
-    provenance: { provider: input.provider, runId: input.runId, note: "AI-generated Build-mode schematic, proposed for explicit human review; nothing applied", instruction: sanitizeTraceText(input.prompt, 300) },
-    createdAt: input.now,
-    expiresAt: input.now + GENERATION_PROPOSAL_TTL_MS,
+}
+/** The digest the trace records for a reference (identity and disposition only). */
+export const generationTaskReferenceDigest = (reference: GenerationTaskReference): string => engineeringDigest({ schema: GENERATION_TASK_REF_SCHEMA, taskId: reference.taskId, disposition: reference.disposition });
+
+// ─── generate-proposal@2.0.0: start or attach ────────────────────────────────────────────────────────────────────────────────
+
+/** Back-compat name of the start input (the gateway's call shape). */
+export type SchematicGenerationProposalInput = GenerationInvocationInput;
+
+export class SchematicGenerationProposalService {
+  constructor(private readonly registry: ToolRegistry, private readonly options: GenerationServiceOptions) {}
+
+  async invoke(input: GenerationInvocationInput): Promise<GatewayInvocationOutcome> {
+    const refuse = refusalFor(input);
+    const gate = prelude(this.registry, this.options, input, AGENT_GENERATION_PROPOSAL_TOOL_ID);
+    if (!gate.ok) return gate.outcome;
+    const context = input.context;
+    // the base the task pins: the validated schematic as the chat run posted it (the `chat-sheet` recipe) and its head mark when present
+    if (!context.schematic || !context.schematicDigest) return refuse("authority_unavailable", ["No verified schematic snapshot is available for this run; nothing was started."]);
+    const surface = closedSurface(input.args, ["prompt"], "the generation start");
+    if (surface) return refuse("invalid_input", [surface]);
+    const prompt = typeof input.args.prompt === "string" ? input.args.prompt.trim() : "";
+    if (prompt.length === 0 || prompt.length > MAX_GENERATION_PROMPT_CHARS) return refuse("invalid_input", [`prompt must be 1 to ${MAX_GENERATION_PROMPT_CHARS} characters of plain text describing the circuit.`]);
+    if (typeof input.callId !== "string" || input.callId.length === 0 || input.callId.length > 200) return refuse("not_callable", ["A provider call id is required: it keys the start's idempotency (a retried call attaches to the task it started)."]);
+    if (input.signal?.aborted) return refuse("cancelled", ["The turn ended before the design was started; nothing was started."]);
+    const scope = scopeOf(context);
+    const body: GenerationTaskPortStart["body"] = {
+      clientRequestId: generationChatClientRequestId({ scope, runId: input.runId, callId: input.callId }),
+      prompt, provider: input.provider,
+      base: { schematicDigest: context.schematicDigest, recipe: "chat-sheet", ...(context.schematicHeadMark ? { headMark: { ...context.schematicHeadMark } } : {}) },
+    };
+    let answer: GenerationTaskPortAnswer;
+    try {
+      // deliberately NOT raced against the turn: a start is one durable commit; once it lands the task outlives the turn either way
+      answer = await gate.port.start({ scope, principal: { principalId: context.actor.actorId, role: context.actor.actorRole, membershipRevision: context.actor.membershipRevision ?? UNREVISIONED_MEMBERSHIP }, chatRunId: input.runId, body });
+    } catch (error) {
+      return refuse("implementation_failed", [`The design task service failed: ${sanitizeTraceText(error instanceof Error ? error.message : String(error), 200) || "unknown error"}. Nothing is known to have started; the project's design status shows any task that did.`]);
+    }
+    if (answer.status === 202) {
+      const snapshot = snapshotOf(answer.body.task);
+      if (!snapshot) return refuse("invalid_output", ["The design task service answered without a task snapshot."]);
+      return { kind: "generation-task", ok: true, toolId: input.toolId, version: input.version, task: generationTaskReferenceOf(snapshot, answer.body.attached === true ? "attached-same-request" : "started", gate.port.durability) };
+    }
+    if (answer.status === 409 && answer.body.code === "GENERATION_TASK_ACTIVE") {
+      // one design at a time per project and branch: the running one is ATTACHED (as the composer's Generate follows it), never a second
+      const active = snapshotOf(answer.body.activeTask);
+      if (!active) return blockedFor(input)([{ code: "task_active", detail: "A design is already running for this project; nothing new was started." }, { code: "retryable", detail: "Ask again once the running design is finished or stopped." }]);
+      return { kind: "generation-task", ok: true, toolId: input.toolId, version: input.version, task: generationTaskReferenceOf(active, "attached-active", gate.port.durability) };
+    }
+    return answerFailure(input, answer);
+  }
+}
+
+// ─── sirkit.generation.task-inspect@1.0.0 ───────────────────────────────────────────────────────────────────────────────────
+
+/** The snapshot keys the inspection hands the model: an ALLOWLIST (a key added to the snapshot later is not forwarded until reviewed). */
+const INSPECTED_SNAPSHOT_KEYS = Object.freeze(["taskId", "scope", "state", "terminal", "phase", "origin", "provider", "createdAt", "updatedAt", "serverNow", "liveness", "plan", "blocker", "failure", "usage", "allowance", "base", "result", "review", "control", "actions", "retryBlocks", "eventCursor", "activity"] as const);
+
+export function publicTaskProjection(snapshot: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(INSPECTED_SNAPSHOT_KEYS.filter((key) => Object.prototype.hasOwnProperty.call(snapshot, key)).map((key) => [key, structuredClone(snapshot[key])]));
+}
+/** A bounded summary of a validated result: completeness, omitted blocks, counts and the electrical check's numbers (never the netlist). */
+export function resultSummaryOf(result: unknown): Record<string, unknown> | null {
+  if (!isRecord(result) || (result.status !== "complete" && result.status !== "partial")) return null;
+  const netlist = isRecord(result.netlist) ? result.netlist : {};
+  const check = isRecord(result.electricalCheck) ? result.electricalCheck : {};
+  return {
+    status: result.status,
+    omittedBlocks: Array.isArray(result.omittedBlocks) ? result.omittedBlocks.filter((entry): entry is string => typeof entry === "string").slice(0, 8) : [],
+    components: Array.isArray(netlist.components) ? netlist.components.length : 0,
+    connections: Array.isArray(netlist.connections) ? netlist.connections.length : 0,
+    electricalCheck: { state: typeof check.state === "string" ? check.state : "not_run", criticalCount: typeof check.criticalCount === "number" ? check.criticalCount : null, warningCount: typeof check.warningCount === "number" ? check.warningCount : null },
+    resultDigest: typeof result.resultDigest === "string" ? result.resultDigest : null,
   };
-  return deepFreeze({ ...body, proposalId: `genprop-${engineeringDigest({ schema: IDENTITY_DIGEST_SCHEMA, body }).slice(5)}` });
+}
+
+export class GenerationTaskInspectService {
+  constructor(private readonly registry: ToolRegistry, private readonly options: GenerationServiceOptions) {}
+
+  async invoke(input: GenerationInvocationInput): Promise<GatewayInvocationOutcome> {
+    const refuse = refusalFor(input);
+    const gate = prelude(this.registry, this.options, input, GENERATION_TASK_INSPECT_TOOL_ID);
+    if (!gate.ok) return gate.outcome;
+    const surface = closedSurface(input.args, ["taskId"], "the task inspection");
+    if (surface) return refuse("invalid_input", [surface]);
+    const asked = input.args.taskId;
+    if (asked !== undefined && (typeof asked !== "string" || asked.length > 200)) return refuse("invalid_input", ["taskId, when given, is a design task id (generation-task:<32 hex>); omit it for the project's current or most recent design."]);
+    if (input.signal?.aborted) return refuse("cancelled", ["The turn ended before the inspection ran."]);
+    const scope = scopeOf(input.context);
+    let taskId: string | null = typeof asked === "string" ? asked.trim() : null;
+    try {
+      if (taskId === null) {
+        const listed = await gate.port.list(scope);
+        if (listed.status !== 200) return answerFailure(input, listed);
+        const active = snapshotOf(listed.body.active);
+        const recent = Array.isArray(listed.body.recent) ? listed.body.recent.find((ref): ref is { taskId: string } => isRecord(ref) && typeof ref.taskId === "string" && GENERATION_TASK_ID_PATTERN.test(ref.taskId)) : undefined;
+        taskId = active ? String(active.taskId) : recent ? recent.taskId : null;
+        if (taskId === null) return this.read(input, { schema: GENERATION_TASK_INSPECTION_SCHEMA, found: false, durability: gate.port.durability, note: "This project has no design task. A design is started from the Build composer's Generate or with the generation start tool; nothing was changed." }, engineeringDigest({ schema: GENERATION_TASK_INSPECTION_SCHEMA, scope, found: false }), gate.descriptor);
+      }
+      if (!GENERATION_TASK_ID_PATTERN.test(taskId)) return refuse("not_found", [NOT_FOUND_SENTENCE]);
+      const answer = await gate.port.inspect(scope, taskId, { includeResult: true });
+      if (answer.status !== 200) return answerFailure(input, answer);
+      const snapshot = snapshotOf(answer.body.task);
+      if (!snapshot) return refuse("invalid_output", ["The design task service answered without a task snapshot."]);
+      const report = {
+        schema: GENERATION_TASK_INSPECTION_SCHEMA, found: true, durability: gate.port.durability,
+        task: publicTaskProjection(snapshot), result: resultSummaryOf(answer.body.result),
+        note: "The task's public state from the durable task store (never its conversation, tool outputs or reasoning). A design runs in a generation worker, not in this chat: a turn ending or Stop answer does not stop it; Stop design (the status card, or a confirmed control request) does. A reviewable result is offered to the user in the schematic review dialog, where only they approve it. Report the state as it is; liveness no_worker means no worker is consuming designs right now, never that the design is running.",
+      };
+      return this.read(input, report, engineeringDigest({ schema: GENERATION_TASK_INSPECTION_SCHEMA, taskId, updatedAt: snapshot.updatedAt, eventCursor: snapshot.eventCursor }), gate.descriptor);
+    } catch (error) {
+      return refuse("implementation_failed", [`The task inspection failed: ${sanitizeTraceText(error instanceof Error ? error.message : String(error), 200) || "unknown error"}. Nothing was changed.`]);
+    }
+  }
+
+  private read(input: GenerationInvocationInput, report: Record<string, unknown>, digest: string, descriptor: ToolDescriptor): GatewayInvocationOutcome {
+    const output = { report };
+    const errors = [...assertSafeJsonValue(output, DEFAULT_OUTPUT_LIMITS, "output"), ...validateAgainstSchema(output, descriptor.outputSchema, "output")];
+    if (JSON.stringify(output).length > GENERATION_TASK_INSPECT_MAX_CHARS) errors.push(`output: over the inspection bound (${GENERATION_TASK_INSPECT_MAX_CHARS} characters)`);
+    if (errors.length > 0) return refusalFor(input)("invalid_output", errors.slice(0, 5));
+    return { kind: "read", ok: true, toolId: input.toolId, version: input.version, output, sourceRevisionDigest: digest, verification: GENERATION_TASK_INSPECT_VERIFICATION };
+  }
+}
+
+// ─── sirkit.generation.task-control@1.0.0: a confirm chip ────────────────────────────────────────────────────────────────────
+
+export class GenerationTaskControlProposalService {
+  constructor(private readonly registry: ToolRegistry, private readonly options: GenerationServiceOptions) {}
+
+  async invoke(input: GenerationInvocationInput): Promise<GatewayInvocationOutcome> {
+    const refuse = refusalFor(input), blocked = blockedFor(input);
+    const gate = prelude(this.registry, this.options, input, GENERATION_TASK_CONTROL_TOOL_ID);
+    if (!gate.ok) return gate.outcome;
+    const surface = closedSurface(input.args, ["action", "taskId", "blockId"], "the task control request");
+    if (surface) return refuse("invalid_input", [surface]);
+    const action = input.args.action;
+    if (typeof action !== "string" || !(GENERATION_TASK_CONTROL_TOOL_ACTIONS as readonly string[]).includes(action)) return refuse("invalid_input", [`action is one of ${GENERATION_TASK_CONTROL_TOOL_ACTIONS.join(", ")}.`]);
+    const asked = input.args.taskId, block = input.args.blockId;
+    if (asked !== undefined && (typeof asked !== "string" || asked.length > 200)) return refuse("invalid_input", ["taskId, when given, is a design task id; omit it for the project's running design."]);
+    if (action === "retry-block" ? !(typeof block === "string" && (GENERATION_TASK_BLOCK_IDS as readonly string[]).includes(block)) : block !== undefined) return refuse("invalid_input", [action === "retry-block" ? "retry-block needs blockId: a planned block id the task lists as retryable (main, b1..b8)." : "blockId is only for retry-block."]);
+    if (input.signal?.aborted) return refuse("cancelled", ["The turn ended before the control request was prepared."]);
+    const scope = scopeOf(input.context);
+    try {
+      let taskId: string | null = typeof asked === "string" ? asked.trim() : null;
+      if (taskId === null) {
+        const listed = await gate.port.list(scope);
+        if (listed.status !== 200) return answerFailure(input, listed);
+        const active = snapshotOf(listed.body.active);
+        if (!active) return blocked([{ code: "no_active_task", detail: "This project has no running design task to control; nothing was requested." }]);
+        taskId = String(active.taskId);
+      }
+      if (!GENERATION_TASK_ID_PATTERN.test(taskId)) return refuse("not_found", [NOT_FOUND_SENTENCE]);
+      const answer = await gate.port.inspect(scope, taskId, { includeResult: false });
+      if (answer.status !== 200) return answerFailure(input, answer);
+      const snapshot = snapshotOf(answer.body.task);
+      if (!snapshot) return refuse("invalid_output", ["The design task service answered without a task snapshot."]);
+      const state = String(snapshot.state ?? "");
+      const actions = Array.isArray(snapshot.actions) ? snapshot.actions.filter((entry): entry is string => typeof entry === "string") : [];
+      const retryBlocks = Array.isArray(snapshot.retryBlocks) ? snapshot.retryBlocks.filter((entry): entry is string => typeof entry === "string") : [];
+      const valid = actions.includes(action) && (action !== "retry-block" || retryBlocks.includes(String(block)));
+      if (!valid) {
+        const offered = actions.filter((entry) => (GENERATION_TASK_CONTROL_TOOL_ACTIONS as readonly string[]).includes(entry));
+        return blocked([{ code: "action_not_available", detail: `${action} is not valid while the design is ${state}${action === "retry-block" ? ` (retryable blocks: ${retryBlocks.join(", ") || "none"})` : ""}; valid now: ${offered.join(", ") || "none"}. Nothing was requested.` }]);
+      }
+      const plan = isRecord(snapshot.plan) && Array.isArray(snapshot.plan.blocks) ? snapshot.plan.blocks.filter(isRecord) : [];
+      const blockName = action === "retry-block" ? String(plan.find((entry) => entry.blockId === block)?.name ?? block).slice(0, 120) : null;
+      const now = this.options.now ? this.options.now() : Date.now();
+      const actor = input.context.actor;
+      const request: SealedGenerationTaskControlRequest = sealGenerationTaskControlRequest({
+        version: gate.descriptor.version, scope, taskId, action: action as GenerationTaskControlToolAction, blockId: action === "retry-block" ? String(block) : null,
+        label: blockName ? `${GENERATION_TASK_CONTROL_LABELS["retry-block"]} ${blockName}` : GENERATION_TASK_CONTROL_LABELS[action as GenerationTaskControlToolAction], stateAtRequest: state,
+        actor: { actorId: `agent:${input.provider}`, kind: "ai" }, effectiveActor: { actorId: actor.actorId, kind: actor.source === "verified-worker" ? "worker" : "human" },
+        provenance: { provider: input.provider, runId: input.runId }, createdAt: now,
+      });
+      return { kind: "generation-task-control", ok: true, toolId: input.toolId, version: input.version, request };
+    } catch (error) {
+      return refuse("implementation_failed", [`The control request could not be prepared: ${sanitizeTraceText(error instanceof Error ? error.message : String(error), 200) || "unknown error"}. Nothing was requested.`]);
+    }
+  }
 }

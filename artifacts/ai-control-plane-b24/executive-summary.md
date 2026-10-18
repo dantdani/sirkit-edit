@@ -47,20 +47,20 @@ NOT READY (`eslint .` exits 1, none of its 33 errors introduced by B24), CI read
 
 | count | value |
 |---|---|
-| route-methods | 175 |
-| canonical-wrappers | 172 |
+| route-methods | 177 |
+| canonical-wrappers | 174 |
 | approved-factories | 3 |
 | raw-handlers | 0 |
-| action-records | 110 |
-| registry-tools | 59 |
-| agent-exposed-tools | 47 |
+| action-records | 111 |
+| registry-tools | 63 |
+| agent-exposed-tools | 51 |
 | mcp-exposed-tools | 9 |
-| agent-only-tools | 38 |
+| agent-only-tools | 42 |
 | agent-exposed-tier-3-tools | 0 |
-| control-sites | 654 |
-| control-surfaces | 68 |
+| control-sites | 663 |
+| control-surfaces | 70 |
 | sql-migrations | 32 |
-| generators | 31 |
+| generators | 32 |
 
 [PR-D, 2026-10-17] Count lines moved with the regenerated map (product reliability D): registry-tools 48 -> 52, agent-exposed-tools
 37 -> 40, agent-only-tools 28 -> 31 (PR-D's four descriptors, OD-243, OD-244; mcp-exposed-tools stays 9); generators 28 -> 30 (PR-D's
@@ -84,6 +84,8 @@ table are the concurrent PR-F builders' to move with their descriptors and contr
 [PR-M, 2026-10-17] Count lines moved with the regenerated map (runbook section M, increment M1): action-records 108 -> 110 (schematic.resolve-components-propose, the sealed resolution batch, and schematic.resolve-components, its reviewed destructive apply), registry-tools 56 -> 59, agent-exposed-tools 44 -> 47, agent-only-tools 35 -> 38 and agent-exposed-proposal-tools 9 -> 10 - PR-M's three descriptors: the schematic-instance inspection and the resolution candidate search (Tier 0 reads) and the component resolution proposal (Tier 2), all three agent-exposed and withheld from MCP; mcp-exposed-tools stays 9; the verdict's status lines stand.
 
 [PR-M, 2026-10-18] Count lines moved with the regenerated map (runbook section M, M1's page intake): route-methods 174 -> 175 and canonical-wrappers 171 -> 172 (POST /api/component-resolution-authority, the reviewed resolution's fresh-facts endpoint, one canonical wrapper; 3 factories and 0 raw unchanged); control-sites 649 -> 654 and control-surfaces 67 -> 68 (the resolution review dialog `ComponentResolutionReviewDialog.tsx`, a new surface - Approve, Discard, its close and the receipt's Dismiss - and the Missing parts list's Find a replacement in the library, as the B17-A inventory is regenerated).
+
+[PR-M, 2026-10-18] Count lines moved with the regenerated map (runbook section M, M2's acquisition): route-methods 175 -> 177 and canonical-wrappers 172 -> 174 (GET and POST /api/parts/acquisitions); action-records 110 -> 111 (parts.cad-acquisition); registry-tools 59 -> 63, agent-exposed-tools 47 -> 51 and agent-only-tools 38 -> 42 - runbook L.5's two descriptors as the tree holds them and M2's two (the CAD acquisition start and status, both withheld from MCP; mcp-exposed-tools stays 9); control-sites 654 -> 663 and control-surfaces 68 -> 70 - L.5's design control chip (two controls) as the tree holds it, and M2's seven controls on two new surfaces (the Missing parts list's acquisition panel, the Build Library's component review inbox), the B17-A inventory as regenerated; generators 31 -> 32 (the CAD source registry generator `scripts/generate-cad-source-registry.ts`).
 
 ## 4. Earlier verdicts
 

@@ -351,7 +351,7 @@ describe("PR-F fB - through the real loop", () => {
     const sealed = (ready[0] as { proposal: SealedPartDraftRequest }).proposal;
     expect(sealed.schema).toBe(DRAFT_REQUEST_SCHEMA);
     expect(verifySealedPartDraftRequestIntegrity(sealed)).toEqual({ ok: true });
-    expect(events.some((event) => event.type === "proposal_ready" || event.type === "pcb_proposal_ready" || event.type === "generation_proposal_ready" || event.type === "execution_grant_ready")).toBe(false);
+    expect(events.some((event) => event.type === "proposal_ready" || event.type === "pcb_proposal_ready" || event.type === "generation_task_ready" || event.type === "execution_grant_ready")).toBe(false); // [PR-L, 2026-10-18] pin move (runbook L.5): generation_task_ready replaced the removed v1 generation_proposal_ready; the same "no artifact" assertion
     expect(events.filter((event) => event.type === "tool_refused").map((event) => (event as { status: string }).status)).toEqual(["proposal_exists"]);
     const toldRead = JSON.parse(continuations[0]![0]!) as { ok: boolean; output: { report: { items: Array<{ checklist: { refDes: string } }> } } };
     expect(toldRead.ok).toBe(true);

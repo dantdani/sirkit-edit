@@ -15,6 +15,10 @@
  *    resumes each slice from its last committed checkpoint.
  *  - Every slice runs inside the injected scope runner (the script binds `withLlmCallScope` with the route that admitted the task, so the
  *    provider calls are recorded under it).
+ *  - [PR-M, 2026-10-18] Section M2 (m2-acquisition-design.md M2.3): the worker also consumes OTHER durable topics on the same repository
+ *    and outbox through `FencedTopicRunner`s (the component-resolution task's `component-resolution-slice`): claimed only with the capacity
+ *    the generation claim left free, each slice under the same kind of supervisor (renewal, control poll, yield on a stop, abort after the
+ *    grace, release for immediate takeover). There is no second worker.
  */
 import type { GenerationTaskScope } from "../contracts";
 import { GENERATION_SLICE_POLICY } from "../contracts";
@@ -56,6 +60,31 @@ const REAL_TIMERS: WorkerTimers = {
 /** Runs one slice inside the request scope its provider calls are recorded under (identity by default). */
 export type GenerationScopeRunner = <T>(scope: GenerationTaskScope, run: () => Promise<T>) => Promise<T>;
 
+/** [PR-M, 2026-10-18] M2: one claimed slice of another durable topic (its own store does the fenced claim; the worker supervises it). */
+export interface FencedTopicSlice {
+  readonly topic: string;
+  readonly sliceId: string;
+  readonly taskId: string;
+  readonly kind: string;
+  readonly attempt: number;
+  readonly leaseExpiresAt: string;
+  /** S2: extend the lease; false when it was lost (the slice must stop) */
+  renew(): Promise<boolean>;
+  poll(): Promise<{ fenced: boolean; cancel: boolean }>;
+  /** hand the slice back for immediate takeover (a shutdown) */
+  release(): Promise<void>;
+  run(supervisor: { readonly signal: AbortSignal; boundary(): Promise<BoundaryVerdict> }): Promise<TopicSliceReport>;
+}
+/** [PR-M, 2026-10-18] M2: what a topic slice reports (the generation report's fields, its kind the topic's own). */
+export interface TopicSliceReport { topic: string; sliceId: string; taskId: string; kind: string; blockId: null; attempt: number; outcome: string; state: string | null; detail: string }
+/** [PR-M, 2026-10-18] M2: another durable topic this worker consumes. */
+export interface FencedTopicRunner {
+  readonly topic: string;
+  claim(input: { workerId: string; limit: number }): Promise<FencedTopicSlice[]>;
+}
+/** [PR-M, 2026-10-18] M2: a settled slice of either kind. */
+export type WorkerSliceReport = GenerationSliceReport | TopicSliceReport;
+
 export interface GenerationWorkerOptions {
   store: GenerationTaskStore;
   workerId: string;
@@ -69,6 +98,8 @@ export interface GenerationWorkerOptions {
   timers?: WorkerTimers;
   runInScope?: GenerationScopeRunner;
   log?: (line: string) => void;
+  /** [PR-M, 2026-10-18] M2: other durable topics on the same repository (the component-resolution slices) */
+  topics?: readonly FencedTopicRunner[];
 }
 
 export interface GenerationTickReport {
@@ -151,6 +182,48 @@ class RunningSlice implements SliceSupervisor {
   }
 }
 
+/** [PR-M, 2026-10-18] M2: the supervisor of one running topic slice (the same renewal, control, yield and abort as a generation slice). */
+class RunningTopicSlice {
+  readonly controller = new AbortController();
+  private reason: SliceStopReason | null = null;
+  private yieldFor: "pause" | "shutdown" | null = null;
+  private readonly handles: unknown[] = [];
+  promise!: Promise<WorkerSliceReport>;
+
+  constructor(private readonly worker: GenerationWorker, readonly slice: FencedTopicSlice) {
+    const policy = worker.policy, timers = worker.timers;
+    this.handles.push(timers.setInterval(() => { void this.renew(); }, policy.renewEveryMs));
+    this.handles.push(timers.setInterval(() => { void this.poll(); }, policy.controlPollMs));
+  }
+  get signal(): AbortSignal { return this.controller.signal; }
+  stop(reason: SliceStopReason): void {
+    if (this.reason !== null) return;
+    this.reason = reason;
+    this.controller.abort(new Error(`TOPIC_SLICE_STOPPED:${reason}`));
+  }
+  requestYield(reason: "pause" | "shutdown"): void { this.yieldFor ??= reason; }
+  dispose(): void { for (const handle of this.handles.splice(0)) this.worker.timers.clearInterval(handle); }
+  private async renew(): Promise<void> {
+    if (this.reason !== null) return;
+    try { if (!(await this.slice.renew())) this.stop("lease_lost"); } catch {
+      const expires = Date.parse(this.slice.leaseExpiresAt);
+      if (!Number.isFinite(expires) || this.worker.clock() >= expires - Math.min(5_000, this.worker.policy.renewEveryMs)) this.stop("lease_lost");
+    }
+  }
+  private async poll(): Promise<void> {
+    if (this.reason !== null) return;
+    try { const control = await this.slice.poll(); if (control.fenced) this.stop("fenced"); else if (control.cancel) this.stop("cancel"); } catch { /* the next poll or boundary retries */ }
+  }
+  async boundary(): Promise<BoundaryVerdict> {
+    if (this.reason === "cancel") return "cancel";
+    if (this.reason === "fenced" || this.reason === "lease_lost") return "fenced";
+    const control = await this.slice.poll();
+    if (control.fenced) { this.stop("fenced"); return "fenced"; }
+    if (control.cancel) return "cancel";
+    return this.yieldFor !== null || this.reason !== null ? "yield" : "continue";
+  }
+}
+
 export class GenerationWorker {
   readonly workerId: string;
   readonly store: GenerationTaskStore;
@@ -163,6 +236,9 @@ export class GenerationWorker {
   private readonly runInScope: GenerationScopeRunner;
   private readonly logLine: (line: string) => void;
   private readonly running = new Map<string, RunningSlice>();
+  /** [PR-M, 2026-10-18] M2: the running slices of other topics (they count against the same concurrency) */
+  private readonly topicRunning = new Map<string, RunningTopicSlice>();
+  private readonly topics: readonly FencedTopicRunner[];
   private readonly startedAt: string;
   private lastTickAt: string | null = null;
   private stopping = false;
@@ -184,22 +260,25 @@ export class GenerationWorker {
     this.revalidate = options.revalidate;
     this.runInScope = options.runInScope ?? ((_scope, run) => run());
     this.logLine = options.log ?? (() => undefined);
+    this.topics = options.topics ?? [];
     this.startedAt = isoOf(this.clock());
   }
 
   log(line: string): void { try { this.logLine(line); } catch { /* a log sink never stops the worker */ } }
 
   health(): GenerationWorkerHealth {
-    return { workerId: this.workerId, startedAt: this.startedAt, running: this.running.size, lastTickAt: this.lastTickAt, stopping: this.stopping, slicesSettled: this.settled };
+    return { workerId: this.workerId, startedAt: this.startedAt, running: this.inFlight(), lastTickAt: this.lastTickAt, stopping: this.stopping, slicesSettled: this.settled };
   }
   /** The slices running now (their ids). */
-  runningSlices(): string[] { return [...this.running.keys()]; }
+  runningSlices(): string[] { return [...this.running.keys(), ...this.topicRunning.keys()]; }
+  /** [PR-M, 2026-10-18] M2: generation and topic slices in flight. */
+  private inFlight(): number { return this.running.size + this.topicRunning.size; }
 
   /** One tick: claim up to the free capacity and START each claimed slice (it runs concurrently; `idle()` awaits them). */
   async tick(): Promise<GenerationTickReport> {
     const at = isoOf(this.clock());
     this.lastTickAt = at;
-    const free = this.policy.concurrency - this.running.size;
+    const free = this.policy.concurrency - this.inFlight();
     if (free <= 0 || this.stopping) return { at, claims: [], started: [] };
     const outcomes = await this.store.claimSlices({ workerId: this.workerId, limit: free, revalidate: this.revalidate });
     const report: GenerationTickReport = { at, claims: [], started: [] };
@@ -213,7 +292,37 @@ export class GenerationWorker {
       report.started.push(outcome.lease.sliceId);
       this.startSlice(outcome.lease, outcome.task);
     }
+    // [PR-M, 2026-10-18] M2: the other topics, with the capacity the generation claim left free
+    for (const runner of this.topics) {
+      const remaining = this.policy.concurrency - this.inFlight();
+      if (remaining <= 0 || this.stopping) break;
+      let slices: FencedTopicSlice[];
+      try { slices = await runner.claim({ workerId: this.workerId, limit: remaining }); } catch (error) { this.log(`claim on topic ${runner.topic} failed (${error instanceof Error ? error.name : "error"})`); continue; }
+      for (const slice of slices) {
+        report.claims.push({ outcome: "claimed", taskId: slice.taskId, sliceId: slice.sliceId });
+        report.started.push(slice.sliceId);
+        this.startTopicSlice(slice);
+      }
+    }
     return report;
+  }
+
+  /** [PR-M, 2026-10-18] M2: run one topic slice under its supervisor. */
+  private startTopicSlice(slice: FencedTopicSlice): void {
+    const supervisor = new RunningTopicSlice(this, slice);
+    this.topicRunning.set(slice.sliceId, supervisor);
+    this.log(`started ${slice.topic} ${slice.kind} slice ${slice.sliceId}, attempt ${slice.attempt}`);
+    supervisor.promise = slice.run({ signal: supervisor.signal, boundary: () => supervisor.boundary() }).catch((error: unknown): TopicSliceReport => ({
+      topic: slice.topic, sliceId: slice.sliceId, taskId: slice.taskId, kind: slice.kind, blockId: null, attempt: slice.attempt, outcome: "released", state: null,
+      detail: `the topic slice failed outside its own handling (${error instanceof Error ? error.name : "error"}); the lease will lapse`,
+    })).then((report) => {
+      supervisor.dispose();
+      this.topicRunning.delete(slice.sliceId);
+      this.settled += 1;
+      this.log(`settled ${slice.topic} slice ${slice.sliceId}: ${report.outcome}${report.state ? ` (task ${report.state})` : ""} - ${report.detail}`);
+      this.wake?.();
+      return report;
+    });
   }
 
   private startSlice(lease: GenerationSliceLease, task: Parameters<typeof runGenerationSlice>[0]["task"]): void {
@@ -236,14 +345,14 @@ export class GenerationWorker {
   }
 
   /** Wait for every running slice to settle. */
-  async idle(): Promise<GenerationSliceReport[]> {
-    return Promise.all([...this.running.values()].map((slice) => slice.promise));
+  async idle(): Promise<WorkerSliceReport[]> {
+    return Promise.all([...[...this.running.values()].map((slice): Promise<WorkerSliceReport> => slice.promise), ...[...this.topicRunning.values()].map((slice) => slice.promise)]);
   }
 
   /** One tick and the settlement of the slices it started (the `--once` mode, and the tests' step). */
-  async runOnce(): Promise<{ tick: GenerationTickReport; slices: GenerationSliceReport[] }> {
+  async runOnce(): Promise<{ tick: GenerationTickReport; slices: WorkerSliceReport[] }> {
     const tick = await this.tick();
-    const slices = await Promise.all(tick.started.map((sliceId) => this.running.get(sliceId)?.promise).filter((promise): promise is Promise<GenerationSliceReport> => promise !== undefined));
+    const slices = await Promise.all(tick.started.map((sliceId): Promise<WorkerSliceReport> | undefined => this.running.get(sliceId)?.promise ?? this.topicRunning.get(sliceId)?.promise).filter((promise): promise is Promise<WorkerSliceReport> => promise !== undefined));
     return { tick, slices };
   }
 
@@ -255,7 +364,7 @@ export class GenerationWorker {
       let failures = 0;
       while (!this.stopping) {
         try {
-          if (this.running.size < this.policy.concurrency) await this.tick();
+          if (this.inFlight() < this.policy.concurrency) await this.tick();
           failures = 0;
         } catch (error) {
           failures += 1;
@@ -272,18 +381,20 @@ export class GenerationWorker {
   }
 
   /** Stop claiming; running slices yield at their next boundary, and after `graceMs` the rest are aborted and released. */
-  async stop(options: { graceMs?: number } = {}): Promise<GenerationSliceReport[]> {
+  async stop(options: { graceMs?: number } = {}): Promise<WorkerSliceReport[]> {
     this.stopping = true;
     this.wake?.();
     const graceMs = options.graceMs ?? this.policy.graceMs;
     const slices = [...this.running.values()];
+    const topicSlices = [...this.topicRunning.values()]; // [PR-M, 2026-10-18] M2
     for (const slice of slices) slice.requestYield("shutdown");
-    const all = Promise.all(slices.map((slice) => slice.promise));
+    for (const slice of topicSlices) slice.requestYield("shutdown");
+    const all = Promise.all([...slices.map((slice): Promise<WorkerSliceReport> => slice.promise), ...topicSlices.map((slice) => slice.promise)]);
     let graceHandle: unknown = null;
     const graceOver = new Promise<"grace">((resolve) => { graceHandle = this.timers.setTimeout(() => resolve("grace"), graceMs); });
     const first = await Promise.race([all, graceOver]);
     if (graceHandle !== null) this.timers.clearTimeout(graceHandle);
-    if (first === "grace") for (const slice of [...this.running.values()]) slice.stop("shutdown");
+    if (first === "grace") { for (const slice of [...this.running.values()]) slice.stop("shutdown"); for (const slice of [...this.topicRunning.values()]) slice.stop("shutdown"); }
     const reports = await all;
     await this.loop;
     this.loop = null;

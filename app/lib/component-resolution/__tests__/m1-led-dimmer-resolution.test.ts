@@ -543,7 +543,7 @@ describe("[PR-M M.5-1/2] the real loop inspects, searches and proposes; the page
     expect(instanceIds).toEqual(["kc-d1", "kc-d2"]);
     expect(events.filter((event) => event.type === "tool_finished").map((event) => (event as { status: string }).status)).toEqual(["succeeded", "succeeded", "proposal_sealed"]);
     expect(events.filter((event) => event.type === "tool_refused").map((event) => (event as { status: string }).status)).toEqual(["proposal_exists"]);
-    expect(events.some((event) => ["proposal_ready", "pcb_proposal_ready", "generation_proposal_ready", "draft_request_ready", "module_contracts_ready", "execution_grant_ready"].includes(event.type))).toBe(false);
+    expect(events.some((event) => ["proposal_ready", "pcb_proposal_ready", "generation_task_ready", "generation_task_control_ready", "draft_request_ready", "module_contracts_ready", "execution_grant_ready"].includes(event.type))).toBe(false); // [PR-L, 2026-10-18] pin move (runbook L.5): the durable task's two events replaced the removed v1 generation_proposal_ready; the same "no other artifact" assertion
     const ready = events.filter((event) => event.type === COMPONENT_RESOLUTION_READY_EVENT);
     expect(ready).toHaveLength(1);
     expect(h.executed()).toBe(0); // sealing changed nothing

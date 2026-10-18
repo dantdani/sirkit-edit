@@ -219,7 +219,7 @@ describe("[B24-A2] the scanner (D24-4, OD-195)", () => {
       "app/lib/engineering/__tests__/pr-d-generate-proposal.test.ts anthropic-key-shape",
       "app/lib/parts/__tests__/pr-f-missing-facts-read.test.ts anthropic-key-shape",
       "app/lib/qualification/__tests__/b24-c3-trace-read.test.ts connection-string-password", // [B24-A2F, 2026-10-09] reviewed pin move, eight -> nine: the history-only entry for the fake B24-C3 committed at ba4f562:75 and the lead's fix rewrote (aaa6a1b)
-    ]);
+    "app/lib/engineering/__tests__/pr-d-generate-proposal.test.ts anthropic-key-shape", ]); // [PR-L, 2026-10-18] reviewed pin move, twelve -> thirteen: a second history-only entry, LAST - PR-D's v1 line of the generate-proposal redaction case (committed at e5817558), rewritten by runbook L.5 for the 2.0.0 port; the tree entry above now holds the rewritten line (on the closing line: line-neutral)
     expect(allowlistProblems(SECRET_SCAN_ALLOWLIST)).toEqual([]);
     for (const entry of SECRET_SCAN_ALLOWLIST) expect(entry.reason.length, entry.path).toBeGreaterThan(40);
     // over the files the allowlist names, tree mode passes: every ordinary entry holds its line, nothing else hits ([B24-A2F, 2026-10-09]
@@ -587,7 +587,7 @@ describe("[B24-A2F, 2026-10-09] the history-only allowlist entries (OD-195 amend
   });
 
   it("(q) red first on b3a4f2d (eight entries): the committed allowlist's ninth entry is history-only - B24-C3's test path, the connection-string rule, the lead's 64-hex digest over the line as committed at ba4f562, a reason naming ba4f562:75 and aaa6a1b and saying replaced; no line of that file at HEAD carries the digest, so tree mode over it is green with nothing allowlisted and nothing stale, and the eight ordinary entries carry no mark", () => {
-    expect(SECRET_SCAN_ALLOWLIST).toHaveLength(12); // [PR-G lead, 2026-10-17] reviewed pin move: 9 -> 12 (the three PR-D/PR-F redaction cases, ordinary entries placed before the history-only one, which stays last)
+    expect(SECRET_SCAN_ALLOWLIST).toHaveLength(13); // [PR-L, 2026-10-18] reviewed pin move: 12 -> 13 (PR-D's v1 generate-proposal line as a second history-only entry, after this one); [PR-G lead, 2026-10-17] reviewed pin move: 9 -> 12 (the three PR-D/PR-F redaction cases, ordinary entries placed before the history-only one, which stays last)
     const ninth = SECRET_SCAN_ALLOWLIST[11] /* [PR-G lead, 2026-10-17] the history-only entry stays LAST: index 8 -> 11 after the three ordinary PR-D/PR-F entries */!;
     expect(ninth).toMatchObject({ path: C3_TEST, rule: "connection-string-password", historyOnly: true });
     expect(ninth.sha256).toMatch(/^[0-9a-f]{64}$/);

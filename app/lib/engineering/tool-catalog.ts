@@ -1057,7 +1057,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     timeoutMs: 5_000,
     sourceEvidence: ["app/lib/pcb/dimensions/commands.ts", "app/lib/pcb/dimensions/geometry.ts", "app/components/pcb/hooks/useDimensionTool.ts", "app/components/pcb/inspectors/DimensionInspector.tsx", "app/lib/engineering/operations.ts", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
     versionNotes: "1.2.0 (B18-C I7): bound and agent-exposed as a reviewed granted execution (confirmation-only: no explicit grammar); re-tiered reversible per the runbook's PCB Tier 1 list (OD-13); deterministic add ids; an update never moves the measured points. 1.1.0 (B09.1): reconciled with B08 truth — implemented and active, no tool adapter.",
-  }, ...COMPUTATION_TOOL_DESCRIPTORS, boardPageInspectDescriptor(), generateProposalDescriptor(), pcbSyncPreflightDescriptor(), catalogInspectDescriptor(), componentReviewRequestDescriptor(), missingFactsDescriptor(), draftRequestDescriptor(), moduleContractsDescriptor(), stackupProposalDescriptor(), instanceInspectDescriptor(), candidateSearchDescriptor(), componentResolutionDescriptor(), /* [PR-M, 2026-10-17] the schematic-instance inspection, the candidate search and the component resolution proposal, declared at the END too */ /* [PR-F fE, 2026-10-17] the stackup / via-policy proposal, declared at the END too */ /* [PR-F fD, 2026-10-17] the module contract proposal, declared at the END too */ /* [PR-F fB, 2026-10-17] the missing-facts read and the part draft request, declared at the END too */ // [B22-B] the five named computations (OD-139), from computation-tool-descriptors.ts; [B24-D2, 2026-10-09] the bounded paged board read (OD-213), its declaration at the END of this file; [PR-D, 2026-10-16] the Build-mode generation proposal (OD-243), its declaration at the END too; [PR-D d2, 2026-10-16] the Schematic to PCB preflight read, the catalog part inspection and the (unavailable) component review request, declared at the END too
+  }, ...COMPUTATION_TOOL_DESCRIPTORS, boardPageInspectDescriptor(), generateProposalDescriptor(), pcbSyncPreflightDescriptor(), catalogInspectDescriptor(), componentReviewRequestDescriptor(), missingFactsDescriptor(), draftRequestDescriptor(), moduleContractsDescriptor(), stackupProposalDescriptor(), instanceInspectDescriptor(), candidateSearchDescriptor(), componentResolutionDescriptor(), cadAcquisitionStartDescriptor(), cadAcquisitionStatusDescriptor(), /* [PR-M, 2026-10-18] M2: the schematic-scoped CAD acquisition start and status, declared at the END too */ generationTaskInspectDescriptor(), generationTaskControlDescriptor(), /* [PR-L, 2026-10-18] the durable generation task's inspection and control request (runbook L.5), declared at the END too */ /* [PR-M, 2026-10-17] the schematic-instance inspection, the candidate search and the component resolution proposal, declared at the END too */ /* [PR-F fE, 2026-10-17] the stackup / via-policy proposal, declared at the END too */ /* [PR-F fD, 2026-10-17] the module contract proposal, declared at the END too */ /* [PR-F fB, 2026-10-17] the missing-facts read and the part draft request, declared at the END too */ // [B22-B] the five named computations (OD-139), from computation-tool-descriptors.ts; [B24-D2, 2026-10-09] the bounded paged board read (OD-213), its declaration at the END of this file; [PR-D, 2026-10-16] the Build-mode generation proposal (OD-243), its declaration at the END too; [PR-D d2, 2026-10-16] the Schematic to PCB preflight read, the catalog part inspection and the (unavailable) component review request, declared at the END too
 ] satisfies readonly ToolDescriptor[]);
 
 let cached: ToolRegistry | null = null;
@@ -1105,22 +1105,22 @@ function boardPageInspectDescriptor(): ToolDescriptor {
 /**
  * [PR-D, 2026-10-16] OD-243: the agent's Build-mode GENERATION proposal, declared at the END (a function declaration is hoisted; the
  * defaults above are initialized before the catalog calls it), so no line of this catalog moves. It is the semantic equivalent of
- * the Build composer's Generate: the page POSTs /api/schematic/build-multi and offers the result in the schematic review dialog; the
- * agent runs the SAME `runBuildMultiGeneration` through the chat route's injected port (app/api/chat/schematic-generation-runtime.ts)
- * and seals the outcome into a proposal the human approves in the same dialog (the page's intake is a later round; the contract is
- * app/lib/agent/generation-proposals.ts). Discovery requires Build mode (`schematic-build-mode`: the validated sheet holds no Theory
- * component), a project with a validated schematic and its canonical head mark (the base the proposal replaces), and a generation
- * provider bound to the run (`schematic-generation`: the server's port fact, never a body claim); the run's remaining wall clock is
- * the budget the service checks before anything runs, and the loop's proposal single-flight allows one generation per run.
+ * the Build composer's Generate. [PR-L, 2026-10-18] Runbook L.5: since 2.0.0 both start the SAME durable generation task
+ * (GenerationTaskService.start; the composer through POST /api/generation-tasks, the agent through the chat route's injected port,
+ * app/api/chat/schematic-generation-runtime.ts); the tool answers the task's reference and the page follows it with the same status
+ * card and the same review intake (app/lib/agent/generation-proposals.ts). Discovery requires Build mode (`schematic-build-mode`: the
+ * validated sheet holds no Theory component), a validated schematic and its canonical head mark (the base the task pins), and the
+ * durable task port bound to the run (`schematic-generation`: the server's port fact, never a body claim); the chat turn's deadline
+ * ends the turn, never the task, and the loop's single-flight allows one start (or attach) per run.
  */
 function generateProposalDescriptor(): ToolDescriptor {
   return {
     ...readDefaults,
-    toolId: "sirkit.schematic.generate-proposal", version: "1.0.0",
-    agentExposed: true, // [PR-D] sealed generation proposal ONLY; approval stays human-only in the schematic review dialog
+    toolId: "sirkit.schematic.generate-proposal", version: "2.0.0", // [PR-L, 2026-10-18] runbook L.5: a DURABLE task start (2.0.0); the in-turn generation of 1.0.0 is removed
+    agentExposed: true, // [PR-D] sealed artifact ONLY (since 2.0.0 a task reference); approval stays human-only in the schematic review dialog
     owningCommandId: "schematic.generate",
-    title: "Propose a generated Build-mode schematic",
-    description: "Generate a Build-mode schematic (real catalog parts) from a one-paragraph circuit request through the SAME planner, bounded build loops, merge and electrical check the Build composer's Generate runs, sealed into a proposal. Example input: {\"prompt\":\"A 555 timer LED blinker powered from a 9 V battery through a 5 V linear regulator.\"}. The proposal carries the netlist, its completeness (complete, or partial with the omitted blocks), the electrical check's state (not checked is not a pass), the planner's state and the budget used, as data. Receiving it changes NOTHING: a human reviews it in the schematic review dialog and explicitly approves or discards it. One generation per run, within the run's remaining time; a failed generation is reported as data (failure class, provider reason, whether a retry can help), not as a proposal.",
+    title: "Start or follow a Build-mode schematic design",
+    description: "Start a Build-mode schematic design (real catalog parts) from a one-paragraph circuit request as the project's DURABLE design task - the SAME task the Build composer's Generate starts - or attach to the design already running for this project. Example input: {\"prompt\":\"A 555 timer LED blinker powered from a 9 V battery through a 5 V linear regulator.\"}. It answers at once with the task's reference and state; the design runs in a generation worker in saved steps, NOT inside this chat turn, so the turn ending or Stop answer never stops it (Stop design does). The page shows its progress and offers its result in the schematic review dialog, where a human approves or discards it; NOTHING is changed by this call. One start per turn; a second design request while one runs attaches to the running one. Read its state later with sirkit.generation.task-inspect.",
     category: "schematic", operationClass: "propose",
     sideEffects: "proposal-artifact",
     inputSchema: obj({ prompt: { type: "string", description: "The circuit request in plain words (1 to 4000 characters): what the circuit does, its supply, its inputs and outputs, and named parts where they matter." } }, ["prompt"]),
@@ -1128,16 +1128,16 @@ function generateProposalDescriptor(): ToolDescriptor {
     requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
     requiredProjectState: ["schematic-present", "schematic-build-mode"], requiredAuthority: ["schematic-generation"],
     requiresExpectedRevision: true,
-    // the sealed artifact carries the editor's canonical head mark (the tier-1 scope contract), so discovery requires an open lineage
+    // the task pins the editor's sheet as its base and the loop's B09.1 gate holds every schematic proposal to a canonical head mark, so discovery requires an open lineage
     requiresLineage: true,
-    binding: { status: "bound-proposal", module: "app/lib/schematic/build-multi-generation.ts", symbol: "runBuildMultiGeneration", notes: "PR-D: the ONE Build-mode generation the route and the agent share (planner, complexity gate, bounded block pool, deterministic merge, advisory post-merge ERC, the PR-C structured result). The agent reaches it only through the chat route's injected port (app/api/chat/schematic-generation-runtime.ts); SchematicGenerationProposalService (app/lib/agent/generation-proposals.ts) checks the binding, integrity, discovery, role, base and budget, then seals the outcome (sirkit.schematic-generation-proposal.v1) or reports the failure as proposal-blocked data. Nothing is applied here." },
+    binding: { status: "bound-proposal", module: "app/lib/generation-task/service.ts", symbol: "GenerationTaskService", notes: "PR-L (runbook L.5, 2026-10-18): the ONE durable generation-task service the routes call - start / attach with the start route's closed body, its idempotency (a client request id derived from the run and the provider call), one active task per project and branch (the index CAS), the editor roles, the provider-servable rule and the per-task allowance; origin chat, the asking run recorded. The agent reaches it only through the chat route's injected port (app/api/chat/schematic-generation-runtime.ts); SchematicGenerationProposalService (app/lib/agent/generation-proposals.ts) checks the binding, integrity, discovery, role and the closed argument surface, then answers the task reference (sirkit.generation-task-ref.v1). The design runs in the generation worker (app/lib/generation-task/worker); nothing is applied here." },
     discovery: "discoverable", callability: "callable",
-    // Generation ceiling plus its settlement margin; the run's REMAINING deadline still tightens it.
-    timeoutMs: 185_000, budgetClass: "long-running",
-    validationStrategy: "closed argument surface (exactly prompt, 1-4000 characters; authority-shaped keys refused by name) under the B05 input limits; the server's port fact and a validated schematic with its canonical head mark are required; the run's remaining wall clock must hold a generation (budget_exhausted otherwise); the generation's own gates (planner, complexity, bounded loops, merge, advisory ERC) run unchanged",
-    verificationStrategy: "the sealed body's identity digest and the netlist digest are recomputed at intake (verifySealedSchematicGenerationProposalIntegrity); the page re-checks the base schematic digest, scope, head mark and expiry against the live editor before offering the proposal, and lays the netlist out through the same autoLayoutBuildValidated the Build composer uses",
-    sourceEvidence: ["app/lib/schematic/build-multi-generation.ts", "app/lib/agent/generation-proposals.ts", "app/api/chat/schematic-generation-runtime.ts", "app/api/schematic/build-multi/route.ts", "app/lib/agent/gateway.ts"],
-    versionNotes: "1.0.0 (PR-D, OD-243): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (it seals against the editor's browser-only SchematicState and head mark, and runs a provider generation). The route's response is byte-compatible with PR-C: it serializes the same outcome this proposal seals.",
+    // [PR-L, 2026-10-18] a durable start answers in milliseconds: an interactive tool now (it was the 185 s in-turn generation ceiling)
+    timeoutMs: 15_000, budgetClass: "interactive",
+    validationStrategy: "closed argument surface (exactly prompt, 1-4000 characters; authority-shaped keys such as scope, base, provider or clientRequestId refused by name) under the B05 input limits; the server's generation fact and port, a validated schematic and a provider call id are required; the start route's own validation (GenerationTaskService.start: the closed body, the editor role, the provider rule, the index CAS) decides acceptance; a refused start is reported as data, nothing accepted",
+    verificationStrategy: "the reference names a task read back from the durable store in the trusted scope; the page re-reads the task through its own authorized GET /api/generation-tasks/[id] before following it, and its result is verified at intake (the task's result digest, the base digest under the task's recipe, the exact-base pin) and laid out through the same autoLayoutBuildValidated the Build composer uses",
+    sourceEvidence: ["app/lib/generation-task/service.ts", "app/lib/agent/generation-proposals.ts", "app/lib/agent/generation-task-tools.ts", "app/api/chat/schematic-generation-runtime.ts", "app/api/generation-tasks/route.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "2.0.0 (PR-L, runbook L.5, 2026-10-18): starts or attaches the durable generation task the Build composer uses and answers its reference (generation_task_ready); the 1.0.0 in-turn generation (runBuildMultiGeneration inside the run, sealed as sirkit.schematic-generation-proposal.v1) is removed from the agent tool. 1.0.0 (PR-D, OD-243): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts.",
   };
 }
 
@@ -1553,5 +1553,128 @@ function componentResolutionDescriptor(): ToolDescriptor {
     verificationStrategy: "the sealed batch's operations, impact and identity digests are re-verified at apply (verifySealedResolutionProposal) against the live session head; the apply re-reads fresh server facts through its one-shot channel, recompiles the whole batch and byte-matches the reviewed operations and impact, then proves the postconditions (identities, kept references / values / placements, moved wire ends and labels, unaffected instances, the connectivity digest) inside the canonical transaction",
     sourceEvidence: ["app/lib/component-resolution/resolution-assembler.ts", "app/lib/component-resolution/resolution-proposal.ts", "app/lib/component-resolution/compatibility.ts", "app/lib/component-resolution/approved-resolution-mutations.ts", "app/lib/agent/component-resolution-proposals.ts", "app/lib/agent/gateway.ts"],
     versionNotes: "1.0.0 (PR-M, 2026-10-17): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (it seals against the editor's browser-only SchematicState and head mark, as OD-82's proposals).",
+  };
+}
+
+/**
+ * [PR-L, 2026-10-18] Runbook L.5 (task-worker-contract.md section 8): the durable generation task's INSPECTION, declared at the END too
+ * (a function declaration is hoisted), so no line of this catalog moves. A Tier 0 read of the task's PUBLIC snapshot from the durable
+ * task store through the chat route's injected port (the same service the GET routes answer from): state, phase, liveness, blocks,
+ * counts, blocker, valid actions and, once a result exists, a bounded summary of it - never the prompt, the conversation, a tool output,
+ * hidden reasoning or the netlist.
+ */
+function generationTaskInspectDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.generation.task-inspect", version: "1.0.0",
+    agentExposed: true, // [PR-L] a Tier 0 read of the durable task's public snapshot; nothing started, stopped or applied
+    owningCommandId: "schematic.generate",
+    title: "Inspect the project's design task",
+    description: "Read the PUBLIC state of the project's durable schematic design task - the one the Build composer's Generate or the generation start began: state, phase, liveness (whether a generation worker is actually running it), its blocks and their status, model-call and catalog-search counts, the remaining allowance, any blocker with its resolution, the actions valid now and, once a reviewable result exists, its completeness, omitted blocks, part and connection counts and electrical check numbers. Example input: {} (the project's running or most recent design), or {\"taskId\":\"generation-task:<32 hex>\"}. Never the prompt, the conversation, tool outputs, reasoning or the netlist; nothing is started, stopped or changed.",
+    category: "schematic", operationClass: "read",
+    inputSchema: obj({ taskId: { type: "string", description: "Optional: a design task id of this project (generation-task:<32 hex>); omitted, the project's running design, else its most recent one." } }),
+    outputSchema: OUT_REPORT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["schematic-generation"],
+    binding: { status: "bound-read", module: "app/lib/generation-task/service.ts", symbol: "GenerationTaskService", notes: "PR-L (runbook L.5): GenerationTaskService.list / .inspect over the durable task store - the same answers GET /api/generation-tasks and GET /api/generation-tasks/[id] serve - through the chat route's injected port; GenerationTaskInspectService (app/lib/agent/generation-proposals.ts) projects an allowlist of the public snapshot and a bounded result summary. Scoped by the trusted run context: a foreign or guessed id is the uniform not_found." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 10_000,
+    validationStrategy: "closed argument surface (only taskId; authority-shaped keys refused by name) under the B05 input limits; the server's generation fact and port are required; discovery, role and capability rechecked per call; the task is resolved in the trusted scope only (an unknown, malformed or foreign id is the same not_found); the output is schema-checked and bounded (GENERATION_TASK_INSPECT_MAX_CHARS)",
+    verificationStrategy: "read from the durable task store at the time of the call (generation-task-store-read): the snapshot's liveness comes from the store's leases (running only while a worker holds a live lease), never from a request being open; the result summary is computed from the task's validated result document",
+    sourceEvidence: ["app/lib/generation-task/service.ts", "app/lib/generation-task/snapshot.ts", "app/lib/agent/generation-proposals.ts", "app/api/chat/schematic-generation-runtime.ts", "app/api/generation-tasks/[id]/route.ts"],
+    versionNotes: "1.0.0 (PR-L, runbook L.5, 2026-10-18): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (the MCP server binds no generation-task port).",
+  };
+}
+
+/**
+ * [PR-L, 2026-10-18] Runbook L.5 (OD-252 item 6): the durable generation task's CONTROL REQUEST, declared at the END too. A sealed request
+ * (cancel, pause, resume, retry one block) the page shows as a confirm chip; only the human's click sends it to the task's control route,
+ * under the human's own authorization and CSRF, where the store judges the transition. Direct agent control would need a reviewed
+ * exposure change (OWNER-6).
+ */
+function generationTaskControlDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.generation.task-control", version: "1.0.0",
+    agentExposed: true, // [PR-L] a sealed confirm chip ONLY; the control itself is the human's click on the page (POST /api/generation-tasks/[id]/control)
+    owningCommandId: "schematic.generate",
+    title: "Ask to stop, pause, resume or retry the design task",
+    description: "Prepare a control request for the project's durable design task - cancel (Stop design: nothing more runs and a late result is refused), pause (saved work is kept), resume, or retry-block (one blocked block) - shown to the user as a chip they confirm or dismiss. Example input: {\"action\":\"cancel\"}; retry-block needs blockId. The action must be valid for the task's current state (the snapshot's actions); otherwise nothing is requested and the valid actions are reported. NOTHING happens to the design until the user confirms the chip; Stop answer (ending this chat reply) never stops a design.",
+    category: "schematic", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({
+      action: { type: "string", enum: ["cancel", "pause", "resume", "retry-block"], description: "cancel (Stop design), pause, resume, or retry-block." },
+      taskId: { type: "string", description: "Optional: the design task id (generation-task:<32 hex>); omitted, the project's running design." },
+      blockId: { type: "string", enum: ["main", "b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8"], description: "For retry-block only: the blocked block to retry (the snapshot's retryBlocks)." },
+    }, ["action"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["schematic-generation"],
+    // the loop's B09.1 gate holds every schematic proposal to a canonical head mark, so discovery requires the revision and the open lineage too
+    requiresExpectedRevision: true, requiresLineage: true,
+    binding: { status: "bound-proposal", module: "app/lib/generation-task/service.ts", symbol: "GenerationTaskService", notes: "PR-L (runbook L.5, OD-252 item 6): GenerationTaskService.list / .inspect resolve the task in the trusted scope and its server-computed valid actions; GenerationTaskControlProposalService (app/lib/agent/generation-proposals.ts) seals sirkit.generation-task-control-request.v1 or reports the refusal as proposal-blocked data. The control itself is GenerationTaskService.control behind POST /api/generation-tasks/[id]/control, reached only by the human's click on the chip. Nothing is changed here." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 10_000,
+    validationStrategy: "closed argument surface (action required from the closed list; taskId; blockId only for retry-block, from the block id list; authority-shaped keys refused by name) under the B05 input limits; the server's generation fact and port, a validated schematic and its head mark are required; discovery, role and capability rechecked per call; the action must be one the task's current snapshot lists (and the block one of its retryable blocks)",
+    verificationStrategy: "the sealed request's identity digest is recomputed by the page's receiver (verifySealedGenerationTaskControlRequest), which also checks the page's project and the expiry; the human's confirmation sends the action to the control route, which re-authorizes the human (role, live membership, exact-origin CSRF) and lets the store judge the transition against the task's state at that moment",
+    sourceEvidence: ["app/lib/agent/generation-proposals.ts", "app/lib/agent/generation-task-tools.ts", "app/lib/generation-task/service.ts", "app/lib/generation-task/snapshot.ts", "app/api/generation-tasks/[id]/control/route.ts", "app/lib/project/generation-proposal-events.ts"],
+    versionNotes: "1.0.0 (PR-L, runbook L.5, 2026-10-18): first exposure, reviewed in agent-exposure.ts; a confirm chip by OD-252 item 6 (direct control would be OWNER-6); withheld from MCP by a reviewed choice in mcp-exposure-review.ts (a proposal: MCP exposure stays read-only, OD-82).",
+  };
+}
+
+/**
+ * [PR-M, 2026-10-18] Section M2 (design M2.1): the agent's SCHEMATIC-SCOPED CAD acquisition, declared at the END too (a function
+ * declaration is hoisted), so no line of this catalog moves. Both work BEFORE any PCB exists - a verified schematic snapshot and the
+ * server's `cadAcquisitionAvailable` fact, never `canonical-state` - over the ONE durable component-resolution task service the page
+ * route answers from (app/lib/component-resolution/task/service.ts); the board-gated external search and evidence read keep their contract.
+ */
+function cadAcquisitionStartDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.parts.acquisition-start", version: "1.0.0",
+    agentExposed: true, // [PR-M] starts (or attaches to) a durable acquisition task; mutates no design; publishes, approves, binds and buys nothing
+    owningCommandId: "parts.cad-acquisition",
+    title: "Obtain a part's CAD assets for the library",
+    description: "Start (or attach to) the durable acquisition task for catalog instances of ONE catalog part that have no eligible local revision: a worker retrieves the part's real KiCad symbol and footprint (and a pin table where an admitted source has one) from an ADMITTED CAD source only (the pinned official KiCad library; never an arbitrary URL), stores and hashes the bytes, parses and validates pins, pads, mapping, package and pin 1, and prepares a review package. Works without a PCB. Example input: {\"componentIds\":[\"kc-3a9f01\",\"kc-3a9f02\"],\"requirement\":{\"mounting\":\"through_hole\",\"packageCode\":\"DO-35\"},\"assetKinds\":[\"symbol\",\"footprint\",\"datasheet\"]}. NOTHING in the design changes; a PERSON sends the package for review, a reviewer approves and a different administrator publishes; only then is the replacement offered for the user's review. A published revision of the same part is reused without any download.",
+    category: "parts", operationClass: "propose",
+    sideEffects: "proposal-artifact", // a durable task record (as the generation start): no design state, no publication
+    inputSchema: obj({
+      componentIds: { type: "array", items: { type: "string" }, description: "1-8 stable instance ids (not reference designators) of catalog instances of the same catalog part." },
+      requirement: obj({ exactMpn: { type: "string" }, manufacturer: { type: "string" }, packageCode: { type: "string", description: "e.g. DO-35" }, mounting: { type: "string", enum: ["smd", "through_hole"] } }),
+      assetKinds: { type: "array", items: { type: "string", enum: ["symbol", "footprint", "datasheet", "model"] }, description: "Default symbol, footprint, datasheet (3D models are not retrieved in this release)." },
+    }, ["componentIds"]),
+    outputSchema: OUT_REPORT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
+    binding: { status: "bound-proposal", module: "app/lib/component-resolution/task/service.ts", symbol: "ComponentResolutionService", notes: "PR-M M2: ComponentResolutionService.start over the durable task store (component-resolution.task.v1, topic component-resolution-slice, consumed by the existing generation worker); the instances inspected through the chat route's catalog port over the run's verified schematic; the target derived from the server catalog part; reached only through CadAcquisitionToolService (app/lib/agent/cad-acquisition-reads.ts) and the chat route's one boundary (app/api/chat/cad-acquisition-runtime.ts). The CAD sources are the worker's (cad-source-registry.ts admission), never this call's." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 15_000,
+    validationStrategy: "closed argument surface (componentIds, requirement {exactMpn, manufacturer, packageCode, mounting}, assetKinds; authority-shaped keys such as sourceId, url, bytes, pins or revisionId refused by name) under the B05 input limits; a verified schematic snapshot and the server's acquisition fact are required (no board); discovery, role and capability rechecked per call; the instances must be unresolved KiCad catalog instances of one catalog part",
+    verificationStrategy: "the task is durable and fenced (every slice commit re-checks its fence; a cancel fences a late result); its start is idempotent on (scope, principal, instance ids, requirement digest, schematic base); every stored object is re-hashed on read; the publication re-verifies every byte; the offered replacement is M1's sealed batch applied only by the human",
+    sourceEvidence: ["app/lib/component-resolution/task/service.ts", "app/lib/component-resolution/task/store.ts", "app/lib/component-resolution/task/slices.ts", "app/lib/component-resolution/acquisition/pipeline.ts", "app/lib/agent/cad-acquisition-reads.ts", "app/api/chat/cad-acquisition-runtime.ts"],
+    versionNotes: "1.0.0 (PR-M M2, 2026-10-18): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (it reads the editor's browser-only SchematicState).",
+  };
+}
+
+function cadAcquisitionStatusDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.parts.acquisition-status", version: "1.0.0",
+    agentExposed: true, // [PR-M] a Tier 0 read of the durable acquisition task's public view
+    owningCommandId: "parts.cad-acquisition",
+    title: "Read the CAD acquisition task's progress",
+    description: "Read the PUBLIC state of the project's durable CAD acquisition task(s): each stage (local search, source selection, retrieve, validate, handoff, awaiting publication, proposal, applied, preflight) with its evidence, the source attempts, the candidate's validation verdict, identity (exact or GENERIC KiCad candidate), object hashes, unresolved facts, conflicts and licence, the handoff, the publication status, the replacement offered, the receipt and the updated preflight, the blocker with its remedy and the recent progress lines. Example input: {\"taskId\":\"cr-task:0123456789abcdef0123456789abcdef\"}, or {} for the project's recent tasks. Nothing is changed.",
+    category: "parts", operationClass: "read",
+    inputSchema: obj({ taskId: { type: "string", description: "Optional: an acquisition task id of this project (cr-task:<32 hex>); omitted, the project's recent tasks." } }),
+    outputSchema: OUT_REPORT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
+    binding: { status: "bound-read", module: "app/lib/component-resolution/task/service.ts", symbol: "ComponentResolutionService", notes: "PR-M M2: ComponentResolutionService.read / .list over the durable task store in the trusted scope (a foreign or guessed id is the uniform not_found), reached only through CadAcquisitionToolService and the chat route's one boundary; the same view GET /api/parts/acquisitions answers." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 8_000,
+    validationStrategy: "closed argument surface (only taskId); a verified schematic snapshot and the server's acquisition fact are required (no board); discovery, role and capability rechecked per call; the output is a bounded projection of the public view",
+    verificationStrategy: "a pure read of the durable task head in the trusted scope; never the stored bytes; the view's stages each carry their own evidence (M.4)",
+    sourceEvidence: ["app/lib/component-resolution/task/service.ts", "app/lib/component-resolution/task/contracts.ts", "app/lib/agent/cad-acquisition-reads.ts", "app/api/chat/cad-acquisition-runtime.ts"],
+    versionNotes: "1.0.0 (PR-M M2, 2026-10-18): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts.",
   };
 }

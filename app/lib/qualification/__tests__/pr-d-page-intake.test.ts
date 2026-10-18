@@ -1,80 +1,59 @@
 /**
- * [PR-D] The page's intake of the agent's Build-mode generation proposal (`sirkit.schematic.generate-proposal`, received by `send` as
- * `generation_proposal_ready`): pinned by reading app/page.tsx as text (as pr-a-journey-reproductions does) and by driving the SAFE
- * receiver (app/lib/project/generation-proposal-events.ts) with artifacts sealed by the service's own sealer.
+ * [PR-D] The page's intake of the agent's Build-mode generation (`sirkit.schematic.generate-proposal`), pinned by reading app/page.tsx
+ * as text (as pr-a-journey-reproductions does) and by driving the SAFE receivers (app/lib/project/generation-proposal-events.ts).
  *
- *  1. ONE review dialog, no auto-apply: the page renders exactly one `data-testid="schematic-proposal-review"` and one
- *     `schematic-proposal-approve`, both driven by `pendingReplace`; the intake sets `pendingReplace` (the composer's Generate state),
- *     never a second dialog state and never `applySchematic`.
- *  2. The same path as the composer's Generate: the entry gate, catalog loading, `autoLayoutBuildValidated`, `completenessNote` /
- *     `electricalCheckNote` as the validation note (partial / skipped checks are data), `validateSchematicStateIntegrity`, the exact-base
- *     pin (`captureLifecycleInvocationContext`), the same base-digest recipe `send` posts, and the pending-proposal store
- *     (`savePendingProposal`, the page's one import of it; `restorePendingProposalRef` offers it again after a reload).
- *  3. The SAFE receiver: a sealed proposal is received with its run id as audit metadata; a wrong event type, a wrong schema, a tampered
- *     netlist, an extra key and a non-object are dropped.
- *  4. The currency check against the live editor: ok with the matching scope, head, base and time; foreign-scope, expired, stale-head
- *     (a moved head, or no session) and stale-base are refused with the page's sentence, in that order.
- *  5. No new control: the committed B17 inventory names neither the intake's case nor its function (the intake is a stream-event case
- *     and a function, not a control; the b17-a byte gate covers the CSV).
+ * [PR-L, 2026-10-18] Runbook L.5, increment 5: updated to the 2.0.0 contract. Its v1 assertions described the REMOVED intake of a design
+ * sealed inside the chat run (`generation_proposal_ready` -> offerGenerationProposal, its own currency check and its own copy of the
+ * layout path). The chat's generation is now the project's DURABLE generation task, and the page receives a task REFERENCE
+ * (`generation_task_ready`) that it follows with the SAME status card and the SAME review intake as a Build start. What each block pins:
+ *
+ *  1. ONE review dialog, no auto-apply: exactly one `schematic-proposal-review` and one approve control, driven by `pendingReplace`; the
+ *     stream case sets no proposal state and applies nothing.
+ *  2. ONE intake for Build and chat: the case hands the received reference to followChatGenerationTask, which decides once
+ *     (generationTaskAttachDecision), re-reads the task through the page's own authorized route and calls the SAME attachGenerationTask
+ *     the composer's Build start calls; its result reaches the SAME offerGenerationTaskResult -> offerBuildResult -> offerSchematicProposal
+ *     (catalog loading, autoLayoutBuildValidated, completeness and electrical notes, the integrity check, the exact-base pin, the persisted
+ *     pending-proposal record), once per (task, result digest); a chat-started task says who proposed it.
+ *  3. The base recipe follows the TASK: build-pin is the sheet's content (the composer's pin), chat-sheet the sheet as the chat run posts
+ *     it (the server digested that object as-is) - the same recipe as the sheet-artifact checks.
+ *  4. The SAFE receivers: a reference is narrowed defensively (a wrong event type or schema, a malformed id or disposition, a non-object
+ *     are dropped); the attach decision follows a task once and never a foreign one; a control request is integrity-verified.
+ *  5. No v1 intake remains, and the control inventory classifies the chip's two buttons (the stream cases themselves are not controls).
  *
  * Files are read as text; nothing is written; no provider, database or process work.
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import type { BuildLogicalNetlist, SchematicState } from "@/lib/schematic-types";
-import { assembleAgentRunContext } from "@/app/lib/agent/context";
-import { GENERATION_PROPOSAL_SCHEMA, GENERATION_PROPOSAL_TTL_MS, sealGenerationProposal, type SealedSchematicGenerationProposal } from "@/app/lib/agent/generation-proposals";
-import { schematicStateDigest } from "@/app/lib/engineering/schematic-model";
-import { createEmptyBoard } from "@/app/lib/pcb/types";
-import { generationProposalCurrency, receiveGenerationProposalEvent } from "@/app/lib/project/generation-proposal-events";
+import { GENERATION_TASK_CONTROL_SCHEMA, GENERATION_TASK_REF_SCHEMA, sealGenerationTaskControlRequest, type GenerationTaskReference } from "@/app/lib/agent/generation-task-tools";
+import { generationTaskAttachDecision, generationTaskControlCurrency, receiveGenerationTaskControlEvent, receiveGenerationTaskEvent } from "@/app/lib/project/generation-proposal-events";
 
 const page = readFileSync("app/page.tsx", "utf8").replaceAll("\r\n", "\n");
 const inventory = readFileSync("artifacts/ai-control-plane-b17/ui-control-inventory.csv", "utf8");
 const count = (text: string, needle: string): number => text.split(needle).length - 1;
-/** the intake function's source: from its declaration to the next top-level comment (the tier-1 edit path) */
-const intake = (() => {
-  const start = page.indexOf("  async function offerGenerationProposal(");
-  const end = page.indexOf("  // Tier-1 text editing:", start);
-  if (start < 0 || end < 0) throw new Error("offerGenerationProposal is not where the suite expects it");
+const between = (from: string, to: string): string => {
+  const start = page.indexOf(from);
+  const end = page.indexOf(to, start + from.length);
+  if (start < 0 || end < 0) throw new Error(`${from.trim().slice(0, 60)} is not where the suite expects it`);
   return page.slice(start, end);
-})();
-/** the composer's Generate: handleGenerateSchematic's source */
-const composer = (() => {
-  const start = page.indexOf("  async function handleGenerateSchematic(");
-  const end = page.indexOf("  async function offerGenerationProposal(", start);
-  if (start < 0 || end < 0) throw new Error("handleGenerateSchematic is not where the suite expects it");
-  return page.slice(start, end);
-})();
-/** the stream consumer's case block */
-const caseBlock = (() => {
-  const start = page.indexOf('          case "generation_proposal_ready": {');
-  const end = page.indexOf('          case "view_command_ready": {', start);
-  if (start < 0 || end < 0) throw new Error("the generation_proposal_ready case is not where the suite expects it");
-  return page.slice(start, end);
-})();
+};
+/** the stream consumer's two task cases */
+const caseBlock = between('          case "generation_task_ready": {', '          case "view_command_ready": {');
+/** the chat task's follow, its log, the base recipe and the chip's actions */
+const follow = between("  async function followChatGenerationTask(", "  // [PR-G, 2026-10-17] The LIVE editor as the sheet-artifact currency checks read it");
+/** the composer's Generate (Build start) */
+const composer = between("  async function handleGenerateSchematic(", "  async function offerBuildResult(");
+/** the shared result intake: offerBuildResult and offerSchematicProposal */
+const intake = between("  async function offerBuildResult(", "  // ─── [PR-L, 2026-10-17] the project's durable generation task");
+/** the task follow and the once-per-result offer */
+const taskFollow = between("  function attachGenerationTask(", "  /** The sheet moved since the task's base");
+const recipes = between("  function liveSheetForSealedArtifacts(", "  // Tier-1 text editing:");
 
 const SCOPE = { tenantId: "local", projectId: "p-prd-intake", branchId: "main" };
-const HEAD_MARK = { lineageId: "lin1-a9e2470c11bd8833", headSequence: 3, canonicalStateDigest: "eng1-77aa66bb55cc44dd" };
-const NOW = 1_760_000_000_000;
-/** a Build sheet: catalog parts, no Theory component (the server's `schematic-build-mode` fact) */
-const BUILD_SHEET: SchematicState = { components: [], wires: [], netLabels: [], kicadComponents: [{ id: "u1-id", partId: "lib:part-a", x: 300, y: 100, rotation: 0, refDes: "U1", value: "MCU" }], pageSize: "A4" };
-const NETLIST: BuildLogicalNetlist = {
-  components: [{ refDes: "U1", partId: "lib:ne555", value: "NE555", role: "processor" }, { refDes: "R1", partId: "lib:r-10k", value: "10k", role: "passive" }],
-  connections: [{ from: "U1.3", to: "R1.1" }, { kind: "label", pin: "R1.2", labelName: "GND" }],
-  explanation: "A 555 astable drives a series resistor.",
-};
-
-function sealed(): SealedSchematicGenerationProposal {
-  const assembly = assembleAgentRunContext({ ...SCOPE, schematic: BUILD_SHEET, board: createEmptyBoard(), schematicHeadMark: HEAD_MARK, verifiedActor: { principalId: "u-1", actorRole: "pcb_editor", membershipRevision: "mbr1-a", authMethod: "local_dev" }, schematicGenerationAvailable: true });
-  if (!assembly.ok) throw new Error(assembly.reason);
-  return sealGenerationProposal({
-    body: { ok: true, netlist: NETLIST, explanation: NETLIST.explanation, status: "complete", omittedBlocks: [], electricalCheck: { state: "passed", criticalCount: 0, warningCount: 0 }, planner: { state: "planned", blocks: 1 }, budget: { iterationCap: 20, iterationsUsed: 3, deadlineMs: 40_000, elapsedMs: 1_234, concurrencyCap: 3 } },
-    prompt: "A 555 timer LED blinker.", provider: "openai", runId: "run-prd-intake", context: assembly.context, headMark: HEAD_MARK, descriptor: { version: "1.0.0" }, now: NOW,
-  });
-}
-/** the stream carries JSON: the page receives a plain (unfrozen) copy */
-const wire = (proposal: SealedSchematicGenerationProposal): Record<string, unknown> => JSON.parse(JSON.stringify(proposal)) as Record<string, unknown>;
-const live = (overrides: Partial<Parameters<typeof generationProposalCurrency>[1]> = {}) => ({ scope: SCOPE, headMark: HEAD_MARK, baseDigest: schematicStateDigest(BUILD_SHEET), now: NOW + 1_000, ...overrides });
+const TASK_ID = `generation-task:${"cd".repeat(16)}`;
+const reference = (overrides: Partial<GenerationTaskReference> = {}): GenerationTaskReference => ({
+  schema: GENERATION_TASK_REF_SCHEMA, taskId: TASK_ID, scope: { ...SCOPE }, disposition: "started", sameRequest: true, state: "queued", phase: "planning", origin: "chat", liveness: "waiting_for_worker",
+  base: { schematicDigest: "eng1-0123456789abcdef", recipe: "chat-sheet" }, result: null, durability: "durable", createdAt: "2026-10-18T09:00:00.000Z", ...overrides,
+});
 
 describe("[PR-D page intake 1] one review dialog, no auto-apply", () => {
   it("the page renders exactly one schematic review dialog and one approve control, both driven by pendingReplace", () => {
@@ -84,110 +63,106 @@ describe("[PR-D page intake 1] one review dialog, no auto-apply", () => {
     expect(count(page, "open={pendingReplace !== null}")).toBe(1);
   });
 
-  it("the intake offers the proposal through pendingReplace only: no second dialog state, no apply, no tier-1 or replacement state", () => {
-    expect(count(intake, "setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin, validationNote })")).toBe(1);
-    expect(intake).not.toMatch(/applySchematic\(/);
-    expect(intake).not.toMatch(/setPendingTier1\(|setPendingReplacement\(|setPendingPcbProposal\(|<Dialog/);
-    expect(caseBlock).not.toMatch(/applySchematic\(|setPendingReplace\(/);
+  it("[PR-L, 2026-10-18] pin move: the stream cases set no proposal state and apply nothing; the follow never applies either", () => {
+    expect(caseBlock).not.toMatch(/applySchematic\(|setPendingReplace\(|setPendingTier1\(|setPendingReplacement\(/);
+    expect(follow).not.toMatch(/applySchematic\(|setPendingReplace\(|<Dialog/);
+    expect(count(intake, "setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin, validationNote })")).toBe(1); // the ONE offer
   });
 
-  it("the stream case receives through the SAFE receiver exactly once, drops a failed artifact with the page's sentence, and hands the verified one to the intake", () => {
-    expect(count(page, 'case "generation_proposal_ready": {')).toBe(1);
-    expect(count(caseBlock, "receiveGenerationProposalEvent(event)")).toBe(1);
-    expect(count(caseBlock, "void offerGenerationProposal(generation, { logId, scope });")).toBe(1);
-    expect(caseBlock).toContain("failed the integrity checks. Nothing was changed and no proposal is offered.");
-    expect(count(page, 'import { generationProposalCurrency, receiveGenerationProposalEvent, type ReceivedGenerationProposal } from "@/app/lib/project/generation-proposal-events";')).toBe(1);
+  it("[PR-L, 2026-10-18] pin move: the task case receives through the SAFE receiver exactly once, drops a malformed reference with the page's sentence, and hands the reference to the follow; the control case shows a chip", () => {
+    expect(count(page, 'case "generation_task_ready": {')).toBe(1);
+    expect(count(caseBlock, "receiveGenerationTaskEvent(event)")).toBe(1);
+    expect(count(caseBlock, "void followChatGenerationTask(started, { scope });")).toBe(1);
+    expect(caseBlock).toContain("it was malformed. This page follows nothing for it and nothing was changed.");
+    expect(count(page, 'case "generation_task_control_ready": {')).toBe(1);
+    expect(count(caseBlock, "receiveGenerationTaskControlEvent(event)")).toBe(1);
+    expect(caseBlock).toContain("generationTaskControlCurrency(control.request,");
+    expect(caseBlock).toContain("upsertReviewCard(`${GENERATION_TASK_CONTROL_CARD_ID_PREFIX}${control.request.requestId}`");
+    expect(caseBlock).not.toContain("controlGenerationTask("); // receiving the chip sends nothing
   });
 });
 
-describe("[PR-D page intake 2] the same path as the composer's Generate", () => {
-  it("the same entry gate, catalog loading, layout and validation, notes as data and integrity check", () => {
-    for (const shared of ['schematicConsumerGate("edit")', "ensurePartLoaded(id)", "const built = autoLayoutBuildValidated(netlist, parts);", "validateSchematicStateIntegrity(state)", "completenessNote({", "electricalCheckNote(", "proposalNotes.push(", "const validationNote = "]) {
-      expect(composer, `composer: ${shared}`).toContain(shared);
-      expect(intake, `intake: ${shared}`).toContain(shared);
-    }
-    expect(intake).toContain("completenessNote({ status: proposal.generation.status, omittedBlocks: proposal.generation.omittedBlocks })");
-    expect(intake).toContain("electricalCheckNote(proposal.generation.electricalCheck)");
-    expect(intake).toContain("Drawing check: ${v.length} issue(s)");
+describe("[PR-D page intake 2] ONE intake for Build and chat", () => {
+  it("[PR-L, 2026-10-18] the follow decides once, re-reads the task through the page's own authorized route, and calls the SAME attachGenerationTask as the Build start", () => {
+    expect(follow).toContain("const decision = generationTaskAttachDecision(task, {");
+    expect(follow).toContain('if (decision.kind !== "attach") return;');
+    expect(follow).toContain("await fetchGenerationTask({ projectId: scope.projectId, branchId: scope.branchId }, task.taskId, { signal: scope.signal });");
+    expect(follow).toContain("attachGenerationTask(detail.task, { logId, prompt: detail.task.prompt ?? \"\", scope });");
+    expect(composer).toContain("attachGenerationTask(started.task, { logId, prompt, scope });");
+    expect(count(page, "  function attachGenerationTask(")).toBe(1);
+    expect(follow).not.toContain("crypto.randomUUID"); // the chat task's entry and lines draw no editor id (the composer's id sequence is unchanged, as l4-task-client pins for the task code)
   });
 
-  it("the same exact-base pin, the same persisted record, and the base-digest recipe `send` posts", () => {
-    expect(count(intake, "const pin = captureLifecycleInvocationContext();")).toBe(1);
-    expect(count(composer, "const pin = captureLifecycleInvocationContext();")).toBe(1);
+  it("[PR-L, 2026-10-18] the followed task's result takes the ONE offer: once per (task, result digest), through offerBuildResult's catalog loading, layout, notes and the exact-base pin, persisted by the one store", () => {
+    expect(taskFollow).toContain("const key = `${view.taskId}:${result.resultDigest}`;");
+    expect(taskFollow).toContain("if (entry.offered.has(key)) return;");
+    expect(taskFollow).toContain("stored.task.resultDigest === result.resultDigest");
+    expect(taskFollow).toContain("const offered = await offerBuildResult(");
+    expect(taskFollow).toContain('...(view.origin === "chat" ? { note: `Proposed by the assistant (${view.provider}) for your request; approving replaces the sheet it was generated against. Nothing has been changed yet.` } : {})');
+    for (const shared of ["ensurePartLoaded(id)", "const built = autoLayoutBuildValidated(netlist, parts);", "completenessNote({", "electricalCheckNote(", "validateSchematicStateIntegrity(state)", "if (run.note) proposalNotes.push(run.note);"]) expect(intake, shared).toContain(shared);
     expect(intake).toContain("savePendingProposal({ projectId: pin.projectId, baseDigest: proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()), state, explanation, prompt, validationNote })");
-    expect(composer).toContain("savePendingProposal({ projectId: pin.projectId, baseDigest: proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()), state, explanation, prompt, validationNote })");
-    // the sheet as the chat run posts it (the server digests that object as-is) and the intake's live digest use one recipe
-    expect(count(page, "schematicState: { ...chatSnapshot, pageSize: chatSnapshot.pageSize ?? pageSize }")).toBe(1);
-    expect(intake).toContain("baseDigest: schematicStateDigest({ ...live, pageSize: live.pageSize ?? liveStateRef.current.pageSize })");
-    expect(intake).toContain("headMark: schematicSessionRef.current?.headMark() ?? null");
-    expect(count(intake, "generationProposalCurrency(proposal, {")).toBe(1);
-  });
-
-  it("the pending-proposal store is the page's one store, and a persisted proposal is restored into the same dialog", () => {
     expect(count(page, 'from "@/app/lib/project/pending-proposal-store"')).toBe(1);
-    expect(page).toContain('import { clearPendingProposal, loadPendingProposal, savePendingProposal } from "@/app/lib/project/pending-proposal-store";');
     expect(page).toContain("restorePendingProposalRef.current(record.id);");
-    expect(page).toContain("setPendingReplace({ state: stored.state, explanation: stored.explanation, prompt: stored.prompt, promptAlreadyLogged: true, pin,");
   });
 });
 
-describe("[PR-D page intake 3] the SAFE receiver", () => {
-  it("receives a sealed proposal from its own event with the run id as audit metadata", () => {
-    const proposal = sealed();
-    const received = receiveGenerationProposalEvent({ type: "generation_proposal_ready", runId: "run-prd-intake", toolId: proposal.toolId, proposal: wire(proposal) });
-    expect(received).not.toBeNull();
-    expect(received!.proposal.proposalId).toBe(proposal.proposalId);
-    expect(received!.runId).toBe("run-prd-intake");
-    expect(receiveGenerationProposalEvent({ type: "generation_proposal_ready", runId: 42, proposal: wire(proposal) })!.runId).toBeNull();
-  });
-
-  it("drops a wrong event type, a wrong schema, a tampered netlist, an extra key and a non-object", () => {
-    const proposal = sealed();
-    expect(receiveGenerationProposalEvent({ type: "proposal_ready", runId: "r", proposal: wire(proposal) })).toBeNull();
-    expect(receiveGenerationProposalEvent({ type: "generation_proposal_ready", runId: "r", proposal: { ...wire(proposal), schema: "sirkit.schematic-tier1-proposal.v3" } })).toBeNull();
-    const tampered = wire(proposal) as { generation: { netlist: { components: Array<{ value: string }> } } };
-    tampered.generation.netlist.components[0]!.value = "LM555";
-    expect(receiveGenerationProposalEvent({ type: "generation_proposal_ready", runId: "r", proposal: tampered })).toBeNull();
-    expect(receiveGenerationProposalEvent({ type: "generation_proposal_ready", runId: "r", proposal: { ...wire(proposal), applied: true } })).toBeNull();
-    expect(receiveGenerationProposalEvent({ type: "generation_proposal_ready", runId: "r", proposal: "genprop-x" })).toBeNull();
-    expect(receiveGenerationProposalEvent({ type: "generation_proposal_ready", runId: "r" })).toBeNull();
-    expect(receiveGenerationProposalEvent(null)).toBeNull();
-    expect(proposal.schema).toBe(GENERATION_PROPOSAL_SCHEMA);
+describe("[PR-D page intake 3] the base recipe follows the task", () => {
+  it("[PR-L, 2026-10-18] build-pin is the sheet's content, chat-sheet the sheet as the chat run posts it - the same recipe as the sheet-artifact checks; the moved base is reported under the task's recipe", () => {
+    expect(count(page, "schematicState: { ...chatSnapshot, pageSize: chatSnapshot.pageSize ?? pageSize }")).toBe(1); // what `send` posts (the server digests it as-is)
+    expect(follow).toContain('return recipe === "chat-sheet" ? schematicStateDigest({ ...live, pageSize: live.pageSize ?? liveStateRef.current.pageSize }) : proposalContentDigest(live);');
+    expect(recipes).toContain("baseDigest: schematicStateDigest({ ...live, pageSize: live.pageSize ?? liveStateRef.current.pageSize }),");
+    expect(taskFollow).toContain("const liveDigest = generationLiveBaseDigest(view.base.recipe);");
+    expect(taskFollow).toContain("await reportGenerationBaseMoved(entry, liveDigest, view.base.recipe);");
+    expect(page).toContain('liveBase: { schematicDigest: liveDigest, recipe: recipe === "chat-sheet" ? "chat-sheet" : "build-pin" }');
   });
 });
 
-describe("[PR-D page intake 4] currency against the live editor", () => {
-  it("is current with the matching scope, head, base and time", () => {
-    expect(generationProposalCurrency(sealed(), live())).toEqual({ ok: true });
+describe("[PR-D page intake 4] the SAFE receivers", () => {
+  it("[PR-L, 2026-10-18] a reference is received from its own event with the run id as audit metadata; a wrong event type or schema, a malformed id or disposition and a non-object are dropped", () => {
+    const wire = JSON.parse(JSON.stringify(reference())) as Record<string, unknown>;
+    const received = receiveGenerationTaskEvent({ type: "generation_task_ready", runId: "run-prd-intake", task: wire });
+    expect(received).toMatchObject({ runId: "run-prd-intake", task: { taskId: TASK_ID, disposition: "started", base: { recipe: "chat-sheet" } } });
+    expect(receiveGenerationTaskEvent({ type: "generation_task_ready", runId: 42, task: wire })!.runId).toBeNull();
+    expect(receiveGenerationTaskEvent({ type: "generation_proposal_ready", task: wire })).toBeNull();
+    expect(receiveGenerationTaskEvent({ type: "generation_task_ready", task: { ...wire, schema: "sirkit.schematic-generation-proposal.v1" } })).toBeNull();
+    expect(receiveGenerationTaskEvent({ type: "generation_task_ready", task: { ...wire, taskId: "task-1" } })).toBeNull();
+    expect(receiveGenerationTaskEvent({ type: "generation_task_ready", task: { ...wire, disposition: "applied" } })).toBeNull();
+    expect(receiveGenerationTaskEvent({ type: "generation_task_ready", task: "generation-task:x" })).toBeNull();
+    expect(receiveGenerationTaskEvent(null)).toBeNull();
   });
 
-  it("refuses a foreign scope, an expired proposal, a moved head, a not-ready session and a changed sheet, each with the page's sentence", () => {
-    const proposal = sealed();
-    expect(generationProposalCurrency(proposal, live({ scope: { ...SCOPE, projectId: "p-other" } }))).toMatchObject({ ok: false, code: "foreign-scope" });
-    expect(generationProposalCurrency(proposal, live({ scope: { ...SCOPE, branchId: "feature" } }))).toMatchObject({ ok: false, code: "foreign-scope" });
-    expect(generationProposalCurrency(proposal, live({ now: NOW + GENERATION_PROPOSAL_TTL_MS }))).toMatchObject({ ok: false, code: "expired" });
-    expect(generationProposalCurrency(proposal, live({ now: NOW + GENERATION_PROPOSAL_TTL_MS - 1 }))).toEqual({ ok: true });
-    expect(generationProposalCurrency(proposal, live({ headMark: { ...HEAD_MARK, headSequence: 4 } }))).toMatchObject({ ok: false, code: "stale-head", detail: expect.stringContaining("canonical head moved") });
-    expect(generationProposalCurrency(proposal, live({ headMark: null }))).toMatchObject({ ok: false, code: "stale-head", detail: expect.stringContaining("not ready") });
-    const edited: SchematicState = { ...BUILD_SHEET, kicadComponents: [...BUILD_SHEET.kicadComponents!, { id: "r1-id", partId: "lib:r-10k", x: 400, y: 100, rotation: 0, refDes: "R1", value: "10k" }] };
-    expect(generationProposalCurrency(proposal, live({ baseDigest: schematicStateDigest(edited) }))).toMatchObject({ ok: false, code: "stale-base", detail: expect.stringContaining("stale") });
-    // the sheet-size fallback is part of the posted digest: a sheet posted without its size is another base
-    const unsized: SchematicState = { components: [], wires: [], netLabels: [], kicadComponents: BUILD_SHEET.kicadComponents };
-    expect(generationProposalCurrency(proposal, live({ baseDigest: schematicStateDigest(unsized) }))).toMatchObject({ ok: false, code: "stale-base" });
-    // order: a foreign scope is refused before expiry, a stale head before a stale base
-    expect(generationProposalCurrency(proposal, live({ scope: { ...SCOPE, projectId: "p-other" }, now: NOW + GENERATION_PROPOSAL_TTL_MS }))).toMatchObject({ code: "foreign-scope" });
-    expect(generationProposalCurrency(proposal, live({ headMark: null, baseDigest: "eng1-00" }))).toMatchObject({ code: "stale-head" });
-    for (const refusal of [live({ scope: { ...SCOPE, projectId: "p-other" } }), live({ now: NOW + GENERATION_PROPOSAL_TTL_MS }), live({ headMark: null }), live({ baseDigest: "eng1-00" })]) {
-      const outcome = generationProposalCurrency(proposal, refusal);
-      expect(outcome.ok).toBe(false);
-      if (!outcome.ok) expect(outcome.detail).toMatch(/nothing was changed|was not offered/i);
-    }
+  it("[PR-L, 2026-10-18] the attach decision: this project's new task is attached; a task already followed or a result already in the dialog is not attached twice; another project's is foreign", () => {
+    const live = { projectId: SCOPE.projectId, branchId: "main", followedTaskId: null, pendingTask: null };
+    expect(generationTaskAttachDecision(reference(), live)).toEqual({ kind: "attach" });
+    expect(generationTaskAttachDecision(reference(), { ...live, followedTaskId: TASK_ID })).toMatchObject({ kind: "already-followed" });
+    expect(generationTaskAttachDecision(reference({ result: { status: "complete", omittedBlocks: [], resultDigest: "dw1-r" } }), { ...live, pendingTask: { taskId: TASK_ID, resultDigest: "dw1-r" } })).toMatchObject({ kind: "already-offered" });
+    expect(generationTaskAttachDecision(reference(), { ...live, projectId: "p-other" })).toMatchObject({ kind: "foreign", detail: expect.stringContaining("another project") });
+    expect(generationTaskAttachDecision(reference(), { ...live, branchId: "feature" })).toMatchObject({ kind: "foreign" });
+  });
+
+  it("[PR-L, 2026-10-18] a control request is integrity-verified (an altered action or an extra key is dropped) and current only in its project, unexpired", () => {
+    const request = sealGenerationTaskControlRequest({ version: "1.0.0", scope: { ...SCOPE }, taskId: TASK_ID, action: "pause", blockId: null, label: "Pause design", stateAtRequest: "running", actor: { actorId: "agent:openai", kind: "ai" }, effectiveActor: { actorId: "u-1", kind: "human" }, provenance: { provider: "openai", runId: "run-prd-intake" }, createdAt: 1_760_000_000_000 });
+    const wire = JSON.parse(JSON.stringify(request)) as Record<string, unknown>;
+    expect(request.schema).toBe(GENERATION_TASK_CONTROL_SCHEMA);
+    expect(receiveGenerationTaskControlEvent({ type: "generation_task_control_ready", runId: "r", request: wire })?.request.requestId).toBe(request.requestId);
+    expect(receiveGenerationTaskControlEvent({ type: "generation_task_control_ready", request: { ...wire, action: "cancel" } })).toBeNull();
+    expect(receiveGenerationTaskControlEvent({ type: "generation_task_control_ready", request: { ...wire, confirmed: true } })).toBeNull();
+    expect(receiveGenerationTaskControlEvent({ type: "generation_task_ready", request: wire })).toBeNull();
+    expect(generationTaskControlCurrency(request, { projectId: SCOPE.projectId, branchId: "main", now: request.createdAt + 1 })).toEqual({ ok: true });
+    expect(generationTaskControlCurrency(request, { projectId: "p-other", branchId: "main", now: request.createdAt + 1 })).toMatchObject({ ok: false, code: "foreign-scope" });
+    expect(generationTaskControlCurrency(request, { projectId: SCOPE.projectId, branchId: "main", now: request.expiresAt })).toMatchObject({ ok: false, code: "expired" });
   });
 });
 
-describe("[PR-D page intake 5] no new control", () => {
-  it("the committed B17 control inventory names neither the intake's case nor its function", () => {
+describe("[PR-D page intake 5] no v1 intake remains; the chip's controls are classified", () => {
+  it("[PR-L, 2026-10-18] pin move: the page names neither the v1 event nor its intake; the committed B17 inventory classifies the chip's Confirm (semantic) and Dismiss (view), and names no stream case", () => {
+    expect(page).not.toContain('case "generation_proposal_ready"');
+    expect(page).not.toContain("offerGenerationProposal");
+    expect(page).not.toContain("receiveGenerationProposalEvent");
     expect(inventory).not.toContain("generation_proposal");
     expect(inventory).not.toContain("offerGenerationProposal");
+    expect(inventory).toContain("onConfirmGenerationControl");
+    expect(inventory).toContain("onDismissGenerationControl");
+    expect(inventory).not.toContain("followChatGenerationTask");
   });
 });

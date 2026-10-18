@@ -105,6 +105,8 @@ POST,/api/model-simulation/propose,auth+csrf,canonical-wrapper,authenticatedJson
 POST,/api/model-simulation/readiness,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 GET,/api/parts/[id]/alternates,public,canonical-wrapper,publicRoute,(adopted),adopted
 GET,/api/parts/[id],public,canonical-wrapper,publicRoute,(adopted),adopted
+GET,/api/parts/acquisitions,auth,canonical-wrapper,authenticatedRoute,(adopted),adopted
+POST,/api/parts/acquisitions,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 GET,/api/parts/categories,public,canonical-wrapper,publicRoute,(adopted),adopted
 POST,/api/parts/external-search,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/parts/search,public,canonical-wrapper,publicJsonRoute,(adopted),adopted

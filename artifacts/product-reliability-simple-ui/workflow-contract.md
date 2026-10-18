@@ -108,6 +108,8 @@ row 3 is a recorded netlist (BL:139), rows 9-15 use in-memory stores and role co
 
 ## Addendum D (2026-10-17) — the assistant's generation path
 
+[PR-L, 2026-10-18] Superseded by runbook L.5: `sirkit.schematic.generate-proposal@2.0.0` starts or attaches the project's DURABLE design task (the same `GenerationTaskService` the composer's Generate uses) and the page follows that task with the same status card and review intake; the assistant inspects it (`sirkit.generation.task-inspect`) and asks to stop, pause, resume or retry it on a confirm chip (`sirkit.generation.task-control`). Stop answer ends a chat reply only; Stop design cancels the task. The paragraph below describes the removed in-turn path as it was.
+
 The assistant can now produce the Build generation itself: `sirkit.schematic.generate-proposal` runs the same `runBuildMultiGeneration`
 the composer's Generate runs (through the chat route's injected port, under the run's remaining wall clock, one generation per run) and
 seals the outcome as a proposal with completeness, omitted blocks, the electrical check, the planner and the budget as data. The page

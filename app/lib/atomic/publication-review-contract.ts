@@ -27,12 +27,21 @@ export type ImportReviewProfile = "schematic_only" | "pcb_assignable";
 export const IMPORT_REVIEW_PROFILES: readonly ImportReviewProfile[] = Object.freeze(["schematic_only", "pcb_assignable"]);
 export type FactEstablishesView = "sourcing" | "identity_hint" | "engineering_candidate" | "quarantined";
 
-/** What the person entered: references into the bundled KiCad library and a terminal table, package and citation. */
+/**
+ * [PR-M, 2026-10-18] M2.4: a symbol or footprint reference. `library:name` is always the KiCad identity (the link rule and the
+ * draft-bound values compare it); the closed `acquired` alternative names a STORED object of a governance-scope acquisition handoff by
+ * its SHA-256 instead of the bundled library - never bytes (the forbidden body keys are unchanged). Correction to the design (M2.4 named
+ * `{acquired: {handoffId, objectHash, name}}`): the reference keeps `library` and `name`, because `reviewLinks` and `draftValue` compare
+ * `library:name`, and an acquired asset is still a KiCad library entry.
+ */
+export interface AtomicAssetReference { library: string; name: string; acquired?: { handoffId: string; objectHash: string } }
+
+/** What the person entered: references into the bundled KiCad library (or a handoff's stored objects) and a terminal table, package and citation. */
 export interface AtomicPublicationSpec {
   exactMpn: string;
   profile: ImportReviewProfile;
-  symbol: { library: string; name: string } | null;
-  footprint: { library: string; name: string } | null;
+  symbol: AtomicAssetReference | null;
+  footprint: AtomicAssetReference | null;
   terminals: Array<{ number: string; function: string; pads: string[] }>;
   package: { code: string; mounting: "smd" | "through_hole" } | null;
   datasheet: { url: string | null; locator: string } | null;
@@ -158,6 +167,8 @@ export interface AtomicPublicationRequest {
   requesterMembershipRevision: string | null;
   spec: AtomicPublicationSpec;
   links: AtomicPublicationLink[];
+  /** [PR-M, 2026-10-18] M2.5: the publication also writes ONE discovery catalog row (an acquired part) and its link */
+  discovery?: { valueKey: string };
   evidence: ImportReviewEvidence;
   decision?: {
     decision: "approve" | "reject";

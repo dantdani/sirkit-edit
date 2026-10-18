@@ -21,6 +21,10 @@
  * existing composer route to the assistant, which inspects them, searches the local library and seals ONE resolution batch for the
  * human's review (the page's review dialog applies it). The button only hands the page the instances; it is disabled, with the reason,
  * when there is no catalog instance to resolve or the page offers no assistant.
+ * [PR-M, 2026-10-18] Section M2: below it, "Obtain the part's assets" (CadAcquisitionPanel) for the listed catalog instances of each
+ * catalog part - the durable CAD acquisition task over POST/GET /api/parts/acquisitions (the agent's acquisition tools read the same task):
+ * admitted CAD sources only, a validated review package a person sends for component review, two humans publish, and the replacement
+ * is then offered through the same review path as "Find a replacement in the library".
  * Nothing here binds, publishes, buys or applies anything; the catalog part record comes from the page's parts cache.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -41,6 +45,7 @@ import {
   type SourcingObservationFacts,
 } from "@/app/lib/parts/missing-facts";
 import { AtomicPublicationReviewSection, type AtomicPublicationPrefill } from "@/app/components/parts/AtomicPublicationReviewPanel";
+import { CadAcquisitionPanel, type AcquisitionInstance } from "@/app/components/parts/CadAcquisitionPanel"; // [PR-M, 2026-10-18] M2: "Obtain the part's assets"
 
 const FACT_CLASSES: readonly MissingFactClass[] = ["identity", "evidence", "stock_pricing"];
 const CATALOG_SEARCH_FAILED = "The catalog search could not be completed.";
@@ -104,6 +109,11 @@ export function MissingPartsList({ items, schematic, projectScope, onFindReplace
     const instance = (schematic.kicadComponents ?? []).find((candidate) => candidate.refDes === item.refDes);
     return instance ? [{ componentId: instance.id, refDes: instance.refDes }] : [];
   }), [items, schematic]);
+  const acquisitionInstances = useMemo(() => items.flatMap((item): AcquisitionInstance[] => {
+    if (item.family !== "kicad") return [];
+    const instance = (schematic.kicadComponents ?? []).find((candidate) => candidate.refDes === item.refDes);
+    return instance ? [{ componentId: instance.id, refDes: instance.refDes, partId: instance.partId }] : [];
+  }), [items, schematic]);
   const findReason = !onFindReplacement ? "the assistant is not available on this surface" : catalogInstances.length === 0 ? "no listed instance is a catalog part (a Theory symbol needs a catalog part placed instead)" : null;
   return (
     <>
@@ -111,6 +121,7 @@ export function MissingPartsList({ items, schematic, projectScope, onFindReplace
         <button type="button" onClick={() => { if (onFindReplacement && catalogInstances.length > 0) onFindReplacement(catalogInstances); }} disabled={findReason !== null} aria-describedby="missing-find-replacement-note" data-testid="missing-parts-find-replacement" data-count={catalogInstances.length} className="rounded border border-teal-800 px-2 py-0.5 text-teal-200 hover:border-teal-600 disabled:cursor-not-allowed disabled:opacity-50">{FIND_REPLACEMENT_LABEL}</button>
         <span id="missing-find-replacement-note" className="text-zinc-400">{findReason ? `not available: ${findReason}` : `asks the assistant to inspect ${catalogInstances.map((instance) => instance.refDes).join(", ")}, search the local library and prepare one batch for your review - nothing changes until you approve it`}</span>
       </div>
+      <CadAcquisitionPanel instances={acquisitionInstances} schematic={schematic} projectScope={projectScope} {...(onFindReplacement ? { onOfferReplacement: onFindReplacement } : {})} />
       <ul data-testid="sync-unresolved-instances" aria-label="Unresolved instances" className="mt-2 space-y-1.5">
         {items.map((item) => <MissingPartRow key={`${item.family}:${item.refDes}`} item={item} schematic={schematic} projectScope={projectScope} />)}
       </ul>

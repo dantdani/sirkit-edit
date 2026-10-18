@@ -1,0 +1,8 @@
+SIRKIT-PIN-TABLE/1
+fixture: yes
+licence: MIT
+title: Sirkit fixture pin table for a 1N4001-class rectifier diode (NOT a manufacturer datasheet)
+part: 1N4001
+package: DO-41 through_hole
+pin 1 K 1
+pin 2 A 2

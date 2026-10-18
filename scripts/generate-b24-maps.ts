@@ -616,7 +616,7 @@ export const GENERATOR_OUTPUTS: Readonly<Record<string, readonly string[]>> = Ob
   "generate-b24-eval-catalog.ts": ["artifacts/ai-control-plane-b24/eval-catalog.csv", "artifacts/ai-control-plane-b24/eval-catalog.json"],
   "generate-b24-maps.ts": B24_MAP_FILES.map((file) => `${B24_MAPS_DIR}/${file}`),
   "generate-b24-scenario-map.ts": ["artifacts/ai-control-plane-b24/scenario-map.csv", "artifacts/ai-control-plane-b24/scenario-map.json"],
-  "generate-b24-threshold-census.ts": ["artifacts/ai-control-plane-b24/threshold-census.csv"],
+  "generate-b24-threshold-census.ts": ["artifacts/ai-control-plane-b24/threshold-census.csv"], "generate-cad-source-registry.ts": ["artifacts/product-reliability-simple-ui/component-resolution/cad-source-registry.csv"], // [PR-M, 2026-10-18] section M2: the CAD source registry (gate m2-2-cad-source-registry; in place: no line moves)
   "generate-pcb-shape-descriptor.ts": ["app/lib/agent/generated/pcb-shape-descriptor.ts"],
   "generate-pr-d-coverage-matrix.ts": ["artifacts/product-reliability-simple-ui/ui-agent-command-coverage.csv", "artifacts/product-reliability-simple-ui/ui-agent-command-coverage-summary.json"], // [PR-D, 2026-10-16] the UI<->AI coverage matrix with dispositions (gate pr-d-coverage-matrix)
   "generate-pr-d-tool-manuals.ts": ["artifacts/product-reliability-simple-ui/manuals/MANIFEST.json"], // [PR-D, 2026-10-16] the registry-backed tool manuals (gate pr-d-tool-manuals; one .md per descriptor beside the manifest)

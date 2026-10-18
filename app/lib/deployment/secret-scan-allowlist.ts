@@ -68,8 +68,8 @@ export const SECRET_SCAN_ALLOWLIST: readonly SecretScanAllowlistEntry[] = Object
   {
     path: "app/lib/engineering/__tests__/pr-d-generate-proposal.test.ts",
     rule: "anthropic-key-shape",
-    sha256: "4ac308fec5066095a8b2153307f2c714c48da82f5326474fdf097ce9d4495eeb",
-    reason: "PR-D's generate-proposal failure case: the fake generation port throws 'socket hang up' followed by the same alphabet placeholder; the proposal-blocked data must carry the first words and never the key shape",
+    sha256: "0d36d7140314e27901cf1114a29a29fed1ab55c4f7f7fcd06cfb19c15973d4f7",
+    reason: "PR-D's generate-proposal failure case, [PR-L, 2026-10-18] as rewritten for the 2.0.0 port (runbook L.5): the fake generation-task port's start throws 'socket hang up' followed by the same alphabet placeholder; the refusal must carry the first words and never the key shape",
   },
   {
     path: "app/lib/parts/__tests__/pr-f-missing-facts-read.test.ts",
@@ -86,5 +86,14 @@ export const SECRET_SCAN_ALLOWLIST: readonly SecretScanAllowlistEntry[] = Object
     sha256: "8bbe84aef14181902a233659797cf030bfd89aceb5f844542df7aee61e584a01",
     historyOnly: true as const,
     reason: "B24-C3's fake connection string as committed at ba4f562:75 - a template literal assigned to FAKE_URL, user and password assembled from joined fragments, host db.invalid, no credential - matched by shape only; replaced at aaa6a1b by joined fragments under FAKE_CONNECTION, so it exists only in the pull request's history",
+  },
+  // [PR-L, 2026-10-18] history-only, LAST: PR-D's v1 line of the same case (the fake 1.0.0 generation port), which the pull request's
+  // history scan still reads in e5817558's blob; the digest is the one PR-G's lead verified for the tree entry above before L.5 rewrote it
+  {
+    path: "app/lib/engineering/__tests__/pr-d-generate-proposal.test.ts",
+    rule: "anthropic-key-shape",
+    sha256: "4ac308fec5066095a8b2153307f2c714c48da82f5326474fdf097ce9d4495eeb",
+    historyOnly: true as const,
+    reason: "PR-D's generate-proposal failure line as committed at e5817558 - the fake 1.0.0 generation port throwing 'socket hang up' and the 55-character alphabet placeholder, no key material - rewritten by runbook L.5 (2026-10-18) for the 2.0.0 port, so it exists only in the pull request's history",
   },
 ].map((entry) => Object.freeze(entry as SecretScanAllowlistEntry)));

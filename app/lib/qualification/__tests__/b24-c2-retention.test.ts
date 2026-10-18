@@ -149,7 +149,7 @@ describe("[B24-C2] the retention policy and the aggregate census (D24-13, OD-202
     expect(found.every((literal) => AGGREGATE_LITERAL.test(literal))).toBe(true);
     const durableRows = RETENTION_POLICY.rows.filter((row) => row.store === "durable_aggregate").map((row) => row.recordClass).sort();
     expect(found).toEqual(durableRows);
-    expect(found).toHaveLength(34); // 30 at f663d71 + C1's two + C2's two (the attribution and the salt)
+    expect(found).toHaveLength(38); // 30 at f663d71 + C1's two + C2's two (the attribution and the salt); [PR-M, 2026-10-18] reviewed pin move (section M2), was 34: + the acquisition's four aggregates (atomic.acquired-object.v1, atomic.acquisition-candidate.v1, atomic.acquisition-handoff.v1, component-resolution.task.v1), each with its kept row
     // the module-local ones are among them (never a hand list of exports)
     for (const local of ["pcb-sync.board.v1", "pcb-sync.audit-stream.v1", "mfg.release-ledger.v1", "mfg.release-authority.v1", "mfg.qualification-lease.v1", "assignment-queue.item.v1", "mapping-verification.effect-receipt.v1", "passive-policy.record.v1"]) expect(found, local).toContain(local);
     // schema strings and numeric bounds never enter: no `sirkit.` schema, no MAX_* constant

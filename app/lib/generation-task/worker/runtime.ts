@@ -27,8 +27,7 @@ import type { LLMProviderId } from "../../llm/types";
 import { isGenerationEditorRole } from "../contracts";
 import { GenerationTaskStore, type GenerationSliceRevalidator } from "../store";
 import type { GenerationLlmAdmission } from "./accounting";
-import type { GenerationSliceReport } from "./slices";
-import { GenerationWorker, type GenerationScopeRunner, type GenerationTickReport, type GenerationWorkerHealth } from "./worker";
+import { GenerationWorker, type FencedTopicRunner, type GenerationScopeRunner, type GenerationTickReport, type GenerationWorkerHealth, type WorkerSliceReport } from "./worker";
 import type { GenerationSlicePorts } from "./slices";
 import { fixtureGenerationCatalogPort, fixtureGenerationLlmPort } from "../../fixture-runtime/generation-ports";
 import { isoOf } from "../vocabulary";
@@ -83,7 +82,7 @@ export const PROCESS_GENERATION_ADMISSION: GenerationLlmAdmission = Object.freez
 
 // ─── Transports ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export interface GenerationTransportTick { tick: GenerationTickReport; slices: GenerationSliceReport[] }
+export interface GenerationTransportTick { tick: GenerationTickReport; slices: WorkerSliceReport[] } // [PR-M, 2026-10-18] M2: a topic slice settles here too
 /** How a worker process reaches the queued work: one interface, two transports (section 4). */
 export interface GenerationWorkerTransport {
   readonly mode: "direct" | "pump";
@@ -104,6 +103,8 @@ export interface DirectTransportOptions {
   runInScope?: GenerationScopeRunner;
   log?: (line: string) => void;
   environment?: Record<string, string | undefined>;
+  /** [PR-M, 2026-10-18] M2: other durable topics the worker consumes (the component-resolution slices) */
+  topics?: readonly FencedTopicRunner[];
 }
 /** The direct transport over the process's durable repository and the production ports. Throws a setup refusal with nothing claimed. */
 export function createDirectTransport(options: DirectTransportOptions): GenerationWorkerTransport {
@@ -118,6 +119,7 @@ export function createDirectTransport(options: DirectTransportOptions): Generati
     ...(options.concurrency !== undefined ? { policy: { concurrency: options.concurrency } } : {}),
     ...(options.runInScope ? { runInScope: options.runInScope } : {}),
     ...(options.log ? { log: options.log } : {}),
+    ...(options.topics ? { topics: options.topics } : {}),
   });
   return {
     mode: "direct",
@@ -157,8 +159,10 @@ export interface PumpedSliceInput {
   workerId?: string;
   graceMs?: number;
   log?: (line: string) => void;
+  /** [PR-M, 2026-10-18] M2: other durable topics (the component-resolution slices) the one pumped slice may come from */
+  topics?: readonly FencedTopicRunner[];
 }
-export interface PumpedSliceAnswer { tick: GenerationTickReport; ran: GenerationSliceReport | null }
+export interface PumpedSliceAnswer { tick: GenerationTickReport; ran: WorkerSliceReport | null }
 
 /** The SERVER side of the pump: claim at most ONE slice and run it to its settlement, awaited, inside this request (the slice window
  *  bounds it). The same `GenerationWorker`, claim, fencing, lease renewal and slice code as the direct transport. */
@@ -167,7 +171,7 @@ export async function runPumpedSlice(input: PumpedSliceInput): Promise<PumpedSli
   if (input.signal?.aborted) return { tick: { at: isoOf(input.clock()), claims: [], started: [] }, ran: null };
   const worker = new GenerationWorker({
     store: input.store, workerId, ports: input.ports, revalidate: input.revalidate, clock: input.clock, policy: { concurrency: 1 },
-    ...(input.runInScope ? { runInScope: input.runInScope } : {}), ...(input.log ? { log: input.log } : {}),
+    ...(input.runInScope ? { runInScope: input.runInScope } : {}), ...(input.log ? { log: input.log } : {}), ...(input.topics ? { topics: input.topics } : {}),
   });
   const onAbort = (): void => { void worker.stop({ graceMs: input.graceMs ?? 10_000 }); };
   input.signal?.addEventListener("abort", onAbort, { once: true });

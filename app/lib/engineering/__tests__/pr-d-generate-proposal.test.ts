@@ -1,21 +1,26 @@
 /**
- * [PR-D] The agent's Build-mode generation proposal, `sirkit.schematic.generate-proposal` (OD-243): the semantic equivalent of the
- * Build composer's Generate, over the SAME `runBuildMultiGeneration` the route runs, through the chat route's injected port.
+ * [PR-D] The agent's Build-mode generation, `sirkit.schematic.generate-proposal` (OD-243): the semantic equivalent of the Build
+ * composer's Generate, through the chat route's injected port.
  *
- *  - the descriptor: registered, valid, strict-compatible, Tier 2 (proposal_only by derivation), its example validates against its
- *    schema, exposed in the reviewed list, withheld from MCP, bound to the one shared generation; the registry refuses a stray
- *    claim of its authority and a generation binding of another class;
- *  - denied discovery, with the reason: a Theory sheet (no Build mode), no generation provider (no port fact), no project (no
- *    schematic), a viewer, no head mark - at the registry AND at the run toolset the model receives;
- *  - the happy path through the REAL gateway with a FAKE port: a sealed proposal with the documented payload (scope + head mark,
- *    authorization, base digest, request, the generation's completeness / checks / planner / budget as data, the netlist digest,
- *    actor and effective actor, expiry), its integrity re-verified, a tampered copy refused; the loop emits its own event once
- *    and refuses a second generation (`proposal_exists`);
- *  - a partial generation is sealed with its omitted blocks and findings as data; a failed generation (budget, provider) is
- *    `proposal-blocked` data (class, retryable, provider, reason) and never ok;
- *  - the tool never mutates: the schematic digest is unchanged on every path, the port is asked once per call, nothing is sealed
- *    on a refusal; a closed argument surface; the run's remaining time is the budget (refused before the port is asked).
- *  - the chat runtime boundary: the port is resolvable only for a configured provider (or the fixture runtime), the seam resets.
+ * [PR-L, 2026-10-18] Runbook L.5, increment 5: updated to the 2.0.0 contract. Its 1.0.0 assertions described the REMOVED in-turn path
+ * (the run's clamped `runBuildMultiGeneration` sealed as `sirkit.schematic-generation-proposal.v1`, the run's remaining wall clock as
+ * the generation's budget, a hanging generation refused `timeout`); 2.0.0 starts or attaches the project's DURABLE generation task
+ * through the SAME service the start route uses and answers its reference. Each case below names what it pins now; the moved pins say
+ * so in place. (The durable behaviour end to end - idempotency, attach, the worker, the turn deadline - is l5-generation-task-tool.)
+ *
+ *  - the descriptor: registered, valid, strict-compatible, Tier 2 (proposal_only by derivation), 2.0.0 and interactive, its example
+ *    validates against its schema, exposed in the reviewed list, withheld from MCP, bound to the one shared durable task service; the
+ *    registry refuses a stray claim of its authority, a generation binding of another class and any binding of the in-turn generation;
+ *  - denied discovery, with the reason: a Theory sheet (no Build mode), no generation port (no fact), no project (no schematic), a
+ *    viewer, no head mark - at the registry AND at the run toolset the model receives;
+ *  - the happy path through the REAL gateway with a FAKE port: the start route's closed body (the prompt, the run's provider, the
+ *    chat-sheet base pinned to the verified schematic digest and its head mark, a client request id derived from the run and the call),
+ *    origin chat with the asking run; the reference answered; an active task attached; the loop emits its own event once and refuses a
+ *    second start (`proposal_exists`);
+ *  - a refused start is data or a refusal, never ok, and nothing is reported as started;
+ *  - the tool never mutates and never widens: the schematic digest is unchanged on every path, the port is asked once per call and never
+ *    on a refusal; a closed argument surface;
+ *  - the chat runtime boundary: the port resolves only for a servable provider AND a durable task store, the seam resets.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SchematicState } from "@/lib/schematic-types";
@@ -35,16 +40,17 @@ import { assembleAgentRunContext } from "../../agent/context";
 import { createAgentToolGateway, verifyAgentContextIntegrity } from "../../agent/gateway";
 import { buildRunToolset, runAgentLoop } from "../../agent/loop";
 import { DEFAULT_AGENT_BUDGET, type AgentRunContext, type AgentRunEvent, type AgentStep, type ProviderAgentAdapter } from "../../agent/contracts";
-import { AGENT_GENERATION_PROPOSAL_TOOL_ID, GENERATE_PROPOSAL_INPUT_EXAMPLE, GENERATION_AUTHORITY, GENERATION_BINDING, GENERATION_PROPOSAL_SCHEMA, GENERATION_PROPOSAL_TTL_MS, MIN_GENERATION_BUDGET_MS, generationFailureBlockers, resolveGenerationBinding, verifySealedSchematicGenerationProposalIntegrity, type SchematicGenerationPort, type SchematicGenerationPortRequest, type SealedSchematicGenerationProposal } from "../../agent/generation-proposals";
-import type { BuildMultiGenerationOutcome } from "../../schematic/build-multi-generation";
-import { BUILD_BUDGET } from "../../schematic/build-result";
-import { LLMProviderError } from "../../llm/errors";
+import { AGENT_GENERATION_PROPOSAL_TOOL_ID, GENERATE_PROPOSAL_INPUT_EXAMPLE, GENERATION_AUTHORITY, GENERATION_BINDING, resolveGenerationBinding, type GenerationTaskPortAnswer, type GenerationTaskPortStart, type SchematicGenerationPort } from "../../agent/generation-proposals";
+import { GENERATION_TASK_REF_SCHEMA, generationChatClientRequestId } from "../../agent/generation-task-tools";
 import { createEmptyBoard } from "../../pcb/types";
 import { PROVIDER_KEY_SETTINGS, resetSchematicGenerationPortFactory, resolveSchematicGenerationPort, schematicGenerationServable, setSchematicGenerationPortFactory } from "@/app/api/chat/schematic-generation-runtime";
+import { resetGenerationTaskRuntimeFactory, setGenerationTaskRuntimeFactory } from "@/app/lib/generation-task/runtime";
+import { InMemoryDurableWorkflowRepository } from "@/app/lib/durable-workflow/repository";
 
 const registry = sirkitToolRegistry();
 const KNOWN = new Set(ACTION_COVERAGE_REGISTRY.map((record) => record.id));
 const TOOL = AGENT_GENERATION_PROPOSAL_TOOL_ID;
+const VERSION = "2.0.0"; // [PR-L, 2026-10-18] pin move (runbook L.5): 1.0.0 -> 2.0.0, the durable task start
 const descriptor = (): ToolDescriptor => registry.get(TOOL)!;
 const SCOPE = { tenantId: "local", projectId: "p-prd-gen", branchId: "main" };
 /** a Build sheet: catalog parts, no Theory component */
@@ -54,6 +60,7 @@ const EMPTY_SHEET: SchematicState = { components: [], wires: [], netLabels: [], 
 const THEORY_SHEET: SchematicState = { components: [{ id: "r1", type: "resistor", x: 100, y: 100, rotation: 0, value: "10k" }], wires: [], netLabels: [], kicadComponents: [] };
 const HEAD_MARK = { lineageId: "lin1-a9e2470c11bd8833", headSequence: 3, canonicalStateDigest: "eng1-77aa66bb55cc44dd" };
 const PROMPT = GENERATE_PROPOSAL_INPUT_EXAMPLE.prompt;
+const TASK_ID = `generation-task:${"ab".repeat(16)}`;
 
 interface ContextOptions { schematic?: SchematicState | null; headMark?: boolean; generation?: boolean; role?: ProjectRole; board?: boolean }
 function contextFor(options: ContextOptions = {}): AgentRunContext {
@@ -75,60 +82,50 @@ const reasonFor = (context: AgentRunContext): string => {
 };
 const offered = (context: AgentRunContext, warnings: string[] = []): string[] => buildRunToolset(registry, context, (message) => { warnings.push(message); }).declarations.map((declaration) => declaration.toolId);
 
-const SUCCESS: BuildMultiGenerationOutcome = {
-  kind: "success",
-  body: {
-    ok: true,
-    netlist: {
-      components: [{ refDes: "U1", partId: "lib:ne555", value: "NE555", role: "processor" }, { refDes: "R1", partId: "lib:r-10k", value: "10k", role: "passive" }, { refDes: "D1", partId: "lib:led-red", value: "LED", role: "indicator" }],
-      connections: [{ from: "U1.3", to: "R1.1" }, { from: "R1.2", to: "D1.1" }, { kind: "label", pin: "D1.2", labelName: "GND" }, { kind: "label", pin: "U1.1", labelName: "GND" }],
-      explanation: "A 555 astable drives one LED through a series resistor.",
-    },
-    explanation: "A 555 astable drives one LED through a series resistor.",
-    status: "complete",
-    omittedBlocks: [],
-    electricalCheck: { state: "passed", criticalCount: 0, warningCount: 1 },
-    planner: { state: "planned", blocks: 2 },
-    budget: { iterationCap: 20, iterationsUsed: 4, deadlineMs: 40_000, elapsedMs: 2_345, concurrencyCap: 3 },
-  },
-};
-const PARTIAL: BuildMultiGenerationOutcome = {
-  kind: "success",
-  body: { ...SUCCESS.body, status: "partial", omittedBlocks: ["Power supply"], electricalCheck: { state: "findings", criticalCount: 1, warningCount: 0, findings: ["Net VCC has no driver"] }, planner: { state: "planned", blocks: 3 } },
-};
-const BUDGET_FAILURE: BuildMultiGenerationOutcome = { kind: "failure", status: 503, body: { ok: false, code: "build_budget_exhausted", error: "Max iterations reached (20) without a submitted schematic.", retryable: true } };
-
-/** a fake port that records every request and answers the scripted outcome (or hangs) */
-function fakePort(outcome: BuildMultiGenerationOutcome | "hang"): { port: SchematicGenerationPort; requests: SchematicGenerationPortRequest[] } {
-  const requests: SchematicGenerationPortRequest[] = [];
+/** the public snapshot the service answers (sirkit.generation-task-snapshot.v1), minimal */
+function snapshot(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    requests,
+    schema: "sirkit.generation-task-snapshot.v1", taskId: TASK_ID, clientRequestId: "00000000-0000-8000-8000-000000000001", scope: { ...SCOPE }, state: "queued", terminal: false, phase: "planning", origin: "chat", provider: "openai",
+    createdAt: "2026-10-18T09:00:00.000Z", updatedAt: "2026-10-18T09:00:00.000Z", serverNow: "2026-10-18T09:00:00.000Z", liveness: { state: "waiting_for_worker", since: "2026-10-18T09:00:00.000Z", retryAt: null },
+    plan: null, blocker: null, failure: null, usage: { slices: 0, attempts: 0, modelCalls: 0, uncertainModelCalls: 0, inputTokens: 0, outputTokens: 0, catalogSearches: 0, cacheHits: 0 },
+    allowance: { units: 1, extensions: 0, maxExtensions: 4, remaining: { modelCalls: 60, outputTokens: 480_000, catalogSearches: 300 }, windowEndsAt: "2026-10-21T09:00:00.000Z" },
+    base: { schematicDigest: "eng1-0000000000000000", recipe: "chat-sheet", moved: false }, result: null, review: null, control: { cancelRequested: false, pauseRequested: false }, actions: ["cancel", "pause"], retryBlocks: [], eventCursor: 1, activity: [],
+    ...overrides,
+  };
+}
+/** a fake port that records every start and answers the scripted service answer */
+function fakePort(answer: GenerationTaskPortAnswer | "throw"): { port: SchematicGenerationPort; starts: GenerationTaskPortStart[] } {
+  const starts: GenerationTaskPortStart[] = [];
+  return {
+    starts,
     port: {
-      generate: async (request) => {
-        requests.push(request);
-        if (outcome === "hang") return new Promise<never>(() => { /* only the race ends this */ });
-        return outcome; // as the real function answers: its own objects (a provider error keeps its class)
-      },
+      durability: "durable",
+      start: async (input) => { starts.push(input); if (answer === "throw") throw new Error("socket hang up sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop"); return structuredClone(answer); },
+      list: async () => ({ status: 200, body: { ok: true, active: null, recent: [] } }),
+      inspect: async () => ({ status: 404, body: { ok: false, code: "GENERATION_TASK_NOT_FOUND" } }),
     },
   };
 }
+const ACCEPTED: GenerationTaskPortAnswer = { status: 202, body: { ok: true, attached: false, durability: "durable", task: snapshot() } };
 const gatewayWith = (port?: SchematicGenerationPort) => createAgentToolGateway(registry, { ...(port ? { schematicGeneration: port } : {}), now: () => 1_760_000_000_000 });
-const invoke = (gateway: ReturnType<typeof createAgentToolGateway>, context: AgentRunContext, args: Record<string, unknown>, timeoutMs = 45_000, signal?: AbortSignal) =>
-  gateway.invoke({ runId: "run-prd-gen", provider: "openai", callId: "call-gen-1", toolId: TOOL, version: "1.0.0", args, context, timeoutMs, ...(signal ? { signal } : {}) });
+const invoke = (gateway: ReturnType<typeof createAgentToolGateway>, context: AgentRunContext, args: Record<string, unknown>, signal?: AbortSignal) =>
+  gateway.invoke({ runId: "run-prd-gen", provider: "openai", callId: "call-gen-1", toolId: TOOL, version: VERSION, args, context, timeoutMs: 15_000, ...(signal ? { signal } : {}) });
 
-afterEach(() => { resetSchematicGenerationPortFactory(); vi.unstubAllEnvs(); });
+afterEach(() => { resetSchematicGenerationPortFactory(); resetGenerationTaskRuntimeFactory(); vi.unstubAllEnvs(); });
 
 describe("PR-D generate-proposal — the descriptor", () => {
-  it("is registered, valid and strict-compatible: a propose-class sealed proposal artifact bound to the one shared generation, Tier 2 by derivation (proposal_only), requiring Build mode, a schematic with its head mark and the server's generation authority", () => {
+  it("is registered, valid and strict-compatible: a propose-class sealed artifact bound to the one shared durable task service, Tier 2 by derivation (proposal_only), requiring Build mode, a schematic with its head mark and the server's generation authority", () => {
     const d = descriptor();
     expect(validateToolDescriptor(d, KNOWN)).toEqual([]);
     expect(d).toMatchObject({
-      version: "1.0.0", lifecycle: "active", owningCommandId: "schematic.generate", category: "schematic", operationClass: "propose", sideEffects: "proposal-artifact",
+      version: VERSION, lifecycle: "active", owningCommandId: "schematic.generate", category: "schematic", operationClass: "propose", sideEffects: "proposal-artifact",
       approvalTier: "none", requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"], requiredProjectState: ["schematic-present", "schematic-build-mode"],
-      requiredAuthority: [GENERATION_AUTHORITY], requiresExpectedRevision: true, requiresLineage: true, discovery: "discoverable", callability: "callable", agentExposed: true, budgetClass: "long-running",
+      requiredAuthority: [GENERATION_AUTHORITY], requiresExpectedRevision: true, requiresLineage: true, discovery: "discoverable", callability: "callable", agentExposed: true,
+      budgetClass: "interactive", // [PR-L, 2026-10-18] pin move (runbook L.5): long-running (185 s, above BUILD_BUDGET) -> an interactive start
       binding: { status: "bound-proposal", module: GENERATION_BINDING.module, symbol: GENERATION_BINDING.symbol },
     });
-    expect(d.timeoutMs).toBeGreaterThan(BUILD_BUDGET.deadlineMs);
+    expect(GENERATION_BINDING).toEqual({ module: "app/lib/generation-task/service.ts", symbol: "GenerationTaskService" }); // [PR-L, 2026-10-18] pin move: the durable service, not runBuildMultiGeneration
+    expect(d.timeoutMs).toBeLessThanOrEqual(DEFAULT_AGENT_BUDGET.perToolTimeoutMs); // [PR-L, 2026-10-18] pin move: was "> BUILD_BUDGET.deadlineMs" (the in-turn ceiling)
     expect(d.executionMode).toBeUndefined();
     expect(strictCompatibility(d).ok).toBe(true);
     expect(resolveGenerationBinding(d)).toEqual({ state: "resolved" });
@@ -142,13 +139,14 @@ describe("PR-D generate-proposal — the descriptor", () => {
     expect(TOOL_PROJECT_STATES).toContain("schematic-build-mode");
   });
 
-  it("its example validates against its schema (and the schema refuses a missing prompt, an extra key and a non-string prompt); the description states the example", () => {
+  it("its example validates against its schema (and the schema refuses a missing prompt, an extra key and a non-string prompt); the description states the example and that the turn is not the task", () => {
     const d = descriptor();
     expect(validateAgainstSchema(GENERATE_PROPOSAL_INPUT_EXAMPLE, d.inputSchema)).toEqual([]);
     expect(validateAgainstSchema({}, d.inputSchema)).toEqual(["$.prompt: required"]);
     expect(validateAgainstSchema({ prompt: PROMPT, scope: SCOPE }, d.inputSchema)).toEqual(["$.scope: unknown field"]);
     expect(validateAgainstSchema({ prompt: 7 }, d.inputSchema)).toEqual(["$.prompt: must be a string"]);
     expect(d.description).toContain(JSON.stringify(GENERATE_PROPOSAL_INPUT_EXAMPLE));
+    expect(d.description).toContain("NOT inside this chat turn"); // [PR-L, 2026-10-18] the 2.0.0 semantics, stated to the model
     expect(Object.keys(d.inputSchema.properties as Record<string, unknown>)).toEqual(["prompt"]);
     expect(d.inputSchema.required).toEqual(["prompt"]);
   });
@@ -162,7 +160,7 @@ describe("PR-D generate-proposal — the descriptor", () => {
     expect(mcp.excludedByReason.withheld).toContain(TOOL);
   });
 
-  it("the registry refuses a descriptor that claims the schematic-generation authority without the generation binding, and a generation-bound descriptor of another class, side effect or approval tier", () => {
+  it("the registry refuses a descriptor that claims the schematic-generation authority without the generation binding, a generation-bound descriptor of another class, side effect or approval tier, and any tool bound to the removed in-turn generation", () => {
     const d = descriptor();
     const strayAuthority: ToolDescriptor = { ...registry.get("sirkit.schematic.propose-tier1-edit")!, requiredAuthority: [GENERATION_AUTHORITY] };
     expect(validateToolDescriptor(strayAuthority, KNOWN).some((issue) => issue.includes("belongs to the tool bound to the Build-mode generation only"))).toBe(true);
@@ -170,7 +168,10 @@ describe("PR-D generate-proposal — the descriptor", () => {
     expect(validateToolDescriptor({ ...d, sideEffects: "engineering-state" }, KNOWN).some((issue) => issue.includes("proposal-artifact side effects only"))).toBe(true);
     expect(validateToolDescriptor({ ...d, approvalTier: "reversible" }, KNOWN).some((issue) => issue.includes("no approval tier of its own"))).toBe(true);
     expect(validateToolDescriptor({ ...d, requiredAuthority: ["local-working-copy"] }, KNOWN).some((issue) => issue.includes("exactly the schematic-generation authority"))).toBe(true);
+    // [PR-L, 2026-10-18] runbook L.5: "do not leave two implementations" - binding the in-turn generation is refused outright
+    expect(validateToolDescriptor({ ...d, binding: { status: "bound-proposal", module: "app/lib/schematic/build-multi-generation.ts", symbol: "runBuildMultiGeneration" } }, KNOWN).some((issue) => issue.includes("no tool binds the in-turn Build-mode generation"))).toBe(true);
     expect(resolveGenerationBinding({ ...d, binding: { status: "bound-proposal", module: "app/lib/engineering/schematic-plans.ts", symbol: "compileTier1Proposal" } }).state).toBe("not_callable");
+    expect(resolveGenerationBinding({ ...d, binding: { status: "bound-proposal", module: "app/lib/schematic/build-multi-generation.ts", symbol: "runBuildMultiGeneration" } }).state).toBe("not_callable");
   });
 });
 
@@ -194,7 +195,7 @@ describe("PR-D generate-proposal — denied discovery, with the reason, at the r
     expect(offered(context)).not.toContain(TOOL);
   });
 
-  it("no provider (the server bound no generation port): authority_missing; the fact is absent and the authority is not advertised; the run toolset withholds it", () => {
+  it("no generation port (no durable task store or no servable provider): authority_missing; the fact is absent and the authority is not advertised; the run toolset withholds it", () => {
     const context = contextFor({ generation: false });
     expect(context.schematicGenerationAvailable).toBeUndefined();
     expect(context.discovery.availableAuthority).not.toContain(GENERATION_AUTHORITY);
@@ -211,7 +212,6 @@ describe("PR-D generate-proposal — denied discovery, with the reason, at the r
     expect(context.schematicGenerationAvailable).toBeUndefined();
     expect(reasonFor(context)).toBe("lineage_required");
     expect(offered(context)).not.toContain(TOOL);
-    // with a lineage but still no schematic: the project state is what refuses
     const marked = { ...context, discovery: { ...context.discovery, lineageId: HEAD_MARK.lineageId } };
     expect(reasonFor(marked)).toBe("project_state_missing");
   });
@@ -234,53 +234,34 @@ describe("PR-D generate-proposal — denied discovery, with the reason, at the r
   });
 });
 
-describe("PR-D generate-proposal — the happy path through the real gateway with a fake generation", () => {
-  it("seals the generation into the documented proposal payload; the port was asked once with the prompt, the run's provider, scope, run id and a deadline within the build budget; the schematic is untouched; the artifact verifies and a tampered copy is refused", async () => {
+describe("PR-D generate-proposal — the happy path through the real gateway with a fake port (2.0.0: a durable start)", () => {
+  it("[PR-L, 2026-10-18] pin move (runbook L.5; was: seals the generation into a v1 proposal): the port is asked ONCE with the start route's closed body - the prompt, the run's provider, the chat-sheet base pinned to the verified schematic digest and head mark, the derived client request id - in the trusted scope as the effective actor, recording the run; the reference is answered; nothing is changed", async () => {
     const context = contextFor();
     const before = schematicStateDigest(BUILD_SHEET);
-    const fake = fakePort(SUCCESS);
+    const fake = fakePort(ACCEPTED);
     const outcome = await invoke(gatewayWith(fake.port), context, { prompt: PROMPT });
-    expect(outcome).toMatchObject({ kind: "generation-proposal", ok: true, toolId: TOOL, version: "1.0.0" });
-    if (outcome.kind !== "generation-proposal") throw new Error("unreachable");
-    const proposal = outcome.proposal;
-    expect(fake.requests).toHaveLength(1);
-    expect(fake.requests[0]).toMatchObject({ prompt: PROMPT, provider: "openai", scope: SCOPE, runId: "run-prd-gen" });
-    expect(fake.requests[0]!.deadlineMs).toBeLessThanOrEqual(BUILD_BUDGET.deadlineMs);
-    expect(fake.requests[0]!.deadlineMs).toBeGreaterThan(0);
-    // the documented payload
-    expect(proposal).toMatchObject({
-      schema: GENERATION_PROPOSAL_SCHEMA, toolId: TOOL, version: "1.0.0", mode: "build",
-      scope: { ...SCOPE, headMark: HEAD_MARK },
-      authorization: { principalId: "u-1", membershipRevision: "mbr1-a", tenantId: SCOPE.tenantId, projectId: SCOPE.projectId, branchId: SCOPE.branchId, requiredApplyRole: "pcb_editor" },
-      baseSchematicDigest: before,
-      request: { prompt: PROMPT, provider: "openai" },
-      generation: { status: "complete", omittedBlocks: [], electricalCheck: { state: "passed", criticalCount: 0, warningCount: 1 }, planner: { state: "planned", blocks: 2 }, budget: SUCCESS.body.budget, explanation: SUCCESS.body.explanation, netlist: SUCCESS.body.netlist },
-      actor: { kind: "ai", actorId: "agent:openai" }, effectiveActor: { kind: "human", actorId: "u-1" },
-      provenance: { provider: "openai", runId: "run-prd-gen" },
-      createdAt: 1_760_000_000_000, expiresAt: 1_760_000_000_000 + GENERATION_PROPOSAL_TTL_MS,
+    expect(outcome).toMatchObject({ kind: "generation-task", ok: true, toolId: TOOL, version: VERSION, task: { schema: GENERATION_TASK_REF_SCHEMA, taskId: TASK_ID, disposition: "started", sameRequest: true, state: "queued", origin: "chat", durability: "durable", scope: SCOPE } });
+    expect(fake.starts).toHaveLength(1);
+    expect(fake.starts[0]).toEqual({
+      scope: SCOPE, principal: { principalId: "u-1", role: "pcb_editor", membershipRevision: "mbr1-a" }, chatRunId: "run-prd-gen",
+      body: { clientRequestId: generationChatClientRequestId({ scope: SCOPE, runId: "run-prd-gen", callId: "call-gen-1" }), prompt: PROMPT, provider: "openai", base: { schematicDigest: context.schematicDigest, recipe: "chat-sheet", headMark: HEAD_MARK } },
     });
-    expect(proposal.proposalId).toMatch(/^genprop-[0-9a-f]+$/);
-    expect(proposal.netlistDigest).toMatch(/^eng1-/);
-    expect(Object.isFrozen(proposal)).toBe(true);
-    expect(Object.isFrozen(proposal.generation.netlist)).toBe(true);
-    expect(verifySealedSchematicGenerationProposalIntegrity(proposal)).toEqual({ ok: true });
-    // tampering: a changed netlist, a changed base, an extra key - each refused at intake
-    const altered = JSON.parse(JSON.stringify(proposal)) as SealedSchematicGenerationProposal;
-    altered.generation.netlist.components[0]!.value = "LM555";
-    expect(verifySealedSchematicGenerationProposalIntegrity(altered)).toMatchObject({ ok: false, code: "altered" });
-    const rebased = JSON.parse(JSON.stringify(proposal)) as SealedSchematicGenerationProposal;
-    rebased.baseSchematicDigest = schematicStateDigest(EMPTY_SHEET);
-    expect(verifySealedSchematicGenerationProposalIntegrity(rebased)).toMatchObject({ ok: false, code: "altered" });
-    expect(verifySealedSchematicGenerationProposalIntegrity({ ...JSON.parse(JSON.stringify(proposal)), applied: true })).toMatchObject({ ok: false, code: "malformed" });
-    expect(verifySealedSchematicGenerationProposalIntegrity({ ...JSON.parse(JSON.stringify(proposal)), schema: "sirkit.schematic-tier1-proposal.v3" })).toMatchObject({ ok: false, code: "wrong-version" });
-    // nothing changed
+    expect(fake.starts[0]!.body.clientRequestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(generationChatClientRequestId({ scope: SCOPE, runId: "run-prd-gen", callId: "call-gen-2" })).not.toBe(fake.starts[0]!.body.clientRequestId);
     expect(schematicStateDigest(BUILD_SHEET)).toBe(before);
     expect(schematicStateDigest(context.schematic!)).toBe(before);
   });
 
-  it("through the loop: the model's call yields tool_finished proposal_sealed and ONE generation_proposal_ready event carrying the sealed artifact; the model is told the result's data (never the netlist); a second generation in the same run is refused proposal_exists", async () => {
+  it("[PR-L, 2026-10-18] an attach: the same request again (attached-same-request) and a running task of another request (attached-active, sameRequest false) are references too - never a second task", async () => {
+    const same = await invoke(gatewayWith(fakePort({ status: 202, body: { ok: true, attached: true, durability: "durable", task: snapshot() } }).port), contextFor(), { prompt: PROMPT });
+    expect(same).toMatchObject({ kind: "generation-task", task: { disposition: "attached-same-request", sameRequest: true } });
+    const active = await invoke(gatewayWith(fakePort({ status: 409, body: { ok: false, code: "GENERATION_TASK_ACTIVE", activeTask: snapshot({ origin: "build", state: "running", base: { schematicDigest: "eng1-1111111111111111", recipe: "build-pin", moved: false } }) } }).port), contextFor(), { prompt: PROMPT });
+    expect(active).toMatchObject({ kind: "generation-task", task: { disposition: "attached-active", sameRequest: false, origin: "build", state: "running", base: { recipe: "build-pin" } } });
+  });
+
+  it("through the loop: the model's call yields tool_finished task_started and ONE generation_task_ready event carrying the reference; the model is told the task's state (never the prompt); a second start in the same run is refused proposal_exists", async () => {
     const context = contextFor();
-    const fake = fakePort(SUCCESS);
+    const fake = fakePort(ACCEPTED);
     const gateway = gatewayWith(fake.port);
     const events: AgentRunEvent[] = [];
     const continuations: string[][] = [];
@@ -290,14 +271,14 @@ describe("PR-D generate-proposal — the happy path through the real gateway wit
       provider: "openai",
       async start(input) {
         const tool = input.tools.find((declaration) => declaration.toolId === TOOL);
-        expect(tool, "the generation proposal is offered to the model").toBeDefined();
+        expect(tool, "the generation start is offered to the model").toBeDefined();
         return step([{ callId: "call-1", providerName: tool!.providerName, argumentsText: JSON.stringify({ prompt: PROMPT }) }]);
       },
       async continueWith(input) {
         continuations.push(input.results.map((result) => result.outputText));
         turns += 1;
         if (turns === 1) return step([{ callId: "call-2", providerName: input.tools.find((declaration) => declaration.toolId === TOOL)!.providerName, argumentsText: JSON.stringify({ prompt: `${PROMPT} Make it blink faster.` }) }]);
-        return step([], "The generated schematic is waiting for your review.");
+        return step([], "The design is running; its result will wait for your review.");
       },
     };
     const result = await runAgentLoop(
@@ -306,55 +287,40 @@ describe("PR-D generate-proposal — the happy path through the real gateway wit
     );
     expect(result.status, JSON.stringify(result)).toBe("completed");
     expect(result.toolCalls).toBe(1); // the second call was refused before it ran
-    const ready = events.filter((event) => event.type === "generation_proposal_ready");
+    const ready = events.filter((event) => event.type === "generation_task_ready"); // [PR-L, 2026-10-18] pin move: generation_proposal_ready -> generation_task_ready
     expect(ready).toHaveLength(1);
-    if (ready[0]!.type !== "generation_proposal_ready") throw new Error("unreachable");
+    if (ready[0]!.type !== "generation_task_ready") throw new Error("unreachable");
     expect(ready[0]!.toolId).toBe(TOOL);
-    expect(verifySealedSchematicGenerationProposalIntegrity(ready[0]!.proposal)).toEqual({ ok: true });
+    expect(ready[0]!.task).toMatchObject({ schema: GENERATION_TASK_REF_SCHEMA, taskId: TASK_ID });
     expect(events.some((event) => event.type === "proposal_ready" || event.type === "pcb_proposal_ready")).toBe(false);
-    expect(events.filter((event) => event.type === "tool_finished").map((event) => (event as { status: string }).status)).toEqual(["proposal_sealed"]);
+    expect(events.filter((event) => event.type === "tool_finished").map((event) => (event as { status: string }).status)).toEqual(["task_started"]);
     expect(events.filter((event) => event.type === "tool_refused").map((event) => (event as { status: string }).status)).toEqual(["proposal_exists"]);
-    expect(fake.requests).toHaveLength(1);
+    expect(fake.starts).toHaveLength(1);
     const told = JSON.parse(continuations[0]![0]!) as Record<string, unknown>;
-    expect(told).toMatchObject({ ok: true, status: "proposal_sealed", generation: { status: "complete", omittedBlocks: [], electricalCheck: { state: "passed" }, planner: { state: "planned", blocks: 2 }, components: 3, connections: 4 } });
-    expect(JSON.stringify(told)).not.toContain("lib:ne555");
+    expect(told).toMatchObject({ ok: true, status: "task_started", taskId: TASK_ID, disposition: "started", state: "queued", liveness: "waiting_for_worker" });
+    expect(JSON.stringify(told)).not.toContain(PROMPT);
     expect(String(told.note)).toContain("NOTHING has been changed");
   });
 });
 
-describe("PR-D generate-proposal — partial and failed generations are data, never ok", () => {
-  it("a partial generation is sealed with its omitted blocks, the electrical findings and the planner's state as data", async () => {
-    const fake = fakePort(PARTIAL);
-    const outcome = await invoke(gatewayWith(fake.port), contextFor(), { prompt: PROMPT });
-    expect(outcome).toMatchObject({ kind: "generation-proposal", ok: true });
-    if (outcome.kind !== "generation-proposal") throw new Error("unreachable");
-    expect(outcome.proposal.generation).toMatchObject({ status: "partial", omittedBlocks: ["Power supply"], electricalCheck: { state: "findings", criticalCount: 1, findings: ["Net VCC has no driver"] }, planner: { state: "planned", blocks: 3 } });
-    expect(verifySealedSchematicGenerationProposalIntegrity(outcome.proposal)).toEqual({ ok: true });
-  });
-
-  it("a loop failure (the build budget) is proposal-blocked with the failure class and retryable as blockers; a provider failure keeps the provider's reason and says a retry will not help; neither is ok and nothing is sealed", async () => {
-    const budget = await invoke(gatewayWith(fakePort(BUDGET_FAILURE).port), contextFor(), { prompt: PROMPT });
-    expect(budget).toMatchObject({ kind: "proposal-blocked", ok: false, toolId: TOOL });
-    if (budget.kind !== "proposal-blocked") throw new Error("unreachable");
-    expect(budget.blockers.map((blocker) => blocker.code)).toEqual(["build_budget_exhausted", "retryable"]);
-    expect(budget.blockers[0]!.detail).toContain("Max iterations reached");
-    const quota = await invoke(gatewayWith(fakePort({ kind: "provider_error", error: new LLMProviderError("openai", "insufficient_quota", 429) }).port), contextFor(), { prompt: PROMPT });
-    expect(quota).toMatchObject({ kind: "proposal-blocked", ok: false });
-    if (quota.kind !== "proposal-blocked") throw new Error("unreachable");
-    expect(quota.blockers.map((blocker) => [blocker.code, blocker.detail])).toEqual([
-      ["provider_unavailable", expect.stringMatching(/credits|quota/i)],
-      ["not_retryable", expect.stringContaining("nothing was generated or changed")],
-      ["provider", "openai"],
-      ["provider_reason", "insufficient_quota"],
-    ]);
-    expect(generationFailureBlockers({ ok: false, code: "build_loop_failed", error: "The model submitted no schematic.", retryable: true }).map((blocker) => blocker.code)).toEqual(["build_loop_failed", "retryable"]);
-    expect(generationFailureBlockers({ ok: false, code: "provider_unavailable", error: "x", provider: "anthropic", reason: "breaker_open", retryable: false }).map((blocker) => blocker.code)).toEqual(["provider_unavailable", "not_retryable", "provider", "provider_reason"]);
+describe("PR-D generate-proposal — a refused start is data or a refusal, never ok", () => {
+  it("[PR-L, 2026-10-18] pin move (was: a failed generation's blockers): no provider is proposal-blocked (not retryable), a busy index is proposal-blocked (retryable), a forbidden role, an invalid request and a reused request id are refusals; none is ok", async () => {
+    const provider = await invoke(gatewayWith(fakePort({ status: 503, body: { ok: false, code: "GENERATION_PROVIDER_UNAVAILABLE" } }).port), contextFor(), { prompt: PROMPT });
+    expect(provider).toMatchObject({ kind: "proposal-blocked", ok: false, toolId: TOOL });
+    if (provider.kind !== "proposal-blocked") throw new Error("unreachable");
+    expect(provider.blockers.map((blocker) => blocker.code)).toEqual(["provider_unavailable", "not_retryable"]);
+    expect(provider.blockers[0]!.detail).toContain("nothing was started");
+    const contended = await invoke(gatewayWith(fakePort({ status: 409, body: { ok: false, code: "GENERATION_TASK_CONTENDED" } }).port), contextFor(), { prompt: PROMPT });
+    expect(contended).toMatchObject({ kind: "proposal-blocked", blockers: [{ code: "task_contended" }, { code: "retryable" }] });
+    expect(await invoke(gatewayWith(fakePort({ status: 403, body: { ok: false, code: "GENERATION_TASK_FORBIDDEN" } }).port), contextFor(), { prompt: PROMPT })).toMatchObject({ kind: "refused", status: "unauthorized" });
+    expect(await invoke(gatewayWith(fakePort({ status: 400, body: { ok: false, code: "GENERATION_TASK_INVALID_REQUEST", issue: "body.prompt: 1..4000 characters" } }).port), contextFor(), { prompt: PROMPT })).toMatchObject({ kind: "refused", status: "invalid_input" });
+    expect(await invoke(gatewayWith(fakePort({ status: 409, body: { ok: false, code: "IDEMPOTENCY_KEY_REUSED" } }).port), contextFor(), { prompt: PROMPT })).toMatchObject({ kind: "refused", status: "idempotency_conflict" });
   });
 });
 
 describe("PR-D generate-proposal — the tool never mutates, never widens, and refuses before the port when it must", () => {
   it("no port bound to the gateway: authority_unavailable although the context carries the fact; the fact absent: authority_unavailable before discovery; a Theory sheet with the port: not_discoverable (project_state_missing); a viewer: not_discoverable (role_not_permitted) - the port is never asked", async () => {
-    const fake = fakePort(SUCCESS);
+    const fake = fakePort(ACCEPTED);
     const noPort = await invoke(gatewayWith(), contextFor(), { prompt: PROMPT });
     expect(noPort).toMatchObject({ kind: "refused", status: "authority_unavailable" });
     const noFact = await invoke(gatewayWith(fake.port), contextFor({ generation: false }), { prompt: PROMPT });
@@ -365,11 +331,11 @@ describe("PR-D generate-proposal — the tool never mutates, never widens, and r
     expect(viewer).toMatchObject({ kind: "refused", status: "not_discoverable", diagnostics: [expect.stringContaining("role_not_permitted")] });
     const noMark = await invoke(gatewayWith(fake.port), contextFor({ headMark: false }), { prompt: PROMPT });
     expect(noMark).toMatchObject({ kind: "refused", status: "not_discoverable", diagnostics: [expect.stringContaining("lineage_required")] });
-    expect(fake.requests).toHaveLength(0);
+    expect(fake.starts).toHaveLength(0);
   });
 
-  it("the closed argument surface: an extra key, an authority-shaped key (scope, provider, netlist), an empty prompt and an over-long prompt refuse invalid_input before the port is asked", async () => {
-    const fake = fakePort(SUCCESS);
+  it("the closed argument surface: an extra key, an authority-shaped key (scope, provider, netlist, base, clientRequestId), an empty prompt and an over-long prompt refuse invalid_input before the port is asked", async () => {
+    const fake = fakePort(ACCEPTED);
     const gateway = gatewayWith(fake.port);
     const context = contextFor();
     for (const [args, expected] of [
@@ -377,6 +343,8 @@ describe("PR-D generate-proposal — the tool never mutates, never widens, and r
       [{ prompt: PROMPT, scope: SCOPE }, /authority-shaped/],
       [{ prompt: PROMPT, provider: "anthropic" }, /authority-shaped/],
       [{ prompt: PROMPT, netlist: { components: [] } }, /authority-shaped/],
+      [{ prompt: PROMPT, base: { schematicDigest: "eng1-00" } }, /authority-shaped/], // [PR-L, 2026-10-18] + the start body's own keys
+      [{ prompt: PROMPT, clientRequestId: "00000000-0000-4000-8000-000000000001" }, /authority-shaped/],
       [{ prompt: "   " }, /1 to 4000 characters/],
       [{ prompt: "x".repeat(4_001) }, /1 to 4000 characters/],
       [{}, /1 to 4000 characters/],
@@ -385,29 +353,23 @@ describe("PR-D generate-proposal — the tool never mutates, never widens, and r
       expect(outcome, JSON.stringify(args).slice(0, 80)).toMatchObject({ kind: "refused", status: "invalid_input" });
       if (outcome.kind === "refused") expect(outcome.diagnostics[0], JSON.stringify(args).slice(0, 80)).toMatch(expected);
     }
-    expect(fake.requests).toHaveLength(0);
+    expect(fake.starts).toHaveLength(0);
   });
 
-  it("the budget: a run with less than the minimum wall clock left is refused budget_exhausted before the port is asked; an already-cancelled run is refused cancelled; a generation that outruns the run's remaining time is refused timeout and nothing is sealed", async () => {
-    const fake = fakePort(SUCCESS);
-    const context = contextFor();
-    const exhausted = await invoke(gatewayWith(fake.port), context, { prompt: PROMPT }, MIN_GENERATION_BUDGET_MS - 1);
-    expect(exhausted).toMatchObject({ kind: "refused", status: "budget_exhausted", diagnostics: [expect.stringContaining("nothing was generated or changed")] });
+  it("[PR-L, 2026-10-18] pin move (was: the run's remaining wall clock as the generation's budget, a hang refused timeout): an already-ended turn is refused cancelled before the port is asked; the start itself is never raced against the turn (one durable commit), so no budget_exhausted or timeout exists any more", async () => {
+    const fake = fakePort(ACCEPTED);
     const aborted = new AbortController();
     aborted.abort();
-    expect(await invoke(gatewayWith(fake.port), context, { prompt: PROMPT }, 45_000, aborted.signal)).toMatchObject({ kind: "refused", status: "cancelled" });
-    expect(fake.requests).toHaveLength(0);
-    const hang = fakePort("hang");
-    const timedOut = await invoke(gatewayWith(hang.port), context, { prompt: PROMPT }, MIN_GENERATION_BUDGET_MS);
-    expect(timedOut).toMatchObject({ kind: "refused", status: "timeout" });
-    expect(hang.requests).toHaveLength(1);
-    expect(hang.requests[0]!.deadlineMs).toBeLessThan(MIN_GENERATION_BUDGET_MS);
-    expect(schematicStateDigest(context.schematic!)).toBe(schematicStateDigest(BUILD_SHEET));
-  }, 15_000);
+    expect(await invoke(gatewayWith(fake.port), contextFor(), { prompt: PROMPT }, aborted.signal)).toMatchObject({ kind: "refused", status: "cancelled" });
+    expect(fake.starts).toHaveLength(0);
+    const descriptorText = JSON.stringify(descriptor());
+    expect(descriptorText).not.toContain("budget_exhausted");
+    expect(descriptorText).not.toContain("runBuildMultiGeneration\"");
+  });
 
   it("a port that throws is implementation_failed with a redacted reason; the schematic is untouched", async () => {
     const context = contextFor();
-    const outcome = await invoke(gatewayWith({ generate: async () => { throw new Error("socket hang up sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop"); } }), context, { prompt: PROMPT });
+    const outcome = await invoke(gatewayWith(fakePort("throw").port), context, { prompt: PROMPT });
     expect(outcome).toMatchObject({ kind: "refused", status: "implementation_failed" });
     if (outcome.kind === "refused") { expect(outcome.diagnostics[0]).toContain("socket hang up"); expect(outcome.diagnostics[0]).not.toContain("sk-ant-api03-ABCDEFGHIJ"); }
     expect(schematicStateDigest(context.schematic!)).toBe(schematicStateDigest(BUILD_SHEET));
@@ -415,7 +377,7 @@ describe("PR-D generate-proposal — the tool never mutates, never widens, and r
 });
 
 describe("PR-D generate-proposal — the chat route's runtime boundary (app/api/chat/schematic-generation-runtime.ts)", () => {
-  it("the port is servable only for a configured provider (the key's presence, never its value) or under the fixture runtime; the production factory resolves accordingly; the test seam overrides and resets; a throwing factory resolves to null", () => {
+  it("[PR-L, 2026-10-18] pin move: the port resolves only for a servable provider (the key's presence, never its value, or the fixture runtime) AND a durable task store; the production factory resolves accordingly; the test seam overrides and resets; a throwing factory resolves to null", () => {
     expect(schematicGenerationServable("openai", {})).toBe(false);
     expect(schematicGenerationServable("anthropic", { [PROVIDER_KEY_SETTINGS.openai]: "set" })).toBe(false);
     expect(schematicGenerationServable("anthropic", { [PROVIDER_KEY_SETTINGS.anthropic]: "set" })).toBe(true);
@@ -424,18 +386,25 @@ describe("PR-D generate-proposal — the chat route's runtime boundary (app/api/
     vi.stubEnv(PROVIDER_KEY_SETTINGS.openai, "");
     vi.stubEnv(PROVIDER_KEY_SETTINGS.anthropic, "");
     vi.stubEnv("SIRKIT_FIXTURE_RUNTIME", "");
+    vi.stubEnv("DATABASE_URL", "");
     expect(resolveSchematicGenerationPort("openai")).toBeNull();
-    vi.stubEnv("SIRKIT_FIXTURE_RUNTIME", "blinker");
-    const fixturePort = resolveSchematicGenerationPort("openai");
-    expect(fixturePort).not.toBeNull();
-    expect(typeof fixturePort!.generate).toBe("function");
+    // a servable provider but no durable task store (normal mode without DATABASE_URL): withheld, nothing advertised as recoverable
+    vi.stubEnv(PROVIDER_KEY_SETTINGS.openai, "set");
+    expect(resolveSchematicGenerationPort("openai")).toBeNull();
+    // a store and a servable provider: the port over the shared service
+    setGenerationTaskRuntimeFactory(() => ({ repository: new InMemoryDurableWorkflowRepository(), clock: () => Date.now(), durability: "durable", catalogProfile: "fixture-scripted" }));
+    const port = resolveSchematicGenerationPort("openai");
+    expect(port).not.toBeNull();
+    expect(port!.durability).toBe("durable");
+    expect([typeof port!.start, typeof port!.list, typeof port!.inspect]).toEqual(["function", "function", "function"]);
+    expect(resolveSchematicGenerationPort("anthropic")).toBeNull(); // its key is absent
     setSchematicGenerationPortFactory(() => { throw new Error("boom"); });
     expect(resolveSchematicGenerationPort("openai")).toBeNull();
-    const fake = fakePort(SUCCESS);
+    const fake = fakePort(ACCEPTED);
     setSchematicGenerationPortFactory(() => fake.port);
     expect(resolveSchematicGenerationPort("anthropic")).toBe(fake.port);
     resetSchematicGenerationPortFactory();
-    vi.stubEnv("SIRKIT_FIXTURE_RUNTIME", "");
-    expect(resolveSchematicGenerationPort("anthropic")).toBeNull();
+    resetGenerationTaskRuntimeFactory();
+    expect(resolveSchematicGenerationPort("openai")).toBeNull();
   });
 });

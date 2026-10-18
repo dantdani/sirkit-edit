@@ -47,7 +47,7 @@ const OPERATION_ROLES: Readonly<Record<AtomicPublicationOperation, ReadonlySet<P
 });
 
 const OPERATION_KEYS: Readonly<Record<AtomicPublicationOperation, readonly string[]>> = Object.freeze({
-  submit_request: ["operation", "exactMpn", "profile", "symbol", "footprint", "terminals", "package", "datasheet", "manufacturer", "links", "reason", "idempotencyKey"],
+  submit_request: ["operation", "exactMpn", "profile", "symbol", "footprint", "terminals", "package", "datasheet", "manufacturer", "links", "reason", "idempotencyKey", "discovery"], // [PR-M, 2026-10-18] M2.5: + the discovery-row option (an acquired part only)
   resolve_request: ["operation", "requestId", "decision", "reason", "reviewEvidenceDigest", "resolutions", "factDispositions", "idempotencyKey"],
   publish_request: ["operation", "requestId", "reason", "idempotencyKey"],
   withdraw_request: ["operation", "requestId", "reason", "idempotencyKey"],
@@ -160,7 +160,7 @@ export async function handleAtomicPublicationPost(input: { context: TrustedReque
     // a reviewer stamp, a source class or asset bytes anywhere in a nested shape refuse the request with 400
     if (op === "submit_request") {
       const spec = { exactMpn: body.exactMpn, profile: body.profile, symbol: body.symbol, footprint: body.footprint, terminals: body.terminals, package: body.package, datasheet: body.datasheet, manufacturer: body.manufacturer };
-      const { stored, created } = await submitAtomicPublicationRequest(deps.review(), { scope, actor, membershipRevision: context.membershipRevision ?? null, spec: Object.fromEntries(Object.entries(spec).filter(([, value]) => value !== undefined)), links: body.links, reason: body.reason, ...(idempotencyKey ? { idempotencyKey } : {}) });
+      const { stored, created } = await submitAtomicPublicationRequest(deps.review(), { scope, actor, membershipRevision: context.membershipRevision ?? null, spec: Object.fromEntries(Object.entries(spec).filter(([, value]) => value !== undefined)), links: body.links, reason: body.reason, ...(idempotencyKey ? { idempotencyKey } : {}), ...(body.discovery !== undefined ? { discovery: body.discovery } : {}) });
       return Response.json({ ok: true, created, request: view(stored) }, { status: created ? 201 : 200, headers: NO_STORE });
     }
     if (op === "resolve_request") {

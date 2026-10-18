@@ -105,6 +105,8 @@ POST,/api/model-simulation/propose,auth+csrf,authenticated,authenticatedJsonRout
 POST,/api/model-simulation/readiness,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,MODEL_SIMULATION_API_MAX_BYTES,MODEL_SIMULATION_API_DEADLINE_MS,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 GET,/api/parts/[id]/alternates,public,public,publicRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
 GET,/api/parts/[id],public,public,publicRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+GET,/api/parts/acquisitions,auth,authenticated,authenticatedRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/parts/acquisitions,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,CAD_ACQUISITION_MAX_BYTES,CAD_ACQUISITION_DEADLINE_MS,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 GET,/api/parts/categories,public,public,publicRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
 POST,/api/parts/external-search,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,4096,5000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/parts/search,public,public,publicJsonRoute(…),application/json,200000,10000,bounded-body-before-compute,canonical-wrapper:publicJsonRoute,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior

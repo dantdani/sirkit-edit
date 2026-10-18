@@ -593,7 +593,7 @@ the base, for the reader (none of them changed in D2).
 | C43 | `app/lib/project/pcb-edit-approval-controller.internal.ts` | 48 | — | `export async function approveAndApplyPcbEdit(deps: PcbEditApplyDeps): Promise<ApprovedPcbApplyOutcome> {` | the PCB approval controller the editor uses |
 | C44 | `app/api/pcb/apply-authorization/route.ts` | 34 | — | `export const POST = selectorEnvelopeJsonRoute(` | the one reauthorization route both apply paths consult |
 | C45 | `app/lib/project/pcb-proposal-events.ts` | 38 | — | `export function receivePcbProposalReadyEvent(` | the page's full PCB proposal discriminator |
-| C46 | `app/page.tsx` | 4711 | — | `case "proposal_ready": {` | the page's proposal_ready consumer |
+| C46 | `app/page.tsx` | 4712 | — | `case "proposal_ready": {` | the page's proposal_ready consumer |
 | C47 | `app/api/chat/route.ts` | 397 | — | `const replacementFactsSource = resolveReplacementPinFactsSource();` | D21-37: the pin-facts reads, the coordinator's gateway only |
 | C48 | `app/lib/engineering/replacement-proposal-assembler.ts` | 263 | — | `return blocked("current-pin-authority-unavailable",` | D21-37: without them the replacement seal blocks |
 | C49 | `app/lib/agent/gateway.ts` | 393 | — | `currentPinFacts = await this.replacementPinFacts(instance.atomicPartRevisionId, "current");` | D21-37: the gateway reads them only when injected |

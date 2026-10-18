@@ -41,7 +41,7 @@
       "Schematic drawing: pointer-only, not readable by assistive technology. From the keyboard, use Go to component in the schematic toolbar to select a component by its reference designator.",
       "Select",
       "Sheet size",
-      "Stop the assistant's run",
+      "Stop the assistant's answer (a design task it started keeps running; Stop design on its card stops that)",
       "Toggle AI chat",
       "Undo schematic action",
       "Wire",

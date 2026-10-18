@@ -505,17 +505,17 @@ function externalTransferIssues(descriptor: ToolDescriptor): string[] {
   return descriptor.sideEffects === "external-transfer" && descriptor.agentExposed ? ["an external-transfer tool can never be agent-exposed (Tier 3: data leaves Sirkit, OD-173)"] : [];
 }
 
-/** [PR-D] The `schematic-generation` authority (the chat route's injected generation port, OD-243) belongs to the ONE proposal bound
- *  to the shared Build-mode generation (`app/lib/schematic/build-multi-generation.ts`) and nothing else: a sealed proposal artifact
- *  (propose class, proposal-artifact side effects, no approval tier of its own - Tier 2 by derivation) that requires exactly that
- *  authority; a tool bound to the generation requires it, and no other tool may claim it. */
+/** [PR-D] The `schematic-generation` authority (the chat route's injected generation port, OD-243) belongs to the tools bound to the shared
+ *  generation and nothing else. [PR-L, 2026-10-18] Runbook L.5: that is the DURABLE generation-task service (`app/lib/generation-task/service.ts`):
+ *  the start and the control request are sealed artifacts (propose class, proposal-artifact side effects, no approval tier of its own - Tier 2
+ *  by derivation), the inspection a Tier 0 read; each requires exactly that authority, no other tool may claim it, and no tool binds the in-turn generation. */
 function generationAuthorityIssues(descriptor: ToolDescriptor, binding: ToolImplementationBinding): string[] {
   const issues: string[] = [];
   const authority = Array.isArray(descriptor.requiredAuthority) ? descriptor.requiredAuthority : [];
-  const generationBound = binding.status === "bound-proposal" && binding.module === "app/lib/schematic/build-multi-generation.ts";
+  const generationBound = (binding.status === "bound-proposal" || binding.status === "bound-read") && binding.module === "app/lib/generation-task/service.ts"; if (binding.module === "app/lib/schematic/build-multi-generation.ts" && binding.status !== "unbound") issues.push("no tool binds the in-turn Build-mode generation: the durable generation-task service replaced it (runbook L.5)");
   if (generationBound) {
-    if (descriptor.operationClass !== "propose") issues.push("a tool bound to the Build-mode generation is propose class only");
-    if (descriptor.sideEffects !== "proposal-artifact") issues.push("a tool bound to the Build-mode generation has proposal-artifact side effects only");
+    if (descriptor.operationClass !== (binding.status === "bound-read" ? "read" : "propose")) issues.push(binding.status === "bound-read" ? "a read bound to the durable generation-task service is read class only" : "a tool bound to the Build-mode generation is propose class only");
+    if (descriptor.sideEffects !== (binding.status === "bound-read" ? "none" : "proposal-artifact")) issues.push(binding.status === "bound-read" ? "a read bound to the durable generation-task service has no side effects" : "a tool bound to the Build-mode generation has proposal-artifact side effects only");
     if (descriptor.approvalTier !== "none") issues.push("a tool bound to the Build-mode generation carries no approval tier of its own (Tier 2 by derivation)");
     if (authority.length !== 1 || authority[0] !== "schematic-generation") issues.push("a tool bound to the Build-mode generation requires exactly the schematic-generation authority");
   } else if (authority.includes("schematic-generation")) {

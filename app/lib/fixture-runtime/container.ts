@@ -21,8 +21,13 @@ interface FixtureContainer {
   catalog: BlinkerCatalog;
   /** Observed router executions (placed-board revisions), for the harness's evidence. */
   routerExecutions: string[];
+  /** [PR-M, 2026-10-18] M2: the FIXTURE catalog governance project (OD-37's ids for the fixture runtime only; never the environment's) */
+  governance: { tenantId: string; projectId: string };
   createdAt: string;
 }
+
+/** [PR-M, 2026-10-18] M2: the fixture runtime's catalog governance project - where the browser proof's reviewer and administrator act. */
+export const FIXTURE_CATALOG_GOVERNANCE = Object.freeze({ tenantId: "local", projectId: "m2-fixture-catalog-governance" });
 
 const KEY = "__sirkitFixtureRuntimeContainer__" as const;
 
@@ -33,6 +38,7 @@ function create(): FixtureContainer {
     physicalBindingRepository: new InMemoryPhysicalBindingRepository(),
     catalog: fixtureRuntimeCatalog(),
     routerExecutions: [],
+    governance: { ...FIXTURE_CATALOG_GOVERNANCE },
     createdAt: new Date().toISOString(),
   };
 }

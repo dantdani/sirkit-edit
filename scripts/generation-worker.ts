@@ -57,6 +57,8 @@ async function main(): Promise<number> {
     import("../app/api/chat/schematic-generation-runtime"),
     import("../app/lib/generation-task/worker/pump-transport"), // [PR-L, 2026-10-17] the pump's client loop (increment 4)
   ]);
+  // [PR-M, 2026-10-18] section M2: the direct worker also consumes the component-resolution topic (the pump's server does it in its route)
+  const resolution = args.transport === "direct" ? await Promise.all([import("../app/lib/component-resolution/task/runtime"), import("../app/lib/component-resolution/task/worker-runtime"), import("../app/api/chat/catalog-inspection-runtime"), import("../app/api/chat/revision-evidence-runtime")]) : null;
   // [PR-L, 2026-10-17] the pump runs no provider call in this process (the server's route does, and records it there): only the direct
   // transport binds the durable call-record sink
   if (args.transport === "direct") callRecords.bindDurableLlmCallRecordSink();
@@ -71,6 +73,13 @@ async function main(): Promise<number> {
         providerServable: (provider) => generation.schematicGenerationServable(provider),
         runInScope: (scope, run) => seam.withLlmCallScope({ routeId: runtime.GENERATION_TASK_ROUTE.routeId, method: runtime.GENERATION_TASK_ROUTE.method, scope }, run),
         log: out,
+        ...(() => {
+          if (!resolution) return {};
+          const [taskRuntime, workerRuntime, catalogRuntime, evidenceRuntime] = resolution;
+          const componentRuntime = taskRuntime.resolveComponentResolutionRuntime();
+          const topic = componentRuntime ? workerRuntime.componentResolutionTopic(componentRuntime, () => { const catalog = catalogRuntime.resolveCatalogInspectionPort(), evidence = evidenceRuntime.resolveRevisionEvidencePort(); return catalog && evidence ? { catalog, evidence } : null; }, out) : null;
+          return topic ? { topics: [topic] } : {};
+        })(),
       });
   } catch (error) {
     if (error instanceof runtime.GenerationWorkerSetupError) { fail(`REFUSED ${error.code}: ${error.message}`); return 2; }

@@ -434,7 +434,37 @@ export function fixtureRuntimeCatalog(): BlinkerCatalog {
   const extra = resolutionFixtureParts();
   return {
     ...blinker,
-    cachedParts: new Map([...blinker.cachedParts, ...extra.cachedParts]),
+    cachedParts: new Map([...blinker.cachedParts, ...extra.cachedParts, ...acquisitionFixtureParts()]), /* [PR-M, 2026-10-18] M2: + the acquisition proof's one part (in place: no line moves) */
     snapshots: new Map([...blinker.snapshots, ...extra.snapshots]),
   };
+}
+
+// ─── [PR-M, 2026-10-18] Section M2: the acquisition proof's catalog part (appended: no line above moves) ──────────────────────────────────
+/**
+ * Runbook section M2 (M.5 item 4, fixture evidence): ONE catalog part the fixture runtime adds so a fresh browser can prove the missing-part
+ * ACQUISITION - a part with NO published exact revision and NO published revision of the same exact part anywhere in the library, whose
+ * KiCad assets the fixture CAD source (app/lib/fixture-runtime/cad-source, the official KiCad Diode:1N4001 symbol and
+ * Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal footprint copied verbatim, plus an ORIGINAL fixture pin table) can serve:
+ *
+ *  - `M2_ACQUISITION_PART_ID` - a catalog part "1N4001" (the KiCad Diode library's general-purpose rectifier: K is pin 1, A is pin 2), its
+ *    pins read from the committed symbol by the production extractor. Its id is UUID-shaped like a database part's, so the acquisition's
+ *    handoff may propose linking THIS part to the revision two humans publish (the link rule of app/lib/atomic/publication-review.ts);
+ *  - nothing here publishes anything: the revision exists only after the browser proof's review and publication (and only in the
+ *    fixture container's process memory).
+ *
+ * Truth boundary: fixture evidence end to end - the pin table is not a manufacturer datasheet, and no rating is ever claimed.
+ */
+export const M2_ACQUISITION_PART_ID = "f1d40010-0000-4000-8000-000000004001" as const;
+let acquisitionMemo: Array<[string, CachedPart]> | null = null;
+/** The acquisition proof's catalog part (built once per process from the committed 1N4001 symbol). */
+export function acquisitionFixtureParts(): Array<[string, CachedPart]> {
+  if (acquisitionMemo) return acquisitionMemo;
+  const source = readFileSync(join(process.cwd(), "app", "lib", "fixture-runtime", "cad-source", "kicad-symbols", "Diode.kicad_symdir", "1N4001.kicad_sym"), "utf8").replace(/\r\n/g, "\n");
+  const extracted = extractLibrary([source]).find((item) => item.name === "1N4001");
+  if (!extracted) throw new Error("extractLibrary did not yield Diode:1N4001");
+  acquisitionMemo = [[M2_ACQUISITION_PART_ID, {
+    id: M2_ACQUISITION_PART_ID, name: "1N4001", description: "50 V 1 A general-purpose rectifier, DO-41", mpn: "1N4001", manufacturer: null, datasheet: extracted.datasheet,
+    footprintHint: "Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal", mainCategory: "Diode", libraryName: "Diode", pins: extracted.pins, symbolRaw: extracted.symbolRaw, properties: extracted.properties,
+  }]];
+  return acquisitionMemo;
 }

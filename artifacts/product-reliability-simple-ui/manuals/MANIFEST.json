@@ -1,302 +1,322 @@
 {
   "schema": "sirkit.tool-manuals-manifest.v1",
-  "registryDigest": "eng1-62a7d6c8a2c36879",
-  "count": 59,
+  "registryDigest": "eng1-9c4c16b205eb5939",
+  "count": 63,
   "manuals": [
     {
       "toolId": "sirkit.component-authority.inspect",
       "version": "1.0.0",
-      "sha256": "663f47dae5374893ad5a7988aebc4bc686ea10c42b7a5f6717c313d62bd91219"
+      "sha256": "0cf8086b19965cebde94a598b1d8b047cea377748941ee5d31c5769d12639497"
     },
     {
       "toolId": "sirkit.component.review-request",
       "version": "1.0.0",
-      "sha256": "bb8343abf3a1e62b4066e0c2e05b06c482658bad4f2187cedd97482e3dd8eb48"
+      "sha256": "63300207e6e4242f093b46e8c582f27980d605cff90d9fd56b9740450ab15976"
     },
     {
       "toolId": "sirkit.computation.analytical-equation",
       "version": "1.0.0",
-      "sha256": "760611c5ff129042cb885f3014557453a530df2794a4fa5aad8715c009e64312"
+      "sha256": "499b22850031a7ea4695b9be88d6538831ebd9686093183aaa557c4c8bfb29e6"
     },
     {
       "toolId": "sirkit.computation.artifact-compare",
       "version": "1.0.0",
-      "sha256": "e4d08f661c43397a4b507a919c62618d4c521f56bcab12810f2aa49ef33747f9"
+      "sha256": "464f12fc090424a0fbf63deb38f300a6d2266a3e9f70d9b9dc7b8b23af7085e3"
     },
     {
       "toolId": "sirkit.computation.artifact-parse",
       "version": "1.0.0",
-      "sha256": "c76e4b0ff60b1c76d028b04333427de1f0a3d48adf034e69251f5841a11d7cb4"
+      "sha256": "3d4919c2204c63626f75dfd0e552e1632fce46eec04d7239801c47a780dccb57"
     },
     {
       "toolId": "sirkit.computation.circuit-analysis",
       "version": "1.0.0",
-      "sha256": "873804cd4b8779392ff1ac9607cf21b32fbb784ede30823938d25eb1f683fa74"
+      "sha256": "531815ea532415e82b3527a5195348549af8c8d0fa427a9056988f782658b6a4"
     },
     {
       "toolId": "sirkit.computation.layout-experiment",
       "version": "1.0.0",
-      "sha256": "77016f49c0e8870efae214062112b93e7067ee0817b9afc94dfade6a04e8e9f6"
+      "sha256": "672615d7b1f43699154fdfb566d13172b0ec50e2b72077bbd519730ae4d748ef"
+    },
+    {
+      "toolId": "sirkit.generation.task-control",
+      "version": "1.0.0",
+      "sha256": "053a2d9f9710ea560caf4ecb97864f0c3c88b51a2833b6160f1946179023d432"
+    },
+    {
+      "toolId": "sirkit.generation.task-inspect",
+      "version": "1.0.0",
+      "sha256": "c0fce99a8e625d5aa2bd0eac8e8e59a70a19a6b1ae211320845a436675b49119"
     },
     {
       "toolId": "sirkit.manufacturing.readiness-inspect",
       "version": "1.0.0",
-      "sha256": "2ea60571004ea365cfc351923aa026b887f7110a1563cbad8cc4699ce6a3fb0b"
+      "sha256": "8ea9bf82be4f6e2f71eafc3298bc8f59ec7133ef2fadb424cdccec8b0b8c5285"
     },
     {
       "toolId": "sirkit.manufacturing.release",
       "version": "1.0.0",
-      "sha256": "6cff5872eb6630906e240b1c783b9c9d1acc3059f6edce56614f54f5cdb5e96f"
+      "sha256": "38f9d37d37b5696b12a5863e483c22c12de4eafca367d8fd6b8d1ae0a5c8103c"
     },
     {
       "toolId": "sirkit.mcp.observation-read",
       "version": "1.0.0",
-      "sha256": "0c301a6c6819b37de1aee2f8df600ae674e228c63fb029dbf0a609e33a5e19d1"
+      "sha256": "01a2b53758036fbdc1945fc59634722b86bc79621473cfcccd00970e1e250c4c"
     },
     {
       "toolId": "sirkit.module.propose-contracts",
       "version": "1.0.0",
-      "sha256": "d8c4bc4c8a492128f441fa1dce43fa88931d4b3282cf5e4c1f3de5dd36773a53"
+      "sha256": "fa25699de1417d02eb4b2366a5ee3109f7b0e87c4045aa7d6540cb9ca8692e66"
+    },
+    {
+      "toolId": "sirkit.parts.acquisition-start",
+      "version": "1.0.0",
+      "sha256": "096ecc4f3159c858a4a2fb721dbff89adb5b672542d0240da9c76f615fd07362"
+    },
+    {
+      "toolId": "sirkit.parts.acquisition-status",
+      "version": "1.0.0",
+      "sha256": "1dec69c9334bdb7b5c330e4e53b320bdc614043e3000f9bb937d858310c0668b"
     },
     {
       "toolId": "sirkit.parts.candidate-search",
       "version": "1.0.0",
-      "sha256": "575fecf9446bfa1358a72bb6eeb9931041bb600f8c8b35c7a44ef6442c19b2c1"
+      "sha256": "3e41d34e4a1890a905f8beb1fe22512e8f96c0bdc510a672375765f9e12d7fbc"
     },
     {
       "toolId": "sirkit.parts.catalog-inspect",
       "version": "1.0.0",
-      "sha256": "a1f0cf9c6a74eaca6f81440e174ccdf6df8ae9a1e4721eb8414a601206f6686a"
+      "sha256": "d49201efe45d4281c5dbea4c2e47af428d2e93a9b274c79600a5dffa2810803a"
     },
     {
       "toolId": "sirkit.parts.draft-request",
       "version": "1.0.0",
-      "sha256": "d436a92111244e2d1258f25914b3cf4513acce04f4772c61430dc7841a8b5c39"
+      "sha256": "31a44d65646c593310b2d7db52f45c6e0ba1b8b59f44f274fc6498700f1ef90f"
     },
     {
       "toolId": "sirkit.parts.evidence-read",
       "version": "1.0.0",
-      "sha256": "0c6417eef95ffa23a1fdfdb7b5a4243cfdbfb20531bd2f5cb757f88993602319"
+      "sha256": "0b5bdfb4d663530c5f438ab67449523d37dd38f2ac27ceef22bc0f6bdbf02956"
     },
     {
       "toolId": "sirkit.parts.external-search",
       "version": "1.0.0",
-      "sha256": "a54e6afd494126037ff90e4c9f48b639740f02b57062c3e66ae7b1446c9951d2"
+      "sha256": "718f6752dd8ab8b77ee9585607089936aeebb611c081d8e22a65b9d6d45f3931"
     },
     {
       "toolId": "sirkit.parts.missing-facts",
       "version": "1.0.0",
-      "sha256": "36e0004e842fb949e0efa46f64bef22be4e0372451d9832f23aaa78c97f4dff1"
+      "sha256": "e7589d62f99333ea0c42c9dabf714ababf3ce20cc3617a9ee12635bb68b7c9c1"
     },
     {
       "toolId": "sirkit.parts.search",
       "version": "1.0.0",
-      "sha256": "26d1e86846bb2572ee518d13444007dee7a26bcbcbad8e0353891754d8d16115"
+      "sha256": "b6d356f9ef680afa378eb77ddb5a7013f77127668a3df29353cbb28e7a04bf2e"
     },
     {
       "toolId": "sirkit.pcb-sync.preflight",
       "version": "1.0.0",
-      "sha256": "a2682500135b0c18d3b4ed991edad827e9d3eb9ae9517c8622e6075c27f29960"
+      "sha256": "e5dcf6431f9b98d6349564ac3914d0cfcc8215cf4d9d9555b9fd0623ae30a23a"
     },
     {
       "toolId": "sirkit.pcb.arrange",
       "version": "1.1.1",
-      "sha256": "1f79fb54caba8a700b1220f03ef03d58dfd2158c7b463817365cd0a89b735b19"
+      "sha256": "820e0f2a843fc858901c44be29565694ff49afc28c190a383bda1e7601af7a36"
     },
     {
       "toolId": "sirkit.pcb.board-inspect",
       "version": "1.1.0",
-      "sha256": "616c8f8a52ed16db18537c8c1f823868af96361acb756959fc11a6eb0fbdc18d"
+      "sha256": "290d5b621f2445d2d55195574e95749d17376f576724cef39e59c35d1563a892"
     },
     {
       "toolId": "sirkit.pcb.board-page-inspect",
       "version": "1.0.0",
-      "sha256": "770dcdb8f5ec86ace60eaa06ed5f11ba427e915726fbedd4dda7109f055b7915"
+      "sha256": "4b217dd67a6d8f001d9b34bb2e4161fe7ebcf28935e99b3776667ccfe323104c"
     },
     {
       "toolId": "sirkit.pcb.create-via",
       "version": "1.1.0",
-      "sha256": "6736e0163e8834461641ebda5c053cfa9ef48e289fd08e4cd81eb5196bf853dd"
+      "sha256": "edb3822236e7729e5c0eef5c8409285dc9d43d45dfcd9d8bea34b8a12bbf2748"
     },
     {
       "toolId": "sirkit.pcb.delete-item",
       "version": "1.0.0",
-      "sha256": "663749d053f79c80ed1910348e1a2a22dc7ed6e8d084dc0dbc2845b351655a57"
+      "sha256": "6dfda0dc24360b0d2b1ee4e5982cd369ee081781f9ed822b915f66573d2b0a05"
     },
     {
       "toolId": "sirkit.pcb.dimension",
       "version": "1.2.0",
-      "sha256": "ea93f8c456d7724554f295f0d83ff7f636f4e447c6ac07264194fab2ee0ca8e4"
+      "sha256": "32d70727f1e5638c44ec62bae40b20663fa530b5ab6285a7d14e52ec27974b5f"
     },
     {
       "toolId": "sirkit.pcb.edit-track",
       "version": "1.0.0",
-      "sha256": "9c2c6bdc47095099d37993bf06957b9e6de8c232c69446d69cd8d897b8f8a0a9"
+      "sha256": "2b3e95bb90a4465f547108b3f7dbce33718d53b3d68af108304f41700b40e314"
     },
     {
       "toolId": "sirkit.pcb.mechanical-inspect",
       "version": "1.0.0",
-      "sha256": "b4390d43619b5bcce2192047ddebca323b616c169b18ea2b6b8bc797bedf4cff"
+      "sha256": "34dd8ed93a6fc7b70f3bfacbac126c5758692962da1590da91c0e2168e80a163"
     },
     {
       "toolId": "sirkit.pcb.move-footprint",
       "version": "1.1.1",
-      "sha256": "72b6269a644373a99c68b2bc8017592168fc2cda5e5497296e48b0c314360ca1"
+      "sha256": "e3afc2c0304f2ac2981cdea3b41332d2c55ec0e74fe624733c41159b82caaec7"
     },
     {
       "toolId": "sirkit.pcb.propose-bounded-edit",
       "version": "1.0.0",
-      "sha256": "385f24dc88c83432fc66e8897f326b2900bf97a29183a0dd4e29f7ba21d4dfa6"
+      "sha256": "45125be668836069b6bb5fc12b8a170566b5b78db077f5cdcc9c7b9ee80da833"
     },
     {
       "toolId": "sirkit.pcb.repair-plan",
       "version": "1.0.0",
-      "sha256": "19f8688b0acdc617c5f67a370f0d3818515c02a6ea416f1a91dcfe8db8f143c3"
+      "sha256": "3ca650a4fa9b0151d7d0e802e17b2ad50aeffdb06981d25cb265dbc387902eff"
     },
     {
       "toolId": "sirkit.pcb.revision-inspect",
       "version": "1.0.0",
-      "sha256": "61a0782862f225a39c744d4d942653089fabd8f3427407b261c8d9153f1cdd73"
+      "sha256": "7499e2759dd670c15ec89c2e92560185b09c2aef0c54d58adeb0df076f831ffc"
     },
     {
       "toolId": "sirkit.pcb.rotate-side-footprint",
       "version": "1.2.1",
-      "sha256": "fd9dd959832351204a7113cc4524faea19f5d09a12fdf0a14816d0e922e2a152"
+      "sha256": "39e88e83dbe293f39d06565979fa913837b156f873cc4ba389f780274fb3a6a0"
     },
     {
       "toolId": "sirkit.pcb.silkscreen-text",
       "version": "1.0.1",
-      "sha256": "4d4596e84b26f940f9f3c963d98f6f6bdac9a4c73f6d8dd15ddce2cf3b7f1da1"
+      "sha256": "2f4e67e75030d63083c19756ec2630b180587033a434777cd25cb2bf55671ae9"
     },
     {
       "toolId": "sirkit.pcb.undo-redo-canonical",
       "version": "1.0.0",
-      "sha256": "298cfe82f745943cecf1532d88e9ac792db515da509a3bcda1701af94e27296b"
+      "sha256": "ae3de4ae0aea13f68e8cd1e2762c5f3acd8bdd81469ed2cafa221c3f9fb2dade"
     },
     {
       "toolId": "sirkit.pcb.undo-redo-granted",
       "version": "1.0.1",
-      "sha256": "fc3a2d4f02af3a290fafb05bfb4f7ced6c0d7c3239f6c468f974f38c7810f41b"
+      "sha256": "723c62b1de7396f682f3604ec57a1317093b950a73e0af72d89bf882ef2c4a29"
     },
     {
       "toolId": "sirkit.pcb.via-inspect",
       "version": "1.0.0",
-      "sha256": "55935942a996ea26f38dc5dd7503de582d5bcd9081aec428059562432da19e1e"
+      "sha256": "79ea617c00de6e91d1e91201916de7e623181ddb24628110274befd62be400ba"
     },
     {
       "toolId": "sirkit.pcb.zone-edit",
       "version": "1.1.0",
-      "sha256": "02a2134816fd379ceef08aa9250b312f91960b22a4d30edfc874443b01815b43"
+      "sha256": "0a97e2ff6b07c1f1b8dd3a19e890d7f2879a0125d8b9c7550c8f56df103b82fb"
     },
     {
       "toolId": "sirkit.placement.propose",
       "version": "1.2.0",
-      "sha256": "7cdd51ab1e99c90d5947812ab80a81860b31f04b2cfb999dbf80cb4c7b2bc54c"
+      "sha256": "772e96344d59fd9873935715cd1a330c67ec01f8ea5d26679075aa618176c6ad"
     },
     {
       "toolId": "sirkit.project.canonical-revision-inspect",
       "version": "1.0.0",
-      "sha256": "8cb8adf71a9d27943262eafa4f828f93004538996abe43d60cf5d3673875f4be"
+      "sha256": "4eb7330bcd638caa35c8e4eb6e59ec67edfe71c0687cf1e6ae9708f53f5f2e53"
     },
     {
       "toolId": "sirkit.project.history-inspect",
       "version": "1.0.0",
-      "sha256": "e25abb00364cd48d00f221a04d16af6a2dd9bb1e5e80bacaebc5057a0f3d3a80"
+      "sha256": "1c3d028dadcccd2e7ba47ec31a0cb8cfeb5ff0952dd668be88d72571285376c8"
     },
     {
       "toolId": "sirkit.routing.propose",
       "version": "1.1.0",
-      "sha256": "cd12a020ff351aba07aa447782339ad89ff4dba755f34d44638962a7ba45ecaa"
+      "sha256": "fd1e669a1521595951d8ae401424a228c786557697705d35deb619a568736dc1"
     },
     {
       "toolId": "sirkit.schematic.add-component",
       "version": "1.0.0",
-      "sha256": "3b58762a2b1d5299d6a42a9f7b20f517b3164d072c7abeb23ae8c53e6aa6595d"
+      "sha256": "0b932390ad871af2194037646fa60b8741f2face8ae25d5de200cdc28dc2b5af"
     },
     {
       "toolId": "sirkit.schematic.generate-proposal",
-      "version": "1.0.0",
-      "sha256": "ef1c644bb9ce0196d9ea471fcb79722446f0d8348064954cfc9b968a8a52d5cd"
+      "version": "2.0.0",
+      "sha256": "7f91587ed39feb5d66674d65430d34632fb1eef856c1f01e77f0db1c63b420e1"
     },
     {
       "toolId": "sirkit.schematic.inspect",
       "version": "1.1.0",
-      "sha256": "2a40748c61cf670a741665170eed241dbd2db3d60e5269a943836430e5df079e"
+      "sha256": "92b13edb4d4727a6b64a73c34850376cd90793543ad13327923e333d06e3f238"
     },
     {
       "toolId": "sirkit.schematic.instance-inspect",
       "version": "1.0.0",
-      "sha256": "9f75e2e0cd27056a14894e82509ad734117725a3e2e09889f4dd5d364c2b3728"
+      "sha256": "0abb1b99bee0d0333eee4b8509c182a2612e79a5eb2528c9565d0eaff889b2ce"
     },
     {
       "toolId": "sirkit.schematic.propose-component-replacement",
       "version": "1.0.0",
-      "sha256": "06cb9b0ba3dafd07b398744c77920c1436c2d8eba3a39b2f2f01b392cedfe5af"
+      "sha256": "8ed6bfa53ae75ca839f9f9cbfda450a4f4c30513b5f190ed6e344e25d52ef130"
     },
     {
       "toolId": "sirkit.schematic.propose-component-resolution",
       "version": "1.0.0",
-      "sha256": "2df8f4e5e1e3b489c376de4084b16bec97961ea1e59dcd79701d9f8a2f1bd8c3"
+      "sha256": "5eae6c76d31a0fc3332b1dcf308c61f10ecdadbc236f71ff975350c5b99949a7"
     },
     {
       "toolId": "sirkit.schematic.propose-tier1-edit",
       "version": "1.1.0",
-      "sha256": "821780df094c6ceeacd8119f773d9b1b375c7b867f7200b2e61159232c796076"
+      "sha256": "f35ea98ee902a1f59c3a45a0319564e5c76f2ba71183b7258d2664df7e88b688"
     },
     {
       "toolId": "sirkit.selection.control",
       "version": "1.0.0",
-      "sha256": "288e00fddc7558473dce8b4fe821bcd72a9ff9cc488dbe8b069a64bc10a4e86a"
+      "sha256": "77f5185dab228e780e9c0f118b9f715923563cf5d59d825a6a8e6572ea9e3f89"
     },
     {
       "toolId": "sirkit.selection.inspect",
       "version": "1.1.0",
-      "sha256": "0c3ea73f1dddef95e983f7f5b5aa53178323e6a0e1787e5a177a5239e8ed4822"
+      "sha256": "5dc53cc5866fd683d3ad4d16d734748763dc8a5bf4d75de2079595c462212162"
     },
     {
       "toolId": "sirkit.stackup.propose",
       "version": "1.0.0",
-      "sha256": "17ad6bc50a4d6205098e58f72398fb815c46c1f0b24cf21b7c7281cd397bdabc"
+      "sha256": "373618111862dee49282e2502a07bcbbdd2ba47b7038c4efbd29105cd368e34e"
     },
     {
       "toolId": "sirkit.validation.connectivity-verify",
       "version": "1.0.0",
-      "sha256": "fb52f87fe16a2d8588b123a691b822c66a49152f13c8ce320974b83ca0dce05a"
+      "sha256": "38b52ee5a1fdc2fe63655bf73e9a4e496c9d5d5650c0227400512a796e8a428b"
     },
     {
       "toolId": "sirkit.validation.drc-run",
       "version": "1.0.0",
-      "sha256": "815074eab9b498306d4f2bccb5e627061f335a2aaae9f9c64f9632bec9cbbc33"
+      "sha256": "3530411e63e38e5409eff86a2d1f4fa714f6d362efccc16f2db61d8cdf211d67"
     },
     {
       "toolId": "sirkit.view.canvas-navigation",
       "version": "1.1.0",
-      "sha256": "1eeb292ffed82bbe57315d71ab6f412ec6bfb305d413a15ace1690a0c7b5ba5c"
+      "sha256": "c3dd7e34fb1edf417bc90012237549ab196eb8017f7647d9c24e9ea320cb75ff"
     },
     {
       "toolId": "sirkit.view.layers",
       "version": "1.0.0",
-      "sha256": "b02ee03fd5b6c40b4245ee501de50d3d90a5551d55819e7d5ef15ef996c3bcdb"
+      "sha256": "6cea124b01fd79fc443fe25b0159c587a7e7aa821f8c50fae7c01277dddb6a01"
     },
     {
       "toolId": "sirkit.view.measure",
       "version": "1.0.0",
-      "sha256": "1a647357385633b384ce11c62a384cfe4ab059bb1406e56244fe2cacd7489a7a"
+      "sha256": "b3ac17220c773ec23099b6b3f19d759309d454d7aaea69871b73de9d000bd76c"
     },
     {
       "toolId": "sirkit.view.pcb3d",
       "version": "1.0.0",
-      "sha256": "37f4bd268ab1818f43ac4132d1396f133bc97a5ba1934ea096ef073d112f4cc3"
+      "sha256": "344a3de18c76cbceb7568779da9f4478fc94aff0804e00fc9e9c2405a7b96b01"
     },
     {
       "toolId": "sirkit.view.read-state",
       "version": "1.0.0",
-      "sha256": "18b556e2f772629df6e8ea77ac1fc0ae7124942738abbe751812e9c4ba6eae1c"
+      "sha256": "188976b4144bc25834c0eab1b95ae7badb594294c04d20de603b969e12150cce"
     },
     {
       "toolId": "sirkit.view.reveal-finding",
       "version": "1.0.0",
-      "sha256": "0a945a0389cf70787a7930f83c5c302066173e364fcb46c0cbc1b1d4584c6210"
+      "sha256": "92d206100c9cc4b559e3328118fe34ffb8306032f2737abe890b3efee3338eb1"
     }
   ]
 }

@@ -246,7 +246,8 @@ describe("[L4 client 5] the page's wiring (app/page.tsx read as text, as the PR-
     expect(offerTask).toContain("const key = `${view.taskId}:${result.resultDigest}`;");
     expect(offerTask).toContain("if (entry.offered.has(key)) return;");
     expect(offerTask).toContain("stored.task.taskId === view.taskId && stored.task.resultDigest === result.resultDigest");
-    expect(offerTask).toContain("if (liveDigest !== view.base.schematicDigest) { await reportGenerationBaseMoved(entry, liveDigest); return; }");
+    expect(offerTask).toContain("if (liveDigest !== view.base.schematicDigest) { await reportGenerationBaseMoved(entry, liveDigest, view.base.recipe); return; }"); // [PR-L, 2026-10-18] pin move (runbook L.5): the moved base is reported under the TASK's recipe (a chat start pins chat-sheet)
+    expect(offerTask).toContain("const liveDigest = generationLiveBaseDigest(view.base.recipe);"); // [PR-L, 2026-10-18]
     expect(offerTask.match(/await offerBuildResult\(/g)).toHaveLength(1);
     expect(page.match(/async function offerBuildResult\(/g)).toHaveLength(1);
     expect(page.match(/function offerSchematicProposal\(/g)).toHaveLength(1);
@@ -264,7 +265,7 @@ describe("[L4 client 5] the page's wiring (app/page.tsx read as text, as the PR-
   });
 
   it("the design task's own ids and log lines draw no crypto.randomUUID (the editor's id sequence - components, wires, log lines - is the one the composer had before the task)", () => {
-    const taskCode = slice("  function attachGenerationTask(", "  // [PR-D] The agent's Build-mode generation proposal");
+    const taskCode = slice("  function attachGenerationTask(", "  // [PR-D] The agent's Build-mode generation enters"); // [PR-L, 2026-10-18] pin move (runbook L.5): the end marker is the chat-task block's comment (the v1 intake it named was removed); the chat-task block itself draws none either (pr-d-page-intake)
     expect(taskCode).not.toContain("crypto.randomUUID");
     expect(taskCode.match(/generationActivityLineId\(\)/g)!.length).toBeGreaterThanOrEqual(9);
     expect(taskCode.match(/newGenerationClientActionId\(\)/g)).toHaveLength(4);

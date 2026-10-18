@@ -37,7 +37,7 @@ const TOOL_STATUS_LABELS: Readonly<Record<string, string>> = Object.freeze({
   proposal_sealed: "proposal sealed — awaiting your review",
   layout_candidate_ready: "candidate ready — awaiting your review",
   view_command_dispatched: "view request sent",
-  execution_grant_dropped: "dropped by this page — it failed the integrity checks; nothing was changed", // [B18-D review]
+  execution_grant_dropped: "dropped by this page — it failed the integrity checks; nothing was changed", /* [B18-D review] */ task_started: "design task started — a generation worker runs it; this answer ending does not stop it", task_attached: "following the project's design task — nothing new was started", control_requested: "control request ready — confirm or dismiss it on its card", // [PR-L, 2026-10-18] runbook L.5: the durable generation task's three outcomes
 });
 
 /** [B18-E E1] A refusal the model is told in plain words gets a plain line too, never a bare code. */

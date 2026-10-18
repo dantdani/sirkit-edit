@@ -11,19 +11,19 @@
     "legacy",
     "missing"
   ],
-  "rows": 953,
+  "rows": 968,
   "byKind": {
-    "action": 110,
-    "control": 784,
-    "tool": 59
+    "action": 111,
+    "control": 794,
+    "tool": 63
   },
   "byDisposition": {
-    "callable-now": 52,
-    "proposal-only": 261,
+    "callable-now": 54,
+    "proposal-only": 271,
     "grant-required": 68,
     "human-admin-only": 85,
     "view-session-only": 85,
-    "intentionally-ui-only": 337,
+    "intentionally-ui-only": 340,
     "unavailable": 11,
     "legacy": 0,
     "missing": 54
@@ -31,7 +31,7 @@
   "byKindAndDisposition": {
     "action": {
       "callable-now": 6,
-      "proposal-only": 43,
+      "proposal-only": 44,
       "grant-required": 7,
       "human-admin-only": 17,
       "view-session-only": 6,
@@ -42,18 +42,18 @@
     },
     "control": {
       "callable-now": 21,
-      "proposal-only": 208,
+      "proposal-only": 215,
       "grant-required": 55,
       "human-admin-only": 64,
       "view-session-only": 73,
-      "intentionally-ui-only": 327,
+      "intentionally-ui-only": 330,
       "unavailable": 0,
       "legacy": 0,
       "missing": 36
     },
     "tool": {
-      "callable-now": 25,
-      "proposal-only": 10,
+      "callable-now": 27,
+      "proposal-only": 12,
       "grant-required": 6,
       "human-admin-only": 4,
       "view-session-only": 6,
@@ -71,23 +71,23 @@
   },
   "rowsWithoutTest": {
     "action": 40,
-    "control": 434,
+    "control": 437,
     "tool": 0
   },
   "actions": {
-    "records": 110,
-    "rows": 110
+    "records": 111,
+    "rows": 111
   },
   "controls": {
-    "sites": 654,
-    "rows": 784,
-    "surfaces": 68,
-    "recordsReached": 82
+    "sites": 663,
+    "rows": 794,
+    "surfaces": 70,
+    "recordsReached": 83
   },
   "tools": {
-    "descriptors": 59,
-    "rows": 59,
-    "agentExposed": 47,
+    "descriptors": 63,
+    "rows": 63,
+    "agentExposed": 51,
     "grantedExecutions": 6
   }
 }

@@ -566,8 +566,8 @@ added for the low fixes.
 | C48 | `app/components/pcb/ProviderExchangePanel.tsx` | 129 | `data-testid="p2g-ordering-notice">Ordering through Sirkit is turned off.` |
 | C49 | `app/components/pcb/ProviderExchangePanel.tsx` | 122 | `export function ProviderExchangePanel(props: ProviderExchangePanelProps) {` |
 | C50 | `app/components/pcb/ProviderExchangePanel.tsx` | 157 | `data-testid="p2g-provider-carried"` |
-| C51 | `artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv` | 110 | `manufacturing.provider-order,1,manufacturing,` |
-| C52 | `app/lib/manufacturing-providers/__tests__/b23-a-tier3-vocabulary.test.ts` | 272 | `expect(actionIds).toHaveLength(110); // [PR-M, 2026-10-17] reviewed pin move (D9), was 108` |
+| C51 | `artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv` | 111 | `manufacturing.provider-order,1,manufacturing,` |
+| C52 | `app/lib/manufacturing-providers/__tests__/b23-a-tier3-vocabulary.test.ts` | 272 | `expect(actionIds).toHaveLength(111); // [PR-M, 2026-10-18] reviewed pin move (D9), was 110` |
 | C53 | `app/lib/engineering/__tests__/b17-a-control-inventory.test.ts` | 63 | `if (record.status === "missing") expect(reached.has(record.id) \|\| routed.has(record.id)` |
 | C54 | `app/lib/engineering/__tests__/b19-e-no-purchase-tripwire.test.ts` | 26 | `const PURCHASE_WORDING = /add to cart` |
 | C55 | `app/lib/project/__tests__/b18-b-import-gates.test.ts` | 34 | `const MINT_APPROVED = new Set(["app/lib/execution-grant/mint.ts", "app/api/chat/route.ts"]);` |
@@ -589,7 +589,7 @@ added for the low fixes.
 whose generated matrix row sits just above `manufacturing.provider-order`'s; the anchor is unchanged. C52 re-anchored in place on `:272`:
 F's lead moved the `actionIds` length pin 107 -> 108 with its own dated note, so the anchor now quotes that line's current text
 (`toHaveLength(108); // [PR-F lead, 2026-10-17] reviewed pin move (D9), was 107`); the line is unchanged. This note stands below the
-table so that no row moves (`environments-and-deployment.md:326` cites C52 at `:570`). [PR-M, 2026-10-17] C51 re-pinned `:108` -> `:110` in place: section M added the `schematic.resolve-components-propose` and `schematic.resolve-components` records just above the two-record tail, so `manufacturing.provider-order`'s matrix row moved down two; the anchor is unchanged. C52 re-anchored in place on `:272` to the line's current text (`toHaveLength(110); // [PR-M, 2026-10-17] reviewed pin move (D9), was 108`); the line is unchanged. This note is appended to the paragraph's last line, so no line of the page moves.
+table so that no row moves (`environments-and-deployment.md:326` cites C52 at `:570`). [PR-M, 2026-10-17] C51 re-pinned `:108` -> `:110` in place: section M added the `schematic.resolve-components-propose` and `schematic.resolve-components` records just above the two-record tail, so `manufacturing.provider-order`'s matrix row moved down two; the anchor is unchanged. C52 re-anchored in place on `:272` to the line's current text (`toHaveLength(110); // [PR-M, 2026-10-17] reviewed pin move (D9), was 108`); the line is unchanged. This note is appended to the paragraph's last line, so no line of the page moves. [PR-M, 2026-10-18] C51 re-pinned `:110` -> `:111` in place: section M2 added the `parts.cad-acquisition` record just above the two-record tail, so `manufacturing.provider-order`'s matrix row moved down one; the anchor is unchanged. C52 re-anchored in place on `:272` to the line's current text (`toHaveLength(111); // [PR-M, 2026-10-18] reviewed pin move (D9), was 110`); the line is unchanged; this note too is appended in place.
 
 ## 14. The B23 closeout's export record
 

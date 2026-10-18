@@ -460,7 +460,7 @@ describe("B11.5 §D — every B11.4 closure is preserved", () => {
         source.includes('mkdtempSync(join(tmpdir(), "sirkit-b24-d2-proc-"))')
         && !source.split("\n").some((line) =>
           /(?:writeFileSync|mkdirSync|rmSync|appendFileSync|unlinkSync|cpSync|rmdirSync|createWriteStream|symlinkSync|linkSync)\s*\(/.test(line)
-          && !/\b(?:scratch|root)\b/.test(line)),
+          && !/\b(?:scratch|root)\b/.test(line)), /* [PR-M, 2026-10-18] reviewed admission (section M2, in place: no line moves): the bundled-checkout block of the acquisition pipeline suite lays out a pinned KiCad checkout EXCLUSIVELY under its OS temp scratch root `mkdtempSync(join(tmpdir(), "sirkit-m2-bundled-"))` (`root`, removed through `checkout`), copied from the committed upstream blobs; EVERY write-primitive line - its file copies included - must be rooted at one of them, or the admission lapses */ "m2-3-acquisition-pipeline-pglite.test.ts": (source) => source.includes('mkdtempSync(join(tmpdir(), "sirkit-m2-bundled-"))') && !source.split("\n").some((line) => /(?:writeFileSync|mkdirSync|rmSync|appendFileSync|unlinkSync|cpSync|copyFileSync|rmdirSync|createWriteStream|symlinkSync|linkSync)\s*\(/.test(line) && !/\b(?:root|checkout)\b/.test(line)),
     };
 
     const offenders: string[] = [];

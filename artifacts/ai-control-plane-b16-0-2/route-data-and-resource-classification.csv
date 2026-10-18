@@ -81,7 +81,7 @@ path,method,is_public,durable_access,project_data_sensitivity,provider_credit,ex
 /api/generation-tasks/[id],GET,false,read,project-durable,false,,false,false,false,false,none,false
 /api/generation-tasks/[id]/control,POST,false,read-write,project-durable,false,,false,true,false,false,none,false
 /api/generation-tasks/[id]/events,GET,false,read,project-durable,false,,false,false,false,false,none,false
-/api/generation-worker,POST,false,read-write,project-durable,false,,false,true,false,false,none,true
+/api/generation-worker,POST,false,read-write,project-durable,false,,false,true,false,false,observation-query,true
 /api/health,GET,true,none,none,false,,false,false,false,true,none,false
 /api/interfaces/allocate,POST,false,none,caller-supplied-only,false,,false,false,false,false,none,false
 /api/interfaces/alternatives,POST,false,none,caller-supplied-only,true,,false,false,false,false,none,false
@@ -105,6 +105,8 @@ path,method,is_public,durable_access,project_data_sensitivity,provider_credit,ex
 /api/model-simulation/readiness,POST,false,none,caller-supplied-only,false,,false,false,false,false,none,false
 /api/parts/[id],GET,true,none,none,false,,false,false,false,true,none,false
 /api/parts/[id]/alternates,GET,true,none,none,false,,false,false,false,true,none,false
+/api/parts/acquisitions,GET,false,read-write,project-durable,false,,false,false,false,false,none,false
+/api/parts/acquisitions,POST,false,read-write,project-durable,false,,false,false,false,false,none,false
 /api/parts/categories,GET,true,none,none,false,,false,false,false,true,none,false
 /api/parts/external-search,POST,false,none,caller-supplied-only,true,,false,false,false,false,observation-query,false
 /api/parts/search,POST,true,none,none,true,,true,false,false,false,none,true

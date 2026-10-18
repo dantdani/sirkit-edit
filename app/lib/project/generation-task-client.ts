@@ -1,6 +1,6 @@
 /**
  * [PR-L, 2026-10-17] Runbook L.4, increment 4 (task-worker-contract.md section 7): the BROWSER side of the durable generation task - the
- * one client the page's composer (and, in increment 5, the chat's generation intake) uses to start or attach a design, follow its real
+ * one client the page's composer (and, since increment 5, the chat's generation intake) uses to start or attach a design, follow its real
  * public progress, control it and fetch its validated result. Browser-safe: no server import (types are mirrored and every answer is
  * READ defensively - a server answer that is not the snapshot shape is dropped, never trusted).
  *
@@ -36,6 +36,8 @@ export interface GenerationTaskSnapshotView {
   state: GenerationTaskClientState;
   terminal: boolean;
   phase: string | null;
+  /** [PR-L, 2026-10-18] who started it: the Build composer, or the assistant in the chat (runbook L.5) - the same task either way */
+  origin: "build" | "chat";
   provider: string;
   createdAt: string;
   updatedAt: string;
@@ -85,7 +87,7 @@ export function readGenerationTaskSnapshot(value: unknown): GenerationTaskSnapsh
   return {
     taskId: value.taskId, clientRequestId: value.clientRequestId,
     scope: { tenantId: value.scope.tenantId, projectId: value.scope.projectId, branchId: value.scope.branchId },
-    state: value.state as GenerationTaskClientState, terminal: value.terminal === true, phase: strOrNull(value.phase), provider: str(value.provider, 40) ? value.provider : "",
+    state: value.state as GenerationTaskClientState, terminal: value.terminal === true, phase: strOrNull(value.phase), origin: value.origin === "chat" ? "chat" : "build", provider: str(value.provider, 40) ? value.provider : "",
     createdAt: value.createdAt, updatedAt: value.updatedAt, serverNow: value.serverNow,
     liveness: { state: value.liveness.state as GenerationTaskClientLiveness, since: strOrNull(value.liveness.since), retryAt: strOrNull(value.liveness.retryAt) },
     plan: plan && Array.isArray(plan.blocks)

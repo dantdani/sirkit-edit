@@ -97,16 +97,16 @@ Counts, from `current-system-map.md` (generated; each pinned count equals its pi
 
 | count | value |
 |---|---|
-| route-methods | 175 |
-| canonical-wrappers | 172 |
+| route-methods | 177 |
+| canonical-wrappers | 174 |
 | approved-factories | 3 |
 | raw-handlers | 0 |
-| action-records | 110 |
-| registry-tools | 59 |
-| agent-exposed-tools | 47 |
+| action-records | 111 |
+| registry-tools | 63 |
+| agent-exposed-tools | 51 |
 | mcp-exposed-tools | 9 |
 | granted-tier-1-tools | 6 |
-| agent-exposed-proposal-tools | 10 |
+| agent-exposed-proposal-tools | 12 |
 | agent-exposed-tier-3-tools | 0 |
 | sql-migrations | 32 |
 
@@ -121,6 +121,8 @@ closeout's final SHA.
 [PR-M, 2026-10-17] Count lines moved with the regenerated map (runbook section M, increment M1): action-records 108 -> 110 (schematic.resolve-components-propose, the sealed resolution batch, and schematic.resolve-components, its reviewed destructive apply), registry-tools 56 -> 59, agent-exposed-tools 44 -> 47, agent-only-tools 35 -> 38 and agent-exposed-proposal-tools 9 -> 10 - PR-M's three descriptors: the schematic-instance inspection and the resolution candidate search (Tier 0 reads) and the component resolution proposal (Tier 2), all three agent-exposed and withheld from MCP; mcp-exposed-tools stays 9; the verdict's status lines stand.
 
 [PR-M, 2026-10-18] Count lines moved with the regenerated map (runbook section M, M1's page intake): route-methods 174 -> 175 and canonical-wrappers 171 -> 172 (POST /api/component-resolution-authority, the reviewed resolution's fresh-facts endpoint, one canonical wrapper; 3 factories and 0 raw unchanged).
+
+[PR-M, 2026-10-18] Count lines moved with the regenerated map (runbook section M, M2's acquisition): route-methods 175 -> 177 and canonical-wrappers 172 -> 174 (GET and POST /api/parts/acquisitions, two canonical wrappers); action-records 110 -> 111 (parts.cad-acquisition); registry-tools 59 -> 63, agent-exposed-tools 47 -> 51 and agent-exposed-proposal-tools 10 -> 12 - runbook L.5's two descriptors (the durable generation task's inspection and its control request, a proposal) as the tree holds them, and M2's two (the CAD acquisition start, a proposal, and its status read; both agent-exposed, withheld from MCP); mcp-exposed-tools stays 9; the verdict's status lines stand.
 
 [PR-F, 2026-10-17] Count lines moved with the regenerated map (product reliability F): action-records 107 -> 108 (parts.draft-request, the sealed draft request own propose record), registry-tools 52 -> 56, agent-exposed-tools
 40 -> 44, agent-exposed-proposal-tools 6 -> 9 - PR-F's four descriptors: the missing-facts read and the part draft request (missing parts,

@@ -1,6 +1,6 @@
 # Generation task, worker and recovery contract (runbook L.2-L.5)
 
-Status: IMPLEMENTED in increments 2-4 (see progress.md); this contract remains the design reference. Written 2026-10-17 against `codex/astra-foundation` at `5b4a941b` plus the uncommitted 180 s
+Status: IMPLEMENTED in increments 2-5 (see progress.md; section 8 records how increment 5 implemented it, 2026-10-18); this contract remains the design reference. Written 2026-10-17 against `codex/astra-foundation` at `5b4a941b` plus the uncommitted 180 s
 correction (`build-boundary.ts`, provider-adapter cancellation, `parts-search.ts`). It governs L.8 increments 2-7; L.1's stall
 map (`limit-and-stall-map.md`) feeds increment 6. Labels: **CONFIRMED** = read in source at the cited line; **DECIDED** = this
 contract's choice, justified from the cited source; **OWNER** = must be decided by the owner before the dependent step ships
@@ -344,23 +344,44 @@ only stops that poll; it never cancels the task.
 
 ## 8. Chat parity (L.5)
 
-- One service, `GenerationTaskService` (`app/lib/generation-task/service.ts`: start / attach / inspect / control / collect over
-  the injected repository), used by the routes AND by the chat port; `schematic-generation-runtime.ts` binds it (composition
-  root, F16). The chat closure imports only the service and the domain modules, never the worker-side slice code (which may reach
-  acquisition modules forbidden there, `b19-d-external-text-injection-route.test.ts:128`).
-- `sirkit.schematic.generate-proposal@2.0.0` (propose): arguments exactly one of `{ prompt }` (start or attach; `clientRequestId`
-  derived from run id + call id; base recipe `chat-sheet`) or `{ taskId }` (collect). Start returns a new outcome kind
-  `generation-task` and run event `generation_task_ready { runId, toolId, task }` within milliseconds; collect on
-  `awaiting-review` seals `sirkit.schematic-generation-proposal.v2` (v1 + `task: { taskId, resultDigest }`) as the existing
-  `generation_proposal_ready`; the receiver accepts v1 and v2 and routes a v2 into `offerGenerationTaskResult` (one offer per
-  result). The descriptor drops 185 s to an `interactive` 15 s; the binding constant moves to the service.
-- `sirkit.schematic.generation-task-inspect@1.0.0` (read): the snapshot without the prompt.
-- `sirkit.schematic.generation-task-control@1.0.0` (propose, `proposal-artifact`): a sealed control request
-  (`generation_task_control_ready`) that the page shows as a confirm chip; only the human's click calls the control route.
+Design (2026-10-17), then **as implemented in increment 5 (2026-10-18)** - the deviations from the design are marked IMPLEMENTED:
+
+- One service, `GenerationTaskService` (`app/lib/generation-task/service.ts`), used by the routes AND by the chat port;
+  `app/api/chat/schematic-generation-runtime.ts` binds it (composition root, F16): `generationTaskPortOver(service)` exposes `start`
+  (the start route's own `service.start` with origin `chat` and the asking run as `chatRunId`), `list` and `inspect`, each canonicalizing
+  the trusted scope. The port resolves only when a durable task store exists here AND the run's provider is servable; otherwise the
+  three tools are withheld (the `schematic-generation` fact is false). The chat closure no longer imports `runBuildMultiGeneration`.
+- `sirkit.schematic.generate-proposal@2.0.0` (propose, interactive 15 s): exactly `{ prompt }`. IMPLEMENTED: no `{ taskId }` collect
+  form - the base recipe is `chat-sheet` (the verified schematic digest the chat run posted, its head mark when present), the client
+  request id is derived from (scope, run id, provider call id) as a v8 uuid, so a retried call attaches to its own task (`attached-same-
+  request`) and a new turn while one runs attaches to the scope's active task (`attached-active`, the store's one-active-task rule). The
+  outcome kind `generation-task` carries a task REFERENCE (`sirkit.generation-task-ref.v1`: id, scope, disposition, state, phase, origin,
+  liveness, base, result reference, durability) and the run event `generation_task_ready { runId, toolId, task }`. Collecting the result
+  is the PAGE's intake, never a second sealed artifact: the page re-reads the task through `GET /api/generation-tasks/[id]`, follows it
+  with `attachGenerationTask` (the same status card as a Build start) and offers its result once per (task, result digest) through
+  `offerGenerationTaskResult -> offerBuildResult` (the live base digest under the TASK's recipe: build-pin or chat-sheet). The v1 artifact
+  (`sirkit.schematic-generation-proposal.v1`), its `generation_proposal_ready` event, its page intake (`offerGenerationProposal`) and the
+  in-turn path are REMOVED; the deprecated `POST /api/schematic/build-multi` stays for compatibility (OD-252 item 8, OWNER-8) and the
+  B21 build-multi tripwire is unchanged.
+- `sirkit.generation.task-inspect@1.0.0` (Tier 0 read; IMPLEMENTED under this id rather than `sirkit.schematic.generation-task-inspect`):
+  `{ taskId? }` (omitted: the scope's active task, else its most recent one; none is data `found: false`), the snapshot through an
+  ALLOWLIST of its public keys (never the prompt, a message, a tool output, reasoning or the netlist) and a bounded result summary
+  (completeness, omitted blocks, part and connection counts, electrical check numbers), at most `GENERATION_TASK_INSPECT_MAX_CHARS`.
+  A foreign, unknown or malformed id is the uniform `not_found`.
+- `sirkit.generation.task-control@1.0.0` (propose, `proposal-artifact`; IMPLEMENTED under this id): `{ action: cancel | pause | resume |
+  retry-block, taskId?, blockId? }`; the action must be listed as valid by the task's current snapshot (else `proposal-blocked`
+  `action_not_available` naming the valid ones). It seals `sirkit.generation-task-control-request.v1` (`generation_task_control_ready`);
+  the page shows it as a confirm chip (Confirm: <label> / Dismiss); only the human's click calls the control route (OD-252 item 6).
   Direct agent control would need a reviewed exposure change (OWNER-6).
-- Stop answer = the chat's existing Stop (`page.tsx:4862`): ends the run only; the line says the design keeps running. Stop
-  design = the task's `cancel`. A chat run's 120 s end never touches the task. Shared manuals, exposure list, coverage matrix,
-  MCP parity artifacts and the scripted fixture agent (`fixture-agent-adapter.ts:33`) are updated in the same increment.
+- The chat stays usable while a design works: the followed task's busy state (`designTaskBusy`) blocks only the composer's generate and
+  edit routes, never the ask route, so a later turn can inspect and control the same task.
+- Stop answer = the chat's stop (`chat-stop`, labelled "Stop answer"): ends the streaming run only; the run log says the design keeps
+  running (`STOP_ANSWER_SEMANTICS`). Stop design = the task's `cancel` (the status card, or a confirmed chip; `STOP_DESIGN_SEMANTICS`).
+  A chat run's 120 s deadline ends the turn, never the task (`l5-generation-task-tool` case 5). When a turn ends before its task
+  reference arrived, the page looks up the project's active task instead of starting another.
+- Shared manuals, the exposure list, MCP withholding, the coverage matrix, the B04/B09/B10/B11/B17/B20/B21/B24 artifacts and the scripted
+  fixture agent (`fixture-agent-adapter.ts`: "Generate a schematic: ..." starts the task; "Generate a schematic, then keep answering:
+  ..." holds the reply for Stop answer; "Check the design." inspects; "Stop / Pause / Resume the design." asks for a chip) are updated.
 
 ## 9. Test plan (L.7)
 

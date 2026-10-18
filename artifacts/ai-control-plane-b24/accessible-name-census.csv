@@ -106,6 +106,13 @@ app/components/parts/AtomicPublicationReviewPanel.tsx|click|Button|atomic-submit
 app/components/parts/AtomicPublicationReviewPanel.tsx|click|Button|atomic-withdraw-*|withdrawRequest,app/components/parts/AtomicPublicationReviewPanel.tsx,click,Button,yes,named:text,Withdraw
 app/components/parts/AtomicPublicationReviewPanel.tsx|click|Button|atomic-withdraw-revision-*|withdrawRevision,app/components/parts/AtomicPublicationReviewPanel.tsx,click,Button,yes,named:text,Withdraw revision
 app/components/parts/AtomicPublicationReviewPanel.tsx|click|Button|Refresh|review.refresh,app/components/parts/AtomicPublicationReviewPanel.tsx,click,Button,yes,named:text,Refresh
+"app/components/parts/CadAcquisitionPanel.tsx|click|button|missing-acquire-start-*|run,startCadAcquisition,group.instances.map",app/components/parts/CadAcquisitionPanel.tsx,click,button,no,named:aria-label,* for *
+"app/components/parts/CadAcquisitionPanel.tsx|click|button|missing-acquisition-cancel-*|run,controlCadAcquisition",app/components/parts/CadAcquisitionPanel.tsx,click,button,no,named:text,Cancel
+"app/components/parts/CadAcquisitionPanel.tsx|click|button|missing-acquisition-handoff-send-*|run,sendCadAcquisitionForReview",app/components/parts/CadAcquisitionPanel.tsx,click,button,no,named:text,Send for component review
+"app/components/parts/CadAcquisitionPanel.tsx|click|button|missing-acquisition-offer-*|onOfferReplacement,group.instances.map",app/components/parts/CadAcquisitionPanel.tsx,click,button,no,named:text,Offer the replacement
+"app/components/parts/CadAcquisitionPanel.tsx|click|button|missing-acquisition-recheck-*|run,controlCadAcquisition",app/components/parts/CadAcquisitionPanel.tsx,click,button,no,named:text,Check again
+app/components/parts/ComponentReviewInbox.tsx|click|button|component-review-inbox-refresh|load,app/components/parts/ComponentReviewInbox.tsx,click,button,no,named:text,Refresh
+"app/components/parts/ComponentReviewInbox.tsx|click|button|component-review-open-*|onOpen,handoffPrefill",app/components/parts/ComponentReviewInbox.tsx,click,button,no,named:aria-label,Open the publication review for *
 app/components/pcb/AssignmentQueuePanel.tsx|change|input|(none)|setConfirmed,app/components/pcb/AssignmentQueuePanel.tsx,change,input,yes,named:label-wrap,Commit this exact plan. Chat and AI suggestions are not a…
 app/components/pcb/AssignmentQueuePanel.tsx|change|input|assignment-candidate|setCandidateId,app/components/pcb/AssignmentQueuePanel.tsx,change,input,yes,named:label-wrap,* * * selectable approval ready suggestion only * package…
 app/components/pcb/AssignmentQueuePanel.tsx|change|input|e.g. pcb-reviewers|setAssigneeId,app/components/pcb/AssignmentQueuePanel.tsx,change,input,yes,named:label-wrap,Reviewer or group ID
@@ -542,7 +549,7 @@ app/page.tsx|click|button|Build|setMode,app/page.tsx,click,button,no,named:text,
 app/page.tsx|click|Button|Cancel — change nothing|cancelTier1Proposal,app/page.tsx,click,Button,yes,named:text,Cancel — change nothing
 "app/page.tsx|click|Button|Cancel|finishActivityLog,reportGenerationReview,setPendingReplace",app/page.tsx,click,Button,yes,named:text,Cancel
 app/page.tsx|click|button|change in Settings|setSettingsOpen,app/page.tsx,click,button,yes,named:text,change in Settings
-app/page.tsx|click|Button|chat-stop|stopChatRun,app/page.tsx,click,Button,yes,named:text,Stop
+app/page.tsx|click|Button|chat-stop|stopChatRun,app/page.tsx,click,Button,yes,named:text,Stop answer
 "app/page.tsx|click|button|Close pane|e.stopPropagation,onRemove",app/page.tsx,click,button,no,named:title,Close pane
 app/page.tsx|click|Button|Close|setDraftRequestOpen,app/page.tsx,click,Button,no,named:text,Close
 app/page.tsx|click|Button|Close|setSettingsOpen,app/page.tsx,click,Button,no,named:text,Close
@@ -562,6 +569,8 @@ app/page.tsx|click|button|empty-sheet-describe-circuit|handleJourneyAction,app/p
 app/page.tsx|click|button|Expand suggestions|Minimise suggestions|setSuggestionsMinimized,app/page.tsx,click,button,yes,named:text,* suggestion s ready
 app/page.tsx|click|Button|Export as KiCad (.kicad_sch)|handleExportKicad,app/page.tsx,click,Button,no,named:text,Export
 app/page.tsx|click|button|Fit page to view|schematicView.fitPage,app/page.tsx,click,button,no,named:text,Fit
+app/page.tsx|click|Button|generation-task-control-confirm|onConfirmGenerationControl,app/page.tsx,click,Button,yes,named:text,Confirm: *
+app/page.tsx|click|Button|generation-task-control-dismiss|onDismissGenerationControl,app/page.tsx,click,Button,yes,named:text,Dismiss
 "app/page.tsx|click|Button|Ignore these suggestions|setPendingSuggestions,setSuggestionsMinimized",app/page.tsx,click,Button,yes,named:text,Ignore
 "app/page.tsx|click|button|Independent domain model designs the same request and diffs it (slow, ~1–2 min)|setMoreMenuOpen,handleSecondOpinion",app/page.tsx,click,button,yes,named:text,Second opinion (SchGen)
 "app/page.tsx|click|button|Junction — mark a wire crossing as connected|setTool,setWireDraftStart",app/page.tsx,click,button,no,named:text,J

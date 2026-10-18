@@ -314,7 +314,7 @@ describe("PR-F fD module propose - through the real loop", () => {
     expect((ready[0] as { toolId: string }).toolId).toBe(TOOL);
     expect(sealed.schema).toBe(MODULE_CONTRACT_PROPOSAL_SCHEMA);
     expect(verifySealedModuleContractProposalIntegrity(sealed)).toEqual({ ok: true });
-    expect(events.some((event) => event.type === "proposal_ready" || event.type === "pcb_proposal_ready" || event.type === "generation_proposal_ready" || event.type === "draft_request_ready" || event.type === "execution_grant_ready")).toBe(false);
+    expect(events.some((event) => event.type === "proposal_ready" || event.type === "pcb_proposal_ready" || event.type === "generation_task_ready" || event.type === "draft_request_ready" || event.type === "execution_grant_ready")).toBe(false); // [PR-L, 2026-10-18] pin move (runbook L.5): generation_task_ready replaced the removed v1 generation_proposal_ready; the same "no artifact" assertion
     expect(events.filter((event) => event.type === "tool_refused").map((event) => (event as { status: string }).status)).toEqual(["proposal_exists"]);
     const told = JSON.parse(continuations[0]![0]!) as Record<string, unknown>;
     expect(told).toMatchObject({ ok: true, status: "proposal_sealed", verification: MODULE_CONTRACT_VERIFICATION, electricalCheck: { state: "not_run" }, coverage: { physicalInstances: 4, owned: 3, unassigned: ["U2"] } });

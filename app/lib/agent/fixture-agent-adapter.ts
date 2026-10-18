@@ -418,7 +418,7 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
   }
 
   async start(input: Parameters<ProviderAgentAdapter["start"]>[0]): Promise<AgentStep> {
-    const roleStep = await scriptedRoleStart(this, input); if (roleStep) return roleStep; this.planned = planFixtureInstruction(input.userMessage); const resolutionStep = scriptedResolutionStart(this, input); if (resolutionStep) return resolutionStep; // [B21 F] a specialist run or the follow-up turn answers from the per-role script (D21-40), appended below; [PR-M, 2026-10-18] the resolution script (appended below), in place on this line
+    const roleStep = await scriptedRoleStart(this, input); if (roleStep) return roleStep; this.planned = planFixtureInstruction(input.userMessage); const resolutionStep = scriptedResolutionStart(this, input); if (resolutionStep) return resolutionStep; const generationStep = scriptedGenerationTaskStart(this, input); if (generationStep) return generationStep; /* [PR-L, 2026-10-18] the durable generation task's scripts (appended below), in place on this line */ // [B21 F] a specialist run or the follow-up turn answers from the per-role script (D21-40), appended below; [PR-M, 2026-10-18] the resolution script (appended below), in place on this line
     if (this.planned.kind === "reply") return this.step({ text: this.planned.text });
     if (this.planned.kind === "select-then") {
       this.awaitingSelection = true;
@@ -459,7 +459,7 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
   }
 
   async continueWith(input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): Promise<AgentStep> {
-    const roleStep = scriptedRoleContinue(this, input); if (roleStep) return roleStep; const planned = this.planned; const resolutionNext = scriptedResolutionContinue(this, input); if (resolutionNext) return resolutionNext; // [B21 F] a specialist run continues on its per-role script; [PR-M, 2026-10-18] a resolution run continues on its script (appended below)
+    const roleStep = scriptedRoleContinue(this, input); if (roleStep) return roleStep; const planned = this.planned; const resolutionNext = scriptedResolutionContinue(this, input); if (resolutionNext) return resolutionNext; const generationNext = await scriptedGenerationTaskContinue(this, input); if (generationNext) return generationNext; /* [PR-L, 2026-10-18] the durable generation task's scripts, in place on this line */ // [B21 F] a specialist run continues on its per-role script; [PR-M, 2026-10-18] a resolution run continues on its script (appended below)
     const outputText = input.results[0]?.outputText;
     if (this.awaitingBoard && planned.kind === "board-then") {
       this.awaitingBoard = false;
@@ -710,11 +710,11 @@ function scriptedFollowUp(adapter: FixtureAgentAdapter, input: Parameters<Provid
 // Appended on purpose (as B21-F and B21-F2b were): a `const` read only when a plan is made and a hoisted function declaration, so no
 // line cited above moves - the ONE in-place hook is `planFixtureInstruction`'s last line. Still never a model: the whole sentence
 // "Generate a schematic: <prompt>" becomes the ONE tool call a model would make, sirkit.schematic.generate-proposal { prompt }, through
-// the REAL loop, gateway, injected generation port and seal (under the fixture runtime the port answers the recorded blinker design:
-// app/api/chat/schematic-generation-runtime.ts -> runBuildMultiGeneration -> runBuildToolLoop's fixture branch, no provider, no credits).
-// The sealed result is answered by the class's plain closing reply ("the tool answered proposal_sealed"); the page's intake offers the
-// artifact in the SAME schematic review dialog as the composer's Generate, where only the human approves it. Every other instruction
-// is byte-identical to before.
+// the REAL loop, gateway and injected port. [PR-L, 2026-10-18] runbook L.5: the port STARTS the durable generation task (app/api/chat/
+// schematic-generation-runtime.ts -> GenerationTaskService.start, the composer's own start); the fixture's generation worker designs it
+// (the scripted provider, no credits). The class's plain closing reply says "the tool answered task_started"; the page follows the task
+// on its status card and offers its result in the SAME schematic review dialog as the composer's Generate. Every other instruction is
+// byte-identical to before.
 
 /** The instruction, whole: "Generate a schematic: <prompt>" - the prompt is 1 to 4000 characters (the tool's own bound), passed as the
  *  person wrote it (whitespace collapsed; its own sentence punctuation kept, unlike the PCB scripts' normalized text). */
@@ -840,4 +840,105 @@ function scriptedResolutionContinue(adapter: FixtureAgentAdapter, input: Paramet
   return roleStep(adapter, { text: status === "proposal_sealed"
     ? `(fixture agent) One batch for ${refs} is sealed for your review: each instance would be bound to the eligible published revision the search reported, with the proved pin mapping. Nothing has changed yet - review it, then approve or discard it in the dialog.`
     : `(fixture agent) the resolution proposal answered ${status}. Nothing was changed.` });
+}
+
+// ─── [PR-L, 2026-10-18] The durable generation task's turns (runbook L.5, L.7 item 8) ────────────────────────────────────────────────
+// Appended on purpose (as PR-G and PR-M were): constants read only when a run starts and hoisted function declarations, so no line cited
+// above moves - the two in-place hooks sit on the start and continue lines after the resolution hooks. Still never a model: whole
+// sentences become the calls a model would make, through the REAL loop, gateway and injected port, and the closing reply says only what
+// the tool answered -
+//   "Generate a schematic, then keep answering: <prompt>" -> sirkit.schematic.generate-proposal { prompt }, then the reply is HELD (up
+//     to GENERATION_HOLD_MS, or until the run is aborted): a model still streaming its answer after the start, so "Stop answer" has a
+//     turn to end while the design task keeps running;
+//   "Check the design." / "How is the design going?" -> sirkit.generation.task-inspect {} and a reply from the snapshot it returned;
+//   "Stop the design." / "Pause the design." / "Resume the design." -> sirkit.generation.task-control { action } (a chip the user confirms).
+
+/** How long the held reply waits before it answers (well under the run's deadline). */
+export const GENERATION_HOLD_MS = 45_000;
+const GENERATE_AND_HOLD = /^(?:please\s+)?generate\s+a\s+schematic,?\s+then\s+keep\s+answering\s*:\s*(\S[\s\S]{0,3999})$/i;
+const CHECK_DESIGN = /^(?:please\s+)?(?:check\s+the\s+design(?:\s+task)?|how\s+is\s+the\s+design(?:\s+task)?\s+going|inspect\s+the\s+design(?:\s+task)?)[.?!]*$/i;
+const CONTROL_DESIGN = /^(?:please\s+)?(stop|pause|resume)\s+the\s+design(?:\s+task)?[.!]*$/i;
+const CONTROL_ACTIONS: Readonly<Record<string, string>> = Object.freeze({ stop: "cancel", pause: "pause", resume: "resume" });
+
+interface GenerationTaskRun { kind: "hold" | "inspect" | "control"; seq: number }
+const GENERATION_RUNS = new WeakMap<FixtureAgentAdapter, GenerationTaskRun>();
+
+/** [PR-L] What a generation-task sentence asks for, or null (the scripts above answer). */
+export function planFixtureGenerationTask(message: string): { kind: "hold"; prompt: string } | { kind: "inspect" } | { kind: "control"; action: string } | null {
+  const text = message.replace(/\s+/g, " ").trim();
+  const hold = GENERATE_AND_HOLD.exec(text);
+  if (hold) return { kind: "hold", prompt: hold[1]!.trim() };
+  if (CHECK_DESIGN.test(text)) return { kind: "inspect" };
+  const control = CONTROL_DESIGN.exec(text);
+  return control ? { kind: "control", action: CONTROL_ACTIONS[control[1]!.toLowerCase()]! } : null;
+}
+
+function generationCall(adapter: FixtureAgentAdapter, run: GenerationTaskRun, tools: readonly ProviderToolDeclaration[], toolId: string, args: Record<string, unknown>): AgentStep {
+  const declaration = tools.find((tool) => tool.toolId === toolId);
+  if (!declaration) { GENERATION_RUNS.delete(adapter); return roleStep(adapter, { text: `(fixture agent) ${toolId} is not available to this run; nothing was done.` }); }
+  run.seq += 1;
+  return roleStep(adapter, { toolCalls: [{ callId: `fx-generation-${run.seq}`, providerName: declaration.providerName, argumentsText: JSON.stringify(args) }] });
+}
+
+/** [PR-L] The start hook: a generation-task sentence makes its one call; anything else is null. */
+function scriptedGenerationTaskStart(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["start"]>[0]): AgentStep | null {
+  GENERATION_RUNS.delete(adapter);
+  const plan = planFixtureGenerationTask(input.userMessage);
+  if (!plan) return null;
+  const run: GenerationTaskRun = { kind: plan.kind, seq: 0 };
+  GENERATION_RUNS.set(adapter, run);
+  if (plan.kind === "hold") return generationCall(adapter, run, input.tools, "sirkit.schematic.generate-proposal", { prompt: plan.prompt });
+  if (plan.kind === "inspect") return generationCall(adapter, run, input.tools, "sirkit.generation.task-inspect", {});
+  return generationCall(adapter, run, input.tools, "sirkit.generation.task-control", { action: plan.action });
+}
+
+/** [PR-L] What the scripted agent reads out of the task inspection (the same fields a model would report). */
+export function generationTaskFacts(outputText: string | undefined): { found: boolean; taskId: string | null; state: string | null; phase: string | null; liveness: string | null; modelCalls: number | null; result: string | null } {
+  try {
+    const parsed = JSON.parse(outputText ?? "") as { output?: { report?: { found?: unknown; task?: Record<string, unknown>; result?: { status?: unknown; components?: unknown } | null } } };
+    const report = parsed.output?.report;
+    const task = report?.task;
+    const usage = task?.usage as { modelCalls?: unknown } | undefined;
+    const liveness = task?.liveness as { state?: unknown } | undefined;
+    return {
+      found: report?.found === true, taskId: typeof task?.taskId === "string" ? task.taskId : null, state: typeof task?.state === "string" ? task.state : null,
+      phase: typeof task?.phase === "string" ? task.phase : null, liveness: typeof liveness?.state === "string" ? liveness.state : null,
+      modelCalls: typeof usage?.modelCalls === "number" ? usage.modelCalls : null,
+      result: report?.result && typeof report.result.status === "string" ? `${report.result.status}, ${typeof report.result.components === "number" ? report.result.components : "?"} part(s)` : null,
+    };
+  } catch {
+    return { found: false, taskId: null, state: null, phase: null, liveness: null, modelCalls: null, result: null };
+  }
+}
+
+/** [PR-L] A wait the run's abort ends early (Stop answer): resolves true when the hold elapsed, false when the run was aborted. */
+function heldReply(signal: AbortSignal | undefined, ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) { resolve(false); return; }
+    const timer = setTimeout(() => { signal?.removeEventListener("abort", onAbort); resolve(true); }, ms);
+    const onAbort = (): void => { clearTimeout(timer); resolve(false); };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/** [PR-L] The continue hook: the closing reply from what the tool answered; null outside a generation-task run. */
+async function scriptedGenerationTaskContinue(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): Promise<AgentStep | null> {
+  const run = GENERATION_RUNS.get(adapter);
+  if (!run) return null;
+  GENERATION_RUNS.delete(adapter);
+  const outputText = input.results[0]?.outputText;
+  const status = statusOf(outputText);
+  if (run.kind === "hold") {
+    const elapsed = await heldReply(input.signal, GENERATION_HOLD_MS);
+    if (!elapsed) throw Object.assign(new Error("The run was stopped while the scripted agent was still answering."), { name: "AbortError" });
+    return roleStep(adapter, { text: `(fixture agent) the tool answered ${status}; the design keeps running in its worker while I answer.` });
+  }
+  if (run.kind === "inspect") {
+    const facts = generationTaskFacts(outputText);
+    if (!facts.found) return roleStep(adapter, { text: `(fixture agent) the inspection answered ${status}: ${facts.taskId ? "the task could not be read" : "this project has no design task"}. Nothing was changed.` });
+    return roleStep(adapter, { text: `(fixture agent) design task ${facts.taskId}: ${facts.state}${facts.phase ? ` (${facts.phase})` : ""}, liveness ${facts.liveness}, ${facts.modelCalls ?? 0} model call(s)${facts.result ? `; result ${facts.result}` : "; no result yet"}.` });
+  }
+  return roleStep(adapter, { text: status === "control_requested"
+    ? "(fixture agent) the control request is on a chip for you to confirm - nothing has happened to the design yet."
+    : `(fixture agent) the control request answered ${status}. Nothing was changed.` });
 }

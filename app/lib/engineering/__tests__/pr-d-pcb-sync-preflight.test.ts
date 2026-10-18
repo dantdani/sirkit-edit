@@ -235,7 +235,7 @@ describe("PR-D d2 pcb-sync.preflight — the happy path through the real gateway
     expect(result.status, JSON.stringify(result)).toBe("completed");
     expect(result.toolCalls).toBe(1);
     expect(events.filter((event) => event.type === "tool_finished").map((event) => (event as { status: string; ok: boolean }).status)).toEqual(["succeeded"]);
-    expect(events.some((event) => event.type === "proposal_ready" || event.type === "pcb_proposal_ready" || event.type === "generation_proposal_ready" || event.type === "execution_grant_ready")).toBe(false);
+    expect(events.some((event) => event.type === "proposal_ready" || event.type === "pcb_proposal_ready" || event.type === "generation_task_ready" || event.type === "execution_grant_ready")).toBe(false); // [PR-L, 2026-10-18] pin move (runbook L.5): the generation's event is generation_task_ready since generate-proposal 2.0.0 (the v1 generation_proposal_ready was removed with the in-turn path); the same "no artifact" assertion
     const told = JSON.parse(continuations[0]![0]!) as { ok: boolean; output: { report: PcbSyncPreflightReport } };
     expect(told.ok).toBe(true);
     expect(told.output.report.status).toBe("refused_unresolved_instances");

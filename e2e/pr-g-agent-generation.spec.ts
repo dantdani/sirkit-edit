@@ -9,6 +9,15 @@
  * survives a reload and the proposal is offered again, restored; approval applies the recorded design (the design checks compute
  * real states); the record is gone and a reload offers nothing twice. No request left the origin and the composer's own generation
  * route was never called. Fake-backed: it proves the page's and the adapter's contract, not a live model or live authentication.
+ *
+ * [PR-L, 2026-10-18] Runbook L.5, increment 5: the observable steps follow generate-proposal 2.0.0. The scripted agent's ONE tool call
+ * now STARTS the project's durable generation task (the same GenerationTaskService the composer's POST /api/generation-tasks calls, here
+ * reached server-side by the chat route): the run log shows the start's tool line, the page's "started from the chat" line and the
+ * agent's closing reply; the chat run ends while the design keeps running; the page follows the task in its own activity entry with the
+ * SAME status card as a Build start (generation-task-status), and the fixture's generation worker designs it; its result opens the SAME
+ * review dialog through the SAME intake as the composer's (offerBuildResult), with the note that the assistant proposed it. The v1 lines
+ * ("Generated schematic received", "Generated schematic proposal - waiting for your approval") belonged to the removed in-turn path.
+ * The browser still never calls the composer's generation routes: the start happens inside the chat request.
  */
 import { expect, test, type Page, type Request } from "@playwright/test";
 import { mkdirSync } from "node:fs";
@@ -23,8 +32,8 @@ const FIXTURE_CLOCK = process.env.SIRKIT_FIXTURE_CLOCK?.trim() || FIXTURE_CLOCK_
 const SHOTS = join(process.cwd(), "artifacts", "product-reliability-simple-ui", "screenshots");
 /** the scripted agent's one generation instruction (fixture-agent-adapter.ts, PR-G) around the recorded design's own request */
 const INSTRUCTION = `Generate a schematic: ${BLINKER_ACCEPTANCE_PROMPT}`;
-/** the run log's tool line: the registry title (tool-catalog.ts generateProposalDescriptor), the propose tier, the sealed status */
-const TOOL_LINE = toolLineLabel({ title: "Propose a generated Build-mode schematic", tier: 2, ok: true, status: "proposal_sealed" });
+/** the run log's tool line: the registry title (tool-catalog.ts generateProposalDescriptor), the propose tier, the start's status ([PR-L, 2026-10-18] 2.0.0: the durable task started; was the v1 sealed proposal's title and status) */
+const TOOL_LINE = toolLineLabel({ title: "Start or follow a Build-mode schematic design", tier: 2, ok: true, status: "task_started" });
 /** the pending-proposal store's key prefix (journey-contract.spec asserts the composer's record by the same prefix) */
 const PENDING_KEY = "sirkit:pending-proposal:";
 
@@ -75,15 +84,17 @@ test("fresh browser, empty Build sheet: 'Generate a schematic: …' to the assis
   await submit.click();
 
   // 3. the run: ONE chat request carrying the instruction and the EMPTY sheet (never the composer's generation route); the run log
-  //    shows the tool line (the real loop sealed the proposal), the page's intake line, the offer line and the agent's closing reply.
+  //    shows the tool line ([PR-L, 2026-10-18] the real loop STARTED the durable task), the page's line that the design runs in a worker
+  //    and the agent's closing reply; the chat run ends while the design keeps running, followed on the SAME status card as a Build start.
   await expect.poll(() => chatBodies.length, { timeout: 30_000 }).toBe(1);
   expect(chatBodies[0]!.messages?.at(-1)).toMatchObject({ role: "user", content: INSTRUCTION });
-  expect(chatBodies[0]!.schematicState, "the sheet the proposal replaces is empty").toMatchObject({ components: [], kicadComponents: [] });
+  expect(chatBodies[0]!.schematicState, "the sheet the design's result replaces is empty").toMatchObject({ components: [], kicadComponents: [] });
   await expect(page.getByText(TOOL_LINE)).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByText(/Generated schematic received — \d+ part\(s\), complete; preparing it for your review/)).toBeVisible();
-  await expect(page.getByText("Generated schematic proposal — waiting for your approval in the review dialog; nothing has been changed")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText("(fixture agent) the tool answered proposal_sealed.")).toBeVisible();
-  await expect(page.getByTestId("chat-stop")).toBeHidden({ timeout: 60_000 }); // the run ended
+  await expect(page.getByText("Design task started from the chat; a generation worker runs it in saved steps - this answer ending (or Stop answer) does not stop it")).toBeVisible({ timeout: 30_000 }); // [PR-L, 2026-10-18] was the v1 intake's "Generated schematic received" line
+  await expect(page.getByText("(fixture agent) the tool answered task_started.")).toBeVisible(); // [PR-L, 2026-10-18] was proposal_sealed
+  await expect(page.getByTestId("chat-stop")).toBeHidden({ timeout: 60_000 }); // the run ended - the design did not
+  await expect(page.getByTestId("generation-task-status").first()).toBeVisible({ timeout: 30_000 }); // [PR-L, 2026-10-18] the SAME status card as the composer's Build start
+  await expect(page.getByText("Generated schematic proposal; waiting for approval")).toBeVisible({ timeout: 90_000 }); // [PR-L, 2026-10-18] the composer's own offer line (offerSchematicProposal), once the worker's result is reviewable
   expect(composerGenerations, "the agent's path, never the composer's Generate").toBe(0);
 
   // 4. the SAME dialog as the composer's Generate: one review dialog on the page, the summary names the recorded design, the intake's

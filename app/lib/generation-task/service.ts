@@ -125,7 +125,9 @@ export class GenerationTaskService {
 
   // ── start / attach ──
 
-  async start(scope: DurableWorkflowScope, principal: GenerationTaskPrincipal, body: unknown, origin: GenerationTaskOrigin = "build"): Promise<GenerationTaskAnswer> {
+  /** [PR-L, 2026-10-18] runbook L.5: the chat's start (origin `chat`, the asking chat run recorded on the task) is THIS method, through
+   *  the chat route's port (app/api/chat/schematic-generation-runtime.ts) - the same closed body, idempotency, index and allowance. */
+  async start(scope: DurableWorkflowScope, principal: GenerationTaskPrincipal, body: unknown, origin: GenerationTaskOrigin = "build", chatRunId: string | null = null): Promise<GenerationTaskAnswer> {
     if (!isPlainRecord(body)) return invalid("body: an object is required");
     const keyIssue = unknownKey(body, START_KEYS, "body");
     if (keyIssue) return invalid(keyIssue);
@@ -139,7 +141,7 @@ export class GenerationTaskService {
     if (typeof base.schematicDigest !== "string" || typeof base.recipe !== "string" || !(GENERATION_BASE_RECIPES as readonly string[]).includes(base.recipe)) return invalid("body.base: a schematic digest and its recipe are required");
     const provider: LLMProviderId = body.provider === undefined ? "openai" : (body.provider as LLMProviderId);
     const outcome = await this.store.createOrAttach({
-      scope, principal, origin,
+      scope, principal, origin, ...(origin === "chat" ? { chatRunId } : {}),
       request: { clientRequestId: body.clientRequestId, prompt: body.prompt, provider },
       base: { schematicDigest: base.schematicDigest, recipe: base.recipe as GenerationBaseRecipe, ...(base.headMark !== undefined ? { headMark: base.headMark as GenerationTaskStartInput["base"]["headMark"] } : {}) },
       identities: this.identities(),

@@ -84,7 +84,7 @@ const CACHE_ONLY: Readonly<Record<string, CacheOnly>> = {
   "/api/bom/export-csv": { names: ["bomStateRefusal", "bomToCsv", "buildBom", "checkBomState"], calls: ["buildBom"], reason: CACHE_ONLY_REASON },
 };
 /** The paths that send an observation query today (each reaches the boundary and holds no exemption). */
-const QUERY_PATHS = ["/api/bom", "/api/bom/diff", "/api/bom/snapshot", "/api/chat", "/api/parts/external-search", "/api/schematic/cross-verify"]; const TRANSFER_PATHS: ReadonlySet<string> = new Set(["/api/pcb/provider-exchange"]); // [B23-B1, 2026-10-03] the transfer paths are declared by their policy rows: `files`, never derived (OD-182 (a)). [B23-B1 review, 2026-10-04] tests-5: a reviewed literal, not the policy flag, so case 4 checks the flag's files row against a list it does not read
+const QUERY_PATHS = ["/api/bom", "/api/bom/diff", "/api/bom/snapshot", "/api/chat", "/api/generation-worker", "/api/parts/external-search", "/api/schematic/cross-verify"]; /* [PR-M, 2026-10-18] reviewed move (runbook M.3, section M2): + /api/generation-worker - the pump also runs the component-resolution slices, whose CAD retrieval asks an ADMITTED CAD source for one KiCad file per request through the egress boundary (exact host, pinned path, no design byte sent); route-resource-classification.ts declares it */ const TRANSFER_PATHS: ReadonlySet<string> = new Set(["/api/pcb/provider-exchange"]); // [B23-B1, 2026-10-03] the transfer paths are declared by their policy rows: `files`, never derived (OD-182 (a)). [B23-B1 review, 2026-10-04] tests-5: a reviewed literal, not the policy flag, so case 4 checks the flag's files row against a list it does not read
 
 const edgeCache = new WeakMap<FileMap, Map<string, string[]>>();
 /** A file's runtime import edges to production files: the rule `importClosure` follows (type-only declarations erased). */
@@ -615,7 +615,7 @@ const TRANSFER: RoutePolicy = {
 describe("[B23-A2] the route vocabulary (OD-174)", () => {
   it("1. every policy row carries explicit externalTransfer and spend booleans; no row is either in A2 ([B23-B1, 2026-10-03] B1's provider exchange is the one externalTransfer row; none is spend); the two releaseOrQualification rows are unchanged; the gates pass on the table", () => {
     const policies = allRoutePolicies();
-    expect(policies).toHaveLength(175); // [PR-M, 2026-10-18] reviewed census move (runbook M.2.5), was 174: + POST /api/component-resolution-authority (no transfer, no spend); [PR-L, 2026-10-17] reviewed census move (runbook L.4), was 168: + the six generation-task methods; [B24-A1, 2026-10-06] reviewed census move (OD-198), was 166; [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
+    expect(policies).toHaveLength(177); // [PR-M, 2026-10-18] reviewed census move (runbook M.3, section M2), was 175: + GET and POST /api/parts/acquisitions (no transfer, no spend); [PR-M, 2026-10-18] reviewed census move (runbook M.2.5), was 174: + POST /api/component-resolution-authority (no transfer, no spend); [PR-L, 2026-10-17] reviewed census move (runbook L.4), was 168: + the six generation-task methods; [B24-A1, 2026-10-06] reviewed census move (OD-198), was 166; [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
     for (const policy of policies) {
       expect(typeof policy.externalTransfer, `${policy.method} ${policy.path}`).toBe("boolean");
       expect(typeof policy.spend, `${policy.method} ${policy.path}`).toBe("boolean");
@@ -655,7 +655,7 @@ describe("[B23-A2] the route vocabulary (OD-174)", () => {
   it("3. outboundEgress is a closed vocabulary on every classification row and the CSV's last column (external_process stays at index 6); files only with a transfer row and a transfer row only with files; no public row sends an observation query or files, and a public row that sends a model input is reviewed; no row sends files in A2 ([B23-B1, 2026-10-03] B1's provider exchange is the one files row)", () => {
     expect([...OUTBOUND_EGRESS]).toEqual(["none", "observation-query", "files"]);
     const rows = routeResourceClassification();
-    expect(rows).toHaveLength(175); // [PR-M, 2026-10-18] reviewed census move (runbook M.2.5), was 174; [PR-L, 2026-10-17] reviewed census move (runbook L.4), was 168; [B24-A1, 2026-10-06] reviewed census move (OD-198), was 166; [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
+    expect(rows).toHaveLength(177); // [PR-M, 2026-10-18] reviewed census move (runbook M.3, section M2), was 175; [PR-M, 2026-10-18] reviewed census move (runbook M.2.5), was 174; [PR-L, 2026-10-17] reviewed census move (runbook L.4), was 168; [B24-A1, 2026-10-06] reviewed census move (OD-198), was 166; [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
     for (const row of rows) expect(OUTBOUND_EGRESS, `${row.method} ${row.path}`).toContain(row.outboundEgress);
     expect(rows.filter((row) => row.outboundEgress === "files").map((row) => `${row.method} ${row.path}`)).toEqual(["POST /api/pcb/provider-exchange"]); // [B23-B1, 2026-10-03] was []: declared by B1's transfer row
     expect(rows.filter((row) => row.isPublic && row.outboundEgress !== "none")).toEqual([]);
@@ -776,7 +776,7 @@ describe("[B23-A2] the route vocabulary (OD-174)", () => {
   });
 
   it("7. [B23-B1, 2026-10-03] one route was added (the provider exchange; A2 added none); [B24-A1, 2026-10-06] B24-A1 added two (health and readiness): 168 classified rows over the route files (the census is 168 / 165 / 3 / 0, b16-1c-invariant-tripwires), and the policy table is the route tree", () => {
-    expect(routeResourceClassification()).toHaveLength(175); // [PR-M, 2026-10-18] reviewed census move (runbook M.2.5), was 174; [PR-L, 2026-10-17] reviewed census move (runbook L.4), was 168; [B24-A1, 2026-10-06] reviewed census move (OD-198), was 166; [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
+    expect(routeResourceClassification()).toHaveLength(177); // [PR-M, 2026-10-18] reviewed census move (runbook M.3, section M2), was 175: + GET and POST /api/parts/acquisitions; [PR-M, 2026-10-18] reviewed census move (runbook M.2.5), was 174; [PR-L, 2026-10-17] reviewed census move (runbook L.4), was 168; [B24-A1, 2026-10-06] reviewed census move (OD-198), was 166; [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165
     expect(routeEntries.map((entry) => entry.path).sort()).toEqual([...new Set(allRoutePolicies().map((policy) => policy.path))].sort());
   });
 

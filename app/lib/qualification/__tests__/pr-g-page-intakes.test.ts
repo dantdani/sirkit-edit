@@ -11,7 +11,8 @@
  *  4. stackup_candidate_ready is a PREVIEW: the page checks the candidate against the LIVE board's revision and hands it to PcbEditor,
  *     which re-verifies and renders StackupCandidatePanel; its Accept re-checks the revision and runs the SAME `applyStackupProfile` the
  *     toolbar's Stackup selector runs (the one pcb.board-geometry commit); the intake effect never commits; the page never commits;
- *  5. the sheet-artifact currency recipe is byte-identical to offerGenerationProposal's; the new controls are classified in the B17
+ *  5. the sheet-artifact currency recipe is byte-identical to offerGenerationProposal's ([PR-L, 2026-10-18] since runbook L.5 removed that v1 intake: to
+ *     generationLiveBaseDigest's chat-sheet recipe, the base a chat-started design task pins); the new controls are classified in the B17
  *     inventory and named in the B24 census; the answer footer is rendered from the run's own events and never enters the history.
  *
  * Files are read as text; nothing is written; no provider, database or process work.
@@ -43,7 +44,7 @@ const resolutionCase = between(consumer, 'case "component_resolution_ready": {',
 const bubble = between(page, "function MessageBubble(", "function TheoryPartRow(");
 const dialog = between(page, 'data-testid="draft-request-publication-dialog"', "{/* Confirmation dialog for replacing existing schematic */}");
 const liveSheet = between(page, "function liveSheetForSealedArtifacts()", "// Tier-1 text editing:");
-const generationIntake = between(page, "async function offerGenerationProposal(", "function liveSheetForSealedArtifacts()");
+const generationIntake = between(page, "function generationLiveBaseDigest(", "async function confirmGenerationControl("); // [PR-L, 2026-10-18] pin move (runbook L.5): the v1 intake (offerGenerationProposal) was removed; the chat task's chat-sheet base recipe is the copy that must stay byte-identical
 const intakeEffect = between(editor, "const stackupIntakeRef = useRef<string | null>(null);", "const pendingStackupLiveRevision");
 const accept = between(editor, "async function acceptStackupCandidate(): Promise<void> {", "// B08.2 — lifecycle replacement");
 const applyStackup = between(editor, "function applyStackupProfile(", "// [PR-G, 2026-10-17] the agent's stackup recommendation enters as a PREVIEW");
@@ -51,7 +52,7 @@ const applyStackup = between(editor, "function applyStackupProfile(", "// [PR-G,
 describe("[PR-G page intakes 1] the three cases, each through its SAFE receiver once", () => {
   it("the consumer names each new case exactly once, in order, and keeps every earlier case; every case drops a failed artifact and refuses a stale one with the page's sentence", () => {
     const cases = [...consumer.matchAll(/^\s*case "([a-z_]+)":/gm)].map((match) => match[1]!);
-    expect(cases).toEqual(["text_delta", "tool_started", "tool_finished", "tool_refused", "proposal_ready", "pcb_proposal_ready", "generation_proposal_ready", "view_command_ready", "layout_candidate_ready", "stackup_candidate_ready", "draft_request_ready", "module_contracts_ready", "component_resolution_ready", "execution_grant_ready", "execution_settled", "warning", "run_failed"]); // [PR-M, 2026-10-18] reviewed pin move: + component_resolution_ready after module_contracts_ready (runbook M.2.5: the SAFE receiver, the currency check, the review dialog)
+    expect(cases).toEqual(["text_delta", "tool_started", "tool_finished", "tool_refused", "proposal_ready", "pcb_proposal_ready", "generation_task_ready", "generation_task_control_ready", "view_command_ready", "layout_candidate_ready", "stackup_candidate_ready", "draft_request_ready", "module_contracts_ready", "component_resolution_ready", "execution_grant_ready", "execution_settled", "warning", "run_failed"]); // [PR-M, 2026-10-18] reviewed pin move: + component_resolution_ready after module_contracts_ready (runbook M.2.5: the SAFE receiver, the currency check, the review dialog)
     expect(count(resolutionCase, "receiveComponentResolutionEvent(event)")).toBe(1); // [PR-M, 2026-10-18] received once, through its SAFE receiver, and checked against the live editor before it is offered
     expect(count(page, "receiveComponentResolutionEvent(")).toBe(1);
     expect(count(resolutionCase, "componentResolutionCurrency(resolution.proposal, liveSheetForSealedArtifacts())")).toBe(1);
@@ -183,15 +184,14 @@ describe("[PR-G page intakes 4] stackup_candidate_ready is a preview; the existi
 });
 
 describe("[PR-G page intakes 5] the shared recipe, the inventories and the answer footer", () => {
-  it("the sheet-artifact live-editor recipe is byte-identical to offerGenerationProposal's currency recipe", () => {
+  it("the sheet-artifact live-editor recipe is byte-identical to the chat task's chat-sheet base recipe (offerGenerationProposal's until runbook L.5 removed it)", () => {
     for (const line of [
       'scope: { tenantId: "local", projectId: projectScopeRegistryRef.current?.current.projectId ?? "local", branchId: projectScopeRegistryRef.current?.current.branchId ?? "local" },',
       "headMark: schematicSessionRef.current?.headMark() ?? null,",
       "baseDigest: schematicStateDigest({ ...live, pageSize: live.pageSize ?? liveStateRef.current.pageSize }),",
-    ]) {
-      expect(count(liveSheet, line), line).toBe(1);
-      expect(count(generationIntake, line), line).toBe(1);
-    }
+    ]) expect(count(liveSheet, line), line).toBe(1);
+    // [PR-L, 2026-10-18] pin move: the digest expression is the shared recipe (a task's scope is the attach decision's, its head is not pinned)
+    expect(count(generationIntake, 'recipe === "chat-sheet" ? schematicStateDigest({ ...live, pageSize: live.pageSize ?? liveStateRef.current.pageSize }) : proposalContentDigest(live)')).toBe(1);
     expect(count(liveSheet, "const live = gestureCoordinatorRef.current!.authoritativeState();")).toBe(1);
     expect(count(generationIntake, "const live = gestureCoordinatorRef.current!.authoritativeState();")).toBe(1);
     expect(count(page, "liveSheetForSealedArtifacts()")).toBe(4); // the declaration and the two sheet-artifact cases; [PR-M, 2026-10-18] reviewed pin move 3 -> 4: + the component resolution's intake (the same recipe)
