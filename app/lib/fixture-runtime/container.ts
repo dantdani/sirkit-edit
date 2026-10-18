@@ -13,7 +13,7 @@ import { InMemoryDurableWorkflowRepository } from "../durable-workflow/repositor
 import { InMemoryPhysicalBindingRepository } from "../physical-binding/repository";
 import { fixtureRuntimeEnabled } from "./mode";
 import { installFixtureClock, uninstallFixtureClock } from "./clock";
-import { blinkerCatalog, type BlinkerCatalog } from "./blinker/catalog";
+import { fixtureRuntimeCatalog, type BlinkerCatalog } from "./blinker/catalog"; // [PR-M, 2026-10-18] the blinker catalog plus the two resolution records (an unresolved 1N4148, a published 1N4148W)
 
 interface FixtureContainer {
   durableRepository: InMemoryDurableWorkflowRepository;
@@ -31,7 +31,7 @@ function create(): FixtureContainer {
   return {
     durableRepository: new InMemoryDurableWorkflowRepository(),
     physicalBindingRepository: new InMemoryPhysicalBindingRepository(),
-    catalog: blinkerCatalog(),
+    catalog: fixtureRuntimeCatalog(),
     routerExecutions: [],
     createdAt: new Date().toISOString(),
   };

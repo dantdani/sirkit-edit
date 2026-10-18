@@ -315,3 +315,126 @@ export const BLINKER_NETLIST: BuildLogicalNetlist = {
   ],
   explanation: "555 astable LED blinker: R1=10k (R_A), R2=56k (R_B), C1=10uF timing -> f = 1.44/((10k+112k)*10uF) ~ 1.18 Hz, ~54 % duty. R3=330 limits the LED to ~7 mA from the ~3.3 V output high. C2=100nF decouples VCC at the timer; C3=10nF bypasses CONT (pin 5). J1 is the 5 V/GND header (pin 1 = +5 V, pin 2 = GND).",
 };
+
+// ─── [PR-M, 2026-10-18] The resolution proof's two catalog records (appended: no line above moves; blinkerCatalog() is unchanged) ──────
+/**
+ * Runbook section M.5 item 8 (fixture evidence): the two catalog records the FIXTURE runtime adds beside the committed
+ * blinker catalog so a fresh browser can prove the unresolved-component resolution with no database, provider or embedding:
+ *
+ *  - `pr-m-part-1n4148` - a catalog part "1N4148" (the KiCad Diode library's standard switching diode, drawn with the Device:D symbol it
+ *    extends: K is pin 1, A is pin 2) with NO published exact revision. An instance placed from it is exactly what the owner's LED
+ *    dimmer left on the sheet: Prepare PCB refuses it ("no published exact revision"), and nothing here publishes it;
+ *  - `pr-m-part-1n4148w` - a catalog part "1N4148W" whose exact revision (Diodes Incorporated 1N4148W-7-F, SOD-123) is built,
+ *    reviewed, approved and published through the SAME production machinery the blinker catalog uses: the official KiCad Device:D
+ *    symbol and Diode_SMD:D_SOD-123 footprint copied verbatim into ./kicad (CC-BY-SA-4.0 with the KiCad libraries exception), parsed
+ *    by the production parsers, a mapping certificate from `buildMappingCertificate` over an explicit terminal map (K = pin 1 = pad 1,
+ *    A = pin 2 = pad 2) that is approved only because the real validator says every pin and pad is covered, and the production
+ *    `AtomicCatalog` transitions with a human reviewer and a different publisher.
+ *
+ * Truth boundary, as the blinker catalog's: the manufacturer part number is real, but its evidence record is an explicit FIXTURE record
+ * (`fixture://pr-m/...`, "NOT manufacturer datasheets"); no rating claim is published, so a resolution over it checks pin functions, the
+ * pin-to-pad mapping and the package - never ratings, never electrical equivalence. These records live ONLY in the fixture runtime's
+ * container catalog (`fixtureRuntimeCatalog`, read by app/lib/fixture-runtime/container.ts); the blinker catalog itself
+ * (`blinkerCatalog()`, which the deterministic acceptance suites read) is unchanged. They are declared in this module, not a new one, so
+ * every import closure that reaches the fixture container stays the same set of files.
+ */
+/** The two records' catalog part ids (stable names, as the blinker catalog's). */
+export const FIXTURE_RESOLUTION_PART_IDS = Object.freeze({
+  /** the unresolved 1N4148: a catalog part with no published exact revision */
+  unresolvedDiode: "pr-m-part-1n4148",
+  /** the eligible 1N4148W: published exact revision 1N4148W-7-F, SOD-123 */
+  eligibleDiode: "pr-m-part-1n4148w",
+} as const);
+export const FIXTURE_ELIGIBLE_DIODE_MPN = "1N4148W-7-F" as const;
+
+const RESOLUTION_NOW = new Date("2026-10-17T00:00:00.000Z");
+const DIODES_INC = { id: "manufacturer_diodes_inc", name: "Diodes Incorporated", domains: ["diodes.com"] };
+
+export interface ResolutionFixtureParts {
+  cachedParts: Map<string, CachedPart>;
+  snapshots: Map<string, PortableAtomicSnapshot>;
+  /** the eligible part's published revision id ('' value key: value-agnostic) */
+  eligibleRevisionId: string;
+}
+
+let resolutionMemo: ResolutionFixtureParts | null = null;
+
+/** Build (once per process) the two records. Pure and deterministic. */
+export function resolutionFixtureParts(): ResolutionFixtureParts {
+  if (resolutionMemo) return resolutionMemo;
+  const symbolSource = kicadSource("D.kicad_sym");
+  const footprintSource = kicadSource("D_SOD-123.kicad_mod");
+  const extracted = extractLibrary([symbolSource]).find((item) => item.name === "D");
+  if (!extracted) throw new Error("extractLibrary did not yield Device:D");
+
+  // ── the eligible part: one published exact revision through the production machinery ──
+  const catalog = new AtomicCatalog();
+  catalog.addLicense(KICAD_LIBRARY_LICENSE);
+  const kicadSourceId = "source_kicad_official_libraries";
+  catalog.addSource({ id: kicadSourceId, sourceClass: "official_kicad_library", name: "KiCad official symbol/footprint libraries", canonicalUri: "https://gitlab.com/kicad/libraries", officialDomains: ["kicad.org", "gitlab.com"], licenseId: KICAD_LIBRARY_LICENSE.id });
+  const origin = (library: string, file: string, content: string, mediaType: string) => {
+    const recordId = `record_kicad_${library}_${file.replace(/[^A-Za-z0-9]+/g, "_")}`;
+    catalog.addSourceRecord({ id: recordId, sourceId: kicadSourceId, revision: "committed-fixture-copy", contentHash: sha256(content), retrievedAt: RESOLUTION_NOW.toISOString(), locator: `kicad-libraries://${library}/${file}`, mediaType, confidential: false });
+    return { sourceRecordId: recordId, libraryNickname: library, sourceUri: `kicad-libraries://${library}/${file}`, licenseId: KICAD_LIBRARY_LICENSE.id };
+  };
+  const symbol = parseSymbolAssets({ source: symbolSource, origin: origin("Device", "D.kicad_sym", symbolSource, MEDIA_SYMBOL) }).find((asset) => asset.symbolName === "D");
+  if (!symbol || symbol.validationState !== "valid") throw new Error("fixture symbol Device:D did not parse valid");
+  const footprint = parseFootprintAsset({ source: footprintSource, libraryNickname: "Diode_SMD", origin: origin("Diode_SMD", "D_SOD-123.kicad_mod", footprintSource, MEDIA_FOOTPRINT) });
+  if (footprint.validationState === "invalid" || footprint.validationState === "unsupported") throw new Error(`fixture footprint D_SOD-123 is ${footprint.validationState}`);
+  catalog.addSymbol(symbol);
+  catalog.addFootprint(footprint);
+  catalog.addRawObject(rawContentObject({ content: symbolSource, mediaType: MEDIA_SYMBOL, licenseId: KICAD_LIBRARY_LICENSE.id }));
+  catalog.addRawObject(rawContentObject({ content: footprintSource, mediaType: MEDIA_FOOTPRINT, licenseId: KICAD_LIBRARY_LICENSE.id }));
+  catalog.addManufacturer({ id: DIODES_INC.id, canonicalName: DIODES_INC.name, aliases: [], officialDomains: DIODES_INC.domains });
+  const recordsSourceId = "source_pr_m_fixture_records";
+  catalog.addSource({ id: recordsSourceId, sourceClass: "organization_authored", name: "PR-M fixture records (NOT manufacturer datasheets)", officialDomains: [], licenseId: KICAD_LIBRARY_LICENSE.id });
+  const key = "pr_m_part_1n4148w_1n4148w_7_f";
+  catalog.addSourceRecord({ id: `record_fixture_${key}`, sourceId: recordsSourceId, revision: "fixture-1", contentHash: sha256(`fixture:${key}:${FIXTURE_ELIGIBLE_DIODE_MPN}`), retrievedAt: RESOLUTION_NOW.toISOString(), locator: `fixture://pr-m/${key}/${FIXTURE_ELIGIBLE_DIODE_MPN}`, mediaType: "text/plain", confidential: false });
+  const evidence: EvidenceRef = { id: `evidence_fixture_${key}`, sourceRecordId: `record_fixture_${key}`, locator: `fixture record for ${FIXTURE_ELIGIBLE_DIODE_MPN}: 75 V fast switching diode, SOD-123`, extractionMethod: "manual", extractorVersion: "pr-m-fixture/1", extractedAt: RESOLUTION_NOW.toISOString(), reviewerId: "user:fixture-reviewer", reviewedAt: RESOLUTION_NOW.toISOString() };
+  catalog.addEvidence(evidence);
+  const exactPart: ExactManufacturerPart = { id: `exact_${key}`, manufacturerId: DIODES_INC.id, exactMpn: FIXTURE_ELIGIBLE_DIODE_MPN, normalizedSearchKey: FIXTURE_ELIGIBLE_DIODE_MPN.replace(/[^A-Za-z0-9]+/g, "").toUpperCase(), state: "active", aliasEvidenceIds: [] };
+  catalog.addExactPart(exactPart);
+  // KiCad convention for Device:D: pin / pad 1 is the cathode, 2 the anode.
+  const terminalMap = [{ number: "1", function: "K" }, { number: "2", function: "A" }];
+  const terminals: ManufacturerTerminal[] = terminalMap.map((terminal) => ({ id: `terminal_${key}_${terminal.number}`, publishedIdentifier: terminal.number, function: terminal.function, classification: "electrical", evidenceIds: [evidence.id] }));
+  const electricalPads = footprint.pads.filter((pad) => !pad.mechanical).length;
+  const packageProof = provePackage({ exactPartId: exactPart.id, footprintVersionId: footprint.versionId, packageCode: "SOD-123", mountingTechnology: footprint.mountingTechnology, pinCount: terminals.length, evidenceIds: [evidence.id], checks: [{ field: "pinCount", expected: terminals.length, actual: electricalPads }] });
+  const mapping = buildMappingCertificate({ exactPartId: exactPart.id, symbol, footprint, terminals, mapping: terminals.map((terminal) => ({ manufacturerTerminalId: terminal.id, symbolPinNumbers: [terminal.publishedIdentifier], logicalPadNumbers: [terminal.publishedIdentifier], evidenceIds: [evidence.id] })), packageProof, evidenceIds: [evidence.id] });
+  if (mapping.state !== "approved") throw new Error(`fixture mapping for ${FIXTURE_ELIGIBLE_DIODE_MPN} is ${mapping.state}`);
+  catalog.addMapping(mapping);
+  const draft = createAtomicRevision({ logicalPartId: `logical_${key}`, revision: 1, exactPartId: exactPart.id, cadBundles: [{ symbolVersionId: symbol.versionId, footprintVersionId: footprint.versionId, modelVersionIds: [], mappingCertificateId: mapping.id, disposition: "primary_approved" }], claimIds: [], guidanceIds: [], offerSnapshotIds: [], licenseIds: [KICAD_LIBRARY_LICENSE.id], publicationState: "draft", policyVersion: "pr-m-fixture-policy/1", createdAt: RESOLUTION_NOW.toISOString(), createdBy: "user:fixture-ingest", reviewHistory: [] });
+  catalog.addRevision(draft);
+  const review = catalog.transition({ revisionId: draft.id, to: "needs_review", actorId: "user:fixture-reviewer", actorRole: "reviewer", reason: "PR-M fixture submission", now: RESOLUTION_NOW });
+  const approved = catalog.transition({ revisionId: review.id, to: "approved", actorId: "user:fixture-reviewer", actorRole: "reviewer", reason: "PR-M fixture approval", now: RESOLUTION_NOW });
+  const published = catalog.transition({ revisionId: approved.id, to: "published", actorId: "user:fixture-publisher", actorRole: "publisher", reason: "PR-M fixture publication", now: RESOLUTION_NOW });
+  const snapshots = new Map<string, PortableAtomicSnapshot>([[published.id, catalog.portableSnapshot(published.id, RESOLUTION_NOW)]]);
+  const footprintFullName = `Diode_SMD:${footprint.footprintName}`;
+
+  const record = (partId: string, name: string, description: string, mpn: string | null, manufacturer: string | null, footprintHint: string, atomicAssignments: CachedPart["atomicAssignments"] | undefined): CachedPart => ({
+    id: partId, name, description, mpn, manufacturer, datasheet: extracted.datasheet, footprintHint, mainCategory: "Diode", libraryName: "Diode",
+    pins: extracted.pins, symbolRaw: extracted.symbolRaw, properties: extracted.properties, ...(atomicAssignments ? { atomicAssignments } : {}),
+  });
+  const cachedParts = new Map<string, CachedPart>([
+    [FIXTURE_RESOLUTION_PART_IDS.unresolvedDiode, record(FIXTURE_RESOLUTION_PART_IDS.unresolvedDiode, "1N4148", "100 V 150 mA standard switching diode, DO-35", "1N4148", null, "Diode_THT:D_DO-35_SOD27_P7.62mm_Horizontal", undefined)],
+    [FIXTURE_RESOLUTION_PART_IDS.eligibleDiode, record(FIXTURE_RESOLUTION_PART_IDS.eligibleDiode, "1N4148W", "75 V 150 mA fast switching diode, SOD-123", FIXTURE_ELIGIBLE_DIODE_MPN, DIODES_INC.name, footprintFullName, {
+      "": { revisionId: published.id, symbolVersionId: mapping.symbolVersionId, footprintVersionId: mapping.footprintVersionId, mappingCertificateId: mapping.id, footprintFullName, approved: true },
+    })],
+  ]);
+  resolutionMemo = { cachedParts, snapshots, eligibleRevisionId: published.id };
+  return resolutionMemo;
+}
+
+/**
+ * The fixture runtime container's catalog: the committed blinker catalog plus the two resolution records (catalog parts and the one
+ * published snapshot). The blinker's own `parts`, AtomicCatalog and `revisionFor` are unchanged; the merged maps are new objects, so
+ * `blinkerCatalog()` itself never gains these records.
+ */
+export function fixtureRuntimeCatalog(): BlinkerCatalog {
+  const blinker = blinkerCatalog();
+  const extra = resolutionFixtureParts();
+  return {
+    ...blinker,
+    cachedParts: new Map([...blinker.cachedParts, ...extra.cachedParts]),
+    snapshots: new Map([...blinker.snapshots, ...extra.snapshots]),
+  };
+}

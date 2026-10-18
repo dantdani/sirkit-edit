@@ -16,6 +16,11 @@
  *    the draft prefill adds the symbol/footprint references - the request stays UNVERIFIED and not PCB-assignable until the
  *    deterministic mapping checks and the human publication pass. An action without its facts or its path is disabled with the
  *    reason (never a fake).
+ * [PR-M, 2026-10-18] Above the rows, "Find a replacement in the library" (runbook M.1): for the listed catalog instances it starts the
+ * SAME agent path a chat request takes - the page sends one sentence naming the references and their stable instance ids through the
+ * existing composer route to the assistant, which inspects them, searches the local library and seals ONE resolution batch for the
+ * human's review (the page's review dialog applies it). The button only hands the page the instances; it is disabled, with the reason,
+ * when there is no catalog instance to resolve or the page offers no assistant.
  * Nothing here binds, publishes, buys or applies anything; the catalog part record comes from the page's parts cache.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -88,11 +93,28 @@ const toPanelPrefill = (prefill: PublicationPrefill, draft: boolean): AtomicPubl
 
 const STATE_CLASS: Readonly<Record<"known" | "unknown" | "conflicting", string>> = { known: "text-emerald-300", unknown: "text-zinc-400", conflicting: "text-amber-300" };
 
-export function MissingPartsList({ items, schematic, projectScope }: { items: readonly UnresolvedInstance[]; schematic: SchematicState; projectScope: ProjectSelectorScope | null }) {
+/** [PR-M, 2026-10-18] The instances "Find a replacement in the library" hands the page: the listed CATALOG instances (a Theory symbol is
+ *  resolved by placing a catalog part, never by a replacement of the same instance), by stable id and reference. */
+export interface ReplacementRequestInstance { componentId: string; refDes: string }
+export const FIND_REPLACEMENT_LABEL = "Find a replacement in the library";
+
+export function MissingPartsList({ items, schematic, projectScope, onFindReplacement }: { items: readonly UnresolvedInstance[]; schematic: SchematicState; projectScope: ProjectSelectorScope | null; /** [PR-M, 2026-10-18] the page's agent entry point (absent: no assistant on this surface) */ onFindReplacement?: (instances: ReplacementRequestInstance[]) => void }) {
+  const catalogInstances = useMemo(() => items.flatMap((item): ReplacementRequestInstance[] => {
+    if (item.family !== "kicad") return [];
+    const instance = (schematic.kicadComponents ?? []).find((candidate) => candidate.refDes === item.refDes);
+    return instance ? [{ componentId: instance.id, refDes: instance.refDes }] : [];
+  }), [items, schematic]);
+  const findReason = !onFindReplacement ? "the assistant is not available on this surface" : catalogInstances.length === 0 ? "no listed instance is a catalog part (a Theory symbol needs a catalog part placed instead)" : null;
   return (
-    <ul data-testid="sync-unresolved-instances" aria-label="Unresolved instances" className="mt-2 space-y-1.5">
-      {items.map((item) => <MissingPartRow key={`${item.family}:${item.refDes}`} item={item} schematic={schematic} projectScope={projectScope} />)}
-    </ul>
+    <>
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+        <button type="button" onClick={() => { if (onFindReplacement && catalogInstances.length > 0) onFindReplacement(catalogInstances); }} disabled={findReason !== null} aria-describedby="missing-find-replacement-note" data-testid="missing-parts-find-replacement" data-count={catalogInstances.length} className="rounded border border-teal-800 px-2 py-0.5 text-teal-200 hover:border-teal-600 disabled:cursor-not-allowed disabled:opacity-50">{FIND_REPLACEMENT_LABEL}</button>
+        <span id="missing-find-replacement-note" className="text-zinc-400">{findReason ? `not available: ${findReason}` : `asks the assistant to inspect ${catalogInstances.map((instance) => instance.refDes).join(", ")}, search the local library and prepare one batch for your review - nothing changes until you approve it`}</span>
+      </div>
+      <ul data-testid="sync-unresolved-instances" aria-label="Unresolved instances" className="mt-2 space-y-1.5">
+        {items.map((item) => <MissingPartRow key={`${item.family}:${item.refDes}`} item={item} schematic={schematic} projectScope={projectScope} />)}
+      </ul>
+    </>
   );
 }
 

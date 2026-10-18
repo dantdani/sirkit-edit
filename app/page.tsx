@@ -113,6 +113,7 @@ import type { StackupCandidate } from "@/app/lib/pcb/candidates/stackup-candidat
 import { AtomicPublicationReviewSection } from "@/app/components/parts/AtomicPublicationReviewPanel"; // [PR-G, 2026-10-17] the EXISTING publication request (the Build Library's and the Missing parts list's), opened prefilled from a sealed draft request
 import { type SealedPcbEditProposal } from "@/app/lib/pcb/proposal/sealed-pcb-edit-proposal";
 import { ReplacementReviewDialog } from "@/app/components/schematic/ReplacementReviewDialog";
+import { ComponentResolutionReceiptNotice, ComponentResolutionReviewDialog } from "@/app/components/schematic/ComponentResolutionReviewDialog"; import { approveAndApplyResolution } from "@/app/lib/project/resolution-approval-controller.internal"; import { componentResolutionCurrency, componentResolutionReview, findReplacementSentence, receiveComponentResolutionEvent, resolutionAftermathLines, resolutionLines, resolutionProgressLine, type ReceivedComponentResolution, type ResolutionReceiptView } from "@/app/lib/project/component-resolution-events"; import { buildPcbSyncPreflightReport } from "@/app/lib/pcb-sync/preflight-read"; // [PR-M, 2026-10-18] the component resolution (runbook M.2.5-M.2.6): the review dialog and its receipt, the trusted apply controller, the SAFE receiver with the run log's sentences, and the Prepare PCB preflight read the aftermath reports
 import { fromCanonicalSchematic, schematicStateDigest, validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
 import { schematicMarkPatch } from "@/app/lib/engineering/schematic-projection";
 import { diffSchematicGraphOps, nextTheoryDisplayRef, type SchematicGraphAfter } from "@/app/lib/engineering/schematic-graph";
@@ -2694,6 +2695,11 @@ export default function Home() {
   const [pendingReplacementRunId, setPendingReplacementRunId] = useState<string | null>(null);
   const [replacementApplyBusy, setReplacementApplyBusy] = useState(false);
   const [replacementReceipt, setReplacementReceipt] = useState<ReplacementMutationReceipt | null>(null);
+  // [PR-M, 2026-10-18] the ONE pending sealed component-resolution batch (received + currency-checked; display grants nothing), its apply
+  // busy state and its real receipt; the run log it came from receives the committed / preflight lines
+  const [pendingResolution, setPendingResolution] = useState<{ received: ReceivedComponentResolution; logId: string } | null>(null);
+  const [resolutionApplyBusy, setResolutionApplyBusy] = useState(false);
+  const [resolutionReceipt, setResolutionReceipt] = useState<ResolutionReceiptView | null>(null);
   // [B15.3] the ONE pending sealed bounded PCB edit proposal — narrowed by
   // the SAFE discriminator only; display grants nothing. Apply authority
   // lives inside PcbEditor (the PCB composition root), never here.
@@ -3118,7 +3124,7 @@ export default function Home() {
     setTier1ApplyBusy(false);           // B12: no in-flight apply crosses projects
     setTier1Receipt(null);              // B12: a receipt belongs to its project
     setPendingPcbProposal(null);        // B15.3: no stale PCB proposal crosses projects
-    setPendingLayoutCandidate(null); setPendingStackupCandidate(null); liveDraftRequestsRef.current.clear(); setLiveDraftRequests(new Map()); setDraftRequestOpen(null); // [PR-G, 2026-10-17] no sealed candidate, draft request or open publication request crosses projects
+    setPendingLayoutCandidate(null); setPendingStackupCandidate(null); liveDraftRequestsRef.current.clear(); setLiveDraftRequests(new Map()); setDraftRequestOpen(null); setPendingResolution(null); setResolutionReceipt(null); // [PR-G, 2026-10-17] no sealed candidate, draft request or open publication request crosses projects; [PR-M, 2026-10-18] nor a resolution batch or its receipt
     setPendingExecutionGrant(null);     // B18-C review: a pending execution grant never crosses projects (it idles out server-side)
     executionEntriesRef.current.clear(); // [B18-D review] no execution entry crosses projects: a late editor callback for the
     setExecutionEntries(new Map());      // previous project's grant finds nothing to write into the new project's chat
@@ -3940,6 +3946,76 @@ export default function Home() {
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", content: replacementChatLines.discarded() }]);
   }, [replacementApplyBusy, pendingReplacement, pendingReplacementRunId]);
 
+  // ── [PR-M, 2026-10-18] the reviewed component resolution (runbook M.2.5-M.2.6): the batch's explicit Approve ─────────────────────
+  // The B14 discipline: scope captured before any async work, the interlock from the transition coordinator, the journal scoped to the
+  // CAPTURED project. The trusted controller reauthorizes the live membership, mints the one-shot intent, builds the production
+  // fresh-facts channel and calls the approved-resolution service (live base and head, fresh candidate authority, the byte-exact
+  // recompile, ONE canonical transaction, the real receipt). Every outcome is written to the run log the batch came from; a committed
+  // one is followed by the recomputed Prepare PCB preflight and design checks on the new revision (resolutionAftermath).
+  async function applyResolutionProposal(): Promise<void> {
+    const pending = pendingResolution;
+    if (!pending || resolutionApplyBusy) return;
+    const scope = projectScopeRegistryRef.current!.capture();
+    const applySession = schematicSessionRef.current;
+    const applyInterlock = projectTransitionRef.current!.currentInterlock();
+    const currentProjectId = scope.projectId ?? projectRef.current?.id ?? null;
+    if (!applySession || !currentProjectId || !applyInterlock) {
+      setPendingResolution(null);
+      const line = resolutionLines.refused("the schematic session is not ready to verify the batch's scope. Nothing was changed.");
+      failActivityLog(pending.logId, line);
+      showToast(line);
+      return;
+    }
+    setResolutionApplyBusy(true);
+    try {
+      const outcome = await approveAndApplyResolution({
+        proposal: pending.received.proposal,
+        session: applySession,
+        gateway: gestureCoordinatorRef.current!,
+        interlock: applyInterlock,
+        journal: new ApprovedMutationJournal(approvedJournalStoreRef.current!, { tenantId: "local", projectId: currentProjectId, branchId: scope.branchId }),
+        stillCurrent: () => scope.isCurrent(),
+        currentProjectId,
+        currentBranchId: scope.branchId,
+        originRunId: pending.received.runId,
+      });
+      scope.ifCurrent(() => {
+        if (outcome.ok) {
+          setPendingResolution(null);
+          setResolutionReceipt(outcome.receipt);
+          setSelectedId(null);
+          setSelectedKicadId(null);
+          finishActivityLog(pending.logId, resolutionLines.committed(outcome.receipt, outcome.status === "already-applied"));
+          void resolutionAftermath(pending.logId, scope);
+        } else {
+          // a stale base, a withdrawn candidate, a revoked membership: the batch can never apply now; another apply in flight or a
+          // gesture owning the editor keeps it for another try
+          if (outcome.code !== "already-in-flight" && outcome.code !== "editor-busy") setPendingResolution(null);
+          failActivityLog(pending.logId, resolutionLines.refused(outcome.message));
+          showToast(outcome.message);
+        }
+      });
+    } finally {
+      scope.ifCurrent(() => setResolutionApplyBusy(false));
+    }
+  }
+  /** [PR-M, 2026-10-18] After a committed batch: the Prepare PCB preflight (the editor's own pure checks) and the design checks, recomputed
+   *  on the NEW authoritative revision with its parts loaded, written to the batch's run log; nothing is run on the server here. */
+  async function resolutionAftermath(logId: string, scope: ProjectAsyncScope): Promise<void> {
+    const state = currentSchematicState();
+    await Promise.allSettled([...new Set((state.kicadComponents ?? []).map((instance) => instance.partId))].map((id) => ensurePartLoaded(id)));
+    if (!scope.isCurrent()) return;
+    const parts = new Map<string, CachedPart>();
+    for (const instance of state.kicadComponents ?? []) { const part = getCachedPart(instance.partId); if (part) parts.set(instance.partId, part); }
+    for (const line of resolutionAftermathLines(buildPcbSyncPreflightReport(state), computeDesignChecks(state, parts, schematicStateDigest(state), "build").checks)) finishActivityLog(logId, line);
+  }
+  const discardResolutionProposal = useCallback(() => {
+    if (resolutionApplyBusy || !pendingResolution) return;
+    finishActivityLog(pendingResolution.logId, resolutionLines.discarded()); // nothing is applied, journaled or audited: discard records nothing
+    setPendingResolution(null);
+    showToast(resolutionLines.discarded());
+  }, [resolutionApplyBusy, pendingResolution]);
+
   // ── B06.2: explicit schematic-history recovery choices ─────────────────────
   // While a recovery is pending the session is `conflicted` and every
   // canonical mutation is structurally rejected with a truthful message.
@@ -4621,7 +4697,7 @@ export default function Home() {
           }
           case "tool_started": {
             const tag = typeof event.tier === "number" ? `T${event.tier} · ` : "";
-            appendActivityStep(logId, `Running Sirkit tool: ${tag}${typeof event.title === "string" ? event.title : "tool"}`);
+            appendActivityStep(logId, resolutionProgressLine(event) ?? `Running Sirkit tool: ${tag}${typeof event.title === "string" ? event.title : "tool"}`); // [PR-M, 2026-10-18] a resolution step's public progress line (inspecting, searching, checking mappings)
             return;
           }
           case "tool_finished": {
@@ -4759,6 +4835,19 @@ export default function Home() {
             const note = moduleContractNoteLines(contracts.proposal);
             upsertReviewCard(`${MODULE_CONTRACT_NOTE_ID_PREFIX}${contracts.proposal.proposalId}`, note.title, [note.summary, ...note.details], assistantId);
             appendActivityStep(logId, `Engineering note: module contracts for ${contracts.proposal.contractSet.modules.length} module${contracts.proposal.contractSet.modules.length === 1 ? "" : "s"} — read the collapsible note below (this card is the note; it is kept with the project's chat history). Validated for structure only; no electrical check ran; nothing is applied to the sheet or a board.`, "done");
+            return;
+          }
+          case "component_resolution_ready": {
+            // [PR-M, 2026-10-18] the agent's component resolution batch (sirkit.schematic.propose-component-resolution): the SAFE receiver
+            // verifies the sealed batch, the currency check runs against the LIVE editor (scope, expiry, head, the base digest as `send`
+            // posted it), and a current one opens the review dialog. Receiving it mutates nothing; only the human's Approve applies it.
+            const resolution = receiveComponentResolutionEvent(event);
+            if (!resolution) { appendActivityStep(logId, resolutionLines.dropped(), "error"); return; }
+            const resolutionVerdict = componentResolutionCurrency(resolution.proposal, liveSheetForSealedArtifacts());
+            if (!resolutionVerdict.ok) { appendActivityStep(logId, resolutionLines.notOffered(resolutionVerdict.detail), "error"); return; }
+            setPendingResolution({ received: resolution, logId });
+            approvedMutationAudit.record({ at: Date.now(), proposalId: resolution.proposal.proposalId, originRunId: resolution.runId, event: "approval-displayed", code: null });
+            appendActivityStep(logId, resolutionLines.awaitingReview(resolution.proposal), "done");
             return;
           }
           case "execution_grant_ready": {
@@ -6934,6 +7023,7 @@ export default function Home() {
                     onJourneyFacts={setPcbFacts} // [PR-C] display only
                     syncRequestToken={syncRequestToken} // [PR-C] "Prepare PCB" from the journey strip
                     missingPartsRequestToken={missingPartsRequestToken} // [PR-F fA] the Missing parts list from the sidebar line or the journey
+                    onFindReplacement={(instances) => { setChatOpen(true); if (loading) { showToast("The assistant is still answering; ask for the replacement when it has finished. Nothing was sent."); return; } void send(findReplacementSentence(instances)); }} // [PR-M, 2026-10-18] "Find a replacement in the library": the SAME chat request through the composer's ask route to the assistant
                     presentation={view === "3d" ? "3d" : "editor"} // [PR-E] the 3D tab renders the editor's one preview, never a second renderer
                     onOpenPcbTab={() => workspaceView.open("pcb")}
                     gateSchematicSync={() => schematicConsumerGate("pcb-sync")}
@@ -7108,6 +7198,8 @@ export default function Home() {
           onApply={() => void applyReplacementProposal()}
           onCancel={cancelReplacementProposal}
         />
+        <ComponentResolutionReviewDialog review={pendingResolution ? componentResolutionReview(pendingResolution.received.proposal) : null} busy={resolutionApplyBusy} onApprove={() => void applyResolutionProposal()} onDiscard={discardResolutionProposal} /> {/* [PR-M, 2026-10-18] */}
+        {resolutionReceipt && <ComponentResolutionReceiptNotice receipt={resolutionReceipt} onDismiss={() => setResolutionReceipt(null)} />}
         {replacementReceipt && (
           <div className="fixed bottom-28 right-4 z-50 max-w-xs rounded border border-teal-800/60 bg-zinc-900/95 px-3 py-2 text-[11px] text-teal-300 shadow-sm">
             <div className="font-medium text-teal-200">Exact replacement applied &amp; verified</div>

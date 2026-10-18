@@ -458,7 +458,7 @@ it in `app/lib/engineering/control-registry.ts`; the anchor is unchanged.
 | C14 | `app/lib/auth/route-resource-classification.ts` | 99 | `"/api/pcb/provider-exchange": { durable: "read", sensitivity: "project-durable", expensive: true },` |
 | C15 | `app/lib/auth/route-resource-classification.ts` | 200 | `outboundEgress: policy.externalTransfer === true ? "files"` |
 | C16 | `app/lib/engineering/action-registry.ts` | 186 | `action({ id: "manufacturing.provider-exchange", version: 1, area: "manufacturing",` |
-| C17 | `app/lib/engineering/control-registry.ts` | 151 | `rule({ id: "manufacturing.provider-exchange", surface: PCB + "ProviderExchangePanel.tsx",` |
+| C17 | `app/lib/engineering/control-registry.ts` | 152 | `rule({ id: "manufacturing.provider-exchange", surface: PCB + "ProviderExchangePanel.tsx",` |
 | C18 | `app/components/pcb/ProviderExchangePanel.tsx` | 122 | `export function ProviderExchangePanel(props: ProviderExchangePanelProps) {` |
 | C19 | `app/components/pcb/ManufacturingWorkflowPanel.tsx` | 122 | `<ProviderExchangePanel scope={workflow.workflow.scope}` |
 | C20 | `app/components/pcb/ManufacturingWorkflowPanel.tsx` | 19 | `import { ProviderExchangePanel } from "./ProviderExchangePanel"; // [B23-B1] appended in place` |

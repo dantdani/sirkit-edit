@@ -932,8 +932,8 @@ lines current in E2b's tree; `b21-e2b-page.test.ts` case 5 checks them for every
 | C40 | `app/lib/project/chat-run-view.ts` | 573 | — | `export function orchestrationStatusLine(state: RunViewState)` | the ONE status line (OD-127) |
 | C41 | `app/lib/project/chat-run-view.ts` | 183 | — | `status: orchestrationStatusLine(state),` | the projection's additive field |
 | C42 | `app/lib/project/chat-run-view.ts` | 585 | — | `export function orchestrationRunLogLine(` | an event's run-log line: its own sentence |
-| C43 | `app/page.tsx` | 4821 | — | `{ const line = orchestrationRunLogLine(event); if (line) appendActivityStep(logId, line.text, line.status); return; }` | the page's default branch: a run-log line, no control |
-| C44 | `app/page.tsx` | 4868 | — | `for (const note of [...(projected.status ? [projected.status] : []), ...projected.notes]) appendActivityStep(logId, note, "done");` | the status line, once, before the notes |
+| C43 | `app/page.tsx` | 4910 | — | `{ const line = orchestrationRunLogLine(event); if (line) appendActivityStep(logId, line.text, line.status); return; }` | the page's default branch: a run-log line, no control |
+| C44 | `app/page.tsx` | 4957 | — | `for (const note of [...(projected.status ? [projected.status] : []), ...projected.notes]) appendActivityStep(logId, note, "done");` | the status line, once, before the notes |
 | C45 | `app/api/chat/route.ts` | 48 | — | `export const CHAT_PROTOCOL_VERSION = 1;` | protocol version 1 stands |
 | C46 | `app/api/chat/route.ts` | 491 | — | `JSON.stringify({ v: CHAT_PROTOCOL_VERSION, seq, ...event })` | every event, the five included, in the v1 envelope |
 | C47 | `app/lib/agent/trace.ts` | 626 | — | `const secretPath = findSecretShapedPath(trace, "trace");` | the v1 trace validator scans every string (the run id included) |

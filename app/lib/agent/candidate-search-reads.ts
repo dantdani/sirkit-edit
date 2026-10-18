@@ -31,6 +31,8 @@ export const CANDIDATE_SEARCH_BINDING = Object.freeze({ module: "app/lib/compone
 export const CANDIDATE_SEARCH_VERIFICATION = "catalog-search+published-evidence" as const;
 export const MAX_CANDIDATE_SEARCHES_PER_RUN = 3;
 export const MAX_CANDIDATE_QUERY_CHARS = 300;
+/** [PR-M, 2026-10-18] What the output says when the recall came from the fixture runtime's seam (app/api/chat/component-resolution-runtime.ts). */
+export const FIXTURE_RECALL_NOTE = Object.freeze({ source: "fixture-catalog", note: "FIXTURE RUNTIME: the recall is a word-overlap match over the committed fixture catalog (no embedding, no reranker, no provider); every hit was still re-read through the catalog and the published revision evidence. This is not the production catalog search." });
 export const CANDIDATE_SEARCH_INPUT_EXAMPLE = Object.freeze({ componentId: "D1", query: "small-signal fast switching diode 100 V 150 mA", functionalClass: "diode", limit: 8 });
 
 const AUTHORITY_KEYS = new Set(["actor", "actorId", "role", "capability", "capabilities", "authority", "approval", "approvals", "apply", "commit", "bind", "publish", "place", "scope", "headMark", "revision", "expectedRevision", "revisionId", "atomicPartRevisionId", "lineageId", "schematic", "board", "pins", "nets", "mapping", "eligible", "verified", "live", "distributor", "source", "price", "stock"]);
@@ -174,7 +176,7 @@ export class CandidateSearchReadService {
     try {
       const outcome = await searchResolutionCandidates({ query, category, limit, instance, requirement: parsed.requirement, ports: { search, catalog, evidence }, scope, runId: input.runId, budgetMs: timeoutMs - (now() - started) - 250, ...(input.signal ? { signal: input.signal } : {}), now });
       if (!outcome.ok) return refuse(outcome.code === "search_timeout" ? "timeout" : "implementation_failed", [outcome.detail]);
-      output = { result: { ...outcome.report, searchesThisRun: { used: this.searchesUsed(input.runId), limit: MAX_CANDIDATE_SEARCHES_PER_RUN } } as unknown as Record<string, unknown> };
+      output = { result: { ...outcome.report, searchesThisRun: { used: this.searchesUsed(input.runId), limit: MAX_CANDIDATE_SEARCHES_PER_RUN }, ...(search.recall === "fixture-catalog" ? { recall: FIXTURE_RECALL_NOTE } : {}) } as unknown as Record<string, unknown> }; // [PR-M, 2026-10-18] the fixture runtime's seam is named in the output, never passed off as the production search
     } catch (error) {
       return refuse("implementation_failed", [`The candidate search failed internally: ${sanitizeTraceText(error instanceof Error ? error.message : String(error), 200) || "unknown error"}. Nothing was changed.`]);
     }

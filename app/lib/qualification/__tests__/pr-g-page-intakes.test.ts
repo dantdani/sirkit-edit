@@ -38,7 +38,8 @@ const between = (text: string, start: string, end: string): string => {
 const consumer = between(page, "const applyAgentEvent = (event: Record<string, unknown>): void => {", "while (true) {");
 const stackupCase = between(consumer, 'case "stackup_candidate_ready": {', 'case "draft_request_ready": {');
 const draftCase = between(consumer, 'case "draft_request_ready": {', 'case "module_contracts_ready": {');
-const moduleCase = between(consumer, 'case "module_contracts_ready": {', 'case "execution_grant_ready": {');
+const moduleCase = between(consumer, 'case "module_contracts_ready": {', 'case "component_resolution_ready": {'); // [PR-M, 2026-10-18] reviewed pin move: the case after it is now the component resolution's (was execution_grant_ready)
+const resolutionCase = between(consumer, 'case "component_resolution_ready": {', 'case "execution_grant_ready": {'); // [PR-M, 2026-10-18] the component resolution's intake
 const bubble = between(page, "function MessageBubble(", "function TheoryPartRow(");
 const dialog = between(page, 'data-testid="draft-request-publication-dialog"', "{/* Confirmation dialog for replacing existing schematic */}");
 const liveSheet = between(page, "function liveSheetForSealedArtifacts()", "// Tier-1 text editing:");
@@ -50,7 +51,12 @@ const applyStackup = between(editor, "function applyStackupProfile(", "// [PR-G,
 describe("[PR-G page intakes 1] the three cases, each through its SAFE receiver once", () => {
   it("the consumer names each new case exactly once, in order, and keeps every earlier case; every case drops a failed artifact and refuses a stale one with the page's sentence", () => {
     const cases = [...consumer.matchAll(/^\s*case "([a-z_]+)":/gm)].map((match) => match[1]!);
-    expect(cases).toEqual(["text_delta", "tool_started", "tool_finished", "tool_refused", "proposal_ready", "pcb_proposal_ready", "generation_proposal_ready", "view_command_ready", "layout_candidate_ready", "stackup_candidate_ready", "draft_request_ready", "module_contracts_ready", "execution_grant_ready", "execution_settled", "warning", "run_failed"]);
+    expect(cases).toEqual(["text_delta", "tool_started", "tool_finished", "tool_refused", "proposal_ready", "pcb_proposal_ready", "generation_proposal_ready", "view_command_ready", "layout_candidate_ready", "stackup_candidate_ready", "draft_request_ready", "module_contracts_ready", "component_resolution_ready", "execution_grant_ready", "execution_settled", "warning", "run_failed"]); // [PR-M, 2026-10-18] reviewed pin move: + component_resolution_ready after module_contracts_ready (runbook M.2.5: the SAFE receiver, the currency check, the review dialog)
+    expect(count(resolutionCase, "receiveComponentResolutionEvent(event)")).toBe(1); // [PR-M, 2026-10-18] received once, through its SAFE receiver, and checked against the live editor before it is offered
+    expect(count(page, "receiveComponentResolutionEvent(")).toBe(1);
+    expect(count(resolutionCase, "componentResolutionCurrency(resolution.proposal, liveSheetForSealedArtifacts())")).toBe(1);
+    expect(resolutionCase).toContain("resolutionLines.dropped()");
+    expect(resolutionCase).toContain("resolutionLines.notOffered(resolutionVerdict.detail)");
     expect(count(stackupCase, "receiveStackupCandidateEvent(event)")).toBe(1);
     expect(count(draftCase, "receiveDraftRequestEvent(event)")).toBe(1);
     expect(count(moduleCase, "receiveModuleContractsEvent(event)")).toBe(1);
@@ -188,7 +194,7 @@ describe("[PR-G page intakes 5] the shared recipe, the inventories and the answe
     }
     expect(count(liveSheet, "const live = gestureCoordinatorRef.current!.authoritativeState();")).toBe(1);
     expect(count(generationIntake, "const live = gestureCoordinatorRef.current!.authoritativeState();")).toBe(1);
-    expect(count(page, "liveSheetForSealedArtifacts()")).toBe(3); // the declaration and the two sheet-artifact cases
+    expect(count(page, "liveSheetForSealedArtifacts()")).toBe(4); // the declaration and the two sheet-artifact cases; [PR-M, 2026-10-18] reviewed pin move 3 -> 4: + the component resolution's intake (the same recipe)
   });
 
   it("every new control is classified in the committed B17 inventory under a PR-G rule and named in the B24 census", () => {

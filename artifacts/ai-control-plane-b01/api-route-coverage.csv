@@ -42,6 +42,7 @@ path,methods,record_id,class
 /api/circuit-verification/propose,POST,cd.circuit-verification.workbench,propose
 /api/circuit-verification/readiness,POST,cd.circuit-verification.workbench,propose
 /api/circuit-verification/run,POST,cd.circuit-verification.workbench,propose
+/api/component-resolution-authority,POST,schematic.resolve-components,read
 /api/component-selection/alternative,POST,cd.component-selection.workbench,propose
 /api/component-selection/catalog,POST,cd.component-selection.workbench,read
 /api/component-selection/evaluate,POST,cd.component-selection.workbench,propose

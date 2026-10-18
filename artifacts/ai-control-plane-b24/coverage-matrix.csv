@@ -280,6 +280,8 @@ app/components/pcb/MissingPartsList.tsx|click|button|missing-action-*-*|run,app/
 app/components/pcb/MissingPartsList.tsx|click|button|missing-action-*-*|run,app/components/pcb/MissingPartsList.tsx,dispatcher,parts.external-observation-read,-,sirkit.parts.external-search,true,viewer;commenter;pcb_editor;reviewer;project_admin,coordinator;component-sourcing-evidence,false,0,0
 app/components/pcb/MissingPartsList.tsx|click|button|missing-action-*-*|run,app/components/pcb/MissingPartsList.tsx,dispatcher,parts.atomic-publication-review,submit_request / resolve_request / publish_request / withdraw_request / withdraw_revision,-,-,-,-,-,3,-
 app/components/pcb/MissingPartsList.tsx|click|button|missing-checklist-toggle-*|setExpanded,app/components/pcb/MissingPartsList.tsx,view,-,-,-,-,-,-,-,-,-
+app/components/pcb/MissingPartsList.tsx|click|button|missing-parts-find-replacement|onFindReplacement,app/components/pcb/MissingPartsList.tsx,dispatcher,ai.chat-qa,-,-,-,-,-,-,2,-
+app/components/pcb/MissingPartsList.tsx|click|button|missing-parts-find-replacement|onFindReplacement,app/components/pcb/MissingPartsList.tsx,dispatcher,schematic.resolve-components-propose,sealed component resolution proposal (sirkit.component-resolution-proposal.v1),sirkit.schematic.propose-component-resolution,true,pcb_editor;reviewer;project_admin,coordinator,false,2,2
 app/components/pcb/MissingPartsList.tsx|click|button|missing-review-close-*|setPublication,app/components/pcb/MissingPartsList.tsx,view,-,-,-,-,-,-,-,-,-
 app/components/pcb/PadstackPanel.tsx|click|button|(none)|setSelectedId,app/components/pcb/PadstackPanel.tsx,view,-,-,-,-,-,-,-,-,-
 app/components/pcb/PadstackPanel.tsx|click|button|Close padstacks|onClose,app/components/pcb/PadstackPanel.tsx,view,-,-,-,-,-,-,-,-,-
@@ -540,6 +542,10 @@ app/components/schematic-compiler/SchematicCompilerWorkspace.tsx|change|select|(
 app/components/schematic-compiler/SchematicCompilerWorkspace.tsx|click|button|(none)|setSelectedObject,app/components/schematic-compiler/SchematicCompilerWorkspace.tsx,view,-,-,-,-,-,-,-,-,-
 app/components/schematic-compiler/SchematicCompilerWorkspace.tsx|click|button|(none)|setSelectedObject#2,app/components/schematic-compiler/SchematicCompilerWorkspace.tsx,view,-,-,-,-,-,-,-,-,-
 app/components/schematic-compiler/SchematicCompilerWorkspace.tsx|click|g|(none)|setSelectedObject,app/components/schematic-compiler/SchematicCompilerWorkspace.tsx,view,-,-,-,-,-,-,-,-,-
+app/components/schematic/ComponentResolutionReviewDialog.tsx|click|Button|component-resolution-approve|onApprove,app/components/schematic/ComponentResolutionReviewDialog.tsx,semantic,schematic.resolve-components,schematic_replace_component x N in ONE transaction,-,-,-,-,-,2,-
+app/components/schematic/ComponentResolutionReviewDialog.tsx|click|Button|component-resolution-discard|onDiscard,app/components/schematic/ComponentResolutionReviewDialog.tsx,view,-,-,-,-,-,-,-,-,-
+app/components/schematic/ComponentResolutionReviewDialog.tsx|click|button|Dismiss the component resolution receipt|onDismiss,app/components/schematic/ComponentResolutionReviewDialog.tsx,view,-,-,-,-,-,-,-,-,-
+app/components/schematic/ComponentResolutionReviewDialog.tsx|dialog|Dialog|(none)|onDiscard,app/components/schematic/ComponentResolutionReviewDialog.tsx,view,-,-,-,-,-,-,-,-,-
 app/components/schematic/ReplacementReviewDialog.tsx|click|Button|Applying…|Apply exact replacement|onApply,app/components/schematic/ReplacementReviewDialog.tsx,semantic,schematic.replace-component,schematic_replace_component,-,-,-,-,-,2,-
 app/components/schematic/ReplacementReviewDialog.tsx|click|Button|Cancel — change nothing|onCancel,app/components/schematic/ReplacementReviewDialog.tsx,view,-,-,-,-,-,-,-,-,-
 app/components/schematic/ReplacementReviewDialog.tsx|dialog|Dialog|(none)|onCancel,app/components/schematic/ReplacementReviewDialog.tsx,view,-,-,-,-,-,-,-,-,-
@@ -948,6 +954,4 @@ app/page.tsx|shortcut|window|keydown:onKey|onKey,app/page.tsx,dispatcher,view.ca
 -,-,-,project.autosave,-,-,-,-,-,-,1,-
 -,-,-,project.engineering-effects,-,-,-,-,-,-,0,-
 -,-,-,project.service-health,-,-,-,-,-,-,0,-
--,-,-,schematic.resolve-components,schematic_replace_component x N in ONE transaction,-,-,-,-,-,2,-
--,-,-,schematic.resolve-components-propose,sealed component resolution proposal (sirkit.component-resolution-proposal.v1),sirkit.schematic.propose-component-resolution,true,pcb_editor;reviewer;project_admin,coordinator,false,2,2
 -,-,-,validation.constraints-inspect,constraint evaluation read,-,-,-,-,-,0,-

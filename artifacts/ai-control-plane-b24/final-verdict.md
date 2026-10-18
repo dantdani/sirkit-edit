@@ -97,8 +97,8 @@ Counts, from `current-system-map.md` (generated; each pinned count equals its pi
 
 | count | value |
 |---|---|
-| route-methods | 174 |
-| canonical-wrappers | 171 |
+| route-methods | 175 |
+| canonical-wrappers | 172 |
 | approved-factories | 3 |
 | raw-handlers | 0 |
 | action-records | 110 |
@@ -119,6 +119,8 @@ closeout's final SHA.
 [PR-L, 2026-10-17] Count lines moved with the regenerated map (runbook L.4, increment 4): route-methods 168 -> 174 and canonical-wrappers 165 -> 171 (the durable generation task's six canonical-wrapper methods: POST/GET /api/generation-tasks, GET /api/generation-tasks/[id], GET .../events, POST .../control and the worker pump POST /api/generation-worker; 3 factories and 0 raw unchanged); the descriptor and action-record rows are the concurrent section M builder's to move with its descriptors and records.
 
 [PR-M, 2026-10-17] Count lines moved with the regenerated map (runbook section M, increment M1): action-records 108 -> 110 (schematic.resolve-components-propose, the sealed resolution batch, and schematic.resolve-components, its reviewed destructive apply), registry-tools 56 -> 59, agent-exposed-tools 44 -> 47, agent-only-tools 35 -> 38 and agent-exposed-proposal-tools 9 -> 10 - PR-M's three descriptors: the schematic-instance inspection and the resolution candidate search (Tier 0 reads) and the component resolution proposal (Tier 2), all three agent-exposed and withheld from MCP; mcp-exposed-tools stays 9; the verdict's status lines stand.
+
+[PR-M, 2026-10-18] Count lines moved with the regenerated map (runbook section M, M1's page intake): route-methods 174 -> 175 and canonical-wrappers 171 -> 172 (POST /api/component-resolution-authority, the reviewed resolution's fresh-facts endpoint, one canonical wrapper; 3 factories and 0 raw unchanged).
 
 [PR-F, 2026-10-17] Count lines moved with the regenerated map (product reliability F): action-records 107 -> 108 (parts.draft-request, the sealed draft request own propose record), registry-tools 52 -> 56, agent-exposed-tools
 40 -> 44, agent-exposed-proposal-tools 6 -> 9 - PR-F's four descriptors: the missing-facts read and the part draft request (missing parts,

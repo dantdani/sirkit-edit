@@ -162,7 +162,7 @@ import { AssignmentQueuePanel } from "./AssignmentQueuePanel";
 import { PcbSyncReadinessPanel } from "./PcbSyncReadinessPanel"; // [PR-C F-08] a blocked preflight shown per blocker (message + refs), not as one 6 s toast
 import type { JourneyPcbFacts } from "@/app/lib/workflow/journey"; // [PR-C] the PCB facts reported to the page's journey model
 import { listUnresolvedInstances, unresolvedInstancesRefusal, type UnresolvedInstance } from "@/app/lib/pcb-sync/unresolved-instances"; // [PR-C F-08] the instances named BEFORE any server call
-import { MissingPartsList } from "./MissingPartsList"; // [PR-F fA] the refusal rows as a workflow item: checklist + next actions over the existing routes
+import { MissingPartsList, type ReplacementRequestInstance } from "./MissingPartsList"; // [PR-F fA] the refusal rows as a workflow item: checklist + next actions over the existing routes; [PR-M, 2026-10-18] + the replacement entry point's instances
 import type { ProjectSelectorScope } from "@/app/lib/project/project-selector"; // [PR-F fA] the scope the list's distributor search and publication request act in
 import { missingPartsWords } from "@/app/lib/parts/missing-facts"; // [PR-F fA]
 
@@ -337,7 +337,7 @@ export default function PcbEditor({
   onExecutionGrantProgress,
   onExecutionGrantAttemptRefused,
   onExecutionRecovery, restoredExecutionGrants, pageProject,
-  onJourneyFacts, syncRequestToken = 0, presentation = "editor", onOpenPcbTab, missingPartsRequestToken = 0,
+  onJourneyFacts, syncRequestToken = 0, presentation = "editor", onOpenPcbTab, missingPartsRequestToken = 0, onFindReplacement, // [PR-M, 2026-10-18]
 }: {
   schematic: SchematicState;
   /** R06: false while the editor is mounted but hidden (another workspace
@@ -411,6 +411,8 @@ export default function PcbEditor({
   /** [PR-F fA] bumped by the page's "Missing parts (N)" line and the journey's "Resolve parts": shows the missing-parts list
    *  (the SAME rows a Schematic → PCB run would refuse, computed from the schematic alone - no server call, nothing bound). */
   missingPartsRequestToken?: number;
+  /** [PR-M, 2026-10-18] the Missing parts list's "Find a replacement in the library": the page sends the agent request (absent: not offered). */
+  onFindReplacement?: (instances: ReplacementRequestInstance[]) => void;
 }) {
   // Lint note (B08.3): this editor is an imperative orchestrator — canvas
   // scene, gesture tool, and history/session refs are deliberately mutated
@@ -470,6 +472,10 @@ export default function PcbEditor({
   const [pendingPreflight, setPendingPreflight] = useState<PcbSyncPreflightResult | null>(null);
   // [PR-C F-08] the persistent trace of a refused/blocked sync (see SyncBlockers); the toast is never its only trace.
   const [syncBlockers, setSyncBlockers] = useState<SyncBlockers | null>(null);
+  // [PR-M, 2026-10-18] the Missing parts list follows the schematic: the shown refusal rows are recomputed by the same pure listing on
+  // every schematic change (a reviewed component resolution, an undo) - a resolved instance leaves the list and an empty list is not
+  // shown. Only the unresolved-instances list is derived; a blocked preflight's blockers are a later stage's facts and stay as reported.
+  const shownSyncBlockers = useMemo(() => syncBlockersForSchematic(syncBlockers, schematic), [syncBlockers, schematic]);
   const [authoritativeRecord, setAuthoritativeRecord] = useState<PcbSyncBoardRecord | null>(null);
   const authorityRef = useRef<PcbSyncBoardRecord | null>(null);
   // [B16-C.1] the board this session works on: the lineage ROOT (`board:<project>`) until the server's lineage says a
@@ -2582,7 +2588,7 @@ export default function PcbEditor({
   // [PR-C] The PCB facts the page's journey strip derives its stages from. Reported, never authority: a missing fact is
   // reported as unknown (the DRC hook does not record which board revision it ran against, so DRC currency is null).
   const journeyPreflight: JourneyPcbFacts["preflight"] = pendingPreflight === null ? "none" : pendingPreflight.status === "ready_to_apply" ? "ready_to_apply" : pendingPreflight.status === "ready_no_changes" ? "ready_no_changes" : "blocked";
-  const journeyUnresolved = syncBlockers?.kind === "unresolved_instances" ? syncBlockers.items.length : 0;
+  const journeyUnresolved = shownSyncBlockers?.kind === "unresolved_instances" ? shownSyncBlockers.items.length : 0; // [PR-M, 2026-10-18] the list as the schematic stands
   const journeyWorkflowState = manufacturing.workflow?.state ?? null;
   const journeyReleased = Boolean(manufacturing.truth?.latestRelease?.current);
   const journeyBoardExists = state.board !== null;
@@ -2678,9 +2684,9 @@ export default function PcbEditor({
           </div>
           {/* [PR-C F-08] the refusal that outlives the toast, under the call to action: the instances named before any server
               call (missing fact + review path each) or the blocked preflight, per blocker. Dismiss or the next sync clears it. */}
-          {syncBlockers && (
+          {shownSyncBlockers && (
             <div className="mt-4 w-full max-w-2xl px-4">
-              <SyncBlockersPanel blockers={syncBlockers} busy={syncing || applying} onDismiss={() => setSyncBlockers(null)} schematic={schematic} projectScope={publisherScope} />
+              <SyncBlockersPanel blockers={shownSyncBlockers} busy={syncing || applying} onDismiss={() => setSyncBlockers(null)} schematic={schematic} projectScope={publisherScope} onFindReplacement={onFindReplacement} />
             </div>
           )}
           {/* [B16-C.2/C.5] the review handoff is reachable BEFORE any board exists: an editor's first
@@ -2812,15 +2818,15 @@ export default function PcbEditor({
           )}
           {/* [PR-C F-08] the refusal that outlives the toast, a compact panel under the sync toolbar: the instances named before
               any server call or the blocked preflight, per blocker. Dismiss or the next sync clears it. */}
-          {syncBlockers && (
+          {shownSyncBlockers && (
             <div className="absolute top-2 right-2 z-30 w-[24rem] max-w-[calc(100%-1rem)] max-h-[70%] overflow-auto">
-              <SyncBlockersPanel blockers={syncBlockers} busy={syncing || applying} onDismiss={() => setSyncBlockers(null)} schematic={schematic} projectScope={publisherScope} />
+              <SyncBlockersPanel blockers={shownSyncBlockers} busy={syncing || applying} onDismiss={() => setSyncBlockers(null)} schematic={schematic} projectScope={publisherScope} onFindReplacement={onFindReplacement} />
             </div>
           )}
           {/* [PR-G, 2026-10-17] the agent's stackup recommendation as a PREVIEW (OD-249): Accept runs the toolbar selector's own commit path
               after re-checking the live revision; Discard drops it; the board is unchanged until then. Below the sync blockers when both show. */}
           {pendingStackupCandidate && (
-            <div className={`absolute right-2 z-30 w-[28rem] max-w-[calc(100%-1rem)] max-h-[70%] overflow-auto ${syncBlockers ? "top-[40%]" : "top-2"}`}>
+            <div className={`absolute right-2 z-30 w-[28rem] max-w-[calc(100%-1rem)] max-h-[70%] overflow-auto ${shownSyncBlockers ? "top-[40%]" : "top-2"}`}>
               <StackupCandidatePanel candidate={pendingStackupCandidate} liveRevision={pendingStackupLiveRevision} now={stackupPreviewNow} busy={stackupCandidateBusy} onAccept={() => void acceptStackupCandidate()} onDiscard={() => setPendingStackupCandidate(null)} />
             </div>
           )}
@@ -3091,6 +3097,16 @@ export default function PcbEditor({
   );
 }
 
+/** [PR-M, 2026-10-18] The refusal as the CURRENT schematic stands: an unresolved-instances list recomputed by the editor's own listing
+ *  (null when nothing is unresolved any more); any other blocker kind unchanged. Pure. */
+function syncBlockersForSchematic(blockers: SyncBlockers | null, schematic: SchematicState): SyncBlockers | null {
+  if (blockers === null || blockers.kind !== "unresolved_instances") return blockers;
+  const items = listUnresolvedInstances(schematic);
+  if (items.length === 0) return null;
+  const same = items.length === blockers.items.length && items.every((item, index) => item.refDes === blockers.items[index]!.refDes && item.missing === blockers.items[index]!.missing && item.family === blockers.items[index]!.family);
+  return same ? blockers : { kind: "unresolved_instances", items };
+}
+
 // ─── [PR-C F-08] the sync refusal panel ──────────────────────────────────────
 
 /**
@@ -3101,7 +3117,7 @@ export default function PcbEditor({
  * with its code, message and refs; it gets no apply control of its own (`onApply` undefined — the editor's Apply buttons stay
  * where they are) and no derive control (the editor's `derive-board-revision` button already covers protected copper).
  */
-function SyncBlockersPanel({ blockers, busy, onDismiss, schematic, projectScope }: { blockers: SyncBlockers; busy: boolean; onDismiss: () => void; /** [PR-F fA] the rows' own facts (value, part id, installed assets) */ schematic: SchematicState; /** [PR-F fA] the project the distributor search and the publication request act in; null in demo or without a scope */ projectScope: ProjectSelectorScope | null }) {
+function SyncBlockersPanel({ blockers, busy, onDismiss, schematic, projectScope, onFindReplacement }: { blockers: SyncBlockers; busy: boolean; onDismiss: () => void; /** [PR-F fA] the rows' own facts (value, part id, installed assets) */ schematic: SchematicState; /** [PR-F fA] the project the distributor search and the publication request act in; null in demo or without a scope */ projectScope: ProjectSelectorScope | null; /** [PR-M, 2026-10-18] the page's agent entry point */ onFindReplacement?: (instances: ReplacementRequestInstance[]) => void }) {
   const title = blockers.kind === "unresolved_instances"
     ? `Schematic → PCB refused: ${blockers.items.length} part(s) cannot reach the board — nothing was bound or published`
     : `Schematic → PCB blocked: ${blockers.result.blockers.length} blocker(s) in the preflight — nothing was applied`;
@@ -3114,7 +3130,7 @@ function SyncBlockersPanel({ blockers, busy, onDismiss, schematic, projectScope 
       {blockers.kind === "unresolved_instances" ? (
         // [PR-F fA] each row keeps its missing fact and review path and expands into the missing-facts checklist with the next
         // actions over the existing routes (catalog search, distributor search, publication review request / unverified draft)
-        <MissingPartsList items={blockers.items} schematic={schematic} projectScope={projectScope} />
+        <MissingPartsList items={blockers.items} schematic={schematic} projectScope={projectScope} onFindReplacement={onFindReplacement} />
       ) : (
         <div className="mt-2" data-testid="sync-readiness-panel">
           <PcbSyncReadinessPanel result={blockers.result} busy={busy} />

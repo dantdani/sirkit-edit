@@ -233,7 +233,7 @@ export function planFixtureInstruction(message: string): Planned {
   if (LAYOUT.test(text)) return { kind: "layout-then", routeAsked: /\broute\b/i.test(text) };
   const replay = REPLAY.exec(text);
   if (replay) return { kind: "call", toolId: "sirkit.pcb.undo-redo-granted", args: { direction: replay[1]!.toLowerCase() } };
-  return planGenerateSchematic(message) ?? { kind: "reply", text: "(fixture agent) I follow only the harness's scripted instructions: move or flip a selected part, add silkscreen text, dimension the board (and its mounting holes), resize or retarget the vias on a net, replace a component with the part its authority records, propose a placement, generate a schematic from a prompt, undo, redo, and the refusal scripts (release, qualify, order, a delegation, a double call)." }; // [PR-G, 2026-10-17] the generation script (appended below) is tried last, on the sentence as written: no earlier pattern opens with "generate", so the order changes nothing
+  return planGenerateSchematic(message) ?? { kind: "reply", text: "(fixture agent) I follow only the harness's scripted instructions: move or flip a selected part, add silkscreen text, dimension the board (and its mounting holes), resize or retarget the vias on a net, replace a component with the part its authority records, propose a placement, generate a schematic from a prompt, resolve or replace unresolved parts from the library, undo, redo, and the refusal scripts (release, qualify, order, a delegation, a double call)." }; // [PR-G, 2026-10-17] the generation script (appended below) is tried last, on the sentence as written: no earlier pattern opens with "generate", so the order changes nothing
 }
 
 /** [B18-E E14] The name the person used is not a net on this board: say so, and say what the board does have. */
@@ -418,7 +418,7 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
   }
 
   async start(input: Parameters<ProviderAgentAdapter["start"]>[0]): Promise<AgentStep> {
-    const roleStep = await scriptedRoleStart(this, input); if (roleStep) return roleStep; this.planned = planFixtureInstruction(input.userMessage); // [B21 F] a specialist run or the follow-up turn answers from the per-role script (D21-40), appended below
+    const roleStep = await scriptedRoleStart(this, input); if (roleStep) return roleStep; this.planned = planFixtureInstruction(input.userMessage); const resolutionStep = scriptedResolutionStart(this, input); if (resolutionStep) return resolutionStep; // [B21 F] a specialist run or the follow-up turn answers from the per-role script (D21-40), appended below; [PR-M, 2026-10-18] the resolution script (appended below), in place on this line
     if (this.planned.kind === "reply") return this.step({ text: this.planned.text });
     if (this.planned.kind === "select-then") {
       this.awaitingSelection = true;
@@ -459,7 +459,7 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
   }
 
   async continueWith(input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): Promise<AgentStep> {
-    const roleStep = scriptedRoleContinue(this, input); if (roleStep) return roleStep; const planned = this.planned; // [B21 F] a specialist run continues on its per-role script
+    const roleStep = scriptedRoleContinue(this, input); if (roleStep) return roleStep; const planned = this.planned; const resolutionNext = scriptedResolutionContinue(this, input); if (resolutionNext) return resolutionNext; // [B21 F] a specialist run continues on its per-role script; [PR-M, 2026-10-18] a resolution run continues on its script (appended below)
     const outputText = input.results[0]?.outputText;
     if (this.awaitingBoard && planned.kind === "board-then") {
       this.awaitingBoard = false;
@@ -724,4 +724,120 @@ const GENERATE_SCHEMATIC = /^(?:please\s+)?generate\s+a\s+schematic\s*:\s*(\S[\s
 function planGenerateSchematic(message: string): Extract<Planned, { kind: "call" }> | null {
   const match = GENERATE_SCHEMATIC.exec(message.replace(/\s+/g, " ").trim());
   return match ? { kind: "call", toolId: "sirkit.schematic.generate-proposal", args: { prompt: match[1]!.trim() } } : null;
+}
+
+// ─── [PR-M, 2026-10-18] The unresolved-component resolution turn (runbook M.1, M.5 items 1-3 and 8) ──────────────────────────────────
+// Appended on purpose (as B21-F, B21-F2b and PR-G were): constants read only when a run starts and hoisted function declarations, so no
+// line cited above moves - the two in-place hooks sit on the start and continue lines after their existing statements. Still never a
+// model: three whole sentences become the calls a model would make, through the REAL loop, gateway, injected ports and seal -
+//   "Replace D1 and D2 with suitable alternatives already in the library." / "Find a replacement in the library for D1 and D2 (...)."
+//     -> sirkit.schematic.instance-inspect { componentIds: [the named references] };
+//   "Resolve the missing parts and footprints, then continue preparing the PCB." -> sirkit.schematic.instance-inspect {} (every
+//     instance Prepare PCB would refuse);
+// then sirkit.parts.candidate-search for the FIRST unresolved KiCad instance the inspection returned (its query built from what the
+// inspection reported: the catalog part's name and its functional class), then sirkit.schematic.propose-component-resolution with ONE
+// item per unresolved KiCad instance the inspection returned, each naming the first ELIGIBLE candidate the search reported (its catalog
+// part and exact revision, an assertion the server re-proves). Nothing here names a reference, part or revision: every id comes from the
+// sentence or a tool result. The sealed batch rides its own event to the page's review dialog; only the human applies it.
+
+const RESOLVE_REFS = "([a-z]+\\d+(?:\\s*(?:,\\s*(?:and\\s+)?|and\\s+)[a-z]+\\d+)*)";
+const RESOLVE_FROM_LIBRARY = new RegExp(`^(?:please\\s+)?replace\\s+${RESOLVE_REFS}\\s+with\\s+(?:suitable\\s+|compatible\\s+)?(?:alternatives?|parts?|replacements?)\\s+(?:already\\s+)?in\\s+the\\s+library$`, "i");
+const FIND_REPLACEMENT = new RegExp(`^(?:please\\s+)?find\\s+(?:a\\s+)?replacements?\\s+in\\s+the\\s+library\\s+for\\s+${RESOLVE_REFS}(?:\\s*\\([^()]{0,1200}\\))?$`, "i");
+const RESOLVE_MISSING = /^(?:please\s+)?resolve\s+the\s+missing\s+parts(?:\s+and\s+footprints)?(?:,?\s+then\s+continue\s+preparing\s+the\s+pcb)?$/i;
+/** The classes a candidate search may be asked for (the descriptor's enum); any other class is left to the instance's own. */
+const SEARCHABLE_CLASSES: ReadonlySet<string> = new Set(["diode", "schottky-diode", "zener-diode", "tvs-diode", "led", "resistor", "capacitor", "inductor", "transistor", "integrated-circuit", "connector"]);
+
+/** [PR-M] What a resolution sentence asks for: the references it names, or null for every instance Prepare PCB would refuse. */
+export function planFixtureResolution(message: string): { targets: string[] | null } | null {
+  const text = message.replace(/\s+/g, " ").trim().replace(/[.!]+$/, "").trim();
+  if (RESOLVE_MISSING.test(text)) return { targets: null };
+  const named = RESOLVE_FROM_LIBRARY.exec(text) ?? FIND_REPLACEMENT.exec(text);
+  if (!named) return null;
+  const targets = [...new Set((named[1] ?? "").split(/\s*(?:,|\band\b)\s*/i).map((ref) => ref.trim().toUpperCase()).filter((ref) => /^[A-Z]+\d+$/.test(ref)))];
+  return targets.length > 0 ? { targets } : null;
+}
+
+/** [PR-M] What the scripted agent reads out of the instance inspection: the unresolved KiCad instances (stable id, reference, class, name). */
+export interface FixtureUnresolvedInstance { componentId: string; refDes: string; functionalClass: string; partName: string | null; value: string }
+export function unresolvedInstanceFacts(outputText: string | undefined): FixtureUnresolvedInstance[] {
+  try {
+    const parsed = JSON.parse(outputText ?? "") as { output?: { report?: { inspection?: { instances?: unknown } } } };
+    const instances = Array.isArray(parsed.output?.report?.inspection?.instances) ? (parsed.output.report.inspection.instances as Array<Record<string, unknown>>) : [];
+    return instances.flatMap((instance) => {
+      const resolution = instance.resolution as { state?: unknown } | undefined;
+      const catalog = instance.catalog as { part?: { name?: unknown } | null } | undefined;
+      if (instance.family !== "kicad" || resolution?.state !== "unresolved" || typeof instance.componentId !== "string" || typeof instance.refDes !== "string") return [];
+      return [{ componentId: instance.componentId, refDes: instance.refDes, functionalClass: typeof instance.functionalClass === "string" ? instance.functionalClass : "unknown", partName: typeof catalog?.part?.name === "string" ? catalog.part.name : null, value: typeof instance.value === "string" ? instance.value : "" }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** [PR-M] What the scripted agent reads out of the candidate search: the eligible candidates (catalog part, exact revision) and the bucket counts. */
+export function eligibleCandidateFacts(outputText: string | undefined): { eligible: Array<{ catalogPartId: string; revisionId: string }>; counts: Record<string, number> } {
+  try {
+    const parsed = JSON.parse(outputText ?? "") as { output?: { result?: { buckets?: Record<string, unknown> } } };
+    const buckets = parsed.output?.result?.buckets ?? {};
+    const counts = Object.fromEntries(Object.entries(buckets).map(([bucket, entries]) => [bucket, Array.isArray(entries) ? entries.length : 0]));
+    const eligible = (Array.isArray(buckets.eligible) ? (buckets.eligible as Array<Record<string, unknown>>) : []).flatMap((entry) => {
+      const revision = entry.exactRevision as { revisionId?: unknown } | null | undefined;
+      return typeof entry.catalogPartId === "string" && typeof revision?.revisionId === "string" ? [{ catalogPartId: entry.catalogPartId, revisionId: revision.revisionId }] : [];
+    });
+    return { eligible, counts };
+  } catch {
+    return { eligible: [], counts: {} };
+  }
+}
+
+interface ResolutionRun { stage: "inspect" | "search" | "propose"; instances: FixtureUnresolvedInstance[]; seq: number }
+const RESOLUTION_RUNS = new WeakMap<FixtureAgentAdapter, ResolutionRun>();
+
+function resolutionCall(adapter: FixtureAgentAdapter, run: ResolutionRun, tools: readonly ProviderToolDeclaration[], toolId: string, args: Record<string, unknown>): AgentStep {
+  const declaration = tools.find((tool) => tool.toolId === toolId);
+  if (!declaration) { RESOLUTION_RUNS.delete(adapter); return roleStep(adapter, { text: `(fixture agent) ${toolId} is not available to this run; nothing was done.` }); }
+  run.seq += 1;
+  return roleStep(adapter, { toolCalls: [{ callId: `fx-resolve-${run.seq}`, providerName: declaration.providerName, argumentsText: JSON.stringify(args) }] });
+}
+
+/** [PR-M] The start hook: a resolution sentence reads the instances first; anything else is null (the scripts above answer). */
+function scriptedResolutionStart(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["start"]>[0]): AgentStep | null {
+  RESOLUTION_RUNS.delete(adapter);
+  const plan = planFixtureResolution(input.userMessage);
+  if (!plan) return null;
+  const run: ResolutionRun = { stage: "inspect", instances: [], seq: 0 };
+  RESOLUTION_RUNS.set(adapter, run);
+  return resolutionCall(adapter, run, input.tools, "sirkit.schematic.instance-inspect", plan.targets ? { componentIds: plan.targets } : {});
+}
+
+/** [PR-M] The continue hook: inspect -> search -> propose -> a closing reply that says what the tools answered; null outside a resolution run. */
+function scriptedResolutionContinue(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): AgentStep | null {
+  const run = RESOLUTION_RUNS.get(adapter);
+  if (!run) return null;
+  const outputText = input.results[0]?.outputText;
+  if (run.stage === "inspect") {
+    run.instances = unresolvedInstanceFacts(outputText);
+    if (run.instances.length === 0) { RESOLUTION_RUNS.delete(adapter); return roleStep(adapter, { text: `(fixture agent) the inspection answered ${statusOf(outputText)} and reported no unresolved catalog instance to resolve. Nothing was changed.` }); }
+    const first = run.instances[0]!;
+    run.stage = "search";
+    const query = `${first.partName ?? first.value} ${first.functionalClass === "unknown" ? "" : first.functionalClass.replace(/-/g, " ")}`.replace(/[^\x20-\x7E]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) || "replacement part";
+    return resolutionCall(adapter, run, input.tools, "sirkit.parts.candidate-search", { componentId: first.componentId, query, ...(SEARCHABLE_CLASSES.has(first.functionalClass) ? { functionalClass: first.functionalClass } : {}) });
+  }
+  if (run.stage === "search") {
+    const { eligible, counts } = eligibleCandidateFacts(outputText);
+    const candidate = eligible[0];
+    if (!candidate) {
+      RESOLUTION_RUNS.delete(adapter);
+      const tally = Object.entries(counts).filter(([, count]) => count > 0).map(([bucket, count]) => `${count} ${bucket}`).join(", ") || "no result";
+      return roleStep(adapter, { text: `(fixture agent) the candidate search answered ${statusOf(outputText)} with no eligible published revision in the local library (${tally}). Nothing was proposed and nothing was changed.` });
+    }
+    run.stage = "propose";
+    return resolutionCall(adapter, run, input.tools, "sirkit.schematic.propose-component-resolution", { items: run.instances.map((instance) => ({ componentId: instance.componentId, candidatePartId: candidate.catalogPartId, atomicPartRevisionId: candidate.revisionId })) });
+  }
+  RESOLUTION_RUNS.delete(adapter);
+  const status = statusOf(outputText);
+  const refs = run.instances.map((instance) => instance.refDes).join(", ");
+  return roleStep(adapter, { text: status === "proposal_sealed"
+    ? `(fixture agent) One batch for ${refs} is sealed for your review: each instance would be bound to the eligible published revision the search reported, with the proved pin mapping. Nothing has changed yet - review it, then approve or discard it in the dialog.`
+    : `(fixture agent) the resolution proposal answered ${status}. Nothing was changed.` });
 }

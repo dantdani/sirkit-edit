@@ -42,6 +42,7 @@ path,methods,auth_class,identity_source,migrated
 /api/circuit-verification/propose,POST,authenticated-propose,trusted-context,yes
 /api/circuit-verification/readiness,POST,authenticated-propose,trusted-context,yes
 /api/circuit-verification/run,POST,authenticated-propose,trusted-context,yes
+/api/component-resolution-authority,POST,authenticated-read,trusted-context,yes
 /api/component-selection/alternative,POST,authenticated-propose,trusted-context,yes
 /api/component-selection/catalog,POST,authenticated-read,trusted-context,yes
 /api/component-selection/evaluate,POST,authenticated-propose,trusted-context,yes

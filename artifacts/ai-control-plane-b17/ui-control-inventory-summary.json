@@ -1,12 +1,12 @@
 {
   "schemaVersion": "sirkit.ui-control-inventory-summary.v1",
-  "sites": 649,
-  "surfaces": 67,
+  "sites": 654,
+  "surfaces": 68,
   "byKind": {
     "change": 178,
-    "click": 366,
+    "click": 370,
     "context-menu": 1,
-    "dialog": 17,
+    "dialog": 18,
     "double-click": 1,
     "gesture": 12,
     "key": 11,
@@ -16,10 +16,10 @@
     "submit": 3
   },
   "byClassification": {
-    "dispatcher": 22,
+    "dispatcher": 23,
     "internal": 8,
-    "semantic": 296,
-    "view": 323
+    "semantic": 297,
+    "view": 326
   },
   "recordsReached": [
     "agent.autonomy-setting",
@@ -91,6 +91,8 @@
     "schematic.move-rotate",
     "schematic.replace-component",
     "schematic.replace-component-propose",
+    "schematic.resolve-components",
+    "schematic.resolve-components-propose",
     "schematic.review-advisory",
     "schematic.set-property",
     "schematic.sheet-size",

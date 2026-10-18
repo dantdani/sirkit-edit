@@ -48,6 +48,7 @@ POST,/api/circuit-verification/problem,auth+csrf,canonical-wrapper,authenticated
 POST,/api/circuit-verification/propose,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/circuit-verification/readiness,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/circuit-verification/run,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/component-resolution-authority,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/component-selection/alternative,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/component-selection/catalog,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/component-selection/evaluate,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted

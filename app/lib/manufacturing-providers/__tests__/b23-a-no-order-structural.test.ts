@@ -180,7 +180,7 @@ const productionFiles = (): FileMap => (production ??= collectProductionFiles(RO
 describe("[B23-A2] the structural no-order route check (D23-12)", () => {
   it("1. no route policy row is spend: every row carries spend: false, and the gate refuses a spend row whatever its shape - human-only, CSRF and project administrators included", () => {
     const policies = allRoutePolicies();
-    expect(policies.length).toBe(174); // [PR-L, 2026-10-17] reviewed census move (runbook L.4), was 168: + the six generation-task methods, none spends; [B24-A1, 2026-10-06] reviewed census move (OD-198), was 166: + GET /api/health and GET /api/ready, neither spend; [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165: + POST /api/pcb/provider-exchange, a transfer row that is not spend
+    expect(policies.length).toBe(175); // [PR-M, 2026-10-18] reviewed census move (runbook M.2.5), was 174: + POST /api/component-resolution-authority, a read that spends nothing; [PR-L, 2026-10-17] reviewed census move (runbook L.4), was 168: + the six generation-task methods, none spends; [B24-A1, 2026-10-06] reviewed census move (OD-198), was 166: + GET /api/health and GET /api/ready, neither spend; [B23-B1, 2026-10-03] reviewed census move (OD-174), was 165: + POST /api/pcb/provider-exchange, a transfer row that is not spend
     expect(policies.filter((policy) => policy.spend !== false).map((policy) => `${policy.method} ${policy.path}`)).toEqual([]);
     const release = policyFor("/api/pcb/release", "POST")!;
     expect(routeVocabularyViolations([{ ...release, releaseOrQualification: false, spend: true }])).toEqual(["POST /api/pcb/release: spend_in_b23"]);

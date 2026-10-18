@@ -1045,6 +1045,6 @@ Test-first on `chapter/b24-production-qualification` from `1fe719e`: two runs, t
 | D4-C22 | `app/lib/agent/orchestration/__tests__/b21-f-page.test.ts` | 266 | `"two browser runs, one after the other").toEqual([` |
 | D4-C23 | `artifacts/ai-control-plane-b21/evaluation-matrix.md` | 1183 | `\| C93 \|` |
 | D4-C24 | `app/components/pcb/GrantedExecutionDialog.tsx` | 125 | `return prompt && !prompt.disabled ? prompt : false;` |
-| D4-C25 | `app/components/pcb/PcbEditor.tsx` | 641 | `rememberStoredWorkingCopy(init.scope.projectId, board); adoptBoardLifecycle("checkpoint-restore", board);` |
-| D4-C26 | `app/components/pcb/PcbEditor.tsx` | 668 | `rememberStoredWorkingCopy(syncIdentity.projectId, restored); adoptBoardLifecycle("checkpoint-restore", restored);` |
+| D4-C25 | `app/components/pcb/PcbEditor.tsx` | 647 | `rememberStoredWorkingCopy(init.scope.projectId, board); adoptBoardLifecycle("checkpoint-restore", board);` |
+| D4-C26 | `app/components/pcb/PcbEditor.tsx` | 674 | `rememberStoredWorkingCopy(syncIdentity.projectId, restored); adoptBoardLifecycle("checkpoint-restore", restored);` |
 | D4-C27 | `app/lib/pcb/board-persistence.ts` | 261 | `export function rememberStoredWorkingCopy(projectId: string, restoredBoard: PcbBoard): void {` |

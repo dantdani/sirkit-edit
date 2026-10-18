@@ -227,6 +227,7 @@ app/components/pcb/ManufacturingWorkflowPanel.tsx|dialog|Dialog|(none)|workflow.
 app/components/pcb/MappingVerificationPanel.tsx|click|button|Verifying…|Verify mapping (read only)|onVerify,app/components/pcb/MappingVerificationPanel.tsx,click,button,yes,named:text,Verifying… Verify mapping (read only)
 app/components/pcb/MissingPartsList.tsx|click|button|missing-action-*-*|run,app/components/pcb/MissingPartsList.tsx,click,button,no,named:text,*… *
 app/components/pcb/MissingPartsList.tsx|click|button|missing-checklist-toggle-*|setExpanded,app/components/pcb/MissingPartsList.tsx,click,button,no,named:aria-label,* the missing-facts checklist for *
+app/components/pcb/MissingPartsList.tsx|click|button|missing-parts-find-replacement|onFindReplacement,app/components/pcb/MissingPartsList.tsx,click,button,no,named:text,*
 app/components/pcb/MissingPartsList.tsx|click|button|missing-review-close-*|setPublication,app/components/pcb/MissingPartsList.tsx,click,button,no,named:aria-label,Close the publication request for *
 app/components/pcb/padstack/PadstackEditor.tsx|change|input|Drill diameter|stageDim,app/components/pcb/padstack/PadstackEditor.tsx,change,input,no,named:aria-label,Drill diameter
 app/components/pcb/padstack/PadstackEditor.tsx|change|input|Outer diameter|stageDim,app/components/pcb/padstack/PadstackEditor.tsx,change,input,no,named:aria-label,Outer diameter
@@ -392,6 +393,10 @@ app/components/schematic-compiler/SchematicCompilerWorkspace.tsx|change|select|(
 app/components/schematic-compiler/SchematicCompilerWorkspace.tsx|click|button|(none)|setSelectedObject,app/components/schematic-compiler/SchematicCompilerWorkspace.tsx,click,button,no,named:text,* *
 app/components/schematic-compiler/SchematicCompilerWorkspace.tsx|click|button|(none)|setSelectedObject#2,app/components/schematic-compiler/SchematicCompilerWorkspace.tsx,click,button,no,named:text,* ? · * * exact pins * · * unresolved
 app/components/schematic-compiler/SchematicCompilerWorkspace.tsx|click|g|(none)|setSelectedObject,app/components/schematic-compiler/SchematicCompilerWorkspace.tsx,click,g,no,named:text,* *
+app/components/schematic/ComponentResolutionReviewDialog.tsx|click|Button|component-resolution-approve|onApprove,app/components/schematic/ComponentResolutionReviewDialog.tsx,click,Button,no,named:text,Applying… Approve batch
+app/components/schematic/ComponentResolutionReviewDialog.tsx|click|Button|component-resolution-discard|onDiscard,app/components/schematic/ComponentResolutionReviewDialog.tsx,click,Button,no,named:text,Discard — change nothing
+app/components/schematic/ComponentResolutionReviewDialog.tsx|click|button|Dismiss the component resolution receipt|onDismiss,app/components/schematic/ComponentResolutionReviewDialog.tsx,click,button,no,named:aria-label,Dismiss the component resolution receipt
+app/components/schematic/ComponentResolutionReviewDialog.tsx|dialog|Dialog|(none)|onDiscard,app/components/schematic/ComponentResolutionReviewDialog.tsx,dialog,Dialog,no,exempt:dialog-titled,Resolve * 0 unresolved part s — review before applying
 app/components/schematic/ReplacementReviewDialog.tsx|click|Button|Applying…|Apply exact replacement|onApply,app/components/schematic/ReplacementReviewDialog.tsx,click,Button,yes,named:text,Applying… Apply exact replacement
 app/components/schematic/ReplacementReviewDialog.tsx|click|Button|Cancel — change nothing|onCancel,app/components/schematic/ReplacementReviewDialog.tsx,click,Button,yes,named:text,Cancel — change nothing
 app/components/schematic/ReplacementReviewDialog.tsx|dialog|Dialog|(none)|onCancel,app/components/schematic/ReplacementReviewDialog.tsx,dialog,Dialog,yes,exempt:dialog-titled,Exact component replacement — review before applying

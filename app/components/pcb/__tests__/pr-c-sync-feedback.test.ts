@@ -73,7 +73,7 @@ describe("[PR-C 2] unresolved instances are named before any server call", () =>
     expect(list).toContain("{UNRESOLVED_MISSING_LABEL[item.missing]}"); // [PR-F lead, 2026-10-17] the list component
     expect(list).toContain("Review path: {item.reviewPath}"); // [PR-F lead, 2026-10-17] the list component
     expect(source).toContain('<button type="button" onClick={onDismiss} data-testid="sync-blockers-dismiss"');
-    expect(source.match(/<SyncBlockersPanel blockers=\{syncBlockers\} busy=\{syncing \|\| applying\} onDismiss=\{\(\) => setSyncBlockers\(null\)\} schematic=\{schematic\} projectScope=\{publisherScope\} \/>/g)).toHaveLength(2); // [PR-F lead, 2026-10-17] the panel hands the rows their schematic facts and the project scope (the Missing parts list)
+    expect(source.match(/<SyncBlockersPanel blockers=\{shownSyncBlockers\} busy=\{syncing \|\| applying\} onDismiss=\{\(\) => setSyncBlockers\(null\)\} schematic=\{schematic\} projectScope=\{publisherScope\} onFindReplacement=\{onFindReplacement\} \/>/g)).toHaveLength(2); // [PR-F lead, 2026-10-17] the panel hands the rows their schematic facts and the project scope (the Missing parts list); [PR-M, 2026-10-18] reviewed pin move: + the page's "Find a replacement in the library" entry point (onFindReplacement), both mounts, and the panel shows the list as the schematic stands (shownSyncBlockers: the same listing recomputed, derived - never a setState in an effect)
     // one mount under the empty state's call to action, one in the editor's canvas area
     const emptyState = between('data-testid="pcb-empty-state"', "<SyncPlacementDialog");
     const editor = between('data-testid="pcb-editor"', "<DebugHud scene={scene} />");

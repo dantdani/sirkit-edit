@@ -11,19 +11,19 @@
     "legacy",
     "missing"
   ],
-  "rows": 947,
+  "rows": 953,
   "byKind": {
     "action": 110,
-    "control": 778,
+    "control": 784,
     "tool": 59
   },
   "byDisposition": {
     "callable-now": 52,
-    "proposal-only": 258,
+    "proposal-only": 261,
     "grant-required": 68,
     "human-admin-only": 85,
     "view-session-only": 85,
-    "intentionally-ui-only": 334,
+    "intentionally-ui-only": 337,
     "unavailable": 11,
     "legacy": 0,
     "missing": 54
@@ -42,11 +42,11 @@
     },
     "control": {
       "callable-now": 21,
-      "proposal-only": 205,
+      "proposal-only": 208,
       "grant-required": 55,
       "human-admin-only": 64,
       "view-session-only": 73,
-      "intentionally-ui-only": 324,
+      "intentionally-ui-only": 327,
       "unavailable": 0,
       "legacy": 0,
       "missing": 36
@@ -71,7 +71,7 @@
   },
   "rowsWithoutTest": {
     "action": 40,
-    "control": 431,
+    "control": 434,
     "tool": 0
   },
   "actions": {
@@ -79,10 +79,10 @@
     "rows": 110
   },
   "controls": {
-    "sites": 649,
-    "rows": 778,
-    "surfaces": 67,
-    "recordsReached": 80
+    "sites": 654,
+    "rows": 784,
+    "surfaces": 68,
+    "recordsReached": 82
   },
   "tools": {
     "descriptors": 59,

@@ -168,6 +168,9 @@ export type CatalogSearchPortAnswer =
 /** The server port behind the local catalog search (the Build loop's own recall); faked in tests. */
 export interface CatalogSearchPort {
   search(request: CatalogSearchPortRequest): Promise<CatalogSearchPortAnswer>;
+  /** [PR-M, 2026-10-18] set ONLY by the fixture runtime's seam (app/api/chat/component-resolution-runtime.ts): its recall is a word-overlap
+   *  match over the committed fixture catalog (no embedding, no reranker), and the candidate search says so in its output. */
+  readonly recall?: "fixture-catalog";
 }
 
 /** The fresh server facts of one resolution apply: every catalog part the batch is decided on and the evidence + status of its

@@ -13,13 +13,16 @@
  *  - the facts it returns are DATA: the apply recompiles the whole batch from them and byte-matches the reviewed operations and
  *    impact - provenance comes from the channel, content validity from the recompile.
  *
- * The transport is injected by its factory only. The production factory (the same-origin POST to the server's fresh-facts endpoint,
- * behind the shared authorization boundary) lands with the page's review controller in the next round; until then only the
- * test-only factory exists, and an apply without a channel refuses `authority-unavailable` (fail closed).
+ * The transport is injected by its factory only. [PR-M, 2026-10-18] The PRODUCTION factory `createResolutionReauthorization` is the
+ * same-origin POST to the server's fresh-facts endpoint (`POST /api/component-resolution-authority`, behind the shared authorization
+ * boundary: authentication, active membership, the editor roles, exact-origin CSRF, the bounded body) with the project selector in
+ * headers; its one production caller is the page's review controller (app/lib/project/resolution-approval-controller.internal.ts).
+ * An apply without a channel still refuses `authority-unavailable` (fail closed).
  */
 import type { AtomicRevisionStatus } from "../atomic/revision-status";
 import type { CatalogPartDetail } from "../atomic/catalog-part-detail";
 import { readBoundedStream } from "../http/bounded-stream";
+import { projectSelectorHeaders } from "../project/project-selector";
 import type { FreshResolutionFacts, PublishedRevisionEvidence } from "./evidence";
 
 const MAX_RESPONSE_UTF8_BYTES = 2_000_000;
@@ -41,7 +44,7 @@ export interface ResolutionReauthorizationRequest {
 export interface AuthenticFreshResolutionFacts { facts: FreshResolutionFacts; provenance: { nonce: string; requestedAt: number; expiresAt: number } }
 
 export interface ResolutionTransportResult { ok: boolean; contentType: string | null; stream: ReadableStream<Uint8Array> | null; text: string | null }
-type Transport = (requestBody: string, signal: AbortSignal) => Promise<ResolutionTransportResult | null>;
+type Transport = (requestBody: string, signal: AbortSignal, selectorHeaders: Record<string, string>) => Promise<ResolutionTransportResult | null>;
 
 function randomNonce(): string {
   const bytes = new Uint8Array(16);
@@ -98,7 +101,9 @@ async function performConsume(transport: Transport, request: ResolutionReauthori
   const nonce = randomNonce();
   let response: ResolutionTransportResult | null;
   try {
-    response = await transport(JSON.stringify({ scope: request.scope, proposalId: request.proposalId, items: request.items, partIds: request.partIds, nonce }), signal);
+    // the project SELECTOR travels in headers (the server's only scope authority, verified against the session's membership); the body's
+    // scope is the server's post-authentication cross-check, echoed back for verification
+    response = await transport(JSON.stringify({ scope: request.scope, proposalId: request.proposalId, items: request.items, partIds: request.partIds, nonce }), signal, projectSelectorHeaders(request.scope));
   } catch {
     return null;
   }
@@ -130,6 +135,28 @@ async function performConsume(transport: Transport, request: ResolutionReauthori
     facts: { parts, evidence: payload.evidence as Record<string, PublishedRevisionEvidence | null>, status: payload.status as Record<string, AtomicRevisionStatus> },
     provenance: { nonce, requestedAt: request.now, expiresAt: request.now + RESOLUTION_REAUTHORIZATION_RESULT_TTL_MS },
   };
+}
+
+/** [PR-M, 2026-10-18] The fresh-facts endpoint the production channel posts to (same origin). */
+export const RESOLUTION_REAUTHORIZATION_ENDPOINT = "/api/component-resolution-authority" as const;
+
+/**
+ * [PR-M, 2026-10-18] PRODUCTION factory - the ONLY way the page's review controller obtains a channel. Same-origin platform fetch,
+ * `no-store`, redirect refusal, the selector headers, the internal abort signal threaded through the fetch AND the bounded body read.
+ * Nothing is injectable.
+ */
+export function createResolutionReauthorization(): ResolutionReauthorizationChannel {
+  return make(async (body, signal, selectorHeaders) => {
+    const response = await fetch(RESOLUTION_REAUTHORIZATION_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...selectorHeaders },
+      body,
+      signal,
+      cache: "no-store",
+      redirect: "error",
+    });
+    return { ok: response.ok, contentType: response.headers.get("content-type"), stream: response.body, text: null };
+  });
 }
 
 /** Consume the channel ONCE for one apply attempt (the approved-resolution service only). A non-channel yields null. */

@@ -13,39 +13,25 @@
  *    query on the server's provider account, the lexical and authority channels, the catalog's category vocabulary and the reranker
  *    refusal memo). It needs the catalog DATABASE (the search has no fixture branch), so it is bound only with a configured database
  *    outside the fixture runtime; the agent's per-run limit (3 searches) bounds its provider spend.
+ *  - [PR-M, 2026-10-18] the FIXTURE SEARCH seam: under the fixture runtime only (non-production, local_dev identity), the search port is
+ *    a word-overlap recall over the committed fixture catalog (`fixtureGenerationCatalogPort().searchParts`, the generation worker's own
+ *    fixture catalog search: no embedding, no reranker, no provider), declared `recall: "fixture-catalog"` so the candidate search's
+ *    output names it. Every hit is still re-read through the catalog and evidence ports before it can be eligible;
  *
  * Mirrors catalog-inspection-runtime.ts: the default is the REAL production port, failing CLOSED to undefined; a failure is a closed
  * code, never its message. A test setter exists with a deterministic reset; it is never a production path.
  */
 import { searchPartsForAI, type PartsSearchOutcome } from "@/app/lib/parts-search";
-import { loadAtomicRevisionStatus, loadSelectablePortableSnapshot } from "@/app/lib/atomic/server-catalog";
-import { publishedRevisionEvidenceOf, type CatalogSearchPort, type PublishedRevisionEvidence, type RevisionEvidencePort } from "@/app/lib/component-resolution/evidence";
+import type { CatalogSearchPort, RevisionEvidencePort } from "@/app/lib/component-resolution/evidence";
+import { resolveRevisionEvidencePort } from "./revision-evidence-runtime"; // [PR-M, 2026-10-18] the ONE evidence port (its own module: the fresh-facts endpoint reaches it without the catalog search's provider-backed closure)
 import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode";
-import { CATALOG_DATABASE_SETTING, catalogInspectionServable } from "./catalog-inspection-runtime";
+import { fixtureGenerationCatalogPort } from "@/app/lib/fixture-runtime/generation-ports";
+import { CATALOG_DATABASE_SETTING } from "./catalog-inspection-runtime";
 
 export interface ComponentResolutionPorts { evidence?: RevisionEvidencePort; search?: CatalogSearchPort }
 export type ComponentResolutionPortsFactory = () => ComponentResolutionPorts;
 
-/** At most this many revisions per evidence call (a resolution batch is at most 20 items; a search classifies at most 10 hits). */
-export const MAX_EVIDENCE_REVISIONS_PER_CALL = 64;
-
-const PRODUCTION_EVIDENCE_PORT: RevisionEvidencePort = {
-  load: async (request) => {
-    try {
-      const ids = [...new Set(request.revisionIds)].slice(0, MAX_EVIDENCE_REVISIONS_PER_CALL);
-      const evidence: Record<string, PublishedRevisionEvidence | null> = {};
-      for (const id of ids) {
-        if (request.signal.aborted) return { state: "failed", code: "EVIDENCE_CANCELLED" };
-        const snapshot = await loadSelectablePortableSnapshot(id);
-        evidence[id] = snapshot && snapshot.atomicRevision.id === id ? publishedRevisionEvidenceOf(snapshot) : null;
-      }
-      const statuses = await loadAtomicRevisionStatus(ids);
-      return { state: "ok", evidence, status: Object.fromEntries(statuses) };
-    } catch {
-      return { state: "failed", code: "EVIDENCE_UNAVAILABLE" };
-    }
-  },
-};
+export { MAX_EVIDENCE_REVISIONS_PER_CALL } from "./revision-evidence-runtime"; // [PR-M, 2026-10-18] the evidence port moved to its own module (the fresh-facts endpoint reads it without the search)
 
 const PRODUCTION_SEARCH_PORT: CatalogSearchPort = {
   search: async (request) => {
@@ -65,6 +51,20 @@ const PRODUCTION_SEARCH_PORT: CatalogSearchPort = {
   },
 };
 
+/** [PR-M, 2026-10-18] The fixture runtime's catalog search seam (see the module comment): the committed fixture catalog, word overlap only. */
+const FIXTURE_SEARCH_PORT: CatalogSearchPort = {
+  recall: "fixture-catalog",
+  search: async (request) => {
+    try {
+      if (request.signal.aborted) return { state: "failed", code: "CATALOG_SEARCH_CANCELLED" };
+      const results = await fixtureGenerationCatalogPort().searchParts(request.query, request.category ?? undefined, request.limit, { signal: request.signal });
+      return { state: "ok", hits: results.map((result) => ({ partId: result.partId, name: result.name, mpn: result.mpn, mainCategory: result.mainCategory, similarity: result.similarity, pinCount: result.pins.length })), category: null, ranking: "unknown" };
+    } catch {
+      return { state: "failed", code: "CATALOG_SEARCH_UNAVAILABLE" };
+    }
+  },
+};
+
 /** Whether the local catalog search can run here: a configured catalog database outside the fixture runtime. */
 export function catalogSearchServable(environment: Record<string, string | undefined> = process.env): boolean {
   if (fixtureRuntimeEnabled(environment)) return false;
@@ -72,8 +72,8 @@ export function catalogSearchServable(environment: Record<string, string | undef
 }
 
 const DEFAULT_FACTORY: ComponentResolutionPortsFactory = () => ({
-  ...(catalogInspectionServable() ? { evidence: PRODUCTION_EVIDENCE_PORT } : {}),
-  ...(catalogSearchServable() ? { search: PRODUCTION_SEARCH_PORT } : {}),
+  ...(() => { const evidence = resolveRevisionEvidencePort(); return evidence ? { evidence } : {}; })(),
+  ...(catalogSearchServable() ? { search: PRODUCTION_SEARCH_PORT } : fixtureRuntimeEnabled() ? { search: FIXTURE_SEARCH_PORT } : {}), // [PR-M, 2026-10-18] + the fixture runtime's seam (never with a database search)
 });
 let portsFactory: ComponentResolutionPortsFactory = DEFAULT_FACTORY;
 
