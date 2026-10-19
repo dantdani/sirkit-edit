@@ -38,7 +38,7 @@ function componentProtected(context: PcbSyncPreflightContext, footprint: PcbBoar
   return Object.values(footprint.padNets).some((netId) => netId !== 0 && retained.has(netId));
 }
 
-function riskyBoard(boardClass: PcbSyncPreflightContext["boardAssessment"]["boardClass"]): boolean {
+export function riskyBoard(boardClass: PcbSyncPreflightContext["boardAssessment"]["boardClass"]): boolean {
   return ["routed", "zoned", "constrained", "locked_unrouted", "unsupported"].includes(boardClass);
 }
 
@@ -122,7 +122,7 @@ export function assessComponents(context: PcbSyncPreflightContext): ComponentTra
 }
 
 function boardNetName(net: PcbSyncSchematicNet): string { return net.canonicalScope.length ? `/${net.canonicalScope.join("/")}/${net.displayName}` : net.displayName; }
-function netHasProtectedState(board: PcbBoard | undefined, netId: number): boolean {
+export function netHasProtectedState(board: PcbBoard | undefined, netId: number): boolean {
   if (!board) return false;
   return board.tracks.some((item) => item.netId === netId) || board.vias.some((item) => item.netId === netId) || board.zones.some((item) => item.netId === netId) || Boolean(board.constraintState || board.netClassing);
 }

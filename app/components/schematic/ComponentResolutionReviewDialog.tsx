@@ -15,16 +15,21 @@
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { ComponentResolutionReview, ResolutionReceiptView } from "@/app/lib/project/component-resolution-events";
+import { boardImpactSentences } from "@/app/lib/component-resolution/board-impact";
+import type { ComponentResolutionBoardImpactView, ComponentResolutionReview, ResolutionReceiptView } from "@/app/lib/project/component-resolution-events";
 
 export interface ComponentResolutionReviewDialogProps {
   review: ComponentResolutionReview | null;
+  /** [PR-L6, 2026-10-19] runbook M.4 / M.5 item 7: the batch's PCB impact against the durable board (display only); Approve stays
+   *  disabled, with its visible reason, until it is assessed - loading or unreadable fails closed; Discard is always available. */
+  boardImpact: ComponentResolutionBoardImpactView | null;
   busy: boolean;
   onApprove: () => void;
   onDiscard: () => void;
 }
 
-export function ComponentResolutionReviewDialog({ review, busy, onApprove, onDiscard }: ComponentResolutionReviewDialogProps) {
+export function ComponentResolutionReviewDialog({ review, boardImpact, busy, onApprove, onDiscard }: ComponentResolutionReviewDialogProps) {
+  const approveBlocked = boardImpact === null ? "Approve is disabled until the batch's PCB impact is assessed." : boardImpact.approveBlockedReason;
   return (
     <Dialog open={review !== null} onOpenChange={(open) => { if (!open && !busy) onDiscard(); }}>
       <DialogContent className="sm:max-w-2xl" data-testid="component-resolution-review">
@@ -53,11 +58,19 @@ export function ComponentResolutionReviewDialog({ review, busy, onApprove, onDis
             <div className="rounded border border-border px-2 py-1.5 text-[12px] text-muted-foreground">
               {review.unaffectedComponents} other component(s) are not touched.{review.downstream.length > 0 ? ` ${review.downstream.join(" · ")}` : ""}
             </div>
+            <section aria-label="PCB impact" data-testid="component-resolution-board-impact" data-state={boardImpact?.state ?? "loading"} className="space-y-1 rounded border border-border px-2 py-1.5 text-[12px] text-foreground">
+              <div className="font-medium">{boardImpact?.headline ?? "PCB impact: not assessed yet."}</div>
+              {boardImpact?.rows.map((row) => (
+                <div key={row.componentInstanceId} data-testid={`component-resolution-board-impact-row-${row.refDes}`} data-outcome={row.outcome} data-operation={row.operation}>{row.text}</div>
+              ))}
+              {boardImpact && boardImpact.invalidates.length > 0 && <div className="text-amber-700" data-testid="component-resolution-board-impact-invalidates">Goes stale until Prepare PCB re-runs: {boardImpact.invalidates.join(" · ")}</div>}
+            </section>
           </div>
         )}
         <DialogFooter>
+          {approveBlocked && !busy && <p className="mr-auto self-center text-[11px] text-amber-700" data-testid="component-resolution-approve-reason">{approveBlocked}</p>}
           <Button variant="ghost" onClick={onDiscard} disabled={busy} data-testid="component-resolution-discard">Discard — change nothing</Button>
-          <Button variant="destructive" onClick={onApprove} disabled={busy} data-testid="component-resolution-approve">{busy ? "Applying…" : "Approve batch"}</Button>
+          <Button variant="destructive" onClick={onApprove} disabled={busy || approveBlocked !== null} data-testid="component-resolution-approve">{busy ? "Applying…" : "Approve batch"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -72,6 +85,7 @@ export function ComponentResolutionReceiptNotice({ receipt, onDismiss }: { recei
       <div className="mt-0.5 text-zinc-400">
         {receipt.items.map((item) => item.refDes).join(", ")} → {[...new Set(receipt.items.map((item) => item.target.exactMpn))].join(", ")} · transaction {receipt.transactionId.slice(0, 12)}… · schematic revision {receipt.headAfter.headSequence} · undoable
       </div>
+      {receipt.boardImpact && <div className="mt-0.5 text-zinc-400" data-testid="component-resolution-receipt-board-impact" data-state={receipt.boardImpact.state}>{boardImpactSentences(receipt.boardImpact).join(" ")}</div>}
       <button type="button" className="mt-1 text-zinc-500 hover:text-zinc-300" onClick={onDismiss} aria-label="Dismiss the component resolution receipt">Dismiss</button>
     </div>
   );

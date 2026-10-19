@@ -46,6 +46,7 @@ import { loadCatalogParts, loadFreshResolutionFacts } from "@/app/lib/component-
 import { netlistLookupOf } from "@/app/lib/component-resolution/instance-facts";
 import type { SealedResolutionProposal } from "@/app/lib/component-resolution/resolution-proposal";
 import { applyApprovedResolutionProposal } from "@/app/lib/component-resolution/approved-resolution-mutations";
+import { assessResolutionBoardImpact, resolutionBoardImpactItems, resolutionBoardImpactSummary, type ResolutionReceiptBoardImpact } from "@/app/lib/component-resolution/board-impact"; // [PR-L6, 2026-10-19]
 import { issueResolutionApprovalIntent } from "@/app/lib/component-resolution/resolution-approval.internal";
 import { __createTestResolutionReauthorizationChannel } from "@/app/lib/component-resolution/resolution-reauthorization";
 import { loadAcquisitionHandoff } from "@/app/lib/component-resolution/acquisition/handoff";
@@ -105,14 +106,14 @@ async function harness(state: SchematicState): Promise<Harness> {
   return { editor, coordinator, history, visible: () => structuredClone(visible), context, invoke: (toolId, args) => gateway.invoke({ runId: "run-m2", provider: "anthropic", toolId, version: "1.0.0", args, context: context(), timeoutMs: 15_000 }), journalStore: new InMemoryApprovedMutationJournalStore(), interlock: new ProjectCommitInterlock(), registry: new ApprovedMutationRegistry() };
 }
 
-function apply(h: Harness, proposal: SealedResolutionProposal) {
+function apply(h: Harness, proposal: SealedResolutionProposal, boardImpact?: ResolutionReceiptBoardImpact) { // [PR-L6, 2026-10-19] + the reviewed PCB impact the page passes
   const intent = issueResolutionApprovalIntent({ proposalId: proposal.proposalId, scope: SCOPE, headMark: proposal.scope.headMark, authorization: { principalId: proposal.authorization.principalId, membershipRevision: proposal.authorization.membershipRevision }, now: Date.now() });
   const channel = __createTestResolutionReauthorizationChannel(async (body) => {
     const request = JSON.parse(body) as { nonce: string; proposalId: string; scope: typeof SCOPE; items: Array<{ componentInstanceId: string; currentPartId: string; candidatePartId: string; atomicPartRevisionId: string }>; partIds: string[] };
     const facts = await loadFreshResolutionFacts({ catalog: resolveCatalogInspectionPort()!, evidence: resolveComponentResolutionPorts().evidence!, request: { items: request.items, partIds: request.partIds }, context: { scope: request.scope, runId: "apply", budgetMs: 10_000 } });
     return facts ? { ok: true, text: JSON.stringify({ ok: true, ...facts, binding: { nonce: request.nonce, proposalId: request.proposalId, scope: SCOPE } }) } : { ok: false, text: "{}" };
   });
-  return applyApprovedResolutionProposal({ proposal, session: h.editor, gateway: h.coordinator, interlock: h.interlock, journal: new ApprovedMutationJournal(h.journalStore, SCOPE), stillCurrent: () => true, currentProjectId: SCOPE.projectId, currentBranchId: "main", originRunId: "run-m2", approval: intent, reauthorization: channel, registry: h.registry, audit: new ApprovedMutationAuditLedger() });
+  return applyApprovedResolutionProposal({ proposal, session: h.editor, gateway: h.coordinator, interlock: h.interlock, journal: new ApprovedMutationJournal(h.journalStore, SCOPE), stillCurrent: () => true, currentProjectId: SCOPE.projectId, currentBranchId: "main", originRunId: "run-m2", approval: intent, reauthorization: channel, registry: h.registry, audit: new ApprovedMutationAuditLedger(), ...(boardImpact ? { boardImpact } : {}) });
 }
 
 async function netsByFunction(state: SchematicState): Promise<Record<string, string[]>> {
@@ -203,11 +204,13 @@ describe("[PR-M M.5-4] no local candidate -> fixture source -> bytes -> validati
     expect(sealed.kind, JSON.stringify(sealed)).toBe("resolution-proposal");
     if (sealed.kind !== "resolution-proposal") return;
     expect(sealed.proposal.impact.items.map((item) => [item.refDes, item.mode, item.target.atomicPartRevisionId])).toEqual([["D1", "same-part-binding", revisionId], ["D2", "same-part-binding", revisionId]]);
-    const applied = await apply(h, sealed.proposal);
+    const reviewedImpact = resolutionBoardImpactSummary(assessResolutionBoardImpact({ items: resolutionBoardImpactItems(sealed.proposal), basis: { state: "no-board", boardId: `board:${SCOPE.projectId}` } })); // [PR-L6, 2026-10-19] the acquired revision reaches the same PCB impact (no board yet: added at Prepare PCB)
+    const applied = await apply(h, sealed.proposal, reviewedImpact);
     expect(applied, JSON.stringify(applied)).toMatchObject({ ok: true, status: "committed" }); // [PR-L/M integration, 2026-10-18] F10: a fresh apply must COMMIT (an "already-applied" answer here is a defect, never a silent skip of steps 6-7)
     if (!applied.ok || applied.status !== "committed") throw new Error("unreachable: the apply did not commit"); // narrows the type only
     const after = h.visible();
     expect(schematicStateDigest(after)).toBe(applied.receipt.schematicDigestAfter);
+    expect(applied.receipt).toMatchObject({ schema: "sirkit.approved-resolution-receipt.v2", boardImpact: { state: "assessed", basis: { kind: "no-board" }, items: [{ schematicRefDes: "D1", outcome: "not-on-board", operation: "add_component_instance" }, { schematicRefDes: "D2", outcome: "not-on-board", operation: "add_component_instance" }] } }); // [PR-L6, 2026-10-19] the receipt v2 discloses it
     for (const id of ["kc-d1", "kc-d2"]) expect(after.kicadComponents!.find((instance) => instance.id === id)).toMatchObject({ partId: catalog.ids.get("1n4148"), atomicPartRevisionId: revisionId });
     expect(await netsByFunction(after)).toEqual(netsBefore); // the electrical check: every net, its members and the polarity on it
     expect(buildPcbSyncPreflightReport(after)).toMatchObject({ unresolved: { count: 0 }, status: "ready_for_server_preparation" });

@@ -161,7 +161,7 @@ import { stackupProfile, type StackupProfileId } from "@/app/lib/pcb/stackup"; /
 import { AssignmentQueuePanel } from "./AssignmentQueuePanel";
 import { PcbSyncReadinessPanel } from "./PcbSyncReadinessPanel"; // [PR-C F-08] a blocked preflight shown per blocker (message + refs), not as one 6 s toast
 import type { JourneyPcbFacts } from "@/app/lib/workflow/journey"; // [PR-C] the PCB facts reported to the page's journey model
-import { listUnresolvedInstances, unresolvedInstancesRefusal, type UnresolvedInstance } from "@/app/lib/pcb-sync/unresolved-instances"; // [PR-C F-08] the instances named BEFORE any server call
+import { boardBehindSchematicNotice, boardSchematicDrift, manufacturingGateRefusal } from "@/app/lib/pcb-sync/schematic-drift"; /* [PR-L6, 2026-10-19] M.4 / M.5-7: the board behind the schematic, derived from facts (in place: no line moves) */ import { listUnresolvedInstances, unresolvedInstancesRefusal, type UnresolvedInstance } from "@/app/lib/pcb-sync/unresolved-instances"; // [PR-C F-08] the instances named BEFORE any server call
 import { MissingPartsList, type ReplacementRequestInstance } from "./MissingPartsList"; // [PR-F fA] the refusal rows as a workflow item: checklist + next actions over the existing routes; [PR-M, 2026-10-18] + the replacement entry point's instances
 import type { ProjectSelectorScope } from "@/app/lib/project/project-selector"; // [PR-F fA] the scope the list's distributor search and publication request act in
 import { missingPartsWords } from "@/app/lib/parts/missing-facts"; // [PR-F fA]
@@ -476,7 +476,7 @@ export default function PcbEditor({
   // every schematic change (a reviewed component resolution, an undo) - a resolved instance leaves the list and an empty list is not
   // shown. Only the unresolved-instances list is derived; a blocked preflight's blockers are a later stage's facts and stay as reported.
   const shownSyncBlockers = useMemo(() => syncBlockersForSchematic(syncBlockers, schematic), [syncBlockers, schematic]);
-  const [authoritativeRecord, setAuthoritativeRecord] = useState<PcbSyncBoardRecord | null>(null);
+  const [authoritativeRecord, setAuthoritativeRecord] = useState<PcbSyncBoardRecord | null>(null); const schematicDrift = useMemo(() => (init.demo ? null : boardSchematicDrift(schematic, authoritativeRecord?.board ?? null)), [init.demo, schematic, authoritativeRecord]); const boardBehindNotice = boardBehindSchematicNotice(schematicDrift); // [PR-L6, 2026-10-19] OD-253 item 8: the DURABLE board vs the schematic as they stand - recomputed on every Undo / Redo / reload / Prepare PCB, never a sticky flag
   const authorityRef = useRef<PcbSyncBoardRecord | null>(null);
   // [B16-C.1] the board this session works on: the lineage ROOT (`board:<project>`) until the server's lineage says a
   // derived revision is current — then the editor follows it (a fresh browser learns this from the board load).
@@ -1341,7 +1341,7 @@ export default function PcbEditor({
 
   const handleQualify = useCallback(async () => {
     if (!syncIdentity || !client) return;
-    if (!authorityRef.current) { setToast("Qualification needs an applied durable board — run Schematic → PCB and apply the sync plan first."); return; }
+    if (!authorityRef.current) { setToast("Qualification needs an applied durable board — run Schematic → PCB and apply the sync plan first."); return; } const driftRefusal = manufacturingGateRefusal("qualify", schematicDrift); if (driftRefusal) { setToast(driftRefusal); return; } // [PR-L6, 2026-10-19] refused in the page while the board is behind the schematic
     // B08.3 — VERIFIED qualification adoption: the server's response must
     // carry a non-empty boardRevision AND boardDigest, and the reloaded
     // authoritative record must match BOTH (plus the captured tenant/
@@ -1385,7 +1385,7 @@ export default function PcbEditor({
       },
       settle: settleStaleServerCommit,
     });
-  }, [syncIdentity, client, scopeHeaders, boardCheckpoint, adoptBoardLifecycle, settleStaleServerCommit, ownedOps, pcbLifecycle, bumpManufacturingTruth]);
+  }, [syncIdentity, client, scopeHeaders, boardCheckpoint, adoptBoardLifecycle, settleStaleServerCommit, ownedOps, pcbLifecycle, bumpManufacturingTruth, schematicDrift]);
 
   /**
    * MFG01 verified release: the server reloads its OWN durable authority,
@@ -1405,10 +1405,10 @@ export default function PcbEditor({
     if (manufacturing.hydration.status !== "loaded") return { ok: false, message: "Release is unavailable until the durable manufacturing truth has been read for this board." };
     if (!manufacturing.canRequestRelease) {
       return { ok: false, message: manufacturing.truth?.authority ? "Release blocked: the qualification authority is not current for this board. Run “Qualify & route” again first." : "Release blocked: no manufacturing authority exists yet. Run “Qualify & route” first." };
-    }
+    } const driftRefusal = manufacturingGateRefusal("release", schematicDrift); if (driftRefusal) return { ok: false, message: driftRefusal }; // [PR-L6, 2026-10-19] refused in the page while the board is behind the schematic
     manufacturing.requestRelease();
     return { ok: false, message: "Release requires a separate administrator authorization — review the sealed authority in the manufacturing panel and authorize it there." };
-  }, [syncIdentity, releasing, manufacturing]);
+  }, [syncIdentity, releasing, manufacturing, schematicDrift]);
 
   const handleRelease = useCallback(async () => {
     const result = await performVerifiedRelease();
@@ -2592,20 +2592,20 @@ export default function PcbEditor({
   const journeyWorkflowState = manufacturing.workflow?.state ?? null;
   const journeyReleased = Boolean(manufacturing.truth?.latestRelease?.current);
   const journeyBoardExists = state.board !== null;
-  const journeyRoutingStale = routeStaleNotice !== null;
+  const journeyRoutingStale = routeStaleNotice !== null; const journeyBoardBehind = schematicDrift?.items.length ?? 0; // [PR-L6, 2026-10-19]
   const journeyBindingReviewPending = componentReview.pendingCount;
   useEffect(() => {
-    onJourneyFacts?.({ boardExists: journeyBoardExists, syncing: ownedBusy.syncing, unresolvedCount: journeyUnresolved, bindingReviewPending: journeyBindingReviewPending, preflight: journeyPreflight, applying: ownedBusy.applying, workflowState: journeyWorkflowState, routingStale: journeyRoutingStale, drcCurrent: null, released: journeyReleased });
-  }, [onJourneyFacts, journeyBoardExists, ownedBusy.syncing, ownedBusy.applying, journeyUnresolved, journeyBindingReviewPending, journeyPreflight, journeyWorkflowState, journeyRoutingStale, journeyReleased]);
-  // [PR-C] "Prepare PCB" from the page: the same preparation the button starts, only while no board exists and nothing
+    onJourneyFacts?.({ boardExists: journeyBoardExists, syncing: ownedBusy.syncing, unresolvedCount: journeyUnresolved, bindingReviewPending: journeyBindingReviewPending, preflight: journeyPreflight, applying: ownedBusy.applying, workflowState: journeyWorkflowState, routingStale: journeyRoutingStale, drcCurrent: null, released: journeyReleased, boardBehindSchematic: journeyBoardBehind });
+  }, [onJourneyFacts, journeyBoardExists, ownedBusy.syncing, ownedBusy.applying, journeyUnresolved, journeyBindingReviewPending, journeyPreflight, journeyWorkflowState, journeyRoutingStale, journeyReleased, journeyBoardBehind]);
+  // [PR-C] "Prepare PCB" from the page: the same preparation the button starts, only while no board exists (or, [PR-L6, 2026-10-19], the board is behind the schematic) and nothing
   // runs; each token starts at most one run, and applying the verified plan stays the human's explicit click.
   const syncRequestSeenRef = useRef(0);
   useEffect(() => {
     if (syncRequestToken === 0 || syncRequestSeenRef.current === syncRequestToken) return;
     syncRequestSeenRef.current = syncRequestToken;
-    if (state.board !== null || ownedBusy.syncing) return;
+    if ((state.board !== null && (schematicDrift?.items.length ?? 0) === 0) || ownedBusy.syncing) return; // [PR-L6, 2026-10-19] the journey's Prepare PCB for a board behind the schematic is the button's run (never a silent no-op)
     queueMicrotask(() => { void handleSync({ centerNewParts: true, spreadOverlaps: true }); }); // the run starts after this commit, like a click would
-  }, [syncRequestToken, state.board, ownedBusy.syncing, handleSync]);
+  }, [syncRequestToken, state.board, ownedBusy.syncing, handleSync, schematicDrift]);
   // [PR-F fA] "Missing parts" from the page (the sidebar line, the journey's Resolve parts): the list a Schematic → PCB run would
   // refuse at, computed from the schematic alone (the same `listUnresolvedInstances`), shown without a run - no server call,
   // nothing bound or published. A blocked preflight already on screen is left alone (its blockers are a later stage's facts).
@@ -2815,7 +2815,7 @@ export default function PcbEditor({
             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-40 max-w-xl rounded border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-200" data-testid="route-stale-banner">
               Routing evidence is stale: {routeStaleNotice}
             </div>
-          )}
+          )}{boardBehindNotice && (<div role="status" className={`pointer-events-none absolute ${routeStaleNotice ? "top-12" : "top-2"} left-1/2 -translate-x-1/2 z-20 max-w-xl rounded border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-200`} data-testid="board-behind-schematic-banner" data-count={schematicDrift?.items.length ?? 0}>{boardBehindNotice}</div>)} {/* [PR-L6, 2026-10-19] beside the route-stale notice: plain text, no control; it never intercepts a click and sits BELOW the z-30 action panels (measured: at 1366 px it covered the Missing parts list's "Find a replacement") */}
           {/* [PR-C F-08] the refusal that outlives the toast, a compact panel under the sync toolbar: the instances named before
               any server call or the blocked preflight, per blocker. Dismiss or the next sync clears it. */}
           {shownSyncBlockers && (
@@ -2844,7 +2844,7 @@ export default function PcbEditor({
                 qualifying={qualifying}
                 canQualify={Boolean(authoritativeRecord)}
                 onQualify={() => void handleQualify()}
-                routeStaleNotice={routeStaleNotice}
+                routeStaleNotice={routeStaleNotice} boardBehindNotice={boardBehindNotice} /* [PR-L6, 2026-10-19] the panel's own Request release / Authorize release are refused too while the board is behind the schematic */
               />
             </div>
           )}

@@ -30,6 +30,7 @@ import { ApprovedMutationJournal, InMemoryApprovedMutationJournalStore } from "@
 import { schematicStateDigest } from "@/app/lib/engineering/schematic-model";
 import { buildPcbSyncPreflightReport } from "@/app/lib/pcb-sync/preflight-read";
 import { approveAndApplyResolution } from "@/app/lib/project/resolution-approval-controller.internal";
+import { assessResolutionBoardImpact, resolutionBoardImpactItems } from "../board-impact"; // [PR-L6, 2026-10-19]
 import { MAX_FIND_REPLACEMENT_INSTANCES, RESOLUTION_PROGRESS, findReplacementSentence, resolutionAftermathLines, resolutionLines, resolutionProgressLine } from "@/app/lib/project/component-resolution-events";
 import { planFixtureResolution } from "@/app/lib/agent/fixture-agent-adapter";
 
@@ -136,7 +137,10 @@ describe("[PR-M M.2.5] the page's trusted controller refuses before anything is 
     proposal: sealed.proposal, session: sealed.editor, gateway: sealed.coordinator, interlock: new ProjectCommitInterlock(),
     journal: new ApprovedMutationJournal(new InMemoryApprovedMutationJournalStore(), SCOPE), stillCurrent: () => true,
     currentProjectId: SCOPE.projectId, currentBranchId: SCOPE.branchId, tenantId: SCOPE.tenantId, originRunId: "run-m1-controller",
-    registry: new ApprovedMutationRegistry(), audit: new ApprovedMutationAuditLedger(), ...over,
+    registry: new ApprovedMutationRegistry(), audit: new ApprovedMutationAuditLedger(),
+    // [PR-L6, 2026-10-19] the controller's REQUIRED deps (OD-253 item 8): the reviewed PCB impact (no board) and its re-read at Approve
+    boardImpact: { state: "assessed" as const, impact: assessResolutionBoardImpact({ items: resolutionBoardImpactItems(sealed.proposal), basis: { state: "no-board", boardId: `board:${SCOPE.projectId}` } }) }, readBoardBasis: async () => ({ state: "no-board" as const, boardId: `board:${SCOPE.projectId}` }),
+    ...over,
   });
 
   it("5. an altered batch refuses verification-failed before any membership read; nothing is fetched or executed", async () => {

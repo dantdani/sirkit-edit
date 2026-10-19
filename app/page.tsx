@@ -66,7 +66,7 @@ import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"
 import { listProjects, saveProjectFields, renameProject, deleteProject, type SavedProject, type StoredChatMessage } from "@/lib/persistence";
 import { bootstrapCurrentProject, createProjectRecord, loadProjectRecord, markProjectCurrent, type ProjectBootstrap } from "@/app/lib/project/current";
 import { createAutosaver, settleAutosaveForTransition, type Autosaver, type SaveStatus } from "@/app/lib/project/autosave";
-import { SchematicHistory, type SchematicHistoryView } from "@/app/lib/project/schematic-history";
+import { SchematicHistory, type SchematicHistoryView } from "@/app/lib/project/schematic-history"; import { historyStepState } from "@/app/lib/project/history-step-state"; // [PR-L6, 2026-10-19] an undo / redo target keeps the authoritative sheet size (in place: no line moves)
 import { checkpointBelongsToProject, checkpointStore, type ProjectCheckpoint } from "@/app/lib/project/checkpoints";
 // B06: canonical schematic semantic mutations — the migrated handlers issue
 // shared domain commands through the trusted schematic editor session.
@@ -113,7 +113,7 @@ import type { StackupCandidate } from "@/app/lib/pcb/candidates/stackup-candidat
 import { AtomicPublicationReviewSection } from "@/app/components/parts/AtomicPublicationReviewPanel"; // [PR-G, 2026-10-17] the EXISTING publication request (the Build Library's and the Missing parts list's), opened prefilled from a sealed draft request
 import { type SealedPcbEditProposal } from "@/app/lib/pcb/proposal/sealed-pcb-edit-proposal";
 import { ReplacementReviewDialog } from "@/app/components/schematic/ReplacementReviewDialog";
-import { ComponentResolutionReceiptNotice, ComponentResolutionReviewDialog } from "@/app/components/schematic/ComponentResolutionReviewDialog"; import { approveAndApplyResolution } from "@/app/lib/project/resolution-approval-controller.internal"; import { componentResolutionCurrency, componentResolutionReview, findReplacementSentence, receiveComponentResolutionEvent, resolutionAftermathLines, resolutionLines, resolutionProgressLine, type ReceivedComponentResolution, type ResolutionReceiptView } from "@/app/lib/project/component-resolution-events"; import { buildPcbSyncPreflightReport } from "@/app/lib/pcb-sync/preflight-read"; import { noteResolutionApplied } from "@/app/lib/project/cad-acquisition-client"; // [PR-M, 2026-10-18] M2: + the acquisition task's applied-receipt record (in place: no line moves); [PR-M, 2026-10-18] the component resolution (runbook M.2.5-M.2.6): the review dialog and its receipt, the trusted apply controller, the SAFE receiver with the run log's sentences, and the Prepare PCB preflight read the aftermath reports
+import { ComponentResolutionReceiptNotice, ComponentResolutionReviewDialog } from "@/app/components/schematic/ComponentResolutionReviewDialog"; import { approveAndApplyResolution } from "@/app/lib/project/resolution-approval-controller.internal"; import { componentResolutionBoardImpactView, componentResolutionCurrency, componentResolutionReview, findReplacementSentence, receiveComponentResolutionEvent, resolutionAftermathLines, resolutionLines, resolutionProgressLine, type ReceivedComponentResolution, type ResolutionReceiptView } from "@/app/lib/project/component-resolution-events"; import { loadResolutionBoardBasis } from "@/app/lib/project/resolution-board-basis"; import { assessResolutionBoardImpact, resolutionBoardImpactItems, type ResolutionBoardImpactState, type ResolutionReceiptBoardImpact } from "@/app/lib/component-resolution/board-impact"; /* [PR-L6, 2026-10-19] M.4 / M.5-7: the batch's PCB impact against the durable board (in place: no line moves) */ import { buildPcbSyncPreflightReport } from "@/app/lib/pcb-sync/preflight-read"; import { noteResolutionApplied } from "@/app/lib/project/cad-acquisition-client"; // [PR-M, 2026-10-18] M2: + the acquisition task's applied-receipt record (in place: no line moves); [PR-M, 2026-10-18] the component resolution (runbook M.2.5-M.2.6): the review dialog and its receipt, the trusted apply controller, the SAFE receiver with the run log's sentences, and the Prepare PCB preflight read the aftermath reports
 import { fromCanonicalSchematic, schematicStateDigest, validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
 import { schematicMarkPatch } from "@/app/lib/engineering/schematic-projection";
 import { diffSchematicGraphOps, nextTheoryDisplayRef, type SchematicGraphAfter } from "@/app/lib/engineering/schematic-graph";
@@ -2697,7 +2697,7 @@ export default function Home() {
   const [replacementReceipt, setReplacementReceipt] = useState<ReplacementMutationReceipt | null>(null);
   // [PR-M, 2026-10-18] the ONE pending sealed component-resolution batch (received + currency-checked; display grants nothing), its apply
   // busy state and its real receipt; the run log it came from receives the committed / preflight lines
-  const [pendingResolution, setPendingResolution] = useState<{ received: ReceivedComponentResolution; logId: string } | null>(null);
+  const [pendingResolution, setPendingResolution] = useState<{ received: ReceivedComponentResolution; logId: string; boardImpact: ResolutionBoardImpactState } | null>(null); // [PR-L6, 2026-10-19] + the batch's PCB impact (dropped with the batch)
   const [resolutionApplyBusy, setResolutionApplyBusy] = useState(false);
   const [resolutionReceipt, setResolutionReceipt] = useState<ResolutionReceiptView | null>(null);
   // [B15.3] the ONE pending sealed bounded PCB edit proposal — narrowed by
@@ -3475,7 +3475,7 @@ export default function Home() {
   const applySchematicSnapshot = useCallback((snap: SchematicSnapshot) => {
     // B07.1: undo/redo replacement also orphans pending gesture completions
     // (the epoch bump inside the lifecycle applier).
-    applyLifecycleSchematicProjection({ components: snap.components, wires: snap.wires, kicadComponents: snap.kicadComponents, netLabels: snap.netLabels });
+    applyLifecycleSchematicProjection(historyStepState(snap, gestureCoordinatorRef.current?.authoritativeState())); // [PR-L6, 2026-10-19] the sheet size is not in the undo history: the projection keeps the authoritative one
     setSelectedId(null); setSelectedKicadId(null); setWireDraftStart(null);
   }, [applyLifecycleSchematicProjection]);
 
@@ -3494,7 +3494,7 @@ export default function Home() {
         const history = schHistoryRef.current;
         if (!history) return null;
         const snap = direction === "undo" ? history.peekUndo() : history.peekRedo();
-        return snap ? { components: snap.components, wires: snap.wires, kicadComponents: snap.kicadComponents, netLabels: snap.netLabels } : null;
+        return snap ? historyStepState(snap, gestureCoordinatorRef.current?.authoritativeState()) : null; // [PR-L6, 2026-10-19] + the authoritative sheet size: the target then matches the canonical transaction it undoes (replayed, never a lineage rebase onto a sheet without a size)
       },
       reconcile: (target) => session
         ? session.reconcileHistoryStep(direction, target)
@@ -3978,7 +3978,7 @@ export default function Home() {
         stillCurrent: () => scope.isCurrent(),
         currentProjectId,
         currentBranchId: scope.branchId,
-        originRunId: pending.received.runId,
+        originRunId: pending.received.runId, boardImpact: pending.boardImpact, readBoardBasis: () => loadResolutionBoardBasis({ tenantId: "local", projectId: currentProjectId, branchId: scope.branchId }), // [PR-L6, 2026-10-19] the reviewed PCB impact, re-read at Approve
       });
       scope.ifCurrent(() => {
         if (outcome.ok) {
@@ -3987,11 +3987,11 @@ export default function Home() {
           setSelectedId(null);
           setSelectedKicadId(null);
           finishActivityLog(pending.logId, resolutionLines.committed(outcome.receipt, outcome.status === "already-applied"));
-          void resolutionAftermath(pending.logId, scope); void noteResolutionApplied({ tenantId: "local", projectId: currentProjectId, branchId: scope.branchId }, outcome.receipt, currentSchematicState()); // [PR-M, 2026-10-18] M2: a batch that applies an acquisition task's offered replacement records its receipt and the server's preflight on that task (best effort; in place)
+          void resolutionAftermath(pending.logId, scope, outcome.receipt.boardImpact); void noteResolutionApplied({ tenantId: "local", projectId: currentProjectId, branchId: scope.branchId }, outcome.receipt, currentSchematicState()); // [PR-M, 2026-10-18] M2: a batch that applies an acquisition task's offered replacement records its receipt and the server's preflight on that task (best effort; in place)
         } else {
           // a stale base, a withdrawn candidate, a revoked membership: the batch can never apply now; another apply in flight or a
           // gesture owning the editor keeps it for another try
-          if (outcome.code !== "already-in-flight" && outcome.code !== "editor-busy") setPendingResolution(null);
+          if (outcome.code !== "already-in-flight" && outcome.code !== "editor-busy" && outcome.code !== "board-impact-changed" && outcome.code !== "board-impact-unavailable") setPendingResolution(null); else if (outcome.code === "board-impact-changed" || outcome.code === "board-impact-unavailable") { setPendingResolution((prev) => (prev ? { ...prev, boardImpact: { state: "loading" } } : prev)); void refreshResolutionBoardImpact(pending.received.proposal.proposalId); } // [PR-L6, 2026-10-19] the board moved (or could not be re-read): the batch stays, its impact is read again
           failActivityLog(pending.logId, resolutionLines.refused(outcome.message));
           showToast(outcome.message);
         }
@@ -4002,14 +4002,14 @@ export default function Home() {
   }
   /** [PR-M, 2026-10-18] After a committed batch: the Prepare PCB preflight (the editor's own pure checks) and the design checks, recomputed
    *  on the NEW authoritative revision with its parts loaded, written to the batch's run log; nothing is run on the server here. */
-  async function resolutionAftermath(logId: string, scope: ProjectAsyncScope): Promise<void> {
+  async function resolutionAftermath(logId: string, scope: ProjectAsyncScope, boardImpact?: ResolutionReceiptBoardImpact): Promise<void> {
     const state = currentSchematicState();
     await Promise.allSettled([...new Set((state.kicadComponents ?? []).map((instance) => instance.partId))].map((id) => ensurePartLoaded(id)));
     if (!scope.isCurrent()) return;
     const parts = new Map<string, CachedPart>();
     for (const instance of state.kicadComponents ?? []) { const part = getCachedPart(instance.partId); if (part) parts.set(instance.partId, part); }
-    for (const line of resolutionAftermathLines(buildPcbSyncPreflightReport(state), computeDesignChecks(state, parts, schematicStateDigest(state), "build").checks)) finishActivityLog(logId, line);
-  }
+    for (const line of resolutionAftermathLines(buildPcbSyncPreflightReport(state), computeDesignChecks(state, parts, schematicStateDigest(state), "build").checks, boardImpact)) finishActivityLog(logId, line);
+  } /** [PR-L6, 2026-10-19] runbook M.4 / M.5-7 (OD-253 item 8): assess the open batch against the project's DURABLE board (the existing board read; no crypto.randomUUID draw); an unreadable board leaves Approve disabled (fail closed) */ async function refreshResolutionBoardImpact(proposalId: string): Promise<void> { const scope = projectScopeRegistryRef.current!.capture(); const projectId = scope.projectId ?? projectRef.current?.id ?? null; const basis = projectId ? await loadResolutionBoardBasis({ tenantId: "local", projectId, branchId: scope.branchId }) : { state: "unavailable" as const, code: "NO_PROJECT_SCOPE", detail: "no project is open" }; scope.ifCurrent(() => setPendingResolution((prev) => { if (!prev || prev.received.proposal.proposalId !== proposalId) return prev; let boardImpact: ResolutionBoardImpactState; try { boardImpact = basis.state === "unavailable" ? { state: "unavailable", detail: `${basis.code}: ${basis.detail}` } : { state: "assessed", impact: assessResolutionBoardImpact({ items: resolutionBoardImpactItems(prev.received.proposal), basis }) }; } catch { boardImpact = { state: "unavailable", detail: "the impact could not be computed" }; } return { ...prev, boardImpact }; })); }
   const discardResolutionProposal = useCallback(() => {
     if (resolutionApplyBusy || !pendingResolution) return;
     finishActivityLog(pendingResolution.logId, resolutionLines.discarded()); // nothing is applied, journaled or audited: discard records nothing
@@ -4861,7 +4861,7 @@ export default function Home() {
             if (!resolution) { appendActivityStep(logId, resolutionLines.dropped(), "error"); return; }
             const resolutionVerdict = componentResolutionCurrency(resolution.proposal, liveSheetForSealedArtifacts());
             if (!resolutionVerdict.ok) { appendActivityStep(logId, resolutionLines.notOffered(resolutionVerdict.detail), "error"); return; }
-            setPendingResolution({ received: resolution, logId });
+            setPendingResolution({ received: resolution, logId, boardImpact: { state: "loading" } }); void refreshResolutionBoardImpact(resolution.proposal.proposalId); // [PR-L6, 2026-10-19] the PCB impact is read before Approve is enabled
             approvedMutationAudit.record({ at: Date.now(), proposalId: resolution.proposal.proposalId, originRunId: resolution.runId, event: "approval-displayed", code: null });
             appendActivityStep(logId, resolutionLines.awaitingReview(resolution.proposal), "done");
             return;
@@ -7215,7 +7215,7 @@ export default function Home() {
           onApply={() => void applyReplacementProposal()}
           onCancel={cancelReplacementProposal}
         />
-        <ComponentResolutionReviewDialog review={pendingResolution ? componentResolutionReview(pendingResolution.received.proposal) : null} busy={resolutionApplyBusy} onApprove={() => void applyResolutionProposal()} onDiscard={discardResolutionProposal} /> {/* [PR-M, 2026-10-18] */}
+        <ComponentResolutionReviewDialog review={pendingResolution ? componentResolutionReview(pendingResolution.received.proposal) : null} boardImpact={pendingResolution ? componentResolutionBoardImpactView(pendingResolution.boardImpact) : null} busy={resolutionApplyBusy} onApprove={() => void applyResolutionProposal()} onDiscard={discardResolutionProposal} /> {/* [PR-M, 2026-10-18] */}
         {resolutionReceipt && <ComponentResolutionReceiptNotice receipt={resolutionReceipt} onDismiss={() => setResolutionReceipt(null)} />}
         {replacementReceipt && (
           <div className="fixed bottom-28 right-4 z-50 max-w-xs rounded border border-teal-800/60 bg-zinc-900/95 px-3 py-2 text-[11px] text-teal-300 shadow-sm">

@@ -96,6 +96,12 @@ export interface JourneyPcbFacts {
   drcCurrent: boolean | null;
   /** A ledgered release exists for the current board. */
   released: boolean;
+  /**
+   * [PR-L6, 2026-10-19] Runbook M.4 / M.5 item 7 (OD-253 item 8): how many component instances differ between the schematic and the
+   * DURABLE board (app/lib/pcb-sync/schematic-drift.ts: replaced, unresolved, missing from the board, removed from the schematic) - a
+   * fact derived from the two artifacts, never a flag. Optional: an editor that does not report it leaves every row unchanged.
+   */
+  boardBehindSchematic?: number;
 }
 
 export interface JourneyFacts {
@@ -168,6 +174,7 @@ export function normalizeJourneyFacts(input: JourneyFactsInput): JourneyFacts {
           routingStale: pcb.routingStale === true,
           drcCurrent: typeof pcb.drcCurrent === "boolean" ? pcb.drcCurrent : null,
           released: pcb.released === true,
+          ...(Math.trunc(pcb.boardBehindSchematic ?? 0) > 0 ? { boardBehindSchematic: Math.trunc(pcb.boardBehindSchematic!) } : {}), // [PR-L6, 2026-10-19] absent = 0 (no row changes)
         },
   };
 }
@@ -352,6 +359,26 @@ export function deriveJourney(input: JourneyFactsInput): JourneyView {
       status.validation = "partial";
       note.validation = "DRC is not current";
       candidate.validation = action("Qualify & route", "qualify_route");
+    }
+
+    // ── [PR-L6, 2026-10-19] the board is behind the schematic (a replaced or re-resolved part the board still carries in its old form,
+    // a part that lost its identity, one added or removed after the board): the applied board is `partial`, NOTHING downstream of it
+    // succeeds (its placement, routing, DRC, qualification and release were for the old parts), and the one action is Prepare PCB - the
+    // sync that brings the board up to the schematic (Stage 8 opens a derived revision where copper is protected). Derived from facts,
+    // so Undo, Redo, a reload or the next Prepare PCB recompute it.
+    const behind = p.boardBehindSchematic ?? 0;
+    if (behind > 0 && p.boardExists && !p.applying) {
+      status.pcb_applied = "partial";
+      note.pcb_applied = `the board is behind the schematic: ${plural(behind, "part")} differ - run Prepare PCB`;
+      candidate.pcb_applied = f.mode === "build"
+        ? action("Prepare PCB", "prepare_pcb")
+        : action("Prepare PCB", "prepare_pcb", false, "Theory symbols are not buildable parts: switch to Build mode to prepare a PCB");
+      for (const id of ["placement", "routing", "validation", "export"] as const) {
+        if (status[id] === "succeeded" || status[id] === "awaiting_approval") {
+          status[id] = "pending";
+          note[id] = "stale: the board is behind the schematic";
+        }
+      }
     }
   }
 

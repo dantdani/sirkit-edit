@@ -29,16 +29,20 @@ import { issueResolutionApprovalIntent, retireResolutionApprovalIntent } from ".
 import { verifySealedResolutionProposalIntegrity } from "../component-resolution/resolution-proposal";
 import { createResolutionReauthorization } from "../component-resolution/resolution-reauthorization";
 import { SCHEMATIC_APPLY_ROLES } from "../engineering/proposal-authorization";
-import { createMembershipReauthorizer, evaluateMembershipReauthorization, type MembershipReauthorization, type MembershipReauthorizer } from "./membership-reauthorization";
+import { createMembershipReauthorizer, evaluateMembershipReauthorization, type MembershipReauthorization, type MembershipReauthorizer } from "./membership-reauthorization"; import { assessResolutionBoardImpact, resolutionBoardImpactItems, resolutionBoardImpactSummary, type ResolutionBoardBasis, type ResolutionBoardImpactState } from "../component-resolution/board-impact"; // [PR-L6, 2026-10-19] M.4 / M.5-7
 
 /** The apply's dependencies. `reauthorize` is optional ONLY because the one production caller is the page, which uses the production
  *  reauthorizer constructed here; tests inject a fake from test composition, never through a provider or model surface. */
-export type ResolutionApplyDeps = Omit<ApprovedResolutionApplyInput, "approval" | "reauthorization"> & {
-  reauthorize?: MembershipReauthorizer;
+export type ResolutionApplyDeps = Omit<ApprovedResolutionApplyInput, "approval" | "reauthorization" | "boardImpact"> & {
+  reauthorize?: MembershipReauthorizer; /** [PR-L6, 2026-10-19] REQUIRED: the board impact the human reviewed in the dialog, and the re-read of its durable basis at Approve (OD-253 item 8) */ boardImpact: ResolutionBoardImpactState; readBoardBasis: () => Promise<ResolutionBoardBasis>;
 };
 
+/** [PR-L6, 2026-10-19] the controller's own refusals before any intent: the reviewed PCB impact moved, or it was never assessed / cannot be re-read. */
+export type ResolutionBoardImpactRefusalCode = "board-impact-changed" | "board-impact-unavailable";
+export type ResolutionApplyOutcome = ApprovedResolutionApplyOutcome | { ok: false; status: "refused"; code: ResolutionBoardImpactRefusalCode; message: string };
+
 /** The explicit-activation apply: the intent minted here is the only accepted approval, the channel built here the only fresh facts. */
-export async function approveAndApplyResolution(deps: ResolutionApplyDeps): Promise<ApprovedResolutionApplyOutcome> {
+export async function approveAndApplyResolution(deps: ResolutionApplyDeps): Promise<ResolutionApplyOutcome> {
   let verification: ReturnType<typeof verifySealedResolutionProposalIntegrity>;
   try {
     verification = verifySealedResolutionProposalIntegrity(deps.proposal);
@@ -57,6 +61,7 @@ export async function approveAndApplyResolution(deps: ResolutionApplyDeps): Prom
   }
   const denial = evaluateMembershipReauthorization(deps.proposal.authorization, live, SCHEMATIC_APPLY_ROLES);
   if (denial) return { ok: false, status: "refused", code: `reauthorization-${denial.code}`, message: `${denial.detail} Nothing was changed.` };
+  const bound = await boundBoardImpact(deps); if (!bound.ok) return bound.refusal; // [PR-L6, 2026-10-19] the reviewed PCB impact, re-read against the durable board BEFORE any intent: fail closed, zero mutation
 
   const intent = issueResolutionApprovalIntent({
     proposalId: deps.proposal.proposalId,
@@ -66,8 +71,29 @@ export async function approveAndApplyResolution(deps: ResolutionApplyDeps): Prom
     now: deps.now ? deps.now() : Date.now(),
   });
   try {
-    return await applyApprovedResolutionProposal({ ...deps, approval: intent, reauthorization: createResolutionReauthorization() });
+    return await applyApprovedResolutionProposal({ ...deps, approval: intent, reauthorization: createResolutionReauthorization(), boardImpact: resolutionBoardImpactSummary(bound.impact) });
   } finally {
     retireResolutionApprovalIntent(intent.intentId);
   }
+}
+
+// ─── [PR-L6, 2026-10-19] runbook M.4 / M.5 item 7 (OD-253 item 8): the reviewed board impact, bound at Approve ─────────────────
+/**
+ * The impact the human reviewed must still be the impact: the basis (the durable board record, its qualification authority and latest
+ * release) is RE-READ and the impact recomputed for the same sealed items; a different digest refuses `board-impact-changed` (the page
+ * keeps the batch and shows the new impact), and an impact that was never assessed or a basis that cannot be read refuses
+ * `board-impact-unavailable` - both before the one-shot intent is minted and before the fresh-facts endpoint is asked, so nothing is
+ * changed. The board can still move after this point: the post-apply gate is derived from the board itself (schematic-drift.ts), so
+ * the receipt's impact is disclosure, never authority.
+ */
+async function boundBoardImpact(deps: ResolutionApplyDeps): Promise<{ ok: true; impact: ReturnType<typeof assessResolutionBoardImpact> } | { ok: false; refusal: ResolutionApplyOutcome }> {
+  const refuse = (code: ResolutionBoardImpactRefusalCode, message: string) => ({ ok: false as const, refusal: { ok: false as const, status: "refused" as const, code, message } });
+  const reviewed = deps.boardImpact;
+  if (!reviewed || reviewed.state !== "assessed") return refuse("board-impact-unavailable", "The PCB impact of this batch was not assessed, so it cannot be approved yet. Nothing was changed.");
+  let basis: ResolutionBoardBasis;
+  try { basis = await deps.readBoardBasis(); } catch { basis = { state: "unavailable", code: "PS_BOARD_READ_FAILED", detail: "the board read threw" }; }
+  if (basis.state === "unavailable") return refuse("board-impact-unavailable", `The project's PCB could not be re-read to confirm the reviewed impact (${basis.code}); the batch was not applied. Nothing was changed.`);
+  const impact = assessResolutionBoardImpact({ items: resolutionBoardImpactItems(deps.proposal), basis });
+  if (impact.digest !== reviewed.impact.digest) return refuse("board-impact-changed", "The project's PCB changed since you reviewed this batch's PCB impact; review the updated impact and approve again. Nothing was changed.");
+  return { ok: true, impact };
 }

@@ -57,6 +57,9 @@ import { approveAndApplyResolution } from "@/app/lib/project/resolution-approval
 import { componentResolutionCurrency, componentResolutionReview, findReplacementSentence, receiveComponentResolutionEvent, resolutionAftermathLines, resolutionLines, resolutionProgressLine } from "@/app/lib/project/component-resolution-events";
 import { FIXTURE_RECALL_NOTE } from "@/app/lib/agent/candidate-search-reads";
 import { injectAuthorizedPrincipal, injectIdentity, injectMembership, resetInjectedIdentity } from "@/app/lib/auth/test-support";
+import { loadResolutionBoardBasis } from "@/app/lib/project/resolution-board-basis";
+import { assessResolutionBoardImpact, resolutionBoardImpactItems, type ResolutionBoardBasis, type ResolutionBoardImpactState } from "../board-impact";
+import { componentResolutionBoardImpactView } from "@/app/lib/project/component-resolution-events";
 
 const SCOPE = { tenantId: "local", projectId: "p-m1-page-intake", branchId: "main" } as const;
 const ORIGIN = "http://localhost";
@@ -123,17 +126,23 @@ function routeFetch(role = "editor"): { calls: string[] } {
     const request = new Request(href, { ...init, headers });
     if (href.endsWith("/api/pcb/apply-authorization")) { calls.push("apply-authorization"); return APPLY_AUTHORIZATION(request); }
     if (href.endsWith("/api/component-resolution-authority")) { calls.push("component-resolution-authority"); return FACTS(request); }
+    if (href.includes("/api/pcb-sync?")) { calls.push("pcb-sync-board-read"); return (await import("@/app/api/pcb-sync/route")).GET(request); } // [PR-L6, 2026-10-19] the PCB impact's basis read: the production board read (imported on first use, so its module-level repository is the fixture runtime's)
     throw new Error(`unexpected fetch: ${href}`);
   });
   return { calls };
 }
 
-function approve(h: Harness, proposal: SealedResolutionProposal, scope: { tenantId: string; projectId: string; branchId: string } = SCOPE) {
+/** [PR-L6, 2026-10-19] the controller's REQUIRED deps (OD-253 item 8): the reviewed PCB impact and its basis re-read. These suites
+ *  predate a board, so the reviewed impact is the no-board one and the re-read answers the same (test 11 drives the real loader). */
+const NO_BOARD = (scope: { projectId: string }): ResolutionBoardBasis & { state: "no-board" } => ({ state: "no-board", boardId: `board:${scope.projectId}` });
+function approve(h: Harness, proposal: SealedResolutionProposal, scope: { tenantId: string; projectId: string; branchId: string } = SCOPE, impact: { boardImpact?: ResolutionBoardImpactState; readBoardBasis?: () => Promise<ResolutionBoardBasis> } = {}) {
   return approveAndApplyResolution({
     proposal, session: h.editor, gateway: h.coordinator, interlock: new ProjectCommitInterlock(),
     journal: new ApprovedMutationJournal(new InMemoryApprovedMutationJournalStore(), scope), stillCurrent: () => true,
     currentProjectId: scope.projectId, currentBranchId: scope.branchId, tenantId: scope.tenantId, originRunId: "run-m1-page",
     registry: new ApprovedMutationRegistry(), audit: new ApprovedMutationAuditLedger(),
+    boardImpact: impact.boardImpact ?? { state: "assessed", impact: assessResolutionBoardImpact({ items: resolutionBoardImpactItems(proposal), basis: NO_BOARD(scope) }) },
+    readBoardBasis: impact.readBoardBasis ?? (async () => NO_BOARD(scope)),
   });
 }
 
@@ -383,5 +392,43 @@ describe("[PR-M M.2.5] POST /api/component-resolution-authority", { timeout: 120
     const response = await FACTS(new Request(`${ORIGIN}/api/component-resolution-authority`, { method: "POST", headers: { "content-type": "application/json", origin: ORIGIN, "x-sirkit-tenant-id": SCOPE.tenantId, "x-sirkit-project-id": SCOPE.projectId, "x-sirkit-branch-id": SCOPE.branchId }, body: JSON.stringify(validFactsBody(proposal)) }));
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({ ok: false, code: "RESOLUTION_AUTHORITY_UNAVAILABLE" });
+  });
+});
+
+// ─── [PR-L6, 2026-10-19] runbook M.4 / M.5 item 7 (OD-253 item 8): the page's PCB impact over the REAL board read ─────────────────
+
+describe("[PR-L6 M.5-7] the page's PCB impact: the production basis loader over the real GET /api/pcb-sync, bound at Approve", { timeout: 120_000 }, () => {
+  async function sealed(h: Harness): Promise<SealedResolutionProposal> {
+    const ready = (await chat(h, CHAT_SENTENCE)).find((event) => event.type === "component_resolution_ready");
+    const received = ready ? receiveComponentResolutionEvent(ready) : null;
+    if (!received) throw new Error("no sealed batch");
+    return received.proposal;
+  }
+
+  it("11. no PCB yet: the loader reads not_found as no-board, the dialog's impact is assessed (Approve enabled), the Approve re-reads it and applies; a failed read fails closed", async () => {
+    const h = await harness();
+    const proposal = await sealed(h);
+    const { calls } = routeFetch();
+    const basis = await loadResolutionBoardBasis(SCOPE);
+    expect(basis).toEqual({ state: "no-board", boardId: "board:p-m1-page-intake" });
+    if (basis.state === "unavailable") return;
+    const reviewed: ResolutionBoardImpactState = { state: "assessed", impact: assessResolutionBoardImpact({ items: resolutionBoardImpactItems(proposal), basis }) };
+    expect(componentResolutionBoardImpactView(reviewed)).toMatchObject({ state: "assessed", approveBlockedReason: null, headline: expect.stringContaining("no PCB yet") });
+    const outcome = await approve(h, proposal, SCOPE, { boardImpact: reviewed, readBoardBasis: () => loadResolutionBoardBasis(SCOPE) });
+    expect(outcome.ok, JSON.stringify(outcome)).toBe(true);
+    expect(calls).toEqual(["pcb-sync-board-read", "apply-authorization", "pcb-sync-board-read", "component-resolution-authority"]); // review read, membership, the re-read at Approve, then the fresh facts
+    expect((outcome as { receipt: { boardImpact?: { state: string } } }).receipt.boardImpact).toMatchObject({ state: "assessed", basis: { kind: "no-board" } });
+    // a board read that fails is never a pass: unavailable, and the controller refuses before any fresh facts
+    const failing = await harness();
+    const failingProposal = await sealed(failing);
+    const routed = routeFetch();
+    const platform = globalThis.fetch;
+    vi.stubGlobal("fetch", async (url: string | URL, init?: RequestInit) => { if (String(url).includes("/api/pcb-sync?")) throw new TypeError("fetch failed"); return platform(url, init); }); // the board read fails; the membership read still answers
+    expect(await loadResolutionBoardBasis(SCOPE)).toMatchObject({ state: "unavailable", code: "PS_NETWORK_UNAVAILABLE" });
+    expect(componentResolutionBoardImpactView({ state: "unavailable", detail: "PS_NETWORK_UNAVAILABLE" }).approveBlockedReason).toMatch(/^Approve is disabled/);
+    const refused = await approve(failing, failingProposal, SCOPE, { boardImpact: { state: "unavailable", detail: "PS_NETWORK_UNAVAILABLE" }, readBoardBasis: () => loadResolutionBoardBasis(SCOPE) });
+    expect(refused).toMatchObject({ ok: false, code: "board-impact-unavailable" });
+    expect(routed.calls).toEqual(["apply-authorization"]); // the fresh-facts endpoint was never asked
+    expect(failing.executed()).toBe(0);
   });
 });

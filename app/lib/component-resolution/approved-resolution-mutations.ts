@@ -34,10 +34,10 @@ import { netlistLookupOf, type CatalogPartLoad } from "./instance-facts";
 import { RESOLUTION_COMMAND_ID, RESOLUTION_PROPOSAL_KEYS, RESOLUTION_PROPOSAL_SCHEMA, verifySealedResolutionProposal, verifySealedResolutionProposalIntegrity, type ResolutionTargetIdentity, type SealedResolutionProposal } from "./resolution-proposal";
 import { consumeResolutionApprovalIntent } from "./resolution-approval.internal";
 import { consumeResolutionReauthorization } from "./resolution-reauthorization";
-import type { FreshResolutionFacts } from "./evidence";
+import type { FreshResolutionFacts } from "./evidence"; import type { ResolutionReceiptBoardImpact } from "./board-impact"; // [PR-L6, 2026-10-19] M.4 / M.5-7: the receipt discloses the reviewed board impact (v2)
 
 export const APPROVED_RESOLUTION_APPLY_LABEL = "Applied component resolution";
-export const RESOLUTION_RECEIPT_SCHEMA = "sirkit.approved-resolution-receipt.v1" as const;
+export const RESOLUTION_RECEIPT_SCHEMA = "sirkit.approved-resolution-receipt.v2" as const; /** [PR-L6, 2026-10-19] v2 adds `boardImpact`; a finalized v1 receipt stays valid (the journal accepts both) */ export const RESOLUTION_RECEIPT_SCHEMA_V1 = "sirkit.approved-resolution-receipt.v1" as const;
 export const RESOLUTION_APPROVAL_ACTOR = "human:interactive" as const;
 const IDENTITY_SCHEMA = "sirkit.approved-resolution-identity.v1";
 const COMMITMENT_SCHEMA = "sirkit.approved-resolution-receipt-commitment.v1";
@@ -46,7 +46,7 @@ const EVIDENCE_OPERATIONS_SCHEMA = "sirkit.approved-mutation-evidence-operations
 const MAX_CAPTURE_BYTES = 1_048_576;
 
 export interface ResolutionMutationReceipt {
-  schema: typeof RESOLUTION_RECEIPT_SCHEMA;
+  schema: typeof RESOLUTION_RECEIPT_SCHEMA | typeof RESOLUTION_RECEIPT_SCHEMA_V1;
   receiptId: string;
   proposalId: string;
   operationsDigest: string;
@@ -69,7 +69,7 @@ export interface ResolutionMutationReceipt {
   completedAt: number;
   items: Array<{ componentInstanceId: string; refDes: string; sourcePartId: string; target: ResolutionTargetIdentity }>;
   authorityLinkage: { operationsDigest: string; impactDigest: string; connectivityDigest: string; authorityResourceId: string; authorityResourceDigest: string; canonicalResourceId: string; canonicalResourceDigest: string; consumedAuthorityDigest: string };
-  approvalActor: typeof RESOLUTION_APPROVAL_ACTOR;
+  approvalActor: typeof RESOLUTION_APPROVAL_ACTOR; /** [PR-L6, 2026-10-19] v2: the reviewed board impact (disclosure, never authority); absent on a legacy v1 receipt */ boardImpact?: ResolutionReceiptBoardImpact;
 }
 
 export function resolutionReceiptIdFor(body: Omit<ResolutionMutationReceipt, "receiptId">): string {
@@ -114,7 +114,7 @@ export interface ApprovedResolutionApplyInput {
   reauthorization: unknown;
   now?: () => number;
   registry?: ApprovedMutationRegistry;
-  audit?: ApprovedMutationAuditLedger;
+  audit?: ApprovedMutationAuditLedger; /** [PR-L6, 2026-10-19] the bounded summary of the board impact the human reviewed (the receipt records it; absent = `not-assessed`) */ boardImpact?: ResolutionReceiptBoardImpact;
 }
 
 export type ApprovedResolutionApplyOutcome =
@@ -145,7 +145,7 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-function buildReceiptBody(input: { proposal: SealedResolutionProposal; originRunId: string | null; tenantId: string; authorization: { principalId: string; membershipRevision: string }; headAfter: { headSequence: number; canonicalStateDigest: string }; schematicDigestAfter: string; transactionId: string; committedAt: number }): Omit<ResolutionMutationReceipt, "receiptId"> {
+function buildReceiptBody(input: { proposal: SealedResolutionProposal; originRunId: string | null; tenantId: string; authorization: { principalId: string; membershipRevision: string }; headAfter: { headSequence: number; canonicalStateDigest: string }; schematicDigestAfter: string; transactionId: string; committedAt: number; boardImpact: ResolutionReceiptBoardImpact }): Omit<ResolutionMutationReceipt, "receiptId"> {
   const proposal = input.proposal;
   return {
     schema: RESOLUTION_RECEIPT_SCHEMA,
@@ -179,7 +179,7 @@ function buildReceiptBody(input: { proposal: SealedResolutionProposal; originRun
       canonicalResourceDigest: proposal.canonicalResource.contentDigest,
       consumedAuthorityDigest: proposal.consumedAuthorityDigest,
     },
-    approvalActor: RESOLUTION_APPROVAL_ACTOR,
+    approvalActor: RESOLUTION_APPROVAL_ACTOR, boardImpact: structuredClone(input.boardImpact), // [PR-L6, 2026-10-19] v2
   };
 }
 
@@ -269,7 +269,7 @@ export async function applyApprovedResolutionProposal(input: ApprovedResolutionA
   if (!claim.ok) {
     if (claim.code === "already-applied") {
       const receipt = claim.receipt as unknown as ResolutionMutationReceipt | undefined;
-      if (receipt && receipt.schema === RESOLUTION_RECEIPT_SCHEMA) return { ok: true, status: "already-applied", receipt };
+      if (receipt && (receipt.schema === RESOLUTION_RECEIPT_SCHEMA || receipt.schema === RESOLUTION_RECEIPT_SCHEMA_V1)) return { ok: true, status: "already-applied", receipt }; // [PR-L6, 2026-10-19] a legacy v1 receipt stays a receipt
       return refuse("recovery-required", "This resolution was already consumed but its receipt is unavailable in this session. Nothing was changed.", proposal.proposalId);
     }
     return refuse(claim.code, claim.code === "already-in-flight" ? "This resolution is already being applied. Nothing was changed." : "This resolution identity is poisoned; regenerate a fresh proposal. Nothing was changed.", proposal.proposalId);
@@ -305,13 +305,13 @@ export async function applyApprovedResolutionProposal(input: ApprovedResolutionA
       if (record.provenanceCandidateId !== resolutionReceiptCommitmentFor(identityKey, entry.originRunId, entry.committedAt ?? 0, entry.authorization)) { registry.release(identityKey); return refuse("recovery-required", "The durable transaction does not carry this resolution's chain-protected receipt commitment. Nothing was changed.", proposal.proposalId); }
       const liveHead = input.session.headMark();
       if (!liveHead || liveHead.headSequence !== record.resultHeadSequence || liveHead.canonicalStateDigest !== record.resultCanonicalStateDigest) { registry.release(identityKey); return refuse("recovery-required", "The canonical head moved past this resolution's transaction; the receipt can no longer be proven live. Nothing was changed.", proposal.proposalId); }
-      if (entry.state === "receipt-finalized" && entry.receipt && (entry.receipt as unknown as ResolutionMutationReceipt).schema === RESOLUTION_RECEIPT_SCHEMA) {
+      if (entry.state === "receipt-finalized" && entry.receipt && [RESOLUTION_RECEIPT_SCHEMA, RESOLUTION_RECEIPT_SCHEMA_V1].includes((entry.receipt as unknown as ResolutionMutationReceipt).schema)) { // [PR-L6, 2026-10-19] + a finalized legacy v1 receipt
         const receipt = entry.receipt as unknown as ResolutionMutationReceipt;
         registry.consume(identityKey, receipt as never);
         return { ok: true, status: "already-applied", receipt };
       }
       if (entry.committedAt === null || entry.headAfter === null || entry.schematicDigestAfter === null || entry.transactionId === null) { registry.release(identityKey); return refuse("recovery-required", "The journal records a commit without complete receipt inputs. Nothing was changed.", proposal.proposalId); }
-      const body = buildReceiptBody({ proposal, originRunId: entry.originRunId, tenantId, authorization: entry.authorization, headAfter: entry.headAfter, schematicDigestAfter: entry.schematicDigestAfter, transactionId: entry.transactionId, committedAt: entry.committedAt });
+      const body = buildReceiptBody({ proposal, originRunId: entry.originRunId, tenantId, authorization: entry.authorization, headAfter: entry.headAfter, schematicDigestAfter: entry.schematicDigestAfter, transactionId: entry.transactionId, committedAt: entry.committedAt, boardImpact: { state: "not-recorded" } }); // [PR-L6, 2026-10-19] the reviewed impact is not journaled: the reconstructed receipt says so (enforcement is derived from the board)
       const receipt = deepFreeze({ ...body, receiptId: resolutionReceiptIdFor(body) });
       const finalized = await input.journal.finalizeReceipt(identityKey, receipt as never);
       if (!finalized.ok) { registry.release(identityKey); return refuse("recovery-required", "The reconstructed receipt could not be durably finalized. Nothing was changed.", proposal.proposalId); }
@@ -423,7 +423,7 @@ export async function applyApprovedResolutionProposal(input: ApprovedResolutionA
       const adopted = await input.journal.markAdopted(identityKey);
       if (!adopted.ok) { registry.poison(identityKey); await input.journal.poison(identityKey); return refuse("recovery-required", "The resolution adoption could not be durably recorded. Manual recovery is required.", proposal.proposalId); }
       const result = shared.result;
-      const body = buildReceiptBody({ proposal, originRunId, tenantId, authorization: proposal.authorization, headAfter: { headSequence: result.headMark!.headSequence, canonicalStateDigest: result.headMark!.canonicalStateDigest }, schematicDigestAfter: schematicStateDigest(result.state), transactionId: result.transactionId!, committedAt: shared.committedAt });
+      const body = buildReceiptBody({ proposal, originRunId, tenantId, authorization: proposal.authorization, headAfter: { headSequence: result.headMark!.headSequence, canonicalStateDigest: result.headMark!.canonicalStateDigest }, schematicDigestAfter: schematicStateDigest(result.state), transactionId: result.transactionId!, committedAt: shared.committedAt, boardImpact: input.boardImpact ?? { state: "not-assessed" } }); // [PR-L6, 2026-10-19] v2: the reviewed impact
       const receipt = deepFreeze({ ...body, receiptId: resolutionReceiptIdFor(body) });
       const finalized = await input.journal.finalizeReceipt(identityKey, receipt as never);
       if (!finalized.ok) { registry.release(identityKey); return refuse("recovery-required", "The resolution committed and adopted, but its receipt could not be durably finalized. Nothing further was changed.", proposal.proposalId); }

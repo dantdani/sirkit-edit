@@ -735,7 +735,7 @@ export class ApprovedMutationJournal {
 }
 
 // ─── [PR-M, 2026-10-17] the component RESOLUTION receipt (section M.2.5), appended so no cited line above moves ─────────────
-const RESOLUTION_RECEIPT_KEYS = [...RECEIPT_KEYS, "items", "authorityLinkage", "approvalActor"] as const;
+const RESOLUTION_RECEIPT_KEYS = [...RECEIPT_KEYS, "items", "authorityLinkage", "approvalActor"] as const; const RESOLUTION_RECEIPT_V2_KEYS = [...RESOLUTION_RECEIPT_KEYS, "boardImpact"] as const; // [PR-L6, 2026-10-19] v2 adds the bounded board impact; v1 keeps its closed set
 const RESOLUTION_TARGET_KEYS = ["catalogPartId", "valueKey", "exactMpn", "manufacturer", "atomicPartRevisionId", "symbolAssetVersionId", "footprintAssetVersionId", "mappingCertificateId", "footprintFullName", "evidenceDigest"] as const;
 const RESOLUTION_LINKAGE_KEYS = ["operationsDigest", "impactDigest", "connectivityDigest", "authorityResourceId", "authorityResourceDigest", "canonicalResourceId", "canonicalResourceDigest", "consumedAuthorityDigest"] as const;
 
@@ -745,8 +745,8 @@ const RESOLUTION_LINKAGE_KEYS = ["operationsDigest", "impactDigest", "connectivi
 function isResolutionReceiptShaped(value: unknown): boolean {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const receipt = value as Record<string, unknown>;
-  if (!isExactKeys(receipt, RESOLUTION_RECEIPT_KEYS)) return false;
-  if (receipt.schema !== "sirkit.approved-resolution-receipt.v1") return false;
+  const v2 = receipt.schema === "sirkit.approved-resolution-receipt.v2"; if (!isExactKeys(receipt, v2 ? RESOLUTION_RECEIPT_V2_KEYS : RESOLUTION_RECEIPT_KEYS)) return false; // [PR-L6, 2026-10-19] v1 (legacy, still valid) or v2
+  if (receipt.schema !== "sirkit.approved-resolution-receipt.v1" && !v2) return false; if (v2 && !isResolutionBoardImpactShaped(receipt.boardImpact)) return false;
   if (typeof receipt.receiptId !== "string" || !/^acr-[0-9a-f]{16,64}$/.test(receipt.receiptId)) return false;
   if (typeof receipt.proposalId !== "string" || !/^cprop-[0-9a-f]{8,64}$/.test(receipt.proposalId)) return false;
   if (typeof receipt.operationsDigest !== "string" || !ENG_DIGEST.test(receipt.operationsDigest)) return false;
@@ -788,4 +788,36 @@ function isResolutionReceiptShaped(value: unknown): boolean {
   if (!isExactKeys(linkageRecord, RESOLUTION_LINKAGE_KEYS)) return false;
   for (const key of RESOLUTION_LINKAGE_KEYS) if (!isBoundedString(linkageRecord[key], 512)) return false;
   return receipt.approvalActor === "human:interactive";
+}
+
+// ─── [PR-L6, 2026-10-19] the resolution receipt v2's board impact (runbook M.4 / M.5 item 7), appended so no line above moves ──────
+// Mirrors app/lib/component-resolution/board-impact.ts's `resolutionBoardImpactSummary` bounds: a closed key set at every level, at most
+// 20 items and 6 codes each, strings at most 128 characters, non-negative integer counts. A tampered or oversized impact makes the whole
+// receipt unreadable (lookup answers corrupt), never a silently trimmed one.
+const BOARD_IMPACT_OUTCOMES = new Set(["not-on-board", "unchanged", "footprint_changed", "pin_map_changed", "symbol_changed"]);
+const BOARD_IMPACT_OPERATIONS = new Set(["add_component_instance", "replace_unrouted_footprint", "preserve_component_instance", "update_reference_designator", "blocked"]);
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const isCount = (value: unknown): boolean => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+const isCopperCount = (value: unknown): boolean => isRecord(value) && isExactKeys(value, ["tracks", "vias", "zones"]) && isCount(value.tracks) && isCount(value.vias) && isCount(value.zones);
+const isCodeList = (value: unknown): boolean => Array.isArray(value) && value.length <= 6 && value.every((code) => isBoundedString(code, 128));
+
+function isResolutionBoardImpactShaped(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (value.state === "not-assessed" || value.state === "not-recorded") return isExactKeys(value, ["state"]);
+  if (value.state !== "assessed" || !isExactKeys(value, ["state", "schema", "digest", "basis", "requiresBoardRevision", "predictedCodes", "items", "truncatedItems", "copperStripped", "invalidates"])) return false;
+  if (value.schema !== "sirkit.resolution-board-impact-summary.v1" || !isBoundedString(value.digest, 128) || typeof value.requiresBoardRevision !== "boolean" || !isCodeList(value.predictedCodes) || !isCount(value.truncatedItems) || !isCopperCount(value.copperStripped)) return false;
+  const basis = value.basis;
+  if (!isRecord(basis)) return false;
+  if (basis.kind === "no-board") { if (!isExactKeys(basis, ["kind", "boardId"]) || !isBoundedString(basis.boardId, 128)) return false; }
+  else if (basis.kind !== "board" || !isExactKeys(basis, ["kind", "boardId", "revision", "boardClass"]) || !isBoundedString(basis.boardId, 128) || !isBoundedString(basis.revision, 128) || !isBoundedString(basis.boardClass, 128)) return false;
+  if (!Array.isArray(value.items) || value.items.length < 1 || value.items.length > 20) return false;
+  for (const item of value.items as unknown[]) {
+    if (!isRecord(item) || !isExactKeys(item, ["componentInstanceId", "schematicRefDes", "boardRef", "outcome", "operation", "codes", "affectedNets", "copper", "rebind"]) || typeof item.rebind !== "boolean") return false;
+    if (!isBoundedString(item.componentInstanceId, 128) || !isBoundedString(item.schematicRefDes, 128) || (item.boardRef !== null && !isBoundedString(item.boardRef, 128))) return false;
+    if (!BOARD_IMPACT_OUTCOMES.has(item.outcome as string) || !BOARD_IMPACT_OPERATIONS.has(item.operation as string) || !isCodeList(item.codes) || !isCount(item.affectedNets) || !isCopperCount(item.copper)) return false;
+  }
+  const invalidates = value.invalidates;
+  return isRecord(invalidates) && isExactKeys(invalidates, ["placementLegality", "drc", "routing", "authorityRevision", "releaseId", "stageEvidence"])
+    && typeof invalidates.placementLegality === "boolean" && typeof invalidates.drc === "boolean" && typeof invalidates.routing === "boolean" && typeof invalidates.stageEvidence === "boolean"
+    && (invalidates.authorityRevision === null || isCount(invalidates.authorityRevision)) && (invalidates.releaseId === null || isBoundedString(invalidates.releaseId, 128));
 }

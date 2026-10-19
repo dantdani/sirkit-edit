@@ -21,7 +21,7 @@
 import { COMPONENT_RESOLUTION_READY_EVENT, componentResolutionCurrency, componentResolutionReviewRows, receiveComponentResolutionEvent, type ComponentResolutionReviewRow, type ReceivedComponentResolution } from "../component-resolution/resolution-events";
 import type { SealedResolutionProposal } from "../component-resolution/resolution-proposal";
 import type { PcbSyncPreflightReport } from "../pcb-sync/preflight-read";
-import type { DesignCheck } from "../schematic/design-checks";
+import type { DesignCheck } from "../schematic/design-checks"; import { boardImpactOutcomeWords, boardImpactSentences, REBIND_CONFLICT_CODE, resolutionBoardImpactSummary, type ResolutionBoardImpactState, type ResolutionReceiptBoardImpact } from "../component-resolution/board-impact"; // [PR-L6, 2026-10-19] M.4 / M.5-7 (pure; no apply code)
 
 export { COMPONENT_RESOLUTION_READY_EVENT, componentResolutionCurrency, receiveComponentResolutionEvent, type ReceivedComponentResolution };
 
@@ -31,7 +31,7 @@ export interface ResolutionReceiptView {
   receiptId: string;
   transactionId: string;
   headAfter: { headSequence: number; canonicalStateDigest: string };
-  items: ReadonlyArray<{ refDes: string; target: { exactMpn: string } }>;
+  items: ReadonlyArray<{ refDes: string; target: { exactMpn: string } }>; /** [PR-L6, 2026-10-19] v2: the reviewed board impact (absent on a legacy v1 receipt) */ boardImpact?: ResolutionReceiptBoardImpact;
 }
 
 /** The run-log line of a resolution tool the run STARTED (a real `tool_started` event), keyed by tool id. */
@@ -114,16 +114,62 @@ export const resolutionLines = Object.freeze({
   dropped: (): string => "A component resolution the assistant issued was dropped by this page: it failed the integrity checks. Nothing was changed and no review is offered.",
   notOffered: (detail: string): string => `Component resolution not offered — ${detail}`,
   awaitingReview: (proposal: SealedResolutionProposal): string => `Awaiting your review: one batch for ${refsOf(proposal)} → ${targetsOf(proposal)}, with the proved pin mapping. Nothing has changed yet; approve or discard it in the review dialog.`,
-  committed: (receipt: ResolutionReceiptView, alreadyApplied: boolean): string => `${alreadyApplied ? "Already committed" : "Committed"}: ${receipt.items.map((item) => item.refDes).join(", ")} resolved to ${[...new Set(receipt.items.map((item) => item.target.exactMpn))].join(", ")} in ONE canonical transaction ${receipt.transactionId.slice(0, 12)}… — new schematic revision ${receipt.headAfter.headSequence} (head ${receipt.headAfter.canonicalStateDigest.slice(0, 16)}…), receipt ${receipt.receiptId.slice(0, 16)}…; references, values, placements and nets verified; undoable.`,
+  committed: (receipt: ResolutionReceiptView, alreadyApplied: boolean): string => `${alreadyApplied ? "Already committed" : "Committed"}: ${receipt.items.map((item) => item.refDes).join(", ")} resolved to ${[...new Set(receipt.items.map((item) => item.target.exactMpn))].join(", ")} in ONE canonical transaction ${receipt.transactionId.slice(0, 12)}… — new schematic revision ${receipt.headAfter.headSequence} (head ${receipt.headAfter.canonicalStateDigest.slice(0, 16)}…), receipt ${receipt.receiptId.slice(0, 16)}…; references, values, placements and nets verified; undoable.${receipt.boardImpact ? ` ${boardImpactSentences(receipt.boardImpact).join(" ")}` : ""}`, // [PR-L6, 2026-10-19] + the receipt's board impact
   refused: (message: string): string => `The component resolution was not applied: ${message}`,
   discarded: (): string => "Component resolution discarded — nothing was changed and nothing was recorded.",
 });
 
 /** The run log's lines after a committed batch: the recomputed Prepare PCB preflight and the design checks, as they stand. */
-export function resolutionAftermathLines(report: PcbSyncPreflightReport, checks: readonly DesignCheck[]): string[] {
+export function resolutionAftermathLines(report: PcbSyncPreflightReport, checks: readonly DesignCheck[], boardImpact?: ResolutionReceiptBoardImpact): string[] { // [PR-L6, 2026-10-19] + the board impact the receipt records
   const preflight = report.status === "ready_for_server_preparation"
     ? `Prepare PCB preflight updated: no instance is refused any more (${report.instances.kicadWithPublishedRevision} of ${report.instances.kicad} catalog instances carry a published exact revision). The server stages — bindings, publication, the durable preflight — have not run yet: Prepare PCB runs them; not checked is not a pass.`
     : `Prepare PCB preflight updated: ${report.unresolved.count} instance(s) are still refused — ${report.unresolved.rows.map((row) => `${row.refDes} (${row.missingLabel})`).join(", ")}${report.unresolved.truncated > 0 ? `, and ${report.unresolved.truncated} more` : ""}.`;
   const electrical = checks.filter((check) => check.id !== "bom").map((check) => `${check.label} — ${check.state === "pass" ? "pass" : check.state === "findings" ? `${check.count} finding(s): ${check.findings.slice(0, 2).join("; ")}` : `not run (${check.reason ?? "unknown"})`}`).join(" · ");
-  return [preflight, `Electrical check on the new revision: ${electrical || "not run"}.`];
+  return [preflight, `Electrical check on the new revision: ${electrical || "not run"}.`, ...(boardImpact && boardImpact.state === "assessed" && boardImpact.basis.kind === "board" ? boardImpactSentences(boardImpact) : [])];
+}
+
+// ─── [PR-L6, 2026-10-19] runbook M.4 / M.5 item 7 (OD-253 item 8): the PCB impact section of the review dialog ──────────────────
+
+export interface ComponentResolutionBoardImpactRow {
+  componentInstanceId: string;
+  refDes: string;
+  outcome: string;
+  operation: string;
+  /** one plain sentence: the board footprint, the outcome, the pins (net, pads, copper), the placement and the Prepare PCB operation */
+  text: string;
+}
+
+export interface ComponentResolutionBoardImpactView {
+  state: "loading" | "unavailable" | "assessed";
+  /** the visible reason Approve is disabled; null only when the impact is assessed */
+  approveBlockedReason: string | null;
+  headline: string;
+  rows: ComponentResolutionBoardImpactRow[];
+  /** what goes stale until Prepare PCB re-runs */
+  invalidates: string[];
+  /** the receipt's bounded summary (assessed only) */
+  summary: ResolutionReceiptBoardImpact | null;
+}
+
+const mm = (nm: number): string => `${(nm / 1_000_000).toFixed(2)} mm`;
+
+/** The dialog's PCB impact section (a pure projection of the page's impact state; display only). */
+export function componentResolutionBoardImpactView(state: ResolutionBoardImpactState): ComponentResolutionBoardImpactView {
+  if (state.state === "loading") return { state: "loading", approveBlockedReason: "Approve is disabled while the project's PCB is read to assess this batch's board impact…", headline: "PCB impact: reading the durable board…", rows: [], invalidates: [], summary: null };
+  if (state.state === "unavailable") return { state: "unavailable", approveBlockedReason: `Approve is disabled: the project's PCB could not be read, so this batch's board impact is unknown (${state.detail}). Discard, or ask again later.`, headline: `PCB impact: unavailable (${state.detail}).`, rows: [], invalidates: [], summary: null };
+  const impact = state.impact;
+  const summary = resolutionBoardImpactSummary(impact);
+  if (impact.basis.state === "no-board") return { state: "assessed", approveBlockedReason: null, headline: "PCB impact: this project has no PCB yet - Prepare PCB creates the board from the new revision; nothing on a board goes stale.", rows: [], invalidates: [], summary };
+  const basis = impact.basis;
+  const rows = impact.items.map((item): ComponentResolutionBoardImpactRow => {
+    const pins = item.pins.map((row) => `pin ${row.pin}${row.toPin !== row.pin ? ` -> ${row.toPin}` : ""} ${row.net ? `on ${row.net}` : "unconnected"} (pads ${row.boardPads.join("/") || "-"} -> ${row.targetPads.join("/") || "-"}${row.copper.tracks + row.copper.vias + row.copper.zones > 0 ? `; copper ${row.copper.tracks} track(s), ${row.copper.vias} via(s), ${row.copper.zones} zone(s)` : ""})`).join(", ");
+    const placement = item.placement ? `placed at ${mm(item.placement.x)}, ${mm(item.placement.y)}, ${item.placement.rotationDeg}°, ${item.placement.side}${item.placement.locked ? ", locked" : ""}${item.placement.fixed ? ", fixed" : ""}` : "not placed on the board";
+    const operation = item.predicted.operation === "blocked" ? `Prepare PCB is blocked (${item.predicted.codes.join(", ")})` : `Prepare PCB: ${item.predicted.operation.replace(/_/g, " ")}`;
+    const footprint = item.boardRef ? `board ${item.boardRef}` : "not on the board";
+    const rebind = item.rebind ? `; re-binding needed: the board carries it under another published revision and a reviewer's bind of the new one is refused while that binding is in effect (${REBIND_CONFLICT_CODE})` : "";
+    return { componentInstanceId: item.componentInstanceId, refDes: item.schematicRefDes, outcome: item.outcome, operation: item.predicted.operation, text: `${item.schematicRefDes} (${footprint}): ${boardImpactOutcomeWords(item.outcome)}${item.fields.length > 0 ? ` [${item.fields.join(", ")}]` : ""}; ${pins || "no pins"}; ${placement}; ${operation}${rebind}.` };
+  });
+  const invalidates = [impact.invalidates.placementLegality ? "placement legality" : null, impact.invalidates.drc ? "DRC" : null, impact.invalidates.routing ? "routing (copper on an affected net)" : null, impact.invalidates.authority ? `qualification authority r${impact.invalidates.authority.revision}` : null, impact.invalidates.release ? `release ${impact.invalidates.release.releaseId.slice(0, 24)}` : null, impact.invalidates.stageEvidence ? "local stage evidence" : null].filter((entry): entry is string => entry !== null);
+  const revisionNote = impact.requiresBoardRevision ? ` Prepare PCB will need a NEW derived board revision (copper stripped: ${impact.copperStripped.tracks} track(s), ${impact.copperStripped.vias} via(s), ${impact.copperStripped.zones} zone(s)); the old board and its releases stay as history.` : "";
+  return { state: "assessed", approveBlockedReason: null, headline: `PCB impact on the durable board ${basis.boardId} (revision ${basis.revision.slice(0, 16)}…, ${basis.boardClass.replace(/_/g, " ")}); unsaved PCB edits are not part of it. Nothing on the board changes until Prepare PCB.${revisionNote}`, rows, invalidates, summary };
 }
