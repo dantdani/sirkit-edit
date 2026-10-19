@@ -3475,3 +3475,28 @@ Under the existing OD-217 heading (`:2599`), append:
   allowance capped below the remaining balance (an allowance stop is a valid, resumable outcome); (11) a partial result is reviewed
   only through an explicit review-partial action.
 - **The owner may choose otherwise:** each item independently; none is irreversible (no migration, no deletion, no purchase).
+
+## OD-253 — increment 6 defaults: the fixture four-motor and LED-dimmer slices, the operator allowance with an input dimension, one bounded live run, board impact before approval (product reliability L/M, 2026-10-19)
+
+- **Question:** increment 6 of section L (L.6, L.7 items 9-10) and section M.5 item 7 leave choices the read-only maps
+  (`artifacts/product-reliability-simple-ui/persistent-generation/progress.md`, increment 6) name. The owner's instruction ("complete
+  everything; you are the chief SWE") asks the lead to proceed. Which defaults apply?
+- **Default applied:** (1) the fixture four-motor design uses parts today's KiCad parser can publish: ATmega328P-AU (a pre-composed
+  ATmega48PV-10A + ATmega328P-A library, as `Timer_NE555` already is), LSM6DS3TR-C on I2C, AO3400A low-side N-MOSFETs with SS14
+  flyback diodes, MIC5504-3.3 LDO, 1x02 battery and motor headers, 2x03 ISP and 1x04 UART headers. STM32 symbols (alternate pins) and
+  ESP32 module footprints (zones) are refused by the parser; extending it is separate work. (2) Disclosed assumptions: brushed 1S
+  coreless motors of about 1 A each, a 1S LiPo without charger or protection, the internal 8 MHz oscillator, a UART header for a
+  receiver and no radio, no firmware or flight qualification; one to four motors. (3) A Build generation never pauses for a
+  question: the planner records material assumptions and requested coverage (optional fields of `submit_plan`), shown in the task
+  card and the review dialog; the user may Stop design and restate. (4) The second ordinary circuit is a 555 PWM LED dimmer. (5) The
+  fixture browser proofs stop at the PCB-preparation handoff (awaiting qualification); no new router recording is made. (6) An
+  operator may only LOWER the per-task allowance (environment names, a new input-token dimension, a pre-call input admission), and a
+  worker may be restricted to one scope. (7) The one bounded live run of OD-252 item 10 runs on the builder's own server and worker
+  (never the owner's :3000 or `.env.local`), with an allowance unit whose provable worst case is reserved in `live-spend.json` first;
+  it writes no acquisition or publication into the owner's catalog. (8) A replacement on a project with a durable board shows its
+  board impact before approval; Approve is disabled while the impact loads or cannot be read (fail closed); the receipt discloses it;
+  after apply, qualify and release are refused in the page while the board is behind the schematic (derived from facts, so Undo,
+  Redo and reload recompute it). A server-side schematic-currency guard on qualify / release is left to the owner. (9) A generation
+  task never starts a CAD acquisition for a role that has no schematic instance; a missing role waits for a library action and Retry.
+- **The owner may choose otherwise:** each item independently (another MCU or IMU, a pause-and-ask question path, another second
+  circuit, a router recording, other allowance numbers, a server-side currency guard).
