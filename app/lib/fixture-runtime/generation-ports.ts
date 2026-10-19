@@ -3,20 +3,23 @@
  * slices of `app/lib/generation-task/worker/slices.ts`), so the browser proofs run the REAL task lifecycle - start, worker claim, plan,
  * block, merge, review - with zero credits and no database.
  *
- * Truth boundary: like the request-lifetime fixture (`build-loop.ts`: "the recorded blinker design is the provider's answer"), every
- * design request is answered with the RECORDED blinker design, never a design made for the request. The difference is only how it
- * arrives: here a scripted provider answers the slice core's real turns as a model would - the planner call gets no decomposition
- * (the router's fixture answer), the first build turn searches the fixture catalog for the five recorded parts, the next submits the
- * recorded netlist referencing the partIds those searches surfaced - so the slice core's own submission validation, ERC gate,
- * checkpoints and the merge run unchanged. Each scripted call takes `FIXTURE_GENERATION_TURN_MS` (an abort ends it at once), so a
- * browser can observe a running design; the calls are labelled `fixture-provider` and send nothing anywhere.
+ * Truth boundary: the request-lifetime fixture (`build-loop.ts`) still answers with the recorded blinker design; this port does not.
+ * [PR-L6, 2026-10-19] Runbook L.7 items 9-10: its scripted provider (`generation-policy.ts`, recipes in `generation-recipes.ts`) designs
+ * by the request's FEATURES - a drone with one to four motors as four planned blocks, a 555 PWM LED dimmer, the 555 LED blinker (the
+ * recorded design, transcribed exactly) - from the parts its searches of the fixture catalog actually return; a request with no recipe
+ * gets text replies only, never an invented circuit. The slice core's own submission validation, ERC gate, checkpoints and the merge
+ * run unchanged. Each scripted call takes `FIXTURE_GENERATION_TURN_MS` (an abort ends it at once), so a browser can observe a running
+ * design; the calls are labelled `fixture-provider` and send nothing anywhere. Its search results carry the published authority facts
+ * production's search attaches (`orderableValues`, `physicalAuthority`, `verifiedFootprint`).
  *
  * Reachable only under the fixture runtime (`fixtureContainer()` throws otherwise).
  */
-import { BLINKER_NETLIST } from "./blinker/catalog";
 import { fixtureContainer } from "./container";
+import { scriptedGenerationTurn } from "./generation-policy"; // [PR-L6, 2026-10-19] the scripted provider's engine
+import { BLINKER_SEARCHES } from "./generation-recipes";
 import { EMBEDDING_MODEL } from "../embeddings";
-import type { LLMMessage, LLMRequest, LLMResponse, LLMToolCall } from "../llm/types";
+import type { LLMRequest, LLMResponse } from "../llm/types";
+import type { CachedPart } from "../parts-cache";
 import type { AiPartResult } from "../parts-search";
 import type { BuildCatalogPort, BuildLlmPort } from "../schematic/build-loop-slice";
 
@@ -24,14 +27,8 @@ import type { BuildCatalogPort, BuildLlmPort } from "../schematic/build-loop-sli
 export const FIXTURE_GENERATION_TURN_MS = 1_000;
 export const FIXTURE_GENERATION_MODEL = "fixture-provider";
 
-/** The searches the scripted provider makes before it submits: one per recorded part (query, catalog category). */
-export const FIXTURE_GENERATION_SEARCHES = Object.freeze([
-  { query: "NE555 timer SOIC-8", category: "Timer" },
-  { query: "0805 resistor", category: "Resistor" },
-  { query: "0805 capacitor", category: "Capacitor" },
-  { query: "0805 LED", category: "LED" },
-  { query: "2-pin 2.54 mm header connector", category: "Connector" },
-] as const);
+/** The blinker's recorded searches (query, catalog category): the first query of each blinker recipe role, in order. */
+export const FIXTURE_GENERATION_SEARCHES = BLINKER_SEARCHES;
 
 const wait = (ms: number, signal: AbortSignal | undefined): Promise<void> => new Promise((resolve, reject) => {
   if (signal?.aborted) { reject(signal.reason instanceof Error ? signal.reason : new Error("FIXTURE_PROVIDER_ABORTED")); return; }
@@ -40,21 +37,11 @@ const wait = (ms: number, signal: AbortSignal | undefined): Promise<void> => new
   signal?.addEventListener("abort", onAbort, { once: true });
 });
 
-const toolCallsOf = (messages: readonly LLMMessage[], name: string): number => messages.reduce((sum, message) => sum + (message.role === "assistant" && Array.isArray(message.content) ? message.content.filter((part) => part.type === "tool_call" && part.name === name).length : 0), 0);
-
-/** The scripted provider's answer to one request, from the conversation alone (deterministic; no state of its own). */
+/** The scripted provider's answer to one request, from the conversation alone (deterministic; no state of its own): the engine of
+ *  `generation-policy.ts` over the recipes of `generation-recipes.ts`. */
 export function fixtureGenerationAnswer(request: LLMRequest): LLMResponse {
-  const base = { provider: request.provider, model: FIXTURE_GENERATION_MODEL, text: "", usage: { inputTokens: 0, outputTokens: 0 } };
-  const choice = request.toolChoice;
-  // the planner: no decomposition (the router's fixture answer), so the request is designed as one circuit
-  if (typeof choice === "object" && choice !== null && choice.name === "submit_plan") return { ...base, toolCalls: [], stopReason: "end_turn" };
-  const turn = request.messages.filter((message) => message.role === "assistant").length + 1;
-  if (toolCallsOf(request.messages, "search_parts") === 0) {
-    const toolCalls: LLMToolCall[] = FIXTURE_GENERATION_SEARCHES.map((search, index) => ({ id: `fixture-t${turn}-search-${index + 1}`, name: "search_parts", input: { query: search.query, category: search.category } }));
-    return { ...base, toolCalls, stopReason: "tool_use" };
-  }
-  const netlist = structuredClone(BLINKER_NETLIST);
-  return { ...base, toolCalls: [{ id: `fixture-t${turn}-submit`, name: "submit_schematic", input: { components: netlist.components, connections: netlist.connections, explanation: netlist.explanation } }], stopReason: "tool_use" };
+  const turn = scriptedGenerationTurn(request);
+  return { provider: request.provider, model: FIXTURE_GENERATION_MODEL, text: turn.text, toolCalls: turn.toolCalls, stopReason: turn.stopReason, usage: { inputTokens: 0, outputTokens: 0 } };
 }
 
 /** The scripted provider (fixture runtime only). */
@@ -70,6 +57,19 @@ export function fixtureGenerationLlmPort(turnMs: number = FIXTURE_GENERATION_TUR
 
 function aiPartOf(part: { id: string; name: string; mpn: string | null; description: string | null; mainCategory: string; pins: ReadonlyArray<{ number: string; name: string; type: string }> }, similarity: number): AiPartResult {
   return { partId: part.id, name: part.name, mpn: part.mpn, description: part.description, mainCategory: part.mainCategory, pins: part.pins.map((pin) => ({ number: pin.number, name: pin.name, type: pin.type })), lifecycleStatus: "unknown", similarity };
+}
+
+/** [PR-L6, 2026-10-19] The published authority a SEARCH result carries, exactly as production's search attaches it (parts-search.ts
+ *  `attachOrderableValues`): a part with an approved link to a selectable (here: not withdrawn) revision is `physicalAuthority`
+ *  "verified" with that link's footprint, and its value-specific link keys ('' - the value-agnostic default - excluded), sorted, are
+ *  its `orderableValues`. A part with no such link carries none of the three fields. (`partsByIds` stays without them, as production's
+ *  `getPartsByIds` is.) */
+export function fixtureSearchAuthority(part: Pick<CachedPart, "atomicAssignments" | "withdrawnValueKeys">): Pick<AiPartResult, "orderableValues" | "physicalAuthority" | "verifiedFootprint"> {
+  const withdrawn = new Set(part.withdrawnValueKeys ?? []);
+  const links = Object.entries(part.atomicAssignments ?? {}).filter(([key, link]) => link?.approved === true && !withdrawn.has(key));
+  if (links.length === 0) return {};
+  const values = links.map(([key]) => key).filter((key) => key !== "");
+  return { physicalAuthority: "verified", verifiedFootprint: links[0]![1].footprintFullName, ...(values.length ? { orderableValues: [...values].sort() } : {}) };
 }
 
 /** The committed blinker catalog as a searchable catalog: a part matches when it is in the requested category (when one is named) and
@@ -89,7 +89,7 @@ export function fixtureGenerationCatalogPort(): BuildCatalogPort {
         })
         .filter((entry) => entry.score > 0)
         .sort((a, b) => b.score - a.score || (a.part.id < b.part.id ? -1 : 1));
-      return scored.slice(0, Math.max(0, limit)).map((entry) => aiPartOf(entry.part, Math.min(1, entry.score / Math.max(1, words.length))));
+      return scored.slice(0, Math.max(0, limit)).map((entry) => ({ ...aiPartOf(entry.part, Math.min(1, entry.score / Math.max(1, words.length))), ...fixtureSearchAuthority(entry.part) })); // [PR-L6, 2026-10-19] + the published authority facts
     },
     async findAlternates() { return []; },
     async partsByIds(ids) {

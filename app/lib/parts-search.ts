@@ -32,7 +32,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
-import { parts, libraries, alternates, partsAtomicLinks } from "@/app/lib/db/schema";
+import { parts, libraries, alternates, partsAtomicLinks, atomicRevisionStatusEvents } from "@/app/lib/db/schema"; // [PR-L6, 2026-10-19] + the status events the catalog epoch reads (readCatalogEpoch, after the last line)
 import { selectableRevisionIdSql } from "@/app/lib/atomic/revision-status-sql";
 import { embedQuery } from "@/app/lib/embeddings";
 import { RERANK_RANK_TOOL, RERANK_SYSTEM_PROMPT } from "@/app/lib/prompts";
@@ -288,7 +288,7 @@ export async function searchPartsForAI(
     /** [PR-L, 2026-10-17] the reranker refusal memo: the process-wide one unless a caller (a generation task) injects its own */
     rerankMemo?: RerankRefusalMemo;
     /** [PR-L, 2026-10-17] told how this search ran - its category resolution and ranking - just before the results return */
-    onOutcome?: (outcome: PartsSearchOutcome) => void;
+    onOutcome?: (outcome: PartsSearchOutcome) => void; /** [PR-L6, 2026-10-19] L.6 part 2 item 1: a caller's query embedder (a generation task's per-task cache); this module's embedQuery by default */ embedQuery?: (text: string) => Promise<QueryEmbedding>;
   },
 ): Promise<AiPartResult[]> {
   const signal = options?.signal;
@@ -325,15 +325,15 @@ export async function searchPartsForAI(
   // degrades to lexical-only instead of failing the entire search: exact-token
   // recall still surfaces canonical parts, and every selected partId is
   // re-validated downstream, so degraded recall can never fabricate a part.
-  let queryEmbedding: number[] | null = null;
+  let queryEmbedding: number[] | null = null; let embedding: PartsSearchOutcome["embedding"]; // [PR-L6, 2026-10-19] how the query embedding was obtained, for the outcome
   try {
     assertCatalogLookupCurrent(signal);
-    queryEmbedding = await embedQuery(query);
+    const embedded = options?.embedQuery ? await options.embedQuery(query) : { vector: await embedQuery(query), cached: false }; queryEmbedding = embedded.vector; embedding = embedded.cached ? "cached" : "called"; // [PR-L6, 2026-10-19] in place: the injected embedder, else this module's
     assertCatalogLookupCurrent(signal);
   } catch (error) {
     // A cancelled generation must not degrade into another retrieval stage.
     assertCatalogLookupCurrent(signal);
-    console.warn("[parts-search] embedding provider unavailable; using lexical-only recall:", error instanceof Error ? error.message : String(error));
+    embedding = "failed"; console.warn("[parts-search] embedding provider unavailable; using lexical-only recall:", error instanceof Error ? error.message : String(error));
   }
   const distance = queryEmbedding ? cosineDistance(parts.embedding, queryEmbedding) : null;
   const similarity = distance ? sql<number>`1 - (${distance})` : sql<number>`0`;
@@ -451,7 +451,7 @@ export async function searchPartsForAI(
     .sort((a, b) => b.score - a.score)
     .map((entry) => toAiPart(entry.row));
   assertCatalogLookupCurrent(signal);
-  const report = (rerank: RerankDisposition) => options?.onOutcome?.({ category: categoryResolution, ranking: rerank.state === "used" ? "reranked" : "fused", rerank });
+  const report = (rerank: RerankDisposition) => options?.onOutcome?.({ category: categoryResolution, ranking: rerank.state === "used" ? "reranked" : "fused", rerank, ...(embedding ? { embedding } : {}) });
   if (fusedAll.length === 0) {
     report({ state: "not_needed" });
     return [];
@@ -723,7 +723,14 @@ export interface PartsSearchOutcome {
   /** "reranked": the reranker ordered the results; "fused": the relevance-banded fused order, the truthful fallback */
   ranking: "reranked" | "fused";
   rerank: RerankDisposition;
+  /** [PR-L6, 2026-10-19] how the query embedding was obtained: a provider call, a cached vector (no call), or a failed call (lexical-only
+   *  recall followed); absent when the search embedded nothing */
+  embedding?: "called" | "cached" | "failed";
+  /** [PR-L6, 2026-10-19] answered from a generation task's facts: nothing reached the catalog, the embedder or the reranker */
+  cached?: boolean;
 }
+/** [PR-L6, 2026-10-19] What a caller's query embedder answers: the vector and whether a cache supplied it (no provider call). */
+export interface QueryEmbedding { vector: number[]; cached: boolean }
 
 /**
  * The relevance band. A part's relevance is the sum of its reciprocal ranks in the vector and lexical channels (never the authority
@@ -809,4 +816,21 @@ const PROCESS_RERANK_REFUSAL_MEMO = new RerankRefusalMemo();
 /** The process-wide memo `searchPartsForAI` uses when its caller injects none. */
 export function processRerankRefusalMemo(): RerankRefusalMemo {
   return PROCESS_RERANK_REFUSAL_MEMO;
+}
+
+// ─── [PR-L6, 2026-10-19] The catalog epoch (L.6 part 2, item 2b), appended after the last line so no cited line moves ────────────
+// A generation task's cached lookups are keyed by the catalog identity they were answered under: a part published or withdrawn while
+// the task runs (M2 publication writes parts and link rows; a revision status event withdraws one) changes the epoch, so the cached
+// lookups miss and the next search sees the catalog as it is now. One cheap read; the production port memoizes it (build-loop.ts).
+
+/** The catalog's identity now: the published links (count, newest), the revision status events (count, newest) and the newest library
+ *  ingestion, as one identifier (`pg1-...`, no whitespace). */
+export async function readCatalogEpoch(): Promise<string> {
+  const db = getDb();
+  const ms = (column: SQL) => sql<string>`coalesce(floor(extract(epoch from max(${column})) * 1000), 0)::bigint::text`;
+  const [links] = await db.select({ n: sql<string>`count(*)::bigint::text`, at: ms(sql`${partsAtomicLinks.createdAt}`) }).from(partsAtomicLinks);
+  const [events] = await db.select({ n: sql<string>`count(*)::bigint::text`, at: ms(sql`${atomicRevisionStatusEvents.at}`) }).from(atomicRevisionStatusEvents);
+  const [ingested] = await db.select({ at: ms(sql`${libraries.ingestedAt}`) }).from(libraries);
+  const part = (value: unknown): string => (/^\d{1,19}$/.test(String(value ?? "")) ? String(value) : "0");
+  return `pg1-${part(links?.n)}-${part(links?.at)}-${part(events?.n)}-${part(events?.at)}-${part(ingested?.at)}`;
 }

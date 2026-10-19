@@ -539,7 +539,7 @@ Each block has:
 Rules:
 - Use consistent, UPPERCASE shared-net names across blocks — the same name in two blocks is the SAME electrical net (that's how blocks interconnect).
 - Exactly ONE block must SOURCE each power rail (a regulator or power connector that outputs it); the others consume it. Put GND in every block's sharedNets.
-- ONLY split when it helps. If the request is simple (one functional block, a handful of parts — e.g. "an LED and resistor on an MCU GPIO"), return a SINGLE block covering the whole request. Over-decomposition hurts quality. Prefer 2–5 blocks for genuinely multi-subsystem designs.`;
+- ONLY split when it helps. If the request is simple (one functional block, a handful of parts — e.g. "an LED and resistor on an MCU GPIO"), return a SINGLE block covering the whole request. Over-decomposition hurts quality. Prefer 2–5 blocks for genuinely multi-subsystem designs.\n- Record in "assumptions" every material choice the request leaves open that changes the circuit, one short sentence each (at most 8): for motors, the motor type and its drive (brushed DC through a low-side N-MOSFET with a flyback diode, or brushless, which needs an ESC per motor); the battery chemistry, cell count and voltage; the current per motor and in total; the controller and its sensors; and say that no firmware and no flight or safety qualification is supplied. Design what the request asks for under those assumptions - never silently a different circuit.\n- Record in "coverage" each function the request asks for, with its count (for example "4 motor drive channels", "IMU on I2C"), at most 8; every one must be designed by some block.`; // [PR-L6, 2026-10-19] OD-253 items 2-3: the material assumptions and the requested coverage, appended in place so no later line moves (the stall map cites :587)
 
 export const PLAN_TOOL: LLMTool = {
   name: "submit_plan",
@@ -563,7 +563,7 @@ export const PLAN_TOOL: LLMTool = {
           required: ["name", "brief", "sharedNets"],
         },
       },
-      rationale: { type: "string", description: "One-line summary of the decomposition" },
+      rationale: { type: "string", description: "One-line summary of the decomposition" }, assumptions: { type: "array", items: { type: "string" }, description: "Material assumptions the request leaves open, one short sentence each (at most 8): motor type and drive, battery chemistry, cells and voltage, current per motor and total, controller and sensors, and that no firmware or flight qualification is supplied" }, coverage: { type: "array", items: { type: "string" }, description: "Each function the request asks for, with its count (at most 8), e.g. \"4 motor drive channels\"" }, // [PR-L6, 2026-10-19] OPTIONAL (an older answer without them still plans), in place
     },
     required: ["blocks", "rationale"],
   },
@@ -587,3 +587,28 @@ When an LED is driven from a logic or timer OUTPUT pin, size its series resistor
 Some search results carry a "designNotes" field with datasheet-derived pin roles and REQUIRED connections. Treat designNotes as authoritative: satisfy every listed requirement in your connections. Some results carry "physicalAuthority":"verified" plus "verifiedFootprint" — these are the ONLY parts with a proven symbol/footprint/pin-pad mapping that can actually reach a manufactured board. Prefer a verified part only where it fits the role as well as the other candidates (the same function, suitable pins and ratings): relevance comes first, and an irrelevant verified part is never better than a relevant unverified one - never use a verified part that does a different job just because it is verified. An unverified part is acceptable in a submitted design: it has no footprint authority yet, so it is listed for review as a missing part before the PCB is built (never treated as manufacturable). Choose after one or two searches for a role; do not keep searching only to find a verified option. Verified results may also carry "orderableValues": when present, the component's "value" MUST be exactly one of those strings (pick the closest listed value and adjust the surrounding design to suit).
 
 Every component's partId must be a real UUID copied from a search_parts result. END with exactly one submit_schematic call. Don't narrate after.`;
+
+// ─── [PR-L6, 2026-10-19] A role the catalog cannot fill (L.6 part 2, item 8), appended after the last line so no cited line moves ──────
+
+/** Offered ONLY to a durable generation task's block slices (app/lib/schematic/build-loop-slice.ts; never the request-lifetime loop): the
+ *  block reports one role its searches could not fill instead of guessing a part. Accepted only when at least two of the named searches
+ *  are searches this conversation actually made; the block then waits for the part (a library action, then Retry) - never a made-up part. */
+export const BUILD_REPORT_UNFILLED_ROLE_TOOL: LLMTool = {
+  name: "report_unfilled_role",
+  description:
+    "Report ONE role of this block that the catalog cannot fill, after at least two DIFFERENT search_parts searches for it found no suitable part. Name those searches exactly as you sent them. The block then waits for that part (a person adds or approves it, then retries the block) instead of guessing one; the parts you already found are kept. Never use it for a part you have not searched for, and never invent a partId.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      role: { type: "string", description: "The role in this block, e.g. \"low-side motor MOSFET\"" },
+      function: { type: "string", description: "What the part must do in the circuit" },
+      keySpecs: { type: "array", items: { type: "string" }, description: "The specifications the candidates failed (at most 6)" },
+      queriesTried: {
+        type: "array",
+        items: { type: "object", properties: { query: { type: "string" }, category: { type: "string" } }, required: ["query"] },
+        description: "The search_parts searches made for this role, query and category exactly as sent (at least 2, at most 4)",
+      },
+    },
+    required: ["role", "function", "queriesTried"],
+  },
+};

@@ -56,7 +56,7 @@ import {
   type BuildLlmPort,
 } from "./build-loop-slice";
 import type { BuildLoopCheckpoint } from "@/app/lib/generation-task/checkpoint";
-import { isLabelConnection, type BuildLogicalNetlist } from "@/lib/schematic-types";
+import { inferNetLabelKind, isLabelConnection, type BuildLogicalNetlist } from "@/lib/schematic-types";
 import { runErc } from "@/lib/erc";
 import {
   BUILD_SYSTEM_PROMPT,
@@ -104,9 +104,18 @@ function boundedReason(error: unknown): string {
 export interface GenerationPlanDraft {
   planner: BuildPlannerStatus;
   rationale: string;
-  /** material assumptions the planner disclosed (the current submit_plan carries none; the store's plan has the field) */
+  /** material assumptions the planner disclosed ([PR-L6, 2026-10-19] submit_plan's optional `assumptions`, OD-253 item 3) */
   assumptions: string[];
+  /** [PR-L6, 2026-10-19] the functions the request asks for, as the planner listed them (submit_plan's optional `coverage`) */
+  coverage?: string[];
   blocks: PlannedBlock[];
+}
+/** [PR-L6, 2026-10-19] The most assumption and coverage lines a plan keeps, and their length (the task head's bounds). */
+export const PLAN_NOTE_BOUNDS = Object.freeze({ lines: 8, chars: 200 });
+/** A planner list field (assumptions, coverage): its non-empty strings, trimmed, one line each, bounded; anything else is dropped. */
+function planLines(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === "string").map((entry) => entry.replace(/\s+/g, " ").trim().slice(0, PLAN_NOTE_BOUNDS.chars)).filter(Boolean).slice(0, PLAN_NOTE_BOUNDS.lines);
 }
 export interface PlanGenerationUsage { modelCalls: number; inputTokens: number; outputTokens: number }
 export type PlanRefusalCode = "PLAN_TRUNCATED" | "PLAN_UNREADABLE" | "PLAN_TOO_MANY_BLOCKS";
@@ -143,7 +152,7 @@ const PLAN_REFUSALS: Readonly<Record<PlanRefusalCode, string>> = Object.freeze({
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** Read one planner answer: no submit_plan, a usable plan, or why the plan cannot be used. */
-function readPlan(res: LLMResponse, maxBlocks: number): { kind: "none" } | { kind: "plan"; blocks: PlannedBlock[]; rationale: string } | { kind: "refused"; code: PlanRefusalCode } {
+function readPlan(res: LLMResponse, maxBlocks: number): { kind: "none" } | { kind: "plan"; blocks: PlannedBlock[]; rationale: string; assumptions: string[]; coverage: string[] } | { kind: "refused"; code: PlanRefusalCode } {
   const tool = res.toolCalls.find((call) => call.name === "submit_plan");
   // `planned: false` - the model submitted no plan at all (an empty plan is a judged-simple request; no submission is no plan)
   if (tool === undefined) return { kind: "none" };
@@ -159,7 +168,8 @@ function readPlan(res: LLMResponse, maxBlocks: number): { kind: "none" } | { kin
     brief: b.brief as string,
     sharedNets: Array.isArray(b.sharedNets) ? (b.sharedNets as unknown[]).filter((net): net is string => typeof net === "string") : [],
   }));
-  return { kind: "plan", blocks, rationale: typeof raw.rationale === "string" ? raw.rationale : "" };
+  // [PR-L6, 2026-10-19] the optional assumptions and coverage (an older answer without them still plans)
+  return { kind: "plan", blocks, rationale: typeof raw.rationale === "string" ? raw.rationale : "", assumptions: planLines(raw.assumptions), coverage: planLines(raw.coverage) };
 }
 
 const ROUTER_PORT: BuildLlmPort = { generate: (request) => llmRouter.generate(request) };
@@ -205,7 +215,8 @@ export async function planGeneration(input: PlanGenerationInput): Promise<PlanGe
       const planner: BuildPlannerStatus = blocks.length > 1
         ? { state: "planned", blocks: blocks.length }
         : { state: "single", reason: read.kind === "plan" ? "simple_request" : "no_plan" };
-      return { kind: "planned", plan: { planner, rationale: read.kind === "plan" ? read.rationale : "", assumptions: [], blocks: blocks.length > 1 ? blocks : [] }, attempts: attempt, usage };
+      const notes = read.kind === "plan" ? { assumptions: read.assumptions, ...(read.coverage.length ? { coverage: read.coverage } : {}) } : { assumptions: [] as string[] }; // [PR-L6, 2026-10-19]
+      return { kind: "planned", plan: { planner, rationale: read.kind === "plan" ? read.rationale : "", ...notes, blocks: blocks.length > 1 ? blocks : [] }, attempts: attempt, usage };
     }
     refusal = read.code;
     console.warn(`[build-multi] planner submit_plan refused (${read.code}, attempt ${attempt}/${PLAN_ATTEMPTS})`);
@@ -216,9 +227,33 @@ export async function planGeneration(input: PlanGenerationInput): Promise<PlanGe
 }
 
 /** The store's plan input (`GenerationPlanInput`) for a plan draft: the planned blocks, or ONE whole-circuit block (block `main`). */
-export function generationPlanInput(plan: GenerationPlanDraft, prompt: string): { planner: BuildPlannerStatus; rationale: string; assumptions: string[]; blocks: PlannedBlock[] } {
-  if (plan.blocks.length > 1) return { planner: plan.planner, rationale: plan.rationale, assumptions: [...plan.assumptions], blocks: plan.blocks.map((block) => ({ ...block, sharedNets: [...block.sharedNets] })) };
-  return { planner: plan.planner, rationale: plan.rationale, assumptions: [...plan.assumptions], blocks: [{ name: "Whole circuit", brief: prompt.slice(0, 600), sharedNets: [] }] };
+export function generationPlanInput(plan: GenerationPlanDraft, prompt: string): { planner: BuildPlannerStatus; rationale: string; assumptions: string[]; coverage?: string[]; blocks: PlannedBlock[] } {
+  const coverage = plan.coverage?.length ? { coverage: [...plan.coverage] } : {}; // [PR-L6, 2026-10-19]
+  // [PR-L6, 2026-10-19] OD-253 item 3: the assumptions are folded into each block's brief HERE, at plan time, so a block's prompt is fixed by
+  // the stored plan (a resumed block prompt never changes); the single design (block main) reads them from the plan (`designPrompt`)
+  if (plan.blocks.length > 1) return { planner: plan.planner, rationale: plan.rationale, assumptions: [...plan.assumptions], ...coverage, blocks: plan.blocks.map((block) => ({ ...block, brief: briefWithAssumptions(block.brief, plan.assumptions), sharedNets: [...block.sharedNets] })) };
+  return { planner: plan.planner, rationale: plan.rationale, assumptions: [...plan.assumptions], ...coverage, blocks: [{ name: "Whole circuit", brief: prompt.slice(0, 600), sharedNets: [] }] };
+}
+
+/** [PR-L6, 2026-10-19] The brief bound of a stored plan block (the task head's `blockBriefChars`). */
+const BRIEF_CHARS = 600;
+/** A block brief with as many WHOLE assumptions as fit its bound appended (the planner's brief always comes first and is kept whole). */
+export function briefWithAssumptions(brief: string, assumptions: readonly string[]): string {
+  const base = brief.replace(/\s+/g, " ").trim();
+  if (!assumptions.length) return brief;
+  const kept: string[] = [];
+  for (const assumption of assumptions) {
+    const next = `${base} Assumptions: ${[...kept, assumption].join("; ")}.`;
+    if (next.length > BRIEF_CHARS) break;
+    kept.push(assumption);
+  }
+  return kept.length ? `${base} Assumptions: ${kept.join("; ")}.` : brief;
+}
+/** [PR-L6, 2026-10-19] The single design's message: the request, and the plan's assumptions when it has any (a pure function of the
+ *  stored plan, so a resumed slice sends the same message; a plan without assumptions leaves the request exactly as it was). */
+export function designPrompt(prompt: string, assumptions: readonly string[]): string {
+  if (!assumptions.length) return prompt;
+  return `${prompt}\n\nDesign assumptions (decided at planning; design under them, do not contradict them):\n${assumptions.map((assumption) => `- ${assumption}`).join("\n")}`;
 }
 
 // ─── 2. A block ──────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -305,6 +340,12 @@ export interface MergeAndValidateInput {
   emptyBlocks: "refuse" | "accept";
   /** the catalog read the post-merge check revalidates parts with; parts-search by default */
   partsByIds?: (ids: string[]) => Promise<AiPartResult[]>;
+  /** [PR-L6, 2026-10-19] the plan's material assumptions and requested coverage (OD-253 item 3): stated in the explanation, so the review
+   *  dialog shows them */
+  assumptions?: readonly string[];
+  coverage?: readonly string[];
+  /** [PR-L6, 2026-10-19] the roles omitted blocks waited for (item 8): a partial explanation names them */
+  unfilledRoles?: readonly string[];
 }
 /** Every plan shared net must be labelled in at least two blocks (a net one block labels joins nothing): the obligations checked
  *  and the findings, bounded (the result document's `sharedNets`). */
@@ -313,7 +354,7 @@ export type MergeAndValidateOutcome =
   | { kind: "merged"; body: BuildMultiSuccess; sharedNets: SharedNetReport; parts: AiPartResult[] | null }
   | { kind: "refused"; code: "MERGE_NO_BLOCKS" | "MERGE_EMPTY_BLOCK"; blocks: string[]; error: string };
 
-function sharedNetReport(blocks: ReadonlyArray<{ name: string; netlist: BuildLogicalNetlist; sharedNets: readonly string[] }>): SharedNetReport {
+function sharedNetReport(blocks: ReadonlyArray<{ name: string; netlist: BuildLogicalNetlist; sharedNets: readonly string[] }>, parts: ReadonlyMap<string, AiPartResult> | null = null): SharedNetReport {
   const nets = new Set<string>();
   for (const block of blocks) for (const net of block.sharedNets) { const name = net.trim().toUpperCase(); if (name) nets.add(name); }
   const findings: string[] = [];
@@ -322,7 +363,48 @@ function sharedNetReport(blocks: ReadonlyArray<{ name: string; netlist: BuildLog
     if (labelled.length >= 2) continue;
     findings.push(`Shared net ${net} is labelled in ${labelled.length} block(s)${labelled.length ? ` (${labelled.join(", ")})` : ""}; a shared net must join at least two blocks.`.slice(0, 200));
   }
+  if (parts) findings.push(...railSourcingFindings(blocks, nets, parts)); // [PR-L6, 2026-10-19] OD-253 item 3: exactly one block sources each rail
   return { checked: nets.size, findings: findings.slice(0, 20) };
+}
+
+// ─── [PR-L6, 2026-10-19] Rail sourcing (the plan's "exactly ONE block must SOURCE each power rail") ───────────────────────────────
+// Read from the merged design's parts. "No source" uses the electrical check's reading (lib/erc.ts `isDriven`: a power_out pin, or a pin of
+// a supply, connector or regulator component), except that a regulator's INPUT pin (VIN, VI, IN, EN, VBAT by name, or a logic input) never
+// sources the rail it consumes: a battery header counts as its rail's source, a regulator output as its rail's. Two blocks sourcing one rail
+// use a STRICT reading (a power_out pin, or a supply's pin that is not a power or logic input): a connector carrying a rail into a block (a
+// motor header on VBAT) is not a second source. Advisory findings, beside the electrical check.
+const NOT_A_SOURCE_PIN: ReadonlySet<string> = new Set(["power_in", "input", "no_connect"]);
+const REGULATOR_INPUT_PIN = /^(v?in|vi|en|shdn|vbat)\d*$/i;
+function railSourcingFindings(blocks: ReadonlyArray<{ name: string; netlist: BuildLogicalNetlist }>, sharedNets: ReadonlySet<string>, parts: ReadonlyMap<string, AiPartResult>): string[] {
+  const findings: string[] = [];
+  const rails = [...sharedNets].filter((net) => net !== "GND" && blocks.some((block) => block.netlist.connections.some((connection) => isLabelConnection(connection) && connection.labelName.trim().toUpperCase() === net && (connection.labelKind ?? inferNetLabelKind(connection.labelName.trim().toUpperCase())) === "power")));
+  for (const rail of rails) {
+    const strict: string[] = [], permissive: string[] = [];
+    for (const block of blocks) {
+      const components = new Map(block.netlist.components.map((component) => [component.refDes, component] as const));
+      let strictHere = false, permissiveHere = false;
+      for (const connection of block.netlist.connections) {
+        if (!isLabelConnection(connection) || connection.labelName.trim().toUpperCase() !== rail) continue;
+        const dot = connection.pin.indexOf(".");
+        const component = components.get(dot < 0 ? connection.pin.trim() : connection.pin.slice(0, dot).trim());
+        const token = dot < 0 ? "" : connection.pin.slice(dot + 1).trim().toLowerCase();
+        const pin = component ? parts.get(component.partId)?.pins.find((candidate) => candidate.name.toLowerCase() === token || candidate.number.toLowerCase() === token) : undefined;
+        if (!component || !pin) continue;
+        if (pin.type === "power_out" || (component.role === "source" && !NOT_A_SOURCE_PIN.has(pin.type))) strictHere = true;
+        if (pin.type === "power_out" || component.role === "source" || component.role === "connector" || (component.role === "regulator" && pin.type !== "input" && !REGULATOR_INPUT_PIN.test(pin.name.trim()))) permissiveHere = true;
+      }
+      if (strictHere) strict.push(block.name);
+      if (permissiveHere) permissive.push(block.name);
+    }
+    if (strict.length >= 2) findings.push(`Power rail ${rail} is sourced in ${strict.length} blocks (${strict.join(", ")}); exactly one block should source each rail.`.slice(0, 200));
+    else if (permissive.length === 0) findings.push(`Power rail ${rail} has no source in any block (no regulator output, supply or power connector pin is on it).`.slice(0, 200));
+  }
+  return findings;
+}
+/** [PR-L6, 2026-10-19] The explanation's assumption, coverage and unfilled-role lines (empty when the plan disclosed none). */
+function planNotes(input: Pick<MergeAndValidateInput, "assumptions" | "coverage" | "unfilledRoles">): string {
+  const section = (title: string, lines: readonly string[] | undefined) => (lines?.length ? [`${title}:`, ...lines.map((line) => `- ${line}`)].join("\n") : "");
+  return [section("Assumptions", input.assumptions), section("Requested coverage", input.coverage), section("Not designed (no catalog part was found for these roles)", input.unfilledRoles)].filter(Boolean).join("\n");
 }
 
 /**
@@ -368,9 +450,13 @@ export async function mergeAndValidate(input: MergeAndValidateInput): Promise<Me
   }
 
   const omittedBlocks = [...input.omittedBlocks];
+  // [PR-L6, 2026-10-19] OD-253 item 3: the plan's assumptions and requested coverage (and a partial design's unfilled roles) lead the
+  // explanation, so the review dialog shows them before anything a length bound could cut; none disclosed: the explanation as before
+  const planNote = planNotes(input);
   const explanation = single
-    ? netlist.explanation
+    ? (planNote ? `${planNote}\n\n${netlist.explanation}` : netlist.explanation)
     : `Designed as ${designed.length} subsystem block(s)${input.rationale ? ` — ${input.rationale}` : ""}.\n\n` +
+      (planNote ? `${planNote}\n\n` : "") +
       netlist.explanation +
       (omittedBlocks.length > 0 ? `\n\nNote: ${omittedBlocks.length} block(s) failed and were omitted: ${omittedBlocks.join(", ")}.` : "") +
       (notes.length > 0 ? `\n\nMerge: ${notes.join("; ")}.` : "") +
@@ -386,7 +472,7 @@ export async function mergeAndValidate(input: MergeAndValidateInput): Promise<Me
     planner: input.planner,
     budget: input.budget(),
   };
-  return { kind: "merged", body, sharedNets: sharedNetReport(designed), parts };
+  return { kind: "merged", body, sharedNets: sharedNetReport(designed, parts ? new Map(parts.map((part) => [part.partId, part] as const)) : null), parts };
 }
 
 // ─── The request-lifetime composition (the route and the agent's port) ────────────────────────────────────────────────

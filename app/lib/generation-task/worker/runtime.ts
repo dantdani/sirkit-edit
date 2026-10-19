@@ -24,7 +24,7 @@ import { projectRoleFromMembership, type ProjectMembershipRepository } from "../
 import { fixtureRuntimeEnabled } from "../../fixture-runtime/mode";
 import { recordLlmProviderOutcome, requestLlmProviderAdmission, type LlmProviderTicket } from "../../acquisition/admission-control";
 import type { LLMProviderId } from "../../llm/types";
-import { isGenerationEditorRole } from "../contracts";
+import { isGenerationEditorRole, type GenerationTaskScope } from "../contracts";
 import { GenerationTaskStore, type GenerationSliceRevalidator } from "../store";
 import type { GenerationLlmAdmission } from "./accounting";
 import { GenerationWorker, type FencedTopicRunner, type GenerationScopeRunner, type GenerationTickReport, type GenerationWorkerHealth, type WorkerSliceReport } from "./worker";
@@ -105,6 +105,8 @@ export interface DirectTransportOptions {
   environment?: Record<string, string | undefined>;
   /** [PR-M, 2026-10-18] M2: other durable topics the worker consumes (the component-resolution slices) */
   topics?: readonly FencedTopicRunner[];
+  /** [PR-L6, 2026-10-19] OD-253 item 6: the worker's `--scope` (both topics); absent: every scope */
+  scope?: GenerationTaskScope;
 }
 /** The direct transport over the process's durable repository and the production ports. Throws a setup refusal with nothing claimed. */
 export function createDirectTransport(options: DirectTransportOptions): GenerationWorkerTransport {
@@ -120,6 +122,7 @@ export function createDirectTransport(options: DirectTransportOptions): Generati
     ...(options.runInScope ? { runInScope: options.runInScope } : {}),
     ...(options.log ? { log: options.log } : {}),
     ...(options.topics ? { topics: options.topics } : {}),
+    ...(options.scope ? { scope: options.scope } : {}),
   });
   return {
     mode: "direct",

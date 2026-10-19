@@ -39,10 +39,11 @@ import {
   type LLMResponse,
   type LLMToolResultPart,
 } from "@/app/lib/llm/types";
-import type { AiAlternateResult, AiPartResult, PartsSearchOutcome } from "@/app/lib/parts-search";
+import type { AiAlternateResult, AiPartResult, PartsSearchOutcome, QueryEmbedding } from "@/app/lib/parts-search";
 import {
   BUILD_FIND_ALTERNATES_TOOL,
   BUILD_NUDGE,
+  BUILD_REPORT_UNFILLED_ROLE_TOOL,
   BUILD_SEARCH_PARTS_TOOL,
   BUILD_SUBMIT_SCHEMATIC_TOOL,
 } from "@/app/lib/prompts";
@@ -126,16 +127,22 @@ export interface BuildLlmPort {
 
 /** The catalog a slice searches (parts-search in production; a fake in tests). */
 export interface BuildCatalogPort {
-  /** the lookup identity a search key is computed under (contract section 1.4) */
-  readonly identity: { catalogProfile: GenerationCatalogProfile; embeddingModel: string };
+  /** the lookup identity a search key is computed under (contract section 1.4); [PR-L6, 2026-10-19] `catalogEpoch` when a task keys its
+   *  lookups by the catalog's identity (item 2b) */
+  readonly identity: { catalogProfile: GenerationCatalogProfile; embeddingModel: string; catalogEpoch?: string };
   searchParts(
     query: string,
     category: string | undefined,
     limit: number,
-    options: { signal?: AbortSignal; onOutcome?: (outcome: PartsSearchOutcome) => void },
+    /** [PR-L6, 2026-10-19] `embedQuery`: a caller's query embedder (a task's embedding cache, item 1) */
+    options: { signal?: AbortSignal; onOutcome?: (outcome: PartsSearchOutcome) => void; embedQuery?: (text: string) => Promise<QueryEmbedding> },
   ): Promise<AiPartResult[]>;
   findAlternates(partId: string, kind: "drop_in" | "fff" | "all", limit: number, options: { signal?: AbortSignal }): Promise<AiAlternateResult[]>;
   partsByIds(ids: string[]): Promise<AiPartResult[]>;
+  /** [PR-L6, 2026-10-19] the raw query embedder a task's embedding cache answers its misses with (the production catalog only) */
+  embedQuery?(text: string, signal?: AbortSignal): Promise<number[]>;
+  /** [PR-L6, 2026-10-19] the catalog's identity now (the production catalog: one cheap read, memoized; item 2b) */
+  catalogEpoch?(): Promise<string>;
 }
 
 /** What one block conversation designs: the system prompt, the seed user message and (for an edit) pre-validated parts. */
@@ -238,12 +245,15 @@ interface BlockSliceOutcomeBase {
 export type BlockSliceOutcome =
   /** a submission passed validation and the ERC gate; `checkpoint.result` holds it */
   | (BlockSliceOutcomeBase & { status: "submitted"; result: SavedBlockResult })
-  /** the turn allowance, the window or the caller's "yield" ended the slice: schedule the next slice, never fail the block */
-  | (BlockSliceOutcomeBase & { status: "yielded"; reason: "turn_allowance" | "window" | "requested"; stage: BlockSliceStage })
+  /** the turn allowance, the window or the caller's "yield" ended the slice: schedule the next slice, never fail the block.
+   *  [PR-L6, 2026-10-19] "no_progress": two consecutive turns repeated earlier work (item 7); "missing_part": the model reported a role the
+   *  catalog cannot fill, backed by two recorded searches (item 8) - the worker routes both, never a failed block */
+  | (BlockSliceOutcomeBase & { status: "yielded"; reason: "turn_allowance" | "window" | "requested" | "no_progress" | "missing_part"; stage: BlockSliceStage })
   /** a transient provider failure or a per-call timeout: retry after backoff (and `retryAfterMs` when the provider gave one) */
   | (BlockSliceOutcomeBase & { status: "provider_waiting"; provider: LLMProviderId; reason: LLMProviderFailureReason; error: string; retryAfterMs: number | null })
-  /** a provider failure a retry cannot fix (credentials, quota, access, a malformed request): an actionable blocker */
-  | (BlockSliceOutcomeBase & { status: "provider_failed"; provider: LLMProviderId; reason: LLMProviderFailureReason; error: string })
+  /** a provider failure a retry cannot fix (credentials, quota, access, a malformed request): an actionable blocker. [PR-L6, 2026-10-19]
+   *  `providerCode` when the failure carries one (an input-admission refusal: the call was never sent) */
+  | (BlockSliceOutcomeBase & { status: "provider_failed"; provider: LLMProviderId; reason: LLMProviderFailureReason; error: string; providerCode?: string })
   /** the slice's signal was aborted */
   | (BlockSliceOutcomeBase & { status: "cancelled"; stage: BlockSliceStage })
   /** the slice could not run or continue: an invalid or foreign checkpoint (no checkpoint then), a state no checkpoint can hold, or
@@ -533,7 +543,10 @@ type LoopEnd =
   | { kind: "provider_error"; error: LLMProviderError }
   | { kind: "call_timeout" }
   | { kind: "loop_failed"; error: string }
-  | { kind: "unrepresentable"; issue: string };
+  | { kind: "unrepresentable"; issue: string }
+  /** [PR-L6, 2026-10-19] slice-only: two consecutive repeat turns (item 7), or an accepted report of an unfilled role (item 8) */
+  | { kind: "no_progress" }
+  | { kind: "missing_part" };
 
 /** The slice-only hooks: the boundary (checkpoint, normalized state, the caller's `onTurn`) and saving an accepted submission. */
 interface DurableHooks {
@@ -561,6 +574,72 @@ interface LoopContext {
   turnCodes: string[];
   onCallStarted?: (calls: number) => void;
   durable: DurableHooks | null;
+  /** [PR-L6, 2026-10-19] consecutive repeat turns of this slice (the durable path's repeat detector, item 7) */
+  repeatTurns?: number;
+}
+
+// ─── [PR-L6, 2026-10-19] The durable path's context economy and honest stops (L.6 part 2, items 2c, 4, 7 and 8) ──────────────────
+
+/** The note a cached search's tool result carries (item 2c): the same search as before, answered from the task's facts. */
+export const BUILD_CACHE_NOTE = "Same search as an earlier one (any word order); results unchanged - reuse these partIds or submit.";
+/** The note a part carries when its full pin list is already in an earlier tool result still present in the conversation (item 4). */
+export const BUILD_PINS_LISTED_NOTE = "Pins listed in an earlier result in this conversation - reuse this partId.";
+/** At least this many recorded searches back an unfilled-role report (item 8). */
+export const UNFILLED_ROLE_MIN_SEARCHES = 2;
+/** Two consecutive repeat turns end a slice as no-progress (item 7). */
+export const REPEAT_TURNS_TO_STOP = 2;
+
+/** The part ids whose FULL pin list stands in a search result still present in the conversation: derived from the normalized messages,
+ *  so an uninterrupted and a resumed slice agree, and a result compaction removed lists its pins again. */
+export function pinsInConversation(messages: readonly LLMMessage[]): Set<string> {
+  const listed = new Set<string>();
+  for (let index = 1; index < messages.length; index += 1) {
+    const message = messages[index]!;
+    if (message.role !== "user" || !Array.isArray(message.content)) continue;
+    for (const part of message.content) {
+      if (part.type !== "tool_result" || part.isError) continue;
+      let parsed: unknown;
+      try { parsed = JSON.parse(part.output); } catch { continue; }
+      const list = Array.isArray(parsed) ? parsed : parsed !== null && typeof parsed === "object" && Array.isArray((parsed as { results?: unknown }).results) ? (parsed as { results: unknown[] }).results : null;
+      if (!list) continue;
+      for (const entry of list) if (entry !== null && typeof entry === "object" && typeof (entry as { partId?: unknown }).partId === "string" && Array.isArray((entry as { pins?: unknown }).pins)) listed.add((entry as { partId: string }).partId);
+    }
+  }
+  return listed;
+}
+
+/** Whether the conversation's last complete turn holds an ACCEPTED report_unfilled_role (its tool result is not an error). */
+export function endsWithUnfilledRole(messages: readonly LLMMessage[]): boolean {
+  if (messages.length < 3 || messages.length % 2 === 0) return false;
+  const assistant = messages[messages.length - 2]!, answer = messages[messages.length - 1]!;
+  if (!Array.isArray(assistant.content) || !Array.isArray(answer.content)) return false;
+  const calls = new Set(assistant.content.filter((part) => part.type === "tool_call" && part.name === "report_unfilled_role").map((part) => (part as { id: string }).id));
+  return answer.content.some((part) => part.type === "tool_result" && calls.has(part.toolCallId) && part.isError !== true);
+}
+
+/** The searches an unfilled-role report names, as the model sent them (bounded: at most 4, queries 200 characters). */
+function reportedSearches(input: Record<string, unknown>): Array<{ query: string; category: string | null }> {
+  const tried = Array.isArray(input.queriesTried) ? input.queriesTried : [];
+  return tried.slice(0, 4).flatMap((entry) => {
+    if (typeof entry === "string") return entry.trim() ? [{ query: entry.trim().slice(0, 200), category: null }] : [];
+    if (entry === null || typeof entry !== "object") return [];
+    const { query, category } = entry as { query?: unknown; category?: unknown };
+    return typeof query === "string" && query.trim() ? [{ query: query.trim().slice(0, 200), category: typeof category === "string" && category.trim() ? category.trim().slice(0, 64) : null }] : [];
+  });
+}
+
+/** Judge one report_unfilled_role call: accepted when its role is named and at least two of its searches are searches this conversation
+ *  recorded (by the semantic search key: any word order or punctuation); otherwise the correction the model gets. Never a part. */
+function judgeUnfilledRole(ctx: LoopContext, raw: unknown): { accepted: true; role: string; recorded: number } | { accepted: false; error: string } {
+  const input = raw !== null && typeof raw === "object" && !Array.isArray(raw) && !("_raw" in raw) ? raw as Record<string, unknown> : null;
+  const role = typeof input?.role === "string" ? input.role.trim().slice(0, 120) : "";
+  if (!input || !role) return { accepted: false, error: `This report_unfilled_role was not accepted: it needs a "role" naming the part's job in this block and "queriesTried" listing the searches you made for it. Search for the role, then report again - or submit the block with the parts you found.` };
+  const identity = ctx.catalog.identity;
+  const keys = new Set(reportedSearches(input).map((search) => generationSearchKey({ query: search.query, category: search.category, catalogProfile: identity.catalogProfile, embeddingModel: identity.embeddingModel, catalogEpoch: identity.catalogEpoch })).filter((key) => ctx.state.searches.has(key)));
+  if (keys.size < UNFILLED_ROLE_MIN_SEARCHES) {
+    return { accepted: false, error: `This report_unfilled_role was not accepted: it must name at least ${UNFILLED_ROLE_MIN_SEARCHES} different search_parts searches this block actually made for the role (${keys.size} of the searches named match a recorded search). Search for "${boundUntrustedText(role, 80)}" with at least two different queries or categories, then report again with those searches exactly as sent - or submit the block with the parts you found.` };
+  }
+  return { accepted: true, role, recorded: keys.size };
 }
 
 const UNCERTAIN_REASONS: ReadonlySet<LLMProviderFailureReason> = new Set(["timeout", "cancelled", "network", "unknown"]);
@@ -615,7 +694,7 @@ function recordSearch(ctx: LoopContext, query: string, category: string | null, 
   }
 }
 function recordSearchUnguarded(ctx: LoopContext, query: string, category: string | null, results: readonly AiPartResult[]): void {
-  const key = generationSearchKey({ query, category, catalogProfile: ctx.catalog.identity.catalogProfile, embeddingModel: ctx.catalog.identity.embeddingModel });
+  const key = generationSearchKey({ query, category, catalogProfile: ctx.catalog.identity.catalogProfile, embeddingModel: ctx.catalog.identity.embeddingModel, catalogEpoch: ctx.catalog.identity.catalogEpoch }); // [PR-L6, 2026-10-19] the facts' key exactly (item 2b)
   const resultDigest = durableWorkflowDigest({ schema: "sirkit.build-search-result.v1", parts: results.map((part) => [part.partId, partFactsDigest(normalizePartFacts(part as GenerationPartFacts))]) });
   ctx.state.searches.delete(key);
   ctx.state.searches.set(key, { resultDigest, partIds: results.slice(0, CHECKPOINT_BOUNDS.searchPartIds).map((part) => part.partId), count: results.length });
@@ -642,7 +721,8 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
         maxTokens: BUILD_LOOP_LIMITS.turnOutputTokens,
         temperature: 0,
         system: ctx.block.systemPrompt,
-        tools: [BUILD_SEARCH_PARTS_TOOL, BUILD_FIND_ALTERNATES_TOOL, BUILD_SUBMIT_SCHEMATIC_TOOL],
+        // [PR-L6, 2026-10-19] a durable slice also offers report_unfilled_role (item 8); the request-lifetime loop is unchanged
+        tools: ctx.durable ? [BUILD_SEARCH_PARTS_TOOL, BUILD_FIND_ALTERNATES_TOOL, BUILD_SUBMIT_SCHEMATIC_TOOL, BUILD_REPORT_UNFILLED_ROLE_TOOL] : [BUILD_SEARCH_PARTS_TOOL, BUILD_FIND_ALTERNATES_TOOL, BUILD_SUBMIT_SCHEMATIC_TOOL],
         messages: ctx.state.messages,
       });
 
@@ -670,27 +750,32 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
       ctx.stage = "search";
       const searchBlocks = toolUses.filter((b) => b.name === "search_parts");
       const searched: Array<{ query: string; category: string | null; results: AiPartResult[] }> = [];
+      // [PR-L6, 2026-10-19] the durable path: what the conversation already holds (item 4: pins listed in an earlier result; item 7: the
+      // parts and submissions before this turn), read from the normalized state this turn starts from
+      const pinsListed = ctx.durable ? pinsInConversation(ctx.state.messages) : new Set<string>();
+      const knownBefore = ctx.durable ? new Set(ctx.state.surfaced.keys()) : new Set<string>();
+      const submissionsBefore = ctx.durable ? new Set(ctx.state.submissions.map((entry) => `${entry.fingerprint}|${entry.codes.join(",")}`)) : new Set<string>();
       const rawSearches = await Promise.all(
         searchBlocks.map(async (block) => {
           const { query, category } = block.input as { query?: unknown; category?: unknown };
           if (typeof query !== "string" || query.trim() === "") {
-            return { block, error: "query is required", results: [] as AiPartResult[], categoryNote: null as string | null };
+            return { block, error: "query is required", results: [] as AiPartResult[], categoryNote: null as string | null, cached: false };
           }
           ctx.usage.catalogSearches += 1;
           try {
             // [PR-L, 2026-10-17] the search says how it read the category; a normalized or unrecognised one is noted to the model
-            const seen: { categoryNote: string | null; applied: string | null | undefined } = { categoryNote: null, applied: undefined };
+            const seen: { categoryNote: string | null; applied: string | null | undefined; cached: boolean } = { categoryNote: null, applied: undefined, cached: false };
             const results = await ctx.catalog.searchParts(
               query,
               typeof category === "string" ? category : undefined,
               BUILD_LOOP_LIMITS.searchLimit,
-              { signal: ctx.signal, onOutcome: (outcome) => { seen.categoryNote = outcome.category.note; seen.applied = outcome.category.applied; } },
+              { signal: ctx.signal, onOutcome: (outcome) => { seen.categoryNote = outcome.category.note; seen.applied = outcome.category.applied; seen.cached = outcome.cached === true; } },
             );
             for (const r of results) ctx.state.surfaced.set(r.partId, r);
             searched.push({ query, category: seen.applied !== undefined ? seen.applied : typeof category === "string" ? category : null, results });
-            return { block, error: null as string | null, results, categoryNote: seen.categoryNote };
+            return { block, error: null as string | null, results, categoryNote: seen.categoryNote, cached: seen.cached };
           } catch (err) {
-            return { block, error: toolFailure("search_parts", err), results: [] as AiPartResult[], categoryNote: null as string | null };
+            return { block, error: toolFailure("search_parts", err), results: [] as AiPartResult[], categoryNote: null as string | null, cached: false };
           }
         }),
       );
@@ -701,7 +786,7 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
       const seenPartIds = new Set<string>();
       if (stopRequested(ctx)) return { kind: "stopped", stage: "search" };
       const searchResults: LLMToolResultPart[] = rawSearches.map(
-        ({ block, error, results, categoryNote }) => {
+        ({ block, error, results, categoryNote, cached }) => {
           if (error !== null) {
             return {
               type: "tool_result" as const,
@@ -720,6 +805,17 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
               };
             }
             seenPartIds.add(r.partId);
+            // [PR-L6, 2026-10-19] item 4: a part whose full pin list an earlier result still in the conversation carries is not re-sent
+            // (validation keeps the full record in `surfaced`); after compaction removes that result, the pins are sent once more
+            if (pinsListed.has(r.partId)) {
+              return {
+                partId: r.partId,
+                mainCategory: r.mainCategory,
+                pinCount: r.pins.length,
+                untrustedCatalogText: { name: boundUntrustedText(r.name, 128), mpn: boundUntrustedTextOrNull(r.mpn, 128) },
+                note: BUILD_PINS_LISTED_NOTE,
+              };
+            }
             // Ground generation in datasheet-derived pin roles + required
             // connections when this part has a KG entry (Phase 2 "unified
             // context assembly" — only matched parts pay the tokens).
@@ -730,11 +826,14 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
           return {
             type: "tool_result" as const,
             toolCallId: block.id,
-            // [PR-L, 2026-10-17] the plain list as before; with a category note, the note and the same list under "results"
-            output: categoryNote ? JSON.stringify({ categoryNote, results: payload }) : JSON.stringify(payload),
+            // [PR-L, 2026-10-17] the plain list as before; with a category note, the note and the same list under "results"; [PR-L6,
+            // 2026-10-19] a search the task's facts answered says so (item 2c), the same pattern
+            output: ctx.durable && cached ? JSON.stringify({ cacheNote: BUILD_CACHE_NOTE, ...(categoryNote ? { categoryNote } : {}), results: payload }) : categoryNote ? JSON.stringify({ categoryNote, results: payload }) : JSON.stringify(payload),
           };
         },
       );
+      // [PR-L6, 2026-10-19] item 7: a search repeats when the facts answered it and it surfaced no part this conversation lacked
+      const repeatSearches = new Set(rawSearches.filter((entry) => entry.error === null && entry.cached && entry.results.every((part) => knownBefore.has(part.partId))).map((entry) => entry.block.id));
 
       // Run find_alternates calls in parallel. For each, register the full part
       // record (with pins) of every returned alternate into the surfaced parts, so
@@ -778,12 +877,14 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
       );
 
       const submitResults: LLMToolResultPart[] = [];
+      const repeatSubmits = new Set<string>(); // [PR-L6, 2026-10-19] item 7: rejected submissions identical (fingerprint and codes) to a recorded one
       if (stopRequested(ctx)) return { kind: "stopped", stage: "alternates" };
       ctx.stage = "submission";
       for (const block of toolUses.filter((b) => b.name === "submit_schematic")) {
         // [PR-L, 2026-10-17] a turn cut short cannot submit; a block slice refuses an empty netlist
         const result = finalizeSubmission(block.input, ctx.state.surfaced, response.stopReason, ctx.block.allowEmpty !== false);
         const fingerprint = ctx.durable ? submissionFingerprint(block.input) : "";
+        const noteRepeat = (codes: readonly string[]): void => { if (ctx.durable && submissionsBefore.has(`${fingerprint}|${codes.join(",")}`)) repeatSubmits.add(block.id); };
         if (result.ok) {
           const dropped: SubmissionCode[] = result.dropped > 0 ? ["CONNECTIONS_DROPPED"] : [];
           // Deterministic ERC gate (design-level, not drawing-level): critical
@@ -803,7 +904,7 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
               isError: true,
               output: formatErcFeedback(erc),
             });
-            if (ctx.durable) noteSubmission(ctx, { fingerprint, codes: ["ERC_REJECTED", ...dropped] });
+            if (ctx.durable) { noteRepeat(["ERC_REJECTED", ...dropped]); noteSubmission(ctx, { fingerprint, codes: ["ERC_REJECTED", ...dropped] }); }
             continue;
           }
           if (!erc.ok) {
@@ -815,6 +916,7 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
             const record = { fingerprint, codes: [erc.ok ? "ACCEPTED" : "ACCEPTED_WITH_ERC_FINDINGS", ...dropped] };
             const issue = ctx.durable.save(ctx, { netlist: result.netlist, explanation: result.explanation, erc }, record);
             if (issue !== null) {
+              noteRepeat(["SUBMISSION_UNSTORABLE"]);
               noteSubmission(ctx, { fingerprint, codes: ["SUBMISSION_UNSTORABLE"] });
               submitResults.push({ type: "tool_result", toolCallId: block.id, isError: true, output: unstorableSubmission(issue) });
               continue;
@@ -822,7 +924,7 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
           }
           return { kind: "submitted", netlist: result.netlist, explanation: result.explanation, erc };
         }
-        if (ctx.durable) noteSubmission(ctx, { fingerprint, codes: [result.code] });
+        if (ctx.durable) { noteRepeat([result.code]); noteSubmission(ctx, { fingerprint, codes: [result.code] }); }
         submitResults.push({
           type: "tool_result",
           toolCallId: block.id,
@@ -831,11 +933,31 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
         });
       }
 
-      ctx.state.messages.push(toolResultsMessage([...searchResults, ...alternateResults, ...submitResults]));
+      // [PR-L6, 2026-10-19] item 8 (the durable path only): a role the catalog cannot fill, backed by two recorded searches, ends the slice
+      // with the block's conversation saved; a report the conversation's searches do not back gets a correction. Never a part.
+      const reportResults: LLMToolResultPart[] = [];
+      let unfilled = false;
+      if (ctx.durable) {
+        for (const block of toolUses.filter((b) => b.name === "report_unfilled_role")) {
+          const verdict = judgeUnfilledRole(ctx, block.input);
+          if (verdict.accepted) {
+            unfilled = true;
+            reportResults.push({ type: "tool_result", toolCallId: block.id, output: JSON.stringify({ accepted: true, note: `Recorded: this block waits for a part for "${boundUntrustedText(verdict.role, 80)}" (${verdict.recorded} recorded searches found none suitable). No part was invented; the parts already found are kept.` }) });
+          } else reportResults.push({ type: "tool_result", toolCallId: block.id, isError: true, output: verdict.error });
+        }
+      }
+
+      ctx.state.messages.push(toolResultsMessage([...searchResults, ...alternateResults, ...submitResults, ...reportResults]));
       ctx.state.turnsUsed += 1;
       if (ctx.durable) {
+        // [PR-L6, 2026-10-19] item 7: every call of this turn repeated earlier work (a cached search that surfaced nothing new, or a
+        // rejected submission identical to a recorded one)
+        const repeat = toolUses.length > 0 && toolUses.every((call) => (call.name === "search_parts" && repeatSearches.has(call.id)) || (call.name === "submit_schematic" && repeatSubmits.has(call.id)));
         const ended = await ctx.durable.boundary(ctx);
         if (ended) return ended;
+        if (unfilled) return { kind: "missing_part" };
+        ctx.repeatTurns = repeat ? (ctx.repeatTurns ?? 0) + 1 : 0;
+        if (ctx.repeatTurns >= REPEAT_TURNS_TO_STOP) return { kind: "no_progress" };
       }
     }
   } catch (err) {
@@ -1019,6 +1141,11 @@ export async function runBlockSlice(input: BlockSliceInput): Promise<BlockSliceO
     // an already saved block: nothing to run; the saved result again, under this slice's identity
     return { status: "submitted", result: initial.result, checkpoint: initial, turns: 0, usage: usageOf(usage), progress: progressOf(initial, initial, [], true) };
   }
+  if (endsWithUnfilledRole(initial.messages)) {
+    // [PR-L6, 2026-10-19] item 8: the conversation's last turn reported an unfilled role (the slice was paused before the worker routed it):
+    // no call - the worker routes the block now
+    return { status: "yielded", reason: "missing_part", stage: "turn_start", checkpoint: initial, turns: 0, usage: usageOf(usage), progress: progressOf(initial, initial, [], false) };
+  }
 
   const holder = { checkpoint: initial, saved: null as BuildLoopCheckpoint | null, turns: 0, codes: [] as string[] };
   const durable: DurableHooks = {
@@ -1091,6 +1218,8 @@ export async function runBlockSlice(input: BlockSliceInput): Promise<BlockSliceO
     }
     case "turn_allowance": return { status: "yielded", reason: "turn_allowance", stage: "turn_boundary", ...base(holder.checkpoint) };
     case "yield_requested": return { status: "yielded", reason: "requested", stage: "turn_boundary", ...base(holder.checkpoint) };
+    case "no_progress": return { status: "yielded", reason: "no_progress", stage: "turn_boundary", ...base(holder.checkpoint) }; // [PR-L6, 2026-10-19] item 7
+    case "missing_part": return { status: "yielded", reason: "missing_part", stage: "turn_boundary", ...base(holder.checkpoint) }; // [PR-L6, 2026-10-19] item 8
     case "window": return { status: "yielded", reason: "window", stage, ...base(holder.checkpoint) };
     case "cancelled": return { status: "cancelled", stage, ...base(holder.checkpoint) };
     case "stopped":
@@ -1104,7 +1233,7 @@ export async function runBlockSlice(input: BlockSliceInput): Promise<BlockSliceO
       const retryAfter = (error as { retryAfterMs?: unknown }).retryAfterMs;
       return isRetryableReason(error.reason)
         ? { status: "provider_waiting", provider: error.provider, reason: error.reason, error: error.message, retryAfterMs: typeof retryAfter === "number" && Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter : null, ...base(holder.checkpoint) }
-        : { status: "provider_failed", provider: error.provider, reason: error.reason, error: error.message, ...base(holder.checkpoint) };
+        : { status: "provider_failed", provider: error.provider, reason: error.reason, error: error.message, ...(error.providerCode?.startsWith("sirkit_input_") ? { providerCode: error.providerCode } : {}), ...base(holder.checkpoint) };
     }
     case "loop_failed": return { status: "refused", code: "loop_failed", error: end.error, ...base(holder.checkpoint) };
     case "unrepresentable": return { status: "refused", code: "checkpoint_unrepresentable", error: `The block state cannot be checkpointed: ${end.issue}.`, ...base(holder.checkpoint) };

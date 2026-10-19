@@ -33,6 +33,7 @@ import { validateSchematicCanonicalMark, type SchematicCanonicalMark } from "../
 import { BUILD_BUDGET, resolveBuildIterationCap, type BuildPlannerStatus, type ElectricalCheckStatus } from "../schematic/build-result";
 import type { BuildLogicalNetlist } from "@/lib/schematic-types";
 import { compareCodePoints } from "../stable-compare";
+import { resolveMainCategory } from "../kicad/categories"; // [PR-L6, 2026-10-19] the postgres search key filters on the RESOLVED category (L.6 part 2, item 2a)
 import { electricalCheckJudge, netlistJudge, normalizeElectricalCheck, normalizeNetlist, normalizePartFacts, partFactsDigest, partFactsJudge, type GenerationPartFacts } from "./checkpoint";
 import { generationTaskMilestonesIssue, type GenerationTaskEvent } from "./events";
 import {
@@ -109,6 +110,11 @@ export const GENERATION_TASK_BOUNDS = Object.freeze({
   factsLookups: 512,
   queryChars: 200,
   explanationChars: 4_000,
+  /** [PR-L6, 2026-10-19] the planner's requested-coverage lines (OD-253 item 3) and a block's unfilled roles (L.6 part 2, item 8) */
+  coverage: 8,
+  coverageChars: 200,
+  missingRoles: 3,
+  missingRoleChars: 120,
 });
 
 /** Section 3.1: a FINITE execution-slice policy - never the total work a task may do. */
@@ -142,7 +148,35 @@ export function generationBlockTurnsPerSlice(environment?: Record<string, string
 /** Section 5's proposed per-task allowance unit (OD-252 (1)); a task may hold up to 1 + 4 explicit extensions. An operator may only
  *  LOWER the unit at creation (the judge refuses any field above this). There is no USD price table in the product (F18). */
 export const GENERATION_TASK_ALLOWANCE_UNIT = Object.freeze({ modelCalls: 60, outputTokens: 480_000, catalogSearches: 300, wallClockMs: 72 * 3_600_000 });
-export type GenerationAllowanceUnit = { modelCalls: number; outputTokens: number; catalogSearches: number; wallClockMs: number };
+/** [PR-L6, 2026-10-19] `inputTokens` is OPTIONAL (OD-253 item 6): the default unit above has no input bound (unchanged, so the manuals and
+ *  every persisted head stay valid); an operator unit may set one, and every limit - input included - multiplies by `units`. */
+export type GenerationAllowanceUnit = { modelCalls: number; outputTokens: number; catalogSearches: number; wallClockMs: number; inputTokens?: number };
+/** [PR-L6, 2026-10-19] The most an operator's input-token unit may hold: a judge bound, not a default (the default unit has no input
+ *  dimension, so any input bound lowers it). */
+export const GENERATION_INPUT_TOKENS_CEILING = 100_000_000;
+/** [PR-L6, 2026-10-19] The environment names an operator LOWERS the per-task unit with (OD-252 item 1): read ONCE by the composition root
+ *  (generation-task/runtime.ts) and handed to the service, never from a request body (the start body is a closed shape). */
+export const GENERATION_ALLOWANCE_ENV = Object.freeze({ modelCalls: "SIRKIT_GENERATION_ALLOWANCE_MODEL_CALLS", outputTokens: "SIRKIT_GENERATION_ALLOWANCE_OUTPUT_TOKENS", inputTokens: "SIRKIT_GENERATION_ALLOWANCE_INPUT_TOKENS", catalogSearches: "SIRKIT_GENERATION_ALLOWANCE_CATALOG_SEARCHES", wallClockMs: "SIRKIT_GENERATION_ALLOWANCE_WALL_CLOCK_MS" } as const);
+/** [PR-L6, 2026-10-19] The operator's unit: each name an integer >= 1 that only LOWERS its field of the default (a value above the default,
+ *  zero, a sign, a fraction or any other text is ignored - the default field stands); the input name sets the optional input dimension
+ *  (1..GENERATION_INPUT_TOKENS_CEILING). Undefined when nothing lowers the default (every task then gets the default unit, as before). */
+export function resolveGenerationAllowanceUnit(environment: Record<string, string | undefined> = typeof process === "undefined" ? {} : process.env): GenerationAllowanceUnit | undefined {
+  const read = (name: string, max: number): number | null => {
+    const raw = environment[name];
+    if (typeof raw !== "string" || !/^[1-9][0-9]{0,15}$/.test(raw.trim())) return null;
+    const value = Number(raw.trim());
+    return Number.isSafeInteger(value) && value >= 1 && value <= max ? value : null;
+  };
+  const unit: GenerationAllowanceUnit = { ...GENERATION_TASK_ALLOWANCE_UNIT };
+  let lowered = false;
+  for (const key of ["modelCalls", "outputTokens", "catalogSearches", "wallClockMs"] as const) {
+    const value = read(GENERATION_ALLOWANCE_ENV[key], GENERATION_TASK_ALLOWANCE_UNIT[key]);
+    if (value !== null && value < GENERATION_TASK_ALLOWANCE_UNIT[key]) { unit[key] = value; lowered = true; }
+  }
+  const input = read(GENERATION_ALLOWANCE_ENV.inputTokens, GENERATION_INPUT_TOKENS_CEILING);
+  if (input !== null) { unit.inputTokens = input; lowered = true; }
+  return lowered ? unit : undefined;
+}
 
 /** The roles that may start (and therefore stop) a generation: `route-policy.ts` EDITORS, the propose policy's roles. */
 export const GENERATION_TASK_EDITOR_ROLES = Object.freeze(["pcb_editor", "reviewer", "project_admin", "automation"] as const satisfies readonly ProjectRole[]);
@@ -151,18 +185,29 @@ export const isGenerationEditorRole = (role: unknown): role is ProjectRole => ty
 // ─── The head ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export interface GenerationPlanBlock { blockId: GenerationBlockId; name: string; brief: string; sharedNets: string[] }
-export interface GenerationTaskPlan { planDigest: string; planner: BuildPlannerStatus; rationale: string; assumptions: string[]; blocks: GenerationPlanBlock[] }
+/** [PR-L6, 2026-10-19] `coverage` (OD-253 item 3): the functions the request asks for, as the planner listed them; OPTIONAL so every
+ *  persisted plan stays valid (and keeps its digest). */
+export interface GenerationTaskPlan { planDigest: string; planner: BuildPlannerStatus; rationale: string; assumptions: string[]; coverage?: string[]; blocks: GenerationPlanBlock[] }
 export interface GenerationArtifactRef { recordId: string; recordDigest: string }
 export interface GenerationStrategyHistoryEntry { id: GenerationStrategyId; slices: number; outcome: GenerationStrategyOutcome }
+/** [PR-L6, 2026-10-19] A role a block's searches could not fill (L.6 part 2, item 8): its name, the last query tried and its category. */
+export interface GenerationMissingRole { role: string; query: string; category: string | null }
 export interface GenerationBlockState {
   blockId: GenerationBlockId; name: string; brief: string; sharedNets: string[]; status: GenerationBlockStatus; strategy: GenerationStrategyId;
   strategyHistory: GenerationStrategyHistoryEntry[]; artifactRef: GenerationArtifactRef | null; turnsUsed: number; stagnantSlices: number; lastProgressKey: string | null; blocker: GenerationBlockerCode | null;
+  /** [PR-L6, 2026-10-19] OPTIONAL: the roles a blocked `missing_part` block waits for (at most 3) */
+  missing?: GenerationMissingRole[];
 }
 export interface GenerationSliceOwner { attempt: number; fence: number; workerId: string; leaseToken: string; claimedAt: string }
 export interface GenerationPendingSlice { kind: GenerationSliceKind; blockId: GenerationBlockId | null; notBefore: string; state: "queued" | "running"; owner: GenerationSliceOwner | null }
 export const GENERATION_USAGE_KEYS = Object.freeze(["slices", "attempts", "modelCalls", "inputTokens", "outputTokens", "catalogSearches", "cacheHits", "embeddingCalls", "rerankCalls", "rerankSkipped", "uncertainModelCalls", "uncertainOutputTokens"] as const);
-export type GenerationTaskUsage = Record<(typeof GENERATION_USAGE_KEYS)[number], number>;
-export interface GenerationReservation { sliceId: string; attempt: number; modelCalls: number; outputTokens: number; state: "held" | "uncertain"; at: string }
+/** [PR-L6, 2026-10-19] Usage keys a head carries only once they are non-zero (persisted heads without them stay valid): the input bound of
+ *  calls whose completion is unknown (OD-253 item 6). */
+export const GENERATION_OPTIONAL_USAGE_KEYS = Object.freeze(["uncertainInputTokens"] as const);
+export type GenerationTaskUsage = Record<(typeof GENERATION_USAGE_KEYS)[number], number> & Partial<Record<(typeof GENERATION_OPTIONAL_USAGE_KEYS)[number], number>>;
+/** [PR-L6, 2026-10-19] `inputTokens` (OPTIONAL): the input bound of the attempt's call in flight, recorded BEFORE the call is sent, so a
+ *  process that dies inside the call leaves it charged (uncertain) for the next claimer's admission. */
+export interface GenerationReservation { sliceId: string; attempt: number; modelCalls: number; outputTokens: number; inputTokens?: number; state: "held" | "uncertain"; at: string }
 export interface GenerationTaskAllowance { unit: GenerationAllowanceUnit; units: number; extensions: Array<{ principalId: string; clientActionId: string; at: string }> }
 export interface GenerationControlStamp { action: GenerationControlAction; clientActionId: string; principalId: string; at: string }
 export interface GenerationTaskBlocker { code: GenerationBlockerCode; message: string; resolution: string; blockId: GenerationBlockId | null; evidence: Record<string, string | number> }
@@ -206,7 +251,7 @@ export function generationRequestDigest(input: { prompt: string; provider: LLMPr
   return durableWorkflowDigest({ schema: "sirkit.generation-task-request.v1", prompt: input.prompt, provider: input.provider, mode: input.mode, origin: input.origin, base: { schematicDigest: input.base.schematicDigest, recipe: input.base.recipe } });
 }
 export function generationPlanDigest(plan: Omit<GenerationTaskPlan, "planDigest">): string {
-  return durableWorkflowDigest({ schema: "sirkit.generation-task-plan.v1", planner: plan.planner, rationale: plan.rationale, assumptions: plan.assumptions, blocks: plan.blocks });
+  return durableWorkflowDigest({ schema: "sirkit.generation-task-plan.v1", planner: plan.planner, rationale: plan.rationale, assumptions: plan.assumptions, ...(plan.coverage !== undefined ? { coverage: plan.coverage } : {}), blocks: plan.blocks }); // [PR-L6, 2026-10-19] coverage only when present: a persisted plan keeps its digest
 }
 
 // ─── Judges ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -223,20 +268,22 @@ const plannerJudge: Judge = (value, path) => {
 };
 const netNames = arrayOf(line(GENERATION_TASK_BOUNDS.netNameChars, 1), GENERATION_TASK_BOUNDS.sharedNets);
 const planBlockShape = shape({ blockId, name: line(GENERATION_TASK_BOUNDS.blockNameChars, 1), brief: line(GENERATION_TASK_BOUNDS.blockBriefChars), sharedNets: netNames });
-const planShape = shape({ planDigest: durableDigest, planner: plannerJudge, rationale: line(GENERATION_TASK_BOUNDS.rationaleChars), assumptions: arrayOf(line(GENERATION_TASK_BOUNDS.assumptionChars, 1), GENERATION_TASK_BOUNDS.assumptions), blocks: arrayOf(planBlockShape, GENERATION_TASK_BOUNDS.blocks, 1) });
+const planShape = shape({ planDigest: durableDigest, planner: plannerJudge, rationale: line(GENERATION_TASK_BOUNDS.rationaleChars), assumptions: arrayOf(line(GENERATION_TASK_BOUNDS.assumptionChars, 1), GENERATION_TASK_BOUNDS.assumptions), blocks: arrayOf(planBlockShape, GENERATION_TASK_BOUNDS.blocks, 1) }, { coverage: arrayOf(line(GENERATION_TASK_BOUNDS.coverageChars, 1), GENERATION_TASK_BOUNDS.coverage) });
 const artifactRefShape = shape({ recordId, recordDigest: durableDigest });
+/** [PR-L6, 2026-10-19] an unfilled role (L.6 part 2, item 8): bounded redacted lines */
+const missingRoleShape = shape({ role: line(GENERATION_TASK_BOUNDS.missingRoleChars, 1), query: line(GENERATION_TASK_BOUNDS.queryChars), category: nullable(line(128, 1)) });
 const blockStateShape = shape({
   blockId, name: line(GENERATION_TASK_BOUNDS.blockNameChars, 1), brief: line(GENERATION_TASK_BOUNDS.blockBriefChars), sharedNets: netNames, status: oneOf(GENERATION_BLOCK_STATUSES), strategy: oneOf(GENERATION_STRATEGIES),
   strategyHistory: arrayOf(shape({ id: oneOf(GENERATION_STRATEGIES), slices: count(), outcome: oneOf(GENERATION_STRATEGY_OUTCOMES) }), GENERATION_TASK_BOUNDS.strategyHistory),
   artifactRef: nullable(artifactRefShape), turnsUsed: count(), stagnantSlices: count(1_000), lastProgressKey: nullable(durableDigest), blocker: nullable(oneOf(GENERATION_BLOCKER_CODES)),
-});
+}, { missing: arrayOf(missingRoleShape, GENERATION_TASK_BOUNDS.missingRoles, 1) });
 const ownerShape = shape({ attempt: count(1_000_000, 1), fence: count(Number.MAX_SAFE_INTEGER, 1), workerId: identifier(200), leaseToken: pattern(LEASE_TOKEN, "a lease token"), claimedAt: isoInstant });
 const pendingShape = shape({ kind: oneOf(GENERATION_SLICE_KINDS), blockId: nullable(blockId), notBefore: isoInstant, state: oneOf(["queued", "running"]), owner: nullable(ownerShape) });
-const usageShape = shape(Object.fromEntries(GENERATION_USAGE_KEYS.map((key) => [key, count()])));
-const reservationShape = shape({ sliceId, attempt: count(1_000_000, 1), modelCalls: count(), outputTokens: count(), state: oneOf(["held", "uncertain"]), at: isoInstant });
+const usageShape = shape(Object.fromEntries(GENERATION_USAGE_KEYS.map((key) => [key, count()])), Object.fromEntries(GENERATION_OPTIONAL_USAGE_KEYS.map((key) => [key, count()])));
+const reservationShape = shape({ sliceId, attempt: count(1_000_000, 1), modelCalls: count(), outputTokens: count(), state: oneOf(["held", "uncertain"]), at: isoInstant }, { inputTokens: count() });
 const unit = GENERATION_TASK_ALLOWANCE_UNIT;
 const allowanceShape = shape({
-  unit: shape({ modelCalls: count(unit.modelCalls, 1), outputTokens: count(unit.outputTokens, 1), catalogSearches: count(unit.catalogSearches, 1), wallClockMs: count(unit.wallClockMs, 1) }),
+  unit: shape({ modelCalls: count(unit.modelCalls, 1), outputTokens: count(unit.outputTokens, 1), catalogSearches: count(unit.catalogSearches, 1), wallClockMs: count(unit.wallClockMs, 1) }, { inputTokens: count(GENERATION_INPUT_TOKENS_CEILING, 1) }),
   units: count(1 + GENERATION_TASK_BOUNDS.extensions, 1),
   extensions: arrayOf(shape({ principalId: identifier(200), clientActionId: identifier(128), at: isoInstant }), GENERATION_TASK_BOUNDS.extensions),
 });
@@ -366,7 +413,8 @@ export function generationIndexWith(index: GenerationTaskIndex, head: Generation
 
 // ─── Facts (validated catalog facts shared by a task's blocks) ─────────────────────────────────────────────────────────────
 
-export interface GenerationLookup { query: string; category: string | null; partIds: string[]; resultDigest: string; count: number; lastUsedSeq: number }
+/** [PR-L6, 2026-10-19] `catalogEpoch` (OPTIONAL): the catalog identity the lookup was answered under (item 2b); part of its key. */
+export interface GenerationLookup { query: string; category: string | null; partIds: string[]; resultDigest: string; count: number; lastUsedSeq: number; catalogEpoch?: string }
 export interface GenerationTaskFacts {
   schema: typeof GENERATION_TASK_FACTS_SCHEMA;
   taskId: string;
@@ -379,7 +427,7 @@ export interface GenerationTaskFacts {
 const factsShape = shape({
   schema: oneOf([GENERATION_TASK_FACTS_SCHEMA]), taskId, seq: count(),
   parts: recordOf(identifier(128), shape({ part: partFactsJudge, factsDigest: durableDigest, blocks: arrayOf(blockId, GENERATION_TASK_BOUNDS.blocks + 1, 1), lastUsedSeq: count() }), GENERATION_TASK_BOUNDS.factsParts),
-  lookups: recordOf(durableDigest, shape({ query: line(GENERATION_TASK_BOUNDS.queryChars, 1), category: nullable(line(128, 1)), partIds: arrayOf(identifier(128), 10), resultDigest: durableDigest, count: count(1_000_000), lastUsedSeq: count() }), GENERATION_TASK_BOUNDS.factsLookups),
+  lookups: recordOf(durableDigest, shape({ query: line(GENERATION_TASK_BOUNDS.queryChars, 1), category: nullable(line(128, 1)), partIds: arrayOf(identifier(128), 10), resultDigest: durableDigest, count: count(1_000_000), lastUsedSeq: count() }, { catalogEpoch: identifier(128) }), GENERATION_TASK_BOUNDS.factsLookups),
   optional: shape({ rerank: nullable(shape({ state: oneOf(["available", "unavailable"]), reason: nullable(line(120, 1)), since: isoInstant, probeAfter: nullable(isoInstant) })) }),
 });
 export function generationTaskFactsIssue(value: unknown): Issue {
@@ -396,15 +444,21 @@ export function generationTaskFactsIssue(value: unknown): Issue {
 
 /** Section 1.4's lookup key: the NFC lower-cased query with punctuation as spaces, its tokens sorted and de-duplicated; the
  *  normalized category; the catalog profile and the embedding model. Different punctuation of the same search is the same key. */
-export function generationSearchKey(input: { query: string; category: string | null | undefined; catalogProfile: GenerationCatalogProfile; embeddingModel: string }): string {
+export function generationSearchKey(input: { query: string; category: string | null | undefined; catalogProfile: GenerationCatalogProfile; embeddingModel: string; catalogEpoch?: string | null }): string {
   const tokens = [...new Set(input.query.normalize("NFC").toLowerCase().replace(/[\p{P}\p{S}]+/gu, " ").split(/\s+/).filter(Boolean))].sort(compareCodePoints);
-  const category = typeof input.category === "string" ? input.category.normalize("NFC").trim().toLowerCase().replace(/\s+/g, " ") : "";
-  return durableWorkflowDigest({ schema: "sirkit.generation-search-key.v1", tokens, category: category || null, catalogProfile: input.catalogProfile, embeddingModel: input.embeddingModel });
+  // [PR-L6, 2026-10-19] item 2a: the postgres catalog filters on the RESOLVED category (kicad/categories.ts), so "MOSFETs", "mosfet" and
+  // "Transistors" are one SQL filter and one key, and an unrecognised name (no filter) keys as no category; the fixture catalogs filter on
+  // their raw names, so they keep the raw lower-cased key
+  const requested = input.catalogProfile === "postgres" ? resolveMainCategory(input.category).applied : input.category;
+  const category = typeof requested === "string" ? requested.normalize("NFC").trim().toLowerCase().replace(/\s+/g, " ") : "";
+  // [PR-L6, 2026-10-19] item 2b: the catalog identity the answer belongs to (absent: the key is the one it always was)
+  const epoch = typeof input.catalogEpoch === "string" && input.catalogEpoch ? { catalogEpoch: input.catalogEpoch } : {};
+  return durableWorkflowDigest({ schema: "sirkit.generation-search-key.v1", tokens, category: category || null, catalogProfile: input.catalogProfile, embeddingModel: input.embeddingModel, ...epoch });
 }
 
 export interface GenerationFactsDelta {
   parts?: ReadonlyArray<{ part: GenerationPartFacts; blockId: GenerationBlockId }>;
-  lookups?: ReadonlyArray<{ query: string; category: string | null; partIds: readonly string[]; resultDigest: string; count: number }>;
+  lookups?: ReadonlyArray<{ query: string; category: string | null; partIds: readonly string[]; resultDigest: string; count: number; catalogEpoch?: string }>;
   rerank?: GenerationTaskFacts["optional"]["rerank"];
 }
 /** Merge a slice's facts onto the referenced facts: a part's surfacing blocks union, a lookup is refreshed, the least recently used
@@ -417,8 +471,8 @@ export function applyGenerationFactsDelta(base: GenerationTaskFacts | null, delt
     facts.parts[part.partId] = { part, factsDigest: partFactsDigest(part), blocks, lastUsedSeq: seq };
   }
   for (const entry of delta.lookups ?? []) {
-    const key = generationSearchKey({ query: entry.query, category: entry.category, catalogProfile: context.catalogProfile, embeddingModel: context.embeddingModel });
-    facts.lookups[key] = { query: cleanLine(entry.query, GENERATION_TASK_BOUNDS.queryChars) || "(empty)", category: entry.category ? cleanLine(entry.category, 128) || null : null, partIds: entry.partIds.slice(0, 10).map(String), resultDigest: entry.resultDigest, count: entry.count, lastUsedSeq: (facts.seq += 1) };
+    const key = generationSearchKey({ query: entry.query, category: entry.category, catalogProfile: context.catalogProfile, embeddingModel: context.embeddingModel, catalogEpoch: entry.catalogEpoch });
+    facts.lookups[key] = { query: cleanLine(entry.query, GENERATION_TASK_BOUNDS.queryChars) || "(empty)", category: entry.category ? cleanLine(entry.category, 128) || null : null, partIds: entry.partIds.slice(0, 10).map(String), resultDigest: entry.resultDigest, count: entry.count, lastUsedSeq: (facts.seq += 1), ...(entry.catalogEpoch ? { catalogEpoch: entry.catalogEpoch } : {}) };
   }
   if (delta.rerank !== undefined) facts.optional = { rerank: delta.rerank === null ? null : { ...delta.rerank, reason: delta.rerank.reason === null ? null : cleanLine(delta.rerank.reason, 120) || null } };
   const evict = <T extends { lastUsedSeq: number }>(record: Record<string, T>, max: number) => {
@@ -517,11 +571,21 @@ export function generationReservationFor(kind: GenerationSliceKind, turns: numbe
   return { modelCalls: turns, outputTokens: turns * GENERATION_SLICE_POLICY.turnOutputTokens };
 }
 export function generationAllowanceLimits(allowance: GenerationTaskAllowance): GenerationAllowanceUnit {
-  return { modelCalls: allowance.unit.modelCalls * allowance.units, outputTokens: allowance.unit.outputTokens * allowance.units, catalogSearches: allowance.unit.catalogSearches * allowance.units, wallClockMs: allowance.unit.wallClockMs * allowance.units };
+  return {
+    modelCalls: allowance.unit.modelCalls * allowance.units, outputTokens: allowance.unit.outputTokens * allowance.units, catalogSearches: allowance.unit.catalogSearches * allowance.units, wallClockMs: allowance.unit.wallClockMs * allowance.units,
+    ...(allowance.unit.inputTokens !== undefined ? { inputTokens: allowance.unit.inputTokens * allowance.units } : {}), // [PR-L6, 2026-10-19] "Continue with another allowance" extends input too
+  };
 }
-/** Spent plus every held or uncertain reservation (and the folded uncertain worst case): the cross-process spend bound. */
-export function generationCommitted(head: Pick<GenerationTaskHead, "usage" | "reservations">): { modelCalls: number; outputTokens: number } {
-  return head.reservations.reduce((sum, entry) => ({ modelCalls: sum.modelCalls + entry.modelCalls, outputTokens: sum.outputTokens + entry.outputTokens }), { modelCalls: head.usage.modelCalls + head.usage.uncertainModelCalls, outputTokens: head.usage.outputTokens + head.usage.uncertainOutputTokens });
+/** Spent plus every held or uncertain reservation (and the folded uncertain worst case): the cross-process spend bound. [PR-L6, 2026-10-19]
+ *  `inputTokens`: the reported input, the uncertain calls' input bounds and every reservation's in-flight input bound. */
+export function generationCommitted(head: Pick<GenerationTaskHead, "usage" | "reservations">): { modelCalls: number; outputTokens: number; inputTokens: number } {
+  return head.reservations.reduce((sum, entry) => ({ modelCalls: sum.modelCalls + entry.modelCalls, outputTokens: sum.outputTokens + entry.outputTokens, inputTokens: sum.inputTokens + (entry.inputTokens ?? 0) }), { modelCalls: head.usage.modelCalls + head.usage.uncertainModelCalls, outputTokens: head.usage.outputTokens + head.usage.uncertainOutputTokens, inputTokens: head.usage.inputTokens + (head.usage.uncertainInputTokens ?? 0) });
+}
+/** [PR-L6, 2026-10-19] The input a new slice of this head may still send (its admission's budget), or null when the task has no input
+ *  dimension (the default unit). */
+export function generationInputRemaining(head: Pick<GenerationTaskHead, "usage" | "reservations" | "allowance">): number | null {
+  const limit = generationAllowanceLimits(head.allowance).inputTokens;
+  return limit === undefined ? null : Math.max(0, limit - generationCommitted(head).inputTokens);
 }
 /** Why a new reservation does not fit the allowance, or null when it does. */
 export function generationAllowanceRefusal(head: GenerationTaskHead, reservation: { modelCalls: number; outputTokens: number }, nowMs: number): "allowance_exhausted" | "task_window_elapsed" | null {
@@ -529,6 +593,7 @@ export function generationAllowanceRefusal(head: GenerationTaskHead, reservation
   if (nowMs - Date.parse(head.createdAt) > limits.wallClockMs) return "task_window_elapsed";
   if (committed.modelCalls + reservation.modelCalls > limits.modelCalls || committed.outputTokens + reservation.outputTokens > limits.outputTokens) return "allowance_exhausted";
   if (reservation.modelCalls > 0 && head.usage.catalogSearches >= limits.catalogSearches) return "allowance_exhausted";
+  if (reservation.modelCalls > 0 && limits.inputTokens !== undefined && committed.inputTokens >= limits.inputTokens) return "allowance_exhausted"; // [PR-L6, 2026-10-19] settled + uncertain input reached the limit: no call may start
   return null;
 }
 export function generationReservationsWithinAllowance(head: GenerationTaskHead): boolean {

@@ -21,7 +21,7 @@ import { canonicalDurableScope } from "../durable-workflow/stable";
 import type { DurableWorkflowRepository, DurableWorkflowScope } from "../durable-workflow/types";
 import type { ProjectRole } from "../engineering/types";
 import { isLLMProviderId, type LLMProviderId } from "../llm/types";
-import { GENERATION_SLICE_TOPIC, type GenerationTaskHead, type GenerationTaskResultPayload } from "./contracts";
+import { GENERATION_SLICE_TOPIC, type GenerationAllowanceUnit, type GenerationTaskHead, type GenerationTaskResultPayload } from "./contracts";
 import { GENERATION_TASK_EVENT_BOUNDS } from "./events";
 import { buildGenerationTaskSnapshot, type GenerationProcessingSlice, type GenerationTaskSnapshot } from "./snapshot";
 import { GenerationTaskStore, type GenerationCommitRefusalCode, type GenerationTaskStartInput } from "./store";
@@ -44,6 +44,9 @@ export interface GenerationTaskServiceOptions {
   identities: () => GenerationTaskStartInput["identities"];
   durability: GenerationTaskDurability;
   pickupGraceMs?: number;
+  /** [PR-L6, 2026-10-19] the operator-lowered per-task unit (OD-252 item 1, OD-253 item 6), read ONCE by the composition root
+   *  (`resolveGenerationAllowanceUnit`); every start - Build and chat - is created with it. A request body can never carry it. */
+  allowanceUnit?: GenerationAllowanceUnit;
 }
 
 /** The control route's actions (snapshot.ts lists the ones valid now). */
@@ -96,6 +99,7 @@ export class GenerationTaskService {
   private readonly providerServable: (provider: LLMProviderId) => boolean;
   private readonly identities: () => GenerationTaskStartInput["identities"];
   private readonly pickupGraceMs: number | undefined;
+  private readonly allowanceUnit: GenerationAllowanceUnit | undefined;
 
   constructor(options: GenerationTaskServiceOptions) {
     this.store = options.store;
@@ -105,6 +109,7 @@ export class GenerationTaskService {
     this.identities = options.identities;
     this.durability = options.durability;
     this.pickupGraceMs = options.pickupGraceMs;
+    this.allowanceUnit = options.allowanceUnit ? { ...options.allowanceUnit } : undefined;
   }
 
   /** The processing slice events of the topic (global; bounded by workers x concurrency): the liveness evidence. */
@@ -146,6 +151,7 @@ export class GenerationTaskService {
       base: { schematicDigest: base.schematicDigest, recipe: base.recipe as GenerationBaseRecipe, ...(base.headMark !== undefined ? { headMark: base.headMark as GenerationTaskStartInput["base"]["headMark"] } : {}) },
       identities: this.identities(),
       providerServable: this.providerServable(provider),
+      ...(this.allowanceUnit ? { allowanceUnit: { ...this.allowanceUnit } } : {}), // [PR-L6, 2026-10-19] the operator's unit; never the body's (START_KEYS is closed)
     });
     if (outcome.ok) return { status: 202, body: { ok: true, attached: outcome.attached, durability: this.durability, task: await this.snapshot(scope, outcome.task) } };
     switch (outcome.code) {

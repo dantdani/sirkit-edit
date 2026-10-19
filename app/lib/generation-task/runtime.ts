@@ -22,6 +22,7 @@ import type { LLMProviderId } from "../llm/types";
 import { BUILD_SUBSYSTEM_SYSTEM_PROMPT, BUILD_SYSTEM_PROMPT, PLAN_SYSTEM_PROMPT } from "../prompts";
 import { GenerationTaskService, type GenerationTaskDurability } from "./service";
 import { GenerationTaskStore, type GenerationTaskStartInput } from "./store";
+import { resolveGenerationAllowanceUnit, type GenerationAllowanceUnit } from "./contracts";
 import type { GenerationCatalogProfile } from "./vocabulary";
 
 export interface GenerationTaskRuntime {
@@ -30,13 +31,18 @@ export interface GenerationTaskRuntime {
   clock: () => number;
   durability: GenerationTaskDurability;
   catalogProfile: GenerationCatalogProfile;
+  /** [PR-L6, 2026-10-19] the operator-lowered per-task unit (`resolveGenerationAllowanceUnit`), absent for the default unit */
+  allowanceUnit?: GenerationAllowanceUnit;
 }
 export type GenerationTaskRuntimeFactory = () => GenerationTaskRuntime | null;
 
 function productionRuntime(environment: Record<string, string | undefined> = process.env): GenerationTaskRuntime | null {
-  if (fixtureRuntimeEnabled(environment)) return { repository: getDurableWorkflowRepository(), clock: unfrozenNowMs, durability: "process-memory", catalogProfile: "fixture-blinker" };
+  // [PR-L6, 2026-10-19] the operator's unit is read here, in the composition root, once per resolved runtime - never from a request
+  const allowanceUnit = resolveGenerationAllowanceUnit(environment);
+  const operator = allowanceUnit ? { allowanceUnit } : {};
+  if (fixtureRuntimeEnabled(environment)) return { repository: getDurableWorkflowRepository(), clock: unfrozenNowMs, durability: "process-memory", catalogProfile: "fixture-blinker", ...operator };
   if (!(environment.DATABASE_URL ?? "").trim()) return null;
-  return { repository: getDurableWorkflowRepository(), clock: () => Date.now(), durability: "durable", catalogProfile: "postgres" };
+  return { repository: getDurableWorkflowRepository(), clock: () => Date.now(), durability: "durable", catalogProfile: "postgres", ...operator };
 }
 
 const DEFAULT_FACTORY: GenerationTaskRuntimeFactory = () => productionRuntime();
@@ -64,7 +70,7 @@ export function resolveGenerationTaskService(input: { providerServable: (provide
   const runtime = resolveGenerationTaskRuntime();
   if (!runtime) return null;
   try {
-    return new GenerationTaskService({ store: generationTaskStoreOf(runtime), repository: runtime.repository, clock: runtime.clock, providerServable: input.providerServable, identities: () => generationTaskIdentities(runtime.catalogProfile), durability: runtime.durability });
+    return new GenerationTaskService({ store: generationTaskStoreOf(runtime), repository: runtime.repository, clock: runtime.clock, providerServable: input.providerServable, identities: () => generationTaskIdentities(runtime.catalogProfile), durability: runtime.durability, ...(runtime.allowanceUnit ? { allowanceUnit: runtime.allowanceUnit } : {}) });
   } catch {
     return null;
   }

@@ -19,12 +19,14 @@
  */
 import { LLMProviderError, isRetryableReason, type LLMProviderFailureReason } from "../../llm/errors";
 import type { LLMProviderId, LLMRequest, LLMResponse } from "../../llm/types";
-import type { AiAlternateResult, AiPartResult, PartsSearchOutcome } from "../../parts-search";
+import { composeInstructions } from "../../llm/context";
+import type { AiAlternateResult, AiPartResult, PartsSearchOutcome, QueryEmbedding } from "../../parts-search";
 import type { BuildCatalogPort, BuildLlmPort } from "../../schematic/build-loop-slice";
+import { resolveMainCategory, type MainCategoryResolution } from "../../kicad/categories";
 import { durableWorkflowDigest } from "../../durable-workflow/stable";
 import { normalizePartFacts, partFactsDigest, type GenerationPartFacts } from "../checkpoint";
 import { GENERATION_SLICE_POLICY, generationSearchKey, type GenerationFactsDelta, type GenerationTaskFacts, type GenerationTaskHead, type GenerationTaskUsage } from "../contracts";
-import { isoOf, type GenerationBlockId, type GenerationBlockerCode, type GenerationWaitingReason } from "../vocabulary";
+import { isoOf, type GenerationBlockId, type GenerationBlockerCode, type GenerationCatalogProfile, type GenerationWaitingReason } from "../vocabulary";
 
 // ─── The slice's spend ───────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -44,17 +46,20 @@ export interface SliceSpend {
   embeddingCalls: number;
   rerankCalls: number;
   rerankSkipped: number;
+  /** [PR-L6, 2026-10-19] the input bounds of calls whose input is not reported (in flight, or ended with an unknown completion): charged at
+   *  their bound (0 when the task has no input dimension) */
+  uncertainInputTokens: number;
 }
-export const zeroSpend = (): SliceSpend => ({ modelCalls: 0, uncertainModelCalls: 0, admissionRefusals: 0, inputTokens: 0, outputTokens: 0, catalogSearches: 0, cacheHits: 0, embeddingCalls: 0, rerankCalls: 0, rerankSkipped: 0 });
+export const zeroSpend = (): SliceSpend => ({ modelCalls: 0, uncertainModelCalls: 0, admissionRefusals: 0, inputTokens: 0, outputTokens: 0, catalogSearches: 0, cacheHits: 0, embeddingCalls: 0, rerankCalls: 0, rerankSkipped: 0, uncertainInputTokens: 0 });
 
 /** Reports a slice's spend to the store as additive deltas: every counter at most once, never negative. */
 export class SliceMeter {
-  private reported = { settled: 0, uncertain: 0, inputTokens: 0, outputTokens: 0, catalogSearches: 0, cacheHits: 0, embeddingCalls: 0, rerankCalls: 0, rerankSkipped: 0 };
+  private reported = { settled: 0, uncertain: 0, inputTokens: 0, outputTokens: 0, catalogSearches: 0, cacheHits: 0, embeddingCalls: 0, rerankCalls: 0, rerankSkipped: 0, uncertainInputTokens: 0 };
   constructor(private readonly uncertainTokensPerCall: number = GENERATION_SLICE_POLICY.turnOutputTokens) {}
 
   private totals(current: SliceSpend) {
     const settled = Math.max(0, current.modelCalls - current.uncertainModelCalls - current.admissionRefusals);
-    return { settled, uncertain: current.uncertainModelCalls, inputTokens: current.inputTokens, outputTokens: current.outputTokens, catalogSearches: current.catalogSearches, cacheHits: current.cacheHits, embeddingCalls: current.embeddingCalls, rerankCalls: current.rerankCalls, rerankSkipped: current.rerankSkipped };
+    return { settled, uncertain: current.uncertainModelCalls, inputTokens: current.inputTokens, outputTokens: current.outputTokens, catalogSearches: current.catalogSearches, cacheHits: current.cacheHits, embeddingCalls: current.embeddingCalls, rerankCalls: current.rerankCalls, rerankSkipped: current.rerankSkipped, uncertainInputTokens: current.uncertainInputTokens ?? 0 };
   }
   /** The usage since the last `mark` (empty keys omitted); nothing is marked reported until its commit landed (`mark`). */
   peek(current: SliceSpend): Partial<GenerationTaskUsage> {
@@ -62,7 +67,7 @@ export class SliceMeter {
     const step = (key: keyof typeof next) => Math.max(0, next[key] - this.reported[key]);
     const delta: Partial<GenerationTaskUsage> = {
       modelCalls: step("settled"), uncertainModelCalls: step("uncertain"), inputTokens: step("inputTokens"), outputTokens: step("outputTokens"), catalogSearches: step("catalogSearches"),
-      cacheHits: step("cacheHits"), embeddingCalls: step("embeddingCalls"), rerankCalls: step("rerankCalls"), rerankSkipped: step("rerankSkipped"),
+      cacheHits: step("cacheHits"), embeddingCalls: step("embeddingCalls"), rerankCalls: step("rerankCalls"), rerankSkipped: step("rerankSkipped"), uncertainInputTokens: step("uncertainInputTokens"),
     };
     delta.uncertainOutputTokens = (delta.uncertainModelCalls ?? 0) * this.uncertainTokensPerCall;
     for (const key of Object.keys(delta) as Array<keyof GenerationTaskUsage>) if (!delta[key]) delete delta[key];
@@ -115,7 +120,11 @@ export function waitingReasonOf(reason: LLMProviderFailureReason, admission: boo
  *  request the provider refused as malformed, an unrequested output or an unclassified failure has no code of its own in the closed
  *  list and is recorded as `platform_failure` (the resolution - check the worker and resume - is the actionable one; the provider's
  *  reason is in the worker's log line). */
-export function providerBlockerOf(reason: LLMProviderFailureReason): GenerationBlockerCode {
+export function providerBlockerOf(reason: LLMProviderFailureReason, providerCode?: string): GenerationBlockerCode {
+  // [PR-L6, 2026-10-19] OD-253 item 6: a call the input admission refused was never sent - the task waits for another allowance; a
+  // broken input estimate (a reported input above its bound) or an admission that could not be recorded stops the slice for a person
+  if (providerCode === INPUT_ALLOWANCE_EXHAUSTED_CODE) return "allowance_exhausted";
+  if (providerCode === INPUT_BOUND_EXCEEDED_CODE || providerCode === INPUT_ADMISSION_UNRECORDED_CODE) return "platform_failure";
   switch (reason) {
     case "missing_credentials": case "authentication": return "provider_credentials";
     case "insufficient_quota": return "provider_quota";
@@ -146,6 +155,79 @@ function admissionOutcomeOf(error: unknown): GenerationAdmissionOutcome {
   return "inconclusive";
 }
 
+// ─── [PR-L6, 2026-10-19] Pre-call input admission (OD-253 item 6; live-run.md H, D3) ────────────────────────────────────────
+
+/** The codes an input-admission refusal carries (`providerCode`): the call was NEVER sent. */
+export const INPUT_ALLOWANCE_EXHAUSTED_CODE = "sirkit_input_allowance_exhausted";
+/** A reported input above its call's bound (the estimator's self-check): the slice stops before any further call. */
+export const INPUT_BOUND_EXCEEDED_CODE = "sirkit_input_bound_exceeded";
+/** The call's input bound could not be recorded durably before it was sent (fenced, cancelled or the store did not answer): not sent. */
+export const INPUT_ADMISSION_UNRECORDED_CODE = "sirkit_input_admission_unrecorded";
+export const isInputAdmissionRefusal = (error: unknown): boolean => error instanceof LLMProviderError && (error.providerCode === INPUT_ALLOWANCE_EXHAUSTED_CODE || error.providerCode === INPUT_BOUND_EXCEEDED_CODE || error.providerCode === INPUT_ADMISSION_UNRECORDED_CODE);
+
+/** The framing a provider adds around what the request carries, in tokens (INFERRED, and self-checked: a reported input above its bound
+ *  stops the slice). Byte-level BPE gives tokens <= UTF-8 bytes for the text itself. */
+export const GENERATION_INPUT_BOUND = Object.freeze({ perCall: 1_024, perMessage: 16, perPart: 8, perTool: 64 });
+const utf8Bytes = (text: string): number => new TextEncoder().encode(text).length;
+/** An upper bound on the input tokens one request can be billed for: the UTF-8 bytes of the instructions the adapters compose (the system
+ *  prompt and every context section, escaped), of JSON(tools), JSON(toolChoice) and JSON(messages), plus the framing overhead. */
+export function generationRequestInputBound(request: Pick<LLMRequest, "messages" | "system" | "tools" | "toolChoice" | "boardState" | "schematicState" | "retrievedContext" | "designConstraints" | "userRequest" | "provider">): number {
+  const tools = request.tools ?? [];
+  const parts = request.messages.reduce((sum, message) => sum + (typeof message.content === "string" ? 1 : message.content.length), 0);
+  return utf8Bytes(composeInstructions(request as LLMRequest) ?? "") + utf8Bytes(JSON.stringify(tools)) + utf8Bytes(JSON.stringify(request.toolChoice ?? null)) + utf8Bytes(JSON.stringify(request.messages))
+    + GENERATION_INPUT_BOUND.perCall + GENERATION_INPUT_BOUND.perMessage * request.messages.length + GENERATION_INPUT_BOUND.perPart * parts + GENERATION_INPUT_BOUND.perTool * tools.length;
+}
+
+/** One slice's input budget, shared by every model port of the slice (the plan call, a block's seed call and its turns): a call is admitted
+ *  only when its bound fits what remains; until its usage is reported it is charged at its bound, and a call whose completion is unknown
+ *  STAYS charged at its bound (uncertain input). Per process and per slice: the bound holds for one worker at concurrency 1. */
+export class SliceInputAllowance {
+  private charged = 0;
+  private readonly inFlight = new Map<number, number>();
+  private nextCall = 0;
+  /** input the provider reported for answered calls */
+  reported = 0;
+  /** bounds of calls that ended with an unknown completion */
+  uncertainBound = 0;
+  /** a reported input above its bound: no further call is admitted */
+  violation: { bound: number; reported: number } | null = null;
+  constructor(readonly limit: number) {}
+  get remaining(): number { return Math.max(0, this.limit - this.charged); }
+  /** the input charged at a bound because it was never reported (in flight or unknown) */
+  unreportedBound(): number { let inFlight = 0; for (const bound of this.inFlight.values()) inFlight += bound; return this.uncertainBound + inFlight; }
+  /** a call id when the bound fits, else null (the call must not be sent) */
+  admit(bound: number): number | null {
+    if (this.violation || bound > this.limit - this.charged) return null;
+    const id = (this.nextCall += 1);
+    this.inFlight.set(id, bound);
+    this.charged += bound;
+    return id;
+  }
+  /** the admitted call was not sent after all (its durable record or a meter refused it) */
+  withdraw(id: number): void { const bound = this.inFlight.get(id); if (bound === undefined) return; this.inFlight.delete(id); this.charged -= bound; }
+  /** the call answered: its reported input replaces its bound (an unreported input keeps the bound, as uncertain) */
+  answered(id: number, reportedInput: number | null): void {
+    const bound = this.inFlight.get(id);
+    if (bound === undefined) return;
+    this.inFlight.delete(id);
+    if (reportedInput === null) { this.uncertainBound += bound; return; }
+    this.charged += reportedInput - bound;
+    this.reported += reportedInput;
+    if (reportedInput > bound) this.violation = { bound, reported: reportedInput };
+  }
+  /** the provider refused the call (no work done): nothing is charged */
+  refused(id: number): void { this.withdraw(id); }
+  /** the call's completion is unknown (aborted, timed out, a network failure): it stays charged at its bound */
+  unknown(id: number): void { const bound = this.inFlight.get(id); if (bound === undefined) return; this.inFlight.delete(id); this.uncertainBound += bound; }
+}
+
+export interface MeteredLlmPortOptions {
+  /** [PR-L6, 2026-10-19] the slice's input budget (absent: the task has no input dimension - nothing is bounded, nothing changes) */
+  input?: SliceInputAllowance | null;
+  /** [PR-L6, 2026-10-19] durably record an admitted call's input bound BEFORE it is sent (a throw: the call is not sent) */
+  beforeSend?: (bound: number) => Promise<void>;
+}
+
 export class MeteredLlmPort implements BuildLlmPort {
   started = 0;
   settled = 0;
@@ -156,13 +238,35 @@ export class MeteredLlmPort implements BuildLlmPort {
   lastAdmissionRetryAtMs: number | null = null;
   /** whether the LAST call asked for was refused by the meters (not sent) */
   lastWasAdmissionRefusal = false;
-  constructor(private readonly inner: BuildLlmPort, private readonly admission?: GenerationLlmAdmission, private readonly wallClock: () => number = () => Date.now()) {}
+  private readonly input: SliceInputAllowance | null;
+  private readonly beforeSend: ((bound: number) => Promise<void>) | null;
+  constructor(private readonly inner: BuildLlmPort, private readonly admission?: GenerationLlmAdmission, private readonly wallClock: () => number = () => Date.now(), options: MeteredLlmPortOptions = {}) {
+    this.input = options.input ?? null;
+    this.beforeSend = options.beforeSend ?? null;
+  }
+
+  /** [PR-L6, 2026-10-19] the input admission: a refused call is never sent and is counted as a refusal (never as a model call) */
+  private async admitInput(request: LLMRequest): Promise<number | null> {
+    if (!this.input) return null;
+    const refuse = (code: string): never => { this.admissionRefusals += 1; this.lastWasAdmissionRefusal = false; throw new LLMProviderError(request.provider, "bad_request", undefined, code); };
+    if (this.input.violation) refuse(INPUT_BOUND_EXCEEDED_CODE);
+    const bound = generationRequestInputBound(request);
+    const id = this.input.admit(bound);
+    if (id === null) refuse(INPUT_ALLOWANCE_EXHAUSTED_CODE);
+    if (this.beforeSend) {
+      try { await this.beforeSend(bound); }
+      catch { this.input.withdraw(id!); refuse(INPUT_ADMISSION_UNRECORDED_CODE); }
+    }
+    return id!;
+  }
 
   async generate(request: LLMRequest): Promise<LLMResponse> {
+    const inputCall = await this.admitInput(request);
     let ticket: unknown = null;
     if (this.admission) {
       const now = this.wallClock(), admitted = this.admission.request(request.provider, now);
       if (!admitted.allowed) {
+        if (inputCall !== null) this.input!.withdraw(inputCall); // not sent
         this.admissionRefusals += 1;
         this.lastAdmissionRetryAtMs = admitted.retryAtMs;
         this.lastWasAdmissionRefusal = true;
@@ -176,12 +280,16 @@ export class MeteredLlmPort implements BuildLlmPort {
       const response = await this.inner.generate(request);
       this.settled += 1;
       const usage = response?.usage;
-      if (typeof usage?.inputTokens === "number" && Number.isSafeInteger(usage.inputTokens) && usage.inputTokens >= 0) this.inputTokens += usage.inputTokens;
+      const reportedInput = typeof usage?.inputTokens === "number" && Number.isSafeInteger(usage.inputTokens) && usage.inputTokens >= 0 ? usage.inputTokens : null;
+      if (reportedInput !== null) this.inputTokens += reportedInput;
       if (typeof usage?.outputTokens === "number" && Number.isSafeInteger(usage.outputTokens) && usage.outputTokens >= 0) this.outputTokens += usage.outputTokens;
+      if (inputCall !== null) this.input!.answered(inputCall, reportedInput);
       if (this.admission) this.admission.record(request.provider, ticket, "success", this.wallClock());
       return response;
     } catch (error) {
-      if (error instanceof LLMProviderError && !UNCERTAIN_FAILURES.has(error.reason)) this.settled += 1;
+      const settledFailure = error instanceof LLMProviderError && !UNCERTAIN_FAILURES.has(error.reason);
+      if (settledFailure) this.settled += 1;
+      if (inputCall !== null) { if (settledFailure) this.input!.refused(inputCall); else this.input!.unknown(inputCall); }
       if (this.admission) this.admission.record(request.provider, ticket, admissionOutcomeOf(error), this.wallClock());
       throw error;
     }
@@ -189,7 +297,7 @@ export class MeteredLlmPort implements BuildLlmPort {
 
   /** The plan slice's spend so far (calls started and not settled are uncertain). */
   spend(): SliceSpend {
-    return { ...zeroSpend(), modelCalls: this.started, uncertainModelCalls: Math.max(0, this.started - this.settled), inputTokens: this.inputTokens, outputTokens: this.outputTokens };
+    return { ...zeroSpend(), modelCalls: this.started, uncertainModelCalls: Math.max(0, this.started - this.settled), inputTokens: this.inputTokens, outputTokens: this.outputTokens, uncertainInputTokens: this.input?.unreportedBound() ?? 0 };
   }
 }
 
@@ -214,24 +322,122 @@ const asAiPart = (part: GenerationPartFacts): AiPartResult => structuredClone(pa
  * (with every part's facts) is answered from them; any other search reaches the catalog once and is recorded. Counts what it did.
  * `bypassCache` (a strategy's deliberate re-search, S3) always reaches the catalog, so a part added since is found.
  */
+/** [PR-L6, 2026-10-19] The catalog epoch of a fixture catalog (item 2b): its parts never change while a task runs. */
+export const FIXTURE_CATALOG_EPOCH = "fixture";
+/** [PR-L6, 2026-10-19] The catalog identity a slice's lookups are keyed under: the fixture constant for a fixture profile; the production
+ *  port's own epoch read for postgres (null - the key as it always was - when the port has none or the read fails). */
+export async function catalogEpochOf(catalog: BuildCatalogPort): Promise<string | null> {
+  if (catalog.identity.catalogProfile !== "postgres") return FIXTURE_CATALOG_EPOCH;
+  if (!catalog.catalogEpoch) return null;
+  try { return await catalog.catalogEpoch(); } catch { return null; }
+}
+/** How a cache hit reads its requested category (the same resolution the catalog applies; a fixture catalog takes its name as given). */
+function cachedCategoryResolution(profile: GenerationCatalogProfile, requested: string | null): MainCategoryResolution {
+  if (profile === "postgres") return resolveMainCategory(requested);
+  return requested === null ? { status: "none", requested: null, applied: null, candidates: [], note: null } : { status: "exact", requested, applied: requested, candidates: [], note: null };
+}
+
+// ─── [PR-L6, 2026-10-19] The per-task query-embedding cache (item 1) ─────────────────────────────────────────────────────
+
+export const TASK_EMBEDDING_CACHE_BOUNDS = Object.freeze({ entriesPerTask: 64, tasks: 8 });
+/** How a search's query embedding was obtained (the cache's per-search probe). */
+export interface EmbeddingProbe { status: "called" | "cached" | "failed" | null }
+/**
+ * A PROCESS-LOCAL cache of query embeddings for one task, keyed by the EXACT query text (NFC, whitespace collapsed - embeddings depend on
+ * word order, so the token-sorted search key is NOT reused) and the embedding model; at most 64 entries (least recently used out). Never
+ * durable: a 1536-float vector would overflow the facts bound. A concurrent identical embed waits for the one in flight; an embed that
+ * fails or is aborted leaves no entry.
+ */
+export class TaskEmbeddingCache {
+  private readonly entries = new Map<string, Promise<number[]>>();
+  readonly counts = { calls: 0, hits: 0, failures: 0 };
+  constructor(readonly model: string, private readonly maxEntries: number = TASK_EMBEDDING_CACHE_BOUNDS.entriesPerTask) {}
+  keyOf(text: string): string { return durableWorkflowDigest({ schema: "sirkit.task-query-embedding.v1", text: text.normalize("NFC").replace(/\s+/g, " ").trim(), model: this.model }); }
+  get size(): number { return this.entries.size; }
+  has(text: string): boolean { return this.entries.has(this.keyOf(text)); }
+  /** The seam `searchPartsForAI` takes (`options.embedQuery`): `embed` is the real embedder, asked only on a miss. */
+  embedder(embed: (text: string, signal?: AbortSignal) => Promise<number[]>, signal: AbortSignal | undefined, probe: EmbeddingProbe): (text: string) => Promise<QueryEmbedding> {
+    return async (text) => {
+      const key = this.keyOf(text);
+      const existing = this.entries.get(key);
+      if (existing) {
+        this.entries.delete(key); this.entries.set(key, existing); // most recently used
+        try {
+          const vector = await existing;
+          this.counts.hits += 1;
+          probe.status ??= "cached";
+          return { vector, cached: true };
+        } catch { /* the earlier embed failed (its entry is gone): embed below */ }
+      }
+      const pending = abortable(embed(text, signal), signal);
+      this.entries.set(key, pending);
+      while (this.entries.size > this.maxEntries) this.entries.delete(this.entries.keys().next().value!);
+      try {
+        const vector = await pending;
+        this.counts.calls += 1;
+        probe.status = "called";
+        return { vector, cached: false };
+      } catch (error) {
+        if (this.entries.get(key) === pending) this.entries.delete(key);
+        this.counts.failures += 1;
+        probe.status = "failed";
+        throw error;
+      }
+    };
+  }
+}
+/** A promise that rejects as soon as `signal` aborts (the work itself is asked to stop through the same signal). */
+function abortable<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return work;
+  if (signal.aborted) return Promise.reject(signal.reason instanceof Error ? signal.reason : new Error("EMBEDDING_ABORTED"));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(signal.reason instanceof Error ? signal.reason : new Error("EMBEDDING_ABORTED"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    work.then((value) => { signal.removeEventListener("abort", onAbort); resolve(value); }, (error: unknown) => { signal.removeEventListener("abort", onAbort); reject(error); });
+  });
+}
+const TASK_EMBEDDING_CACHES = new Map<string, TaskEmbeddingCache>();
+/** This process's cache for a task (at most 8 tasks are kept, least recently used out). */
+export function taskEmbeddingCache(taskId: string, model: string): TaskEmbeddingCache {
+  const key = `${taskId}\u0000${model}`;
+  const found = TASK_EMBEDDING_CACHES.get(key);
+  if (found) { TASK_EMBEDDING_CACHES.delete(key); TASK_EMBEDDING_CACHES.set(key, found); return found; }
+  const cache = new TaskEmbeddingCache(model);
+  TASK_EMBEDDING_CACHES.set(key, cache);
+  while (TASK_EMBEDDING_CACHES.size > TASK_EMBEDDING_CACHE_BOUNDS.tasks) TASK_EMBEDDING_CACHES.delete(TASK_EMBEDDING_CACHES.keys().next().value!);
+  return cache;
+}
+
+export interface FactsCatalogPortOptions {
+  /** [PR-L6, 2026-10-19] item 2b: the catalog identity this slice's lookups are keyed under (`catalogEpochOf`) */
+  catalogEpoch?: string | null;
+  /** [PR-L6, 2026-10-19] item 1: the task's embedding cache (production postgres catalog only) */
+  embeddings?: TaskEmbeddingCache | null;
+}
+
 export class FactsCatalogPort implements BuildCatalogPort {
   readonly counts = { searches: 0, cacheHits: 0, embeddingCalls: 0, rerankCalls: 0, rerankSkipped: 0, alternatesLookups: 0 };
   private readonly lookups = new Map<string, Lookup>();
   private readonly parts = new Map<string, GenerationPartFacts>();
   private pending: { parts: Map<string, GenerationPartFacts>; lookups: Map<string, Lookup>; rerank: GenerationFactsDelta["rerank"] | undefined } = { parts: new Map(), lookups: new Map(), rerank: undefined };
   private rerankState: "available" | "unavailable" | null;
+  private readonly epoch: string | null;
+  private readonly embeddings: TaskEmbeddingCache | null;
   bypassCache = false;
 
-  constructor(private readonly inner: BuildCatalogPort, facts: GenerationTaskFacts | null, private readonly blockId: GenerationBlockId, private readonly clock: () => number) {
+  constructor(private readonly inner: BuildCatalogPort, facts: GenerationTaskFacts | null, private readonly blockId: GenerationBlockId, private readonly clock: () => number, options: FactsCatalogPortOptions = {}) {
     for (const [key, entry] of Object.entries(facts?.lookups ?? {})) this.lookups.set(key, { query: entry.query, category: entry.category, partIds: [...entry.partIds], resultDigest: entry.resultDigest, count: entry.count });
     for (const [partId, entry] of Object.entries(facts?.parts ?? {})) this.parts.set(partId, structuredClone(entry.part));
     this.rerankState = facts?.optional.rerank?.state ?? null;
+    this.epoch = options.catalogEpoch ?? null;
+    this.embeddings = options.embeddings ?? null;
   }
 
-  get identity(): BuildCatalogPort["identity"] { return this.inner.identity; }
+  /** the inner port's identity, with this slice's catalog epoch (so the slice core's checkpoint search key is this port's facts key) */
+  get identity(): BuildCatalogPort["identity"] { return { catalogProfile: this.inner.identity.catalogProfile, embeddingModel: this.inner.identity.embeddingModel, ...(this.epoch ? { catalogEpoch: this.epoch } : {}) }; }
 
   private keyOf(query: string, category: string | null): string {
-    return generationSearchKey({ query, category, catalogProfile: this.identity.catalogProfile, embeddingModel: this.identity.embeddingModel });
+    return generationSearchKey({ query, category, catalogProfile: this.identity.catalogProfile, embeddingModel: this.identity.embeddingModel, catalogEpoch: this.epoch });
   }
   private remember(parts: readonly AiPartResult[]): void {
     for (const part of parts) {
@@ -260,7 +466,7 @@ export class FactsCatalogPort implements BuildCatalogPort {
     return hit.partIds.map((partId) => asAiPart(this.parts.get(partId)!));
   }
 
-  async searchParts(query: string, category: string | undefined, limit: number, options: { signal?: AbortSignal; onOutcome?: (outcome: PartsSearchOutcome) => void }): Promise<AiPartResult[]> {
+  async searchParts(query: string, category: string | undefined, limit: number, options: { signal?: AbortSignal; onOutcome?: (outcome: PartsSearchOutcome) => void; embedQuery?: (text: string) => Promise<QueryEmbedding> }): Promise<AiPartResult[]> {
     const requested = typeof category === "string" && category.trim() ? category : null;
     const key = this.keyOf(query, requested);
     if (!this.bypassCache) {
@@ -269,18 +475,30 @@ export class FactsCatalogPort implements BuildCatalogPort {
         this.counts.cacheHits += 1;
         const answer = hit.slice(0, Math.max(0, limit));
         this.remember(answer); // the parts are surfaced by this block too (facts tag + LRU)
+        // [PR-L6, 2026-10-19] item 2c: a hit is reported (the slice core notes it to the model), never silent; nothing reached the catalog
+        options.onOutcome?.({ category: cachedCategoryResolution(this.identity.catalogProfile, requested), ranking: "fused", rerank: { state: "not_needed" }, cached: true });
         return answer;
       }
     }
     this.counts.searches += 1;
-    if (this.identity.catalogProfile === "postgres") this.counts.embeddingCalls += 1; // searchPartsForAI embeds every query it is asked (degrading to lexical when the embedding fails)
-    const results = await this.inner.searchParts(query, category, limit, { ...(options.signal ? { signal: options.signal } : {}), onOutcome: (outcome) => { this.noteRerank(outcome); options.onOutcome?.(outcome); } });
-    this.remember(results);
-    const facts = results.map((part) => normalizePartFacts(part as GenerationPartFacts));
-    const lookup: Lookup = { query, category: requested, partIds: facts.slice(0, 10).map((part) => part.partId), resultDigest: lookupResultDigest(facts), count: results.length };
-    this.lookups.set(key, lookup);
-    this.pending.lookups.set(key, lookup);
-    return results;
+    // [PR-L6, 2026-10-19] item 1: the production catalog embeds through the task's cache (one provider call per distinct query text);
+    // the count is what happened - the cache's probe, else the outcome's report - never an assumption
+    const probe: EmbeddingProbe = { status: null };
+    const embedQuery = this.identity.catalogProfile === "postgres" && this.embeddings && this.inner.embedQuery ? this.embeddings.embedder((text, signal) => this.inner.embedQuery!(text, signal), options.signal, probe) : options.embedQuery;
+    let reported: PartsSearchOutcome["embedding"];
+    try {
+      const results = await this.inner.searchParts(query, category, limit, { ...(options.signal ? { signal: options.signal } : {}), ...(embedQuery ? { embedQuery } : {}), onOutcome: (outcome) => { reported = outcome.embedding; this.noteRerank(outcome); options.onOutcome?.(outcome); } });
+      this.remember(results);
+      const facts = results.map((part) => normalizePartFacts(part as GenerationPartFacts));
+      const lookup: Lookup = { query, category: requested, partIds: facts.slice(0, 10).map((part) => part.partId), resultDigest: lookupResultDigest(facts), count: results.length };
+      this.lookups.set(key, lookup);
+      this.pending.lookups.set(key, lookup);
+      return results;
+    } finally {
+      const status = probe.status ?? reported;
+      if (status === "called" || status === "failed") this.counts.embeddingCalls += 1;
+      else if (status === undefined && !embedQuery && this.identity.catalogProfile === "postgres") this.counts.embeddingCalls += 1; // a port that reports nothing: searchPartsForAI embeds every query it is asked
+    }
   }
 
   async findAlternates(partId: string, kind: "drop_in" | "fff" | "all", limit: number, options: { signal?: AbortSignal }): Promise<AiAlternateResult[]> {
@@ -312,7 +530,7 @@ export class FactsCatalogPort implements BuildCatalogPort {
     if (!parts.size && !lookups.size && rerank === undefined) return undefined;
     return {
       ...(parts.size ? { parts: [...parts.values()].map((part) => ({ part, blockId: this.blockId })) } : {}),
-      ...(lookups.size ? { lookups: [...lookups.values()].map((entry) => ({ query: entry.query, category: entry.category, partIds: entry.partIds, resultDigest: entry.resultDigest, count: entry.count })) } : {}),
+      ...(lookups.size ? { lookups: [...lookups.values()].map((entry) => ({ query: entry.query, category: entry.category, partIds: entry.partIds, resultDigest: entry.resultDigest, count: entry.count, ...(this.epoch ? { catalogEpoch: this.epoch } : {}) })) } : {}),
       ...(rerank !== undefined ? { rerank } : {}),
     };
   }

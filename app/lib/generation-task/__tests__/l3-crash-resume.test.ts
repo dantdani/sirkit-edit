@@ -11,7 +11,10 @@
  *  3. a worker that crashes after its end commit but before acknowledging the event leaves only a stale event, which the next worker
  *     settles without any work;
  *  4. the task's facts are a cache: a delta the facts aggregate cannot hold (its 512 KB bound) is dropped and logged, and the slice's
- *     checkpoint and end still commit - the design is never wedged by its cache.
+ *     checkpoint and end still commit - the design is never wedged by its cache;
+ *  5. [PR-L6, 2026-10-19] (PGlite) the input dimension survives a crash inside a call: the call's input bound was recorded on its
+ *     reservation before it was sent, so the restarted claim charges it as uncertain, the resumed slice's admission counts it, and the
+ *     resumed call that no longer fits is never sent - no input overshoot across the restart (OD-253 item 6).
  *
  * Fake model and catalog ports, a simulated clock; PostgreSQL is PGlite in process (the l2 pattern: `vi.mock` of the database client).
  * This file starts PGlite, so its CI admission is the database-delivery job's (a separate, line-pinned workflow entry, F20).
@@ -35,11 +38,13 @@ vi.mock("@/lib/kg", () => ({ kgDesignNotes: vi.fn(() => null) }));
 import { InMemoryDurableWorkflowRepository } from "../../durable-workflow/repository";
 import { durableAggregateIdentity } from "../../durable-workflow/stable";
 import type { DurableWorkflowRepository } from "../../durable-workflow/types";
-import type { LLMResponse } from "../../llm/types";
-import { GENERATION_SLICE_POLICY, GENERATION_SLICE_TOPIC, GENERATION_TASK_AGGREGATES, type GenerationTaskHead } from "../contracts";
+import type { LLMRequest, LLMResponse } from "../../llm/types";
+import type { BuildLlmPort } from "../../schematic/build-loop-slice";
+import { GENERATION_SLICE_POLICY, GENERATION_SLICE_TOPIC, GENERATION_TASK_AGGREGATES, GENERATION_TASK_ALLOWANCE_UNIT, generationCommitted, type GenerationTaskHead } from "../contracts";
+import { generationRequestInputBound } from "../worker/accounting";
 import { GenerationTaskStore } from "../store";
 import type { GenerationWorker, WorkerTimers } from "../worker/worker";
-import { ScriptedModel, SimulatedTime, droneCatalog, droneScripts, drive, l3Env, membership, part, scopeFor, startTask } from "./_l3-worker-fixtures";
+import { NETLISTS, ScriptedModel, SimulatedTime, droneCatalog, droneScripts, drive, l3Env, membership, part, reply, scopeFor, search, startTask, submit } from "./_l3-worker-fixtures";
 import { InMemoryProjectMembershipRepository } from "../../auth/project-membership";
 import { hookedRepository } from "./_l2-store-scenarios";
 
@@ -207,6 +212,29 @@ describe("[PR-L L.7-4] the facts cache never wedges a slice", () => {
   });
 });
 
+// ─── [PR-L6, 2026-10-19] the input dimension across a crash (OD-253 item 6) ─────────────────────────────────────────────────
+
+const INPUT_QUERIES = ["flight controller mcu", "imu gyro", "decoupling capacitor"];
+/** One block (the planner answers no submit_plan): three searches, then the submission. */
+const singleScripts = () => ({
+  plan: () => reply([]),
+  blocks: { "": ({ turn }: { turn: number }) => (turn <= INPUT_QUERIES.length ? reply([search(`call_main_${turn}`, INPUT_QUERIES[turn - 1]!)]) : reply([submit("call_main_submit", NETLISTS["Flight controller"])])) },
+});
+/** The provider seam: each call's bound (as the admission computes it) and the input it reports (40 % of the bound). */
+class ReportingPort implements BuildLlmPort {
+  readonly bounds: number[] = [];
+  readonly reported: number[] = [];
+  constructor(readonly inner: ScriptedModel) {}
+  async generate(request: LLMRequest): Promise<LLMResponse> {
+    const bound = generationRequestInputBound(request);
+    this.bounds.push(bound);
+    const response = await this.inner.generate(request);
+    const input = Math.floor(bound * 0.4);
+    this.reported.push(input);
+    return { ...response, usage: { inputTokens: input, outputTokens: 60 } };
+  }
+}
+
 describe("[PR-L L.7-4] the same crash and resume on PostgreSQL (PGlite), with a restart of the modules", () => {
   beforeAll(async () => {
     pg = await disposablePostgres();
@@ -228,5 +256,61 @@ describe("[PR-L L.7-4] the same crash and resume on PostgreSQL (PGlite), with a 
     });
     const rows = await pg!.db.query<{ n: number }>("select count(*)::int as n from durable_workflow_heads where tenant_id = 'tenant-l3'");
     expect(rows.rows[0]!.n).toBeGreaterThan(0); // the scenario wrote the real tables
+  });
+
+  it("5. [PR-L6, 2026-10-19] (PGlite) a crash inside a call keeps its input bound charged: the restarted slice counts it, and the resumed call that no longer fits is never sent", { timeout: 180_000 }, async () => {
+    // the deterministic bounds and reported inputs of the calls up to the crash (plan, three turns), measured in memory first
+    const calibration = l3Env({ name: "crash-input-calibration", repository: new InMemoryDurableWorkflowRepository(), catalog: droneCatalog() });
+    const measured = new ReportingPort(new ScriptedModel(singleScripts(), calibration.time, () => 1_000));
+    const measuredTask = await startTask(calibration, { allowanceUnit: { ...GENERATION_TASK_ALLOWANCE_UNIT, inputTokens: 50_000_000 } });
+    await drive(calibration, calibration.worker({ llm: measured }), measuredTask.taskId, { until: (current) => current.state === "awaiting-review", maxTicks: 20 });
+    const b3 = measured.bounds[3]!, settledInput = measured.reported[0]! + measured.reported[1]! + measured.reported[2]!;
+    const limit = settledInput + 2 * b3 - 1; // the third turn fits once (before the crash), and no longer once its dead attempt is charged
+
+    const { PostgresDurableWorkflowRepository } = await import("../../durable-workflow/server-repository");
+    const repository = new PostgresDurableWorkflowRepository(), time = new SimulatedTime(), scope = scopeFor("crash-input-pglite");
+    const memberships = new InMemoryProjectMembershipRepository();
+    memberships.set(membership(scope));
+    const { createGenerationSliceRevalidator } = await import("../worker/runtime");
+    const { GenerationWorker: Worker } = await import("../worker/worker");
+    const store = new GenerationTaskStore({ repository, clock: time.clock });
+    const catalog = droneCatalog();
+    let crashed = false, crashNow: () => void = () => undefined;
+    const crash = new Promise<void>((resolve) => { crashNow = resolve; });
+    const model = new ScriptedModel(singleScripts(), time, () => 1_000);
+    model.intercept = (request, kind) => {
+      const turn = request.messages.filter((message) => message.role === "assistant").length + 1;
+      if (kind === "block" && turn === 3 && !crashed) { crashed = true; crashNow(); return NEVER; } // the process dies in this call
+      return undefined;
+    };
+    const port = new ReportingPort(model);
+    const task = await startTask({ store, scope }, { allowanceUnit: { ...GENERATION_TASK_ALLOWANCE_UNIT, inputTokens: limit } });
+    const workerA = new Worker({ store, workerId: "worker-crash-input-a", ports: { llm: port, catalog }, revalidate: createGenerationSliceRevalidator({ membership: () => memberships, providerServable: () => true }), clock: time.clock, random: () => 0.5, timers: DEAF, policy: { concurrency: 1 } });
+    await runUntilHang(workerA, crash, () => crashed);
+    expect(port.bounds).toEqual(measured.bounds.slice(0, 4)); // the same requests as measured
+
+    // what the crash leaves: the settled input in the usage, and the dead call's bound on its attempt's reservation
+    const before = await store.load(scope, task.taskId);
+    if (!before.ok) throw new Error(before.code);
+    expect(before.task.usage.inputTokens).toBe(settledInput);
+    expect(before.task.reservations).toEqual([expect.objectContaining({ attempt: 1, state: "held", inputTokens: b3 })]);
+
+    // the process is gone; its lease lapses; fresh modules over the same database resume the block
+    time.jump(time.now() + GENERATION_SLICE_POLICY.leaseMs + 15_000);
+    vi.resetModules();
+    const [repositoryModule, storeModule, workerModule, runtimeModule] = await Promise.all([import("../../durable-workflow/server-repository"), import("../store"), import("../worker/worker"), import("../worker/runtime")]);
+    const restartedStore = new storeModule.GenerationTaskStore({ repository: new repositoryModule.PostgresDurableWorkflowRepository(), clock: time.clock }) as unknown as GenerationTaskStore;
+    const workerB = new workerModule.GenerationWorker({ store: restartedStore as never, workerId: "worker-crash-input-b", ports: { llm: port, catalog }, revalidate: runtimeModule.createGenerationSliceRevalidator({ membership: () => memberships, providerServable: () => true }), clock: time.clock, random: () => 0.5, timers: DEAF, policy: { concurrency: 1 } });
+    const { task: parked } = await drive({ store: restartedStore, scope, time }, workerB as never, task.taskId, { until: (current) => current.state === "waiting-for-resource", maxTicks: 10 });
+
+    // the dead call stays charged (uncertain, at its bound); the resumed third turn did not fit what remained and was never sent
+    expect(port.bounds).toHaveLength(4);
+    expect(model.calls.filter((call) => call.kind === "block").map((call) => call.turn)).toEqual([1, 2, 3]);
+    expect(parked.blocker).toMatchObject({ code: "allowance_exhausted" });
+    expect(parked.blocks.main).toMatchObject({ status: "blocked", blocker: "allowance_exhausted", turnsUsed: 2 });
+    expect(parked.reservations).toEqual([expect.objectContaining({ attempt: 1, state: "uncertain", inputTokens: b3 })]);
+    expect(parked.usage.inputTokens).toBe(settledInput);
+    expect(generationCommitted(parked).inputTokens).toBe(settledInput + b3);
+    expect(generationCommitted(parked).inputTokens).toBeLessThanOrEqual(limit); // no input overshoot across the restart
   });
 });

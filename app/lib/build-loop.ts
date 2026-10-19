@@ -23,9 +23,11 @@ import {
   searchPartsForAI,
   fetchAlternatesForAI,
   getPartsByIds,
+  readCatalogEpoch,
   type AiPartResult,
 } from "@/app/lib/parts-search";
-import { EMBEDDING_MODEL } from "@/app/lib/embeddings";
+import { EMBEDDING_MODEL, embedQuery } from "@/app/lib/embeddings";
+import { CatalogSlots, resolveCatalogSearchConcurrency } from "@/app/lib/schematic/catalog-slots";
 import { runErc, type ErcReport } from "@/lib/erc";
 import {
   clampBuildTurns,
@@ -64,14 +66,36 @@ export type BuildLoopResult =
 // ─── [PR-L, 2026-10-17] The production seams of the slice core ─────────────────────────────────────────────────────────
 
 const PRODUCTION_LLM: BuildLlmPort = { generate: (request) => llmRouter.generate(request) };
+/** [PR-L6, 2026-10-19] L.6 part 2, item 5: the process's catalog slots (`min(4, max(1, SIRKIT_DB_POOL_MAX - 3))`, lowered only by
+ *  SIRKIT_CATALOG_SEARCH_CONCURRENCY): every production catalog read holds one, so concurrent turns and slices never take the whole pool
+ *  from the durable store's lease renewals. */
+const CATALOG_SLOTS = new CatalogSlots(resolveCatalogSearchConcurrency());
+/** [PR-L6, 2026-10-19] item 2b: the catalog epoch, read at most once per 30 s per process (a failed read is not remembered). */
+const CATALOG_EPOCH_MEMO_MS = 30_000;
+let catalogEpochMemo: { at: number; value: Promise<string> } | null = null;
 const PRODUCTION_CATALOG: BuildCatalogPort = {
   get identity() {
     return { catalogProfile: fixtureRuntimeEnabled() ? ("fixture-blinker" as const) : ("postgres" as const), embeddingModel: EMBEDDING_MODEL };
   },
-  searchParts: (query, category, limit, options) => searchPartsForAI(query, category, limit, options),
-  findAlternates: (partId, kind, limit, options) => fetchAlternatesForAI(partId, kind, limit, options),
-  partsByIds: (ids) => getPartsByIds(ids),
+  searchParts: (query, category, limit, options) => CATALOG_SLOTS.run(options.signal, () => searchPartsForAI(query, category, limit, options)),
+  findAlternates: (partId, kind, limit, options) => CATALOG_SLOTS.run(options.signal, () => fetchAlternatesForAI(partId, kind, limit, options)),
+  partsByIds: (ids) => CATALOG_SLOTS.run(undefined, () => getPartsByIds(ids)),
+  // [PR-L6, 2026-10-19] item 1: the raw query embedder a task's embedding cache answers its misses with (the signal reaches the SDK call)
+  embedQuery: (text, signal) => embedQuery(text, signal ? { signal } : undefined),
+  catalogEpoch: () => {
+    const now = Date.now();
+    if (!catalogEpochMemo || now - catalogEpochMemo.at >= CATALOG_EPOCH_MEMO_MS || now < catalogEpochMemo.at) {
+      const value = CATALOG_SLOTS.run(undefined, () => readCatalogEpoch());
+      catalogEpochMemo = { at: now, value };
+      value.catch(() => { if (catalogEpochMemo?.value === value) catalogEpochMemo = null; });
+    }
+    return catalogEpochMemo.value;
+  },
 };
+/** [PR-L6, 2026-10-19] The process's catalog slots (diagnostics and tests). */
+export function productionCatalogSlots(): CatalogSlots {
+  return CATALOG_SLOTS;
+}
 /** The model port a production slice uses: the LLM router (its fixture short-circuit, call records and admission included). */
 export function productionBuildLlmPort(): BuildLlmPort {
   return PRODUCTION_LLM;

@@ -25,19 +25,22 @@ import type { AiPartResult } from "../../parts-search";
 import { resolveMainCategory, MAIN_CATEGORIES } from "../../kicad/categories";
 import { BuildBoundaryError, withinBuildBoundary } from "../../schematic/build-boundary";
 import { runBlockSlice, type BlockSliceOutcome, type BlockSliceTurn, type BuildCatalogPort, type BuildLlmPort, type BuildLoopBlock } from "../../schematic/build-loop-slice";
-import { blockDesignRequest, designBlockSlice, generationPlanInput, mergeAndValidate, planGeneration, type GenerationPlanDraft, type PlanGenerationOutcome, type PlannedBlock } from "../../schematic/build-multi-generation";
+import { blockDesignRequest, designBlockSlice, designPrompt, generationPlanInput, mergeAndValidate, planGeneration, type GenerationPlanDraft, type PlanGenerationOutcome, type PlannedBlock } from "../../schematic/build-multi-generation";
 import type { BuildBudgetReport } from "../../schematic/build-result";
 import { BUILD_BUDGET } from "../../schematic/build-result";
 import { sanitizeTraceText } from "../../agent/redaction";
 import { normalizePartFacts, type BuildLoopCheckpoint, type GenerationPartFacts } from "../checkpoint";
 import {
-  GENERATION_SLICE_POLICY, GENERATION_TASK_BOUNDS, buildGenerationTaskResult, generationBlockTurnsPerSlice,
-  type GenerationBlockState, type GenerationTaskHead, type GenerationTaskUsage,
+  GENERATION_SLICE_POLICY, GENERATION_TASK_BOUNDS, buildGenerationTaskResult, generationBlockTurnsPerSlice, generationInputRemaining,
+  type GenerationBlockState, type GenerationMissingRole, type GenerationTaskHead, type GenerationTaskUsage,
 } from "../contracts";
 import { generationTaskEvent, type GenerationTaskEventDraft } from "../events";
 import type { GenerationBlockPatch, GenerationSliceEnd, GenerationSliceLease, GenerationTaskStore } from "../store";
-import { GenerationTaskContractError, cleanLine, isoOf, type GenerationBlockId, type GenerationStrategyId, type GenerationTaskState } from "../vocabulary";
-import { FactsCatalogPort, MeteredLlmPort, SliceMeter, consecutiveProviderWaits, isAdmissionPause, providerBlockerOf, providerWait, zeroSpend, type GenerationLlmAdmission, type SliceSpend } from "./accounting";
+import { GENERATION_STRATEGIES, GenerationTaskContractError, cleanLine, isoOf, type GenerationBlockId, type GenerationStrategyId, type GenerationTaskState } from "../vocabulary";
+import {
+  FactsCatalogPort, INPUT_BOUND_EXCEEDED_CODE, MeteredLlmPort, SliceInputAllowance, SliceMeter, catalogEpochOf, consecutiveProviderWaits, isAdmissionPause, providerBlockerOf, providerWait, taskEmbeddingCache, zeroSpend,
+  type GenerationLlmAdmission, type MeteredLlmPortOptions, type SliceSpend,
+} from "./accounting";
 import { blockLearning, historyClosed, historyWithSlice, judgeSliceProgress, nextStrategyOf, quotedQuery, strategyAtClaim, strategySeedText, type BlockLearning } from "./progress";
 
 // ─── The worker's side of a slice ────────────────────────────────────────────────────────────────────────────────────────
@@ -185,11 +188,35 @@ export async function runGenerationSlice(ctx: SliceContext): Promise<GenerationS
   }
 }
 
+// ─── [PR-L6, 2026-10-19] Input metering (OD-253 item 6; live-run.md H, D3) ────────────────────────────────────────────────
+
+/** The slice's input budget from the claimed head (null when the task's unit has no input dimension: nothing changes), and the durable
+ *  pre-call record each admitted call makes BEFORE it is sent (a fenced or cancelled slice cannot record, so it does not send). The record
+ *  is everything this attempt has charged that no commit carries yet - the new call's bound, and the input of earlier calls of the slice
+ *  (a seed or correction call) reported since the last commit - so a process that dies inside the call leaves all of it charged. */
+function inputMetering(ctx: SliceContext): { input: SliceInputAllowance | null; options: MeteredLlmPortOptions; committed: (usage: Partial<GenerationTaskUsage>) => void } {
+  const remaining = generationInputRemaining(ctx.task);
+  if (remaining === null) return { input: null, options: {}, committed: () => undefined };
+  const input = new SliceInputAllowance(remaining);
+  let seq = 0, committedInput = 0;
+  const beforeSend = async (): Promise<void> => {
+    const uncommitted = Math.max(0, input.reported + input.unreportedBound() - committedInput);
+    const recorded = await ctx.store.admitCall(ctx.lease, (seq += 1), uncommitted);
+    if (!recorded.ok) throw new Error(recorded.code);
+  };
+  return { input, options: { input, beforeSend }, committed: (usage) => { committedInput += (usage.inputTokens ?? 0) + (usage.uncertainInputTokens ?? 0); } };
+}
+/** A broken input estimate is the operator's to see (the worker log), never silent. */
+function logInputViolation(ctx: SliceContext, input: SliceInputAllowance | null, code: string | undefined): void {
+  if (code === INPUT_BOUND_EXCEEDED_CODE && input?.violation) ctx.log(`slice ${ctx.lease.sliceId}: a call reported ${input.violation.reported} input tokens, above its admitted bound ${input.violation.bound}; the slice stopped before any further call (the input estimate needs review)`);
+}
+
 // ─── plan ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 async function runPlanSlice(ctx: SliceContext): Promise<GenerationSliceReport> {
   const { task } = ctx;
-  const llm = new MeteredLlmPort(ctx.ports.llm, ctx.ports.admission);
+  const metering = inputMetering(ctx);
+  const llm = new MeteredLlmPort(ctx.ports.llm, ctx.ports.admission, undefined, metering.options);
   const meter = new SliceMeter(GENERATION_SLICE_POLICY.planOutputTokens);
   let planned: PlanGenerationOutcome | null = null;
   try {
@@ -207,7 +234,8 @@ async function runPlanSlice(ctx: SliceContext): Promise<GenerationSliceReport> {
     return end(ctx, { usage, schedule: [{ kind: "plan", blockId: null, notBefore: wait.notBefore }], waitingReason: wait.waitingReason }, "waiting_provider", `the planner waits for the provider (${wait.waitingReason}) until ${wait.notBefore}`);
   }
   if (planned.kind === "provider_error") {
-    const blocker = providerBlockerOf(planned.error.reason);
+    const blocker = providerBlockerOf(planned.error.reason, planned.error.providerCode); // [PR-L6, 2026-10-19] an input-admission refusal: never sent
+    logInputViolation(ctx, metering.input, planned.error.providerCode);
     ctx.log(`plan slice ${ctx.lease.sliceId}: the provider refused (${planned.error.reason}); the task waits (${blocker})`);
     return end(ctx, { usage, blocker }, "blocked", `the provider refused the planner (${planned.error.reason}): ${blocker}`);
   }
@@ -265,13 +293,16 @@ function turnLine(blockName: string, checkpoint: BuildLoopCheckpoint): string {
 }
 
 const NO_TURNS = { usage: { modelCalls: 0, uncertainModelCalls: 0, inputTokens: 0, outputTokens: 0, catalogSearches: 0, alternatesLookups: 0 } } as const;
-/** The slice's whole spend so far: the core's turns, the seed's calls, the catalog port's work. */
-function spendOf(run: { usage: BlockSliceOutcome["usage"] | BlockSliceTurn["usage"] }, seedLlm: MeteredLlmPort, coreLlm: MeteredLlmPort, catalog: FactsCatalogPort): SliceSpend {
+/** The slice's whole spend so far: the core's turns, the seed's calls, the catalog port's work; [PR-L6, 2026-10-19] the input bounds of
+ *  calls whose input is not reported (the slice's one input budget, shared by the seed and the core). */
+function spendOf(run: { usage: BlockSliceOutcome["usage"] | BlockSliceTurn["usage"] }, seedLlm: MeteredLlmPort, coreLlm: MeteredLlmPort, catalog: FactsCatalogPort, input: SliceInputAllowance | null = null): SliceSpend {
   const seed = seedLlm.spend();
   return {
     ...zeroSpend(), ...catalog.spend(),
     modelCalls: run.usage.modelCalls + seed.modelCalls, uncertainModelCalls: run.usage.uncertainModelCalls + seed.uncertainModelCalls, admissionRefusals: coreLlm.admissionRefusals,
-    inputTokens: run.usage.inputTokens + seed.inputTokens, outputTokens: run.usage.outputTokens + seed.outputTokens,
+    // [PR-L6, 2026-10-19] with an input dimension, the slice's one input budget is the input's record: every answered call's reported input
+    // (an answer that arrived after its turn was abandoned included - the provider did the work) and the bound of every call not answered
+    inputTokens: input ? input.reported : run.usage.inputTokens + seed.inputTokens, outputTokens: run.usage.outputTokens + seed.outputTokens, uncertainInputTokens: input?.unreportedBound() ?? 0,
   };
 }
 
@@ -280,10 +311,16 @@ async function runDesignSlice(ctx: SliceContext): Promise<GenerationSliceReport>
   const blockId = lease.blockId!;
   const state: GenerationBlockState = task.blocks[blockId]!;
   const planned = plannedBlockOf(task, blockId);
-  const base = blockDesignRequest(task.request.prompt, planned);
+  // [PR-L6, 2026-10-19] OD-253 item 3: the single design's message carries the plan's assumptions (a planned block's brief already does)
+  const prompt = planned === null ? designPrompt(task.request.prompt, task.plan?.assumptions ?? []) : task.request.prompt;
+  const base = blockDesignRequest(prompt, planned);
   const facts = await store.readFacts(lease.scope, task);
-  const catalog = new FactsCatalogPort(ctx.ports.catalog, facts, blockId, ctx.clock);
-  const seedLlm = new MeteredLlmPort(ctx.ports.llm, ctx.ports.admission), coreLlm = new MeteredLlmPort(ctx.ports.llm, ctx.ports.admission);
+  // [PR-L6, 2026-10-19] items 1 and 2b: lookups keyed by the catalog's identity now; query embeddings cached per task in this process
+  const catalogEpoch = await catalogEpochOf(ctx.ports.catalog);
+  const catalog = new FactsCatalogPort(ctx.ports.catalog, facts, blockId, ctx.clock, { catalogEpoch, embeddings: ctx.ports.catalog.identity.catalogProfile === "postgres" ? taskEmbeddingCache(task.taskId, task.identities.embeddingModel) : null });
+  const metering = inputMetering(ctx); // [PR-L6, 2026-10-19] OD-253 item 6: one input budget for the seed call and the turns
+  const seedLlm = new MeteredLlmPort(ctx.ports.llm, ctx.ports.admission, undefined, metering.options), coreLlm = new MeteredLlmPort(ctx.ports.llm, ctx.ports.admission, undefined, metering.options);
+  const spendNow = (run: { usage: BlockSliceOutcome["usage"] | BlockSliceTurn["usage"] }): SliceSpend => spendOf(run, seedLlm, coreLlm, catalog, metering.input);
   const meter = new SliceMeter();
   const previous = await store.readBlock(lease.scope, task, blockId);
   const claim = strategyAtClaim(state);
@@ -302,7 +339,9 @@ async function runDesignSlice(ctx: SliceContext): Promise<GenerationSliceReport>
   }
 
   // the conversation this slice continues or begins
-  let checkpoint = previous && previous.strategy === strategy ? previous : null;
+  // [PR-L6, 2026-10-19] a strategy a retry RESTARTS (claim.restartedFrom) begins a fresh conversation, never the one that ended the ladder:
+  // an unfilled role reported at S3 leaves an S3 conversation behind, and its retry must re-search (the part may exist now)
+  let checkpoint = previous && previous.strategy === strategy && !claim.restartedFrom ? previous : null;
   let block: BuildLoopBlock = { ...base, allowEmpty: false };
   if (strategy !== "S1-baseline") {
     // resume the seeded conversation this strategy began (its first message IS the seed; the store verified the record is this block's)
@@ -313,14 +352,14 @@ async function runDesignSlice(ctx: SliceContext): Promise<GenerationSliceReport>
       try {
         seeded = await withinBuildBoundary(windowDeadlineAt, ctx.supervisor.signal, (signal) => seedConversation({ strategy, base, learning: blockLearning(previous), catalog, seedLlm, provider: task.request.provider, signal, maxTurns }));
       } catch (error) {
-        if (error instanceof BuildBoundaryError && error.kind === "cancelled") return stopped(ctx, meter.peek(spendOf(NO_TURNS, seedLlm, coreLlm, catalog)));
+        if (error instanceof BuildBoundaryError && error.kind === "cancelled") return stopped(ctx, meter.peek(spendNow(NO_TURNS)));
         if (error instanceof BuildBoundaryError) { // the seeding outlived the window: try again next slice (nothing of it is lost: the facts are kept)
-          const usage = meter.peek(spendOf(NO_TURNS, seedLlm, coreLlm, catalog));
+          const usage = meter.peek(spendNow(NO_TURNS));
           return end(ctx, { usage, facts: catalog.takeDelta(), block: { status: "queued" }, schedule: [{ kind: "block", blockId }] }, "yielded", `seeding ${strategy} reached the slice window; it continues in the next slice`);
         }
         throw error;
       }
-      if (seeded.providerError) return endSeedProviderError(ctx, seeded.providerError, meter.peek(spendOf(NO_TURNS, seedLlm, coreLlm, catalog)), catalog, state);
+      if (seeded.providerError) return endSeedProviderError(ctx, seeded.providerError, meter.peek(spendNow(NO_TURNS)), catalog, state);
       block = seeded.block;
       maxTurns = Math.max(1, maxTurns - seedLlm.started);
     }
@@ -333,9 +372,10 @@ async function runDesignSlice(ctx: SliceContext): Promise<GenerationSliceReport>
     if (verdict === "fenced") throw new SliceFencedError();
     if (verdict === "cancel") { boundaryStop = "cancel"; return "yield"; }
     boundaries += 1;
-    const spend = spendOf(turn, seedLlm, coreLlm, catalog), usage = meter.peek(spend), factsDelta = catalog.takeDelta();
+    const spend = spendNow(turn), usage = meter.peek(spend), factsDelta = catalog.takeDelta();
     const milestones = pendingMilestones.splice(0);
-    const delta = { checkpoint: turn.checkpoint, block: { turnsUsed: state.turnsUsed + turn.turns, strategy, status: "designing" as const }, usage, ...(milestones.length ? { milestones } : {}) };
+    // [PR-L6, 2026-10-19] the turn's call is answered and its input is in `usage`: the reservation's in-flight input bound is cleared
+    const delta = { checkpoint: turn.checkpoint, block: { turnsUsed: state.turnsUsed + turn.turns, strategy, status: "designing" as const }, usage, ...(milestones.length ? { milestones } : {}), ...(metering.input ? { inFlightInput: 0 } : {}) };
     const committed = await withFactsFallback(ctx, factsDelta ? { facts: factsDelta } : {}, (attempt) => store.checkpointSlice(lease, boundaries, { ...delta, ...attempt }));
     if (!committed.ok) {
       catalog.restore(factsDelta);
@@ -345,6 +385,7 @@ async function runDesignSlice(ctx: SliceContext): Promise<GenerationSliceReport>
       throw new SliceCommitError(committed.code, committed.issue);
     }
     meter.mark(spend);
+    metering.committed(usage); // [PR-L6, 2026-10-19] the input this commit carried is no longer the in-flight record's
     await store.writeActivity(lease, turnLine(state.name, turn.checkpoint)).catch(() => undefined); // display only
     if (verdict === "yield") { boundaryStop = "yield"; return "yield"; }
     return undefined;
@@ -352,10 +393,10 @@ async function runDesignSlice(ctx: SliceContext): Promise<GenerationSliceReport>
   const identity = { taskId: lease.taskId, blockId, sliceId: lease.sliceId, attempt: lease.attempt, fence: lease.fence, strategy };
   const policy = { maxTurns, windowDeadlineAt, perCallMs: ctx.windows.perCallMs, minTurnStartMs: ctx.windows.minTurnStartMs };
   const outcome = strategy === "S1-baseline"
-    ? await designBlockSlice({ prompt: task.request.prompt, block: planned, checkpoint, identity, policy, provider: task.request.provider, signal: ctx.supervisor.signal, llm: coreLlm, catalog, now: ctx.clock, onTurn })
+    ? await designBlockSlice({ prompt, block: planned, checkpoint, identity, policy, provider: task.request.provider, signal: ctx.supervisor.signal, llm: coreLlm, catalog, now: ctx.clock, onTurn })
     : await runBlockSlice({ block, checkpoint, identity, policy, signal: ctx.supervisor.signal, provider: task.request.provider, llm: coreLlm, catalog, now: ctx.clock, onTurn });
 
-  const usage = meter.peek(spendOf(outcome, seedLlm, coreLlm, catalog));
+  const usage = meter.peek(spendNow(outcome));
   const factsDelta = catalog.takeDelta();
   const now = ctx.clock(), at = isoOf(now), turnsUsed = state.turnsUsed + outcome.turns;
   const withFacts = (payload: GenerationSliceEnd): GenerationSliceEnd => ({ ...payload, usage, ...(factsDelta ? { facts: factsDelta } : {}), milestones: [...pendingMilestones, ...(payload.milestones ?? [])] });
@@ -371,6 +412,30 @@ async function runDesignSlice(ctx: SliceContext): Promise<GenerationSliceReport>
     case "cancelled":
       return stopped(ctx, usage);
     case "yielded": {
+      // [PR-L6, 2026-10-19] item 8: the block reported a role the catalog cannot fill (backed by two recorded searches): below S3 it is
+      // re-searched catalog-guided (S3, the cache bypassed); from S3 on it waits for the part (S6, zero model calls) - never a guessed part
+      if (outcome.reason === "missing_part") {
+        history = outcome.turns > 0 ? historyWithSlice(history, strategy) : history;
+        const learning = blockLearning(outcome.checkpoint);
+        if (GENERATION_STRATEGIES.indexOf(strategy) < GENERATION_STRATEGIES.indexOf("S3-catalog-guided")) {
+          const closed = historyClosed(history, strategy, "stagnant");
+          const roles = learning.missingRoles.slice(0, 3).map((entry) => quotedQuery(entry.role)).join(", ") || "a role";
+          const changed = generationTaskEvent("strategy_changed", { at, phase: "designing", blockId, message: `Block "${state.name}" found no catalog part for ${roles}; re-searching the catalog with its own category names (S3-catalog-guided).`, data: { from: strategy, to: "S3-catalog-guided" } });
+          return end(ctx, withFacts({ block: { status: "queued", turnsUsed, strategy: "S3-catalog-guided", strategyHistory: closed, stagnantSlices: 0, lastProgressKey: null }, schedule: [{ kind: "block", blockId }], milestones: [changed] }), "strategy_changed", `${strategy} -> S3-catalog-guided (unfilled role reported)`);
+        }
+        return advanceStrategy(ctx, { state, strategy, history, lastKey, turnsUsed, learning, withFacts, cause: "stagnant", toMissingPart: true });
+      }
+      // [PR-L6, 2026-10-19] item 7: two consecutive turns repeated earlier work - the slice counts as stagnant at once; the ladder is unchanged
+      if (outcome.reason === "no_progress") {
+        history = historyWithSlice(history, strategy);
+        stagnantSlices += 1;
+        lastKey = outcome.progress.key;
+        if (stagnantSlices < ctx.windows.stagnantSlicesPerStrategy) {
+          const repeated = generationTaskEvent("slice_yielded", { at, phase: "designing", blockId, message: `Block "${state.name}": ${outcome.turns} turn(s) repeated earlier searches or submissions; the slice ended early (${stagnantSlices}/${ctx.windows.stagnantSlicesPerStrategy} without progress).`, data: { sliceKind: "block", turns: outcome.turns } });
+          return end(ctx, withFacts({ block: { status: "queued", turnsUsed, strategy, strategyHistory: history, stagnantSlices, lastProgressKey: lastKey }, schedule: [{ kind: "block", blockId }], milestones: [repeated] }), "yielded", `${outcome.turns} repeat turn(s) under ${strategy} (no new progress: ${stagnantSlices}/${ctx.windows.stagnantSlicesPerStrategy}); continued in the next slice`);
+        }
+        return advanceStrategy(ctx, { state, strategy, history, lastKey, turnsUsed, learning: blockLearning(outcome.checkpoint), withFacts, cause: "stagnant" });
+      }
       if (outcome.turns === 0 && outcome.reason !== "requested") {
         return end(ctx, withFacts({ block: { status: "queued", strategy }, schedule: [{ kind: "block", blockId }] }), "yielded", `${strategy}: the slice window left no room for a turn; continued in the next slice`);
       }
@@ -397,7 +462,8 @@ async function runDesignSlice(ctx: SliceContext): Promise<GenerationSliceReport>
       return end(ctx, withFacts({ block: { status: "queued", turnsUsed, strategy, strategyHistory: history }, schedule: [{ kind: "block", blockId, notBefore: wait.notBefore }], waitingReason: wait.waitingReason, milestones: [waiting] }), "waiting_provider", `waits for the provider (${outcome.reason}) until ${wait.notBefore}`);
     }
     case "provider_failed":
-      return endProviderFailure(ctx, new LLMProviderError(outcome.provider, outcome.reason), usage, catalog, state, { withFacts, turnsUsed, history: outcome.turns > 0 ? historyWithSlice(history, strategy) : history });
+      logInputViolation(ctx, metering.input, outcome.providerCode); // [PR-L6, 2026-10-19]
+      return endProviderFailure(ctx, new LLMProviderError(outcome.provider, outcome.reason, undefined, outcome.providerCode), usage, catalog, state, { withFacts, turnsUsed, history: outcome.turns > 0 ? historyWithSlice(history, strategy) : history });
     case "refused": {
       if (outcome.code === "loop_failed") {
         ctx.log(`block slice ${lease.sliceId}: the build loop failed (${cleanLine(outcome.error, 200)}); released for another attempt`);
@@ -440,8 +506,8 @@ async function endProviderFailure(
   ctx: SliceContext, error: LLMProviderError, usage: Partial<GenerationTaskUsage>, catalog: FactsCatalogPort, state: GenerationBlockState,
   extra: { withFacts: (payload: GenerationSliceEnd) => GenerationSliceEnd; turnsUsed: number; history: GenerationBlockState["strategyHistory"] } | null,
 ): Promise<GenerationSliceReport> {
-  const blocker = providerBlockerOf(error.reason);
-  ctx.log(`block slice ${ctx.lease.sliceId}: the provider refused (${error.reason}); block "${cleanLine(state.name, 80)}" waits (${blocker})`);
+  const blocker = providerBlockerOf(error.reason, error.providerCode); // [PR-L6, 2026-10-19] an input-admission refusal: the call was never sent
+  ctx.log(`block slice ${ctx.lease.sliceId}: the provider refused (${error.reason}${error.providerCode?.startsWith("sirkit_input_") ? `, ${error.providerCode}` : ""}); block "${cleanLine(state.name, 80)}" waits (${blocker})`);
   const payload: GenerationSliceEnd = { block: { status: "blocked", blocker, ...(extra ? { turnsUsed: extra.turnsUsed, strategyHistory: extra.history } : {}) } };
   if (extra) return end(ctx, extra.withFacts(payload), "blocked", `the provider refused (${error.reason}): ${blocker}`);
   const factsDelta = catalog.takeDelta();
@@ -454,21 +520,27 @@ async function endProviderFailure(
 async function advanceStrategy(ctx: SliceContext, input: {
   state: GenerationBlockState; strategy: GenerationStrategyId; history: GenerationBlockState["strategyHistory"]; lastKey: string | null; turnsUsed: number;
   learning: BlockLearning; withFacts: (payload: GenerationSliceEnd) => GenerationSliceEnd; cause: "stagnant" | "unrepresentable";
+  /** [PR-L6, 2026-10-19] item 8: a reported unfilled role at S3 or later goes straight to the missing-part rung */
+  toMissingPart?: boolean;
 }): Promise<GenerationSliceReport> {
   const { state, strategy } = input, blockId = ctx.lease.blockId!, at = isoOf(ctx.clock());
-  const next = nextStrategyOf(strategy);
+  const next = input.toMissingPart ? "S6-missing-part" : nextStrategyOf(strategy);
   if (next !== null && next !== "S6-missing-part") {
     const history = historyClosed(input.history, strategy, "stagnant");
     const changed = generationTaskEvent("strategy_changed", { at, phase: "designing", blockId, message: `Block "${state.name}" stopped making progress under ${strategy}${input.cause === "unrepresentable" ? " (its conversation could not be stored)" : ""}; trying ${next}.`, data: { from: strategy, to: next } });
     return end(ctx, input.withFacts({ block: { status: "queued", turnsUsed: input.turnsUsed, strategy: next, strategyHistory: history, stagnantSlices: 0, lastProgressKey: null }, schedule: [{ kind: "block", blockId }], milestones: [changed] }), "strategy_changed", `${strategy} -> ${next}`);
   }
-  const missing = input.learning.emptySearches;
+  // [PR-L6, 2026-10-19] item 8: the evidence is the roles the block reported (each backed by two recorded searches), else its empty searches;
+  // the roles ride the block (`missing`), the blocker's evidence and the snapshot
+  const missing: GenerationMissingRole[] = input.learning.missingRoles.length
+    ? input.learning.missingRoles.map((entry) => ({ role: entry.role, query: entry.query, category: entry.category }))
+    : input.learning.emptySearches.map((miss) => ({ role: miss.query, query: miss.query, category: miss.category }));
   if (missing.length > 0) {
     const history = historyClosed(strategy === "S6-missing-part" ? input.history : historyClosed(input.history, strategy, "stagnant"), "S6-missing-part", "exhausted");
-    const names = missing.slice(0, 3).map((miss) => `${quotedQuery(miss.query)}${miss.category ? ` (${cleanLine(miss.category, 40)})` : ""}`).join(", ");
+    const names = missing.slice(0, 3).map((miss) => `${quotedQuery(input.learning.missingRoles.length ? miss.role : miss.query)}${miss.category ? ` (${cleanLine(miss.category, 40)})` : ""}`).join(", ");
     const changed = generationTaskEvent("strategy_changed", { at, phase: "designing", blockId, message: `Block "${state.name}" needs a part the catalog search did not find; it waits for that part instead of guessing one.`, data: { from: strategy, to: "S6-missing-part" } });
     const waiting = generationTaskEvent("waiting_resource", { at, phase: "designing", blockId, message: `Block "${state.name}": no catalog part for ${names}. Add or approve the part, then retry the block.`, data: { code: "missing_part" } });
-    return end(ctx, input.withFacts({ block: { status: "blocked", blocker: "missing_part", turnsUsed: input.turnsUsed, strategy: "S6-missing-part", strategyHistory: history, stagnantSlices: 0, lastProgressKey: input.lastKey }, milestones: [changed, waiting] }), "blocked", `missing part: ${names}`);
+    return end(ctx, input.withFacts({ block: { status: "blocked", blocker: "missing_part", turnsUsed: input.turnsUsed, strategy: "S6-missing-part", strategyHistory: history, stagnantSlices: 0, lastProgressKey: input.lastKey, missing: missing.slice(0, GENERATION_TASK_BOUNDS.missingRoles) }, milestones: [changed, waiting] }), "blocked", `missing part: ${names}`);
   }
   const history = historyClosed(input.history, strategy, "exhausted");
   const waiting = generationTaskEvent("waiting_resource", { at, phase: "designing", blockId, message: `Block "${state.name}" stopped making progress under every strategy; change the request or retry the block.`, data: { code: "no_progress" } });
@@ -485,7 +557,10 @@ async function seedConversation(input: {
   const addSeeds = (parts: readonly AiPartResult[] | readonly GenerationPartFacts[]) => { for (const part of parts) { const facts = normalizePartFacts(part as GenerationPartFacts); if (!seeds.has(facts.partId)) seeds.set(facts.partId, facts); } };
   const guidance: string[] = [];
   if (strategy === "S3-catalog-guided") {
-    const queries = (learning.emptySearches.length ? learning.emptySearches : learning.searches.slice(-4)).slice(0, 4);
+    // [PR-L6, 2026-10-19] item 8: a reported unfilled role's searches are re-run first (cache bypassed: a part added since is found)
+    const reported = learning.missingRoles.flatMap((entry) => entry.queries);
+    const earlier = learning.emptySearches.length ? learning.emptySearches : learning.searches.slice(-4);
+    const queries = [...reported, ...earlier].filter((query, index, all) => all.findIndex((other) => other.query.toLowerCase() === query.query.toLowerCase() && other.category === query.category) === index).slice(0, 4);
     guidance.push(`The catalog's category names (use one of them exactly as search_parts' category, or leave the category out): ${MAIN_CATEGORIES.join(", ")}.`);
     if (queries.length) guidance.push("A catalog-guided re-search of this block's earlier queries (fresh, with the catalog's own category names) found:");
     catalog.bypassCache = true;
@@ -592,10 +667,13 @@ async function mergeSaved(ctx: SliceContext, savedBlocks: NonNullable<Generation
   }
   if (stale.size) return { kind: "stale-facts" as const, blocks: [...stale] };
   const budget = (): BuildBudgetReport => ({ iterationCap: task.allowance.unit.modelCalls * task.allowance.units, iterationsUsed: task.usage.modelCalls, deadlineMs: task.allowance.unit.wallClockMs * task.allowance.units, elapsedMs: Math.max(0, ctx.clock() - Date.parse(task.createdAt)), concurrencyCap: BUILD_BUDGET.concurrencyCap });
+  // [PR-L6, 2026-10-19] OD-253 item 3 and item 8: the plan's assumptions and coverage, and the roles an omitted block waited for, in the explanation
+  const unfilledRoles = task.plan!.blocks.flatMap((planned) => { const block = task.blocks[planned.blockId]!; return block.status === "omitted" ? (block.missing ?? []).map((entry) => `${block.name}: ${entry.role}`) : []; });
   const merged = await mergeAndValidate({
     designed: checkpoints.map((entry) => ({ name: entry.name, netlist: entry.checkpoint.result!.netlist, sharedNets: entry.sharedNets })),
     omittedBlocks: omitted, rationale: task.plan!.rationale, planner: task.plan!.planner, budget, emptyBlocks: "refuse",
     partsByIds: (ids) => ctx.ports.catalog.partsByIds(ids),
+    assumptions: task.plan!.assumptions, coverage: task.plan!.coverage ?? [], unfilledRoles,
   });
   if (merged.kind === "refused") return { kind: "refused" as const, error: merged.error };
   const result = buildGenerationTaskResult({

@@ -110,7 +110,7 @@ describe("[PR-L L.6] searchPartsForAI remembers a non-transient rerank refusal",
     const first = await search(memo);
     expect(harness.rerank).toHaveBeenCalledTimes(1);
     expect(harness.rerank.mock.calls[0]?.[0]).toMatchObject({ model: "claude-haiku-4-5", max_tokens: 256 }); // the provider and model are unchanged
-    expect(first.outcome).toEqual({ category: { status: "none", requested: null, applied: null, candidates: [], note: null }, ranking: "fused", rerank: { state: "refused", reason: "insufficient_quota" } });
+    expect(first.outcome).toEqual({ category: { status: "none", requested: null, applied: null, candidates: [], note: null }, ranking: "fused", rerank: { state: "refused", reason: "insufficient_quota" }, embedding: "called" }); // [PR-L6, 2026-10-19] pin move: + embedding "called" - the outcome now says how the query embedding was obtained (L.6 part 2 item 1; l6-embedding-cache)
     expect(first.ids).toEqual(ids);
     for (let index = 0; index < 5; index++) {
       clock += 60_000;

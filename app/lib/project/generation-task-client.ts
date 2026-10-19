@@ -43,7 +43,8 @@ export interface GenerationTaskSnapshotView {
   updatedAt: string;
   serverNow: string;
   liveness: { state: GenerationTaskClientLiveness; since: string | null; retryAt: string | null };
-  plan: { planner: string; rationale: string; assumptions: string[]; blocks: Array<{ blockId: string; name: string; status: string; strategy: string; turnsUsed: number; blocker: string | null }> } | null;
+  /** [PR-L6, 2026-10-19] `coverage` (the planner's requested functions) and a block's `missing` roles (it waits for those parts) only when present */
+  plan: { planner: string; rationale: string; assumptions: string[]; coverage?: string[]; blocks: Array<{ blockId: string; name: string; status: string; strategy: string; turnsUsed: number; blocker: string | null; missing?: Array<{ role: string; query: string; category: string | null }> }> } | null;
   blocker: { code: string; message: string; resolution: string; blockId: string | null } | null;
   failure: { reason: string; at: string } | null;
   usage: { slices: number; attempts: number; modelCalls: number; uncertainModelCalls: number; inputTokens: number; outputTokens: number; catalogSearches: number; cacheHits: number };
@@ -74,6 +75,12 @@ export interface GenerationTaskFailure { ok: false; status: number; code: string
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const str = (value: unknown, max = 4_000): value is string => typeof value === "string" && value.length <= max;
 const num = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
+/** [PR-L6, 2026-10-19] A block's unfilled roles as the snapshot lists them (at most 3, bounded strings), or nothing. */
+function missingRolesOf(value: unknown): { missing?: Array<{ role: string; query: string; category: string | null }> } {
+  if (!Array.isArray(value)) return {};
+  const missing = value.filter(isRecord).filter((entry) => str(entry.role, 200)).slice(0, 3).map((entry) => ({ role: entry.role as string, query: str(entry.query, 400) ? (entry.query as string) : "", category: str(entry.category, 200) ? (entry.category as string) : null }));
+  return missing.length ? { missing } : {};
+}
 const strOrNull = (value: unknown): string | null => (typeof value === "string" ? value : null);
 
 /** The snapshot, or null when the value is not the snapshot shape (never trusted half-read). */
@@ -94,7 +101,8 @@ export function readGenerationTaskSnapshot(value: unknown): GenerationTaskSnapsh
       ? {
         planner: str(plan.planner, 40) ? plan.planner : "", rationale: str(plan.rationale, 1_000) ? plan.rationale : "",
         assumptions: Array.isArray(plan.assumptions) ? plan.assumptions.filter((entry): entry is string => str(entry, 400)).slice(0, 8) : [],
-        blocks: plan.blocks.filter(isRecord).slice(0, 8).map((block) => ({ blockId: str(block.blockId, 8) ? block.blockId : "", name: str(block.name, 200) ? block.name : "", status: str(block.status, 40) ? block.status : "", strategy: str(block.strategy, 40) ? block.strategy : "", turnsUsed: num(block.turnsUsed) ? block.turnsUsed : 0, blocker: strOrNull(block.blocker) })),
+        ...(Array.isArray(plan.coverage) && plan.coverage.some((entry) => str(entry, 400)) ? { coverage: plan.coverage.filter((entry): entry is string => str(entry, 400)).slice(0, 8) } : {}), // [PR-L6, 2026-10-19]
+        blocks: plan.blocks.filter(isRecord).slice(0, 8).map((block) => ({ blockId: str(block.blockId, 8) ? block.blockId : "", name: str(block.name, 200) ? block.name : "", status: str(block.status, 40) ? block.status : "", strategy: str(block.strategy, 40) ? block.strategy : "", turnsUsed: num(block.turnsUsed) ? block.turnsUsed : 0, blocker: strOrNull(block.blocker), ...missingRolesOf(block.missing) })),
       }
       : null,
     blocker: isRecord(value.blocker) && str(value.blocker.code, 40) && str(value.blocker.message, 600) && str(value.blocker.resolution, 600) ? { code: value.blocker.code, message: value.blocker.message, resolution: value.blocker.resolution, blockId: strOrNull(value.blocker.blockId) } : null,

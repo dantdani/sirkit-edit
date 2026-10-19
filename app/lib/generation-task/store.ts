@@ -35,11 +35,11 @@ import type { BuildPlannerStatus } from "../schematic/build-result";
 import { assertBuildLoopCheckpoint, buildLoopCheckpointIssue, type BuildLoopCheckpoint } from "./checkpoint";
 import {
   GENERATION_BLOCKER_TEXT, GENERATION_SLICE_CONTRACT, GENERATION_SLICE_EVENT, GENERATION_SLICE_POLICY, GENERATION_SLICE_TOPIC, GENERATION_TASK_AGGREGATES, GENERATION_TASK_ALLOWANCE_UNIT, GENERATION_TASK_BOUNDS,
-  GENERATION_TASK_INDEX_KEY, GENERATION_TASK_SCHEMA, GENERATION_TASK_SCOPE_SUFFIX, GENERATION_TASK_START_SCOPE_SUFFIX, GENERATION_USAGE_KEYS,
+  GENERATION_TASK_INDEX_KEY, GENERATION_TASK_SCHEMA, GENERATION_TASK_SCOPE_SUFFIX, GENERATION_TASK_START_SCOPE_SUFFIX, GENERATION_USAGE_KEYS, GENERATION_OPTIONAL_USAGE_KEYS,
   applyGenerationFactsDelta, assertGenerationTaskHead, deriveGenerationTaskState, emptyGenerationTaskIndex, generationActivityAggregateKey, generationAllowanceRefusal, generationBlockAggregateKey,
   generationBlockTurnsPerSlice, generationIndexWith, generationPlanDigest, generationRequestDigest, generationReservationFor, generationSliceId, generationTaskFactsIssue, generationTaskHeadIssue,
   generationTaskId, generationTaskIndexIssue, generationTaskResultIssue, generationTaskTransitionIssue, hasGenerationOwner, isGenerationEditorRole, nextGenerationWork,
-  type GenerationAllowanceUnit, type GenerationBlockState, type GenerationControlStamp, type GenerationFactsDelta, type GenerationPendingSlice, type GenerationReservation, type GenerationTaskFacts,
+  type GenerationAllowanceUnit, type GenerationBlockState, type GenerationControlStamp, type GenerationFactsDelta, type GenerationMissingRole, type GenerationPendingSlice, type GenerationReservation, type GenerationTaskFacts,
   type GenerationTaskHead, type GenerationTaskIndex, type GenerationTaskResultPayload, type GenerationTaskUsage, type GenerationTransitionActor, type GenerationTransitionAttestation,
 } from "./contracts";
 import { appendGenerationTaskActivity, appendGenerationTaskEvents, generationTaskActivityIssue, generationTaskEvent, generationTaskEventsPage, type GenerationTaskActivity, type GenerationTaskEventDraft, type GenerationTaskEventsPage } from "./events";
@@ -123,6 +123,8 @@ export type GenerationCommitOutcome =
 export interface GenerationBlockPatch {
   status?: GenerationBlockState["status"]; strategy?: GenerationBlockState["strategy"]; strategyHistory?: GenerationBlockState["strategyHistory"]; turnsUsed?: number;
   stagnantSlices?: number; lastProgressKey?: string | null; blocker?: GenerationBlockerCode | null;
+  /** [PR-L6, 2026-10-19] the roles a missing_part block waits for (null or [] clears them) */
+  missing?: readonly GenerationMissingRole[] | null;
 }
 export interface GenerationSliceDelta {
   checkpoint?: BuildLoopCheckpoint;
@@ -131,8 +133,10 @@ export interface GenerationSliceDelta {
   /** additive counters of this attempt */
   usage?: Partial<GenerationTaskUsage>;
   milestones?: readonly GenerationTaskEventDraft[];
+  /** [PR-L6, 2026-10-19] the input bound of this attempt's call in flight (0 once the calls so far are reported in `usage`) */
+  inFlightInput?: number;
 }
-export interface GenerationPlanInput { planner: BuildPlannerStatus; rationale: string; assumptions: readonly string[]; blocks: ReadonlyArray<{ name: string; brief: string; sharedNets: readonly string[] }> }
+export interface GenerationPlanInput { planner: BuildPlannerStatus; rationale: string; assumptions: readonly string[]; coverage?: readonly string[]; blocks: ReadonlyArray<{ name: string; brief: string; sharedNets: readonly string[] }> }
 export interface GenerationSliceEnd extends GenerationSliceDelta {
   /** the plan slice's plan (once) */
   plan?: GenerationPlanInput;
@@ -169,8 +173,10 @@ const phaseOf = (kind: GenerationSliceKind): GenerationTaskPhase => (kind === "p
 const sameScope = (a: DurableWorkflowScope, b: DurableWorkflowScope) => a.tenantId === b.tenantId && a.projectId === b.projectId && a.branchId === b.branchId;
 function addUsage(usage: GenerationTaskUsage, delta: Partial<GenerationTaskUsage> | undefined): void {
   for (const [key, value] of Object.entries(delta ?? {})) {
-    if (!(GENERATION_USAGE_KEYS as readonly string[]).includes(key) || typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new GenerationTaskContractError("GENERATION_TASK_USAGE_INVALID", `usage.${key.length > 40 ? "[key]" : key}: a nonnegative integer`);
-    usage[key as keyof GenerationTaskUsage] += value;
+    const optional = (GENERATION_OPTIONAL_USAGE_KEYS as readonly string[]).includes(key); // [PR-L6, 2026-10-19] carried only once non-zero
+    if ((!(GENERATION_USAGE_KEYS as readonly string[]).includes(key) && !optional) || typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new GenerationTaskContractError("GENERATION_TASK_USAGE_INVALID", `usage.${key.length > 40 ? "[key]" : key}: a nonnegative integer`);
+    if (optional && value === 0) continue;
+    usage[key as keyof GenerationTaskUsage] = (usage[key as keyof GenerationTaskUsage] ?? 0) + value;
   }
 }
 /** The repository's record id for an operation (both repositories derive it identically); checked again after the commit. */
@@ -188,7 +194,15 @@ function foldReservations(head: GenerationTaskHead): void {
     const [folded] = head.reservations.splice(index, 1);
     head.usage.uncertainModelCalls += folded!.modelCalls;
     head.usage.uncertainOutputTokens += folded!.outputTokens;
+    if (folded!.inputTokens) head.usage.uncertainInputTokens = (head.usage.uncertainInputTokens ?? 0) + folded!.inputTokens; // [PR-L6, 2026-10-19] the in-flight input bound stays charged
   }
+}
+/** [PR-L6, 2026-10-19] Record the input bound of this attempt's call in flight on its HELD reservation (replace; 0 removes the field). */
+function setInFlightInput(head: GenerationTaskHead, sliceIdValue: string, attempt: number, bound: number | undefined): void {
+  if (bound === undefined) return;
+  const entry = head.reservations.find((reservation) => reservation.sliceId === sliceIdValue && reservation.attempt === attempt && reservation.state === "held");
+  if (!entry) return;
+  if (bound > 0) entry.inputTokens = bound; else delete entry.inputTokens;
 }
 /** An attempt whose completion is unknown keeps its reservation, charged at worst case. */
 function markUncertain(head: GenerationTaskHead, sliceIdValue: string, attempt: number): void {
@@ -217,7 +231,17 @@ function settleBlocker(head: GenerationTaskHead, explicit: GenerationBlockerCode
   if (!cause) return;
   const code: GenerationBlockerCode = saved > 0 && blockedCount > 0 && cause !== "partial_available" ? "partial_available" : cause;
   const text = GENERATION_BLOCKER_TEXT[code];
-  head.blocker = { code, message: text.message, resolution: text.resolution, blockId: blocked?.blockId ?? null, evidence: { savedBlocks: saved, blockedBlocks: blockedCount, cause } };
+  // [PR-L6, 2026-10-19] item 8: the roles the blocked block waits for ride the blocker's evidence (missing1..3, bounded lines)
+  const missing = Object.fromEntries((blocked?.missing ?? []).slice(0, GENERATION_TASK_BOUNDS.missingRoles).map((entry, index) => [`missing${index + 1}`, cleanLine(`${entry.role}: ${entry.query}${entry.category ? ` (${entry.category})` : ""}`, 120) || entry.role.slice(0, 120)]));
+  head.blocker = { code, message: text.message, resolution: text.resolution, blockId: blocked?.blockId ?? null, evidence: { savedBlocks: saved, blockedBlocks: blockedCount, cause, ...missing } };
+}
+/** [PR-L6, 2026-10-19] A block's unfilled roles, bounded and redacted as stored (at most 3; empty clears). */
+function boundedMissing(missing: readonly GenerationMissingRole[] | null | undefined): GenerationMissingRole[] {
+  return (missing ?? []).slice(0, GENERATION_TASK_BOUNDS.missingRoles).map((entry) => ({
+    role: cleanLine(String(entry.role ?? ""), GENERATION_TASK_BOUNDS.missingRoleChars) || "unnamed role",
+    query: cleanLine(String(entry.query ?? ""), GENERATION_TASK_BOUNDS.queryChars),
+    category: entry.category ? cleanLine(String(entry.category), 128) || null : null,
+  }));
 }
 
 interface HeadChange {
@@ -445,7 +469,7 @@ export class GenerationTaskStore {
       next.nextSliceSeq += 1;
       const notBefore = entry.notBefore && Date.parse(entry.notBefore) > Date.parse(nowIso) ? isoOf(Date.parse(entry.notBefore)) : nowIso;
       next.pending[id] = { kind: entry.kind, blockId: entry.blockId, notBefore, state: "queued", owner: null };
-      if (entry.kind === "block" && entry.blockId) { const block = next.blocks[entry.blockId]; if (block && (block.status === "blocked" || block.status === "needs-revalidation")) { block.status = "queued"; block.blocker = null; } }
+      if (entry.kind === "block" && entry.blockId) { const block = next.blocks[entry.blockId]; if (block && (block.status === "blocked" || block.status === "needs-revalidation")) { block.status = "queued"; block.blocker = null; delete block.missing; } } // [PR-L6, 2026-10-19] a re-queued block no longer waits for its roles (the S3 re-search reads them from its conversation)
       outbox.push(this.sliceEffect(next, id, entry.kind, entry.blockId, notBefore));
       scheduled.push(id);
     }
@@ -597,12 +621,12 @@ export class GenerationTaskStore {
             if (input.action === "retry-block") {
               const block = input.blockId ? next.blocks[input.blockId] : undefined;
               if (!block || block.status === "saved" || block.status === "omitted") return refuse("GENERATION_TASK_STATE_CONFLICT", "retry-block: a planned block that is not saved");
-              block.status = "queued"; block.blocker = null; block.stagnantSlices = 0;
+              block.status = "queued"; block.blocker = null; block.stagnantSlices = 0; delete block.missing;
               work = [{ kind: "block", blockId: block.blockId }];
             } else {
               const blocks = Object.values(next.blocks).filter((block): block is GenerationBlockState => Boolean(block));
               if (!blocks.some((block) => block.status === "saved")) return refuse("GENERATION_TASK_STATE_CONFLICT", "review-partial: no saved block");
-              for (const block of blocks) if (block.status !== "saved") { block.status = "omitted"; block.blocker = null; }
+              for (const block of blocks) if (block.status !== "saved") { block.status = "omitted"; block.blocker = null; } // [PR-L6, 2026-10-19] an omitted block keeps its `missing` roles: the partial result names them
               work = [{ kind: "merge", blockId: null }];
             }
             next.blocker = null;
@@ -644,10 +668,11 @@ export class GenerationTaskStore {
 
   // ── slices ──
 
-  /** Claim up to `limit` slices of any scope (the caller's FREE capacity), then claim each slice's head. */
-  async claimSlices(input: { workerId: string; limit: number; revalidate: GenerationSliceRevalidator }): Promise<GenerationClaimOutcome[]> {
+  /** Claim up to `limit` slices of any scope - or, with `scope` ([PR-L6, 2026-10-19] the worker's `--scope`), of that scope only - (the
+   *  caller's FREE capacity), then claim each slice's head. */
+  async claimSlices(input: { workerId: string; limit: number; revalidate: GenerationSliceRevalidator; scope?: DurableWorkflowScope }): Promise<GenerationClaimOutcome[]> {
     const nowMs = this.clock();
-    const events = await this.repository.claimOutbox({ workerId: input.workerId, now: isoOf(nowMs), leaseUntil: isoOf(nowMs + this.leaseMs), limit: input.limit, topics: [GENERATION_SLICE_TOPIC] });
+    const events = await this.repository.claimOutbox({ workerId: input.workerId, now: isoOf(nowMs), leaseUntil: isoOf(nowMs + this.leaseMs), limit: input.limit, topics: [GENERATION_SLICE_TOPIC], ...(input.scope ? { scope: canonicalDurableScope(input.scope) } : {}) });
     const outcomes: GenerationClaimOutcome[] = [];
     for (const event of events) outcomes.push(await this.claimOne(event, input.workerId, input.revalidate));
     return outcomes;
@@ -812,6 +837,7 @@ export class GenerationTaskStore {
       if (patch.stagnantSlices !== undefined) block.stagnantSlices = patch.stagnantSlices;
       if (patch.lastProgressKey !== undefined) block.lastProgressKey = patch.lastProgressKey;
       if (patch.blocker !== undefined) block.blocker = patch.blocker;
+      if (patch.missing !== undefined) { const missing = boundedMissing(patch.missing); if (missing.length) block.missing = missing; else delete block.missing; } // [PR-L6, 2026-10-19]
       if (artifact) block.artifactRef = { ...artifact };
     }
     addUsage(next.usage, delta.usage);
@@ -850,8 +876,26 @@ export class GenerationTaskStore {
         const refusal = this.applyDelta(next, lease, delta, artifact);
         if (refusal) return refusal;
         consumeReservation(next, lease.sliceId, lease.attempt, delta.usage);
+        setInFlightInput(next, lease.sliceId, lease.attempt, delta.inFlightInput); // [PR-L6, 2026-10-19]
         const extraOperations = delta.facts ? [await this.factsOperation(lease.scope, current, next, delta.facts)] : [];
         return { next, extraOperations };
+      },
+    });
+  }
+
+  /** [PR-L6, 2026-10-19] Pre-call input admission, made durable (OD-253 item 6): BEFORE a call is sent, its input bound is recorded on the
+   *  attempt's held reservation by a fenced head commit, so a process that dies inside the call leaves it charged (the next claimer marks
+   *  the reservation uncertain, and every admission after it counts it). A fenced or cancelled slice writes nothing and must not send. */
+  async admitCall(lease: GenerationSliceLease, seq: number, bound: number): Promise<GenerationCommitOutcome> {
+    if (!Number.isSafeInteger(bound) || bound < 0) return refuse("GENERATION_SLICE_END_INVALID", "admit: an input bound is a nonnegative integer");
+    return this.commitHead({
+      scope: lease.scope, taskId: lease.taskId, key: `${lease.sliceId}:a${lease.attempt}:admit:${seq}`, actor: "worker", fence: lease,
+      mutate: (current) => {
+        const next = clone(current);
+        if (!next.reservations.some((entry) => entry.sliceId === lease.sliceId && entry.attempt === lease.attempt && entry.state === "held")) return refuse("GENERATION_SLICE_END_INVALID", "admit: the attempt holds no reservation");
+        setInFlightInput(next, lease.sliceId, lease.attempt, bound);
+        next.updatedAt = this.nowIso();
+        return { next };
       },
     });
   }
@@ -886,7 +930,8 @@ export class GenerationTaskStore {
           const planned = end.plan.planner.state === "planned";
           if (end.plan.blocks.length < 1 || end.plan.blocks.length > GENERATION_TASK_BOUNDS.blocks || (!planned && end.plan.blocks.length !== 1)) return refuse("GENERATION_SLICE_END_INVALID", "plan: 1..8 planned blocks, or exactly the main block");
           const blocks = end.plan.blocks.map((block, index) => ({ blockId: (planned ? `b${index + 1}` : "main") as GenerationBlockId, name: cleanLine(block.name, GENERATION_TASK_BOUNDS.blockNameChars) || `Block ${index + 1}`, brief: cleanLine(block.brief, GENERATION_TASK_BOUNDS.blockBriefChars), sharedNets: block.sharedNets.slice(0, GENERATION_TASK_BOUNDS.sharedNets).map((net) => cleanLine(net, GENERATION_TASK_BOUNDS.netNameChars)).filter(Boolean) }));
-          const body = { planner: clone(end.plan.planner), rationale: cleanLine(end.plan.rationale, GENERATION_TASK_BOUNDS.rationaleChars), assumptions: end.plan.assumptions.slice(0, GENERATION_TASK_BOUNDS.assumptions).map((text) => cleanLine(text, GENERATION_TASK_BOUNDS.assumptionChars)).filter(Boolean), blocks };
+          const coverage = (end.plan.coverage ?? []).slice(0, GENERATION_TASK_BOUNDS.coverage).map((text) => cleanLine(text, GENERATION_TASK_BOUNDS.coverageChars)).filter(Boolean); // [PR-L6, 2026-10-19] OD-253 item 3: stored only when the planner listed any
+          const body = { planner: clone(end.plan.planner), rationale: cleanLine(end.plan.rationale, GENERATION_TASK_BOUNDS.rationaleChars), assumptions: end.plan.assumptions.slice(0, GENERATION_TASK_BOUNDS.assumptions).map((text) => cleanLine(text, GENERATION_TASK_BOUNDS.assumptionChars)).filter(Boolean), ...(coverage.length ? { coverage } : {}), blocks };
           next.plan = { planDigest: generationPlanDigest(body), ...body };
           for (const block of blocks) next.blocks[block.blockId] = newBlockState(block.blockId, block.name, block.brief, [...block.sharedNets]);
         }

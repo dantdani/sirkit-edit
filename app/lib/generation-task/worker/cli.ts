@@ -3,7 +3,7 @@
  * before anything loads the environment or connects (the `scripts/db-migrate.ts` order). Pure: no environment, no I/O; an unknown or
  * malformed flag refuses instead of falling through to a run.
  */
-import { GENERATION_SLICE_POLICY } from "../contracts";
+import { GENERATION_SLICE_POLICY, type GenerationTaskScope } from "../contracts";
 
 export interface GenerationWorkerArguments {
   /** one tick, settle what it started, exit (tests, cron-style supervision) */
@@ -22,6 +22,8 @@ export interface GenerationWorkerArguments {
   /** how long running slices may take to reach a boundary after a shutdown signal */
   graceMs: number;
   help: boolean;
+  /** [PR-L6, 2026-10-19] OD-253 item 6: claim only this scope's slices (generation and component resolution), or null for every scope */
+  scope: GenerationTaskScope | null;
 }
 
 export const GENERATION_WORKER_USAGE = [
@@ -34,11 +36,12 @@ export const GENERATION_WORKER_USAGE = [
   "  --transport pump --origin <url>   the HTTP pump: POST <url>/api/generation-worker with SIRKIT_WORKFLOW_WORKER_SECRET (the fixture runtime needs it)",
   "  --grace-ms <ms>        on SIGINT/SIGTERM, how long slices may take to reach a turn boundary (default 10000)",
   "  --no-env-file          do not read .env.local",
+  "  --scope <tenant>/<project>/<branch>   claim only this project branch's slices (both topics; direct transport only)",
   "Stop with Ctrl+C (SIGINT) or SIGTERM: running slices yield at a turn boundary, the rest are released for another worker.",
 ].join("\n");
 
 export function parseGenerationWorkerArguments(argv: readonly string[]): { ok: true; args: GenerationWorkerArguments } | { ok: false; message: string } {
-  const args: GenerationWorkerArguments = { once: false, concurrency: GENERATION_SLICE_POLICY.workerConcurrency, healthPort: null, workerId: null, transport: "direct", origin: null, envFile: true, graceMs: 10_000, help: false };
+  const args: GenerationWorkerArguments = { once: false, concurrency: GENERATION_SLICE_POLICY.workerConcurrency, healthPort: null, workerId: null, transport: "direct", origin: null, envFile: true, graceMs: 10_000, help: false, scope: null };
   const integer = (value: string | undefined, min: number, max: number): number | null => (value !== undefined && /^\d{1,7}$/.test(value) && Number(value) >= min && Number(value) <= max ? Number(value) : null);
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index]!;
@@ -53,10 +56,12 @@ export function parseGenerationWorkerArguments(argv: readonly string[]): { ok: t
       case "--worker-id": { const id = value(); if (!id || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id)) return { ok: false, message: "--worker-id takes 1-128 characters of [A-Za-z0-9._:-]" }; args.workerId = id; break; }
       case "--transport": { const mode = value(); if (mode !== "direct" && mode !== "pump") return { ok: false, message: "--transport takes direct or pump" }; args.transport = mode; break; }
       case "--origin": { const origin = value(); try { const url = new URL(origin ?? ""); if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("protocol"); args.origin = url.origin; } catch { return { ok: false, message: "--origin takes an http(s) origin" }; } break; }
+      case "--scope": { const scope = parseWorkerScope(value()); if (!scope) return { ok: false, message: "--scope takes <tenant>/<project>/<branch> (each a non-empty id without control characters; the branch may contain /)" }; args.scope = scope; break; }
       default: return { ok: false, message: `unknown argument ${JSON.stringify(flag.slice(0, 40))}` };
     }
   }
   if (args.transport === "pump" && !args.origin) return { ok: false, message: "--transport pump needs --origin <url>" };
+  if (args.transport === "pump" && args.scope) return { ok: false, message: "--scope applies to the direct transport only (the pump's server claims for itself)" }; // [PR-L6, 2026-10-19] never a silently ignored bound
   return { ok: true, args };
 }
 
@@ -64,4 +69,15 @@ export function parseGenerationWorkerArguments(argv: readonly string[]): { ok: t
 export function defaultGenerationWorkerId(hostname: string, pid: number): string {
   const host = hostname.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "").slice(0, 80) || "host";
   return `generation-worker-${host}-${pid}`;
+}
+
+/** [PR-L6, 2026-10-19] `<tenant>/<project>/<branch>`: the first two segments name the tenant and the project, the rest is the branch (a
+ *  branch name may contain `/`); each a canonical id (NFC, trimmed, 1..512 characters, no control character), else null. */
+export function parseWorkerScope(raw: string | undefined): GenerationTaskScope | null {
+  if (typeof raw !== "string") return null;
+  const first = raw.indexOf("/"), second = first < 0 ? -1 : raw.indexOf("/", first + 1);
+  if (first < 0 || second < 0) return null;
+  const [tenantId, projectId, branchId] = [raw.slice(0, first), raw.slice(first + 1, second), raw.slice(second + 1)];
+  const canonical = (value: string): boolean => value.length >= 1 && value.length <= 512 && value === value.normalize("NFC").trim() && !/[\p{Cc}]/u.test(value);
+  return canonical(tenantId) && canonical(projectId) && canonical(branchId) ? { tenantId, projectId, branchId } : null;
 }

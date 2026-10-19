@@ -30,6 +30,11 @@ const BLOCK_STATUS_TEXT: Readonly<Record<string, string>> = Object.freeze({ queu
 
 export function GenerationTaskStatus({ view, onAction, onStartAgain, busy = false }: GenerationTaskStatusProps) {
   const blocks = view.plan?.blocks ?? [];
+  // [PR-L6, 2026-10-19] OD-253 items 2-3: the planner's disclosed assumptions and requested coverage; L.6 part 2 item 8: the parts a
+  // blocked block waits for (its actions stay the listed ones: Retry block, Review the saved blocks)
+  const assumptions = view.plan?.assumptions ?? [];
+  const coverage = view.plan?.coverage ?? [];
+  const waiting = blocks.filter((block) => (block.missing?.length ?? 0) > 0 && block.status !== "saved");
   const latest = view.activity.at(-1)?.text ?? null;
   const actions = BUTTON_ACTIONS.filter((action) => view.actions.includes(action));
   const retryable = view.actions.includes("retry-block") ? blocks.filter((block) => view.retryBlocks.includes(block.blockId)) : [];
@@ -45,6 +50,27 @@ export function GenerationTaskStatus({ view, onAction, onStartAgain, busy = fals
             </li>
           ))}
         </ul>
+      ) : null}
+      {waiting.map((block) => (
+        <p key={`missing-${block.blockId}`} className="text-[10px] text-amber-300" data-testid={`generation-task-missing-${block.blockId}`}>
+          Needs a part: {(block.missing ?? []).map((entry) => entry.role).join(", ")} ({block.name})
+        </p>
+      ))}
+      {assumptions.length > 0 ? (
+        <div className="text-[10px] text-zinc-400">
+          <p className="text-zinc-500">Assumptions:</p>
+          <ul className="list-disc space-y-0.5 pl-4" aria-label="Design assumptions" data-testid="generation-task-assumptions">
+            {assumptions.map((assumption, index) => <li key={`assumption-${index}`}>{assumption}</li>)}
+          </ul>
+        </div>
+      ) : null}
+      {coverage.length > 0 ? (
+        <div className="text-[10px] text-zinc-400">
+          <p className="text-zinc-500">Requested coverage:</p>
+          <ul className="list-disc space-y-0.5 pl-4" aria-label="Requested coverage" data-testid="generation-task-coverage">
+            {coverage.map((entry, index) => <li key={`coverage-${index}`}>{entry}</li>)}
+          </ul>
+        </div>
       ) : null}
       {latest && !view.terminal ? <p className="truncate text-[10px] text-zinc-500" data-testid="generation-task-activity" title={latest}>Latest: {latest}</p> : null}
       {actions.length > 0 || retryable.length > 0 || generationTaskRestartable(view) ? (

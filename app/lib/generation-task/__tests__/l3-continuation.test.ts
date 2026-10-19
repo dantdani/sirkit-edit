@@ -115,7 +115,10 @@ describe("[PR-L L.7-1] a design longer than any single slice or the old request 
 
   it("3. a block slice never runs past its window, and its continuation is claimable at once by the same or another worker", { timeout: 60_000 }, async () => {
     const env = l3Env({ name: "c3", repository: new InMemoryDurableWorkflowRepository(), catalog: droneCatalog() });
-    const model = new ScriptedModel(droneScripts({ "Motor drivers": ({ turn }) => (turn < 12 ? reply([search(`call_${turn}`, turn % 2 ? "logic level mosfet" : "schottky flyback diode")]) : reply([submit("call_submit", NETLISTS["Motor drivers"])])) }), env.time, () => 40_000);
+    // [PR-L6, 2026-10-19] pin move: each turn searches new words (was: the same two searches alternated - from the third turn on, cached
+    // repeats that surface nothing new, which the repeat detector now ends as a no-progress slice after two turns: l6-repeat-turns); the
+    // case is about windows and continuations, unchanged
+    const model = new ScriptedModel(droneScripts({ "Motor drivers": ({ turn }) => (turn < 12 ? reply([search(`call_${turn}`, turn % 2 ? `logic level mosfet option ${turn}` : `schottky flyback diode option ${turn}`)]) : reply([submit("call_submit", NETLISTS["Motor drivers"])])) }), env.time, () => 40_000);
     const task = await startTask(env);
     const first = env.worker({ llm: model, workerId: "worker-c3-first" });
     // plan, then the three block slices, each run by the first worker; Motor drivers yields at its window with a continuation

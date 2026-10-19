@@ -47,6 +47,8 @@ export interface GenerationTaskSnapshotBlock {
   strategy: GenerationStrategyId;
   turnsUsed: number;
   blocker: GenerationBlockerCode | null;
+  /** [PR-L6, 2026-10-19] only when the block waits for parts its searches could not find (L.6 part 2, item 8): the roles, bounded lines */
+  missing?: Array<{ role: string; query: string; category: string | null }>;
 }
 
 export interface GenerationTaskSnapshot {
@@ -64,11 +66,13 @@ export interface GenerationTaskSnapshot {
   /** the server's task clock when the snapshot was taken (elapsed time = serverNow - createdAt; no browser clock involved) */
   serverNow: string;
   liveness: GenerationTaskLivenessView;
-  plan: { planner: string; rationale: string; assumptions: string[]; blocks: GenerationTaskSnapshotBlock[] } | null;
+  /** [PR-L6, 2026-10-19] `coverage` only when the planner listed it (OD-253 item 3) */
+  plan: { planner: string; rationale: string; assumptions: string[]; coverage?: string[]; blocks: GenerationTaskSnapshotBlock[] } | null;
   blocker: { code: GenerationBlockerCode; message: string; resolution: string; blockId: GenerationBlockId | null } | null;
   failure: { reason: GenerationFailureReason; at: string } | null;
   usage: { slices: number; attempts: number; modelCalls: number; uncertainModelCalls: number; inputTokens: number; outputTokens: number; catalogSearches: number; cacheHits: number };
-  allowance: { units: number; extensions: number; maxExtensions: number; remaining: { modelCalls: number; outputTokens: number; catalogSearches: number }; windowEndsAt: string };
+  /** [PR-L6, 2026-10-19] `remaining.inputTokens` only when the task's unit has an input dimension (an operator unit, OD-253 item 6) */
+  allowance: { units: number; extensions: number; maxExtensions: number; remaining: { modelCalls: number; outputTokens: number; catalogSearches: number; inputTokens?: number }; windowEndsAt: string };
   base: { schematicDigest: string; recipe: string; moved: boolean };
   result: { status: "complete" | "partial"; omittedBlocks: string[]; resultDigest: string } | null;
   review: { outcome: "applied" | "discarded"; at: string } | null;
@@ -116,7 +120,11 @@ export function generationTaskActions(head: GenerationTaskHead): { actions: Gene
     case "waiting-for-resource": {
       const code = head.blocker?.code ?? null;
       const actions: GenerationTaskSnapshotAction[] = ["cancel"];
-      if (code !== null && ALLOWANCE_BLOCKERS.includes(code)) { if (head.allowance.extensions.length < GENERATION_TASK_BOUNDS.extensions) actions.push("extend-allowance"); }
+      // [PR-L6, 2026-10-19] saved blocks beside a block the allowance stopped (partial_available, cause allowance_exhausted or
+      // task_window_elapsed): retrying that block would be refused at its claim again, so the way on is another allowance
+      const cause = head.blocker?.evidence.cause;
+      const allowanceCause = code === "partial_available" && typeof cause === "string" && (ALLOWANCE_BLOCKERS as readonly string[]).includes(cause);
+      if (code !== null && (ALLOWANCE_BLOCKERS.includes(code) || allowanceCause)) { if (head.allowance.extensions.length < GENERATION_TASK_BOUNDS.extensions) actions.push("extend-allowance"); }
       else if (code !== null && BLOCK_BLOCKERS.includes(code)) { if (retryBlocks.length) actions.push("retry-block"); }
       else actions.push("resume");
       if (saved) actions.push("review-partial");
@@ -134,10 +142,10 @@ export function buildGenerationTaskSnapshot(head: GenerationTaskHead, input: { n
   const activity = [...(input.activity ?? [])].flatMap((entry) => entry.lines).sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0)).slice(-8).map((entry) => ({ at: entry.at, text: entry.text }));
   const plan = head.plan
     ? {
-      planner: head.plan.planner.state, rationale: head.plan.rationale, assumptions: [...head.plan.assumptions],
+      planner: head.plan.planner.state, rationale: head.plan.rationale, assumptions: [...head.plan.assumptions], ...(head.plan.coverage?.length ? { coverage: [...head.plan.coverage] } : {}),
       blocks: head.plan.blocks.map((planned) => {
         const block = head.blocks[planned.blockId]!;
-        return { blockId: block.blockId, name: block.name, status: block.status, strategy: block.strategy, turnsUsed: block.turnsUsed, blocker: block.blocker };
+        return { blockId: block.blockId, name: block.name, status: block.status, strategy: block.strategy, turnsUsed: block.turnsUsed, blocker: block.blocker, ...(block.missing?.length ? { missing: block.missing.map((entry) => ({ ...entry })) } : {}) };
       }),
     }
     : null;
@@ -161,7 +169,7 @@ export function buildGenerationTaskSnapshot(head: GenerationTaskHead, input: { n
     usage: { slices: head.usage.slices, attempts: head.usage.attempts, modelCalls: head.usage.modelCalls, uncertainModelCalls: head.usage.uncertainModelCalls, inputTokens: head.usage.inputTokens, outputTokens: head.usage.outputTokens, catalogSearches: head.usage.catalogSearches, cacheHits: head.usage.cacheHits },
     allowance: {
       units: head.allowance.units, extensions: head.allowance.extensions.length, maxExtensions: GENERATION_TASK_BOUNDS.extensions,
-      remaining: { modelCalls: Math.max(0, limits.modelCalls - committed.modelCalls), outputTokens: Math.max(0, limits.outputTokens - committed.outputTokens), catalogSearches: Math.max(0, limits.catalogSearches - head.usage.catalogSearches) },
+      remaining: { modelCalls: Math.max(0, limits.modelCalls - committed.modelCalls), outputTokens: Math.max(0, limits.outputTokens - committed.outputTokens), catalogSearches: Math.max(0, limits.catalogSearches - head.usage.catalogSearches), ...(limits.inputTokens !== undefined ? { inputTokens: Math.max(0, limits.inputTokens - committed.inputTokens) } : {}) },
       windowEndsAt: isoOf(Date.parse(head.createdAt) + limits.wallClockMs),
     },
     base: { schematicDigest: head.base.schematicDigest, recipe: head.base.recipe, moved: head.base.moved },

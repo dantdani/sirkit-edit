@@ -11,7 +11,10 @@
  *  3. both provider adapters carry the SDK error's Retry-After (`retry-after-ms`, `retry-after` seconds or an HTTP date) on
  *     `LLMProviderError.retryAfterMs`; an absent, unreadable or excessive value is undefined;
  *  4. the per-task allowance (OD-252) parks the task as `waiting-for-resource` / `allowance_exhausted`; a `resume` with
- *     `extendAllowance` (recorded with its principal) continues it, and a second extension completes it.
+ *     `extendAllowance` (recorded with its principal) continues it, and a second extension completes it; [PR-L6, 2026-10-19] the unit's
+ *     optional input dimension multiplies with every extension too;
+ *  5. [PR-L6, 2026-10-19] an input limit no call fits parks the task before anything is sent; each "Continue with another allowance" adds
+ *     one input unit, and the cap (1 + 4 extensions) refuses a fifth extension - never a silent sixth unit.
  *
  * Fake model and catalog ports, the in-memory durable repository, a simulated clock. No provider, no database, no network.
  */
@@ -32,6 +35,8 @@ import { LLMProviderError, RETRY_AFTER_MAX_MS, retryAfterMsOf, toProviderError }
 import { generationTaskEventsPage } from "../events";
 import { GenerationTaskStore } from "../store";
 import { GENERATION_BACKOFF, backoffDelayMs } from "../worker/accounting";
+import { GENERATION_TASK_ALLOWANCE_UNIT, generationAllowanceLimits } from "../contracts";
+import { buildGenerationTaskSnapshot } from "../snapshot";
 import { ScriptedModel, T0, droneCatalog, droneScripts, drive, head, l3Env, providerError, startTask } from "./_l3-worker-fixtures";
 
 const HOUR = 3_600_000;
@@ -142,7 +147,7 @@ describe("[PR-L L.7-2] a task longer than a day, across slices, a worker restart
   it("4. the per-task allowance parks the task as waiting-for-resource / allowance_exhausted; resume with extendAllowance continues it to a complete result", { timeout: 60_000 }, async () => {
     const env = l3Env({ name: "allowance", repository: new InMemoryDurableWorkflowRepository(), catalog: droneCatalog() });
     const model = new ScriptedModel(droneScripts(), env.time, () => 1_000);
-    const task = await startTask(env, { allowanceUnit: { modelCalls: 6, outputTokens: 480_000, catalogSearches: 300, wallClockMs: 72 * HOUR } });
+    const task = await startTask(env, { allowanceUnit: { modelCalls: 6, outputTokens: 480_000, catalogSearches: 300, wallClockMs: 72 * HOUR, inputTokens: 5_000_000 } }); // [PR-L6, 2026-10-19] + an input unit that never binds here
     const worker = env.worker({ llm: model });
     const parked = await drive(env, worker, task.taskId, { until: (current) => current.state === "waiting-for-resource", maxTicks: 20 });
     // the plan ran (1 call); no block slice fits 1 + 6 reserved calls into 6: nothing ran that the allowance could not pay for
@@ -151,14 +156,41 @@ describe("[PR-L L.7-2] a task longer than a day, across slices, a worker restart
     expect(model.calls.filter((call) => call.kind === "block")).toHaveLength(0);
     const first = await env.store.control({ scope: env.scope, taskId: task.taskId, principal: editor, action: "resume", clientActionId: "extend-1", extendAllowance: true });
     expect(first).toMatchObject({ ok: true, task: { state: "queued", allowance: { units: 2, extensions: [{ principalId: editor.principalId, clientActionId: "extend-1" }] } } });
+    if (first.ok) expect(generationAllowanceLimits(first.task.allowance)).toMatchObject({ modelCalls: 12, inputTokens: 10_000_000 }); // [PR-L6, 2026-10-19] every limit, input included, multiplies
     // two blocks fit the extended allowance (12 calls); the third parks the task again, now with two saved blocks (partial available)
     const again = await drive(env, worker, task.taskId, { until: (current) => current.state === "waiting-for-resource", maxTicks: 20 });
     expect(Object.values(again.task.blocks).filter((block) => block?.status === "saved")).toHaveLength(2);
     expect(again.task.blocker).toMatchObject({ code: "partial_available", evidence: { cause: "allowance_exhausted" } });
+    // [PR-L6, 2026-10-19] saved blocks beside a block the allowance stopped: the way on is another allowance (a retry of that block would be
+    // refused at its claim again), so the card offers it - with the review of the saved blocks - and no retry
+    expect(buildGenerationTaskSnapshot(again.task, { nowMs: env.time.now(), processing: [] })).toMatchObject({ actions: ["cancel", "extend-allowance", "review-partial"], retryBlocks: [] });
     expect(await env.store.control({ scope: env.scope, taskId: task.taskId, principal: editor, action: "resume", clientActionId: "extend-2", extendAllowance: true })).toMatchObject({ ok: true });
     const { task: done } = await drive(env, worker, task.taskId, { until: (current) => current.state === "awaiting-review", maxTicks: 20 });
     expect(done.allowance.units).toBe(3);
+    expect(generationAllowanceLimits(done.allowance).inputTokens).toBe(15_000_000); // [PR-L6, 2026-10-19]
+    expect(done.usage.inputTokens).toBeLessThanOrEqual(15_000_000);
     expect(done.usage.modelCalls).toBe(1 + 4 + 4 + 3);
     expect((await head(env, task.taskId)).result).toMatchObject({ status: "complete" });
+  });
+
+  it("5. [PR-L6, 2026-10-19] an input limit no call fits parks the task with nothing sent; each extension adds one input unit; the cap refuses a fifth extension", { timeout: 60_000 }, async () => {
+    const env = l3Env({ name: "input-cap", repository: new InMemoryDurableWorkflowRepository(), catalog: droneCatalog() });
+    const model = new ScriptedModel(droneScripts(), env.time, () => 1_000);
+    const task = await startTask(env, { allowanceUnit: { ...GENERATION_TASK_ALLOWANCE_UNIT, inputTokens: 10 } }); // no request fits 10 input tokens, nor 50
+    const worker = env.worker({ llm: model });
+    await drive(env, worker, task.taskId, { until: (current) => current.state === "waiting-for-resource", maxTicks: 5 });
+    for (let extension = 1; extension <= 4; extension += 1) {
+      const extended = await env.store.control({ scope: env.scope, taskId: task.taskId, principal: editor, action: "resume", clientActionId: `extend-input-${extension}`, extendAllowance: true });
+      expect(extended.ok, `extension ${extension}`).toBe(true);
+      const parked = await drive(env, worker, task.taskId, { until: (current) => current.state === "waiting-for-resource", maxTicks: 5 });
+      expect(parked.task.allowance.units).toBe(1 + extension);
+      expect(generationAllowanceLimits(parked.task.allowance).inputTokens).toBe(10 * (1 + extension));
+      expect(parked.task.blocker).toMatchObject({ code: "allowance_exhausted" });
+    }
+    expect(await env.store.control({ scope: env.scope, taskId: task.taskId, principal: editor, action: "resume", clientActionId: "extend-input-5", extendAllowance: true })).toMatchObject({ ok: false, code: "GENERATION_TASK_STATE_CONFLICT", issue: expect.stringMatching(/extension cap/) });
+    const parked = await head(env, task.taskId);
+    expect(parked.allowance.units).toBe(5);
+    expect(model.calls).toHaveLength(0); // nothing was ever sent
+    expect(parked.usage).toMatchObject({ modelCalls: 0, inputTokens: 0 });
   });
 });

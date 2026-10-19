@@ -69,7 +69,7 @@ async function main(): Promise<number> {
       // [PR-L, 2026-10-17] increment 4: the HTTP pump (POST <origin>/api/generation-worker with the worker secret, never printed)
       ? pump.createPumpTransport({ origin: args.origin!, workerId, secret: process.env[pump.GENERATION_WORKER_SECRET_ENV], concurrency: args.concurrency, log: out })
       : runtime.createDirectTransport({
-        workerId, concurrency: args.concurrency,
+        workerId, concurrency: args.concurrency, ...(args.scope ? { scope: args.scope } : {}), // [PR-L6, 2026-10-19] --scope: this project branch's slices only (both topics)
         providerServable: (provider) => generation.schematicGenerationServable(provider),
         runInScope: (scope, run) => seam.withLlmCallScope({ routeId: runtime.GENERATION_TASK_ROUTE.routeId, method: runtime.GENERATION_TASK_ROUTE.method, scope }, run),
         log: out,
@@ -86,7 +86,7 @@ async function main(): Promise<number> {
     throw error;
   }
   const drainRecords = async (): Promise<void> => { await Promise.race([callRecords.drainLlmCallRecordWrites(), sleep(5_000)]); };
-  out(`worker ${workerId} started (${transport.mode} transport, concurrency ${args.concurrency}${args.once ? ", once" : ""})`);
+  out(`worker ${workerId} started (${transport.mode} transport, concurrency ${args.concurrency}${args.once ? ", once" : ""}${args.scope ? `, scope ${args.scope.tenantId}/${args.scope.projectId}/${args.scope.branchId}` : ""})`);
 
   if (args.once) {
     // a signal during the tick stops it the same way: running slices yield at a boundary, the rest are released after the grace

@@ -9,7 +9,10 @@
  *  2. a RESTARTED long-running worker resumes from the durable state alone (it claims the block slices the first process queued),
  *     settles each honestly (the provider key is unset in its environment: `provider_credentials`, with no call), serves `/healthz`, and
  *     shuts down gracefully on request (IPC; SIGINT/SIGTERM run the same path), exiting 0;
- *  3. without `DATABASE_URL` the worker refuses (`GENERATION_TASK_STORE_UNAVAILABLE`, exit 2) and claims nothing.
+ *  3. without `DATABASE_URL` the worker refuses (`GENERATION_TASK_STORE_UNAVAILABLE`, exit 2) and claims nothing;
+ *  4. [PR-L6, 2026-10-19] `--scope <tenant>/<project>/<branch>` (OD-253 item 6): a malformed scope and an unknown flag refuse with exit 2;
+ *     with two projects' plan slices queued, the scoped worker consumes only its scope's, records the call under the admitting route in
+ *     that scope, and leaves the other project's slice pending with no attempt.
  *
  * The child's environment is built here from a short allow-list (no variable of this process is inherited, so no developer secret can
  * reach it), and `--no-env-file` keeps it from reading `.env.local`. This file starts PGlite: its CI admission is the database-delivery
@@ -214,5 +217,34 @@ describe("[PR-L L.3] the real generation worker process", () => {
     expect(run.code).toBe(2);
     expect(run.stderr).toContain("REFUSED GENERATION_TASK_STORE_UNAVAILABLE");
     expect(openai.requests).toHaveLength(1);
+  });
+
+  it("4. [PR-L6, 2026-10-19] --scope: malformed scopes and unknown flags refuse with exit 2; the scoped worker consumes only its scope's plan slice and records the call in that scope", { timeout: 240_000 }, async () => {
+    const env = childEnvironment({ DATABASE_URL: databaseUrl(), SIRKIT_DB_POOL_MAX: "1", SIRKIT_AUTH_MODE: "production", OPENAI_API_KEY: KEY, OPENAI_BASE_URL: `${openai.origin}/v1`, ANTHROPIC_API_KEY: "" });
+    for (const args of [["--once", "--no-env-file", "--scope", "tenant-l3-process"], ["--once", "--no-env-file", "--scope"], ["--once", "--no-env-file", "--bogus"]]) {
+      const refused = await runWorker(args, env);
+      expect(refused.code, args.join(" ")).toBe(2);
+      expect(refused.stderr, args.join(" ")).toContain("REFUSED:");
+    }
+    expect(openai.requests).toHaveLength(1); // nothing was claimed or asked
+    // two more projects of the tenant, each with a queued plan slice: C first (a scope-less FIFO claim would take it first), then D
+    const now = new Date().toISOString();
+    const scopeC = { ...SCOPE, projectId: "project-l3-process-c" }, scopeD = { ...SCOPE, projectId: "project-l3-process-d" };
+    for (const scope of [scopeC, scopeD]) await pg.db.query("insert into project_members (membership_id, tenant_id, project_id, user_id, role, state, version, created_at, updated_at, audit_actor_id) values ($1, $2, $3, $4, 'editor', 'active', 1, $5, $5, 'l3-process')", [`membership-${scope.projectId}`, scope.tenantId, scope.projectId, EDITOR, now]);
+    const taskC = (await startTask({ store, scope: scopeC })).taskId;
+    const taskD = (await startTask({ store, scope: scopeD })).taskId;
+    const run = await runWorker(["--once", "--no-env-file", "--worker-id", "l3-process-scoped", "--scope", `${scopeD.tenantId}/${scopeD.projectId}/${scopeD.branchId}`], env);
+    expect(run.code, `${run.stdout}\n${run.stderr}`).toBe(0);
+    expect(run.stdout).toContain(`scope ${scopeD.tenantId}/${scopeD.projectId}/main`);
+    expect(run.stdout).toContain("once: 1 slice(s) claimed");
+    expect(run.stdout).toContain(`plan ${taskD}:s1: planned -> task queued`);
+    expect(openai.requests).toHaveLength(2); // exactly D's plan call
+    const repository = new PostgresDurableWorkflowRepository();
+    expect((await repository.listOutbox({ scope: scopeC, topic: GENERATION_SLICE_TOPIC })).map((event) => [event.state, event.attempts])).toEqual([["pending", 0]]);
+    const loadedC = await store.load(scopeC, taskC), loadedD = await store.load(scopeD, taskD);
+    expect(loadedC.ok && loadedC.task).toMatchObject({ state: "queued", plan: null, fenceCounter: 0 });
+    expect(loadedD.ok && loadedD.task).toMatchObject({ state: "queued", plan: { planner: { state: "planned", blocks: 3 } } });
+    const records = await pg.db.query<{ project_id: string; payload: { routeId: string; method: string; outcome: string } }>("select project_id, payload from durable_workflow_records where aggregate_type = 'llm.call-record.v1' and tenant_id = $1 and project_id in ($2, $3)", [SCOPE.tenantId, scopeC.projectId, scopeD.projectId]);
+    expect(records.rows.map((row) => [row.project_id, row.payload.routeId, row.payload.method, row.payload.outcome])).toEqual([[scopeD.projectId, "/api/generation-tasks", "POST", "completed"]]);
   });
 });

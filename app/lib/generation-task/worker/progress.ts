@@ -87,6 +87,9 @@ export interface BlockLearning {
   submissionCodes: string[];
   /** the parts the conversation surfaced (validated catalog facts) */
   surfaced: GenerationPartFacts[];
+  /** [PR-L6, 2026-10-19] item 8: the roles the conversation reported unfilled (accepted report_unfilled_role calls), newest last: the role,
+   *  the last search named for it and every search named (at most 4) */
+  missingRoles: Array<{ role: string; query: string; category: string | null; queries: Array<{ query: string; category: string | null }> }>;
 }
 
 const textOf = (value: unknown, max: number): string => (typeof value === "string" ? value.trim().slice(0, max) : "");
@@ -104,7 +107,7 @@ function resultCount(output: string): number | null {
 
 /** Read a checkpoint's conversation: every recorded call with the result right after it (an unanswered call is not evidence). */
 export function blockLearning(checkpoint: BuildLoopCheckpoint | null): BlockLearning {
-  const learning: BlockLearning = { emptySearches: [], searches: [], rejectedPartIds: [], submissionCodes: [], surfaced: [] };
+  const learning: BlockLearning = { emptySearches: [], searches: [], rejectedPartIds: [], submissionCodes: [], surfaced: [], missingRoles: [] };
   if (!checkpoint) return learning;
   learning.surfaced = Object.values(checkpoint.surfaced).map((entry) => entry.part);
   learning.submissionCodes = checkpoint.submissions.flatMap((entry) => entry.codes);
@@ -129,6 +132,20 @@ export function blockLearning(checkpoint: BuildLoopCheckpoint | null): BlockLear
         for (const component of components) {
           const partId = component && typeof component === "object" ? (component as { partId?: unknown }).partId : undefined;
           if (typeof partId === "string" && partId && checkpoint.surfaced[partId]) rejected.unshift(partId);
+        }
+      } else if (call.name === "report_unfilled_role" && !result.isError) {
+        // [PR-L6, 2026-10-19] item 8: an ACCEPTED report (the slice core checked its searches against the recorded ones)
+        const role = textOf(call.input.role, 120);
+        const tried = Array.isArray(call.input.queriesTried) ? call.input.queriesTried : [];
+        const queries = tried.slice(0, 4).flatMap((entry) => {
+          if (typeof entry === "string") return entry.trim() ? [{ query: entry.trim().slice(0, 200), category: null }] : [];
+          const record = entry && typeof entry === "object" ? entry as { query?: unknown; category?: unknown } : {};
+          const query = textOf(record.query, 200);
+          return query ? [{ query, category: textOf(record.category, 64) || null }] : [];
+        });
+        if (role) {
+          learning.missingRoles = learning.missingRoles.filter((entry) => entry.role.toLowerCase() !== role.toLowerCase());
+          learning.missingRoles.push({ role, query: queries.at(-1)?.query ?? "", category: queries.at(-1)?.category ?? null, queries });
         }
       }
     }
@@ -191,6 +208,10 @@ export function strategySeedText(input: {
   if (input.learning.emptySearches.length) {
     lines.push("Searches that returned no part (do not repeat them unchanged; try different words or no category):");
     for (const miss of input.learning.emptySearches.slice(0, 8)) lines.push(`- ${quotedQuery(miss.query)}${miss.category ? ` (category ${quotedQuery(miss.category)})` : ""}`);
+  }
+  if (input.learning.missingRoles.length) { // [PR-L6, 2026-10-19] item 8: what an earlier conversation reported unfilled (re-searched below when the strategy does)
+    lines.push("Roles an earlier attempt reported the catalog could not fill:");
+    for (const missing of input.learning.missingRoles.slice(0, 3)) lines.push(`- ${quotedQuery(missing.role)}${missing.queries.length ? `, searched as ${missing.queries.map((search) => quotedQuery(search.query)).join(", ")}` : ""}`);
   }
   if (input.guidance.length) lines.push(...input.guidance);
   lines.push("When the block is complete, call submit_schematic with every component and connection of this block.");

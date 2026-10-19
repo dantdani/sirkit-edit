@@ -169,9 +169,9 @@ export class ComponentResolutionTaskStore {
 
   // ── slices ──
 
-  async claimSlices(input: { workerId: string; limit: number; revalidate: ResolutionSliceRevalidator }): Promise<ResolutionClaimOutcome[]> {
+  async claimSlices(input: { workerId: string; limit: number; revalidate: ResolutionSliceRevalidator; scope?: DurableWorkflowScope }): Promise<ResolutionClaimOutcome[]> {
     const nowMs = this.clock();
-    const events = await this.repository.claimOutbox({ workerId: input.workerId, now: iso(nowMs), leaseUntil: iso(nowMs + this.leaseMs), limit: Math.max(1, Math.min(10, input.limit)), topics: [COMPONENT_RESOLUTION_SLICE_TOPIC] });
+    const events = await this.repository.claimOutbox({ workerId: input.workerId, now: iso(nowMs), leaseUntil: iso(nowMs + this.leaseMs), limit: Math.max(1, Math.min(10, input.limit)), topics: [COMPONENT_RESOLUTION_SLICE_TOPIC], ...(input.scope ? { scope: canonicalDurableScope(input.scope) } : {}) }); // [PR-L6, 2026-10-19] the worker's --scope (OD-253 item 6)
     const outcomes: ResolutionClaimOutcome[] = [];
     for (const event of events) outcomes.push(await this.claimOne(event, input.workerId, input.revalidate));
     return outcomes;

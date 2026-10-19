@@ -12,8 +12,8 @@ import { runComponentResolutionSlice, type ComponentResolutionSlicePorts } from 
 export function componentResolutionTopicRunner(input: { store: ComponentResolutionTaskStore; ports: () => ComponentResolutionSlicePorts; revalidate: ResolutionSliceRevalidator; log?: (line: string) => void }): FencedTopicRunner {
   return {
     topic: COMPONENT_RESOLUTION_SLICE_TOPIC,
-    async claim({ workerId, limit }) {
-      const outcomes = await input.store.claimSlices({ workerId, limit, revalidate: input.revalidate });
+    async claim({ workerId, limit, scope }) {
+      const outcomes = await input.store.claimSlices({ workerId, limit, revalidate: input.revalidate, ...(scope ? { scope } : {}) }); // [PR-L6, 2026-10-19] the worker's --scope
       const slices: FencedTopicSlice[] = [];
       for (const outcome of outcomes) {
         if (outcome.outcome !== "claimed") { if (outcome.outcome !== "stale-event" && outcome.outcome !== "not-before") input.log?.(`component-resolution claim of event ${outcome.eventId}: ${outcome.outcome}${outcome.code ? ` (${outcome.code})` : ""}`); continue; }

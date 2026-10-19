@@ -80,7 +80,8 @@ export interface TopicSliceReport { topic: string; sliceId: string; taskId: stri
 /** [PR-M, 2026-10-18] M2: another durable topic this worker consumes. */
 export interface FencedTopicRunner {
   readonly topic: string;
-  claim(input: { workerId: string; limit: number }): Promise<FencedTopicSlice[]>;
+  /** [PR-L6, 2026-10-19] `scope`: the worker's `--scope` - claim only that scope's slices */
+  claim(input: { workerId: string; limit: number; scope?: GenerationTaskScope }): Promise<FencedTopicSlice[]>;
 }
 /** [PR-M, 2026-10-18] M2: a settled slice of either kind. */
 export type WorkerSliceReport = GenerationSliceReport | TopicSliceReport;
@@ -100,6 +101,8 @@ export interface GenerationWorkerOptions {
   log?: (line: string) => void;
   /** [PR-M, 2026-10-18] M2: other durable topics on the same repository (the component-resolution slices) */
   topics?: readonly FencedTopicRunner[];
+  /** [PR-L6, 2026-10-19] OD-253 item 6: claim only this scope's slices, of every topic (absent: every scope) */
+  scope?: GenerationTaskScope;
 }
 
 export interface GenerationTickReport {
@@ -239,6 +242,7 @@ export class GenerationWorker {
   /** [PR-M, 2026-10-18] M2: the running slices of other topics (they count against the same concurrency) */
   private readonly topicRunning = new Map<string, RunningTopicSlice>();
   private readonly topics: readonly FencedTopicRunner[];
+  private readonly scope: GenerationTaskScope | null;
   private readonly startedAt: string;
   private lastTickAt: string | null = null;
   private stopping = false;
@@ -261,6 +265,7 @@ export class GenerationWorker {
     this.runInScope = options.runInScope ?? ((_scope, run) => run());
     this.logLine = options.log ?? (() => undefined);
     this.topics = options.topics ?? [];
+    this.scope = options.scope ? { ...options.scope } : null;
     this.startedAt = isoOf(this.clock());
   }
 
@@ -280,7 +285,7 @@ export class GenerationWorker {
     this.lastTickAt = at;
     const free = this.policy.concurrency - this.inFlight();
     if (free <= 0 || this.stopping) return { at, claims: [], started: [] };
-    const outcomes = await this.store.claimSlices({ workerId: this.workerId, limit: free, revalidate: this.revalidate });
+    const outcomes = await this.store.claimSlices({ workerId: this.workerId, limit: free, revalidate: this.revalidate, ...(this.scope ? { scope: this.scope } : {}) });
     const report: GenerationTickReport = { at, claims: [], started: [] };
     for (const outcome of outcomes) {
       if (outcome.outcome !== "claimed") {
@@ -297,7 +302,7 @@ export class GenerationWorker {
       const remaining = this.policy.concurrency - this.inFlight();
       if (remaining <= 0 || this.stopping) break;
       let slices: FencedTopicSlice[];
-      try { slices = await runner.claim({ workerId: this.workerId, limit: remaining }); } catch (error) { this.log(`claim on topic ${runner.topic} failed (${error instanceof Error ? error.name : "error"})`); continue; }
+      try { slices = await runner.claim({ workerId: this.workerId, limit: remaining, ...(this.scope ? { scope: this.scope } : {}) }); } catch (error) { this.log(`claim on topic ${runner.topic} failed (${error instanceof Error ? error.name : "error"})`); continue; }
       for (const slice of slices) {
         report.claims.push({ outcome: "claimed", taskId: slice.taskId, sliceId: slice.sliceId });
         report.started.push(slice.sliceId);

@@ -157,3 +157,36 @@ edit, F20), with the other `l2-*` / `l3-*` suites in increment 7.
   and the commit is made without it - a later identical search then reaches the catalog again.
 - The provider SDKs retry 429 / 5xx themselves (`maxRetries`) before the worker sees a failure; the worker's backoff applies after them.
 - The backoff's count of consecutive provider waits is read from the head's milestone ring (48 entries): a longer run reads short.
+
+## 8. [PR-L6, 2026-10-19] Operator allowance, input admission and `--scope` (OD-252 item 1, OD-253 item 6; offline only)
+
+- **Operator unit.** `SIRKIT_GENERATION_ALLOWANCE_MODEL_CALLS`, `_OUTPUT_TOKENS`, `_CATALOG_SEARCHES`, `_WALL_CLOCK_MS` (each an integer
+  that only LOWERS the default field; zero, signs, fractions, text and values at or above the default are ignored) and
+  `_INPUT_TOKENS` (1..100,000,000; adds the optional input dimension). `resolveGenerationAllowanceUnit` (contracts.ts) is read once per
+  resolved runtime in the composition root (generation-task/runtime.ts) and handed to `GenerationTaskService`, so Build and chat
+  starts share it; a start body can never carry it (the closed START_KEYS). The unit is set by the SERVER that accepts the start,
+  not by the worker. `GENERATION_TASK_ALLOWANCE_UNIT` itself is unchanged.
+- **Input dimension.** Optional `allowance.unit.inputTokens`, optional `usage.uncertainInputTokens`, optional reservation
+  `inputTokens` (persisted heads without them stay valid). Every limit multiplies by `units`, so "Continue with another allowance" adds
+  one input unit too; a claim is refused (`allowance_exhausted`, no model call) once settled + uncertain + in-flight input reaches the
+  limit. With saved blocks beside the stopped one (`partial_available`, cause `allowance_exhausted`), the snapshot offers
+  `extend-allowance` and `review-partial` (no retry of the stopped block).
+- **Pre-call admission** (`MeteredLlmPort`, plan and both block ports): bound = UTF-8 bytes of the composed instructions + JSON(tools)
+  + JSON(toolChoice) + JSON(messages) + 1,024 per call + 16 per message + 8 per part + 64 per tool (`generationRequestInputBound`;
+  the framing overhead is INFERRED). A call whose bound does not fit the slice's remaining input is never sent (code
+  `sirkit_input_allowance_exhausted` -> `allowance_exhausted`, the last turn-boundary checkpoint kept). Before an admitted call is sent,
+  `store.admitCall` records on the attempt's held reservation everything the attempt has charged and not committed (that call's bound
+  plus earlier uncommitted input), so a process that dies inside the call leaves it charged (uncertain) for the next claimer. A call
+  whose completion is unknown stays charged at its bound; a reported input above its bound stops the slice before any further call
+  (`sirkit_input_bound_exceeded` -> `platform_failure`, logged with both numbers). The bound holds per process for ONE worker at
+  `--concurrency 1`; durable cross-slice input reservations for concurrent slices remain a follow-up.
+- **`--scope <tenant>/<project>/<branch>`** (direct transport only; the pump refuses it): the worker claims only that scope's slices of
+  BOTH topics (generation and component resolution, `claimOutbox({ scope })`); the branch may contain `/`. Without it, every scope as
+  before. Evidence: `l3-worker-scope` (in-memory and PGlite), `l3-worker-process` case 4 (the real process).
+- **Bounded run launch (for the lead; no run made here):** the builder's own server with the operator unit, e.g.
+  `SIRKIT_GENERATION_ALLOWANCE_MODEL_CALLS=24 SIRKIT_GENERATION_ALLOWANCE_OUTPUT_TOKENS=57344 SIRKIT_GENERATION_ALLOWANCE_INPUT_TOKENS=450000
+  SIRKIT_GENERATION_ALLOWANCE_CATALOG_SEARCHES=120 SIRKIT_GENERATION_ALLOWANCE_WALL_CLOCK_MS=21600000`, and its worker with
+  `--no-env-file --concurrency 1 --scope <the run's tenant>/<project>/main`. `SIRKIT_CATALOG_SEARCH_CONCURRENCY` may lower the catalog
+  slots (`min(4, max(1, SIRKIT_DB_POOL_MAX - 3))`).
+- Evidence (offline, fake provider and catalog): `l6-allowance-operator`, `l3-input-allowance`, `l3-crash-resume` case 5 (PGlite),
+  `l3-long-task` cases 4-5, `l3-worker-scope`, `l3-worker-process` case 4.
