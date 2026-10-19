@@ -36,7 +36,7 @@ import { assertBuildLoopCheckpoint, buildLoopCheckpointIssue, type BuildLoopChec
 import {
   GENERATION_BLOCKER_TEXT, GENERATION_SLICE_CONTRACT, GENERATION_SLICE_EVENT, GENERATION_SLICE_POLICY, GENERATION_SLICE_TOPIC, GENERATION_TASK_AGGREGATES, GENERATION_TASK_ALLOWANCE_UNIT, GENERATION_TASK_BOUNDS,
   GENERATION_TASK_INDEX_KEY, GENERATION_TASK_SCHEMA, GENERATION_TASK_SCOPE_SUFFIX, GENERATION_TASK_START_SCOPE_SUFFIX, GENERATION_USAGE_KEYS, GENERATION_OPTIONAL_USAGE_KEYS,
-  applyGenerationFactsDelta, assertGenerationTaskHead, deriveGenerationTaskState, emptyGenerationTaskIndex, generationActivityAggregateKey, generationAllowanceRefusal, generationBlockAggregateKey,
+  applyGenerationFactsDelta, assertGenerationTaskHead, deriveGenerationTaskState, emptyGenerationTaskIndex, generationActivityAggregateKey, generationAllowanceLimits, generationAllowanceRefusal, generationBlockAggregateKey, generationCommitted,
   generationBlockTurnsPerSlice, generationIndexWith, generationPlanDigest, generationRequestDigest, generationReservationFor, generationSliceId, generationTaskFactsIssue, generationTaskHeadIssue,
   generationTaskId, generationTaskIndexIssue, generationTaskResultIssue, generationTaskTransitionIssue, hasGenerationOwner, isGenerationEditorRole, nextGenerationWork,
   type GenerationAllowanceUnit, type GenerationBlockState, type GenerationControlStamp, type GenerationFactsDelta, type GenerationMissingRole, type GenerationPendingSlice, type GenerationReservation, type GenerationTaskFacts,
@@ -114,7 +114,7 @@ export type GenerationClaimOutcome =
 export type GenerationCommitRefusalCode =
   | "GENERATION_TASK_NOT_FOUND" | "GENERATION_TASK_INVALID_PERSISTED_STATE" | "GENERATION_SLICE_FENCED" | "GENERATION_TASK_CANCEL_REQUESTED" | "GENERATION_TASK_STATE_CONFLICT"
   | "GENERATION_TASK_TRANSITION_REFUSED" | "GENERATION_TASK_CONTENDED" | "GENERATION_TASK_FORBIDDEN" | "IDEMPOTENCY_KEY_REUSED" | "GENERATION_TASK_ACTION_UNSUPPORTED" | "GENERATION_SLICE_END_INVALID"
-  | "GENERATION_TASK_TOO_LARGE";
+  | "GENERATION_TASK_TOO_LARGE" | "GENERATION_INPUT_ALLOWANCE_EXHAUSTED"; // [PR-L6 integration, 2026-10-19] F2: admitCall only (a worker refusal, never a route answer)
 export type GenerationCommitOutcome =
   | { ok: true; task: GenerationTaskHead; revision: number; replayed: boolean }
   | { ok: false; code: GenerationCommitRefusalCode; issue?: string };
@@ -894,8 +894,8 @@ export class GenerationTaskStore {
         const next = clone(current);
         if (!next.reservations.some((entry) => entry.sliceId === lease.sliceId && entry.attempt === lease.attempt && entry.state === "held")) return refuse("GENERATION_SLICE_END_INVALID", "admit: the attempt holds no reservation");
         setInFlightInput(next, lease.sliceId, lease.attempt, bound);
-        next.updatedAt = this.nowIso();
-        return { next };
+        const limit = generationAllowanceLimits(next.allowance).inputTokens; if (limit !== undefined && generationCommitted(next).inputTokens > limit) return refuse("GENERATION_INPUT_ALLOWANCE_EXHAUSTED", "admit: settled + uncertain + every in-flight input bound would exceed the task's input limit; not sent"); // [PR-L6 integration, 2026-10-19] F2: the TASK's input, shared by every slice and worker (the fenced head commit serializes them)
+        next.updatedAt = this.nowIso(); return { next };
       },
     });
   }

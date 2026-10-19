@@ -124,7 +124,7 @@ function named(drift: SchematicDrift): string {
 /** The persistent notice beside the route-stale notice, or null when the board is not behind the schematic. */
 export function boardBehindSchematicNotice(drift: SchematicDrift | null): string | null {
   if (!drift || drift.items.length === 0) return null;
-  return `The board is behind the schematic: ${drift.items.length} part(s) differ - ${named(drift)}. Placement, routing, DRC, qualification and any release evidence are stale for these parts; run Prepare PCB to bring the board up to date.`;
+  return `The board is behind the schematic: ${drift.items.length} part(s) differ - ${named(drift)}. Placement, routing, DRC, qualification and any release evidence are stale for these parts; run Prepare PCB to bring the board up to date.${rebindClause(drift)}`; // [PR-L6 integration, 2026-10-19] BI-2: + what a replaced part on a bound board needs
 }
 
 /**
@@ -135,5 +135,20 @@ export function boardBehindSchematicNotice(drift: SchematicDrift | null): string
 export function manufacturingGateRefusal(action: "qualify" | "release", drift: SchematicDrift | null): string | null {
   if (!drift || drift.items.length === 0) return null;
   const verb = action === "qualify" ? "Qualification" : "Release";
-  return `${verb} refused: the board is behind the schematic (${named(drift)}). Run Prepare PCB first so the board carries the schematic's exact parts; nothing was sent.`;
+  return `${verb} refused: the board is behind the schematic (${named(drift)}). Run Prepare PCB first so the board carries the schematic's exact parts; nothing was sent.${rebindClause(drift)}`; // [PR-L6 integration, 2026-10-19] BI-2
+}
+
+// [PR-L6 integration, 2026-10-19] BI-2 (the fixture-board review of increment 6), appended after the last line (declarations are hoisted):
+// a `changed` part is one the board carries under ANOTHER bound revision. Prepare PCB's bind step is refused while that earlier binding is
+// in effect (PB_ACTIVE_SELECTION_CONFLICT; the page has no control that supersedes it - board-impact.ts says the same at Approve), so the
+// persistent notice and the gate refusals must not send the user only to Prepare PCB. Conditional on purpose: a binding a reviewer has
+// already superseded (the successor flow) can be bound anew, and then Prepare PCB succeeds.
+/** What a part on a bound board needs when Prepare PCB's bind is refused because the earlier binding still holds (the PcbEditor bind failure). */
+export const BOARD_REBIND_REFUSAL = "the board carries it under an earlier bound revision, so it is re-bound only once that binding no longer holds: Undo the replacement to restore the bound part, or have a reviewer supersede the binding in the Component review panel";
+/** The sentence a notice or gate refusal adds when the drift has `changed` parts ("" when none). */
+function rebindClause(drift: SchematicDrift): string {
+  const changed = drift.items.filter((item) => item.kind === "changed");
+  if (changed.length === 0) return "";
+  const refs = `${changed.slice(0, DRIFT_SENTENCE_REFS).map((item) => item.schematicRefDes ?? item.boardRef ?? item.componentInstanceId.slice(0, 24)).join(", ")}${changed.length > DRIFT_SENTENCE_REFS ? `, and ${changed.length - DRIFT_SENTENCE_REFS} more` : ""}`;
+  return ` Prepare PCB re-binds ${refs} only once the earlier binding no longer holds (while it does, the bind is refused: PB_ACTIVE_SELECTION_CONFLICT): Undo the replacement to restore the bound part, or have a reviewer supersede the binding in the Component review panel.`;
 }

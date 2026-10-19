@@ -285,7 +285,7 @@ export class GenerationWorker {
     this.lastTickAt = at;
     const free = this.policy.concurrency - this.inFlight();
     if (free <= 0 || this.stopping) return { at, claims: [], started: [] };
-    const outcomes = await this.store.claimSlices({ workerId: this.workerId, limit: free, revalidate: this.revalidate, ...(this.scope ? { scope: this.scope } : {}) });
+    const outcomes = await this.store.claimSlices({ workerId: this.scope ? generationScopedClaimOwner(this.workerId, this.scope) : this.workerId, limit: free, revalidate: this.revalidate, ...(this.scope ? { scope: this.scope } : {}) }); // [PR-L6 integration, 2026-10-19] F7: a --scope worker claims under an owner naming its scope (the liveness evidence)
     const report: GenerationTickReport = { at, claims: [], started: [] };
     for (const outcome of outcomes) {
       if (outcome.outcome !== "claimed") {
@@ -406,3 +406,6 @@ export class GenerationWorker {
     return reports;
   }
 }
+
+// [PR-L6 integration, 2026-10-19] F7: on its own line at the end (an import is hoisted), so no cited line moves.
+import { generationScopedClaimOwner } from "../snapshot";

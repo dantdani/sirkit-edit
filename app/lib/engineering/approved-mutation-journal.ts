@@ -603,6 +603,15 @@ export class ApprovedMutationJournal {
       const document: JournalDocument = { schema: APPROVED_MUTATION_JOURNAL_SCHEMA, version: (loaded.loadedVersion ?? 0) + 1, entries: loaded.document.entries };
       const outcome = mutate(document);
       if (!outcome.ok) return outcome;
+      // [PR-L6 integration, 2026-10-19] BI-1: bound the document by its serialized size as well as its entry count - receipt v2's
+      // boardImpact made the store's 256 KiB refusal (JOURNAL_DOCUMENT_TOO_LARGE) come before the 64-entry trim, and after a canonical
+      // commit that refusal is recovery-required. Only the OLDEST receipt-finalized entries (never the one being written, never a
+      // prepared, committed, adopted or poisoned one) make room; a document that cannot fit is refused before anything is saved.
+      while (JSON.stringify(document).length > MAX_SERIALIZED) {
+        const evictable = document.entries.findIndex((entry) => entry.state === "receipt-finalized" && entry.identityKey !== identityKey);
+        if (evictable < 0) return { ok: false, reason: "unavailable" };
+        document.entries.splice(evictable, 1);
+      }
       try {
         const saved = await this.store.saveIf(this.scope.tenantId, this.scope.projectId, this.scope.branchId, document, loaded.loadedVersion);
         if (saved) return { ok: true };

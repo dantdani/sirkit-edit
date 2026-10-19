@@ -111,7 +111,7 @@ export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 4
   let response;
   try {
     response = await llmRouter.generate({
-      provider,
+      provider, maxProviderRetries: 0, // [PR-L6 integration, 2026-10-19] SPEND-1/3: an automatic post-approval pass is ONE billed attempt (no SDK resend)
       maxTokens: 1536,
       system: LAYOUT_CRITIC_SYSTEM_PROMPT,
       tools: [LAYOUT_CRITIC_TOOL],

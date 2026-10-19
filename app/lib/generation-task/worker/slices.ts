@@ -38,7 +38,7 @@ import { generationTaskEvent, type GenerationTaskEventDraft } from "../events";
 import type { GenerationBlockPatch, GenerationSliceEnd, GenerationSliceLease, GenerationTaskStore } from "../store";
 import { GENERATION_STRATEGIES, GenerationTaskContractError, cleanLine, isoOf, type GenerationBlockId, type GenerationStrategyId, type GenerationTaskState } from "../vocabulary";
 import {
-  FactsCatalogPort, INPUT_BOUND_EXCEEDED_CODE, MeteredLlmPort, SliceInputAllowance, SliceMeter, catalogEpochOf, consecutiveProviderWaits, isAdmissionPause, providerBlockerOf, providerWait, taskEmbeddingCache, zeroSpend,
+  FactsCatalogPort, INPUT_BOUND_EXCEEDED_CODE, InputAllowanceExhaustedError, MeteredLlmPort, SliceInputAllowance, SliceMeter, catalogEpochOf, consecutiveProviderWaits, isAdmissionPause, providerBlockerOf, providerWait, taskEmbeddingCache, zeroSpend,
   type GenerationLlmAdmission, type MeteredLlmPortOptions, type SliceSpend,
 } from "./accounting";
 import { blockLearning, historyClosed, historyWithSlice, judgeSliceProgress, nextStrategyOf, quotedQuery, strategyAtClaim, strategySeedText, type BlockLearning } from "./progress";
@@ -202,7 +202,7 @@ function inputMetering(ctx: SliceContext): { input: SliceInputAllowance | null; 
   const beforeSend = async (): Promise<void> => {
     const uncommitted = Math.max(0, input.reported + input.unreportedBound() - committedInput);
     const recorded = await ctx.store.admitCall(ctx.lease, (seq += 1), uncommitted);
-    if (!recorded.ok) throw new Error(recorded.code);
+    if (!recorded.ok) throw recorded.code === "GENERATION_INPUT_ALLOWANCE_EXHAUSTED" ? new InputAllowanceExhaustedError() : new Error(recorded.code); // [PR-L6 integration, 2026-10-19] F2: the task's input limit refused the call (never sent)
   };
   return { input, options: { input, beforeSend }, committed: (usage) => { committedInput += (usage.inputTokens ?? 0) + (usage.uncertainInputTokens ?? 0); } };
 }
@@ -313,7 +313,7 @@ async function runDesignSlice(ctx: SliceContext): Promise<GenerationSliceReport>
   const planned = plannedBlockOf(task, blockId);
   // [PR-L6, 2026-10-19] OD-253 item 3: the single design's message carries the plan's assumptions (a planned block's brief already does)
   const prompt = planned === null ? designPrompt(task.request.prompt, task.plan?.assumptions ?? []) : task.request.prompt;
-  const base = blockDesignRequest(prompt, planned);
+  const base = blockDesignRequest(prompt, planned, task.plan?.assumptions ?? []); // [PR-L6 integration, 2026-10-19] F5: the assumptions the brief could not hold
   const facts = await store.readFacts(lease.scope, task);
   // [PR-L6, 2026-10-19] items 1 and 2b: lookups keyed by the catalog's identity now; query embeddings cached per task in this process
   const catalogEpoch = await catalogEpochOf(ctx.ports.catalog);
@@ -393,7 +393,7 @@ async function runDesignSlice(ctx: SliceContext): Promise<GenerationSliceReport>
   const identity = { taskId: lease.taskId, blockId, sliceId: lease.sliceId, attempt: lease.attempt, fence: lease.fence, strategy };
   const policy = { maxTurns, windowDeadlineAt, perCallMs: ctx.windows.perCallMs, minTurnStartMs: ctx.windows.minTurnStartMs };
   const outcome = strategy === "S1-baseline"
-    ? await designBlockSlice({ prompt, block: planned, checkpoint, identity, policy, provider: task.request.provider, signal: ctx.supervisor.signal, llm: coreLlm, catalog, now: ctx.clock, onTurn })
+    ? await designBlockSlice({ prompt, block: planned, assumptions: task.plan?.assumptions ?? [], checkpoint, identity, policy, provider: task.request.provider, signal: ctx.supervisor.signal, llm: coreLlm, catalog, now: ctx.clock, onTurn })
     : await runBlockSlice({ block, checkpoint, identity, policy, signal: ctx.supervisor.signal, provider: task.request.provider, llm: coreLlm, catalog, now: ctx.clock, onTurn });
 
   const usage = meter.peek(spendNow(outcome));

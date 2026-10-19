@@ -629,15 +629,17 @@ function reportedSearches(input: Record<string, unknown>): Array<{ query: string
 }
 
 /** Judge one report_unfilled_role call: accepted when its role is named and at least two of its searches are searches this conversation
- *  recorded (by the semantic search key: any word order or punctuation); otherwise the correction the model gets. Never a part. */
-function judgeUnfilledRole(ctx: LoopContext, raw: unknown): { accepted: true; role: string; recorded: number } | { accepted: false; error: string } {
+ *  recorded BEFORE the report's turn (by the semantic search key: any word order or punctuation); otherwise the correction the model gets.
+ *  Never a part. [PR-L6 integration, 2026-10-19] F1: a search sent in the same turn as the report does not count - its results were not
+ *  yet read when the report was made (`searchedBefore` is the turn-start snapshot of the recorded keys). */
+function judgeUnfilledRole(ctx: LoopContext, raw: unknown, searchedBefore: ReadonlySet<string>): { accepted: true; role: string; recorded: number } | { accepted: false; error: string } {
   const input = raw !== null && typeof raw === "object" && !Array.isArray(raw) && !("_raw" in raw) ? raw as Record<string, unknown> : null;
   const role = typeof input?.role === "string" ? input.role.trim().slice(0, 120) : "";
   if (!input || !role) return { accepted: false, error: `This report_unfilled_role was not accepted: it needs a "role" naming the part's job in this block and "queriesTried" listing the searches you made for it. Search for the role, then report again - or submit the block with the parts you found.` };
   const identity = ctx.catalog.identity;
-  const keys = new Set(reportedSearches(input).map((search) => generationSearchKey({ query: search.query, category: search.category, catalogProfile: identity.catalogProfile, embeddingModel: identity.embeddingModel, catalogEpoch: identity.catalogEpoch })).filter((key) => ctx.state.searches.has(key)));
+  const keys = new Set(reportedSearches(input).map((search) => generationSearchKey({ query: search.query, category: search.category, catalogProfile: identity.catalogProfile, embeddingModel: identity.embeddingModel, catalogEpoch: identity.catalogEpoch })).filter((key) => searchedBefore.has(key)));
   if (keys.size < UNFILLED_ROLE_MIN_SEARCHES) {
-    return { accepted: false, error: `This report_unfilled_role was not accepted: it must name at least ${UNFILLED_ROLE_MIN_SEARCHES} different search_parts searches this block actually made for the role (${keys.size} of the searches named match a recorded search). Search for "${boundUntrustedText(role, 80)}" with at least two different queries or categories, then report again with those searches exactly as sent - or submit the block with the parts you found.` };
+    return { accepted: false, error: `This report_unfilled_role was not accepted: it must name at least ${UNFILLED_ROLE_MIN_SEARCHES} different search_parts searches this block actually made for the role (${keys.size} of the searches named match a recorded search). A search sent in the same turn as the report does not count: report only after you have read its results. Search for "${boundUntrustedText(role, 80)}" with at least two different queries or categories, then report again with those searches exactly as sent - or submit the block with the parts you found.` };
   }
   return { accepted: true, role, recorded: keys.size };
 }
@@ -754,6 +756,7 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
       // parts and submissions before this turn), read from the normalized state this turn starts from
       const pinsListed = ctx.durable ? pinsInConversation(ctx.state.messages) : new Set<string>();
       const knownBefore = ctx.durable ? new Set(ctx.state.surfaced.keys()) : new Set<string>();
+      const searchedBefore = ctx.durable ? new Set(ctx.state.searches.keys()) : new Set<string>(); // [PR-L6 integration, 2026-10-19] F1: the searches whose results the model has read
       const submissionsBefore = ctx.durable ? new Set(ctx.state.submissions.map((entry) => `${entry.fingerprint}|${entry.codes.join(",")}`)) : new Set<string>();
       const rawSearches = await Promise.all(
         searchBlocks.map(async (block) => {
@@ -784,6 +787,7 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
       if (ctx.durable) for (const entry of searched) recordSearch(ctx, entry.query, entry.category, entry.results);
 
       const seenPartIds = new Set<string>();
+      const sentFull = new Set<string>(); // [PR-L6 integration, 2026-10-19] F3: the search calls that carried a part's full pin list (first shown to the model this turn)
       if (stopRequested(ctx)) return { kind: "stopped", stage: "search" };
       const searchResults: LLMToolResultPart[] = rawSearches.map(
         ({ block, error, results, categoryNote, cached }) => {
@@ -801,7 +805,8 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
                 partId: r.partId,
                 mainCategory: r.mainCategory,
                 untrustedCatalogText: { name: boundUntrustedText(r.name, 128), mpn: boundUntrustedTextOrNull(r.mpn, 128) },
-                note: "Already returned in an earlier search this turn — reuse this partId; full pin list is in that result.",
+                // [PR-L6 integration, 2026-10-19] F9: a part whose pins an EARLIER turn listed is compact in this turn's first entry too
+                note: pinsListed.has(r.partId) ? BUILD_PINS_LISTED_NOTE : "Already returned in an earlier search this turn — reuse this partId; full pin list is in that result.",
               };
             }
             seenPartIds.add(r.partId);
@@ -821,6 +826,7 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
             // context assembly" — only matched parts pay the tokens).
             const designNotes = kgDesignNotes(r.name);
             const facing = modelFacingPart(r);
+            sentFull.add(block.id);
             return designNotes ? { ...facing, designNotes } : facing;
           });
           return {
@@ -833,7 +839,9 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
         },
       );
       // [PR-L6, 2026-10-19] item 7: a search repeats when the facts answered it and it surfaced no part this conversation lacked
-      const repeatSearches = new Set(rawSearches.filter((entry) => entry.error === null && entry.cached && entry.results.every((part) => knownBefore.has(part.partId))).map((entry) => entry.block.id));
+      // [PR-L6 integration, 2026-10-19] F3: a search that sent a part's full pin list for the first time is never a repeat (a seed part the seed
+      // text cut, or a part find_alternates registered compact, is in `surfaced` without the model ever having seen its pins)
+      const repeatSearches = new Set(rawSearches.filter((entry) => entry.error === null && entry.cached && !sentFull.has(entry.block.id) && entry.results.every((part) => knownBefore.has(part.partId))).map((entry) => entry.block.id));
 
       // Run find_alternates calls in parallel. For each, register the full part
       // record (with pins) of every returned alternate into the surfaced parts, so
@@ -939,7 +947,7 @@ async function runTurns(ctx: LoopContext): Promise<LoopEnd> {
       let unfilled = false;
       if (ctx.durable) {
         for (const block of toolUses.filter((b) => b.name === "report_unfilled_role")) {
-          const verdict = judgeUnfilledRole(ctx, block.input);
+          const verdict = judgeUnfilledRole(ctx, block.input, searchedBefore);
           if (verdict.accepted) {
             unfilled = true;
             reportResults.push({ type: "tool_result", toolCallId: block.id, output: JSON.stringify({ accepted: true, note: `Recorded: this block waits for a part for "${boundUntrustedText(verdict.role, 80)}" (${verdict.recorded} recorded searches found none suitable). No part was invented; the parts already found are kept.` }) });

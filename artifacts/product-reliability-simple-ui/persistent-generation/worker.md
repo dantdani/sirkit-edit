@@ -151,11 +151,11 @@ edit, F20), with the other `l2-*` / `l3-*` suites in increment 7.
 - A provider refusal of a malformed request, an unrequested output or an unclassified failure has no code of its own in the closed
   blocker list; it is recorded as `platform_failure` (the provider's reason is in the worker's log line).
 - The planner's one correction attempt can spend one call more than the plan slice's 1-call reservation; the next claim's allowance
-  check counts it.
+  check counts it. [PR-L6 integration, 2026-10-19] SPEND-2: superseded - the plan slice now reserves both planner calls (2 x 4,096 output tokens, `GENERATION_SLICE_POLICY.planAttempts`), since a release, lapse or cancel settled from release drops the measured usage and only the reservation stays charged.
 - The LLM admission meters are per process; the durable allowance is the cross-process bound.
 - The task's facts are a cache: a delta the facts aggregate cannot hold (512 KB; parts with very long pin lists) is dropped and logged,
   and the commit is made without it - a later identical search then reaches the catalog again.
-- The provider SDKs retry 429 / 5xx themselves (`maxRetries`) before the worker sees a failure; the worker's backoff applies after them.
+- The provider SDKs retry 429 / 5xx themselves (`maxRetries`) before the worker sees a failure; the worker's backoff applies after them. [PR-L6 integration, 2026-10-19] SPEND-1: superseded for every metered slice call - `MeteredLlmPort` sends `maxProviderRetries: 0` (the SDKs' per-call `maxRetries`), so one metered call is one billed attempt and the slice's own provider wait re-admits and re-charges a retry; the post-approval Tidy and Review routes send 0 too. Every other caller keeps the client default.
 - The backoff's count of consecutive provider waits is read from the head's milestone ring (48 entries): a longer run reads short.
 
 ## 8. [PR-L6, 2026-10-19] Operator allowance, input admission and `--scope` (OD-252 item 1, OD-253 item 6; offline only)
@@ -179,10 +179,10 @@ edit, F20), with the other `l2-*` / `l3-*` suites in increment 7.
   plus earlier uncommitted input), so a process that dies inside the call leaves it charged (uncertain) for the next claimer. A call
   whose completion is unknown stays charged at its bound; a reported input above its bound stops the slice before any further call
   (`sirkit_input_bound_exceeded` -> `platform_failure`, logged with both numbers). The bound holds per process for ONE worker at
-  `--concurrency 1`; durable cross-slice input reservations for concurrent slices remain a follow-up.
+  `--concurrency 1`; durable cross-slice input reservations for concurrent slices remain a follow-up. [PR-L6 integration, 2026-10-19] F2: superseded - `store.admitCall` refuses (`GENERATION_INPUT_ALLOWANCE_EXHAUSTED` -> `sirkit_input_allowance_exhausted` -> `allowance_exhausted`, never sent) when settled + uncertain + every slice's in-flight input bound would exceed the task's limit; the fenced head commit serializes admissions across slices and worker processes (`l6-input-concurrency`).
 - **`--scope <tenant>/<project>/<branch>`** (direct transport only; the pump refuses it): the worker claims only that scope's slices of
   BOTH topics (generation and component resolution, `claimOutbox({ scope })`); the branch may contain `/`. Without it, every scope as
-  before. Evidence: `l3-worker-scope` (in-memory and PGlite), `l3-worker-process` case 4 (the real process).
+  before. [PR-L6 integration, 2026-10-19] F7: a scoped worker claims generation slices under the owner `<worker id>#scope:<16-hex scope tag>`, and liveness counts its live lease toward `workers_busy` only for its own scope (another scope's due task reads `no_worker`; `l6-liveness-scope`). Evidence: `l3-worker-scope` (in-memory and PGlite), `l3-worker-process` case 4 (the real process).
 - **Bounded run launch (for the lead; no run made here):** the builder's own server with the operator unit, e.g.
   `SIRKIT_GENERATION_ALLOWANCE_MODEL_CALLS=24 SIRKIT_GENERATION_ALLOWANCE_OUTPUT_TOKENS=57344 SIRKIT_GENERATION_ALLOWANCE_INPUT_TOKENS=450000
   SIRKIT_GENERATION_ALLOWANCE_CATALOG_SEARCHES=120 SIRKIT_GENERATION_ALLOWANCE_WALL_CLOCK_MS=21600000`, and its worker with

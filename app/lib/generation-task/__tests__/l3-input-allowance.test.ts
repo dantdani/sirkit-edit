@@ -188,7 +188,7 @@ describe("[PR-L6] the input dimension of the task allowance and the pre-call inp
     expect(port.inner.requests).toHaveLength(2);
     expect(waiting.blocks.main).toMatchObject({ turnsUsed: 0 }); // the turn was discarded
     // the provider did the work for the abandoned call: its input is in the usage (reported, or charged at its bound while unknown)
-    expect(waiting.usage.inputTokens + (waiting.usage.uncertainInputTokens ?? 0)).toBeGreaterThanOrEqual(port.reported[0]! + Math.floor(port.bounds[1]! * 0.4));
+    expect([port.reported[0]! + Math.floor(port.bounds[1]! * 0.4), port.reported[0]! + port.bounds[1]!]).toContain(waiting.usage.inputTokens + (waiting.usage.uncertainInputTokens ?? 0)); // [PR-L6 integration, 2026-10-19] test-integrity F7, reviewed pin move: was a lower bound only (a double charge passed); now EXACTLY the late answer's reported input, or its bound while unknown
   });
 
   it("6. the pre-call record is everything the attempt has not committed: a planner correction's record carries the first answer's input and its own bound", { timeout: 60_000 }, async () => {

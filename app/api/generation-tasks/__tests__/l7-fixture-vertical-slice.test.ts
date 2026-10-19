@@ -133,7 +133,7 @@ describe("[PR-L6 L.7-9] the owner's four-motor request through the real routes, 
     // the disclosed assumptions travel with the plan: in its rationale always, and as the plan's own list once the planner reads it
     const recipe = dronePlan(4, false);
     for (const words of ["brushed 1S coreless motors", "1S LiPo without charger or protection", "internal 8 MHz oscillator", "UART header for a receiver", "no firmware or flight qualification"]) expect(ready.plan.rationale).toContain(words);
-    expect([[], recipe.assumptions]).toContainEqual(ready.plan.assumptions);
+    expect(ready.plan.assumptions).toEqual(recipe.assumptions); // [PR-L6 integration, 2026-10-19] test-integrity F6, reviewed pin move: the pre-integration hedge (`[[], recipe.assumptions]`) is gone - both halves are in 2240363a, so the planner's list must arrive whole
     expect(ready.result).toMatchObject({ status: "complete", omittedBlocks: [] });
     expect(ready.usage.modelCalls).toBe(9); // the planner, then one search turn and one submit turn per block
     expect(ready.usage.cacheHits).toBeGreaterThan(0); // identical passive searches across blocks answered from the task's facts
@@ -235,7 +235,7 @@ describe("[PR-L6 L.7-9] pause and resume, a missing part, and a request with no 
     const taskId = await startTask("build me a simple drone controller with 4 motors and a barometer");
     let extensions = 0;
     let blocked: Record<string, any> | null = null; // eslint-disable-line @typescript-eslint/no-explicit-any
-    for (let round = 0; round < 6 && blocked === null; round += 1) {
+    for (let round = 0; round < 2 && blocked === null; round += 1) { // [PR-L6 integration, 2026-10-19] test-integrity F6, reviewed pin move: was `round < 6` (five extensions accepted where one was measured)
       const waiting = await pumpUntil(taskId, (task) => task.state === "waiting-for-resource", 80);
       const barometer = waiting.plan.blocks.find((block: { name: string }) => block.name === DRONE_BLOCK_NAMES.barometer);
       if (barometer.status === "blocked" && barometer.blocker === "missing_part") { blocked = waiting; break; }
@@ -250,6 +250,7 @@ describe("[PR-L6 L.7-9] pause and resume, a missing part, and a request with no 
       expect((await controlTask(taskId, { action: "extend-allowance", clientActionId: `extend-${extensions}` })).ok).toBe(true);
     }
     expect(blocked, "the barometer block reaches its missing-part blocker").not.toBeNull();
+    expect(extensions).toBe(1); // [PR-L6 integration, 2026-10-19] test-integrity F6: exactly the one explicit extension the builder measured
     expect(blocked!.plan.blocks.filter((block: { status: string }) => block.status === "saved").map((block: { name: string }) => block.name)).toEqual([DRONE_BLOCK_NAMES.power, DRONE_BLOCK_NAMES.motors, DRONE_BLOCK_NAMES.mcu, DRONE_BLOCK_NAMES.imu]);
     // the barometer conversations searched and found nothing; no submission was ever made for it
     const barometerCalls = calls.filter((call) => typeof call.request.messages[0]?.content === "string" ? call.request.messages[0].content.startsWith(`Block: ${DRONE_BLOCK_NAMES.barometer}`) : JSON.stringify(call.request.messages[0]?.content ?? "").includes(`Block: ${DRONE_BLOCK_NAMES.barometer}`));

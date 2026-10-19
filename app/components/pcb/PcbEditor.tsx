@@ -161,7 +161,7 @@ import { stackupProfile, type StackupProfileId } from "@/app/lib/pcb/stackup"; /
 import { AssignmentQueuePanel } from "./AssignmentQueuePanel";
 import { PcbSyncReadinessPanel } from "./PcbSyncReadinessPanel"; // [PR-C F-08] a blocked preflight shown per blocker (message + refs), not as one 6 s toast
 import type { JourneyPcbFacts } from "@/app/lib/workflow/journey"; // [PR-C] the PCB facts reported to the page's journey model
-import { boardBehindSchematicNotice, boardSchematicDrift, manufacturingGateRefusal } from "@/app/lib/pcb-sync/schematic-drift"; /* [PR-L6, 2026-10-19] M.4 / M.5-7: the board behind the schematic, derived from facts (in place: no line moves) */ import { listUnresolvedInstances, unresolvedInstancesRefusal, type UnresolvedInstance } from "@/app/lib/pcb-sync/unresolved-instances"; // [PR-C F-08] the instances named BEFORE any server call
+import { BOARD_REBIND_REFUSAL, boardBehindSchematicNotice, boardSchematicDrift, manufacturingGateRefusal } from "@/app/lib/pcb-sync/schematic-drift"; /* [PR-L6, 2026-10-19] M.4 / M.5-7: the board behind the schematic, derived from facts (in place: no line moves) */ import { listUnresolvedInstances, unresolvedInstancesRefusal, type UnresolvedInstance } from "@/app/lib/pcb-sync/unresolved-instances"; // [PR-C F-08] the instances named BEFORE any server call
 import { MissingPartsList, type ReplacementRequestInstance } from "./MissingPartsList"; // [PR-F fA] the refusal rows as a workflow item: checklist + next actions over the existing routes; [PR-M, 2026-10-18] + the replacement entry point's instances
 import type { ProjectSelectorScope } from "@/app/lib/project/project-selector"; // [PR-F fA] the scope the list's distributor search and publication request act in
 import { missingPartsWords } from "@/app/lib/parts/missing-facts"; // [PR-F fA]
@@ -964,7 +964,7 @@ export default function PcbEditor({
           if (detail?.code === "PB_ATOMIC_SYMBOL_MISMATCH_CONFLICT") {
             return { ok: false, failure: `${k.refDes} (the placed symbol differs from the revision's symbol — replace the component before binding)` };
           }
-          return { ok: false, failure: `${k.refDes} (${detail?.code ?? res.status})` };
+          return { ok: false, failure: detail?.code === "PB_ACTIVE_SELECTION_CONFLICT" ? `${k.refDes} (${BOARD_REBIND_REFUSAL})` : `${k.refDes} (${detail?.code ?? res.status})` }; // [PR-L6 integration, 2026-10-19] BI-2: the earlier binding still holds - name the way out, never the bare code
         } catch {
           return { ok: false, failure: k.refDes };
         }
@@ -2592,11 +2592,11 @@ export default function PcbEditor({
   const journeyWorkflowState = manufacturing.workflow?.state ?? null;
   const journeyReleased = Boolean(manufacturing.truth?.latestRelease?.current);
   const journeyBoardExists = state.board !== null;
-  const journeyRoutingStale = routeStaleNotice !== null; const journeyBoardBehind = schematicDrift?.items.length ?? 0; // [PR-L6, 2026-10-19]
+  const journeyRoutingStale = routeStaleNotice !== null; const journeyBoardBehind = schematicDrift?.items.length ?? 0; const journeyBoardRebind = schematicDrift?.counts.changed ?? 0; // [PR-L6, 2026-10-19]; [PR-L6 integration, 2026-10-19] BI-2: + the replaced parts a bound board carries
   const journeyBindingReviewPending = componentReview.pendingCount;
   useEffect(() => {
-    onJourneyFacts?.({ boardExists: journeyBoardExists, syncing: ownedBusy.syncing, unresolvedCount: journeyUnresolved, bindingReviewPending: journeyBindingReviewPending, preflight: journeyPreflight, applying: ownedBusy.applying, workflowState: journeyWorkflowState, routingStale: journeyRoutingStale, drcCurrent: null, released: journeyReleased, boardBehindSchematic: journeyBoardBehind });
-  }, [onJourneyFacts, journeyBoardExists, ownedBusy.syncing, ownedBusy.applying, journeyUnresolved, journeyBindingReviewPending, journeyPreflight, journeyWorkflowState, journeyRoutingStale, journeyReleased, journeyBoardBehind]);
+    onJourneyFacts?.({ boardExists: journeyBoardExists, syncing: ownedBusy.syncing, unresolvedCount: journeyUnresolved, bindingReviewPending: journeyBindingReviewPending, preflight: journeyPreflight, applying: ownedBusy.applying, workflowState: journeyWorkflowState, routingStale: journeyRoutingStale, drcCurrent: null, released: journeyReleased, boardBehindSchematic: journeyBoardBehind, boardBehindRebind: journeyBoardRebind });
+  }, [onJourneyFacts, journeyBoardExists, ownedBusy.syncing, ownedBusy.applying, journeyUnresolved, journeyBindingReviewPending, journeyPreflight, journeyWorkflowState, journeyRoutingStale, journeyReleased, journeyBoardBehind, journeyBoardRebind]);
   // [PR-C] "Prepare PCB" from the page: the same preparation the button starts, only while no board exists (or, [PR-L6, 2026-10-19], the board is behind the schematic) and nothing
   // runs; each token starts at most one run, and applying the verified plan stays the human's explicit click.
   const syncRequestSeenRef = useRef(0);

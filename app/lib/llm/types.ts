@@ -127,3 +127,12 @@ export function assistantResponseMessage(response: LLMResponse): LLMMessage {
 export function toolResultsMessage(results: LLMToolResultPart[]): LLMMessage {
   return { role: "user", content: results };
 }
+
+// [PR-L6 integration, 2026-10-19] SPEND-1 (the spend-bound review of increment 6): a per-call transport option, merged into
+// `LLMRequest` here, after the last line, so no line cited in this file moves (an interface declaration merges with the one above).
+export interface LLMRequest {
+  /** The provider SDK's own automatic retries for THIS call (transport only, like `signal`; never serialized into provider input).
+   *  Absent: the client's default. 0: one attempt, so one call the caller meters is at most one billed attempt - every durable
+   *  generation slice call (`MeteredLlmPort`) and the post-approval Tidy and Review calls send 0, and the caller's own wait retries. */
+  maxProviderRetries?: number;
+}

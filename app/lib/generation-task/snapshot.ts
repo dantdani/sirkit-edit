@@ -30,7 +30,7 @@ export const GENERATION_TASK_SNAPSHOT_ACTIONS = Object.freeze(["cancel", "pause"
 export type GenerationTaskSnapshotAction = (typeof GENERATION_TASK_SNAPSHOT_ACTIONS)[number];
 
 /** A processing outbox event of the slice topic, as the store lists it (global: bounded by workers x concurrency). */
-export interface GenerationProcessingSlice { sliceId: string; leaseToken: string | null; leaseExpiresAt: string | null }
+export interface GenerationProcessingSlice { sliceId: string; leaseToken: string | null; leaseExpiresAt: string | null; /** [PR-L6 integration, 2026-10-19] F7: the claiming worker (`generationScopedClaimOwner` marks a --scope worker) */ leaseOwner?: string | null }
 
 export interface GenerationTaskLivenessView {
   state: GenerationTaskLiveness;
@@ -103,7 +103,7 @@ export function generationTaskLiveness(head: GenerationTaskHead, input: { nowMs:
   if (due.length === 0) return { state: "scheduled", since: null, retryAt: pending.map(([, entry]) => entry.notBefore).sort()[0]! };
   const since = due.map(([, entry]) => entry.notBefore).sort()[0]!;
   if (input.nowMs - Date.parse(since) < (input.pickupGraceMs ?? GENERATION_SLICE_POLICY.workerPickupGraceMs)) return { state: "waiting_for_worker", since, retryAt: null };
-  return { state: input.processing.some(liveLease) ? "workers_busy" : "no_worker", since, retryAt: null };
+  return { state: input.processing.some((event) => liveLease(event) && claimOwnerServes(event.leaseOwner, head.scope)) ? "workers_busy" : "no_worker", since, retryAt: null }; // [PR-L6 integration, 2026-10-19] F7: a worker restricted to ANOTHER scope never claims this task's slices
 }
 
 const ALLOWANCE_BLOCKERS: readonly GenerationBlockerCode[] = ["allowance_exhausted", "task_window_elapsed"];
@@ -182,4 +182,25 @@ export function buildGenerationTaskSnapshot(head: GenerationTaskHead, input: { n
     activity,
     ...(input.includePrompt ? { prompt: head.request.prompt } : {}),
   };
+}
+
+// [PR-L6 integration, 2026-10-19] F7 (the engine review of increment 6), appended after the last line (declarations are hoisted): since
+// increment 6 a worker may run with `--scope` and claim only that scope's slices, so "a live lease exists" no longer means a due slice of
+// THIS task will be picked up. A scope-restricted worker claims under an owner id that names its scope's tag; the liveness judgement counts
+// a live lease toward `workers_busy` only when its worker is unrestricted or restricted to the task's own scope - otherwise `no_worker`.
+import { canonicalDurableScope, durableWorkflowDigest } from "../durable-workflow/stable";
+/** Between a worker id ([A-Za-z0-9._:-], so never containing "#") and its scope tag: an unambiguous mark. */
+export const GENERATION_SCOPED_OWNER_MARK = "#scope:";
+/** A scope's 16-hex tag (the canonical tenant, project and branch). */
+export function generationWorkerScopeTag(scope: { tenantId: string; projectId: string; branchId: string }): string {
+  return durableWorkflowDigest({ schema: "sirkit.generation-worker-scope.v1", ...canonicalDurableScope(scope) }).slice(4, 20);
+}
+/** The owner id a `--scope` worker claims generation slices under (the outbox lease owner and the head's slice owner; at most 151 characters). */
+export function generationScopedClaimOwner(workerId: string, scope: { tenantId: string; projectId: string; branchId: string }): string {
+  return `${workerId}${GENERATION_SCOPED_OWNER_MARK}${generationWorkerScopeTag(scope)}`;
+}
+/** Whether the worker holding a lease could claim a slice of `scope`: an unmarked (or unknown) owner is unrestricted. */
+function claimOwnerServes(owner: string | null | undefined, scope: { tenantId: string; projectId: string; branchId: string }): boolean {
+  const at = typeof owner === "string" ? owner.lastIndexOf(GENERATION_SCOPED_OWNER_MARK) : -1;
+  return at < 0 || owner!.slice(at + GENERATION_SCOPED_OWNER_MARK.length) === generationWorkerScopeTag(scope);
 }

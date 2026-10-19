@@ -70,10 +70,10 @@ export const DRONE_MAX_MOTORS = 4;
 
 const COUNT_WORDS: Readonly<Record<string, number>> = Object.freeze({ one: 1, single: 1, two: 2, twin: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8 });
 /** The request's features the recipe choice reads (the text before any strategy seed; case and punctuation do not matter). */
-export interface RequestFeatures { drone: boolean; motors: number | null; barometer: boolean; ledDimmer: boolean; blinker: boolean }
+export interface RequestFeatures { drone: boolean; motors: number | null; barometer: boolean; ledDimmer: boolean; blinker: boolean; /** [PR-L6 integration, 2026-10-19] FX-2 */ brushless: boolean }
 export function requestFeatures(request: string): RequestFeatures {
   const text = request.split(STRATEGY_SEED_MARKER)[0]!.toLowerCase();
-  const quad = /\bquad[\s-]?(?:copter|rotor)s?\b|\bquad\b/.test(text);
+  const quad = /\bquad[\s-]?(?:copter|rotor)s?\b|\bquad\b(?=[\s-]+(?:drones?|motors?|props?|propellers?|flight)\b)/.test(text); // [PR-L6 integration, 2026-10-19] FX-1: a bare "quad" (a quad op-amp, quad SPI, a quad-core MCU) is not a drone
   const drone = quad || /\b(?:drones?|multi[\s-]?(?:copter|rotor)s?|tri[\s-]?copters?|hexa[\s-]?copters?|octo[\s-]?copters?|bi[\s-]?copters?)\b/.test(text);
   let motors: number | null = null;
   const counted = /\b(\d{1,2}|one|single|two|twin|three|four|five|six|seven|eight)[\s-]*(?:x\s*)?(?:(?:small|tiny|brushed|brushless|coreless|dc|bldc|mini|micro|propeller|prop)[\s-]+){0,3}motors?\b/.exec(text);
@@ -87,12 +87,15 @@ export function requestFeatures(request: string): RequestFeatures {
   const led = /\bleds?\b/.test(text);
   const ledDimmer = led && /\b(?:dimm(?:er|ing|able)?|brightness|fad(?:e|er|ing)|pwm)\b/.test(text);
   const blinker = /\b555\b/.test(text) && /\b(?:blink(?:er|ing|s)?|astable|flash(?:er|ing)?)\b/.test(text);
-  return { drone, motors, barometer, ledDimmer, blinker };
+  const brushless = /\b(?:brushless|bldc|escs?)\b/.test(text); // [PR-L6 integration, 2026-10-19] FX-2: an explicit brushless requirement (the catalog holds no ESC parts)
+  return { drone, motors, barometer, ledDimmer, blinker, brushless };
 }
 
 /** The recipe the request's features select, or null (no recipe: the provider declines rather than invent a circuit). */
 export function selectRecipe(request: string): RequestRecipe | null {
   const features = requestFeatures(request);
+  // [PR-L6 integration, 2026-10-19] FX-1 / FX-2: a drone AND an LED dimmer, or a brushless drone, is not a circuit a recipe designs: declined
+  if (features.drone && (features.ledDimmer || features.brushless)) return null;
   if (features.drone) {
     const motors = features.motors ?? 4;
     if (!Number.isSafeInteger(motors) || motors < 1 || motors > DRONE_MAX_MOTORS) return null;

@@ -32,7 +32,7 @@ export const GENERATION_TASK_CONTROL_SCHEMA = "sirkit.generation-task-control-re
 export const GENERATION_TASK_INSPECTION_SCHEMA = "sirkit.generation-task-inspection.v1" as const;
 /** A control request expires like a sealed proposal; an expired chip can only be asked for again. */
 export const GENERATION_TASK_CONTROL_TTL_MS = 10 * 60 * 1000;
-/** The inspection's serialized bound (characters of the canonical JSON the model receives); a snapshot is far below it. */
+/** The inspection's serialized bound (characters of the canonical JSON the model receives). [PR-L6 integration, 2026-10-19] F6: was "a snapshot is far below it" - since increment 6 (coverage, assumptions, missing roles) a large one is not, and the inspection shortens it to fit (generation-proposals.ts `fitInspectionBound`). */
 export const GENERATION_TASK_INSPECT_MAX_CHARS = 16_000;
 /** The control actions the assistant may ASK for (the human confirms each); extending an allowance and reviews stay the page's own. */
 export const GENERATION_TASK_CONTROL_TOOL_ACTIONS = Object.freeze(["cancel", "pause", "resume", "retry-block"] as const);

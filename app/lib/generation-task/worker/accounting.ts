@@ -180,7 +180,7 @@ export function generationRequestInputBound(request: Pick<LLMRequest, "messages"
 
 /** One slice's input budget, shared by every model port of the slice (the plan call, a block's seed call and its turns): a call is admitted
  *  only when its bound fits what remains; until its usage is reported it is charged at its bound, and a call whose completion is unknown
- *  STAYS charged at its bound (uncertain input). Per process and per slice: the bound holds for one worker at concurrency 1. */
+ *  STAYS charged at its bound (uncertain input). Per process and per slice; [PR-L6 integration, 2026-10-19] F2: the TASK's limit across slices and workers is held by the durable pre-call record (store.admitCall refuses a bound the task cannot fit). */
 export class SliceInputAllowance {
   private charged = 0;
   private readonly inFlight = new Map<number, number>();
@@ -255,7 +255,7 @@ export class MeteredLlmPort implements BuildLlmPort {
     if (id === null) refuse(INPUT_ALLOWANCE_EXHAUSTED_CODE);
     if (this.beforeSend) {
       try { await this.beforeSend(bound); }
-      catch { this.input.withdraw(id!); refuse(INPUT_ADMISSION_UNRECORDED_CODE); }
+      catch (error) { this.input.withdraw(id!); refuse(error instanceof InputAllowanceExhaustedError ? INPUT_ALLOWANCE_EXHAUSTED_CODE : INPUT_ADMISSION_UNRECORDED_CODE); } // [PR-L6 integration, 2026-10-19] F2: the task-level limit (store.admitCall) is the allowance, not a recording failure
     }
     return id!;
   }
@@ -277,7 +277,7 @@ export class MeteredLlmPort implements BuildLlmPort {
     this.lastWasAdmissionRefusal = false;
     this.started += 1;
     try {
-      const response = await this.inner.generate(request);
+      const response = await this.inner.generate({ ...request, maxProviderRetries: 0 }); // [PR-L6 integration, 2026-10-19] SPEND-1: one metered call is one billed attempt (no SDK resend the meter cannot see); the slice's own provider wait re-admits and re-charges any retry
       this.settled += 1;
       const usage = response?.usage;
       const reportedInput = typeof usage?.inputTokens === "number" && Number.isSafeInteger(usage.inputTokens) && usage.inputTokens >= 0 ? usage.inputTokens : null;
@@ -542,4 +542,13 @@ export class FactsCatalogPort implements BuildCatalogPort {
 
   /** The facts this port holds for a part (seeds for a new strategy). */
   partFacts(partId: string): GenerationPartFacts | null { return this.parts.get(partId) ?? null; }
+}
+
+// [PR-L6 integration, 2026-10-19] F2 (the engine review of increment 6): appended after the last line, so no cited line moves. A class is
+// only read at call time (never while the module evaluates), so declaring it last is safe.
+/** `beforeSend` throws this when the durable pre-call record refused the call because the TASK's input limit (every slice's settled,
+ *  uncertain and in-flight input, across workers) has no room for its bound: the call is never sent, and the slice ends
+ *  `allowance_exhausted` with its last checkpoint kept - never `platform_failure`. */
+export class InputAllowanceExhaustedError extends Error {
+  constructor() { super(INPUT_ALLOWANCE_EXHAUSTED_CODE); this.name = "InputAllowanceExhaustedError"; }
 }

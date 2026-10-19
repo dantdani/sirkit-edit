@@ -41,8 +41,11 @@ const DRONE_PARAPHRASES = [
 const DIMMER_SENTENCES = [
   "Design a 5 V LED dimmer: a 555 timer PWM with a 10k potentiometer setting the brightness, switching the LED through an N-channel MOSFET.",
   "make me an LED brightness controller using PWM",
+  // [PR-L6 integration, 2026-10-19] FX-1: a bare "quad" (an op-amp, a flash) never makes a dimmer request a drone
+  "LED dimmer using an LM324 quad op-amp", "Design an LED dimmer that stores presets in a quad SPI flash",
 ];
-const UNKNOWN_REQUESTS = ["Design a 48 V brushless motor ESC with field-oriented control and CAN bus.", "A USB-C PD sink that negotiates 20 V", "hello"];
+// [PR-L6 integration, 2026-10-19] FX-1 / FX-2: + a quad-core board (no drone), an explicit brushless drone (the catalog has no ESC parts) and a mixed drone-and-dimmer request: declined
+const UNKNOWN_REQUESTS = ["Design a 48 V brushless motor ESC with field-oriented control and CAN bus.", "A USB-C PD sink that negotiates 20 V", "hello", "a quad-core MCU dev board", "drone with four BLDC motors", "a quadcopter with 4 brushless motors", "a quadcopter whose LED headlights are dimmed by PWM"];
 
 beforeEach(() => {
   resetFixtureContainer();

@@ -137,7 +137,7 @@ export const GENERATION_SLICE_POLICY = Object.freeze({
   claimRetries: 5,
   /** the rebase rule's retries (section 3.2) */
   rebaseRetries: 8,
-  planOutputTokens: 4_096,
+  planOutputTokens: 4_096, planAttempts: 2, // [PR-L6 integration, 2026-10-19] SPEND-2: the planner's calls per plan slice (build-multi-generation.ts PLAN_ATTEMPTS: one correction), pinned equal by l6-plan-reservation
   turnOutputTokens: 8_192,
 });
 /** `min(6, resolveBuildIterationCap())`: the operator's iteration cap may only lower a slice's turns. */
@@ -563,10 +563,10 @@ export function nextGenerationWork(head: GenerationTaskHead): Array<{ kind: Gene
   return head.plan.blocks.some((block) => head.blocks[block.blockId]!.status === "saved") ? [{ kind: "merge", blockId: null }] : [];
 }
 
-/** One slice attempt's worst-case reservation (section 5): a block slice reserves its turns x 8 192 output tokens, the planner one
- *  4 096-token call, the merge nothing. */
+/** One slice attempt's worst-case reservation (section 5): a block slice reserves its turns x 8 192 output tokens, the planner both of
+ *  its 4 096-token calls ([PR-L6 integration, 2026-10-19] SPEND-2: was one; a release drops the measured usage), the merge nothing. */
 export function generationReservationFor(kind: GenerationSliceKind, turns: number): { modelCalls: number; outputTokens: number } {
-  if (kind === "plan") return { modelCalls: 1, outputTokens: GENERATION_SLICE_POLICY.planOutputTokens };
+  if (kind === "plan") return { modelCalls: GENERATION_SLICE_POLICY.planAttempts, outputTokens: GENERATION_SLICE_POLICY.planAttempts * GENERATION_SLICE_POLICY.planOutputTokens };
   if (kind === "merge") return { modelCalls: 0, outputTokens: 0 };
   return { modelCalls: turns, outputTokens: turns * GENERATION_SLICE_POLICY.turnOutputTokens };
 }

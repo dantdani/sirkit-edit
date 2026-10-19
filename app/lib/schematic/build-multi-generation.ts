@@ -259,14 +259,20 @@ export function designPrompt(prompt: string, assumptions: readonly string[]): st
 // ─── 2. A block ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** The system prompt and seed message one block's conversation starts from: the whole request for the single design (null), or
- *  the block's brief and its shared board nets for a subsystem. The request-lifetime pool and the durable slice share it. */
-export function blockDesignRequest(prompt: string, block: PlannedBlock | null): { systemPrompt: string; userMessage: string } {
+ *  the block's brief and its shared board nets for a subsystem. The request-lifetime pool and the durable slice share it.
+ *  [PR-L6 integration, 2026-10-19] F5: a durable task passes its plan's `assumptions`; every one its stored brief does not already carry
+ *  (the plan-time fold keeps only as many whole assumptions as fit the 600-character brief) follows the shared nets in the section
+ *  `designPrompt` gives the single design, so no planned block designs without an assumption the review presents as the design basis.
+ *  A pure function of the stored plan (a resumed conversation sends the same message); without assumptions the message is unchanged. */
+export function blockDesignRequest(prompt: string, block: PlannedBlock | null, assumptions: readonly string[] = []): { systemPrompt: string; userMessage: string } {
   if (block === null) return { systemPrompt: BUILD_SYSTEM_PROMPT, userMessage: prompt };
+  const unfolded = assumptions.filter((assumption) => !block.brief.includes(assumption));
   return {
     systemPrompt: BUILD_SUBSYSTEM_SYSTEM_PROMPT,
     userMessage:
       `Block: ${block.name}\n\n${block.brief}\n\n` +
-      `SHARED BOARD NETS (connect to these by exact-name labels): ${block.sharedNets.join(", ") || "(none)"}`,
+      `SHARED BOARD NETS (connect to these by exact-name labels): ${block.sharedNets.join(", ") || "(none)"}` +
+      (unfolded.length ? `\n\nDesign assumptions (decided at planning; design under them, do not contradict them):\n${unfolded.map((assumption) => `- ${assumption}`).join("\n")}` : ""),
   };
 }
 
@@ -275,6 +281,8 @@ export interface DesignBlockSliceInput {
   prompt: string;
   /** the planned subsystem block, or null for the single design (block id `main`) */
   block: PlannedBlock | null;
+  /** [PR-L6 integration, 2026-10-19] F5: the stored plan's assumptions (a planned block's message carries those its brief does not) */
+  assumptions?: readonly string[];
   /** the block's last checkpoint, or null to begin */
   checkpoint: BuildLoopCheckpoint | null;
   identity: BlockSliceIdentity;
@@ -292,7 +300,7 @@ export interface DesignBlockSliceInput {
  *  most `policy.maxTurns` turns in the window. A block never saves an empty design. See build-loop-slice.ts `runBlockSlice`. */
 export async function designBlockSlice(input: DesignBlockSliceInput): Promise<BlockSliceOutcome> {
   if ((input.block === null) !== (input.identity.blockId === "main")) throw new Error("DESIGN_BLOCK_IDENTITY_MISMATCH: the single design is block main, a planned block is b1..b8");
-  const request = blockDesignRequest(input.prompt, input.block);
+  const request = blockDesignRequest(input.prompt, input.block, input.assumptions ?? []);
   return await runBlockSlice({
     block: { systemPrompt: request.systemPrompt, userMessage: request.userMessage, allowEmpty: false },
     checkpoint: input.checkpoint,

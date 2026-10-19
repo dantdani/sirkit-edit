@@ -45,7 +45,7 @@ describe("[PR-L6 M.5-7] the in-page manufacturing gate", () => {
     expect(manufacturingGateRefusal("release", boardSchematicDrift(sheet(A), synced(A)))).toBeNull();
     const undone = boardSchematicDrift(sheet(null), synced(A));
     expect(manufacturingGateRefusal("qualify", undone)).toBe("Qualification refused: the board is behind the schematic (D1 (without an exact part in the schematic)). Run Prepare PCB first so the board carries the schematic's exact parts; nothing was sent.");
-    expect(manufacturingGateRefusal("release", boardSchematicDrift(sheet({ ...A, footprintAssetVersionId: "fp-b" }), synced(A)))).toBe("Release refused: the board is behind the schematic (D1 (replaced in the schematic)). Run Prepare PCB first so the board carries the schematic's exact parts; nothing was sent.");
+    expect(manufacturingGateRefusal("release", boardSchematicDrift(sheet({ ...A, footprintAssetVersionId: "fp-b" }), synced(A)))).toBe("Release refused: the board is behind the schematic (D1 (replaced in the schematic)). Run Prepare PCB first so the board carries the schematic's exact parts; nothing was sent. Prepare PCB re-binds D1 only once the earlier binding no longer holds (while it does, the bind is refused: PB_ACTIVE_SELECTION_CONFLICT): Undo the replacement to restore the bound part, or have a reviewer supersede the binding in the Component review panel."); // [PR-L6 integration, 2026-10-19] reviewed pin move (BI-2): + the rebind sentence a REPLACED part on a bound board adds; the unresolved D1 above keeps its sentence unchanged
   });
 
   it("2. the drift is a memo of the schematic prop and the AUTHORITATIVE board record (skipped for the demo board), never state of its own", () => {
@@ -79,12 +79,15 @@ describe("[PR-L6 M.5-7] the in-page manufacturing gate", () => {
     expect(notice).toContain(" z-20 ");
     expect(source).toContain('<div className="absolute top-2 right-2 z-30 w-[24rem] max-w-[calc(100%-1rem)] max-h-[70%] overflow-auto">'); // the Missing parts list above it
     expect(source).toContain("const journeyBoardBehind = schematicDrift?.items.length ?? 0;");
-    expect(source).toContain("released: journeyReleased, boardBehindSchematic: journeyBoardBehind });");
-    expect(source).toContain("journeyRoutingStale, journeyReleased, journeyBoardBehind]);");
+    expect(source).toContain("released: journeyReleased, boardBehindSchematic: journeyBoardBehind, boardBehindRebind: journeyBoardRebind });"); // [PR-L6 integration, 2026-10-19] reviewed pin move (BI-2): + the replaced-part count (`boardBehindRebind`), in place
+    expect(source).toContain("journeyRoutingStale, journeyReleased, journeyBoardBehind, journeyBoardRebind]);"); // [PR-L6 integration, 2026-10-19] reviewed pin move (BI-2): + its dependency
+    expect(source).toContain("const journeyBoardRebind = schematicDrift?.counts.changed ?? 0;"); // [PR-L6 integration, 2026-10-19] BI-2: the replaced parts, from the same memo
+    // [PR-L6 integration, 2026-10-19] BI-2: a bind refused because the earlier binding still holds names the way out, never the bare code
+    expect(source).toContain('failure: detail?.code === "PB_ACTIVE_SELECTION_CONFLICT" ? `${k.refDes} (${BOARD_REBIND_REFUSAL})` : `${k.refDes} (${detail?.code ?? res.status})` };');
   });
 
   it("5. the edits are in place: the import rides line 164, so no cited line below it moves", () => {
-    expect(source.split("\n")[163]).toMatch(/^import \{ boardBehindSchematicNotice, boardSchematicDrift, manufacturingGateRefusal \} from "@\/app\/lib\/pcb-sync\/schematic-drift";.*import \{ listUnresolvedInstances, unresolvedInstancesRefusal, type UnresolvedInstance \} from "@\/app\/lib\/pcb-sync\/unresolved-instances"; \/\/ \[PR-C F-08\]/);
+    expect(source.split("\n")[163]).toMatch(/^import \{ BOARD_REBIND_REFUSAL, boardBehindSchematicNotice, boardSchematicDrift, manufacturingGateRefusal \} from "@\/app\/lib\/pcb-sync\/schematic-drift";.*import \{ listUnresolvedInstances, unresolvedInstancesRefusal, type UnresolvedInstance \} from "@\/app\/lib\/pcb-sync\/unresolved-instances"; \/\/ \[PR-C F-08\]/); // [PR-L6 integration, 2026-10-19] reviewed pin move (BI-2): + BOARD_REBIND_REFUSAL in the same import, still line 164
   });
 
   // [PR-L6, 2026-10-19] the manufacturing panel's OWN "Request release" calls `workflow.requestRelease` directly (it never passes through

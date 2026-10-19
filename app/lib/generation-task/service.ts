@@ -79,7 +79,7 @@ const SENTENCES: Readonly<Record<string, string>> = Object.freeze({
 const STATUS: Readonly<Record<GenerationCommitRefusalCode, number>> = Object.freeze({
   GENERATION_TASK_NOT_FOUND: 404, GENERATION_TASK_INVALID_PERSISTED_STATE: 500, GENERATION_SLICE_FENCED: 409, GENERATION_TASK_CANCEL_REQUESTED: 409, GENERATION_TASK_STATE_CONFLICT: 409,
   GENERATION_TASK_TRANSITION_REFUSED: 409, GENERATION_TASK_CONTENDED: 409, GENERATION_TASK_FORBIDDEN: 403, IDEMPOTENCY_KEY_REUSED: 409, GENERATION_TASK_ACTION_UNSUPPORTED: 400, GENERATION_SLICE_END_INVALID: 409,
-  GENERATION_TASK_TOO_LARGE: 413,
+  GENERATION_TASK_TOO_LARGE: 413, GENERATION_INPUT_ALLOWANCE_EXHAUSTED: 409, // [PR-L6 integration, 2026-10-19] F2: a worker-only admitCall refusal, listed for the exhaustive map
 });
 
 const refusal = (status: number, code: string, extra: Record<string, unknown> = {}): GenerationTaskAnswer => ({ status, body: { ok: false, code, error: SENTENCES[code] ?? "The design task refused the request.", ...extra } });
@@ -115,7 +115,7 @@ export class GenerationTaskService {
   /** The processing slice events of the topic (global; bounded by workers x concurrency): the liveness evidence. */
   private async processing(): Promise<GenerationProcessingSlice[]> {
     const events = await this.repository.listOutbox({ topic: GENERATION_SLICE_TOPIC, state: "processing" });
-    return events.map((event) => ({ sliceId: typeof event.payload?.sliceId === "string" ? event.payload.sliceId : "", leaseToken: event.leaseToken ?? null, leaseExpiresAt: event.leaseExpiresAt ?? null }));
+    return events.map((event) => ({ sliceId: typeof event.payload?.sliceId === "string" ? event.payload.sliceId : "", leaseToken: event.leaseToken ?? null, leaseExpiresAt: event.leaseExpiresAt ?? null, leaseOwner: event.leaseOwner ?? null })); // [PR-L6 integration, 2026-10-19] F7: + the claiming worker (a --scope worker is marked)
   }
 
   /** The public snapshot of a validated head: liveness from the store, the current owners' live activity. */

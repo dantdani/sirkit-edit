@@ -178,8 +178,8 @@ export class OpenAIProvider implements LLMProvider {
         ...this.baseParams(request),
         stream: false,
       };
-      const response = await (request.signal
-        ? this.getClient().responses.create(params, { signal: request.signal })
+      const response = await (sdkRequestOptions(request) // [PR-L6 integration, 2026-10-19] SPEND-1: the signal and the per-call retries
+        ? this.getClient().responses.create(params, sdkRequestOptions(request))
         : this.getClient().responses.create(params));
       return normalizeResponse(response);
     } catch (error) {
@@ -194,8 +194,8 @@ export class OpenAIProvider implements LLMProvider {
         ...this.baseParams(request),
         stream: true,
       };
-      const stream = await (request.signal
-        ? this.getClient().responses.create(params, { signal: request.signal })
+      const stream = await (sdkRequestOptions(request) // [PR-L6 integration, 2026-10-19] SPEND-1: as generate
+        ? this.getClient().responses.create(params, sdkRequestOptions(request))
         : this.getClient().responses.create(params));
       let completed: Response | undefined;
       for await (const event of stream) {
@@ -237,4 +237,15 @@ export class OpenAIProvider implements LLMProvider {
 function openAIStopReason(response: Response): LLMResponse["stopReason"] {
   if (response.status !== "incomplete") return response.status;
   return response.incomplete_details?.reason === "max_output_tokens" ? "max_tokens" : "incomplete";
+}
+
+// [PR-L6 integration, 2026-10-19] SPEND-1: appended after the last line (a function declaration is hoisted), so no cited line moves.
+/** The SDK's per-call request options: the transport signal and the caller's `maxProviderRetries` (0 for every metered generation slice
+ *  call, so the SDK never resends an attempt the provider may already have billed - the client keeps its default of 5 for every other
+ *  caller). Undefined when the request carries neither, so a plain call stays a one-argument call. */
+function sdkRequestOptions(request: LLMRequest): { signal?: AbortSignal; maxRetries?: number } | undefined {
+  const retries = request.maxProviderRetries;
+  const maxRetries = typeof retries === "number" && Number.isSafeInteger(retries) && retries >= 0 ? retries : undefined;
+  if (!request.signal && maxRetries === undefined) return undefined;
+  return { ...(request.signal ? { signal: request.signal } : {}), ...(maxRetries !== undefined ? { maxRetries } : {}) };
 }

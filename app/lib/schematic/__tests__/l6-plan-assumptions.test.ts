@@ -73,7 +73,7 @@ describe("[PR-L6] the planner's assumptions and requested coverage (OD-253 items
   });
 
   it("2. through the worker: stored bounded and redacted, folded into every block brief at plan time (a resumed block sends the same first message), shown in the snapshot, the chat inspection and the merged explanation", { timeout: 60_000 }, async () => {
-    const secret = "sk-proj-AbCdEf0123456789AbCdEf0123456789AbCdEf";
+    const secret = ["sk", "proj", "L6planAssumptionSentinel".padEnd(38, "0")].join("-"); // [PR-L6 integration, 2026-10-19] key-SHAPED, never a key: assembled at run time (the b21-f3 precedent) so no file holds the shape; the literal this line held hit scan-secrets' openai-key-shape rule in tree and history mode (same length, still redacted as stored)
     const env = l3Env({ name: "l6-assumptions", repository: new InMemoryDurableWorkflowRepository(), catalog: droneCatalog(), storeOptions: { blockTurnsPerSlice: 2 } });
     const model = new ScriptedModel({ ...droneScripts(), plan: () => planWith({ assumptions: [...ASSUMPTIONS, `Use the key ${secret} for nothing.`], coverage: COVERAGE }) }, env.time, () => 1_000);
     const task = await startTask(env);

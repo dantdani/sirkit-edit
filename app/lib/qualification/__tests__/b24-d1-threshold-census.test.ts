@@ -267,7 +267,7 @@ describe("[B24-D1] the threshold census (D24-28, OD-212)", () => {
       ["app/lib/qualification/__tests__/b24-c2-attribution.test.ts", 1, 0, 15_000], ["app/lib/qualification/__tests__/b24-d2-process-cleanup.test.ts", 4, 0, 7_000], // [B24-D2, 2026-10-09] + the process cleanup's four polls (5 s, 5 s, 7 s and the confirm wait)
     ]);
     expect([inCi.reduce((sum, row) => sum + (row.count ?? 0), 0), inCi.reduce((sum, row) => sum + (row.defaults ?? 0), 0)]).toEqual([30, 24]); // [B24-D2, 2026-10-09] 26 -> 30 (+ b24-d2-process-cleanup's four, none at the default)
-    expect(waits.filter((row) => row.ci.length === 0).map((row) => [row.file, row.count])).toEqual([["app/lib/project/__tests__/b14-1-production-integration.test.tsx", 1]]);
+    expect(waits.filter((row) => row.ci.length === 0).map((row) => [row.file, row.count])).toEqual([["app/lib/__tests__/l6-embedding-cache.test.ts", 1], ["app/lib/project/__tests__/b14-1-production-integration.test.tsx", 1]]); // [PR-L6 integration, 2026-10-19] reviewed pin move: + l6-embedding-cache's one vi.waitFor at the default (PR-L6, a suite in no CI job until increment 7 admits it)
   });
 
   it("7. the seven moved markers: four in b20-a4-observation-normalizer case 6, two in pcb-sync performance-resilience and one in b20-a1-redaction-linear, each a performance row with its catalogued metric, in a converted file whose line count and it( count are unchanged (674 and 17; 62 and 4; 109 and 4); this suite's own budget and yield rows", { timeout: 120_000 }, async () => { // [B24-D1 review, 2026-10-09] reviewed pin move: six -> seven (the redaction-linear bound the first scan missed)

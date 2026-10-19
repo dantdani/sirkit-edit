@@ -328,9 +328,9 @@ export function buildLoopCheckpoint(input: BuildLoopCheckpointInput): BuildLoopC
 
 function partIdsOf(output: string): string[] | null {
   try {
-    const parsed: unknown = JSON.parse(output);
-    if (!Array.isArray(parsed)) return null;
-    return parsed.flatMap((entry) => (isPlainRecord(entry) && typeof entry.partId === "string" ? [entry.partId] : []));
+    const parsed: unknown = JSON.parse(output), list: unknown[] | null = Array.isArray(parsed) ? parsed : isPlainRecord(parsed) && Array.isArray(parsed.results) ? parsed.results : null; // [PR-L6 integration, 2026-10-19] F8: a cached or category-noted search wraps its list as { ..., results } (the shape pinsInConversation reads)
+    if (list === null) return null;
+    return list.flatMap((entry) => (isPlainRecord(entry) && typeof entry.partId === "string" ? [entry.partId] : []));
   } catch { return null; }
 }
 function describeCall(call: LLMToolCallPart): string {

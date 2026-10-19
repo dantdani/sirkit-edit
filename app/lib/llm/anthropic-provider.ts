@@ -116,8 +116,8 @@ export class AnthropicProvider implements LLMProvider {
 
   async generate(request: LLMRequest): Promise<LLMResponse> {
     try {
-      const response = await (request.signal
-        ? this.getClient().messages.create(this.params(request), { signal: request.signal })
+      const response = await (sdkRequestOptions(request) // [PR-L6 integration, 2026-10-19] SPEND-1: the signal and the per-call retries
+        ? this.getClient().messages.create(this.params(request), sdkRequestOptions(request))
         : this.getClient().messages.create(this.params(request)));
       const text = response.content
         .filter((block) => block.type === "text")
@@ -150,8 +150,8 @@ export class AnthropicProvider implements LLMProvider {
   async *stream(request: LLMRequest): AsyncIterable<LLMChunk> {
     let stream: ReturnType<AnthropicClient["messages"]["stream"]> | undefined;
     try {
-      stream = request.signal
-        ? this.getClient().messages.stream(this.params(request), { signal: request.signal })
+      stream = sdkRequestOptions(request) // [PR-L6 integration, 2026-10-19] SPEND-1: as generate
+        ? this.getClient().messages.stream(this.params(request), sdkRequestOptions(request))
         : this.getClient().messages.stream(this.params(request));
       for await (const event of stream) {
         if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
@@ -194,3 +194,14 @@ export class AnthropicProvider implements LLMProvider {
 // hoisted): no line cited in this file moves
 import { ANTHROPIC_TEMPERATURE_MODEL_FAMILY, configuredAnthropicModel } from "./anthropic-config";
 import { sendableAnthropicModel } from "./anthropic-model-guard"; // [B24-A1] on its own line at the end (an import is hoisted): no cited line moves
+
+// [PR-L6 integration, 2026-10-19] SPEND-1: appended after the last line (a function declaration is hoisted), so no cited line moves.
+/** The SDK's per-call request options: the transport signal and the caller's `maxProviderRetries` (0 for every metered generation slice
+ *  call, so the SDK never resends an attempt the provider may already have billed - the client keeps the SDK default for every other
+ *  caller). Undefined when the request carries neither, so a plain call stays a one-argument call. */
+function sdkRequestOptions(request: LLMRequest): { signal?: AbortSignal; maxRetries?: number } | undefined {
+  const retries = request.maxProviderRetries;
+  const maxRetries = typeof retries === "number" && Number.isSafeInteger(retries) && retries >= 0 ? retries : undefined;
+  if (!request.signal && maxRetries === undefined) return undefined;
+  return { ...(request.signal ? { signal: request.signal } : {}), ...(maxRetries !== undefined ? { maxRetries } : {}) };
+}

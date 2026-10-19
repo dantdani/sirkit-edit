@@ -102,6 +102,9 @@ export interface JourneyPcbFacts {
    * fact derived from the two artifacts, never a flag. Optional: an editor that does not report it leaves every row unchanged.
    */
   boardBehindSchematic?: number;
+  /** [PR-L6 integration, 2026-10-19] BI-2: how many of those the board carries under ANOTHER bound revision (`changed`): Prepare PCB
+   *  re-binds them only once that earlier binding no longer holds (Undo, or a reviewer's supersede). Optional, like the count. */
+  boardBehindRebind?: number;
 }
 
 export interface JourneyFacts {
@@ -175,6 +178,7 @@ export function normalizeJourneyFacts(input: JourneyFactsInput): JourneyFacts {
           drcCurrent: typeof pcb.drcCurrent === "boolean" ? pcb.drcCurrent : null,
           released: pcb.released === true,
           ...(Math.trunc(pcb.boardBehindSchematic ?? 0) > 0 ? { boardBehindSchematic: Math.trunc(pcb.boardBehindSchematic!) } : {}), // [PR-L6, 2026-10-19] absent = 0 (no row changes)
+          ...(Math.trunc(pcb.boardBehindRebind ?? 0) > 0 ? { boardBehindRebind: Math.trunc(pcb.boardBehindRebind!) } : {}), // [PR-L6 integration, 2026-10-19] BI-2: absent = 0
         },
   };
 }
@@ -370,6 +374,10 @@ export function deriveJourney(input: JourneyFactsInput): JourneyView {
     if (behind > 0 && p.boardExists && !p.applying) {
       status.pcb_applied = "partial";
       note.pcb_applied = `the board is behind the schematic: ${plural(behind, "part")} differ - run Prepare PCB`;
+      // [PR-L6 integration, 2026-10-19] BI-2: a replaced part on a bound board is re-bound only once its earlier binding no longer holds
+      // (Prepare PCB stays the action: after a reviewer's supersede it succeeds; until then its bind is refused and says so)
+      const rebind = Math.min(behind, p.boardBehindRebind ?? 0);
+      if (rebind > 0) note.pcb_applied += `; ${plural(rebind, "replaced part")} ${rebind === 1 ? "re-binds" : "re-bind"} only once the earlier binding no longer holds - Undo restores the bound part, or a reviewer supersedes the binding in the Component review panel`;
       candidate.pcb_applied = f.mode === "build"
         ? action("Prepare PCB", "prepare_pcb")
         : action("Prepare PCB", "prepare_pcb", false, "Theory symbols are not buildable parts: switch to Build mode to prepare a PCB");

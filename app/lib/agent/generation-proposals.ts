@@ -311,7 +311,7 @@ export class GenerationTaskInspectService {
         task: publicTaskProjection(snapshot), result: resultSummaryOf(answer.body.result),
         note: "The task's public state from the durable task store (never its conversation, tool outputs or reasoning). A design runs in a generation worker, not in this chat: a turn ending or Stop answer does not stop it; Stop design (the status card, or a confirmed control request) does. A reviewable result is offered to the user in the schematic review dialog, where only they approve it. Report the state as it is; liveness no_worker means no worker is consuming designs right now, never that the design is running.",
       };
-      return this.read(input, report, engineeringDigest({ schema: GENERATION_TASK_INSPECTION_SCHEMA, taskId, updatedAt: snapshot.updatedAt, eventCursor: snapshot.eventCursor }), gate.descriptor);
+      return this.read(input, fitInspectionBound(report), engineeringDigest({ schema: GENERATION_TASK_INSPECTION_SCHEMA, taskId, updatedAt: snapshot.updatedAt, eventCursor: snapshot.eventCursor }), gate.descriptor); // [PR-L6 integration, 2026-10-19] F6: shortened to the bound, never refused for its size
     } catch (error) {
       return refuse("implementation_failed", [`The task inspection failed: ${sanitizeTraceText(error instanceof Error ? error.message : String(error), 200) || "unknown error"}. Nothing was changed.`]);
     }
@@ -381,4 +381,36 @@ export class GenerationTaskControlProposalService {
       return refuse("implementation_failed", [`The control request could not be prepared: ${sanitizeTraceText(error instanceof Error ? error.message : String(error), 200) || "unknown error"}. Nothing was requested.`]);
     }
   }
+}
+
+// [PR-L6 integration, 2026-10-19] F6 (the engine review of increment 6), appended after the last line (a function declaration is hoisted):
+// increment 6 added plan.coverage, filled plan.assumptions and block.missing to the snapshot, so a reachable head (8 blocks waiting at S6
+// with three long reported roles each, full assumptions and coverage) projects above GENERATION_TASK_INSPECT_MAX_CHARS, and the
+// inspection refused as invalid_output exactly when chat must report the blocker (L.7 item 8). The bound is kept; the projection shrinks.
+/** The report itself when it fits the inspection bound; otherwise a shortened copy, `truncated: true`, shrunk step by step until it fits:
+ *  each missing role's search query, then its category, then all but each block's first missing role, then the plan's assumptions and
+ *  coverage from the end, then the oldest activity lines. A report that still does not fit is left to `read`'s honest refusal. */
+function fitInspectionBound(report: Record<string, unknown>): Record<string, unknown> {
+  const fits = (value: Record<string, unknown>): boolean => JSON.stringify({ report: value }).length <= GENERATION_TASK_INSPECT_MAX_CHARS;
+  if (fits(report)) return report;
+  const shortened: Record<string, unknown> = { ...structuredClone(report), truncated: true, truncation: "This inspection is shortened to fit its bound: some missing-part search queries, categories or extra roles, trailing assumptions or coverage lines, or older activity lines are left out. The status card on the page shows them all." };
+  const task = isRecord(shortened.task) ? shortened.task : null;
+  const plan = task && isRecord(task.plan) ? task.plan : null;
+  const blocks = plan && Array.isArray(plan.blocks) ? plan.blocks.filter(isRecord) : [];
+  const missingOf = (block: Record<string, unknown>): Record<string, unknown>[] => (Array.isArray(block.missing) ? block.missing.filter(isRecord) : []);
+  const steps: Array<() => void> = [
+    () => { for (const block of blocks) for (const entry of missingOf(block)) delete entry.query; },
+    () => { for (const block of blocks) for (const entry of missingOf(block)) delete entry.category; },
+    () => { for (const block of blocks) if (Array.isArray(block.missing) && block.missing.length > 1) block.missing = block.missing.slice(0, 1); },
+  ];
+  for (const step of steps) { step(); if (fits(shortened)) return shortened; }
+  const lists = plan ? (["assumptions", "coverage"] as const).filter((key) => Array.isArray(plan[key])) : [];
+  for (;;) {
+    const longest = lists.map((key) => plan![key] as unknown[]).filter((list) => list.length > 0).sort((a, b) => b.length - a.length)[0];
+    if (!longest) break;
+    longest.pop();
+    if (fits(shortened)) return shortened;
+  }
+  while (task && Array.isArray(task.activity) && task.activity.length > 0 && !fits(shortened)) task.activity.shift();
+  return shortened;
 }
