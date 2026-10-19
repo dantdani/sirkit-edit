@@ -85,6 +85,17 @@ test("fresh browser: entry action, settings dialog, 3D unavailable state, comput
   await expect(page.getByTestId("design-checks")).toBeVisible();
   await expect(page.getByTestId("design-check-floating-nets")).toHaveAttribute("data-state", "not_run");
   await expect(page.getByTestId("design-check-supply-rails")).toHaveAttribute("data-state", "not_run");
+  // [PR-L/M integration, 2026-10-18] the Build Library's catalog loads from the fixture catalog (before, GET /api/parts/categories and
+  // POST /api/parts/search read only the database and answered 500 under the fixture runtime: "Could not load categories"); a category
+  // lists its parts, and the panel goes back to the categories
+  const timerCategory = page.getByRole("button", { name: /^Timer\s*\d+$/ });
+  await expect(timerCategory).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Could not load categories")).toHaveCount(0);
+  await timerCategory.click();
+  await expect(page.getByRole("button", { name: /555/ }).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Could not load parts")).toHaveCount(0);
+  await page.getByRole("button", { name: "Categories", exact: true }).click();
+  await expect(timerCategory).toBeVisible();
   const prompt = page.getByTestId("prompt-input");
   await prompt.fill(BLINKER_ACCEPTANCE_PROMPT);
   await prompt.press("Enter");

@@ -29,6 +29,8 @@ import { createFixtureCadTransport } from "@/app/lib/fixture-runtime/cad-source/
 import { DurableAcquisitionCandidateStore } from "@/app/lib/component-resolution/acquisition/candidate";
 import { runAcquisitionPipeline, type AcquisitionPipelinePorts } from "@/app/lib/component-resolution/acquisition/pipeline";
 import { KICAD_LIBRARY_PINS } from "@/app/lib/kicad/pinned-checkout";
+import { CAD_SOURCE_ENTRIES } from "@/app/lib/acquisition/cad-source-registry"; // [PR-L/M integration, 2026-10-18] M2-SEC-9
+import { bundledKicadLibrary } from "@/app/lib/atomic/authoring";
 import { sha256 } from "@/app/lib/atomic/stable";
 import { HOSTILE_SYMBOLS, SYMBOL_1N4148, target1N4148 } from "./_m2-fixtures";
 
@@ -144,6 +146,23 @@ describe("[PR-M M.5-4] the bundled pinned KiCad checkout (zero network)", { time
     expect(outcome.candidate.report.checks.find((check) => check.id === "terminal-table")).toMatchObject({ status: "unresolved" });
     expect(outcome.candidate.missing.join(" ")).toContain("carries none");
     expect(outcome.candidate.fixtureEvidence).toBe(false);
+  });
+
+  it("[PR-L/M integration, 2026-10-18] M2-SEC-9: the bundled row's 600/min quota is METERED - an agent read gets its OD-40 share (150), then a pause with its retry time before the file is read; a person's read is admitted", async () => {
+    resetAdmissionControl();
+    const share = Math.floor(0.25 * CAD_SOURCE_ENTRIES.find((entry) => entry.id === "kicad-bundled")!.quota.requestsPerMinute);
+    expect(share).toBe(150);
+    const real = bundledKicadLibrary(checkout);
+    let reads = 0;
+    const counting = { symbolsRevision: real.symbolsRevision, footprintsRevision: real.footprintsRevision, symbol: (library: string, name: string) => { reads += 1; return real.symbol(library, name); }, footprint: (library: string, name: string) => { reads += 1; return real.footprint(library, name); } };
+    const agent = createBundledCadAdapter({ clock, root: checkout, library: counting, purpose: "agent" });
+    for (let index = 0; index < share; index += 1) expect((await agent.retrieve({ kind: "symbol", library: "Diode", name: "1N4148" })).ok, `read ${index + 1}`).toBe(true);
+    const paused = await agent.retrieve({ kind: "symbol", library: "Diode", name: "1N4148" });
+    expect(paused).toMatchObject({ ok: false, code: "quota_exhausted" });
+    expect((paused as { retryAtMs: number }).retryAtMs).toBeGreaterThan(NOW);
+    expect(reads).toBe(share); // the paused request read nothing
+    expect((await createBundledCadAdapter({ clock, root: checkout, library: counting }).retrieve({ kind: "symbol", library: "Diode", name: "1N4148" })).ok).toBe(true); // a person's whole window
+    resetAdmissionControl();
   });
 
   it("a checkout not at the pinned commit is refused before anything is read", async () => {

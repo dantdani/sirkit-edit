@@ -41,7 +41,7 @@ export interface UseAtomicPublicationReviewResult {
   /** [B19-E E4 review] what an accepted action did not do (a request for a part that already has an open one) */
   notice: string | null;
   refresh(): Promise<void>;
-  submit(input: { spec: AtomicPublicationSpec; links: AtomicPublicationLink[]; reason: string; /** [PR-M, 2026-10-18] M2.5: an acquired part's one discovery catalog row, written in the publication transaction */ discovery?: { valueKey: string } }): Promise<boolean>;
+  submit(input: { spec: AtomicPublicationSpec; links: AtomicPublicationLink[]; reason: string; /** [PR-M, 2026-10-18] M2.5: an acquired part's one discovery catalog row, written in the publication transaction; [PR-L/M integration, 2026-10-18] M2-SEC-5: `true` (the server decides its value key) */ discovery?: true }): Promise<boolean>;
   resolve(input: AtomicPublicationResolveInput): Promise<boolean>;
   publish(requestId: string, reason: string): Promise<boolean>;
   withdraw(requestId: string, reason: string): Promise<boolean>;
@@ -133,7 +133,7 @@ export function useAtomicPublicationReview(input: UseAtomicPublicationReviewInpu
     }
   }, [busy, refresh, onNotice]);
 
-  const submit = useCallback((request: { spec: AtomicPublicationSpec; links: AtomicPublicationLink[]; reason: string; discovery?: { valueKey: string } }) =>
+  const submit = useCallback((request: { spec: AtomicPublicationSpec; links: AtomicPublicationLink[]; reason: string; discovery?: true }) =>
     run("submit", "submit", { operation: "submit_request", ...request.spec, links: request.links, reason: request.reason, ...(request.discovery ? { discovery: request.discovery } : {}) }, [200, 201]), [run]); // [PR-M, 2026-10-18] + the discovery option
 
   const resolve = useCallback((request: AtomicPublicationResolveInput) =>

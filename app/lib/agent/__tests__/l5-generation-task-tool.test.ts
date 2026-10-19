@@ -363,3 +363,47 @@ describe("[L5 6] the page's receivers", () => {
     expect(generationTaskAttachDecision(received!.task, { ...live, projectId: null }).kind).toBe("foreign");
   });
 });
+
+describe("[PR-L/M integration, 2026-10-18] L5-2: the attach note follows the attached task's REAL state", () => {
+  /** one loop run whose model asks for a new design; what the model is told back */
+  async function toldOnAttach(runId: string): Promise<Record<string, unknown>> {
+    const told: string[] = [];
+    const adapter: ProviderAgentAdapter = {
+      provider: "openai",
+      async start(input) {
+        const tool = input.tools.find((declaration) => declaration.toolId === AGENT_GENERATION_PROPOSAL_TOOL_ID);
+        expect(tool, "the start is offered").toBeDefined();
+        return step([{ callId: "c-1", providerName: tool!.providerName, argumentsText: JSON.stringify({ prompt: "Design a 4-motor drone controller instead" }) }]);
+      },
+      async continueWith(input) {
+        told.push(input.results[0]!.outputText);
+        return step([], "Done.");
+      },
+    };
+    const result = await runAgentLoop({ runId, provider: "openai", history: [], userMessage: "Design a 4-motor drone controller instead", budget: DEFAULT_AGENT_BUDGET }, { adapter, gateway: gatewayWith(productionPort()), registry, context: contextFor("proj-1"), system: "test", emit: () => undefined });
+    expect(result.status).toBe("completed");
+    return JSON.parse(told[0]!) as Record<string, unknown>;
+  }
+
+  it("a design still running is ALREADY running and Stop design applies; a FINISHED design waiting for review is named as such - approve or discard it in the review dialog - and Stop design is not offered (the store refuses cancel from awaiting-review)", async () => {
+    const started = await call(gatewayWith(productionPort()), contextFor("proj-1"), AGENT_GENERATION_PROPOSAL_TOOL_ID, { prompt: PROMPT });
+    if (started.kind !== "generation-task") throw new Error("unreachable");
+    const running = await toldOnAttach("run-l5-note-1");
+    expect(running).toMatchObject({ ok: true, status: "task_attached", disposition: "attached-active", state: "queued" });
+    expect(String(running.note)).toContain("ALREADY running");
+    expect(String(running.note)).toContain("they can stop it (Stop design)");
+    await pumpUntil(started.task.taskId, "proj-1", (task) => task.state === "awaiting-review");
+    const finished = await toldOnAttach("run-l5-note-2");
+    expect(finished).toMatchObject({ ok: true, status: "task_attached", disposition: "attached-active", state: "awaiting-review", taskId: started.task.taskId });
+    const note = String(finished.note);
+    expect(note).toContain("has FINISHED");
+    expect(note).toContain("waiting in the schematic review dialog");
+    expect(note).toContain("approve or discard that result there");
+    expect(note).not.toContain("ALREADY running");
+    expect(note).not.toContain("they can stop it (Stop design)");
+    expect(note).toContain("Stop design does not apply to it");
+    // what the note says is what the store does: cancel is refused from awaiting-review
+    const cancel = await controlRoute(post(`/api/generation-tasks/${started.task.taskId}/control`, { action: "cancel", clientActionId: "l5-note-cancel" }, "proj-1"), ctx(started.task.taskId));
+    expect(cancel.status).toBe(409);
+  }, 60_000);
+});

@@ -13,6 +13,7 @@ import { bundledKicadLibrary, type BundledKicadLibrary } from "../../atomic/auth
 import { sha256 } from "../../atomic/stable";
 import { KICAD_LIBRARY_PINS } from "../../kicad/pinned-checkout";
 import { CAD_SOURCE_REGISTRY, CAD_SOURCE_REGISTRY_VERSION, cadAssetPolicy } from "../cad-source-registry";
+import { recordCadSourceOutcome, requestCadSourceAdmission, type AdmissionPurpose, type CadSourceMeterPolicy } from "../admission-control"; // [PR-L/M integration, 2026-10-18] M2-SEC-9: the row's quota is metered (no network: the meter is process state)
 import type { CadAssetRequest, CadRetrieveOutcome, CadSourceAdapter } from "./types";
 
 /** The commit a local checkout's HEAD names (a detached HEAD, a loose ref or a packed ref), or null. */
@@ -36,7 +37,7 @@ export function libraryHeadCommit(directory: string): string | null {
   }
 }
 
-export interface BundledAdapterOptions { root?: string; library?: BundledKicadLibrary; clock?: () => number; head?: (directory: string) => string | null }
+export interface BundledAdapterOptions { root?: string; library?: BundledKicadLibrary; clock?: () => number; head?: (directory: string) => string | null; /** [PR-L/M integration, 2026-10-18] the meter purpose (OD-40); a person by default */ purpose?: AdmissionPurpose }
 
 export function createBundledCadAdapter(options: BundledAdapterOptions = {}): CadSourceAdapter {
   const root = options.root ?? process.cwd();
@@ -44,6 +45,12 @@ export function createBundledCadAdapter(options: BundledAdapterOptions = {}): Ca
   const clock = options.clock ?? Date.now;
   const head = options.head ?? libraryHeadCommit;
   const entry = CAD_SOURCE_REGISTRY["kicad-bundled"];
+  // [PR-L/M integration, 2026-10-18] M2-SEC-9: the row's declared bound (quota.requestsPerMinute, "to keep one task from monopolising the
+  // server") is METERED like a network source's: one admission per file read, at the caller's purpose share (OD-40), a spent window a PAUSE
+  // with its retry time (the task schedules it); the read's outcome settles the meter (a missing file is neutral)
+  const purpose = options.purpose ?? "interactive";
+  const key = { kind: "cad-source" as const, sourceId: entry.id };
+  const meter: CadSourceMeterPolicy = { displayName: entry.displayName, requestsPerMinute: entry.quota.requestsPerMinute, consecutiveFailuresToOpen: entry.resilience.breaker.consecutiveFailuresToOpen, openMs: entry.resilience.breaker.openMs };
   return {
     sourceId: "kicad-bundled",
     transport: "local-pinned-checkout",
@@ -58,7 +65,10 @@ export function createBundledCadAdapter(options: BundledAdapterOptions = {}): Ca
       const at = head(directory);
       if (at !== pin) return { ok: false, code: "checkout_not_pinned", message: `the local KiCad ${which} checkout is not at the reviewed pinned commit ${pin.slice(0, 12)}; nothing was read` };
       if (!request.library) return { ok: false, code: "path_refused", message: "a KiCad asset is named library:name" };
+      const admitted = requestCadSourceAdmission(key, meter, clock(), purpose);
+      if (!admitted.allowed) return { ok: false, code: admitted.reason === "breaker_open" ? "breaker_open" : "quota_exhausted", message: admitted.message, retryAtMs: admitted.retryAtMs };
       const text = request.kind === "symbol" ? library.symbol(request.library, request.name) : library.footprint(request.library, request.name);
+      recordCadSourceOutcome(key, meter, text === null ? "neutral" : "success", clock());
       if (text === null) return { ok: false, code: "not_found", message: `${request.kind} ${request.library}:${request.name} is not in the pinned KiCad ${which} checkout` };
       const byteLength = Buffer.byteLength(text, "utf8");
       if (byteLength > policy.maxBytes) return { ok: false, code: "response_too_large", message: `${request.kind} ${request.library}:${request.name} is larger than ${policy.maxBytes} bytes` };

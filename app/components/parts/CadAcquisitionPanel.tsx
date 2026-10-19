@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SchematicState } from "@/lib/schematic-types";
 import type { ProjectSelectorScope } from "@/app/lib/project/project-selector";
-import { CAD_ACQUISITION_TERMINAL_STATES, type CadAcquisitionTaskView } from "@/app/lib/acquisition/cad-acquisition-contract";
+import { CAD_ACQUISITION_TERMINAL_STATES, cadCandidateIdentityLine, type CadAcquisitionTaskView } from "@/app/lib/acquisition/cad-acquisition-contract";
 import { controlCadAcquisition, listCadAcquisitions, readCadAcquisition, sendCadAcquisitionForReview, startCadAcquisition, type CadAcquisitionAnswer } from "@/app/lib/project/cad-acquisition-client";
 
 export const OBTAIN_ASSETS_LABEL = "Obtain the part's assets";
@@ -31,14 +31,14 @@ const STAGE_LABEL: Readonly<Record<string, string>> = {
   "local-search": "Local library", "source-selection": "Source", retrieve: "Retrieve", validate: "Validate", handoff: "Send for review",
   "awaiting-publication": "Review and publication", proposal: "Replacement", applied: "Applied", preflight: "Prepare PCB check",
 };
-const STATUS_CLASS: Readonly<Record<string, string>> = { done: "text-emerald-300", running: "text-sky-300", pending: "text-zinc-500", skipped: "text-zinc-500", blocked: "text-amber-300" };
+const STATUS_CLASS: Readonly<Record<string, string>> = { done: "text-emerald-300", running: "text-sky-300", awaiting: "text-violet-300", pending: "text-zinc-500", skipped: "text-zinc-500", blocked: "text-amber-300" }; // [PR-L/M integration, 2026-10-18] + awaiting (a stage waiting for a person)
 
 const shortHash = (hash: string): string => `sha256:${hash.slice(0, 12)}…`;
 
 function identityWords(task: CadAcquisitionTaskView): string | null {
   const candidate = task.candidate;
   if (!candidate) return null;
-  return candidate.identity.kind === "exact" ? `exact MPN ${candidate.identity.exactMpn ?? ""} (${candidate.identity.basis})` : `GENERIC KiCad candidate - ${candidate.identity.basis}`;
+  return cadCandidateIdentityLine(candidate.identity); // [PR-L/M integration, 2026-10-18] the kind named once (the basis already opens with it)
 }
 
 export function CadAcquisitionPanel({ instances, schematic, projectScope, onOfferReplacement }: {

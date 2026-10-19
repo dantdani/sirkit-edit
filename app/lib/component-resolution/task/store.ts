@@ -346,7 +346,7 @@ export class ComponentResolutionTaskStore {
           if (current.handoff?.handoffId === input.handoff.handoffId) return { noop: true };
           current.handoff = clone(input.handoff);
           setStage(current, "handoff", "done", now, `sent for component review as ${input.handoff.handoffId} by ${input.handoff.by}`);
-          setStage(current, "awaiting-publication", "running", now, "waiting for a reviewer to approve and a different administrator to publish");
+          setStage(current, "awaiting-publication", "awaiting", now, "waiting for a reviewer to approve and a different administrator to publish"); // [PR-L/M integration, 2026-10-18] "awaiting", not "running": nothing runs while people review
           current.state = "awaiting-review";
           current.blocker = null;
           pushEvent(current, "handed_off", now, "Sent for component review: a reviewer approves and a different administrator publishes; the task checks again on its own.", { handoffId: input.handoff.handoffId });
@@ -355,7 +355,7 @@ export class ComponentResolutionTaskStore {
         }
         case "record-applied": {
           if (!input.applied || !current.proposal) return { refuse: "COMPONENT_RESOLUTION_STATE_CONFLICT", issue: "no replacement was offered" };
-          if (current.applied?.receiptId === input.applied.receiptId) return { noop: true };
+          if (current.applied?.receiptId === input.applied.receiptId) return { noop: true }; if (isTerminalResolutionState(current.state)) return { refuse: "COMPONENT_RESOLUTION_STATE_CONFLICT", issue: "the task cannot take a receipt now" }; // [PR-L/M integration, 2026-10-18] M2-SEC-2: a cancelled, failed, stale or already-succeeded task never takes a (new) receipt; the same receipt again stays the no-op above (record-handoff's rule)
           current.applied = clone(input.applied);
           setStage(current, "applied", "done", now, `receipt ${input.applied.receiptId}; schematic ${input.applied.schematicDigestAfter}`);
           pushEvent(current, "applied", now, `The replacement was committed (receipt ${input.applied.receiptId.slice(0, 40)}).`);

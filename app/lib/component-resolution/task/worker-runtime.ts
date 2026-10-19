@@ -17,7 +17,7 @@ import { admitCadSource, CAD_SOURCE_ENTRIES } from "../../acquisition/cad-source
 import { createBundledCadAdapter } from "../../acquisition/cad-adapters/bundled";
 import { createFixtureCadAdapter } from "../../acquisition/cad-adapters/network";
 import type { CadSourceAdapter } from "../../acquisition/cad-adapters/types";
-import type { CadEgressDeps } from "../../acquisition/cad-egress";
+import type { CadEgressDeps } from "../../acquisition/cad-egress"; import type { AdmissionPurpose } from "../../acquisition/admission-control";
 import { DurableAcquiredObjectStore } from "../../acquisition/cad-object-store";
 import type { CatalogPartInspectionPort } from "../../agent/catalog-inspection-reads";
 import type { RevisionEvidencePort } from "../evidence";
@@ -38,7 +38,7 @@ export function setCadSourceInjection(next: CadSourceInjection): void { injectio
 export function resetCadSourceInjection(): void { injection = {}; }
 
 /** The admitted adapters in preference order, and every other row as a recorded skip (blocked / fixture-only / operator-off). */
-export function admittedCadSources(runtime: ComponentResolutionRuntime): { adapters: CadSourceAdapter[]; skipped: Array<{ sourceId: string; code: string; detail: string }> } {
+export function admittedCadSources(runtime: ComponentResolutionRuntime, purpose: AdmissionPurpose = "interactive"): { adapters: CadSourceAdapter[]; skipped: Array<{ sourceId: string; code: string; detail: string }> } {
   const fixtureAllowed = injection.fixtureAllowed ?? runtime.fixture;
   const adapters: CadSourceAdapter[] = [];
   const skipped: Array<{ sourceId: string; code: string; detail: string }> = [];
@@ -48,10 +48,10 @@ export function admittedCadSources(runtime: ComponentResolutionRuntime): { adapt
     if (entry.id === "kicad-bundled") {
       // the fixture runtime keeps fixture evidence separate: its bundled checkout is not consulted
       if (runtime.fixture && !injection.bundledRoot) { skipped.push({ sourceId: entry.id, code: "fixture_runtime", detail: "the fixture runtime serves only the fixture CAD source" }); continue; }
-      adapters.push(createBundledCadAdapter({ ...(injection.bundledRoot ? { root: injection.bundledRoot } : {}), clock: runtime.clock }));
+      adapters.push(createBundledCadAdapter({ ...(injection.bundledRoot ? { root: injection.bundledRoot } : {}), clock: runtime.clock, purpose })); // [PR-L/M integration, 2026-10-18] M2-SEC-9: metered at the task's purpose share (OD-40)
     } else if (entry.id === "fixture-kicad") {
       const transport = injection.fixtureEgress ?? (() => { const fixture = fixtureRuntimeCadTransport(); return { fetch: fixture.fetch, resolve: fixture.resolve }; })();
-      adapters.push(createFixtureCadAdapter({ ...transport, fixtureAllowed: true, env: runtime.environment, clock: runtime.clock }));
+      adapters.push(createFixtureCadAdapter({ ...transport, fixtureAllowed: true, env: runtime.environment, clock: runtime.clock, purpose })); // [PR-L/M integration, 2026-10-18] M2-SEC-9: an agent-started task is held to the agent share (OD-40), never metered as a person
     }
   }
   return { adapters, skipped };
@@ -92,8 +92,8 @@ export function componentResolutionSlicePorts(runtime: ComponentResolutionRuntim
     catalog: ports.catalog,
     evidence: ports.evidence,
     partsByExactMpn: (exactMpn) => catalogPartIdsByExactMpn(exactMpn),
-    pipeline: (): AcquisitionPipelinePorts => {
-      const sources = admittedCadSources(runtime);
+    pipeline: (task): AcquisitionPipelinePorts => {
+      const sources = admittedCadSources(runtime, task.origin === "chat" ? "agent" : "interactive"); // [PR-L/M integration, 2026-10-18] M2-SEC-9: the TASK's purpose - a chat-started acquisition is the agent's (OD-40: at most 25% of each window), a page start is a person's
       return { ...sources, objects: new DurableAcquiredObjectStore(runtime.repository), candidates: new DurableAcquisitionCandidateStore(runtime.repository), identityEvidence: runtime.fixture ? undefined : cachedIdentityEvidence, clock: runtime.clock };
     },
     publicationOf: handoffPublicationReader(runtime),

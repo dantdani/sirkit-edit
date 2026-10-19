@@ -16,7 +16,7 @@
  */
 import type { SchematicState } from "@/lib/schematic-types";
 import { projectSelectorHeaders, type ProjectSelectorScope } from "./project-selector";
-import { CAD_ACQUISITION_ROUTE, type CadAcquisitionRequirement, type CadAcquisitionTaskView, type CadAssetRequestKind } from "../acquisition/cad-acquisition-contract";
+import { CAD_ACQUISITION_ROUTE, CAD_ACQUISITION_TERMINAL_STATES, type CadAcquisitionRequirement, type CadAcquisitionTaskView, type CadAssetRequestKind } from "../acquisition/cad-acquisition-contract";
 
 export type CadAcquisitionAnswer = { ok: true; task: CadAcquisitionTaskView; attached?: boolean; handoffId?: string } | { ok: false; status: number; code: string; error: string };
 export type CadAcquisitionListAnswer = { ok: true; tasks: CadAcquisitionTaskView[] } | { ok: false; status: number; code: string; error: string };
@@ -81,7 +81,7 @@ export interface AppliedResolutionReceipt { receiptId: string; schematicDigestAf
 /** Which tasks a committed resolution batch completes: every task whose offered replacement names instances the batch bound to that revision. */
 export function tasksAppliedBy(tasks: readonly CadAcquisitionTaskView[], receipt: AppliedResolutionReceipt): CadAcquisitionTaskView[] {
   const bound = new Map(receipt.items.map((item) => [item.componentInstanceId, item.target.atomicPartRevisionId] as const));
-  return tasks.filter((task) => task.proposal !== null && task.applied === null && task.proposal.componentIds.length > 0 && task.proposal.componentIds.every((id) => bound.get(id) === task.proposal!.atomicPartRevisionId));
+  return tasks.filter((task) => !CAD_ACQUISITION_TERMINAL_STATES.includes(task.state) && task.proposal !== null && task.applied === null && task.proposal.componentIds.length > 0 && task.proposal.componentIds.every((id) => bound.get(id) === task.proposal!.atomicPartRevisionId)); // [PR-L/M integration, 2026-10-18] M2-SEC-2: a stopped or ended task is not sent a receipt (the store refuses it too)
 }
 
 /** After the review dialog's apply: record the receipt (and the server-computed preflight) on every task it completes. Never throws. */

@@ -173,7 +173,7 @@ export async function runComponentResolutionSlice(input: { store: ComponentResol
         next.candidate = candidateView(candidate);
         if (candidate.report.verdict === "validated") {
           setStage(next, "validate", "done", now, `validated (${candidate.report.digest.slice(0, 20)}); ${candidate.report.identity.kind === "generic" ? "a GENERIC KiCad candidate" : `exact ${candidate.report.identity.exactMpn}`}; unresolved: ${candidate.report.unresolved.length}`);
-          setStage(next, "handoff", "running", now, "a person sends the package for component review");
+          setStage(next, "handoff", "awaiting", now, "waiting for a person to send the package for component review"); // [PR-L/M integration, 2026-10-18] "awaiting", not "running": nothing runs until a person sends it
           next.state = "awaiting-review";
           pushEvent(next, "validated", now, `Validation passed: symbol ${candidate.target.symbol.library}:${candidate.target.symbol.name}${candidate.footprint ? ` and footprint ${candidate.target.footprint!.library}:${candidate.target.footprint!.name}` : ""}, pin 1 / pad 1, pins to pads${candidate.pinTable ? " and the pin table" : ""}; ${candidate.report.unresolved.length} fact(s) stay for a person to confirm.`);
           pushEvent(next, "awaiting_handoff", now, "Awaiting a person to send the package for component review (a reviewer approves; a different administrator publishes).");

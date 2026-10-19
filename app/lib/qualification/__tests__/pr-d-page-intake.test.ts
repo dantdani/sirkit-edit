@@ -67,6 +67,11 @@ describe("[PR-D page intake 1] one review dialog, no auto-apply", () => {
     expect(caseBlock).not.toMatch(/applySchematic\(|setPendingReplace\(|setPendingTier1\(|setPendingReplacement\(/);
     expect(follow).not.toMatch(/applySchematic\(|setPendingReplace\(|<Dialog/);
     expect(count(intake, "setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin, validationNote })")).toBe(1); // the ONE offer
+    // [PR-L/M integration, 2026-10-18] F4: v1's guard over the region that carries the offer, restored over v2's two regions - the shared
+    // intake (offerBuildResult / offerSchematicProposal) opens only the review dialog's state above and never applies; the task follow
+    // (attachGenerationTask / offerGenerationTaskResult) neither applies nor sets any proposal state itself (it calls offerBuildResult)
+    expect(intake).not.toMatch(/applySchematic\(|setPendingTier1\(|setPendingReplacement\(|setPendingPcbProposal\(|<Dialog/);
+    expect(taskFollow).not.toMatch(/applySchematic\(|setPendingReplace\(|setPendingTier1\(|setPendingReplacement\(|setPendingPcbProposal\(|<Dialog/);
   });
 
   it("[PR-L, 2026-10-18] pin move: the task case receives through the SAFE receiver exactly once, drops a malformed reference with the page's sentence, and hands the reference to the follow; the control case shows a chip", () => {
@@ -91,6 +96,13 @@ describe("[PR-D page intake 2] ONE intake for Build and chat", () => {
     expect(composer).toContain("attachGenerationTask(started.task, { logId, prompt, scope });");
     expect(count(page, "  function attachGenerationTask(")).toBe(1);
     expect(follow).not.toContain("crypto.randomUUID"); // the chat task's entry and lines draw no editor id (the composer's id sequence is unchanged, as l4-task-client pins for the task code)
+    // [PR-L/M integration, 2026-10-18] L5-1: the chat task's activity ENTRY (a chat message, saved and restored with the project) takes an id
+    // that is unique across page loads; the page-local line counter restarts at every load, so it names the entry's lines only - an entry
+    // id from it collided with a restored entry's id, and the new task's progress and Stop/Pause card were written into both
+    const taskLog = between("  function startGenerationTaskLog(", "  /** [PR-L, 2026-10-18] The live sheet's digest under a design task's base recipe");
+    expect(taskLog).toContain("const id = `generation-task-log-${randomGenerationUuid()}`;");
+    expect(taskLog).not.toMatch(/const id = generationActivityLineId\(\)/);
+    expect(count(taskLog, "generationActivityLineId()")).toBe(1); // the entry's first line
   });
 
   it("[PR-L, 2026-10-18] the followed task's result takes the ONE offer: once per (task, result digest), through offerBuildResult's catalog loading, layout, notes and the exact-base pin, persisted by the one store", () => {
@@ -114,6 +126,17 @@ describe("[PR-D page intake 3] the base recipe follows the task", () => {
     expect(taskFollow).toContain("const liveDigest = generationLiveBaseDigest(view.base.recipe);");
     expect(taskFollow).toContain("await reportGenerationBaseMoved(entry, liveDigest, view.base.recipe);");
     expect(page).toContain('liveBase: { schematicDigest: liveDigest, recipe: recipe === "chat-sheet" ? "chat-sheet" : "build-pin" }');
+  });
+
+  it("[PR-L/M integration, 2026-10-18] L5-3: the review's report of the live base uses the TASK's recipe even when this page does not follow the task (a result restored before, or without, the reattach): it re-reads the task, never guesses build-pin, sends nothing when the recipe is unreadable, and says a refused report in the task's entry", () => {
+    const review = between("  function reportGenerationReview(", "  // [PR-D] The agent's Build-mode generation enters");
+    expect(review).not.toContain(': "build-pin" as const; const liveDigest'); // the old guess: every unfollowed task reported as build-pin (the store refuses a mismatched recipe)
+    expect(review).toContain('const liveDigests = outcome === "not-applied" ? { "build-pin": generationLiveBaseDigest("build-pin"), "chat-sheet": generationLiveBaseDigest("chat-sheet") } : null;');
+    expect(review).toContain('const detail = await fetchGenerationTask({ projectId, branchId: "main" }, task.taskId); return detail.ok && (detail.task.base.recipe === "chat-sheet" || detail.task.base.recipe === "build-pin") ? detail.task.base.recipe : null;');
+    expect(review).toContain("if (liveDigests !== null && recipe === null) return;");
+    expect(review).toContain("liveBase: { schematicDigest: liveDigests[recipe], recipe }");
+    expect(review).toContain("appendActivityStep(entry.logId, `The design task did not record this review: ${answer.message}`, \"error\", generationActivityLineId()); return; }");
+    expect(count(review, "newGenerationClientActionId()")).toBe(2);
   });
 });
 

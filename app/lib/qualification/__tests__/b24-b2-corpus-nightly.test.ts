@@ -95,6 +95,9 @@ describe("[B24-B2] the corpus rides benchmark-nightly only (OD-204)", () => {
       { step: "- name: Upload failure diagnostics", condition: "failure()" },
       { step: "- name: Declare unavailable protected suites", condition: NOT_CANCELLED },
     ]);
+    // [PR-L/M integration, 2026-10-18] no stage10 step hands pnpm a literal `--` before its flags (pnpm 11 passes it through, and vitest
+    // then ignores the reporter and output flags after it: vitest-stage10.xml was never written for the diagnostics upload)
+    expect(text.split(NEWLINE).filter((line) => /pnpm run stage10:test\s+--(\s|$)/.test(line))).toEqual([]);
     // the check bites: without their conditions both steps run only after success again
     const stripped = text.split(NEWLINE).filter((line) => !line.trim().startsWith(`if: ${NOT_CANCELLED}`)).join(NEWLINE);
     expect(stripped).not.toBe(text);

@@ -223,7 +223,7 @@ same bytes with the sink bound and unbound (the 503 `providerErrorResponse` body
 - **The two fixture short-circuits.** `LLMRouter.generate` under the fixture runtime (`router.ts:26-32`) and `runBuildToolLoop`
   (`build-loop.ts:139`) make no provider call and write no record (case 4). The public searches have no fixture branch: under the fixture
   runtime a request to `/api/parts/search` or `/api/pcb/footprints/search` reaches `embedBatch` and records into the fixture's in-memory
-  repository (case 4); whether the browser proof calls those routes is the lead's Playwright run to record.
+  repository (case 4); whether the browser proof calls those routes is the lead's Playwright run to record. [PR-L/M integration, 2026-10-18] Since then `/api/parts/search` (and `/api/parts/categories`) answer from the committed fixture catalog under the fixture runtime, with no provider call (the Build Library answered 500 there); case 4 drives the footprint search, which still reaches `embedBatch`.
 - **A whole, self-consistent rewrite** of a stored record (its fields and its digest recomputed together) by someone with database write
   access is not detectable without a signature: the digests catch a partial edit (RECORDED, low; section 12).
 - **`/api/chat`'s model calls.** They go through `app/lib/agent/adapters.ts`, not the router: the run trace covers them (its `step` events

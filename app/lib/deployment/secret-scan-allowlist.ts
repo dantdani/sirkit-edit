@@ -1,7 +1,7 @@
 /**
  * [B24-A2] D24-4, OD-195 - the secret scan's reviewed allowlist (secret-scan.ts): exact paths, never a glob or a directory; each entry
  * a rule, the sha256 of the line's text (never the text) and a reason. Every entry is a test sentinel that a redaction or denylist
- * test feeds its own classifier - read in its test before it was added here, characterised by its length only and never printed ([B24-A2F, 2026-10-09] except the one entry marked `historyOnly: true`, the last of the array: B24-C3's test fake as committed at ba4f562, which no test at HEAD reads since aaa6a1b rewrote it, so it holds in the pull request's history alone). An
+ * test feeds its own classifier - read in its test before it was added here, characterised by its length only and never printed ([B24-A2F, 2026-10-09] except the entries marked `historyOnly: true`, the last of the array: B24-C3's test fake as committed at ba4f562, which no test at HEAD reads since aaa6a1b rewrote it, so it holds in the pull request's history alone; [PR-L/M integration, 2026-10-18] now the LAST TWO: + PR-D's v1 generate-proposal line as committed at e5817558, which 00d0343 rewrote). An
  * edited line hits again; a line that no longer hits makes its entry stale, and the tree-mode scan fails until the entry goes - except an entry marked `historyOnly: true` ([B24-A2F, 2026-10-09]: its line was rewritten by the commit its reason names and exists only in the pull request's history,
  * so it allowlists the history scan alone, is never stale, and its line back in the tree is a finding; secret-scan.ts, the end of the file). A real secret is never allowlisted: it is reported to the lead as `path:line rule` and rotated by the owner (LB-13).
  */
@@ -94,6 +94,6 @@ export const SECRET_SCAN_ALLOWLIST: readonly SecretScanAllowlistEntry[] = Object
     rule: "anthropic-key-shape",
     sha256: "4ac308fec5066095a8b2153307f2c714c48da82f5326474fdf097ce9d4495eeb",
     historyOnly: true as const,
-    reason: "PR-D's generate-proposal failure line as committed at e5817558 - the fake 1.0.0 generation port throwing 'socket hang up' and the 55-character alphabet placeholder, no key material - rewritten by runbook L.5 (2026-10-18) for the 2.0.0 port, so it exists only in the pull request's history",
+    reason: "PR-D's generate-proposal failure line as committed at e5817558 - the fake 1.0.0 generation port throwing 'socket hang up' and the 55-character alphabet placeholder, no key material - rewritten at 00d0343 by runbook L.5 (2026-10-18) for the 2.0.0 port, so it exists only in the pull request's history", // [PR-L/M integration, 2026-10-18] the reason names the REPLACING commit (00d0343), as secret-scan.ts requires, beside the introducing one
   },
 ].map((entry) => Object.freeze(entry as SecretScanAllowlistEntry)));

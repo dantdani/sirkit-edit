@@ -120,6 +120,10 @@ test("a missing part with no local candidate: Obtain the part's assets → valid
   await expect(candidate).toHaveAttribute("data-identity", "generic");
   await expect(candidate).toHaveAttribute("data-fixture", "true");
   await expect(candidate).toContainText("GENERIC KiCad candidate");
+  expect(((await candidate.innerText()).match(/GENERIC KiCad/g) ?? []).length, "the identity line names its kind once").toBe(1); // [PR-L/M integration, 2026-10-18]
+  // [PR-L/M integration, 2026-10-18] the step that waits for a PERSON reads "awaiting", never "running"
+  await expect(page.getByTestId(`missing-acquisition-stage-${PART}-handoff`)).toHaveAttribute("data-status", "awaiting");
+  await expect(page.getByTestId(`missing-acquisition-stage-${PART}-handoff`)).not.toContainText("running");
   await expect(candidate).toContainText("CC-BY-SA-4.0");
   await expect(candidate.locator('[data-testid="missing-acquisition-object"][data-role="symbol-file"]')).toContainText("sha256:");
   await expect(candidate.locator('[data-testid="missing-acquisition-object"][data-role="footprint"]')).toContainText("sha256:");
@@ -132,6 +136,8 @@ test("a missing part with no local candidate: Obtain the part's assets → valid
   await page.getByTestId(`missing-acquisition-handoff-send-${PART}`).click();
   await expect(page.getByTestId(`missing-acquisition-handoff-${PART}`)).toContainText("Sent for component review by local-dev-principal:editor", { timeout: 30_000 });
   await expect(panel).toHaveAttribute("data-next", "await-publication");
+  await expect(page.getByTestId(`missing-acquisition-stage-${PART}-handoff`)).toHaveAttribute("data-status", "done"); // [PR-L/M integration, 2026-10-18]
+  await expect(page.getByTestId(`missing-acquisition-stage-${PART}-awaiting-publication`)).toHaveAttribute("data-status", "awaiting"); // two people review: awaiting, never "running"
 
   //    the catalog governance project (its own browser: the reviewers' roles never touch the editor's session): the inbox lists the
   //    package and opens the existing publication review, prefilled
@@ -155,6 +161,7 @@ test("a missing part with no local candidate: Obtain the part's assets → valid
   await expect(inbox).toBeVisible({ timeout: 30_000 });
   await expect(inbox).toHaveAttribute("data-count", "1");
   await expect(inbox).toContainText("GENERIC KiCad candidate");
+  expect(((await inbox.innerText()).match(/GENERIC KiCad/g) ?? []).length, "the inbox's identity line names its kind once").toBe(1); // [PR-L/M integration, 2026-10-18]
   await expect(inbox).toContainText("FIXTURE evidence");
   await governance.screenshot({ path: `${SCREENSHOTS}/m2-component-review-inbox-1366x768.png` });
   await inbox.locator('[data-testid^="component-review-open-"]').first().click();

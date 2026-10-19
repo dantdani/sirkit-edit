@@ -238,8 +238,8 @@ export function acquiredAssetsLoader(deps: HandoffDeps): (spec: AtomicPublicatio
     const symbol = spec.symbol?.acquired?.objectHash === handoff.symbolObject ? await load(handoff.symbolObject) : null;
     const footprint = spec.footprint?.acquired && spec.footprint.acquired.objectHash === handoff.footprintObject ? await load(handoff.footprintObject) : null;
     const datasheet = await load(handoff.datasheetObject);
-    const pinTableSource = cadPinTableSourceIdentity(handoff.sourceId);
-    const pinTable: AcquiredPinTable | null = datasheet && handoff.pinTable && pinTableSource ? {
+    const pinTableSource = cadPinTableSourceIdentity(handoff.sourceId); let samePart = false; try { samePart = !!handoff.pinTable && canonicalExactMpn(handoff.pinTable.part) === canonicalExactMpn(spec.exactMpn); } catch { samePart = false; } // [PR-L/M integration, 2026-10-18] M2-SEC-4: the pin table is evidence for the part IT names only - an edited Exact MPN gets no pin_mapping fact and no pin-table terminal evidence (the acquisition-time part check, cad-validation.ts, kept on the publication path)
+    const pinTable: AcquiredPinTable | null = datasheet && handoff.pinTable && pinTableSource && samePart ? {
       text: datasheet.text, source: pinTableSource, license: datasheet.license, revision: cadRevisionLabel(handoff.sourceId, "datasheet"), locator: datasheet.provenance[0]!.locator, retrievedAt: datasheet.provenance[0]!.retrievedAt,
       terminals: terminalTableText(handoff.pinTable.rows), parserVersion: PIN_TABLE_PARSER_VERSION,
     } : null;

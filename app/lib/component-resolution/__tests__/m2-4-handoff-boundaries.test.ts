@@ -74,7 +74,7 @@ describe("[PR-M M2.4] publishing acquired references keeps every two-person rule
     const { handoff } = await createAcquisitionHandoff(handoffDeps, { sourceScope: SOURCE, taskId: "cr-task:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", candidateId: candidate.candidateId, actor: human(USERS.editor, "pcb_editor"), membershipRevision: null });
     const deps = fixtureDeps({ workflow: handoffDeps.repository, acquired: acquiredAssetsLoader(handoffDeps), registeredCandidates: handoffRegisteredCandidates(handoffDeps) });
     const spec = { ...handoff.package.spec, manufacturer: { canonicalName: "Nexperia", officialDomains: [] }, datasheet: { url: null, locator: "1N4148 datasheet, pinning" } };
-    return { handoff, deps, spec };
+    return { handoff, deps, spec, handoffDeps };
   }
 
   it("an AI actor is refused at submit, resolve and publish; the approver cannot publish; a changed digest is refused", async () => {
@@ -98,6 +98,21 @@ describe("[PR-M M2.4] publishing acquired references keeps every two-person rule
     const published = await publishAtomicPublicationRequest(deps, { scope: GOVERNANCE, actor: human(USERS.admin2, "project_admin"), requestId: approved.request.requestId, reason: "a different administrator" });
     expect(published.request.status).toBe("published");
     expect(deps.published).toHaveLength(1);
+  });
+
+  it("[PR-L/M integration, 2026-10-18] M2-SEC-4: the pin table is evidence for the part IT names only - an edited Exact MPN gets no pin_mapping fact and no pin-table terminal evidence", async () => {
+    const { deps, spec, handoff, handoffDeps } = await prepared();
+    expect(handoff.pinTable?.part).toBe("1N4148");
+    // the same part: the pin table is offered (the acquisition-time rule, cad-validation.ts table-part)
+    expect((await acquiredAssetsLoader(handoffDeps)(spec))?.pinTable).not.toBeNull();
+    expect(await handoffRegisteredCandidates(handoffDeps)("1N4148", spec)).toHaveLength(1);
+    // a person edits the Exact MPN in the governance form and keeps the acquired objects and terminals
+    const edited = { ...spec, exactMpn: "1N4001" };
+    expect((await acquiredAssetsLoader(handoffDeps)(edited))?.pinTable).toBeNull();
+    expect(await handoffRegisteredCandidates(handoffDeps)("1N4001", edited)).toEqual([]);
+    const { stored } = await submitAtomicPublicationRequest(deps, { scope: GOVERNANCE, actor: human(USERS.editor, "pcb_editor"), membershipRevision: null, spec: edited, links: [], reason: "an edited MPN" });
+    expect(stored.request.evidence.facts.filter((fact) => fact.sourceId === "source_cad_fixture_pin_tables")).toEqual([]); // no pin_mapping (or package) fact from the 1N4148 table
+    expect(JSON.stringify(stored.request.evidence)).not.toContain("pin table)");
   });
 
   it("a spec naming an object the handoff does not hold reads the asset as missing (never another file); bytes in a body are refused", async () => {

@@ -408,3 +408,26 @@ describe("PR-D generate-proposal — the chat route's runtime boundary (app/api/
     expect(resolveSchematicGenerationPort("openai")).toBeNull();
   });
 });
+
+describe("[PR-L/M integration, 2026-10-18] L5-5: the coverage matrix says what the 2.0.0 tool and the two Stops really do (runbook L.5, L.7 item 8)", () => {
+  it("the generate-proposal@2.0.0 row starts a DURABLE task that spends provider allowance (never 'an inert sealed proposal'); the chat's Stop rows carry Stop answer; the task card's rows carry Stop design", async () => {
+    const { generateCoverageMatrix } = await import("../../../../scripts/generate-pr-d-coverage-matrix");
+    const { rows } = generateCoverageMatrix(process.cwd());
+    const tool = rows.find((row) => row.rowKind === "tool" && row.rowId === "sirkit.schematic.generate-proposal@2.0.0");
+    expect(tool, "the 2.0.0 tool row").toBeDefined();
+    expect(tool!.observableOutcome).toContain("DURABLE generation task");
+    expect(tool!.observableOutcome).toContain("spends provider allowance with no human step");
+    expect(tool!.observableOutcome).not.toContain("an inert sealed proposal");
+    const chatStop = rows.filter((row) => row.rowKind === "control" && row.uiRule === "ai.chat-run-stop");
+    expect(chatStop.length).toBeGreaterThan(0);
+    for (const row of chatStop) expect(row.reason, row.rowId).toContain("labelled Stop answer - it ends the streaming chat turn ONLY");
+    const taskCard = rows.filter((row) => row.rowKind === "control" && row.uiRule === "schematic.generation-task-control");
+    expect(taskCard.length).toBeGreaterThan(0);
+    for (const row of taskCard) expect(row.reason, row.rowId).toContain("Stop design");
+    // the committed matrix is the render (the drift gate, pr-d-coverage-matrix): the words are in the artifact too
+    const { readFileSync } = await import("node:fs");
+    const csv = readFileSync("artifacts/product-reliability-simple-ui/ui-agent-command-coverage.csv", "utf8");
+    expect(csv).toContain("labelled Stop answer - it ends the streaming chat turn ONLY");
+    expect(csv).toContain("starts (or attaches) the project's DURABLE generation task");
+  }, 120_000);
+});

@@ -26,7 +26,7 @@ export const CAD_ACQUISITION_TERMINAL_STATES: readonly CadAcquisitionState[] = O
 /** M.4: distinct stages with distinct completion evidence. */
 export const CAD_ACQUISITION_STAGES = Object.freeze(["local-search", "source-selection", "retrieve", "validate", "handoff", "awaiting-publication", "proposal", "applied", "preflight"] as const);
 export type CadAcquisitionStage = (typeof CAD_ACQUISITION_STAGES)[number];
-export type CadAcquisitionStageStatus = "pending" | "running" | "done" | "skipped" | "blocked";
+export type CadAcquisitionStageStatus = "pending" | "running" | "awaiting" | "done" | "skipped" | "blocked"; // [PR-L/M integration, 2026-10-18] + "awaiting": a stage that waits for a PERSON (the send for review, the two-person publication) - nothing runs, so it never reads "running"
 
 export const CAD_ACQUISITION_BLOCKERS = Object.freeze(["source_credentials", "source_terms", "source_unavailable", "no_matching_asset", "mapping_conflict", "parser_refused", "licence_forbids_retention", "governance_unconfigured", "review_rejected", "review_withdrawn", "authority_revoked", "stale_base", "not_resolvable"] as const);
 export type CadAcquisitionBlockerCode = (typeof CAD_ACQUISITION_BLOCKERS)[number];
@@ -147,4 +147,17 @@ export function normalizeCadAcquisitionRequest(raw: unknown): NormalizedCadAcqui
 /** The run log's sentence for an event (the K.2 public wording). */
 export function cadAcquisitionProgressLine(event: CadAcquisitionEvent): string {
   return event.message;
+}
+
+const GENERIC_IDENTITY_LABEL = "GENERIC KiCad candidate";
+/** the validator's generic basis opens by naming the kind itself ("a GENERIC KiCad library candidate (<symbol>): ...", cad-validation.ts) */
+const GENERIC_BASIS_OPENING = /^an? GENERIC KiCad (?:library )?candidate\s*/i;
+/**
+ * [PR-L/M integration, 2026-10-18] A candidate's identity as ONE line, the kind named ONCE - the Missing parts panel and the component review
+ * inbox both prefixed "GENERIC KiCad candidate" to a basis that already opens with it, so the line said it twice. Exact: the MPN and the
+ * evidence that names it; generic: the label, then the basis without its own restatement of the label.
+ */
+export function cadCandidateIdentityLine(identity: { kind: "exact" | "generic"; exactMpn: string | null; basis: string }): string {
+  if (identity.kind === "exact") return `exact MPN ${identity.exactMpn ?? ""} (${identity.basis})`;
+  return GENERIC_BASIS_OPENING.test(identity.basis) ? `${GENERIC_IDENTITY_LABEL} ${identity.basis.replace(GENERIC_BASIS_OPENING, "")}` : `${GENERIC_IDENTITY_LABEL} - ${identity.basis}`;
 }

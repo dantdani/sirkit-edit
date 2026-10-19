@@ -85,7 +85,7 @@ export function pushEvent(head: ComponentResolutionTaskHead, kind: CadAcquisitio
 
 export function setStage(head: ComponentResolutionTaskHead, stage: CadAcquisitionStage, status: CadAcquisitionStageStatus, at: string, evidence: string | null): void {
   head.stages[stage] = { status, at, evidence: evidence === null ? null : evidence.slice(0, 600) };
-  if (status === "running" || status === "done" || status === "blocked") head.stage = stage;
+  if (status === "running" || status === "awaiting" || status === "done" || status === "blocked") head.stage = stage; // [PR-L/M integration, 2026-10-18] + "awaiting" (a stage waiting for a person is the current stage)
 }
 
 export function blockerOf(code: CadAcquisitionBlockerCode, detail: string | null): NonNullable<ComponentResolutionTaskHead["blocker"]> {

@@ -232,7 +232,7 @@ function invocationPathOf(descriptor: ToolDescriptor, granted: boolean): string 
 function observableOutcomeOf(descriptor: ToolDescriptor, granted: boolean): string {
   switch (descriptor.operationClass) {
     case "read": return `a read result pinned to the source revision; no state change (${descriptor.verificationStrategy})`;
-    case "propose": return `an inert sealed proposal / revision-bound candidate; nothing changes until a human applies it (${descriptor.verificationStrategy})`;
+    case "propose": return DURABLE_TASK_OUTCOME[descriptor.binding.module ?? ""] ? `${DURABLE_TASK_OUTCOME[descriptor.binding.module ?? ""]} (${descriptor.verificationStrategy})` : `an inert sealed proposal / revision-bound candidate; nothing changes until a human applies it (${descriptor.verificationStrategy})`; // [PR-L/M integration, 2026-10-18] L5-5: a propose tool that STARTS a durable task says so
     case "view-session": return `view-command dispatched; the browser bus settles it and reports the view revision; never engineering state (${descriptor.verificationStrategy})`;
     case "mutate": return granted
       ? `a one-shot grant: preview -> the human's Confirm (or the exact explicit request under execute_explicit_tier1) -> one canonical transaction, one history entry, a settled receipt (${descriptor.verificationStrategy})`
@@ -538,7 +538,7 @@ export function buildParityMatrix(input: ParityMatrixInput): ParityRow[] {
         invocationPath: `UI: ${control.kind} on ${control.surface} -> ${control.handler}; ${action.invocationPath}`,
         approvalGrant: action.approvalGrant, observableOutcome: asAction, tests: action.tests,
         disposition: action.disposition,
-        reason: `${control.classification} control (rule ${control.ruleId}) reaches ${recordId}: ${firstClause(action.reason)} - ${asAction}`,
+        reason: `${control.classification} control (rule ${control.ruleId}) reaches ${recordId}: ${firstClause(action.reason)} - ${asAction}${control.note ? `; ${control.note}` : ""}`, // [PR-L/M integration, 2026-10-18] L5-5: + the control rule's own note, so a row says what THIS control does (the chat's Stop answer vs the task card's Stop design, runbook L.5)
         gaps: action.gaps,
       });
     }
@@ -643,3 +643,11 @@ export function summarizeParityMatrix(rows: readonly ParityRow[], input: Pick<Pa
 export function renderParityMatrixSummary(summary: ParityMatrixSummary): string {
   return JSON.stringify(summary, null, 2) + "\n";
 }
+
+// [PR-L/M integration, 2026-10-18] L5-5 (runbook L.5 / L.7 item 8: the matrix matches executable behaviour): the propose tools whose call
+// STARTS (or attaches) a durable task a worker then runs with no human step, keyed by their bound service; the generic propose sentence
+// ("an inert sealed proposal") is untrue for them. Appended after the last line (read only when a matrix is built): no line here moves.
+const DURABLE_TASK_OUTCOME: Readonly<Record<string, string>> = Object.freeze({
+  "app/lib/generation-task/service.ts": "starts (or attaches) the project's DURABLE generation task: a generation worker runs it in saved steps and spends provider allowance with no human step; Stop answer ends only the chat turn, Stop design cancels the task; nothing is applied to the schematic until a human approves its result in the review dialog",
+  "app/lib/component-resolution/task/service.ts": "starts (or attaches) the project's DURABLE CAD acquisition task: a worker retrieves, stores and validates the part's KiCad assets from an admitted source with no human step; nothing in the design changes - a person sends the package for review, two people publish it and a human applies the offered replacement",
+});

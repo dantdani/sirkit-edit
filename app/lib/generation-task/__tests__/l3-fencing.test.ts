@@ -38,6 +38,7 @@ import { dispatchDurableEffects } from "../../durable-workflow/effects-runtime";
 import type { LLMResponse } from "../../llm/types";
 import type { BuildLoopCheckpoint } from "../checkpoint";
 import { GENERATION_SLICE_CONTRACT, GENERATION_SLICE_EVENT, GENERATION_SLICE_POLICY, GENERATION_SLICE_TOPIC, GENERATION_TASK_AGGREGATES } from "../contracts";
+import { COMPONENT_RESOLUTION_SLICE_CONTRACT, COMPONENT_RESOLUTION_SLICE_EVENT, COMPONENT_RESOLUTION_SLICE_TOPIC, COMPONENT_RESOLUTION_TASK_AGGREGATE } from "../../component-resolution/task/contracts"; // [PR-L/M integration, 2026-10-18] M2-SEC-10 / M2-1: the second worker-owned topic
 import type { WorkerTimers } from "../worker/worker";
 import { ScriptedModel, droneCatalog, droneScripts, drive, head, l3Env, membership, reply, settle, startTask, type L3Env } from "./_l3-worker-fixtures";
 
@@ -267,6 +268,21 @@ describe("[PR-L L.7-3] ownership, fencing and honest failure", () => {
     const [plan] = await repository.listOutbox({ topic: GENERATION_SLICE_TOPIC });
     expect(plan).toMatchObject({ state: "pending", attempts: 0 });
     expect(plan!.payload).toMatchObject({ taskId: task.taskId, kind: "plan" });
+    // [PR-L/M integration, 2026-10-18] M2-SEC-10 / M2-1: the M2 acquisition task's slice topic is worker-owned too (the same outbox, claimed
+    // only by the same worker): a generic dispatch that names it claims nothing and leaves the queued slice pending - never failed
+    // terminally for want of a handler (DW_EFFECT_HANDLER_MISSING)
+    expect(COMPONENT_RESOLUTION_SLICE_TOPIC).toBe("component-resolution-slice"); // effects-runtime.ts holds this literal too
+    const acquisitionTaskId = `cr-task:${"ab".repeat(16)}`;
+    await repository.commit({
+      scope: env.scope, scopeKey: "l3-f8-acquisition", idempotencyKey: "l3-f8-acquisition-start",
+      operations: [{ aggregateType: COMPONENT_RESOLUTION_TASK_AGGREGATE, aggregateKey: acquisitionTaskId, expectedRevision: 0, payload: { taskId: acquisitionTaskId } }],
+      outbox: [{ owner: { aggregateType: COMPONENT_RESOLUTION_TASK_AGGREGATE, aggregateKey: acquisitionTaskId }, eventType: COMPONENT_RESOLUTION_SLICE_EVENT, eventVersion: 1, topic: COMPONENT_RESOLUTION_SLICE_TOPIC, payload: { contract: COMPONENT_RESOLUTION_SLICE_CONTRACT, taskId: acquisitionTaskId, sliceId: `${acquisitionTaskId}:s1`, kind: "acquire" } }],
+      result: {}, committedAt: new Date(env.time.now()).toISOString(),
+    });
+    const askedAcquisition = await dispatchDurableEffects({ workerId: "effects-worker", now: new Date(env.time.now() + 60_000).toISOString(), topics: [COMPONENT_RESOLUTION_SLICE_TOPIC, "passive-policy.invalidate"] });
+    expect(askedAcquisition).toEqual({ claimed: 0, completed: 0, retried: 0, failed: 0 });
+    const [acquire] = await repository.listOutbox({ topic: COMPONENT_RESOLUTION_SLICE_TOPIC });
+    expect(acquire).toMatchObject({ state: "pending", attempts: 0 });
   });
 });
 

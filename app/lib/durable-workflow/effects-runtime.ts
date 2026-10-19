@@ -34,8 +34,8 @@ export async function dispatchDurableEffects(input: { workerId: string; now?: st
 // caller asks for it. A generic dispatch would find no handler and fail the slice TERMINALLY (outbox.ts, DW_EFFECT_HANDLER_MISSING), so
 // a queued design would be lost; only the generation worker (app/lib/generation-task/worker/) claims it, under fenced, renewed leases.
 // The literal mirrors `GENERATION_SLICE_TOPIC` (generation-task/contracts.ts; l3-fencing pins the two equal) so that this runtime does
-// not import the generation-task contracts. Appended after the last line (a function declaration is hoisted): no line here moves.
-const WORKER_OWNED_TOPICS: ReadonlySet<string> = new Set(["generation-task.slice"]);
+// not import the generation-task contracts. Appended after the last line (a function declaration is hoisted): no line here moves. [PR-L/M integration, 2026-10-18] M2-SEC-10 / M2-1: + `component-resolution-slice` (COMPONENT_RESOLUTION_SLICE_TOPIC, component-resolution/task/contracts.ts; the M2 acquisition task's slices on the same outbox, claimed only by the same worker)
+const WORKER_OWNED_TOPICS: ReadonlySet<string> = new Set(["generation-task.slice", "component-resolution-slice"]); // [PR-L/M integration, 2026-10-18] the second worker-owned topic, edited in place (no line moves)
 function effectsWorkerMayClaim(topic: string): boolean {
   return !WORKER_OWNED_TOPICS.has(topic);
 }

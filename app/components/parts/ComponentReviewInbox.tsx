@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
-import { CAD_ACQUISITION_ROUTE } from "@/app/lib/acquisition/cad-acquisition-contract";
+import { CAD_ACQUISITION_ROUTE, cadCandidateIdentityLine } from "@/app/lib/acquisition/cad-acquisition-contract";
 import type { AtomicPublicationLink, AtomicPublicationSpec } from "@/app/lib/atomic/publication-review-contract";
 import type { AtomicPublicationPrefill } from "./AtomicPublicationReviewPanel";
 
@@ -37,7 +37,7 @@ export function handoffPrefill(handoff: InboxHandoff): AtomicPublicationPrefill 
     manufacturer: handoff.package.spec.manufacturer?.canonicalName ?? null,
     acquisition: {
       handoffId: handoff.handoffId, spec: handoff.package.spec, links: handoff.package.links,
-      discovery: handoff.package.discovery ? { valueKey: handoff.target.valueKey } : null,
+      discovery: handoff.package.discovery, // [PR-L/M integration, 2026-10-18] M2-SEC-5: a flag; the server decides the discovery row's value key
       notes: handoff.package.notes, missing: handoff.package.missing, conflicts: handoff.package.conflicts,
     },
   };
@@ -81,7 +81,7 @@ export function ComponentReviewInbox({ projectScope, onOpen }: { projectScope: P
               <span className="text-zinc-400">{handoff.target.symbol.library}:{handoff.target.symbol.name}{handoff.target.footprint ? ` · ${handoff.target.footprint.library}:${handoff.target.footprint.name}` : ""}</span>
               <span className={handoff.report.verdict === "validated" ? "text-emerald-300" : "text-amber-300"}>{handoff.report.verdict}</span>
             </div>
-            <div className="text-zinc-400">{handoff.report.identity.kind === "exact" ? `exact MPN ${handoff.report.identity.exactMpn ?? ""}` : "GENERIC KiCad candidate"} - {handoff.report.identity.basis}</div>
+            <div data-testid="component-review-identity" className="text-zinc-400">{cadCandidateIdentityLine(handoff.report.identity)}</div>{/* [PR-L/M integration, 2026-10-18] the kind named once */}
             <div className="text-zinc-500">source {handoff.sourceId}{handoff.fixtureEvidence ? " (FIXTURE evidence)" : ""} · licence {handoff.licence.record.spdxId ?? handoff.licence.record.id} · sent by {handoff.requester.principalId}</div>
             <div className="text-zinc-500">{handoff.objects.map((object) => `${object.role} sha256:${object.sha256.slice(0, 12)}…`).join(" · ")}</div>
             {handoff.package.missing.length > 0 && <div className="text-amber-300">Still to confirm: {handoff.package.missing.join("; ")}</div>}

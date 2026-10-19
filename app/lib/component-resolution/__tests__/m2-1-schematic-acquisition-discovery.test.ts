@@ -175,8 +175,11 @@ describe("[PR-M M2.1] the schematic-scoped CAD acquisition tools", () => {
     const forgedShape = { ...valid, cadAcquisitionAvailable: "yes" as unknown as boolean } as AgentRunContext;
     for (const forged of [forgedNoSheet, forgedShape]) {
       const outcome = await invoke(gateway, forged, STATUS, {});
-      expect(["context_integrity", "authority_unavailable"]).toContain(refusedStatus(outcome));
+      expect(outcome).toMatchObject({ kind: "refused", status: "context_integrity" }); // [PR-L/M integration, 2026-10-18] F12: pinned to the ONE outcome (the integrity check runs first on every call)
     }
+    // [PR-L/M integration, 2026-10-18] F12: the rule that refuses the fact claimed beside no schematic (gateway.ts) is named, so deleting it fails here
+    expect(JSON.stringify(await invoke(gateway, forgedNoSheet, STATUS, {}))).toContain("the CAD acquisition fact is claimed without a validated schematic");
+    expect(JSON.stringify(await invoke(gateway, forgedShape, STATUS, {}))).toContain("the CAD acquisition fact is malformed");
     expect(refusedStatus(await invoke(gateway, forgedShape, STATUS, {}))).toBe("context_integrity");
   });
 
@@ -213,7 +216,7 @@ describe("[PR-M M2.1] the schematic-scoped CAD acquisition tools", () => {
     expect(ids).toContain(STATUS);
     expect(ids).not.toContain(START);
     const gateway = gatewayOf(productionPort());
-    expect(["not_discoverable", "unauthorized"]).toContain(refusedStatus(await invoke(gateway, viewer, START, { componentIds: [DIMMER_INSTANCE_IDS.D1] })));
+    expect(await invoke(gateway, viewer, START, { componentIds: [DIMMER_INSTANCE_IDS.D1] })).toMatchObject({ kind: "refused", status: "not_discoverable", diagnostics: [expect.stringContaining("role_not_permitted")] }); // [PR-L/M integration, 2026-10-18] F12: pinned to the one outcome (discovery excludes the role), as l5 pins task-control
     expect(reportOf(await invoke(gateway, viewer, STATUS, {})).tasks).toEqual([]);
   });
 });

@@ -16,7 +16,7 @@
  *  3. one injected failure per call point: the record's outcome is the classified reason and the response is byte-identical with and
  *     without the sink bound; a provider's own `missing_credentials` through the router is recorded; a missing key before an
  *     embedding or a rerank leaves no call and no record;
- *  4. the fixture runtime: the router short-circuit records nothing; a public search records into the fixture's repository;
+ *  4. the fixture runtime: the router short-circuit records nothing; a public search records into the fixture's repository ([PR-L/M integration, 2026-10-18] the footprint search - the parts search now answers from the fixture catalog with no provider call);
  *  5. the contract, the seam (passthrough of the very answer and error objects, timing, classification, the stream, unscoped, unbound),
  *     the store, the runtime's failure classes and its one-at-a-time appends, and the binding (`register()` binds under nodejs only);
  *  6. the census and the import gates: the 22 derived paths, their wrappers, no agent adapter in their closures, the provider importers,
@@ -417,13 +417,20 @@ describe("[B24-C1] one injected failure per call point: the classified reason, a
 });
 
 describe("[B24-C1] the fixture runtime", () => {
-  it("4. under the fixture runtime the router's short-circuit records nothing (no provider call), while a public search reaches embedBatch and records into the fixture's in-memory repository through the production default store", { timeout: 60_000 }, async () => {
+  it("4. under the fixture runtime the router's short-circuit records nothing (no provider call), while a public search reaches embedBatch and records into the fixture's in-memory repository through the production default store ([PR-L/M integration, 2026-10-18] reviewed pin move: the footprint search; the parts search answers from the fixture catalog and calls no provider)", { timeout: 60_000 }, async () => {
     vi.stubEnv("SIRKIT_FIXTURE_RUNTIME", "blinker");
     resetLlmCallRecordStoreFactory();
     try {
       await expect(withLlmCallScope({ routeId: "/api/schematic/review", method: "POST", scope: LOCAL }, () => llmRouter.generate({ provider: "anthropic", messages: [{ role: "user", content: "x" }] }))).rejects.toMatchObject({ reason: "missing_credentials" });
       expect(llmCallSeamCounts().recorded).toBe(0);
-      const response = await partsSearch(requestFor("/api/parts/search", SPECS["/api/parts/search"]!));
+      // [PR-L/M integration, 2026-10-18] reviewed pin move: the PARTS search has a fixture branch now (the committed fixture catalog: the Build
+      // Library answered 500 under the fixture runtime without it), so it makes NO provider call and writes no record there; the property this
+      // case pins - a public provider call under the fixture runtime records into the fixture's repository - is driven through the footprint
+      // search, the other public embedding path, which still reaches embedBatch
+      const parts = await partsSearch(requestFor("/api/parts/search", SPECS["/api/parts/search"]!));
+      expect(parts.status).toBe(200);
+      expect(sdk.calls).toEqual([]);
+      const response = await footprintsSearch(requestFor("/api/pcb/footprints/search", SPECS["/api/pcb/footprints/search"]!));
       expect(response.status).toBe(200);
       await drainLlmCallRecordWrites();
       const heads = await fixtureContainer().durableRepository.listHeads({ aggregateType: LLM_CALL_AGGREGATE_TYPE, scope: PUBLIC_MODEL_EGRESS_SCOPE });

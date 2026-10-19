@@ -20,7 +20,7 @@ import { normalizeCadAcquisitionRequest, type CadAcquisitionRequest, type CadAcq
 import { createAcquisitionHandoff, AcquisitionHandoffError } from "../acquisition/handoff";
 import { CadObjectStoreError } from "../../acquisition/cad-object-store";
 import { AcquisitionCandidateError, type AcquisitionTarget } from "../acquisition/candidate";
-import { componentResolutionTaskView } from "./contracts";
+import { componentResolutionTaskView, isTerminalResolutionState } from "./contracts";
 import { ComponentResolutionTaskStore } from "./store";
 import { handoffDepsOf, type ComponentResolutionRuntime } from "./runtime";
 
@@ -124,7 +124,7 @@ export class ComponentResolutionService {
     if (typeof input.clientActionId !== "string" || !ACTION_ID.test(input.clientActionId)) return refuse(400, "COMPONENT_RESOLUTION_INVALID_REQUEST", "clientActionId names the action");
     const read = await this.store.get(scope, input.taskId);
     if (!read) return refuse(404, "COMPONENT_RESOLUTION_TASK_NOT_FOUND", "No such acquisition task in this project.");
-    const task = read.task;
+    const task = read.task; if (isTerminalResolutionState(task.state)) return refuse(409, "COMPONENT_RESOLUTION_STATE_CONFLICT", "The task cannot take a handoff now: it was stopped or has ended; nothing was sent for review."); // [PR-L/M integration, 2026-10-18] M2-SEC-3: checked BEFORE the handoff writes anything in the governance scope (a cancelled task, a stale tab, a direct POST); record-handoff keeps its own check
     if (!task.candidateId || task.candidate?.verdict !== "validated") return refuse(409, "COMPONENT_RESOLUTION_STATE_CONFLICT", "Only a validated candidate is sent for review.");
     try {
       const { handoff } = await createAcquisitionHandoff(handoffDepsOf(this.deps.runtime), { sourceScope: scope, taskId: task.taskId, candidateId: task.candidateId, actor, membershipRevision });

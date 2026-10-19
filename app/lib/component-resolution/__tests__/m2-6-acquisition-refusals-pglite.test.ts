@@ -21,7 +21,8 @@ vi.mock("@/app/lib/embeddings", async (original) => ({ ...(await original() as o
 import { resetComponentResolutionRuntimeFactory, setComponentResolutionRuntimeFactory } from "@/app/lib/component-resolution/task/runtime";
 import { resetCadSourceInjection } from "@/app/lib/component-resolution/task/worker-runtime";
 import { resetMembershipRepositoryFactory } from "@/app/lib/auth/identity-runtime";
-import { loadAcquisitionHandoff } from "@/app/lib/component-resolution/acquisition/handoff";
+import { listAcquisitionHandoffs, loadAcquisitionHandoff } from "@/app/lib/component-resolution/acquisition/handoff";
+import { DurableAcquisitionCandidateStore } from "@/app/lib/component-resolution/acquisition/candidate";
 import { resolveAtomicPublicationRequest, submitAtomicPublicationRequest } from "@/app/lib/atomic/publication-review";
 import { resetAdmissionControl } from "@/app/lib/acquisition/admission-control";
 import type { CadAcquisitionTaskView } from "@/app/lib/acquisition/cad-acquisition-contract";
@@ -87,6 +88,22 @@ describe("[PR-M M.5-6] refusals forge nothing, corrupt nothing, duplicate nothin
     const foreignTask = view(await foreignChain.service.start(foreign, requester, { request: REQUEST, schematic: chainSheet(catalog), headMark: null, origin: "page" })).taskId;
     await foreignChain.runWorker();
     expect(await foreignChain.service.handoff(foreign, human(USERS.requester, "pcb_editor"), null, { taskId: foreignTask, clientActionId: "x" })).toMatchObject({ status: 403, body: { code: "ACQUISITION_HANDOFF_CROSS_TENANT" } });
+  });
+
+  it("[PR-L/M integration, 2026-10-18] M2-SEC-3: a CANCELLED task cannot be sent for review - refused BEFORE anything is written in the governance scope (no inbox entry, the candidate stays validated, nothing handed off)", async () => {
+    chainMemberships([scope("p-m2-cancel-handoff")]);
+    const chain = chainRuntime();
+    const taskId = await startAndRun(chain, "p-m2-cancel-handoff");
+    const validated = view(await chain.service.read(scope("p-m2-cancel-handoff"), taskId));
+    expect(validated).toMatchObject({ state: "awaiting-review", nextAction: "send-for-review", candidate: { verdict: "validated" } });
+    expect(await chain.service.control(scope("p-m2-cancel-handoff"), requester, { taskId, action: "cancel", clientActionId: "stop-before-send" })).toMatchObject({ status: 200, body: { task: { state: "cancelled" } } });
+    const inboxBefore = (await listAcquisitionHandoffs(chain.handoffDeps)).length;
+    // a stale tab or a direct POST after the cancel
+    const sent = await chain.service.handoff(scope("p-m2-cancel-handoff"), human(USERS.requester, "pcb_editor"), null, { taskId, clientActionId: "send-after-cancel" });
+    expect(sent).toMatchObject({ status: 409, body: { code: "COMPONENT_RESOLUTION_STATE_CONFLICT" } });
+    expect((await listAcquisitionHandoffs(chain.handoffDeps)).length).toBe(inboxBefore); // no review package for a task its owner stopped
+    expect((await new DurableAcquisitionCandidateStore(chain.runtime.repository).get(scope("p-m2-cancel-handoff"), validated.candidate!.candidateId)).state).toBe("validated");
+    expect(view(await chain.service.read(scope("p-m2-cancel-handoff"), taskId))).toMatchObject({ state: "cancelled", handoff: null });
   });
 
   it("no admitted source: source_terms (only the blocked GitLab row could serve it) - nothing is called", async () => {

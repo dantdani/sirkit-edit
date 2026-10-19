@@ -9,6 +9,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { InMemoryDurableWorkflowRepository } from "@/app/lib/durable-workflow/repository";
+import { componentResolutionSlicePorts, resetCadSourceInjection, setCadSourceInjection } from "@/app/lib/component-resolution/task/worker-runtime";
+import type { ComponentResolutionRuntime } from "@/app/lib/component-resolution/task/runtime";
+import type { ComponentResolutionTaskHead } from "@/app/lib/component-resolution/task/contracts";
 import { fetchCadAsset, retryAfterAt, cadTemplatePath } from "@/app/lib/acquisition/cad-egress";
 import { CAD_SOURCE_ENTRIES, type CadSourceEntry } from "@/app/lib/acquisition/cad-source-registry";
 import { resetAdmissionControl } from "@/app/lib/acquisition/admission-control";
@@ -120,5 +124,63 @@ describe("[PR-M M2.7] the gitlab.com adapter exists and is never called (blocked
     expect(symbol).toMatchObject({ ok: true, object: { sourceId: "fixture-kicad", ref: "90c39c3880f0062a56b5944d428edc846968d72b", library: "Diode", name: "1N4148", mediaType: "application/x-kicad-symbol" } });
     const table = await adapter.retrieve({ kind: "datasheet", library: null, name: "1N4148" });
     expect(table).toMatchObject({ ok: true, object: { kind: "datasheet", ref: null, mediaType: "text/plain" } });
+  });
+});
+
+// ─── [PR-L/M integration, 2026-10-18] review fixes M2-SEC-7, M2-SEC-8, M2-SEC-9 ─────────────────────────────────────────────────────────
+
+const FOOTPRINT_PATH = "/kicad-footprints/Diode_THT.pretty/D_DO-35_SOD27_P7.62mm_Horizontal.kicad_mod";
+
+describe("[PR-L/M integration] the exact bytes stay exact; a non-2xx body is never read", () => {
+  it("M2-SEC-7: a byte-order mark is KEPT in the text, so sha256(text) - the object store's key - is sha256(bytes), the hash the candidate names", async () => {
+    const { transport, deps } = fixtureDeps();
+    const original = committed("kicad-footprints/Diode_THT.pretty/D_DO-35_SOD27_P7.62mm_Horizontal.kicad_mod");
+    const withBom = new Uint8Array([0xef, 0xbb, 0xbf, ...original]);
+    transport.overrides.set(FOOTPRINT_PATH, { status: 200, body: withBom, headers: { "content-type": "application/x-kicad-footprint" } });
+    const outcome = await fetchCadAsset("fixture-kicad", { kind: "footprint", values: { library: "Diode_THT", name: "D_DO-35_SOD27_P7.62mm_Horizontal" } }, deps);
+    expect(outcome.ok, JSON.stringify(outcome).slice(0, 300)).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.sha256).toBe(createHash("sha256").update(withBom).digest("hex"));
+    expect(outcome.text.charCodeAt(0)).toBe(0xfeff); // not silently stripped
+    expect(createHash("sha256").update(outcome.text, "utf8").digest("hex")).toBe(outcome.sha256); // the store's key IS the candidate's hash
+    expect(outcome.byteLength).toBe(withBom.byteLength);
+  });
+
+  it("M2-SEC-8: a 429 with Retry-After and a body over the kind's ceiling is still a scheduled wait at the real retry time (the body is never read); a large 404 is not_found; a 503's Retry-After is kept", async () => {
+    const { transport, deps } = fixtureDeps();
+    transport.overrides.set(SYMBOL_PATH, { status: 429, headers: { "retry-after": "120", "content-type": "text/html" }, body: "<html>slow down</html>".padEnd(2 * 1024 * 1024, " ") });
+    expect(await fetchCadAsset("fixture-kicad", { kind: "symbol", values: { library: "Diode", name: "1N4148" } }, deps)).toMatchObject({ ok: false, code: "rate_limited", status: 429, retryAtMs: NOW + 120_000 });
+    resetAdmissionControl();
+    transport.overrides.set(SYMBOL_PATH, { status: 404, headers: { "content-type": "text/html" }, body: "x".repeat(2 * 1024 * 1024) });
+    expect(await fetchCadAsset("fixture-kicad", { kind: "symbol", values: { library: "Diode", name: "1N4148" } }, deps)).toMatchObject({ ok: false, code: "not_found", status: 404 });
+    transport.overrides.set(SYMBOL_PATH, { status: 503, headers: { "retry-after": "30", "content-type": "text/plain" }, body: "maintenance" });
+    expect(await fetchCadAsset("fixture-kicad", { kind: "symbol", values: { library: "Diode", name: "1N4148" } }, deps)).toMatchObject({ ok: false, code: "http_error", status: 503, retryAtMs: NOW + 30_000 });
+  });
+});
+
+describe("[PR-L/M integration] M2-SEC-9: the CAD source meter holds an agent-started task to the agent share (OD-40) (the bundled row's own meter: m2-3, over its pinned scratch checkout)", () => {
+  afterEach(() => resetCadSourceInjection());
+  const runtime = (): ComponentResolutionRuntime => ({ repository: new InMemoryDurableWorkflowRepository(), clock, durability: "process-memory", fixture: true, governance: { tenantId: null, projectId: null }, environment: {} });
+  const fixtureAdapterFor = (origin: "chat" | "page") => {
+    const transport = createFixtureCadTransport();
+    setCadSourceInjection({ fixtureEgress: { fetch: transport.fetch, resolve: transport.resolve }, fixtureAllowed: true });
+    const ports = componentResolutionSlicePorts(runtime(), { catalog: {} as never, evidence: {} as never });
+    const adapter = ports.pipeline({ origin } as ComponentResolutionTaskHead).adapters.find((candidate) => candidate.sourceId === "fixture-kicad");
+    if (!adapter) throw new Error("the fixture adapter was not admitted");
+    return { adapter, transport };
+  };
+
+  it("a CHAT-started task gets floor(0.25 x 120) = 30 requests a minute from the fixture source, then a pause with its retry time and no request; a PAGE start is a person's whole window", async () => {
+    const share = Math.floor(0.25 * CAD_SOURCE_ENTRIES.find((entry) => entry.id === "fixture-kicad")!.quota.requestsPerMinute);
+    expect(share).toBe(30);
+    const agent = fixtureAdapterFor("chat");
+    for (let index = 0; index < share; index += 1) expect((await agent.adapter.retrieve({ kind: "symbol", library: "Diode", name: "1N4148" })).ok, `request ${index + 1}`).toBe(true);
+    const paused = await agent.adapter.retrieve({ kind: "symbol", library: "Diode", name: "1N4148" });
+    expect(paused).toMatchObject({ ok: false, code: "quota_exhausted" });
+    expect((paused as { retryAtMs: number }).retryAtMs).toBeGreaterThan(NOW);
+    expect(agent.transport.requests).toHaveLength(share); // the paused request was never sent
+    resetAdmissionControl();
+    const person = fixtureAdapterFor("page");
+    for (let index = 0; index <= share; index += 1) expect((await person.adapter.retrieve({ kind: "symbol", library: "Diode", name: "1N4148" })).ok, `request ${index + 1}`).toBe(true);
   });
 });

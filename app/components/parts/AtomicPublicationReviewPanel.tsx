@@ -58,7 +58,7 @@ export interface AtomicPublicationPrefill {
   /** [PR-M, 2026-10-18] Section M2: an ACQUIRED review package (a component review inbox handoff): the spec names the stored symbol and
    *  footprint objects (`acquired`), the links (or the one discovery row) the handoff decided, and what the person must still confirm.
    *  The symbol and footprint stay the acquired objects; every other field stays editable; nothing is requested until the person submits. */
-  acquisition?: { handoffId: string; spec: AtomicPublicationSpec; links: AtomicPublicationLink[]; discovery: { valueKey: string } | null; notes: string[]; missing: string[]; conflicts: string[] };
+  acquisition?: { handoffId: string; spec: AtomicPublicationSpec; links: AtomicPublicationLink[]; discovery: boolean; notes: string[]; missing: string[]; conflicts: string[] }; // [PR-L/M integration, 2026-10-18] M2-SEC-5: discovery is a flag (was { valueKey }, a shape the server always refused)
 }
 
 const STATE_CLASS: Record<string, string> = {
@@ -225,7 +225,7 @@ export function AtomicPublicationReviewPanel({ review, prefill }: AtomicPublicat
       // discovery row are the handoff's; the person's edits of the other fields are kept
       const spec = specFrom(draft);
       const withObjects: AtomicPublicationSpec = { ...spec, symbol: acquired.spec.symbol, footprint: draft.profile === "pcb_assignable" ? acquired.spec.footprint : spec.footprint };
-      await review.submit({ spec: withObjects, links: draft.profile === "pcb_assignable" ? acquired.links : [], reason: draft.reason.trim() || `Component review of the acquired ${draft.exactMpn.trim()} (handoff ${acquired.handoffId.slice(0, 28)})`, ...(acquired.discovery && draft.profile === "pcb_assignable" ? { discovery: acquired.discovery } : {}) });
+      await review.submit({ spec: withObjects, links: draft.profile === "pcb_assignable" ? acquired.links : [], reason: draft.reason.trim() || `Component review of the acquired ${draft.exactMpn.trim()} (handoff ${acquired.handoffId.slice(0, 28)})`, ...(acquired.discovery && draft.profile === "pcb_assignable" ? { discovery: true as const } : {}) }); // [PR-L/M integration, 2026-10-18] M2-SEC-5: `true`, the one shape submit_request accepts (publication-review.ts; the server sets the value key)
       return;
     }
     const links = draft.linkPart && prefill?.partId && !prefill.alreadyLinked && draft.profile === "pcb_assignable" ? [{ partId: prefill.partId, valueKey: "" }] : [];

@@ -78,7 +78,7 @@ import { sealTier1Proposal, TIER1_PROPOSAL_SCHEMA, type SealedTier1Proposal } fr
 import { loadSessionIdentity, sessionAuthorizationBindingFrom, SESSION_IDENTITY_UNAVAILABLE_MESSAGE } from "@/app/lib/project/session-identity";
 import { projectSelectorHeaders } from "@/app/lib/project/project-selector";
 import { completenessNote, electricalCheckNote, type ElectricalCheckStatus } from "@/app/lib/schematic/build-result"; // [PR-C] [PR-L, 2026-10-17] the Build result now arrives from a durable generation task (generation-task-client), not a build-multi response
-import { controlGenerationTask, fetchActiveGenerationTask, fetchGenerationTask, generationTaskBusy, generationTaskRestartable, generationTaskStatusText, generationActivityLineId, newGenerationClientActionId, newGenerationClientRequestId, reduceGenerationTaskView, startGenerationTask, subscribeGenerationTask, type GenerationTaskClientAction, type GenerationTaskSnapshotView, type GenerationTaskUpdate, type GenerationTaskView } from "@/app/lib/project/generation-task-client"; // [PR-L, 2026-10-17] runbook L.4: the durable design task (start or attach, progress, control, result)
+import { controlGenerationTask, fetchActiveGenerationTask, fetchGenerationTask, generationTaskBusy, generationTaskRestartable, generationTaskStatusText, generationActivityLineId, newGenerationClientActionId, randomGenerationUuid, newGenerationClientRequestId, reduceGenerationTaskView, startGenerationTask, subscribeGenerationTask, type GenerationTaskClientAction, type GenerationTaskSnapshotView, type GenerationTaskUpdate, type GenerationTaskView } from "@/app/lib/project/generation-task-client"; // [PR-L, 2026-10-17] runbook L.4: the durable design task (start or attach, progress, control, result)
 import { GenerationTaskStatus } from "@/app/components/chat/GenerationTaskStatus"; // [PR-L, 2026-10-17] the task's live status card in its activity entry
 import { clearPendingProposal, loadPendingProposal, savePendingProposal } from "@/app/lib/project/pending-proposal-store"; // [PR-C]
 import { computeDesignChecks, type DesignCheck } from "@/app/lib/schematic/design-checks"; // [PR-E]
@@ -4764,7 +4764,7 @@ export default function Home() {
             const started = receiveGenerationTaskEvent(event);
             if (!started) { appendActivityStep(logId, "A design task reference the assistant issued was dropped by this page: it was malformed. This page follows nothing for it and nothing was changed.", "error"); return; }
             generationTaskSeen = true;
-            appendActivityStep(logId, started.task.disposition === "attached-active" ? "The assistant attached to the design already running for this project (nothing new was started); following it below" : `Design task ${started.task.disposition === "started" ? "started" : "attached"} from the chat; a generation worker runs it in saved steps - this answer ending (or Stop answer) does not stop it`, "done");
+            appendActivityStep(logId, started.task.disposition === "attached-active" ? (started.task.state === "awaiting-review" ? "The assistant found this project's previous design finished and waiting for your review (nothing new was started): approve or discard it in the review dialog before asking for a new design" : "The assistant attached to the design already running for this project (nothing new was started); following it below") : `Design task ${started.task.disposition === "started" ? "started" : "attached"} from the chat; a generation worker runs it in saved steps - this answer ending (or Stop answer) does not stop it`, "done"); // [PR-L/M integration, 2026-10-18] L5-2: an attached FINISHED design (awaiting-review) is not called running: its result waits in the review dialog
             void followChatGenerationTask(started, { scope });
             return;
           }
@@ -5556,17 +5556,17 @@ export default function Home() {
     if (!task) return;
     const projectId = projectRef.current?.id ?? null;
     const entry = generationTaskRef.current;
-    const recipe = entry && entry.taskId === task.taskId && entry.view?.base.recipe === "chat-sheet" ? "chat-sheet" as const : "build-pin" as const; const liveDigest = generationLiveBaseDigest(recipe); // [PR-L, 2026-10-18] the followed task's recipe (build-pin: the sheet's content; chat-sheet: the sheet as the chat run posted it)
-    const request = outcome === "not-applied"
-      ? { action: "report-base" as const, clientActionId: newGenerationClientActionId(), liveBase: { schematicDigest: liveDigest, recipe } }
-      : { action: "record-review" as const, clientActionId: newGenerationClientActionId(), review: { outcome, resultDigest: task.resultDigest, ...(outcome === "applied" ? { headMark: schematicSessionRef.current?.headMark() ?? undefined } : {}) } };
-    void controlGenerationTask({ projectId, branchId: "main" }, task.taskId, request).then((answer) => {
-      if (!answer.ok || !entry || entry.taskId !== task.taskId || generationTaskRef.current !== entry) return;
+    const followed = entry && entry.taskId === task.taskId && entry.view ? (entry.view.base.recipe === "chat-sheet" ? "chat-sheet" as const : "build-pin" as const) : null; const liveDigests = outcome === "not-applied" ? { "build-pin": generationLiveBaseDigest("build-pin"), "chat-sheet": generationLiveBaseDigest("chat-sheet") } : null; // [PR-L/M integration, 2026-10-18] L5-3: the live sheet under BOTH recipes, read at the review's moment; the TASK's recipe picks one below
+    void (async () => { const recipe = liveDigests === null ? null : followed ?? await (async () => { const detail = await fetchGenerationTask({ projectId, branchId: "main" }, task.taskId); return detail.ok && (detail.task.base.recipe === "chat-sheet" || detail.task.base.recipe === "build-pin") ? detail.task.base.recipe : null; })(); if (liveDigests !== null && recipe === null) return; // a task this page does not follow (a result restored before, or without, the reattach) is re-read for ITS recipe; unreadable, nothing is reported (a guessed recipe is refused by the store; the next attach reports the base under the task's own recipe)
+      const request = outcome !== "not-applied"
+        ? { action: "record-review" as const, clientActionId: newGenerationClientActionId(), review: { outcome, resultDigest: task.resultDigest, ...(outcome === "applied" ? { headMark: schematicSessionRef.current?.headMark() ?? undefined } : {}) } }
+        : liveDigests !== null && recipe !== null ? { action: "report-base" as const, clientActionId: newGenerationClientActionId(), liveBase: { schematicDigest: liveDigests[recipe], recipe } } : null;
+      if (request === null) return; const answer = await controlGenerationTask({ projectId, branchId: "main" }, task.taskId, request);
+      if (!answer.ok) { if (entry && entry.taskId === task.taskId && generationTaskRef.current === entry) appendActivityStep(entry.logId, `The design task did not record this review: ${answer.message}`, "error", generationActivityLineId()); return; } // [PR-L/M integration, 2026-10-18] L5-3: a refused report is said in the task's entry, never dropped silently
+      if (!entry || entry.taskId !== task.taskId || generationTaskRef.current !== entry) return;
       const { view } = reduceGenerationTaskView(entry.view, { task: answer.task, events: [], gap: false });
-      entry.view = view;
-      entry.settled = true;
-      setGenerationTask({ logId: entry.logId, view });
-    });
+      entry.view = view; entry.settled = true; setGenerationTask({ logId: entry.logId, view });
+    })();
   }
 
   // [PR-D] The agent's Build-mode generation enters the SAME review boundary as the composer's Generate. [PR-L, 2026-10-18] Runbook L.5:
@@ -5590,7 +5590,7 @@ export default function Home() {
 
   /** [PR-L, 2026-10-18] An activity entry for a design task this page did not start itself, with ids that draw no random UUID (the editor's id sequence is unchanged). */
   function startGenerationTaskLog(title: string): string {
-    const id = generationActivityLineId();
+    const id = `generation-task-log-${randomGenerationUuid()}`; // [PR-L/M integration, 2026-10-18] L5-1: the entry's MESSAGE id is unique across page loads (chat messages, ids included, are saved and restored with the project; the page-local line counter restarts at every load, so a new task's entry took a restored entry's id) - crypto.getRandomValues, never a draw from the editor's own UUID sequence (that sequence is unchanged); the counter names the entry's lines only
     setMessages((prev) => [...prev, { id, role: "log", title, status: "running", entries: [{ id: generationActivityLineId(), text: "Following the project's design task: it runs in a generation worker, and leaving or reloading this page does not stop it", status: "running" }] }]);
     return id;
   }

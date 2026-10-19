@@ -56,7 +56,7 @@ export const CI_ADMISSION_ANCHORS = Object.freeze({
   benchmarkNightly: "  benchmark-nightly:",
   benchmarkLatency: "  benchmark-latency:", // [B24-D1, 2026-10-09] the appended latency job (OD-212)
   nightlyCondition: "if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'",
-  stage10Step: "- run: pnpm run stage10:test -- ",
+  stage10Step: "- run: pnpm run stage10:test ", // [PR-L/M integration, 2026-10-18] reviewed pin move: the literal `--` dropped from both stage10 steps (pnpm 11 passed it to vitest, which then ignored the reporter and output flags: vitest-stage10.xml was never written)
   stage10Script: '"stage10:test": "vitest run app/lib/engineering/__tests__",',
   vitestInclude: 'include: ["app/**/__tests__/**/*.test.{ts,tsx}"],',
 });

@@ -154,12 +154,17 @@ describe("[PR-M M.5-4] no local candidate -> fixture source -> bytes -> validati
     expect(task.candidate!.objects.map((object) => object.role)).toEqual(["symbol-file", "symbol-parent", "footprint", "datasheet", "symbol-library"]);
     expect(task.candidate!.objects.find((object) => object.role === "datasheet")!.sha256).toBe(sha256(PIN_TABLE_1N4148));
     expect(task.events.map((event) => event.kind)).toEqual(expect.arrayContaining(["accepted", "worker_claimed", "local_search", "source_selected", "retrieved", "stored", "validated", "awaiting_handoff"]));
+    // [PR-L/M integration, 2026-10-18] the stage waiting for a PERSON reads "awaiting" (it said "running" while nothing ran) and is the current stage
+    expect(task.stages.find((stage) => stage.stage === "handoff")).toMatchObject({ status: "awaiting", evidence: "waiting for a person to send the package for component review" });
+    expect(task.stage).toBe("handoff");
 
     // ── 3. a PERSON sends the package for review (the governance inbox in another scope) ──
     const sent = await chain.service.handoff(SCOPE, human(USERS.requester, "pcb_editor"), null, { taskId, clientActionId: "send-for-review-1" });
     expect(sent.status, JSON.stringify(sent.body)).toBe(200);
     const handoffId = sent.body.handoffId as string;
     expect(view(sent)).toMatchObject({ nextAction: "await-publication", handoff: { handoffId } });
+    expect(view(sent).stages.filter((stage) => stage.stage === "handoff" || stage.stage === "awaiting-publication").map((stage) => [stage.stage, stage.status])).toEqual([["handoff", "done"], ["awaiting-publication", "awaiting"]]); // [PR-L/M integration, 2026-10-18] two people review: awaiting, never "running"
+    expect(view(sent).stage).toBe("awaiting-publication");
     const handoff = (await loadAcquisitionHandoff(chain.handoffDeps, handoffId))!;
     expect(JSON.stringify(handoff)).not.toContain(SCOPE.projectId); // the inbox learns nothing about the source project
     expect(handoff.package).toMatchObject({ links: [{ partId: catalog.ids.get("1n4148"), valueKey: "" }], discovery: false, terminalOrigin: "datasheet" });
@@ -199,8 +204,8 @@ describe("[PR-M M.5-4] no local candidate -> fixture source -> bytes -> validati
     if (sealed.kind !== "resolution-proposal") return;
     expect(sealed.proposal.impact.items.map((item) => [item.refDes, item.mode, item.target.atomicPartRevisionId])).toEqual([["D1", "same-part-binding", revisionId], ["D2", "same-part-binding", revisionId]]);
     const applied = await apply(h, sealed.proposal);
-    expect(applied.ok, JSON.stringify(applied)).toBe(true);
-    if (!applied.ok || applied.status !== "committed") return;
+    expect(applied, JSON.stringify(applied)).toMatchObject({ ok: true, status: "committed" }); // [PR-L/M integration, 2026-10-18] F10: a fresh apply must COMMIT (an "already-applied" answer here is a defect, never a silent skip of steps 6-7)
+    if (!applied.ok || applied.status !== "committed") throw new Error("unreachable: the apply did not commit"); // narrows the type only
     const after = h.visible();
     expect(schematicStateDigest(after)).toBe(applied.receipt.schematicDigestAfter);
     for (const id of ["kc-d1", "kc-d2"]) expect(after.kicadComponents!.find((instance) => instance.id === id)).toMatchObject({ partId: catalog.ids.get("1n4148"), atomicPartRevisionId: revisionId });
@@ -214,6 +219,13 @@ describe("[PR-M M.5-4] no local candidate -> fixture source -> bytes -> validati
     expect(view(recorded).stages.map((stage) => [stage.stage, stage.status])).toEqual([["local-search", "done"], ["source-selection", "done"], ["retrieve", "done"], ["validate", "done"], ["handoff", "done"], ["awaiting-publication", "done"], ["proposal", "done"], ["applied", "done"], ["preflight", "done"]]);
     // a stale or foreign record is refused: the receipt for a sheet the task did not offer
     expect((await chain.service.recordApplied(SCOPE, requester, { taskId, clientActionId: "applied-2", receiptId: "r-x", schematicDigestAfter: schematicStateDigest(before), schematic: before })).status).toBe(409);
+    // [PR-L/M integration, 2026-10-18] M2-SEC-2: a SUCCEEDED task takes no other receipt (even over the same, valid sheet): 409, the recorded
+    // receipt unchanged; the same receipt again (a retried click) stays the idempotent no-op
+    const other = await chain.service.recordApplied(SCOPE, requester, { taskId, clientActionId: "applied-3", receiptId: "r-another-receipt", schematicDigestAfter: applied.receipt.schematicDigestAfter, schematic: after });
+    expect(other).toMatchObject({ status: 409, body: { code: "COMPONENT_RESOLUTION_STATE_CONFLICT" } });
+    const retried = await chain.service.recordApplied(SCOPE, requester, { taskId, clientActionId: "applied-4", receiptId: applied.receipt.receiptId, schematicDigestAfter: applied.receipt.schematicDigestAfter, schematic: after });
+    expect(retried.status).toBe(200);
+    expect(view(await chain.service.read(SCOPE, taskId))).toMatchObject({ state: "succeeded", applied: { receiptId: applied.receipt.receiptId } });
 
     // nothing paid, no model: zero embedding, zero reranker, and only the acquisition's four CAD requests
     expect(seams.embedded).toEqual([]);

@@ -91,6 +91,14 @@ describe("[PR-M M.5-5] reuse from durable storage, isolation, withdrawal, upstre
     expect(seams.embedded).toEqual([]); // ZERO embedding (paid) calls
     expect(seams.reranked).toBe(0); // ZERO model calls
 
+    // [PR-L/M integration, 2026-10-18] M2-SEC-2: a task cancelled while its replacement is offered never takes a receipt afterwards (a page
+    // that applied the batch anyway, or a stale tab): the store refuses it, the task stays cancelled and records nothing
+    const offeredTaskId = view(second).taskId;
+    expect(await chain.service.control(P2, requester, { taskId: offeredTaskId, action: "cancel", clientActionId: "stop-offered" })).toMatchObject({ status: 200, body: { task: { state: "cancelled" } } });
+    const late = await chain.store.control({ scope: P2, taskId: offeredTaskId, principalId: USERS.requester, action: "record-applied", clientActionId: "late-receipt", applied: { receiptId: "r-late", schematicDigestAfter: "eng1-late", at: new Date(chain.clock.now).toISOString() }, preflight: { unresolvedCount: 0, unresolvedRefDes: [], at: new Date(chain.clock.now).toISOString(), verifiedDigest: "eng1-late" } });
+    expect(late).toMatchObject({ ok: false, code: "COMPONENT_RESOLUTION_STATE_CONFLICT" });
+    expect(view(await chain.service.read(P2, offeredTaskId))).toMatchObject({ state: "cancelled", applied: null, preflight: null });
+
     // a foreign tenant (or a private project) reads nothing: tasks, candidates and objects are scoped; an unknown id is the same refusal
     expect((await chain.service.read(FOREIGN, taskId)).status).toBe(404);
     expect((await chain.service.read(P1, "cr-task:00000000000000000000000000000000")).status).toBe(404);
