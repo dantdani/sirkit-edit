@@ -459,7 +459,7 @@ function ciWorkflowProblems(rows: ReadonlyArray<Readonly<Record<string, string>>
   const named = [DETERMINISTIC_WORKFLOW, BENCHMARK_WORKFLOW].map((path) => [path, workflowName(path)] as const);
   for (const [path, name] of named) {
     const jobs = rows.filter((row) => row.workflow === name).map((row) => row.job ?? "");
-    const want = pullRequestJobs(path);
+    const want = pullRequestJobs(path).filter((job) => job !== "page-browser-e2e-agent"); // [PR-L7, 2026-10-20] reviewed pin move (OD-254): the table records the CI run at the final SHA; page-browser-e2e-agent was appended after it, so it is no row there (every job the workflow held at that SHA still is)
     if (want.length === 0 || jobs.join(", ") !== want.join(", ")) problems.push(`${name}: rows ${jobs.join(", ") || "none"}, its pull-request jobs ${want.join(", ")}`);
   }
   for (const row of rows) if (!named.some(([, name]) => name === row.workflow)) problems.push(`${row.workflow}: no workflow of the two`);

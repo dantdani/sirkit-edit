@@ -22,12 +22,12 @@
  * its `--reporter` line, in `--exclude '<pattern>'` lines - each a quoted `<dir>/**` or test-file path that some positional filter
  * touches - returned as `excludes`; a job runs a path only when a positional filter selects it and no exclude leaves it out. A bare,
  * unquoted or mis-shaped exclude, another flag, or a positional filter after an exclude throws CI_ANCHOR. The job key
- * `agent-boundary-suites` is a sixth anchor and a sixth job id. [B24-D4, 2026-10-10] OD-30's split of page-browser-e2e: the end of the file.
+ * `agent-boundary-suites` is a sixth anchor and a sixth job id. [B24-D4, 2026-10-10] OD-30's split of page-browser-e2e: the end of the file. [PR-L7, 2026-10-20] OD-254: a second appended browser job, page-browser-e2e-agent, read the same way (its anchor on pageBrowser's line; the one anchor that may be absent - a workflow from before OD-254 has no such job - though never doubled).
  */
 import { readFileSync } from "node:fs";
 import { join, posix } from "node:path";
 
-export const CI_JOB_IDS = ["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "page-browser-e2e", "page-browser-e2e-b24", "agent-boundary-suites", "benchmark-latency"] as const; // [B24-D0, 2026-10-09] + agent-boundary-suites (OD-30's split); [B24-D1, 2026-10-09] + benchmark-latency (OD-212: the appended benchmark job, its one-line vitest step and its env; no stage10 step); [B24-D4, 2026-10-10] + page-browser-e2e-b24 (OD-30's split of page-browser-e2e: the appended browser job, B24's own browser specs; [B24-D4 lead, 2026-10-10] named for them, option (b)), after page-browser-e2e
+export const CI_JOB_IDS = ["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "page-browser-e2e", "page-browser-e2e-b24", "page-browser-e2e-agent", "agent-boundary-suites", "benchmark-latency"] as const; // [PR-L7, 2026-10-20] + page-browser-e2e-agent (OD-254, OD-30's split of page-browser-e2e again: the appended browser job running e2e/agent-execution.spec.ts), after page-browser-e2e-b24; [B24-D0, 2026-10-09] + agent-boundary-suites (OD-30's split); [B24-D1, 2026-10-09] + benchmark-latency (OD-212: the appended benchmark job, its one-line vitest step and its env; no stage10 step); [B24-D4, 2026-10-10] + page-browser-e2e-b24 (OD-30's split of page-browser-e2e: the appended browser job, B24's own browser specs; [B24-D4 lead, 2026-10-10] named for them, option (b)), after page-browser-e2e
 export type CiJobId = (typeof CI_JOB_IDS)[number];
 
 const NEWLINE = String.fromCharCode(10);
@@ -44,7 +44,7 @@ export const CI_ADMISSION_ANCHORS = Object.freeze({
   trigger: "pull_request:",
   promptToGerber: "  prompt-to-gerber:",
   databaseDelivery: "  database-delivery:",
-  pageBrowser: "  page-browser-e2e:", pageBrowserB24: "  page-browser-e2e-b24:", // [B24-D4, 2026-10-10] + the appended browser job (OD-30's split of page-browser-e2e)
+  pageBrowser: "  page-browser-e2e:", pageBrowserB24: "  page-browser-e2e-b24:", pageBrowserAgent: "  page-browser-e2e-agent:", // [B24-D4, 2026-10-10] + the appended browser job (OD-30's split of page-browser-e2e); [PR-L7, 2026-10-20] + the second appended browser job (OD-254)
   agentBoundary: "  agent-boundary-suites:", // [B24-D0, 2026-10-09] the appended job (OD-30's split)
   vitestStep: "pnpm exec vitest run",
   playwrightRun: "- run: pnpm exec playwright test",
@@ -162,7 +162,7 @@ export interface CiAdmission {
   /** The positional filters each vitest job applies, as derived (for the page and the bite checks). */
   readonly filters: Readonly<Record<"prompt-to-gerber" | "database-delivery" | "benchmark-core" | "benchmark-nightly" | "agent-boundary-suites" | "benchmark-latency", readonly string[]>>; // [B24-D1, 2026-10-09] + benchmark-latency
   /** [B24-D0] The `--exclude` patterns of each folded vitest job, in order ([] when the step has none). */
-  readonly excludes: Readonly<Record<"prompt-to-gerber" | "database-delivery" | "agent-boundary-suites", readonly string[]>>; /** [B24-D4, 2026-10-10] page-browser-e2e's SIRKIT_E2E_SKIP globs and page-browser-e2e-b24's spec arguments, as read. */ readonly browser: Readonly<{ skip: readonly string[]; b24: readonly string[] }>;
+  readonly excludes: Readonly<Record<"prompt-to-gerber" | "database-delivery" | "agent-boundary-suites", readonly string[]>>; /** [B24-D4, 2026-10-10] page-browser-e2e's SIRKIT_E2E_SKIP globs and page-browser-e2e-b24's spec arguments, as read; [PR-L7, 2026-10-20] and page-browser-e2e-agent's (OD-254). */ readonly browser: Readonly<{ skip: readonly string[]; b24: readonly string[]; agent: readonly string[] }>;
   /** [B24-B2] The `env` block of each benchmark job's vitest step, values unquoted ({} when the step has none). */
   readonly stepEnv: Readonly<Record<"benchmark-core" | "benchmark-nightly" | "benchmark-latency", Readonly<Record<string, string>>>>; // [B24-D1, 2026-10-09] + benchmark-latency (its vitest step's env holds SIRKIT_B24_BENCHMARK)
 }
@@ -235,7 +235,7 @@ export function ciAdmission(read: RepoReader = readRepoText): CiAdmission {
     }
     if (/^e2e\/[^/]+\.spec\.ts$/.test(normal)) { // [B24-D4, 2026-10-10] page-browser-e2e runs every e2e spec its skip globs leave in (a `**/` glob: the file name at any depth), the new job the specs it names
       if (!browser.skip.some((glob) => normal.endsWith(`/${glob.slice(3)}`))) jobs.add("page-browser-e2e");
-      if (browser.b24.includes(normal)) jobs.add("page-browser-e2e-b24");
+      if (browser.b24.includes(normal)) jobs.add("page-browser-e2e-b24"); if (browser.agent.includes(normal)) jobs.add("page-browser-e2e-agent"); // [PR-L7, 2026-10-20] OD-254
     }
     if (/^e2e-orchestration\/[^/]+\.spec\.ts$/.test(normal)) jobs.add("page-browser-e2e");
     return CI_JOB_IDS.filter((job) => jobs.has(job));
@@ -307,8 +307,9 @@ const holds = (read: RepoReader, path: string): boolean => {
     return false;
   }
 };
-/** The SIRKIT_E2E_SKIP globs of page-browser-e2e's first browser step ([] with no mapping) and the specs the appended job runs. */
-function browserSplit(lines: readonly string[], playwrightRun: number, browserEnd: number, read: RepoReader): Readonly<{ skip: readonly string[]; b24: readonly string[] }> {
+/** The SIRKIT_E2E_SKIP globs of page-browser-e2e's first browser step ([] with no mapping) and the specs the appended jobs run ([PR-L7, 2026-10-20]
+ *  two since OD-254: page-browser-e2e-b24 and page-browser-e2e-agent; the skip list names exactly their specs, none in both). */
+function browserSplit(lines: readonly string[], playwrightRun: number, browserEnd: number, read: RepoReader): Readonly<{ skip: readonly string[]; b24: readonly string[]; agent: readonly string[] }> {
   const where = `${DETERMINISTIC}: page-browser-e2e's playwright test step`;
   const env: string[] = [];
   for (let index = playwrightRun + 1; index < browserEnd && /^ {8,}\S/.test(lines[index]!); index += 1) env.push(lines[index]!);
@@ -323,13 +324,25 @@ function browserSplit(lines: readonly string[], playwrightRun: number, browserEn
       if (!holds(read, `e2e/${glob.slice(3)}`)) fail(`${where} has a skip glob that names no spec under e2e/: "${glob}"`);
     }
   }
-  const [start, end] = jobBlock(lines, CI_ADMISSION_ANCHORS.pageBrowserB24, DETERMINISTIC);
-  const runs = lines.flatMap((line, index) => (index > start && index < end && line.trim().startsWith(B24_RUN) ? [index] : []));
-  if (runs.length !== 1) fail(`${DETERMINISTIC}: page-browser-e2e-b24's playwright test line ${runs.length === 0 ? "absent" : "appears twice"}`);
-  const b24 = lines[runs[0]!]!.trim().slice(B24_RUN.length).split(/\s+/).filter(Boolean);
-  if (b24.length === 0) fail(`${DETERMINISTIC}: page-browser-e2e-b24's playwright test line names no spec`);
-  for (const spec of b24) if (!/^e2e\/[a-z0-9-]+\.spec\.ts$/.test(spec) || !holds(read, spec)) fail(`${DETERMINISTIC}: page-browser-e2e-b24 has an argument that is not an e2e spec: "${spec}"`);
+  const b24 = appendedBrowserSpecs(lines, CI_ADMISSION_ANCHORS.pageBrowserB24, read);
+  const agent = appendedBrowserSpecs(lines, CI_ADMISSION_ANCHORS.pageBrowserAgent, read, true); // [PR-L7, 2026-10-20] OD-254; optional: a workflow from before it (b24-f-verdict-lines reads B24's final tree) has none
+  const appended = [...b24, ...agent];
+  if (new Set(appended).size !== appended.length) fail(`${DETERMINISTIC}: a spec runs in both appended browser jobs: ${appended.filter((spec, index) => appended.indexOf(spec) !== index).join(", ")}`);
   const skipped = skip.map((glob) => `e2e/${glob.slice(3)}`).sort();
-  if (JSON.stringify(skipped) !== JSON.stringify([...b24].sort())) fail(`${DETERMINISTIC}: page-browser-e2e skips ${skipped.join(", ") || "nothing"} but page-browser-e2e-b24 runs ${[...b24].sort().join(", ")}: the skip list and the new job disagree`);
-  return Object.freeze({ skip: Object.freeze(skip), b24: Object.freeze(b24) });
+  if (JSON.stringify(skipped) !== JSON.stringify([...appended].sort())) fail(`${DETERMINISTIC}: page-browser-e2e skips ${skipped.join(", ") || "nothing"} but page-browser-e2e-b24 runs ${[...b24].sort().join(", ")} and page-browser-e2e-agent runs ${[...agent].sort().join(", ")}: the skip list and the appended jobs disagree`);
+  return Object.freeze({ skip: Object.freeze(skip), b24: Object.freeze(b24), agent: Object.freeze(agent) });
+}
+/** [PR-L7, 2026-10-20] The specs an appended browser job's one `run: pnpm exec playwright test <spec>...` line names (B24-D4's reader, now
+ *  shared by page-browser-e2e-b24 and page-browser-e2e-agent): each an `e2e/<name>.spec.ts` that exists; a missing or doubled run line,
+ *  no spec or another argument throws CI_ANCHOR; an `optional` job whose key is absent runs nothing (a doubled key still throws). */
+function appendedBrowserSpecs(lines: readonly string[], key: string, read: RepoReader, optional = false): readonly string[] {
+  const job = key.trim().slice(0, -1);
+  if (optional && !lines.includes(key)) return Object.freeze([]);
+  const [start, end] = jobBlock(lines, key, DETERMINISTIC);
+  const runs = lines.flatMap((line, index) => (index > start && index < end && line.trim().startsWith(B24_RUN) ? [index] : []));
+  if (runs.length !== 1) fail(`${DETERMINISTIC}: ${job}'s playwright test line ${runs.length === 0 ? "absent" : "appears twice"}`);
+  const specs = lines[runs[0]!]!.trim().slice(B24_RUN.length).split(/\s+/).filter(Boolean);
+  if (specs.length === 0) fail(`${DETERMINISTIC}: ${job}'s playwright test line names no spec`);
+  for (const spec of specs) if (!/^e2e\/[a-z0-9-]+\.spec\.ts$/.test(spec) || !holds(read, spec)) fail(`${DETERMINISTIC}: ${job} has an argument that is not an e2e spec: "${spec}"`);
+  return Object.freeze(specs);
 }

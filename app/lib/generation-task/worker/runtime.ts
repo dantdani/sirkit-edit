@@ -186,5 +186,38 @@ export async function runPumpedSlice(input: PumpedSliceInput): Promise<PumpedSli
   }
 }
 
+// ─── [PR-L7, 2026-10-20] The idle hold: an idle pump request waits in the server for new work instead of the worker re-posting ────
+
+/** The longest an idle pump request is held (the client's idle-backoff ceiling, `PUMP_IDLE_MAX_MS` of pump-transport.ts). */
+export const PUMP_HOLD_MAX_MS = 8_000;
+/** The hold a pump request asks for (`?hold=<ms>`): a positive integer, at most `PUMP_HOLD_MAX_MS`; anything else is 0 (no hold). */
+export function pumpHoldMsOf(raw: string | undefined): number {
+  if (raw === undefined || !/^[1-9]\d{0,6}$/.test(raw)) return 0;
+  return Math.min(Number(raw), PUMP_HOLD_MAX_MS);
+}
+/** An in-process work signal (the fixture container's `work`): a commit that schedules outbox work notifies it. */
+export interface PumpWorkSignal {
+  version(): number;
+  wait(ms: number, input: { since: number; signal?: AbortSignal }): Promise<boolean>;
+}
+/** One pump request with the idle hold: run the tick; when it ran nothing and the request asked for a hold, wait for the work signal
+ *  (woken at once by a commit that scheduled work, never later than the hold) and run the tick again, until a slice ran or the hold is
+ *  spent. Without a signal in this process the request is never held and `heldMs` is absent, so the client backs off by itself. The
+ *  version is read BEFORE each tick, so work committed while a tick ran wakes the next wait at once. `now` is a clock that moves
+ *  (the task clock; the fixture freezes `Date.now()`). */
+export async function runHeldPumpedSlice(input: { run: () => Promise<PumpedSliceAnswer>; holdMs: number; work: PumpWorkSignal | null; now: () => number; signal?: AbortSignal }): Promise<PumpedSliceAnswer & { heldMs?: number }> {
+  let since = input.work?.version() ?? 0;
+  let answer = await input.run();
+  if (!input.work) return answer;
+  const started = input.now();
+  while (answer.ran === null && input.holdMs > 0 && !input.signal?.aborted) {
+    const left = input.holdMs - (input.now() - started);
+    if (left <= 0 || !(await input.work.wait(left, { since, ...(input.signal ? { signal: input.signal } : {}) }))) break;
+    since = input.work.version();
+    answer = await input.run();
+  }
+  return { ...answer, heldMs: Math.max(0, Math.round(input.now() - started)) };
+}
+
 /** [PR-L, 2026-10-17] The pump's CLIENT side (`createPumpTransport`, the worker process's HTTP loop) lives in `pump-transport.ts`, imported
  *  only by the worker script: no route reaches a network client through this module (the B23 transport census). */

@@ -84,7 +84,7 @@ const P2G = ["prompt-to-gerber"];
 const CORE = ["benchmark-core", "benchmark-nightly"];
 const P2G_CORE = ["prompt-to-gerber", "benchmark-core", "benchmark-nightly"];
 const AGENT_BOUNDARY = ["agent-boundary-suites"]; // [B24-D0, 2026-10-09] OD-30's split: the suites under app/lib/mcp and app/lib/computation/__tests__ (ci-split.md); [PR-G, 2026-10-17] OD-250: and under app/lib/agent/orchestration/__tests__
-const BROWSER = ["page-browser-e2e"];
+const BROWSER = ["page-browser-e2e"]; const AGENT_BROWSER = ["page-browser-e2e-agent"]; // [PR-L7, 2026-10-20] OD-254: e2e/agent-execution.spec.ts runs in its own appended browser job
 const NONE: readonly string[] = [];
 const ENG = "app/lib/engineering/__tests__/";
 const MFG = "app/lib/manufacturing-providers/__tests__/";
@@ -96,7 +96,7 @@ const B11 = "app/lib/agent/__tests__/b11-trace-replay-evaluation.test.ts";
 const B21F = "app/lib/agent/orchestration/__tests__/b21-f-evaluation.test.ts";
 
 const offline = (path: string, refs: readonly string[], ciJobs: readonly string[]): ScenarioEvidence => ({ class: "deterministic_offline", path, refs, ciJobs });
-const browser = (path: string, refs: readonly string[]): ScenarioEvidence => ({ class: "browser_e2e", path, refs, ciJobs: BROWSER });
+const browser = (path: string, refs: readonly string[]): ScenarioEvidence => ({ class: "browser_e2e", path, refs, ciJobs: path === AGENT_SPEC ? AGENT_BROWSER : BROWSER }); // [PR-L7, 2026-10-20] OD-254: the agent spec's job is page-browser-e2e-agent
 const record = (evalClass: EvalClass, path: string, refs: readonly string[]): ScenarioEvidence => ({ class: evalClass, path, refs, ciJobs: NONE });
 const live = (evalClass: EvalClass, path: string, refs: readonly string[], ciJobs: readonly string[] = P2G): ScenarioEvidence => ({ class: evalClass, path, refs, ciJobs }); // [B24-D0, 2026-10-09] the job is a parameter (default P2G)
 

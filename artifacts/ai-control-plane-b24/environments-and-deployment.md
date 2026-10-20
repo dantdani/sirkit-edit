@@ -407,6 +407,11 @@ handover text the lead pastes into the nine task files is in section 13.
 | [PR-G, 2026-10-17] | prompt-to-gerber | `:352` | 19 |
 | [PR-G, 2026-10-17] | agent-boundary-suites | `:622` | 1 |
 | [PR-G, 2026-10-17] | agent-boundary-suites | `:658` | 19 |
+| [PR-L7, 2026-10-20] | prompt-to-gerber | `:313` | 69 |
+| [PR-L7, 2026-10-20] | prompt-to-gerber | `:440` | 2 |
+| [PR-L7, 2026-10-20] | database-delivery | `:495` | 13 |
+| [PR-L7, 2026-10-20] | agent-boundary-suites | `:761` | 2 |
+| [PR-L7, 2026-10-20] | page-browser-e2e-agent | `:809` | 35 |
 
 ## 11. Gates
 
@@ -417,9 +422,7 @@ handover text the lead pastes into the nine task files is in section 13.
 | `app/lib/qualification/__tests__/b24-a1-flags.test.ts` | 10 |
 | `app/lib/qualification/__tests__/b24-a1-readiness.test.ts` | 11 |
 
-[B24-A1 check, 2026-10-06] `b24-a1-environment-profile` went from 19 to 20 cases (case 20, the handover); the four suites now hold 55.
-
-Every gate below ran through the lock script (two workers), one at a time, every process stopped after; `.next/` was removed before the first. Counts are files, then tests.
+[B24-A1 check, 2026-10-06] `b24-a1-environment-profile` went from 19 to 20 cases (case 20, the handover); the four suites now hold 55. Every gate below ran through the lock script (two workers), one at a time, every process stopped after; `.next/` was removed before the first. Counts are files, then tests.
 
 | gate | result |
 |---|---|
@@ -442,8 +445,7 @@ Every gate below ran through the lock script (two workers), one at a time, every
 Found in the run and fixed before the final gates (each was this increment's own slip, caught by an existing gate):
 - `b23-a-provider-admission` case 8 listed the new B24 files until its one reviewed move (D6) landed;
 - `b23-closeout-statements` case 7 refused `b24-a1-configuration` for spelling B23's deferred retirement (`DC-05R`) in a list of names production must not use; the name was dropped from the list (the closeout's own case pins it);
-- `b23-d-physical-evidence-contract` case 8 refused the flag inventory for spelling the evidence module's path in an exclusion's sites; the exclusion now cites no site and says why.
-No other gate failed; no case timed out and no `Timeout calling onTaskUpdate` was seen.
+- `b23-d-physical-evidence-contract` case 8 refused the flag inventory for spelling the evidence module's path in an exclusion's sites; the exclusion now cites no site and says why. No other gate failed; no case timed out and no `Timeout calling onTaskUpdate` was seen.
 
 ### The review round's gates (2026-10-06, the final tree)
 
@@ -469,9 +471,7 @@ The table above is A1's own run. After the review fixes every gate ran again thr
 No gate failed, no case timed out and no `Timeout calling onTaskUpdate` was seen. The slowest new case is `b24-a1-flags` 4 (about 1.2 s here; it declares a 30 s timeout).
 
 ### The check round's gates (2026-10-06, the final tree)
-
-The check round changed only `b24-a1-environment-profile` and this page. Each gate ran through the lock script, one at a time, with no
-`.next/` present and every process stopped after. **CONFIRMED**:
+The check round changed only `b24-a1-environment-profile` and this page. Each gate ran through the lock script, one at a time, with no `.next/` present and every process stopped after. **CONFIRMED**:
 
 | gate | result |
 |---|---|

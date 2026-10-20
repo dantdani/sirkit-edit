@@ -2,12 +2,12 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B24",
-  "currentCheckpoint": "Product-reliability assignment: A-G done (G on codex/product-reliability-g), H: evidence package and PR #16 open; I: verdict PARTIAL (final-verdict.md); then the owner's runbook sections J and K",
+  "currentCheckpoint": "Product-reliability assignment: A-G done, H evidence and PR #16 open, I verdict PARTIAL; sections L and M on codex/astra-foundation through deaf15ca (L increments 0-6 done, verdict PARTIAL: L.7 items 1-8 and 10 CONFIRMED, item 9 PARTIAL - fixture four-motor design to the PCB-preparation handoff CONFIRMED, live LR-3 stopped at the owner's OpenAI insufficient_quota after a plan and one saved block, 1.17 USD; M1, M2 (bundled KiCad and fixture source) and M4 done, verdict PARTIAL); increment 7 in progress: the evidence package (persistent-generation/, component-resolution/final-verdict.md) and the CI admission and split (OD-254); the assignment verdict stays PARTIAL",
   "status": "in_progress",
   "baseSha": "32b081e152620b46e791f9589256f7d0603f300f",
-  "branch": "codex/product-reliability-g (side branch from 6042488: the main checkout is shared with a concurrent agent's uncommitted work)",
-  "lastGreenSha": "26dc8b8",
-  "pullRequest": "PR #16 https://github.com/dantdani/sirkit-edit/pull/16 (codex/product-reliability-g -> main), opened 2026-10-17, not merged by the builder; must be combined with the concurrent agent's generation-budget correction first",
+  "branch": "codex/astra-foundation (sections L and M; PR #16 head codex/product-reliability-g fast-forwarded to it after each verified increment)",
+  "lastGreenSha": "8b76793f (PR #16 CI all green, 2026-10-19); 0f1c446b red only by page-browser-e2e reaching its 30-minute timeout after 73/73 passed (fixed by OD-254 in increment 7)",
+  "pullRequest": "PR #16 https://github.com/dantdani/sirkit-edit/pull/16 (codex/product-reliability-g -> main), opened 2026-10-17, holds A-G, the interim 180 s correction (OD-251) and sections L and M; never merged by the builder",
   "mergedProgram": {
     "pullRequest": "https://github.com/dantdani/sirkit-edit/pull/15",
     "headSha": "9dee4fb2d2ea205c3da8b00798a213ce8cea2935",
@@ -40,7 +40,7 @@
     "LB-16: BLOCKED-LIVE-QUALIFICATION: live approved external MCP server (discovery, tool calls and hostile tool results through Sirkit's MCP client)",
     "LB-17: BLOCKED-LIVE-QUALIFICATION: kicad-cli live oracle (the exported routed demo loaded and DRC-checked by a real kicad-cli)"
   ],
-  "nextAction": "Read PR #16's CI and fix any red job; integrate the concurrent agent's generation-budget correction (once committed) with this branch and re-run a complex Build request; then runbook section J (multi-sheet schematics), then K",
-  "updatedAt": "2026-10-17T08:10:00-04:00",
+  "nextAction": "Commit increment 7 (the evidence package and the CI builder's admission and split, OD-254), fast-forward PR #16's head codex/product-reliability-g to codex/astra-foundation, read its CI and fix any red job; when the owner restores the OpenAI quota, resume LR-3's task generation-task:e4b1f4b694a91b011486487a8f3c02b7 (the same task, inside its held 2.66 USD) with the launch contract in artifacts/product-reliability-simple-ui/README.md; owner decisions OD-M2-1..14, the rebind of a bound part (PB_ACTIVE_SELECTION_CONFLICT) and the server-side currency guard stay with the owner; then runbook section J (multi-sheet schematics), then K",
+  "updatedAt": "2026-10-20T04:00:00Z",
   "previousChapter": "B23 merged normally into main as 57c3b29 (PR #14, 2026-10-06) after green CI on f663d71; verdict PARTIAL (no provider admitted, LB-11; ordering visibly disabled, its contract tested offline only, LB-12; physical evidence defined, none exists, LB-5; no agent can release, transfer or spend; census 166/163/3/0, counts 47/36/9/27)"
 }

@@ -11,7 +11,7 @@
  * first browser step gains an `env:` mapping setting it to the four moved specs; the lead's option A (2026-10-10) inventories the name
  * (one row in `flag-inventory.ts`, one in `environment-names.ts`). This suite pins the split to the tree:
  *
- *  1. (i) the new job is appended last, after agent-boundary-suites: one blank line and its `[B24-D4]` comment lines, then exactly
+ *  1. (i) the new job is appended last, after agent-boundary-suites ([PR-L7, 2026-10-20] OD-254 appended page-browser-e2e-agent after it, the workflow's last job now, pinned the same way in case 1; cases 2, 3 and 5 read both appended jobs): one blank line and its `[B24-D4]` comment lines, then exactly
  *     its steps in order - B24-D1's start step, page-browser-e2e's checkout, pnpm, node, install and browser-install steps verbatim,
  *     one named step running `pnpm exec playwright test` with the four specs ([B24-D4 lead, 2026-10-10] B24-D2's two, then B24-D3's
  *     two, in that fixed order), an always() upload of its own report and test results
@@ -82,7 +82,7 @@ const JOB = "page-browser-e2e-b24"; // [B24-D4 lead, 2026-10-10] renamed: the jo
 const SKIP_ENV = "SIRKIT_E2E_SKIP";
 /** The specs the new job runs, in the run line's fixed order: [B24-D4 lead, 2026-10-10] option (b) - B24-D2's two (multi-tab,
  *  crash-recovery), then the two B24-D3 added (task-D4 "Lead decisions"): the expectation the tree is held to. */
-const MOVED_SPECS = ["e2e/multi-tab.spec.ts", "e2e/crash-recovery.spec.ts", "e2e/keyboard-and-focus.spec.ts", "e2e/minimum-width.spec.ts"] as const;
+const MOVED_SPECS = ["e2e/multi-tab.spec.ts", "e2e/crash-recovery.spec.ts", "e2e/keyboard-and-focus.spec.ts", "e2e/minimum-width.spec.ts"] as const; const AGENT_JOB = "page-browser-e2e-agent"; const AGENT_SPECS = ["e2e/agent-execution.spec.ts"] as const; // [PR-L7, 2026-10-20] OD-254: the second appended browser job and the spec it runs (page-browser-e2e skips it too)
 /** 1fe719e's bytes (LF), the tree D4 starts from: the workflow, `playwright.config.ts` and the orchestration config. */
 const SHA_WORKFLOW_AT_BASE = "dde22b3d0737a62db577ff5bcd454e8eb6b68c0acf0b03ee0f287efd78d739c4";
 const SHA_CONFIG_AT_BASE = "92f72ee81ef2158dcfb524d961aeb9d60116e1966ade404297c986dd759bf171";
@@ -137,9 +137,9 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
   it("1. (i) the new job is appended last with exactly its steps in order: B24-D1's start step, page-browser-e2e's setup verbatim, one named step running the four specs ([B24-D4 lead, 2026-10-10] option (b)), an always() upload under its own name, B24-D1's headroom step; 20 minutes, CI true, no secret, database or live resource; every other job's limit unchanged", () => {
     const workflow = lines(WORKFLOW);
     const keys = workflow.flatMap((line, index) => (index > workflow.indexOf("jobs:") && /^ {2}[a-z][a-z0-9-]*:$/.test(line) ? [line.trim()] : []));
-    expect(keys).toEqual(["prompt-to-gerber:", "database-delivery:", "page-browser-e2e:", "production-smoke:", "secret-scan:", "agent-boundary-suites:", `${JOB}:`]);
+    expect(keys).toEqual(["prompt-to-gerber:", "database-delivery:", "page-browser-e2e:", "production-smoke:", "secret-scan:", "agent-boundary-suites:", `${JOB}:`, `${AGENT_JOB}:`]); // [PR-L7, 2026-10-20] reviewed pin move: + page-browser-e2e-agent, appended after this job (OD-254)
     const start = workflow.indexOf(`  ${JOB}:`);
-    const end = lineCount(workflow);
+    let end = workflow.indexOf(`  ${AGENT_JOB}:`); while (/^(?:| {2}# .*)$/.test(workflow[end - 1]!)) end -= 1; // [PR-L7, 2026-10-20] reviewed pin move: the job's own lines end where page-browser-e2e-agent's region begins (was the workflow's end; OD-254)
     const block = workflow.slice(start, end);
     // appended: its [B24-D4] comment lines right above its key, one blank line above them, agent-boundary-suites's headroom step above that
     let above = start - 1;
@@ -182,14 +182,14 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
     // the run step is named, so its line never holds B21's C49 anchor (`- run: pnpm exec playwright test`, cited exactly once)
     expect(workflow.filter((line) => line.includes("- run: pnpm exec playwright test"))).toEqual(["      - run: pnpm exec playwright test"]);
     // no timeout-minutes raised: the six earlier jobs keep theirs, the new job has 20
-    expect(workflow.filter((line) => /^ {4}timeout-minutes: /.test(line)).map((line) => line.trim())).toEqual(["timeout-minutes: 25", "timeout-minutes: 15", "timeout-minutes: 30", "timeout-minutes: 20", "timeout-minutes: 10", "timeout-minutes: 20", "timeout-minutes: 20"]);
-    expect(workflow.some((line) => /^\s+needs:/.test(line)), "no job waits on another").toBe(false);
+    expect(workflow.filter((line) => /^ {4}timeout-minutes: /.test(line)).map((line) => line.trim())).toEqual(["timeout-minutes: 25", "timeout-minutes: 15", "timeout-minutes: 30", "timeout-minutes: 20", "timeout-minutes: 10", "timeout-minutes: 20", "timeout-minutes: 20", "timeout-minutes: 30"]); // [PR-L7, 2026-10-20] reviewed pin move: + page-browser-e2e-agent's 30 (OD-254); no limit raised
+    expect(workflow.some((line) => /^\s+needs:/.test(line)), "no job waits on another").toBe(false); const agentStart = workflow.indexOf(`  ${AGENT_JOB}:`); let agentAbove = agentStart - 1; while (workflow[agentAbove]!.startsWith("  # ")) agentAbove -= 1; expect(workflow[agentAbove]).toBe(""); expect(workflow[agentAbove - 1]).toBe(`        run: pnpm exec tsx scripts/ci-job-headroom.ts ${WORKFLOW} ${JOB}`); expect(workflow.slice(agentAbove + 1, agentStart).join(NEWLINE)).toContain("[PR-L7]"); expect(workflow.slice(agentStart, lineCount(workflow))).toEqual([`  ${AGENT_JOB}:`, "    runs-on: ubuntu-latest", "    timeout-minutes: 30", "    env:", '      CI: "true"', "    steps:", `      - run: echo "SIRKIT_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV" # [B24-D1] OD-30: ${AGENT_JOB}'s start`, ...setup, "      - name: The agent-execution browser spec (OD-254; OD-30's split)", `        run: pnpm exec playwright test ${AGENT_SPECS.join(" ")}`, "      - name: Upload browser evidence (the agent-execution spec)", "        if: always()", "        uses: actions/upload-artifact@v4", "        with:", `          name: ${AGENT_JOB}-report`, "          path: |", "            playwright-report", "            test-results", "          if-no-files-found: ignore", "          retention-days: 14", `      - if: always() # [B24-D1] OD-30: ${AGENT_JOB}'s headroom`, `        run: pnpm exec tsx scripts/ci-job-headroom.ts ${WORKFLOW} ${AGENT_JOB}`]); for (const absent of ["secrets.", "permissions:", "DATABASE_URL", "SUPABASE", "OPENAI", "ANTHROPIC", "next build", "next start", SKIP_ENV.concat(":")]) expect(workflow.slice(agentAbove, lineCount(workflow)).join(NEWLINE), absent).not.toContain(absent); // [PR-L7, 2026-10-20] OD-254: the second appended browser job, last: its [PR-L7] comment lines, page-browser-e2e's setup verbatim, one named step running agent-execution, its own upload, B24-D1's headroom step; 30 minutes (OD-30's browser limit)
   });
 
   it("2. (ii) the SIRKIT_E2E_SKIP value under page-browser-e2e's first browser step names exactly the specs the new job runs, each existing, each glob **/<name>.spec.ts, and no other line names the variable; the helper reads both lists and refuses a malformed glob, a glob naming no spec, a non-e2e argument and a missing or doubled run line", () => {
     const workflow = lines(WORKFLOW);
     const run = workflow.indexOf("      - run: pnpm exec playwright test");
-    expect(run + 1, "page-browser-e2e's first browser step, unmoved by D4 (B21's C49)").toBe(insertionRows().filter((row) => row.task === "PR-G").reduce((at, row) => (at >= row.first ? at + row.count : at), ENV_FIRST_LINE - 1)); // [PR-G, 2026-10-17] reviewed pin move (OD-250): D4's line carried through PR-G's rows (its 39 prompt-to-gerber lines above this step; was ENV_FIRST_LINE - 1 itself)
+    expect(run + 1, "page-browser-e2e's first browser step, unmoved by D4 (B21's C49)").toBe(insertionRows().filter((row) => row.task === "PR-G" || row.task === "PR-L7").reduce((at, row) => (at >= row.first ? at + row.count : at), ENV_FIRST_LINE - 1)); // [PR-L7, 2026-10-20] reviewed pin move (OD-254): and through PR-L7's rows (its 71 prompt-to-gerber and 13 database-delivery lines above this step); [PR-G, 2026-10-17] reviewed pin move (OD-250): D4's line carried through PR-G's rows (its 39 prompt-to-gerber lines above this step; was ENV_FIRST_LINE - 1 itself)
     expect(workflow[run + 1]).toBe("        env:");
     const entry = /^ {10}SIRKIT_E2E_SKIP: "([^"]*)" # \[B24-D4\] OD-30: [^\n]+$/.exec(workflow[run + 2]!);
     expect(entry, "the one env entry, quoted, with its dated comment").not.toBeNull();
@@ -197,7 +197,7 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
     expect(workflow.filter((line) => /^\s+SIRKIT_E2E_SKIP:/.test(line)), "no other step sets it").toHaveLength(1);
     // the reader's own parse (line 21: split on commas, trim, drop blanks), applied to the value
     const globs = entry![1]!.split(",").map((glob) => glob.trim()).filter(Boolean);
-    expect(globs).toEqual(MOVED_SPECS.map((spec) => `**/${spec.slice("e2e/".length)}`));
+    expect(globs).toEqual([...MOVED_SPECS, ...AGENT_SPECS].map((spec) => `**/${spec.slice("e2e/".length)}`)); // [PR-L7, 2026-10-20] reviewed pin move: + agent-execution, which page-browser-e2e-agent runs (OD-254)
     for (const glob of globs) expect(glob, glob).toMatch(/^\*\*\/[a-z0-9-]+\.spec\.ts$/);
     for (const spec of MOVED_SPECS) expect(existsSync(join(ROOT, spec)), spec).toBe(true);
     const args = /^ {8}run: pnpm exec playwright test ((?:e2e\/[a-z0-9-]+\.spec\.ts ?)+)$/.exec(workflow[workflow.indexOf(`  ${JOB}:`) + 18]!);
@@ -206,7 +206,7 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
     // the helper derives the same two lists from the files
     const admission = ciAdmission();
     expect(admission.browser.skip).toEqual(globs);
-    expect(admission.browser.b24).toEqual([...MOVED_SPECS]);
+    expect(admission.browser.b24).toEqual([...MOVED_SPECS]); expect(admission.browser.agent).toEqual([...AGENT_SPECS]); // [PR-L7, 2026-10-20] OD-254: the second appended job's spec, read the same way
     // ... and refuses each malformed shape (each plant changes the text; the message starts CI_ANCHOR)
     const original = read(WORKFLOW);
     const withWorkflow = (text: string): RepoReader => (path) => (path === WORKFLOW ? text : read(path));
@@ -233,7 +233,7 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
       ["the skip list and the new job disagree", original.replace(value, '"**/keyboard-and-focus.spec.ts"'), new RegExp(`skips .* but ${JOB} runs|the skip list`)],
       ["the skip list without B24-D2's two", original.replace(value, '"**/keyboard-and-focus.spec.ts,**/minimum-width.spec.ts"'), new RegExp(`skips .* but ${JOB} runs|the skip list`)], // [B24-D4 lead, 2026-10-10] option (b)
       ["the new job's key dropped", original.replace(`${NEWLINE}  ${JOB}:${NEWLINE}`, NEWLINE), /absent$/],
-      ["the new job's key doubled", original.replace(`${NEWLINE}  ${JOB}:${NEWLINE}`, `${NEWLINE}  ${JOB}:${NEWLINE}  ${JOB}:${NEWLINE}`), /appears twice$/],
+      ["the new job's key doubled", original.replace(`${NEWLINE}  ${JOB}:${NEWLINE}`, `${NEWLINE}  ${JOB}:${NEWLINE}  ${JOB}:${NEWLINE}`), /appears twice$/], ["the skip list without agent-execution", original.replace(value, `"${MOVED_SPECS.map((spec) => `**/${spec.slice(4)}`).join(",")}"`), new RegExp(`skips .* but ${JOB} runs .* and ${AGENT_JOB} runs`)], ["the agent job's run line dropped", original.replace(`        run: pnpm exec playwright test ${AGENT_SPECS.join(" ")}${NEWLINE}`, ""), new RegExp(`${AGENT_JOB}'s playwright test line absent`)], ["a spec in both appended jobs", original.replace(`        run: pnpm exec playwright test ${AGENT_SPECS.join(" ")}${NEWLINE}`, `        run: pnpm exec playwright test ${AGENT_SPECS.join(" ")} e2e/minimum-width.spec.ts${NEWLINE}`), /a spec runs in both appended browser jobs/], ["the agent job's key dropped (its run line falls into page-browser-e2e-b24's block)", original.replace(`${NEWLINE}  ${AGENT_JOB}:${NEWLINE}`, NEWLINE), new RegExp(`${JOB}'s playwright test line appears twice$`)], // [PR-L7, 2026-10-20] OD-254: the second appended job bites the same way
     ];
     expect(plants.filter(([, text, pattern]) => !bites(text, pattern)).map(([name]) => name)).toEqual([]);
   });
@@ -253,14 +253,14 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
     specs.sort();
     expect(specs.length).toBeGreaterThanOrEqual(9);
     const admission = ciAdmission();
-    const browserJobs = (spec: string): string[] => admission.jobsOf(spec).filter((job) => job === "page-browser-e2e" || job === JOB);
+    const browserJobs = (spec: string): string[] => admission.jobsOf(spec).filter((job) => job === "page-browser-e2e" || job === JOB || job === AGENT_JOB); // [PR-L7, 2026-10-20] reviewed pin move: + page-browser-e2e-agent (OD-254); every spec still runs in exactly one browser job
     expect(specs.filter((spec) => browserJobs(spec).length !== 1).map((spec) => `${spec}: ${browserJobs(spec).join("+") || "none"}`)).toEqual([]);
     const moved = specs.filter((spec) => browserJobs(spec)[0] === JOB);
     expect(moved).toEqual([...MOVED_SPECS].sort()); // [B24-D4 lead, 2026-10-10] the four, in the walk's (sorted) order
     // the moved set is the skip list's, by Playwright's rule for a `**/` glob (the file name at any depth), never a hand list
-    expect(specs.filter((spec) => admission.browser.skip.some((glob) => spec.endsWith(`/${glob.slice(3)}`)))).toEqual(moved);
+    expect(specs.filter((spec) => admission.browser.skip.some((glob) => spec.endsWith(`/${glob.slice(3)}`)))).toEqual([...moved, ...AGENT_SPECS].sort()); expect(specs.filter((spec) => browserJobs(spec)[0] === AGENT_JOB)).toEqual([...AGENT_SPECS]); // [PR-L7, 2026-10-20] reviewed pin move: the skip list is both appended jobs' specs (OD-254)
     expect(specs.filter((spec) => admission.browser.b24.includes(spec))).toEqual(moved);
-    expect(specs.filter((spec) => !moved.includes(spec)).every((spec) => JSON.stringify(admission.jobsOf(spec)) === JSON.stringify(["page-browser-e2e"]))).toBe(true);
+    expect(specs.filter((spec) => !moved.includes(spec) && !(AGENT_SPECS as readonly string[]).includes(spec)).every((spec) => JSON.stringify(admission.jobsOf(spec)) === JSON.stringify(["page-browser-e2e"]))).toBe(true); // [PR-L7, 2026-10-20] reviewed pin move: agent-execution aside (OD-254)
     expect(admission.jobsOf("e2e-orchestration/specialist-orchestration.spec.ts")).toEqual(["page-browser-e2e"]);
     // the orchestration step never sees the variable: its env is page-browser-e2e's first browser step's alone (case 2), and its config sets no testIgnore
     expect(read(ORCHESTRATION_CONFIG)).not.toContain("testIgnore");
@@ -288,12 +288,12 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
   it("5. (v) A1's insertion table ends with D4's two rows - the env mapping (:418, 2) inside page-browser-e2e and the appended job (its first line, its count with the leading blank line) - and with D4's lines taken out the workflow is 1fe719e's byte for byte", () => {
     const rows = insertionRows();
     const mine = rows.filter((row) => row.task === "B24-D4");
-    const later = rows.slice(rows.indexOf(mine[0]!) + 2); expect(rows.slice(rows.indexOf(mine[0]!), rows.indexOf(mine[0]!) + 2)).toEqual(mine); expect(later.map((row) => row.task)).toEqual(Array(5).fill("PR-G")); const atD4 = (line: number): number => [...later].reverse().reduce((at, row) => (at >= row.first + row.count ? at - row.count : at), line); // [PR-G, 2026-10-17] reviewed pin move (OD-250): D4's two rows are followed by PR-G's five, the only later rows (was: the table's last two); a line of this tree is read at D4's tree by taking PR-G's rows out
+    const later = rows.slice(rows.indexOf(mine[0]!) + 2); expect(rows.slice(rows.indexOf(mine[0]!), rows.indexOf(mine[0]!) + 2)).toEqual(mine); expect(later.map((row) => row.task)).toEqual([...Array(5).fill("PR-G"), ...Array(5).fill("PR-L7")]); /* [PR-L7, 2026-10-20] reviewed pin move: + PR-L7's five rows (OD-254) */ const atD4 = (line: number): number => [...later].reverse().reduce((at, row) => (at >= row.first + row.count ? at - row.count : at), line); // [PR-G, 2026-10-17] reviewed pin move (OD-250): D4's two rows are followed by PR-G's five, the only later rows (was: the table's last two); a line of this tree is read at D4's tree by taking PR-G's rows out
     const workflow = lines(WORKFLOW);
     const start = workflow.indexOf(`  ${JOB}:`);
     let first = start;
     while (/^(?:| {2}# .*)$/.test(workflow[first - 1]!)) first -= 1;
-    const count = lineCount(workflow) - first;
+    let next = workflow.indexOf(`  ${AGENT_JOB}:`); while (/^(?:| {2}# .*)$/.test(workflow[next - 1]!)) next -= 1; const count = next - first; // [PR-L7, 2026-10-20] reviewed pin move: to page-browser-e2e-agent's region (was the workflow's end; OD-254)
     expect(mine.map((row) => [row.date, row.job, row.first, row.count])).toEqual([[DATE, "page-browser-e2e", ENV_FIRST_LINE, 2], [DATE, JOB, atD4(first + 1), count]]); // [PR-G, 2026-10-17] the job's first line at D4's tree (was first + 1: PR-G's rows above it moved it +59)
     expect(workflow[first]).toBe("");
     // every line since A1 is recorded (A1's own check, `b24-a1-environment-profile` 14 and 16)
@@ -430,17 +430,17 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
     expect(workflow[boundaryHeadroom]).toContain("ci-job-headroom.ts");
     expect(workflow[browserHeadroom]).toContain("ci-job-headroom.ts");
     const reliability = lines("artifacts/ai-control-plane-b24/performance-and-reliability.md");
-    const prG = insertionRows().filter((row) => row.task === "PR-G"); const atD4 = (line: number): number => [...prG].reverse().reduce((at, row) => (at >= row.first + row.count ? at - row.count : at), line); const nowOf = (line: number): number => prG.reduce((at, row) => (at >= row.first ? at + row.count : at), line); const now = `[B24-D4, ${DATE}] now \`:${atD4(browserStart)}\` and \`:${atD4(browserHeadroom)}-${atD4(browserHeadroom) + 1}\`, \`:${atD4(boundaryStart)}\` and \`:${atD4(boundaryHeadroom)}-${atD4(boundaryHeadroom) + 1}\``; const nowPrG = `[PR-G, 2026-10-17] now \`:${browserStart}\` and \`:${browserHeadroom}-${browserHeadroom + 1}\`, \`:${boundaryStart}\` and \`:${boundaryHeadroom}-${boundaryHeadroom + 1}\``; expect(nowOf(atD4(boundaryStart))).toBe(boundaryStart); // [PR-G, 2026-10-17] reviewed pin move (OD-250): D4's note names the lines at D4's tree (PR-G's rows taken out), and a PR-G note names the lines that hold them now
+    const prG = insertionRows().filter((row) => row.task === "PR-G"); const prL7 = insertionRows().filter((row) => row.task === "PR-L7"); const out = (rows: ReturnType<typeof insertionRows>) => (line: number): number => [...rows].reverse().reduce((at, row) => (at >= row.first + row.count ? at - row.count : at), line); const atPrG = out(prL7); const atD4 = (line: number): number => out(prG)(atPrG(line)); const nowOf = (line: number): number => [...prG, ...prL7].reduce((at, row) => (at >= row.first ? at + row.count : at), line); const now = `[B24-D4, ${DATE}] now \`:${atD4(browserStart)}\` and \`:${atD4(browserHeadroom)}-${atD4(browserHeadroom) + 1}\`, \`:${atD4(boundaryStart)}\` and \`:${atD4(boundaryHeadroom)}-${atD4(boundaryHeadroom) + 1}\``; const nowPrG = `[PR-G, 2026-10-17] now \`:${atPrG(browserStart)}\` and \`:${atPrG(browserHeadroom)}-${atPrG(browserHeadroom) + 1}\`, \`:${atPrG(boundaryStart)}\` and \`:${atPrG(boundaryHeadroom)}-${atPrG(boundaryHeadroom) + 1}\``; const nowPrL7 = `[PR-L7, 2026-10-20] now \`:${browserStart}\` and \`:${browserHeadroom}-${browserHeadroom + 1}\`, \`:${boundaryStart}\` and \`:${boundaryHeadroom}-${boundaryHeadroom + 1}\``; expect(nowOf(atD4(boundaryStart))).toBe(boundaryStart); /* [PR-L7, 2026-10-20] reviewed pin move (OD-254): D4's note at D4's tree and the PR-G note at PR-G's tree (the later rows taken out), and a PR-L7 note names the lines that hold them now */ // [PR-G, 2026-10-17] reviewed pin move (OD-250): D4's note names the lines at D4's tree (PR-G's rows taken out), and a PR-G note names the lines that hold them now
     const steps = reliability.filter((line) => line.includes("`page-browser-e2e`'s at `:405` and `:432-433`, `agent-boundary-suites`'s at `:565` and `:624-625`"));
     expect(steps).toHaveLength(1);
-    expect(steps[0]).toContain(now); expect(steps[0]).toContain(nowPrG); // [PR-G, 2026-10-17] + the PR-G note
-    const block = `[B24-D4, ${DATE}] now \`:${atD4(boundaryFirst)}-${atD4(boundaryHeadroom) + 1}\``; const blockPrG = `[PR-G, 2026-10-17] now \`:${boundaryFirst}-${boundaryHeadroom + 1}\`, its start step at \`:${boundaryStart}\`, its headroom step at \`:${boundaryHeadroom}-${boundaryHeadroom + 1}\``; // [PR-G, 2026-10-17] reviewed pin move (OD-250): as `now`
+    expect(steps[0]).toContain(now); expect(steps[0]).toContain(nowPrG); expect(steps[0]).toContain(nowPrL7); // [PR-G, 2026-10-17] + the PR-G note; [PR-L7, 2026-10-20] + the PR-L7 note
+    const block = `[B24-D4, ${DATE}] now \`:${atD4(boundaryFirst)}-${atD4(boundaryHeadroom) + 1}\``; const blockPrG = `[PR-G, 2026-10-17] now \`:${atPrG(boundaryFirst)}-${atPrG(boundaryHeadroom) + 1}\`, its start step at \`:${atPrG(boundaryStart)}\`, its headroom step at \`:${atPrG(boundaryHeadroom)}-${atPrG(boundaryHeadroom) + 1}\``; const blockPrL7 = `[PR-L7, 2026-10-20] now \`:${boundaryFirst}-${boundaryHeadroom + 1}\`, its start step at \`:${boundaryStart}\`, its headroom step at \`:${boundaryHeadroom}-${boundaryHeadroom + 1}\``; /* [PR-L7, 2026-10-20] PR-G's lines at PR-G's tree; the PR-L7 note the lines now */ // [PR-G, 2026-10-17] reviewed pin move (OD-250): as `now`
     const readme = reliability.filter((line) => line.includes("`:557-625` (`agent-boundary-suites`, with D1's start step at `:565`"));
     expect(readme).toHaveLength(1);
-    expect(readme[0]).toContain(`${block}, its start step at \`:${atD4(boundaryStart)}\`, its headroom step at \`:${atD4(boundaryHeadroom)}-${atD4(boundaryHeadroom) + 1}\``); expect(readme[0]).toContain(blockPrG); // [PR-G, 2026-10-17] D4's lines at D4's tree, then the PR-G note
+    expect(readme[0]).toContain(`${block}, its start step at \`:${atD4(boundaryStart)}\`, its headroom step at \`:${atD4(boundaryHeadroom)}-${atD4(boundaryHeadroom) + 1}\``); expect(readme[0]).toContain(blockPrG); expect(readme[0]).toContain(blockPrL7); // [PR-G, 2026-10-17] D4's lines at D4's tree, then the PR-G note; [PR-L7, 2026-10-20] then the PR-L7 note
     const d0 = lines(PAGE).filter((line) => line.includes("[B24-D1, 2026-10-09] the block is `:557-625`"));
     expect(d0).toHaveLength(1);
-    expect(d0[0]).toContain(`${block}, its start step at \`:${atD4(boundaryStart)}\`, its headroom step at \`:${atD4(boundaryHeadroom)}-${atD4(boundaryHeadroom) + 1}\``); expect(d0[0]).toContain(blockPrG); // [PR-G, 2026-10-17] D4's lines at D4's tree, then the PR-G note
+    expect(d0[0]).toContain(`${block}, its start step at \`:${atD4(boundaryStart)}\`, its headroom step at \`:${atD4(boundaryHeadroom)}-${atD4(boundaryHeadroom) + 1}\``); expect(d0[0]).toContain(blockPrG); expect(d0[0]).toContain(blockPrL7); // [PR-G, 2026-10-17] D4's lines at D4's tree, then the PR-G note; [PR-L7, 2026-10-20] then the PR-L7 note
     // [B24-D4 lead, 2026-10-10] the rename: the draft name (assembled, so this file never holds it) is gone from every file D4 edits
     // but its pages, where each line that still names it carries the lead's dated note
     const draft = ["page-browser-e2e", "accessibility"].join("-");
@@ -483,7 +483,7 @@ function insertionRows(): Array<{ task: string; date: string; job: string; first
   const header = ten.indexOf("| task | job | first line | count |");
   const rows: Array<{ task: string; date: string; job: string; first: number; count: number }> = [];
   for (let index = header + 2; index < ten.length && ten[index]!.startsWith("|"); index += 1) {
-    const row = /^\| \[(B24-[A-F]\d*[a-z]?|PR-[A-G]), (\d{4}-\d{2}-\d{2})\] \| ([a-z][a-z0-9-]*) \| `:(\d+)` \| ([1-9]\d*) \|$/.exec(ten[index]!); // [PR-G, 2026-10-17] reviewed pin move: + PR-[A-G] (OD-250), as b24-a1-environment-profile's
+    const row = /^\| \[(B24-[A-F]\d*[a-z]?|PR-[A-G]|PR-L7), (\d{4}-\d{2}-\d{2})\] \| ([a-z][a-z0-9-]*) \| `:(\d+)` \| ([1-9]\d*) \|$/.exec(ten[index]!); // [PR-G, 2026-10-17] reviewed pin move: + PR-[A-G] (OD-250), as b24-a1-environment-profile's; [PR-L7, 2026-10-20] reviewed pin move: + PR-L7 (OD-254: PR-L7's five rows - the 69 admitted prompt-to-gerber entries at `:313`, the two moved ones' excludes at `:440`, the 13 admitted database-delivery entries at `:495`, the two moved suites in agent-boundary-suites at `:761`, the appended page-browser-e2e-agent job at `:809`)
     if (row) rows.push({ task: row[1]!, date: row[2]!, job: row[3]!, first: Number(row[4]), count: Number(row[5]) });
   }
   return rows;

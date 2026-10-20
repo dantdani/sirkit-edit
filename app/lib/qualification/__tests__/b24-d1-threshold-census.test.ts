@@ -218,7 +218,7 @@ describe("[B24-D1] the threshold census (D24-28, OD-212)", () => {
       "ci.production-smoke.timeout-minutes": 20 * 60_000,
       "ci.secret-scan.timeout-minutes": 10 * 60_000,
       "ci.agent-boundary-suites.timeout-minutes": 20 * 60_000,
-      "ci.page-browser-e2e-b24.timeout-minutes": 20 * 60_000, // [B24-D4, 2026-10-10] reviewed pin move: + the job B24-D4 appended (OD-30's split of page-browser-e2e)
+      "ci.page-browser-e2e-b24.timeout-minutes": 20 * 60_000, "ci.page-browser-e2e-agent.timeout-minutes": 30 * 60_000, // [B24-D4, 2026-10-10] reviewed pin move: + the job B24-D4 appended (OD-30's split of page-browser-e2e); [PR-L7, 2026-10-20] reviewed pin move: + page-browser-e2e-agent, the job PR-L7 appended (OD-254)
       "ci.benchmark-core.timeout-minutes": 20 * 60_000,
       "ci.benchmark-nightly.timeout-minutes": 90 * 60_000,
       "ci.benchmark-latency.timeout-minutes": 30 * 60_000,
@@ -255,7 +255,7 @@ describe("[B24-D1] the threshold census (D24-28, OD-212)", () => {
     expect(inCi.map((row) => [row.file, row.count, row.defaults, row.max])).toEqual([
       ["app/api/chat/__tests__/b18-d-chat-stop.test.ts", 2, 2, null],
       ["app/api/chat/__tests__/b21-b-chat-router.test.ts", 4, 4, null],
-      ["app/api/chat/__tests__/b21-d2-chat-proposals.test.ts", 1, 1, null],
+      ["app/api/chat/__tests__/b21-d2-chat-proposals.test.ts", 1, 1, null], ["app/lib/__tests__/l6-embedding-cache.test.ts", 1, 1, null], // [PR-L7, 2026-10-20] reviewed pin move: + l6-embedding-cache, admitted to database-delivery (OD-254)
       ["app/lib/computation/__tests__/b22-b-exposure.test.ts", 1, 0, 15_000],
       ["app/lib/mcp/__tests__/b20-a1-http-transport.test.ts", 5, 5, null],
       ["app/lib/mcp/__tests__/b20-a3-authorized-post.test.ts", 2, 2, null],
@@ -266,8 +266,8 @@ describe("[B24-D1] the threshold census (D24-28, OD-212)", () => {
       ["app/lib/qualification/__tests__/b24-c1-llm-call-record.test.ts", 1, 1, null],
       ["app/lib/qualification/__tests__/b24-c2-attribution.test.ts", 1, 0, 15_000], ["app/lib/qualification/__tests__/b24-d2-process-cleanup.test.ts", 4, 0, 7_000], // [B24-D2, 2026-10-09] + the process cleanup's four polls (5 s, 5 s, 7 s and the confirm wait)
     ]);
-    expect([inCi.reduce((sum, row) => sum + (row.count ?? 0), 0), inCi.reduce((sum, row) => sum + (row.defaults ?? 0), 0)]).toEqual([30, 24]); // [B24-D2, 2026-10-09] 26 -> 30 (+ b24-d2-process-cleanup's four, none at the default)
-    expect(waits.filter((row) => row.ci.length === 0).map((row) => [row.file, row.count])).toEqual([["app/lib/__tests__/l6-embedding-cache.test.ts", 1], ["app/lib/project/__tests__/b14-1-production-integration.test.tsx", 1]]); // [PR-L6 integration, 2026-10-19] reviewed pin move: + l6-embedding-cache's one vi.waitFor at the default (PR-L6, a suite in no CI job until increment 7 admits it)
+    expect([inCi.reduce((sum, row) => sum + (row.count ?? 0), 0), inCi.reduce((sum, row) => sum + (row.defaults ?? 0), 0)]).toEqual([31, 25]); // [PR-L7, 2026-10-20] 30 -> 31 and 24 -> 25 (+ l6-embedding-cache's one, at the default; OD-254); [B24-D2, 2026-10-09] 26 -> 30 (+ b24-d2-process-cleanup's four, none at the default)
+    expect(waits.filter((row) => row.ci.length === 0).map((row) => [row.file, row.count])).toEqual([["app/lib/project/__tests__/b14-1-production-integration.test.tsx", 1]]); // [PR-L7, 2026-10-20] reviewed pin move: - l6-embedding-cache, in CI since PR-L7 admitted it to database-delivery (OD-254); [PR-L6 integration, 2026-10-19] reviewed pin move: + l6-embedding-cache's one vi.waitFor at the default (PR-L6, a suite in no CI job until increment 7 admits it)
   });
 
   it("7. the seven moved markers: four in b20-a4-observation-normalizer case 6, two in pcb-sync performance-resilience and one in b20-a1-redaction-linear, each a performance row with its catalogued metric, in a converted file whose line count and it( count are unchanged (674 and 17; 62 and 4; 109 and 4); this suite's own budget and yield rows", { timeout: 120_000 }, async () => { // [B24-D1 review, 2026-10-09] reviewed pin move: six -> seven (the redaction-linear bound the first scan missed)

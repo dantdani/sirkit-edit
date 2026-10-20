@@ -10,6 +10,7 @@
  */
 
 import { InMemoryDurableWorkflowRepository } from "../durable-workflow/repository";
+import type { DurableCommitRequest, DurableCommitResult } from "../durable-workflow/types"; // [PR-L7, 2026-10-20] the nudging repository
 import { InMemoryPhysicalBindingRepository } from "../physical-binding/repository";
 import { fixtureRuntimeEnabled } from "./mode";
 import { installFixtureClock, uninstallFixtureClock } from "./clock";
@@ -23,7 +24,49 @@ interface FixtureContainer {
   routerExecutions: string[];
   /** [PR-M, 2026-10-18] M2: the FIXTURE catalog governance project (OD-37's ids for the fixture runtime only; never the environment's) */
   governance: { tenantId: string; projectId: string };
+  /** [PR-L7, 2026-10-20] the in-process nudge: a durable commit that schedules outbox work (a task started, resumed, retried; an
+   *  acquisition queued) wakes the worker's idle pump request waiting in this process (`POST /api/generation-worker?hold=`) */
+  work: FixtureWorkSignal;
   createdAt: string;
+}
+
+/** [PR-L7, 2026-10-20] The fixture's in-process work signal: `notify` bumps a version and wakes every waiter; `wait` resolves true at
+ *  once when the version moved past `since` (a commit between the waiter's empty tick and its wait is never missed), true on a later
+ *  notify, false when `ms` elapse or the request goes away. No timer outlives a waiter. */
+export interface FixtureWorkSignal {
+  version(): number;
+  notify(): void;
+  wait(ms: number, input: { since: number; signal?: AbortSignal }): Promise<boolean>;
+}
+
+export function createFixtureWorkSignal(): FixtureWorkSignal {
+  let version = 0;
+  const waiters = new Set<() => void>();
+  return {
+    version: () => version,
+    notify: () => { version += 1; for (const wake of [...waiters]) wake(); },
+    wait: (ms, input) => new Promise<boolean>((resolve) => {
+      if (version !== input.since) return resolve(true);
+      if (!(ms > 0) || input.signal?.aborted) return resolve(false);
+      const settle = (woken: boolean): void => { clearTimeout(timer); waiters.delete(wake); input.signal?.removeEventListener("abort", aborted); resolve(woken); };
+      const wake = (): void => settle(true);
+      const aborted = (): void => settle(false);
+      const timer = setTimeout(() => settle(false), ms);
+      waiters.add(wake);
+      input.signal?.addEventListener("abort", aborted, { once: true });
+    }),
+  };
+}
+
+/** [PR-L7, 2026-10-20] The fixture's in-memory repository with the nudge: a first (not replayed) commit that carries outbox effects
+ *  notifies the work signal after it is stored. Every read, write and fence is the parent's. */
+class NudgingInMemoryDurableWorkflowRepository extends InMemoryDurableWorkflowRepository {
+  constructor(private readonly work: FixtureWorkSignal) { super(); }
+  override async commit<TResult extends object = Record<string, unknown>>(request: DurableCommitRequest<TResult>): Promise<DurableCommitResult<TResult>> {
+    const committed = await super.commit(request);
+    if (!committed.idempotent && request.outbox.length > 0) this.work.notify();
+    return committed;
+  }
 }
 
 /** [PR-M, 2026-10-18] M2: the fixture runtime's catalog governance project - where the browser proof's reviewer and administrator act. */
@@ -33,12 +76,14 @@ const KEY = "__sirkitFixtureRuntimeContainer__" as const;
 
 function create(): FixtureContainer {
   installFixtureClock(); // [B16-C.5] frozen clock before the first durable identity (idempotent; instrumentation.ts installs it at start-up)
+  const work = createFixtureWorkSignal(); // [PR-L7, 2026-10-20]
   return {
-    durableRepository: new InMemoryDurableWorkflowRepository(),
+    durableRepository: new NudgingInMemoryDurableWorkflowRepository(work), // [PR-L7, 2026-10-20] was the plain in-memory repository: the same store, plus the nudge
     physicalBindingRepository: new InMemoryPhysicalBindingRepository(),
     catalog: fixtureRuntimeCatalog(),
     routerExecutions: [],
     governance: { ...FIXTURE_CATALOG_GOVERNANCE },
+    work,
     createdAt: new Date().toISOString(),
   };
 }

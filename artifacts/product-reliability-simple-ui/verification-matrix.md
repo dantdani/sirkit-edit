@@ -1,5 +1,8 @@
 # Verification matrix — assignment §G, bullets 1–12 (what permanent tests exist, by file and case)
 
+[PR-L7, 2026-10-20] Sections L and M's permanent tests, mapped to L.7 items 1-10 and M.5 items 1-8, are the last section of this page
+(written against `deaf15ca`; run results in `persistent-generation/validation.md`).
+
 Prepared 2026-10-17 [PR-G] against `codex/astra-foundation` HEAD `6042488` (checkpoint F). Read-only research: every row below names a
 file that exists in this tree and, where one case is the proof, the case title as written in that file (titles were read with grep;
 suites whose bodies were not opened are marked "file listed; cases not opened"). This page says what EXISTS, not what PASSED: run
@@ -227,3 +230,40 @@ No `it.skip(`, `describe.skip(` or `test.skip(` exists under `app/`, `e2e/`, `e2
 12. **G.12** No case asserts editor mount / undo history / camera survival across a WORKSPACE tab change; screenshots are captured, never compared (no `toHaveScreenshot` baseline).
 13. **Gates** Whether the `database-delivery` CI job arms `SIRKIT_DB_QUALIFICATION` was not read in this pass — confirm before claiming the five DB-gated cases run anywhere.
 14. **Evidence folder** `artifacts/product-reliability-simple-ui/README.md` did not exist at the start of this pass and appeared UNTRACKED during it (a concurrent builder's H work; `git status` 2026-10-17). Not a test gap; noted so the lead knows this matrix was written before the README and the two should be reconciled at integration.
+
+## [PR-L7, 2026-10-20] L.7 and M.5 — the persistent generation task and component resolution
+
+Written against `deaf15ca` from the suites' own headers and case titles (read with grep). Path shorthand for this section: `GT/` =
+`app/lib/generation-task/__tests__/`, `GA/` = `app/api/generation-tasks/__tests__/`, `SC/` = `app/lib/schematic/__tests__/`, `L/` =
+`app/lib/__tests__/`, `FX/` = `app/lib/fixture-runtime/__tests__/`, `CR/` = `app/lib/component-resolution/__tests__/`, `LL/` =
+`app/lib/llm/__tests__/`; `AG/`, `P/`, `S/`, `E/`, `C/` as above. Verdicts and the live run: `persistent-generation/final-verdict.md`,
+`component-resolution/final-verdict.md`.
+
+### L.7 (`PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.md:661-676`)
+
+| item | permanent proof (file :: case) | kind | note / GAP |
+|---|---|---|---|
+| 1 longer than 180 s and the old allowances; expiry queues continuation | `GT/l3-continuation.test.ts` :: 1 "three blocks; one needs 24 turns of 55 simulated seconds …", 2 (a cut-off turn is discarded, never synthesized), 3; `SC/l3-block-slice.test.ts`; `SC/l3-plan-merge.test.ts` | fake-backed | live corroboration only (LR-3's two yields) |
+| 2 a 24 h+ task, many slices, worker restart, disconnect / reconnect | `GT/l3-long-task.test.ts` :: 1 "26 simulated hours …", 2-5 (backoff, Retry-After, allowance parking, input extensions); `GT/l3-worker-process.test.ts` :: 2 (a restarted real process); `P/l4-task-client.test.ts` :: 2 (unsubscribe only stops observing); `e2e/l4-generation-task.spec.ts` :: 1 (reload reattaches) | fake-backed / fixture browser | lifecycle only |
+| 3 hung turn, ownership, fencing, honest failure | `GT/l3-fencing.test.ts`; `GT/l2-generation-task-pglite.test.ts` (a fence mutant killed); `GT/l2-task-store.test.ts`, `GT/l2-task-contracts.test.ts` | fake-backed (PGlite) | — |
+| 4 crash survival, no repeated paid work, ambiguous completion | `GT/l3-crash-resume.test.ts` (incl. the PostgreSQL case and the input crash); `GT/l3-input-allowance.test.ts`; `GT/l6-plan-reservation.test.ts`; `LL/l6-sdk-retries.test.ts`; `GT/l6-input-concurrency.test.ts`; `GT/l6-input-bound.test.ts` | fake-backed (PGlite) | no live resume yet |
+| 5 strategies, no-progress loops, actionable blockers | `GT/l3-strategies.test.ts` :: 1-5; `GT/l6-repeat-turns.test.ts`; `GT/l6-missing-role.test.ts`; `GT/l6-unfilled-role-same-turn.test.ts`; `L/l6-search-stall-repro.test.ts` (the stall map's reproduction, PGlite) | fake-backed | LR-3 observed `provider_quota` live |
+| 6 startup replay, event replay, pagination, disconnect, missing worker / storage | `GA/l4-routes.test.ts` :: 2, 4, 5, 6; `P/l4-task-client.test.ts`; `GT/l6-liveness-scope.test.ts`; `GT/l3-worker-process.test.ts` :: 3; `GT/l3-worker-scope.test.ts` | fake-backed | — |
+| 7 Cancel, Stop answer vs Stop design, refresh / switch, revocation, foreign ids, stale bases | `GA/l4-routes.test.ts` :: 3, 7; `e2e/l4-generation-task.spec.ts` :: 2, 4; `e2e/l5-chat-task.spec.ts` :: 3; `AG/l5-generation-task-tool.test.ts` :: 2, 5 | fake-backed / fixture browser | — |
+| 8 Build and chat on the same task; manuals and coverage match | `AG/l5-generation-task-tool.test.ts` :: 1-6; `e2e/l5-chat-task.spec.ts` :: 1-2; `AG/l6-inspect-bound.test.ts`; drift gates `E/pr-d-tool-manuals.test.ts`, `E/pr-d-coverage-matrix.test.ts` | fake-backed / fixture browser / drift gate | no live chat start |
+| 9 the fresh-browser four-motor request to the PCB-preparation handoff | `e2e/l7-drone-vertical-slice.spec.ts`; `GA/l7-fixture-vertical-slice.test.ts` ("[L.7-9] …" cases); `FX/l7-scripted-policy.test.ts`; `FX/l7-generation-catalog.test.ts`; `SC/l6-plan-assumptions.test.ts`, `SC/l6-block-assumptions.test.ts`, `SC/l6-shared-net-obligations.test.ts` | fixture browser / fake-backed | **GAP:** routing and DRC of this board (no router recording, OD-253 (5)); live completion BLOCKED (the owner's OpenAI quota) |
+| 10 another ordinary circuit, labelled | `e2e/l7-second-circuit.spec.ts` (LED dimmer; the blinker unchanged); `GA/l7-fixture-vertical-slice.test.ts` ("[L.7-10] …"); `FX/l7-scripted-policy.test.ts` (declined and non-drone requests) | fixture browser / fake-backed | live-model generality unproven |
+| L.6 search and spend fixes beside the items | `app/lib/kicad/__tests__/l6-category-vocabulary.test.ts`; `L/l6-rerank-refusal-memo`, `l6-verified-relevance-band`, `l6-build-loop-submission`, `l6-embedding-cache`, `l6-context-dedup`, `l6-catalog-slots`, `l6-pins-first-shown`; `LL/l6-provider-stop-reasons`; `GT/l6-search-cache-keys`, `l6-catalog-epoch`, `l6-allowance-operator`; `S/l6-post-approval-retries`, `S/l6-post-apply-admission`; `LL/l6-request-input-bound` | fake-backed (two with PGlite) | the input framing overhead is INFERRED, self-checked against reported usage |
+
+### M.5 (`PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.md:790-807`)
+
+| item | permanent proof (file :: case) | kind | note / GAP |
+|---|---|---|---|
+| 1 no PCB, two unresolved instances; board tools withheld | `CR/m1-led-dimmer-resolution.test.ts` :: 1-3; `CR/m1-page-intake-fixture.test.ts`; `CR/m1-boundaries.test.ts`; `CR/m1-orchestration-withdrawal.test.ts` | fake-backed | — |
+| 2 D1 / D2 to an eligible local revision, one batch, a new canonical revision | `CR/m1-led-dimmer-resolution.test.ts` :: 3, 4, 12; `e2e/m1-resolve-missing-parts.spec.ts` :: 1 | fake-backed / fixture browser | — |
+| 3 identity, connectivity, polarity preserved; precise refusals | `CR/m1-compatibility.test.ts` :: 1-11; `CR/m1-led-dimmer-resolution.test.ts` :: 4, 5, 8, 9 | fake-backed | — |
+| 4 the acquisition chain to an eligible replacement | `CR/m2-5-resolution-after-acquisition-pglite.test.ts`; `CR/m2-3-acquisition-pipeline-pglite.test.ts`, `m2-3-cad-validation`, `m2-3-object-store`; `CR/m2-2-cad-egress.test.ts`, `m2-2-cad-source-registry`; `CR/m2-1-schematic-acquisition-discovery.test.ts`; `e2e/m2-acquire-missing-part.spec.ts` | fake-backed (PGlite) / fixture browser | **GAP (live):** the online source is blocked (OD-M2-3, -5, -12, -13) |
+| 5 reuse with zero network; isolation; withdrawal and changes | `CR/m2-6-reuse-isolation-pglite.test.ts` :: all four cases | fake-backed (PGlite) | no private library tier (OD-M2-11) |
+| 6 refusals cannot forge authority or corrupt the library | `CR/m2-6-acquisition-refusals-pglite.test.ts`; `CR/m2-4-handoff-boundaries.test.ts`; `CR/m1-led-dimmer-resolution.test.ts` :: 6, 7, 10, 11; `app/api/parts/__tests__/m2-acquisitions-route.test.ts`; `CR/m1-channel-and-receiver.test.ts`; `app/components/parts/__tests__/m2-acquisition-panels.test.tsx` | fake-backed (PGlite) / jsdom | missing source credentials has no reachable producer (OD-M2-6) |
+| 7 an existing board | `CR/m4-schematic-drift`, `m4-board-impact`, `m4-board-impact-agrees-with-preflight`, `m4-receipt-board-impact`, `m4-reresolve-after-undo`, `m4-journal-size`, `m2-7-existing-board-acquired-binding`; `app/lib/workflow/__tests__/m4-journey-board-behind.test.ts`, `m4-board-rebind.test.ts`; `C/m4-manufacturing-gate.test.ts`; `app/components/schematic/__tests__/m4-resolution-dialog-impact.test.tsx`; `e2e/m4-existing-board-resolution.spec.ts` | fake-backed (durable stack) / jsdom / fixture browser | **GAP:** a rebind to another revision from the page (`PB_ACTIVE_SELECTION_CONFLICT`; API level only); no routed board in the browser proof; no server-side currency guard; multi-sheet waits on section J |
+| 8 fresh-browser Build and chat proofs; descriptors, manuals, coverage agree | `e2e/m1-resolve-missing-parts.spec.ts` :: 1-2; `e2e/m2-acquire-missing-part.spec.ts`; `e2e/m4-existing-board-resolution.spec.ts`; `E/pr-d-tool-manuals.test.ts`, `E/pr-d-coverage-matrix.test.ts` | fixture browser / drift gate | no live-source or live-provider proof |

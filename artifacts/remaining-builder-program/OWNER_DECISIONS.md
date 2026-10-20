@@ -3500,3 +3500,47 @@ Under the existing OD-217 heading (`:2599`), append:
   task never starts a CAD acquisition for a role that has no schematic instance; a missing role waits for a library action and Retry.
 - **The owner may choose otherwise:** each item independently (another MCU or IMU, a pause-and-ask question path, another second
   circuit, a router recording, other allowance numbers, a server-side currency guard).
+
+## OD-254 — CI for sections L and M: the suites no job selected admitted, the split re-measured, agent-execution in its own browser job, the fixture pump's idle backoff with an in-process wake (PR-L7, 2026-10-20)
+
+- **Question:** (1) At `deaf15ca`, 81 vitest suites that sections L and M (and the interim 180 s correction of OD-251) added or touched
+  were selected by no CI job (`_ci-admission.ts`: `jobsOf` was `[]` for each; 388 of the 1,003 test files `git ls-files` lists were in
+  no job), 82 with this increment's own `l7-pump-idle-backoff`. How are they admitted, and does prompt-to-gerber keep OD-30's margin?
+  (2) PR #16's CI run at `0f1c446b` failed page-browser-e2e at its 30-minute limit (73 tests in 28.1 min, then the orchestration step
+  was cancelled; `agent-execution` alone 1,022 s, 464 s on the previous green run). How is it split? (3) The fixture worker's pump
+  posted `/api/generation-worker` every second while idle (812 of 2,206 requests of one local full browser run), loading the dev
+  server in every browser job. How is that load removed without making a task start later?
+- **Default applied:** (1) OD-250's mechanism as it stands (`ci-split.md` section 5): the 13 suites that start PGlite are
+  database-delivery entries after its last one (`deterministic-manufacturing.yml:495-507`); the 69 others are exact-path positional
+  entries of prompt-to-gerber after its last positional line (`:313-381`). Re-measured once at this tree (585 files, 6,452 tests,
+  0 failures, 54 skipped, 1146.10 s of testcase time, exit 0; `artifacts/ai-control-plane-b24/evidence/d0-ptg-timing.xml`), the 58
+  items moved since OD-250 hold 41.2 %, above OD-30's 40 % line, and the two heaviest admitted suites, held by nothing
+  (`m1-boundaries` 24.47 s, `l7-fixture-vertical-slice` 6.29 s), move to agent-boundary-suites by weight for margin (one `--exclude`
+  line each at `:440-441`, one job line each at `:761-762`): 502.64 s, 43.9 %, 179 files, 60 items. At CI's ratio 1.079,
+  prompt-to-gerber about 11 min 34 s of 25 (headroom about 13 min 26 s) and agent-boundary-suites about 9 min 03 s of 20 - INFERRED
+  until CI; neither comes within OD-30's five minutes, so neither is split further. Test files in no job: 388 of 1,003 before, 307 of
+  1,004 after (the 307 are older chapters' suites this assignment did not touch); suites of sections L and M in no job: 81 -> 0.
+  (2) `e2e/agent-execution.spec.ts` runs in a third browser job appended last, `page-browser-e2e-agent` (`:809-843`,
+  `timeout-minutes: 30`, B24-D1's start and headroom steps, page-browser-e2e's setup verbatim, one named run step, its own upload);
+  page-browser-e2e's `SIRKIT_E2E_SKIP` names it beside B24-D4's four; `_ci-admission.ts` reads both appended jobs (the skip list is
+  exactly their specs, none in both); `golden-catalog.ts` and `scenario-map.ts` record the spec's links under the new job (both
+  generators re-run, zero drift on the second run). On `0f1c446b`'s figures page-browser-e2e about 14 min 28 s of 30 and
+  page-browser-e2e-agent about 19 min 45 s of 30 (10 min 27 s on the green run's 464 s) - INFERRED, each keeping at least OD-30's
+  five minutes on the slow runner's figure (`ci-split.md` section 11.11). (3) The pump transport backs off while idle - 1 s, doubling
+  to 8 s over consecutive empty answers, reset by any settled slice (`app/lib/generation-task/worker/pump-transport.ts`) - and so that
+  no Start, Resume, Retry or acquisition waits out the worker's sleep, a fixture server holds an idle pump request
+  (`POST /api/generation-worker?hold=<ms>`, at most 8 s; no new route) and the fixture container's in-process work signal, notified by
+  every durable commit that schedules outbox work, wakes it at once (`runHeldPumpedSlice`); outside the fixture nothing is held and
+  the worker sleeps the same doubling. Local browser runs of l4, l5, l7-drone and m2 (fixture, one port of their own): 9 passed in
+  2.2 min before, 2.6 min with the backoff alone (l5 case 1 8.8 s -> 20.6 s), 2.3 min with the hold (every pickup immediate; 117 -> 75
+  pump requests). Pins moved with dated `[PR-L7, 2026-10-20]` notes: `b24-d0-ci-split`, `b24-d4-browser-split`,
+  `b24-a1-environment-profile` 16 (A1's insertion table gained PR-L7's five rows; the row reader admits `PR-L7`), `b24-a2-secret-scan`
+  (c), `b24-b1-catalog` 4, `b24-b2-ci-admission` 1, `b24-d1-latency-policy` 9 and 10, `b24-d1-threshold-census` 4 and 6,
+  `b24-f-verdict-lines` 2 (the CI table at B24's final SHA lists that SHA's jobs), `b21-f-page` 10, and the page citations (B21's C39,
+  C49, C55, C93, C94; B23's C64 and its prose citation; B24's accessibility C52, C53, C70 and observability C50; `ci-split.md`
+  sections 0-4, 10 and 11).
+- **The owner may choose otherwise:** keep all 69 admitted suites in prompt-to-gerber (41.2 % without the two moves) or move them all
+  to agent-boundary-suites as OD-250 did with its 19; give the L/M suites a job of their own; give agent-execution's job 20 minutes; or
+  split page-browser-e2e by the new L/M specs instead (about 26 min 27 s of 30 left in page-browser-e2e on `0f1c446b`'s figures, under
+  OD-30's five minutes); another backoff ceiling, or no hold (a Start then waits up to 8 s for the worker). The merge gate of
+  `ci-split.md` section 9 applies to the new job too: a required-status-check list on `main` must name `page-browser-e2e-agent`.

@@ -274,7 +274,7 @@ describe("[B24-B1] the golden catalog (D24-14, OD-203)", () => {
     expect(admission.jobsOf("app/lib/pcb/__tests__/stage-08-professional-routing.test.ts")).toEqual(["benchmark-nightly"]);
     expect(admission.jobsOf("app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts")).toEqual(["benchmark-core", "benchmark-nightly"]);
     expect(admission.jobsOf("app/lib/manufacturing-providers/database/__tests__/b23-b-exchange-ledger-pglite.test.ts")).toEqual(["database-delivery"]);
-    expect(admission.jobsOf("e2e/agent-execution.spec.ts")).toEqual(["page-browser-e2e"]);
+    expect(admission.jobsOf("e2e/agent-execution.spec.ts")).toEqual(["page-browser-e2e-agent"]); // [PR-L7, 2026-10-20] reviewed pin move (OD-254): was ["page-browser-e2e"] - the spec runs in its own appended browser job, page-browser-e2e skips it
     expect(admission.jobsOf(ORCHESTRATION_SPEC)).toEqual(["page-browser-e2e"]);
     expect(admission.jobsOf("app/lib/agent/__tests__/b11-trace-replay-evaluation.test.ts")).toEqual(["prompt-to-gerber"]); // [B24-B2, 2026-10-08] reviewed pin move, was []: B24-B2 admitted the B11 suites to prompt-to-gerber by explicit entries (D24-15, OD-204)
     expect(admission.jobsOf("app/lib/qualification/__tests__/b24-b1-catalog.test.ts")).toEqual(["prompt-to-gerber"]);

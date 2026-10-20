@@ -5752,3 +5752,45 @@ validation.md §C, workflow-contract.md, fault-register.md, live-spend.json).
 - **Carried forward:** 19 suites in no CI job → admission + the CI-split re-measurement.
 - **Concurrent work:** an OpenAI Codex agent edited 15 files from 05:47 (Build generation deadline and cancellation); excluded from
   this commit, untouched.
+
+### Product-reliability assignment, sections L and M — the persistent generation task and component resolution (2026-10-17/20)
+
+- **Scope:** the owner's corrective section L (a durable, resumable generation task instead of one blocking request) and section M
+  (resolving and replacing missing parts), on `codex/astra-foundation`: step 0 `84a2f72c` (OD-251), increments 1-4 `aa8b2512`,
+  `c8e53499`, `382fd59f`, `2e938241`; M1 `2e938241` + `03d473f1`; increment 5 and M2 `00d03430`, `ada0b194`, `7bf0fa55`; increment 6
+  `8b76793f` (OD-253), `2240363a`, `9a42c36b`, `0f1c446b`, `2a0e3079`; M4 `e03c532f`; LR-3 `3337f3f3` (reservation), `deaf15ca`
+  (result). 522 files, 240 new, +50,390 / -2,691 (`artifacts/product-reliability-simple-ui/persistent-generation/changed-files.md`).
+- **What landed:** the durable task store, contracts and events on the existing durable tables (no migration); a separate worker
+  (`pnpm run worker:generation`, `pnpm run dev:with-worker`) running fenced, finite plan / block / merge slices with checkpoints,
+  continuation, a strategy ladder and per-task accounting (an operator unit that may only lower it, an input dimension admitted before
+  each call and across slices, SDK retries 0, both planner attempts reserved); six canonical routes with SSE and a worker pump behind
+  its secret; the task card (Stop design, Pause, Resume, Retry block, Continue with another allowance, Review saved blocks); chat on the
+  same task (`generate-proposal` 2.0.0, task-inspect, task-control as a confirm chip; Stop answer vs Stop design); the L.6 search fixes;
+  a bounded input for the automatic Tidy / Review; schematic-only resolution of unresolved parts through review and one canonical
+  transaction; CAD acquisition from the bundled KiCad library and a fixture source to a validated candidate and the two-human
+  publication; board impact before approval with a durable PCB.
+- **Records:** OD-251, OD-252, OD-253 (and the CI builder's OD-254 for increment 7); pin moves with dated "[PR-L …]", "[PR-M …]",
+  "[PR-L6 …]" notes; route census 168 -> 177; flag census 68 -> 75; the history-only secret-scan entry for a placeholder (`0f1c446b`);
+  the evidence package `persistent-generation/` (progress, stall map, contract, worker, changed files, validation, verdict, screenshots)
+  and `component-resolution/` (M2 design with OD-M2-1 … 14, M4 page, verdict).
+- **Gates (recorded in `persistent-generation/validation.md`):** increment 5 + M2 combined tree: 962/962 vitest files, every CI selection
+  0 failed at 4 workers (15 timing-only failures at 13 workers, each green alone with its numbers), full Playwright 82/82, orchestration
+  4/4 after `ada0b194`, B24 13/13, 30 generators without drift, tsc and eslint clean, secret scans 0. Increment 6 integration:
+  1001/1001 vitest files; prompt-to-gerber 3640 passed 0 failed; agent-boundary 0 failed; five functional pin failures fixed; every
+  remaining failure timing-only and green alone (numbers recorded); tsc clean; Playwright default 73, set1 24, orchestration 4, B24 13
+  (run 2; run 1 lost its server to one `0xC0000409` worker crash under load). Post-approval bound: 559 qualification, 1286 stage10, 1327
+  in the affected folders, 52 page suites 678 tests.
+- **Live:** LR-3, the one bounded live four-motor run (OD-252 item 10, OD-253 item 7): 3.83 USD reserved first; the plan with assumptions
+  and one block saved, two slices yielded and continued, then the owner's OpenAI account answered `insufficient_quota`; 1.17 USD spent
+  (call records); the task durable and resumable. Cumulative known spend 1.3628 USD of 5.00; 2.66 USD held for LR-3's resume.
+- **Verdicts:** section L PARTIAL (L.7 items 1-8 and 10 CONFIRMED by permanent tests, 9 PARTIAL: fixture CONFIRMED, live blocked by the
+  quota; the L.8 stop condition holds live on its blocker branch and fixture-backed on its reviewable-artifact branch); section M
+  PARTIAL (M.5 1-6 and 8 CONFIRMED with fixture evidence, 7 PARTIAL; the online source blocked on OD-M2-3 et al.); the assignment
+  PARTIAL.
+- **Open:** the owner's OpenAI quota; OD-M2-1 … OD-M2-14; rebinding a bound part from the page (`PB_ACTIVE_SELECTION_CONFLICT`); the
+  server-side currency guard; the B14 dialog as an impact consumer; semantic-editor scenario 3 intermittent (no root cause after 16
+  passes); one `0xC0000409` worker crash; the post-apply latch per server process (`remaining-blockers.md`).
+- **Unchanged:** B24 PARTIAL; LB-1..LB-17; the default model `gpt-5.6-sol`; no agent release, purchase, publication or credential tool;
+  `C:\Users\robsa\sirkit` untouched.
+- **Next:** increment 7's CI admission (OD-254) and integration; PR #16's head fast-forwarded and its CI read; LR-3's task resumed once
+  the owner restores the quota; then runbook section J, then K (neither started).

@@ -80,10 +80,10 @@ export type EvalState = (typeof EVAL_STATES)[number];
 export const LINK_KINDS = ["suite", "spec", "pglite", "live_opt_in"] as const;
 export type LinkKind = (typeof LINK_KINDS)[number];
 /** The CI jobs a link can run in, recorded exactly as `b24-b1-catalog` case 4 derives them (a new job extends this by review). */
-export const CATALOG_CI_JOBS = ["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "page-browser-e2e", "agent-boundary-suites"] as const; // [B24-D0, 2026-10-09] + agent-boundary-suites (OD-30's split, ci-split.md)
+export const CATALOG_CI_JOBS = ["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "page-browser-e2e", "page-browser-e2e-agent", "agent-boundary-suites"] as const; // [B24-D0, 2026-10-09] + agent-boundary-suites (OD-30's split, ci-split.md); [PR-L7, 2026-10-20] + page-browser-e2e-agent (OD-254: e2e/agent-execution.spec.ts runs in its own appended browser job), after page-browser-e2e as _ci-admission.ts lists it
 export type CatalogCiJob = (typeof CATALOG_CI_JOBS)[number];
 /** The jobs that run on a pull request (benchmark-nightly runs on schedule and dispatch only). */
-export const PULL_REQUEST_CI_JOBS: readonly CatalogCiJob[] = Object.freeze(["prompt-to-gerber", "database-delivery", "benchmark-core", "page-browser-e2e", "agent-boundary-suites"]); // [B24-D0, 2026-10-09] the appended job runs on every pull request too
+export const PULL_REQUEST_CI_JOBS: readonly CatalogCiJob[] = Object.freeze(["prompt-to-gerber", "database-delivery", "benchmark-core", "page-browser-e2e", "page-browser-e2e-agent", "agent-boundary-suites"]); // [B24-D0, 2026-10-09] the appended job runs on every pull request too; [PR-L7, 2026-10-20] and page-browser-e2e-agent (OD-254)
 /** The owner of a missing row no B24 increment plans. */
 export const NONE_PLANNED_IN_B24 = "none planned in B24" as const;
 
@@ -125,7 +125,7 @@ const DBD: readonly CatalogCiJob[] = ["database-delivery"];
 const ENGINEERING: readonly CatalogCiJob[] = ["benchmark-core", "benchmark-nightly"];
 const P2G_ENGINEERING: readonly CatalogCiJob[] = ["prompt-to-gerber", "benchmark-core", "benchmark-nightly"];
 const NIGHTLY: readonly CatalogCiJob[] = ["benchmark-nightly"];
-const BROWSER: readonly CatalogCiJob[] = ["page-browser-e2e"];
+const BROWSER: readonly CatalogCiJob[] = ["page-browser-e2e"]; const AGENT_BROWSER: readonly CatalogCiJob[] = ["page-browser-e2e-agent"]; // [PR-L7, 2026-10-20] OD-254: e2e/agent-execution.spec.ts runs in its own appended browser job
 const AGENT_BOUNDARY: readonly CatalogCiJob[] = ["agent-boundary-suites"]; // [B24-D0, 2026-10-09] OD-30's split: the suites under app/lib/mcp and app/lib/computation/__tests__ (ci-split.md). [PR-G, 2026-10-17] OD-250: and, since the re-measured split, the suites under app/lib/agent/orchestration/__tests__ (ci-split.md section 4). [B24-B2, 2026-10-08] NO_JOB removed: since B24-B2 every catalogued suite runs in a CI job (D24-15, OD-204; b24-b2-ci-admission).
 
 const link = (path: string, kind: LinkKind, refs: readonly string[], ciJobs: readonly CatalogCiJob[], ids: { readonly b11?: readonly string[]; readonly b21f?: readonly string[] } = {}): EvalLink =>
@@ -144,7 +144,7 @@ const ACCEPTANCE_PIPELINE = "app/lib/workflow/prompt-to-gerber/__tests__/accepta
 const LIVE_COMMAND = "scripts/run-b21-live-orchestration-evaluation.ts";
 
 const suite = (path: string, refs: readonly string[], ciJobs: readonly CatalogCiJob[]): EvalLink => link(path, "suite", refs, ciJobs);
-const spec = (path: string, refs: readonly string[], b21f?: readonly string[]): EvalLink => link(path, "spec", refs, BROWSER, b21f ? { b21f } : {});
+const spec = (path: string, refs: readonly string[], b21f?: readonly string[]): EvalLink => link(path, "spec", refs, path === AGENT_SPEC ? AGENT_BROWSER : BROWSER, b21f ? { b21f } : {}); // [PR-L7, 2026-10-20] OD-254: the agent spec's job is page-browser-e2e-agent
 const pglite = (path: string, refs: readonly string[]): EvalLink => link(path, "pglite", refs, DBD);
 const liveOptIn = (path: string, refs: readonly string[], ciJobs: readonly CatalogCiJob[]): EvalLink => link(path, "live_opt_in", refs, ciJobs);
 /** B11's permanent cases replay in one suite, admitted to prompt-to-gerber by B24-B2 (D24-15, OD-204). */

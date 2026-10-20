@@ -23,8 +23,11 @@ export interface PumpTransportOptions {
   secret: string | undefined;
   /** pump requests in flight at once (1..3): each claims at most one slice */
   concurrency?: number;
-  /** the wait after a request that found nothing to run */
+  /** the wait after a request that found nothing to run (the first of a run of empty answers; the idle backoff doubles it from there) */
   idleTickMs?: number;
+  /** [PR-L7, 2026-10-20] the idle backoff's ceiling: each further consecutive empty answer doubles the wait up to this (8 s by default);
+   *  an answer that settled a slice resets it to `idleTickMs` (`pumpIdleWaitMs`) */
+  idleMaxMs?: number;
   /** one pump request's own bound: the longest slice window plus the shutdown grace and a margin */
   requestTimeoutMs?: number;
   fetch?: typeof fetch;
@@ -32,14 +35,31 @@ export interface PumpTransportOptions {
   clock?: () => number;
 }
 
-/** What the route answers: the claim outcomes of its tick and the slice it ran (or null: nothing was due). */
-interface PumpResponse { ok?: unknown; tick?: GenerationTickReport; ran?: GenerationSliceReport | null; code?: unknown }
+/** What the route answers: the claim outcomes of its tick and the slice it ran (or null: nothing was due); [PR-L7, 2026-10-20] `heldMs`
+ *  when the server holds idle requests (the fixture's in-process work signal, `runHeldPumpedSlice`): how long this one waited. */
+interface PumpResponse { ok?: unknown; tick?: GenerationTickReport; ran?: GenerationSliceReport | null; heldMs?: unknown; code?: unknown }
+
+/** [PR-L7, 2026-10-20] The pump's default idle-backoff ceiling: an idle worker posts at most every 8 s (it posted every second; 812 of
+ *  2,206 requests of one local fixture browser run were idle pump posts, all of them load on the dev server). */
+export const PUMP_IDLE_MAX_MS = 8_000;
+
+/** [PR-L7, 2026-10-20] The wait after the `emptyStreak`-th consecutive answer that found nothing to run (1, 2, 3, ...): `idleTickMs`, then
+ *  doubling, never above `idleMaxMs` (and never below `idleTickMs`). Pure: the loop below and its unit test share it. */
+export function pumpIdleWaitMs(emptyStreak: number, idleTickMs: number, idleMaxMs: number = PUMP_IDLE_MAX_MS): number {
+  const ceiling = Math.max(idleTickMs, idleMaxMs);
+  const doublings = Math.max(0, Math.min(30, Math.floor(emptyStreak) - 1));
+  return Math.min(ceiling, idleTickMs * 2 ** doublings);
+}
 
 /**
  * The HTTP pump transport: the worker PROCESS drives a server's task store by POSTing `/api/generation-worker`; the route runs the
- * slice. A request that found nothing waits `idleTickMs`; a failure (the server not up yet, a refused secret, a store outage) backs off
- * up to 30 ticks and is logged once per streak (never a secret or a response body). `stop()` stops posting and aborts the requests
- * still in flight after the grace: the server treats that as a worker shutdown (the slices yield at a boundary or are released).
+ * slice. A request that found nothing waits `idleTickMs`; [PR-L7, 2026-10-20] each further consecutive empty answer doubles that wait up
+ * to `idleMaxMs` (the idle backoff, `pumpIdleWaitMs`), and an answer that settled a slice resets it, so an idle worker no longer loads the
+ * server every second while a busy one still claims its next slice at once. A server that answers `heldMs` holds idle requests and
+ * wakes them when work is committed (the fixture's in-process nudge): the wait is then asked of it (`?hold=<ms>`, the same doubling)
+ * instead of slept here, so a Start or Resume is picked up at once. A failure (the server not up yet, a refused secret, a store
+ * outage) backs off up to 30 ticks and is logged once per streak (never a secret or a response body). `stop()` stops posting and aborts
+ * the requests still in flight after the grace: the server treats that as a worker shutdown (the slices yield at a boundary or are released).
  */
 export function createPumpTransport(options: PumpTransportOptions): GenerationWorkerTransport {
   const secret = (options.secret ?? "").trim();
@@ -48,6 +68,7 @@ export function createPumpTransport(options: PumpTransportOptions): GenerationWo
   const clock = options.clock ?? (() => Date.now());
   const concurrency = Math.max(1, Math.min(GENERATION_SLICE_POLICY.workerConcurrency, Math.floor(options.concurrency ?? 1)));
   const idleTickMs = options.idleTickMs ?? 1_000;
+  const idleMaxMs = options.idleMaxMs ?? PUMP_IDLE_MAX_MS; // [PR-L7, 2026-10-20] the idle backoff's ceiling
   const requestTimeoutMs = options.requestTimeoutMs ?? GENERATION_SLICE_POLICY.blockWindowMs + 60_000;
   const log = (line: string): void => { try { options.log?.(line); } catch { /* a log sink never stops the worker */ } };
   const url = `${options.origin}${GENERATION_WORKER_PUMP_ROUTE.path}`;
@@ -62,13 +83,13 @@ export function createPumpTransport(options: PumpTransportOptions): GenerationWo
     sleepers.add(wake);
   });
 
-  async function post(): Promise<GenerationTransportTick> {
+  async function post(holdMs = 0): Promise<GenerationTransportTick & { heldMs: number | null }> {
     const controller = new AbortController();
     inFlight.add(controller);
-    const bound = setTimeout(() => controller.abort(new Error("GENERATION_WORKER_PUMP_TIMEOUT")), requestTimeoutMs);
+    const bound = setTimeout(() => controller.abort(new Error("GENERATION_WORKER_PUMP_TIMEOUT")), requestTimeoutMs + holdMs);
     lastTickAt = isoOf(clock());
     try {
-      const response = await fetchImpl(url, { method: GENERATION_WORKER_PUMP_ROUTE.method, headers: { authorization: `Bearer ${secret}` }, signal: controller.signal });
+      const response = await fetchImpl(holdMs > 0 ? `${url}?hold=${Math.round(holdMs)}` : url, { method: GENERATION_WORKER_PUMP_ROUTE.method, headers: { authorization: `Bearer ${secret}` }, signal: controller.signal }); // [PR-L7, 2026-10-20] + the idle hold
       const body = (await response.json().catch(() => ({}))) as PumpResponse;
       if (!response.ok || body.ok !== true) {
         const code = typeof body.code === "string" && /^[A-Z][A-Z0-9_]{2,63}$/.test(body.code) ? body.code : `HTTP_${response.status}`;
@@ -77,7 +98,7 @@ export function createPumpTransport(options: PumpTransportOptions): GenerationWo
       const tick: GenerationTickReport = body.tick ?? { at: isoOf(clock()), claims: [], started: [] };
       const slices = body.ran ? [body.ran] : [];
       settled += slices.length;
-      return { tick, slices };
+      return { tick, slices, heldMs: typeof body.heldMs === "number" && Number.isFinite(body.heldMs) && body.heldMs >= 0 ? body.heldMs : null };
     } finally {
       clearTimeout(bound);
       inFlight.delete(controller);
@@ -86,15 +107,24 @@ export function createPumpTransport(options: PumpTransportOptions): GenerationWo
 
   async function loop(index: number): Promise<void> {
     let failures = 0;
+    let empty = 0; // [PR-L7, 2026-10-20] consecutive answers that found nothing to run (the idle backoff)
+    let hold = 0; // [PR-L7, 2026-10-20] the wait the next request asks a holding server for (0: none)
     while (!stopping) {
       try {
-        const { slices } = await post();
+        const { slices, heldMs } = await post(hold);
         if (failures > 0) log(`pump ${index + 1}: the server answers again`);
         failures = 0;
         for (const slice of slices) log(`settled ${slice.kind} slice ${slice.sliceId}: ${slice.outcome}${slice.state ? ` (task ${slice.state})` : ""} - ${slice.detail}`);
-        if (slices.length === 0 && !stopping) await sleep(idleTickMs);
+        if (slices.length > 0) { empty = 0; hold = 0; } // [PR-L7, 2026-10-20] a settled slice resets the backoff: the next request goes at once
+        else if (!stopping) {
+          empty += 1;
+          const wait = pumpIdleWaitMs(empty, idleTickMs, idleMaxMs);
+          if (heldMs !== null) hold = wait; // a holding server waits for the next request instead, and wakes it when work is committed
+          else { hold = 0; await sleep(wait); }
+        }
       } catch (error) {
         if (stopping) break;
+        empty = 0; hold = 0; // [PR-L7, 2026-10-20] once the server answers again, the idle wait starts over from `idleTickMs`
         failures += 1;
         if (failures === 1) log(`pump ${index + 1}: the request failed (${error instanceof GenerationPumpError ? error.code : error instanceof Error ? error.name : "error"}); retrying with backoff`);
         await sleep(idleTickMs * Math.min(30, 2 ** Math.min(5, failures)));
