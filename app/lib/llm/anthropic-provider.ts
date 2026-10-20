@@ -83,7 +83,7 @@ export class AnthropicProvider implements LLMProvider {
 
   constructor(
     client?: AnthropicClient,
-    private readonly model = configuredAnthropicModel(),
+    readonly model = configuredAnthropicModel(), // [PR-L6 spend, 2026-10-19] SPEND-3-A3: readable (LLMProvider.model), so the router names the model it serves; still fixed at construction
   ) {
     this.client = client;
   }

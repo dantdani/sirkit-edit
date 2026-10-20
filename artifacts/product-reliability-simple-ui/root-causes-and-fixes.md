@@ -84,7 +84,7 @@ bindings, publication and preflight, the human's apply made the durable board, a
 routed it with the bundled FreeRouting (0 unrouted, 0 shorts, parity pass). No stage hung, returned silently or invented a
 pass; the only refusals were Anthropic's rerank calls (no credits), which the part search tolerates. Known limits recorded:
 the loop deadline refuses a new turn but does not abort one in flight (the request took 47.7 s against a 40 s deadline);
-the post-approval automatic passes (layout critic, review) spend provider budget outside the request's reservation; release
+the post-approval automatic passes (layout critic, review) spend provider budget outside the request's reservation ([PR-L6 spend, 2026-10-19] SPEND-3: since bounded - one attempt each, and each request's input admitted against a 200000-token ceiling before any provider call, refused with 413 `POST_APPLY_INPUT_BOUND_EXCEEDED` above it; [PR-L6 spend, 2026-10-19] the attack review: the 3,000-token "high" image allowance only for the documented gpt-5.6-sol / terra / luna, an image at an OpenAI model with no documented cap refused as 413 `POST_APPLY_INPUT_UNBOUNDED`, the image charged at the router's serving model, and a reported input above its bound latching Tidy and Review closed until restart; the BOM view's live distributor pricing after an apply is a cached, table-bounded distributor quota read only while the BOM tab is open, not an AI bill - accepted); release
 was not exercised live (an administrator's irreversible act; the fixture proves it).
 
 ## E — the interface simplified in place: what landed per fault (2026-10-16)

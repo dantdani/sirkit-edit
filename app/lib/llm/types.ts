@@ -136,3 +136,11 @@ export interface LLMRequest {
    *  generation slice call (`MeteredLlmPort`) and the post-approval Tidy and Review calls send 0, and the caller's own wait retries. */
   maxProviderRetries?: number;
 }
+
+// [PR-L6 spend, 2026-10-19] SPEND-3-A3 (the spend-bound review): the model an adapter sends every request to, merged into `LLMProvider`
+// here, after the last line, so no line cited in this file moves (an interface declaration merges with the one above). Optional: a provider
+// that names none leaves the post-apply admission unable to charge an OpenAI image, which it then refuses.
+export interface LLMProvider {
+  /** fixed when the adapter is built (`OpenAIProvider`, `AnthropicProvider`); `LLMRouter.servingModel` reads it */
+  readonly model?: string;
+}

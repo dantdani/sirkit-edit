@@ -44,7 +44,7 @@ export class LLMRouter {
 
   supportsVision(provider: LLMProviderId): boolean {
     return this.resolve(provider).supportsVision();
-  }
+  } /** [PR-L6 spend, 2026-10-19] SPEND-3-A3: the model `provider`'s adapter sends every request to (fixed when it was built); undefined when no adapter names one. The post-apply admission charges an image at it. On this line so no cited line moves */ servingModel(provider: LLMProviderId): string | undefined { return this.providers.get(provider)?.model; }
 }
 
 export const llmRouter = new LLMRouter();

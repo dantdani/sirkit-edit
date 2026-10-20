@@ -19,7 +19,7 @@
  */
 import { LLMProviderError, isRetryableReason, type LLMProviderFailureReason } from "../../llm/errors";
 import type { LLMProviderId, LLMRequest, LLMResponse } from "../../llm/types";
-import { composeInstructions } from "../../llm/context";
+import { REQUEST_INPUT_FRAMING, requestInputBound, worstCaseImageAllowance, type BoundedRequest } from "../../llm/request-input-bound"; // [PR-L6 spend, 2026-10-19] was `composeInstructions` from ../../llm/context, read only by the input bound, which moved there (in place: no line moves)
 import type { AiAlternateResult, AiPartResult, PartsSearchOutcome, QueryEmbedding } from "../../parts-search";
 import type { BuildCatalogPort, BuildLlmPort } from "../../schematic/build-loop-slice";
 import { resolveMainCategory, type MainCategoryResolution } from "../../kicad/categories";
@@ -166,17 +166,17 @@ export const INPUT_ADMISSION_UNRECORDED_CODE = "sirkit_input_admission_unrecorde
 export const isInputAdmissionRefusal = (error: unknown): boolean => error instanceof LLMProviderError && (error.providerCode === INPUT_ALLOWANCE_EXHAUSTED_CODE || error.providerCode === INPUT_BOUND_EXCEEDED_CODE || error.providerCode === INPUT_ADMISSION_UNRECORDED_CODE);
 
 /** The framing a provider adds around what the request carries, in tokens (INFERRED, and self-checked: a reported input above its bound
- *  stops the slice). Byte-level BPE gives tokens <= UTF-8 bytes for the text itself. */
-export const GENERATION_INPUT_BOUND = Object.freeze({ perCall: 1_024, perMessage: 16, perPart: 8, perTool: 64 });
-const utf8Bytes = (text: string): number => new TextEncoder().encode(text).length;
+ *  stops the slice). Byte-level BPE gives tokens <= UTF-8 bytes for the text itself. [PR-L6 spend, 2026-10-19] the shared module's numbers. */
+export const GENERATION_INPUT_BOUND = REQUEST_INPUT_FRAMING;
 /** An upper bound on the input tokens one request can be billed for: the UTF-8 bytes of the instructions the adapters compose (the system
- *  prompt and every context section, escaped), of JSON(tools), JSON(toolChoice) and JSON(messages), plus the framing overhead. */
-export function generationRequestInputBound(request: Pick<LLMRequest, "messages" | "system" | "tools" | "toolChoice" | "boardState" | "schematicState" | "retrievedContext" | "designConstraints" | "userRequest" | "provider">): number {
-  const tools = request.tools ?? [];
-  const parts = request.messages.reduce((sum, message) => sum + (typeof message.content === "string" ? 1 : message.content.length), 0);
-  return utf8Bytes(composeInstructions(request as LLMRequest) ?? "") + utf8Bytes(JSON.stringify(tools)) + utf8Bytes(JSON.stringify(request.toolChoice ?? null)) + utf8Bytes(JSON.stringify(request.messages))
-    + GENERATION_INPUT_BOUND.perCall + GENERATION_INPUT_BOUND.perMessage * request.messages.length + GENERATION_INPUT_BOUND.perPart * parts + GENERATION_INPUT_BOUND.perTool * tools.length;
+ *  prompt and every context section, escaped), of JSON(tools), JSON(toolChoice) and JSON(messages), plus the framing overhead.
+ *  [PR-L6 spend, 2026-10-19] SPEND-3: moved, unchanged, into the shared `llm/request-input-bound.ts` (the post-apply Tidy and Review
+ *  admission reads the same bound); a generation slice sends no image today, so every generation number is the one it was. An image part
+ *  (none here) is charged the documented per-image worst case instead of its base64 bytes. */
+export function generationRequestInputBound(request: BoundedRequest): number {
+  return requestInputBound(request, { imageAllowance: worstCaseImageAllowance });
 }
+// [PR-L6 spend, 2026-10-19] the shared bound is imported at the top of the module (in place of the instruction composer it read).
 
 /** One slice's input budget, shared by every model port of the slice (the plan call, a block's seed call and its turns): a call is admitted
  *  only when its bound fits what remains; until its usage is reported it is charged at its bound, and a call whose completion is unknown

@@ -133,7 +133,7 @@ export class OpenAIProvider implements LLMProvider {
 
   constructor(
     client?: OpenAIClient,
-    private readonly model = configuredOpenAIModel(),
+    readonly model = configuredOpenAIModel(), // [PR-L6 spend, 2026-10-19] SPEND-3-A3: readable (LLMProvider.model), so the router names the model it serves; still fixed at construction
     private readonly reasoningEffort: OpenAIReasoningEffort | undefined =
       configuredOpenAIReasoningEffort(model),
   ) {

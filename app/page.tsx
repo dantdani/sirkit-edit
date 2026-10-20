@@ -50,7 +50,7 @@ import {
   throwAiResponseError,
   type AiRequestOwnership,
 } from "@/app/lib/ai-preferences";
-import type { LLMProviderId } from "@/app/lib/llm/types";
+import type { LLMProviderId } from "@/app/lib/llm/types"; import { PostApplyInputRefusalError, throwPostApplyInputRefusal } from "@/app/lib/llm/post-apply-refusal"; // [PR-L6 spend, 2026-10-19] SPEND-3: the post-apply input admission's typed refusal (Tidy, Review), on this line so no line moves
 import { performProviderSwitch, settleAgentRunFailure } from "@/app/lib/agent/run-consumer";
 import { EditorContextBridge } from "@/app/lib/agent/editor-context-bridge"; // B10
 import { ViewSessionBridge } from "@/app/lib/agent/view-session-bridge"; // [B17-F]
@@ -5954,7 +5954,7 @@ export default function Home() {
         body: JSON.stringify({ ...reviewInput, provider: aiBrainRef.current }),
         signal: reviewScope.signal,
       });
-      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => reviewScope.isCurrent() });
+      if (!res.ok) { await throwPostApplyInputRefusal(res); await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => reviewScope.isCurrent() }); } // [PR-L6 spend, 2026-10-19] SPEND-3: the input admission's 413 is its own typed refusal (no provider card, no Retry); every other failure as before
       const data = (await res.json()) as
         | { ok: true; findings: { severity: string; category?: string; title: string; detail: string; refs: string[] }[]; summary: string; dropped: number }
         | { ok: false; error: string };
@@ -6005,7 +6005,7 @@ export default function Home() {
       ]);
     } catch (err) {
       if (isAbortError(err) || !reviewScope.isCurrent()) return; // cancellation, not a failure
-      if (!auto) {
+      if (err instanceof PostApplyInputRefusalError) { lastAiRetryRef.current = null; const notice = err.autoNotice; if (auto) appendChatFor(reviewPin.projectId, (prev) => [...prev, { id: `post-apply-notice:${reviewScope.requestId}:${Date.now()}`, role: "assistant", content: notice, advisory: true }]); } if (!auto) { // [PR-L6 spend, 2026-10-19] SPEND-3: a refused review is never retried (no Retry is left to replay it); the automatic pass says it was skipped, a manual one shows the route's sentence below
         const msg = err instanceof Error ? err.message : "Review failed";
         setScopedGenError(reviewScope, msg);
       }
@@ -6126,7 +6126,7 @@ export default function Home() {
         }),
         signal: tidyScope.signal,
       });
-      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => tidyScope.isCurrent() });
+      if (!res.ok) { await throwPostApplyInputRefusal(res); await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => tidyScope.isCurrent() }); } // [PR-L6 spend, 2026-10-19] SPEND-3: the input admission's 413 is its own typed refusal (no provider card, no Retry); every other failure as before
       const data = (await res.json()) as
         | {
             ok: true;
@@ -6188,7 +6188,7 @@ export default function Home() {
       }
     } catch (err) {
       if (isAbortError(err) || !tidyScope.isCurrent()) return; // cancellation, not a failure
-      if (!auto) {
+      if (err instanceof PostApplyInputRefusalError) { lastAiRetryRef.current = null; const notice = err.autoNotice; if (auto) appendChatFor(tidyPin.projectId, (prev) => [...prev, { id: `post-apply-notice:${tidyScope.requestId}:${Date.now()}`, role: "assistant", content: notice, advisory: true }]); } if (!auto) { // [PR-L6 spend, 2026-10-19] SPEND-3: a refused tidy is never retried (no Retry is left to replay it); the automatic pass says it was skipped, a manual one shows the route's sentence below
         const msg = err instanceof Error ? err.message : "Layout critic failed";
         setScopedGenError(tidyScope, msg);
       }
