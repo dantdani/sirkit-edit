@@ -40,16 +40,21 @@
     },
     {
       "id": "LR-3",
-      "status": "reserved",
+      "status": "paused (provider insufficient_quota); reservation remainder held for a resume",
       "reserved_at": "2026-10-19T20:45:00-04:00",
       "purpose": "runbook L.7 items 9-10, the ONE bounded live run of OD-252 item 10 / OD-253 item 7: the owner's four-motor sentence through the real page (Build) in NORMAL mode on the builder's own server (port 3005, verification worktree at 2a0e3079) and its own worker (--no-env-file --concurrency 1 --scope <the run's project>), the owner's OpenAI key and main database; a new synthetic project; Approve if a reviewable result arrives (the automatic Tidy and Review follow), then Prepare PCB's truthful preflight; no Continue-with-another-allowance click, no manual AI control, no chat, no acquisition or publication into the owner's catalog",
       "bounds": "server and worker env: SIRKIT_OPENAI_MODEL=gpt-5.6-sol, SIRKIT_BUILD_ITERATION_CAP=4, ANTHROPIC_API_KEY empty (reranker off), vendor keys absent, SIRKIT_DB_POOL_MAX=5; the task's operator unit SIRKIT_GENERATION_ALLOWANCE_MODEL_CALLS=24 / _OUTPUT_TOKENS=57344 / _INPUT_TOKENS=450000 / _CATALOG_SEARCHES=120 / _WALL_CLOCK_MS=21600000, one unit (pre-call input admission and admitCall across slices; SDK maxRetries 0 on every metered call); SIRKIT_POST_APPLY_INPUT_TOKENS=100000 per automatic Tidy / Review request (refused before any provider call above it; maxRetries 0)",
       "worst_case_usd": "3.83",
       "worst_case_basis": "CONFIRMED bounds in code (9a42c36b, 2a0e3079) at the price read 2026-10-19 on developers.openai.com (gpt-5.6-sol 4.00 input / 20.00 output per million, promotional through at least 2026-11-21): task input <= 450,000 x 4/M = 1.8000; task output <= 57,344 x 20/M = 1.1469 (both planner attempts reserved inside the unit); automatic post-approval passes: input <= 2 x 100,000 x 4/M = 0.8000 (image at detail high <= 3,000 tokens for gpt-5.6-sol per OpenAI's vision guide, inside the 100,000), output <= (1,536 + 2,048) x 20/M = 0.0717; embeddings (text-embedding-3-small, <= 120 catalog searches) <= 0.01 INFERRED generous. Sum 3.8286 -> 3.83. Tokens <= UTF-8 bytes of the request plus framing is the bound's stated assumption (byte-level BPE); a reported input above its bound stops the slice / pauses the passes",
-      "remaining_after_reservation_usd": "0.9772"
+      "remaining_after_reservation_usd": "0.9772",
+      "run_window": "2026-10-20T00:44:34Z (worker start) .. 2026-10-20T01:02Z (worker and server stopped by the builder)",
+      "actual_usd_so_far": "1.17",
+      "actual_basis": "CONFIRMED from the durable llm.call-record.v1 rows of project 21558dad-52cd-473a-9101-e72a16deded6 in the run window (read-only, counts only): 15 completed gpt-5.6-sol calls, 219,005 input / 14,629 output tokens; 1 call refused insufficient_quota with no tokens; 69 text-embedding-3-small calls, 1,470 tokens. Priced at 4.00 / 20.00 per million (all input at the uncached rate, an upper bound): 0.8760 + 0.2926 = 1.1686 -> 1.17 rounded up; embeddings < 0.0001. No automatic post-approval pass ran (nothing was approved).",
+      "outcome": "The plan slice planned 3 blocks with disclosed assumptions and coverage (shown in the task card). Block \"Four brushed-motor drivers\" was designed and SAVED. Then OpenAI refused the next calls: block \"Flight controller, IMU, and radio\" -> blocked provider_quota (insufficient_quota); block \"Battery input and regulated power\" -> waiting for the provider (rate_limit) with a scheduled retry at 01:49:36Z. The task kept the saved block, said so on the page (\"Waiting for the model provider; the design continues by itself at 01:49:36 UTC\"), and offered Stop design / Pause design. The builder stopped the worker and server while no slice was in flight; the task stays durable in the owner database for a resume. BLOCKER (owner): the owner's OpenAI account answers insufficient_quota - billing quota or spend limit reached; nothing more can run live until it is raised.",
+      "reserved_remaining_usd": "2.66"
     }
   ],
-  "builder_spent_known": "0.1928",
+  "builder_spent_known": "1.3628",
   "builder_reserved_uncertain": "0.00",
   "builder_remaining_provable": "0.9772",
   "prior_continuation_paid_calls": {
@@ -73,5 +78,5 @@
       "cost_basis": "CONFIRMED: the models list is not metered (no tokens)"
     }
   ],
-  "builder_reserved_open": "3.83"
+  "builder_reserved_open": "2.66"
 }
