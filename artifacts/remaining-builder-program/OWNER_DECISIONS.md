@@ -3544,3 +3544,28 @@ Under the existing OD-217 heading (`:2599`), append:
   split page-browser-e2e by the new L/M specs instead (about 26 min 27 s of 30 left in page-browser-e2e on `0f1c446b`'s figures, under
   OD-30's five minutes); another backoff ceiling, or no hold (a Start then waits up to 8 s for the worker). The merge gate of
   `ci-split.md` section 9 applies to the new job too: a required-status-check list on `main` must name `page-browser-e2e-agent`.
+
+## OD-255 — section J defaults: one sheet document and one project connectivity, legacy single-sheet behaviour kept, sheets as an additive optional field (product reliability J, 2026-10-22)
+
+- **Question:** runbook section J (multi-sheet schematics and workload limits) leaves choices the read-only maps name (`scratchpad` J maps,
+  summarised in `artifacts/product-reliability-simple-ui/multi-sheet/`). The owner's instruction ("complete everything; you are the chief
+  SWE") asks the lead to proceed. Which defaults apply?
+- **Default applied:** (1) a multi-sheet project is the SAME document with an optional sheet set (`sheets` on the schematic state and the
+  canonical schematic, optional `sheetId` on each entity, missing = root); an old single-sheet project loads, saves, digests and exports
+  byte-identically, and the project file's format version moves only when sheets exist (forward-only). (2) ONE project connectivity
+  function serves every consumer (PCB publication, ERC, design checks, BOM, missing parts, SPICE, KiCad export); local labels join only on
+  their own sheet; power and ground labels are project rails by EXACT name (KiCad power-symbol semantics), distinct names are never merged
+  by look-alike; hierarchical ports connect exactly the pins they bind. (3) The existing AGND/DGND/PGND -> "GND" collapse in the PCB netlist
+  and ERC is KEPT for documents without sheets (existing boards keep their nets) and reported as a finding; documents with sheets use the
+  strict rule. (4) Joining two distinct rails or isolation domains is a reported finding on existing designs; a sheet operation that would
+  create such a join is refused. (5) PCB publication keeps `hierarchyPath ["root"]` (component authority stays independent of sheet
+  organisation); sheet-local nets are displayed by sheet path name, their identity stays endpoint-based. (6) Until sheet-aware generation
+  lands, an AI replace-style result (generation, edit, tidy) on a multi-sheet project is refused with a message, never silently flattened.
+  (7) `app/page.tsx` keeps its line count (in-place edits; new UI in components and hooks); the Sheets navigator is a canvas chip with a
+  tree popover. (8) Bus / bundle ports, repeated sheet instances and placing one package's units on different sheets are refused with a
+  diagnostic until their own increment. (9) Generated results become sheets when the planner planned two or more blocks; an undeclared
+  same-name signal label in two blocks keeps the flat page and shows a finding; approving a generated multi-sheet result replaces the
+  project as one undoable transaction. (10) Workload: the 8-block plan limit, 3 worker slots and the orchestration cap stay; their limits
+  are stated truthfully in the task card and larger designs are organised into more sheets after review; no new spend.
+- **The owner may choose otherwise:** each item independently (notably a retroactive ground-split with a board re-sync, real sheet paths in
+  PCB publication, raising the block limit or the specialist cap, an editor-chosen workload size).
