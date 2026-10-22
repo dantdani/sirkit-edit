@@ -13,7 +13,7 @@ import { useEffect, useRef } from "react";
 import type { ProjectRole } from "@/app/lib/engineering/types";
 import { schematicCommands, schematicInitialState, schematicViewProbe, type SchematicFamily, type SchematicProbeSources, type SchematicViewState, type SheetPoint } from "@/app/lib/view-session/schematic";
 import type { ViewTarget } from "@/app/lib/view-session/targets";
-import type { ViewCommandDescriptor, ViewCommandEnvelope, ViewCommandResult, ViewSessionIdentity } from "@/app/lib/view-session/types";
+import type { ViewCommandDescriptor, ViewCommandEnvelope, ViewCommandOutcome, ViewCommandResult, ViewSessionIdentity } from "@/app/lib/view-session/types";
 import { useViewSession, type ViewCommandOk, type ViewCommandRefusal } from "@/app/components/view-session/useViewSession";
 
 export interface SchematicViewSessionInput {
@@ -52,7 +52,23 @@ export interface SchematicViewSession {
 
 type Deps = { sources: SchematicProbeSources | null };
 const INITIAL_STATE = schematicInitialState();
-const schematicSessionCommands = (deps: () => Deps): ViewCommandDescriptor<SchematicViewState, never>[] => schematicCommands(() => schematicViewProbe(deps().sources));
+/** [PR-L7 verify, 2026-10-20] The selections that are ECHOES of the page, never intents: the bus's initial one and every one
+ *  `schematic.observe` wrote (it mirrors the page's own selection as it was when observed). The selection effect below applies only
+ *  intents (select, clear-selection, an agent's command) to the page; an echo that differs from the page makes it observe the page
+ *  again, so the bus converges on the page and the page never moves. Applying an echo back let a stale echo and the page's newer
+ *  selection chase each other through two in-flight observes without end - an intent and a click landing together, or the editor
+ *  remounting over a page selection the fresh bus did not hold (it cleared the page's selection, whose observe then landed): the bus
+ *  flipped R1 / none on every render, "Maximum update depth exceeded", and multi-tab case 1 stalled past its 300 s
+ *  (`use-view-session.test.tsx`, its [PR-L7 verify] cases). */
+const ECHOED_SELECTIONS = new WeakSet<object>([INITIAL_STATE.selection]);
+const markEchoes = (outcome: ViewCommandOutcome<SchematicViewState>, before: SchematicViewState): ViewCommandOutcome<SchematicViewState> => {
+  if (outcome.ok && outcome.state.selection !== before.selection) ECHOED_SELECTIONS.add(outcome.state.selection);
+  return outcome;
+};
+const schematicSessionCommands = (deps: () => Deps): ViewCommandDescriptor<SchematicViewState, never>[] => schematicCommands(() => schematicViewProbe(deps().sources)).map((descriptor) => (descriptor.commandId !== "schematic.observe" ? descriptor : {
+  ...descriptor,
+  apply: (payload, context) => { const outcome = descriptor.apply(payload, context); return outcome instanceof Promise ? outcome.then((settled) => markEchoes(settled, context.state)) : markEchoes(outcome, context.state); },
+}));
 
 export function useSchematicViewSession(input: SchematicViewSessionInput): SchematicViewSession {
   const session = useViewSession<SchematicViewState, Deps>({
@@ -81,16 +97,19 @@ export function useSchematicViewSession(input: SchematicViewSessionInput): Schem
     const zoom = view.camera.zoom ?? camera.zoom;
     applyCamera({ zoom, pan: { x: size.width / 2 - view.camera.centerPx.x * zoom, y: size.height / 2 - view.camera.centerPx.y * zoom } });
   }, [view.camera]);
-  // Selection: apply when the bus selection differs from the page's.
+  const observe = (payload: Record<string, unknown>): void => { void command("schematic.observe", payload); };
+  // Selection: apply when the bus selection differs from the page's. [PR-L7 verify, 2026-10-20] An intent only: when the differing
+  // selection is an echo (the initial one, or an observe that landed after the page had moved on - each observe applies against the
+  // state it was dispatched on), the page is the truth and is observed again, so the bus converges on it and the page never moves.
   useEffect(() => {
     const { selectedId, selectedKicadId, applySelection } = latest.current;
     const current = selectedId ?? selectedKicadId ?? null;
     if (current === view.selection.id) return;
+    if (ECHOED_SELECTIONS.has(view.selection)) { observe({ selection: { id: current } }); return; }
     applySelection(view.selection.id, view.selection.family);
-  }, [view.selection]);
+  }, [view.selection]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Mirror the human's own changes.
-  const observe = (payload: Record<string, unknown>): void => { void command("schematic.observe", payload); };
   const currentId = input.selectedId ?? input.selectedKicadId ?? null;
   useEffect(() => { observe({ selection: { id: currentId } }); }, [currentId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {

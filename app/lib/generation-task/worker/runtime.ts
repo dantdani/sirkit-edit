@@ -204,19 +204,24 @@ export interface PumpWorkSignal {
  *  (woken at once by a commit that scheduled work, never later than the hold) and run the tick again, until a slice ran or the hold is
  *  spent. Without a signal in this process the request is never held and `heldMs` is absent, so the client backs off by itself. The
  *  version is read BEFORE each tick, so work committed while a tick ran wakes the next wait at once. `now` is a clock that moves
- *  (the task clock; the fixture freezes `Date.now()`). */
+ *  (the task clock; the fixture freezes `Date.now()`). [PR-L7 verify, 2026-10-20] A request that never waited (no hold asked, a
+ *  slice ran at once, or the request already gone) answers `heldMs: 0` exactly: two reads of a whole-millisecond clock may differ by
+ *  one even with no wait between them. */
 export async function runHeldPumpedSlice(input: { run: () => Promise<PumpedSliceAnswer>; holdMs: number; work: PumpWorkSignal | null; now: () => number; signal?: AbortSignal }): Promise<PumpedSliceAnswer & { heldMs?: number }> {
   let since = input.work?.version() ?? 0;
   let answer = await input.run();
   if (!input.work) return answer;
   const started = input.now();
+  let waited = false; // [PR-L7 verify, 2026-10-20]
   while (answer.ran === null && input.holdMs > 0 && !input.signal?.aborted) {
     const left = input.holdMs - (input.now() - started);
-    if (left <= 0 || !(await input.work.wait(left, { since, ...(input.signal ? { signal: input.signal } : {}) }))) break;
+    if (left <= 0) break;
+    waited = true;
+    if (!(await input.work.wait(left, { since, ...(input.signal ? { signal: input.signal } : {}) }))) break;
     since = input.work.version();
     answer = await input.run();
   }
-  return { ...answer, heldMs: Math.max(0, Math.round(input.now() - started)) };
+  return { ...answer, heldMs: waited ? Math.max(0, Math.round(input.now() - started)) : 0 };
 }
 
 /** [PR-L, 2026-10-17] The pump's CLIENT side (`createPumpTransport`, the worker process's HTTP loop) lives in `pump-transport.ts`, imported

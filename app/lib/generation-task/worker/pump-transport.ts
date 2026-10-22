@@ -7,7 +7,7 @@
  */
 import { GENERATION_SLICE_POLICY } from "../contracts";
 import { isoOf } from "../vocabulary";
-import { GENERATION_WORKER_PUMP_ROUTE, GenerationWorkerSetupError, type GenerationTransportTick, type GenerationWorkerTransport } from "./runtime";
+import { GENERATION_WORKER_PUMP_ROUTE, GenerationWorkerSetupError, PUMP_HOLD_MAX_MS, type GenerationTransportTick, type GenerationWorkerTransport } from "./runtime";
 import type { GenerationSliceReport } from "./slices";
 import type { GenerationTickReport } from "./worker";
 
@@ -57,9 +57,15 @@ export function pumpIdleWaitMs(emptyStreak: number, idleTickMs: number, idleMaxM
  * to `idleMaxMs` (the idle backoff, `pumpIdleWaitMs`), and an answer that settled a slice resets it, so an idle worker no longer loads the
  * server every second while a busy one still claims its next slice at once. A server that answers `heldMs` holds idle requests and
  * wakes them when work is committed (the fixture's in-process nudge): the wait is then asked of it (`?hold=<ms>`, the same doubling)
- * instead of slept here, so a Start or Resume is picked up at once. A failure (the server not up yet, a refused secret, a store
+ * instead of slept here, so a Start or Resume is picked up at once. [PR-L7 verify, 2026-10-20] The hold asked is never more than a
+ * server holds (`PUMP_HOLD_MAX_MS`), and any part of it the answer's `heldMs` says was not kept is slept here before the next request,
+ * so a server that answers `heldMs` without holding (or a proxy that drops the query) degrades to the plain backoff, never to a tight
+ * loop. A failure (the server not up yet, a refused secret, a store
  * outage) backs off up to 30 ticks and is logged once per streak (never a secret or a response body). `stop()` stops posting and aborts
  * the requests still in flight after the grace: the server treats that as a worker shutdown (the slices yield at a boundary or are released).
+ * [PR-L7 verify, 2026-10-20] A held idle request is in flight, not asleep, so `stop()` cannot wake it: it ends with its hold (at most
+ * `PUMP_HOLD_MAX_MS`, 8 s, inside the default 10 s grace, so nothing is aborted), and stopping an idle worker against a holding server
+ * can take up to about 8 s (it was at once with the plain backoff). A grace shorter than the hold aborts it when the grace ends.
  */
 export function createPumpTransport(options: PumpTransportOptions): GenerationWorkerTransport {
   const secret = (options.secret ?? "").trim();
@@ -89,7 +95,7 @@ export function createPumpTransport(options: PumpTransportOptions): GenerationWo
     const bound = setTimeout(() => controller.abort(new Error("GENERATION_WORKER_PUMP_TIMEOUT")), requestTimeoutMs + holdMs);
     lastTickAt = isoOf(clock());
     try {
-      const response = await fetchImpl(holdMs > 0 ? `${url}?hold=${Math.round(holdMs)}` : url, { method: GENERATION_WORKER_PUMP_ROUTE.method, headers: { authorization: `Bearer ${secret}` }, signal: controller.signal }); // [PR-L7, 2026-10-20] + the idle hold
+      const response = await fetchImpl(holdMs >= 1 ? `${url}?hold=${Math.round(holdMs)}` : url, { method: GENERATION_WORKER_PUMP_ROUTE.method, headers: { authorization: `Bearer ${secret}` }, signal: controller.signal }); // [PR-L7, 2026-10-20] + the idle hold
       const body = (await response.json().catch(() => ({}))) as PumpResponse;
       if (!response.ok || body.ok !== true) {
         const code = typeof body.code === "string" && /^[A-Z][A-Z0-9_]{2,63}$/.test(body.code) ? body.code : `HTTP_${response.status}`;
@@ -117,9 +123,10 @@ export function createPumpTransport(options: PumpTransportOptions): GenerationWo
         for (const slice of slices) log(`settled ${slice.kind} slice ${slice.sliceId}: ${slice.outcome}${slice.state ? ` (task ${slice.state})` : ""} - ${slice.detail}`);
         if (slices.length > 0) { empty = 0; hold = 0; } // [PR-L7, 2026-10-20] a settled slice resets the backoff: the next request goes at once
         else if (!stopping) {
+          if (heldMs !== null && heldMs < hold) await sleep(hold - heldMs); // [PR-L7 verify, 2026-10-20] the part of the asked hold the server did not keep
           empty += 1;
           const wait = pumpIdleWaitMs(empty, idleTickMs, idleMaxMs);
-          if (heldMs !== null) hold = wait; // a holding server waits for the next request instead, and wakes it when work is committed
+          if (heldMs !== null) hold = Math.min(Math.round(wait), PUMP_HOLD_MAX_MS); // a holding server waits for the next request instead, and wakes it when work is committed; [PR-L7 verify, 2026-10-20] never asked more than it holds
           else { hold = 0; await sleep(wait); }
         }
       } catch (error) {
@@ -143,6 +150,8 @@ export function createPumpTransport(options: PumpTransportOptions): GenerationWo
       stopping = false;
       loops = Array.from({ length: concurrency }, (_, index) => loop(index));
     },
+    // [PR-L7 verify, 2026-10-20] wakes sleeping loops at once; a request still in flight - a running slice, or an idle request a holding
+    // server keeps (at most PUMP_HOLD_MAX_MS) - is awaited and aborted only when the grace ends (the header)
     async stop(stopOptions) {
       stopping = true;
       for (const wake of [...sleepers]) wake();

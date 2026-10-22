@@ -14,7 +14,9 @@
  *  5. liveness from the store: a queued task with no worker reads "waiting for a worker" (`no_worker` past the pickup grace), never
  *     running;
  *  6. the pump (POST /api/generation-worker): refused without the worker secret (fail closed, nothing claimed), with it ONE slice per
- *     request until the task's validated result is reviewable; the pump transport drives the same route;
+ *     request until the task's validated result is reviewable; the pump transport drives the same route; [PR-L7 verify, 2026-10-20]
+ *     outside the fixture runtime no request is held: `?hold=8000` is answered at once without `heldMs`, so the transport never asks
+ *     this server for a hold (L7-HOLD-4; the clock here never moves, so a held request would never be answered);
  *  7. control: cancel is durable and fences a late result (the in-flight submission is never saved), pause / resume, the review and the
  *     moved base (stale), a revoked principal's task fails at its next slice;
  *  8. the fixture runtime's default composition (the browser proofs' path);
@@ -297,6 +299,21 @@ describe("[L4 routes 6] the pump: one awaited slice per request, behind the work
     const refusing = createPumpTransport({ origin: "http://localhost", workerId: "w-l4", secret: "wrong-secret", fetch: async (url, init) => pump(new Request(String(url), init as RequestInit)) });
     await expect(refusing.runOnce()).rejects.toBeInstanceOf(GenerationPumpError);
     expect((await json(await inspect(getReq(`/api/generation-tasks/${task.taskId}`), ctx(task.taskId)))).task.plan.blocks).toHaveLength(3);
+  });
+
+  it("[PR-L7 verify, 2026-10-20] outside the fixture runtime nothing is held: ?hold=8000 is answered at once without heldMs, and the pump transport never asks this server for a hold", async () => {
+    const held = await json(await pump(new Request("http://localhost/api/generation-worker?hold=8000", { method: "POST", headers: { authorization: `Bearer ${SECRET}` } })));
+    expect(held).toMatchObject({ ok: true, ran: null });
+    expect("heldMs" in held, "a server without the fixture's work signal never answers heldMs").toBe(false);
+    expect("heldMs" in (await json(await pump(pumpReq())))).toBe(false);
+    // the worker process's loop against this server: no answer says it holds, so every request goes without a hold and it backs off itself
+    const urls: string[] = [];
+    const transport = createPumpTransport({ origin: "http://localhost", workerId: "w-l4-hold", secret: SECRET, idleTickMs: 5, fetch: async (url, init) => { urls.push(String(url)); return pump(new Request(String(url), init as RequestInit)); } });
+    transport.start();
+    for (let turn = 0; turn < 400 && urls.length < 4; turn += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+    await transport.stop({ graceMs: 0 });
+    expect(urls.length).toBeGreaterThanOrEqual(4);
+    expect(urls.filter((url) => url.includes("hold="))).toEqual([]);
   });
 });
 

@@ -223,3 +223,54 @@ and 11.11 hold the full record). Local, deterministic, `--maxWorkers=4` unless s
 | pump idle backoff + fixture hold (`pump-transport.ts`, `l7-pump-idle-backoff` 7 cases) | before: 117 pump posts of 556 requests over four task specs (2.2 min); backoff alone slowed pickup (l5 case 1 8.8 s -> 20.6 s), so the fixture server holds an idle request and a durable commit wakes it; final: l4 43.7 s, l5 25.0 s, l7-drone 29.9 s, m2 12.1 s (2.0 min), agent-execution 48 pump posts in 328 s (was one per second) | 0 |
 | workflow-reading suites (33 files) and the pump / route suites | 332 passed, 3 skipped; 60 passed | 0 |
 | tsc, eslint (18 files), 32 generators twice (zero drift; `gen-demo-fixtures` writes CRLF on Windows - restored), secret scan tree mode | clean | 0 |
+
+## Review round (increment 7) [PR-L7 verify, 2026-10-20]
+
+The fixer round after the gates runner (local, run 2026-10-22, nothing committed): the CONFIRMED findings L7-HOLD-1 to -8, F1 and F2 of
+the increment-7 review, and one defect the browser runs found. Each production fix was shown red by reverting it alone, and each
+regression guard by the mutation its finding names (a scratch runner that rewrote one file, ran the one case and restored the file byte
+for byte); none of those runs touched the tree that was then gated.
+
+| finding | change | red without it |
+|---|---|---|
+| L7-HOLD-1 | `FixtureWorkSignal.waiting()`; `l7-pump-idle-backoff` 5 amended (the stub honours the request's signal), 10 and 11 new | the wait without the request's signal: 10 and 11; no aborted check in the hold loop: 10 (runs 2); settle keeping its timer, waiter or abort listener: 10; stop() not aborting, or post() dropping the signal: 5 |
+| L7-HOLD-2 | the fixture repository's `failOutbox` notifies a non-terminal re-queue due at once (a released slice's immediate takeover) | 12 |
+| L7-HOLD-3 | the hold asked is capped at `PUMP_HOLD_MAX_MS`; the part of an asked hold the answer's `heldMs` says was not kept is slept | 8 (no sleep: gaps all 0; no cap: 16 s holds asked) |
+| L7-HOLD-4 | `l4-routes` 6: outside the fixture `?hold=8000` is answered at once without `heldMs`; the transport never asks this server a hold | a work signal outside the fixture: the case times out (5 s) |
+| L7-HOLD-5 | `runHeldPumpedSlice` answers `heldMs: 0` when it never waited | 10 (`heldMs` 1 on a clock that moves between reads) |
+| L7-HOLD-6 | the upper bounds on `heldMs` removed (case 6 `< 1_000`, case 7 `< 8_000`); the test header states the timing assertions; `threshold-census.csv`'s row for the file counts 2 budgets (case 11's 60 s), regenerated | - (a removal; the ordering proofs stay) |
+| L7-HOLD-7 | only effects on `FIXTURE_PUMP_TOPICS` notify (`l7-pump-idle-backoff` 12 pins them to the two contracts' constants) | 12 |
+| L7-HOLD-8 | stop()'s behaviour against a holding server stated in `pump-transport.ts` and `worker.md`; case 9 pins it | 9 (stop() aborting at once) |
+| F1 | the merge-gate line for `page-browser-e2e-agent`: the end of `ci-split.md` section 11.11, `remaining-blockers.md` section 3 item 7 | - (records) |
+| F2 | the `_ci-admission.ts` block comment and `b24-d4-browser-split` case 2's title and header; `playwright.config.ts:21` kept and recorded as known-stale (`E2E_SKIP_SUFFIX` also reads B24's final-SHA config in `b24-f-verdict-lines` 2, which failed with `CI_ANCHOR` when the two moved) | - (prose) |
+
+Corrections to the CI builder's report (scratchpad `i7-result.json`, not in the tree): "It has no wall-clock bounds, so the threshold
+census is unchanged" was wrong - the suite asserted real-clock upper bounds on `heldMs`, measured in production code where the census
+cannot see them (now removed); and "Stopping the transport while an idle request is held waits for the grace period (10 s by default)
+before aborting it" was wrong - the held request ends with its hold (at most 8 s) inside the grace and nothing is aborted (case 9).
+
+The defect the browser runs found: `page-browser-e2e-b24`'s `multi-tab` case 1 failed at its 300 s timeout in round 1 (10 passed, 1
+failed, 2 did not run). Root cause, reproduced deterministically in jsdom: the schematic view session's two-way selection mirror applied
+`schematic.observe`'s stale echoes back to the page, and the page and the bus chased each other without end (React "Maximum update depth
+exceeded", the warning B24-D2B recorded with an UNKNOWN cause). Fixed in `useSchematicViewSession.ts`; four cases appended to
+`app/components/view-session/__tests__/use-view-session.test.tsx` are red on the unfixed hook in cases 1, 2 and 4
+(`performance-and-reliability.md`, its last bullet). A test file of its own failed `b24-d0-ci-split` 1 and 7 (it changed
+prompt-to-gerber's selection from the 585 files the committed timing evidence measured), so the cases live in the existing file.
+`ui-agent-command-coverage.csv` was regenerated: 13 rows now name that test directory for `view.selection`.
+
+| step (CI=true for the browser jobs, each as the workflow runs it) | result | exit |
+|---|---|---|
+| tsc (`validator.ts` deleted first) | round 1 189 s, round 2 100 s; no errors | 0 |
+| eslint, the changed and increment-7 `.ts`/`.tsx` files (20, then 21) | no errors, no warnings | 0 |
+| prompt-to-gerber's selection, `--maxWorkers=4` | round 1: 401 files passed, 6 skipped; 4,203 passed, 36 skipped (541 s); round 2: 4,207 passed, 36 skipped (387 s) | 0 |
+| agent-boundary-suites' selection | 177 passed, 2 skipped; 2,213 passed, 18 skipped (362 s; round 2 260 s) | 0 |
+| database-delivery's selection (round 1 only: the hook touches no PGlite suite) | 37 passed, 3 skipped; 270 passed, 12 skipped (203 s) | 0 |
+| stage10 (`app/lib/engineering/__tests__`, as benchmark.yml runs it) | 112 files, 1,286 passed (82 s; round 2 62 s, after the coverage CSV was regenerated) | 0 |
+| the 30 `scripts/generate-*.ts` generators, three passes | zero drift after the census and coverage CSVs were regenerated | 0 |
+| secret scan, tree mode | 4,633 entries, 0 findings | 0 |
+| page-browser-e2e (both steps, then its headroom step) | round 1: 43 + 4 passed, job 538 s, headroom 21 min 02 s; round 2: 43 + 4 passed, 527 s, 21 min 13 s | 0 |
+| page-browser-e2e-agent | round 1: 30 passed, 469 s, headroom 22 min 11 s; round 2: 30 passed, 439 s, 22 min 41 s | 0 |
+| page-browser-e2e-b24 | round 1: `multi-tab` 1 failed at 300 s (the defect above), 669 s, exit 1; round 2: 13 passed, 350 s, headroom 14 min 10 s; `multi-tab` 1.2 m, 37.4 s, 30 ms | 0 |
+
+All times are LOCAL (win32, `next dev`, the fixture runtime); no CI time is claimed. Evidence PNGs the browser runs rewrote (28, 20 and
+0 in round 1; 27, 20 and 0 in round 2) were restored from `HEAD`; no untracked file was left.

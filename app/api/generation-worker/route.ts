@@ -18,6 +18,10 @@
  * in-process work signal - the fixture container's, notified by every commit that schedules outbox work - the request waits for it and
  * ticks again (`runHeldPumpedSlice`), answering `heldMs`; so the worker's idle backoff costs no pickup latency: a Start, Resume, Retry
  * or acquisition wakes the waiting request at once. Without the signal (outside the fixture) nothing is held and `heldMs` is absent.
+ * [PR-L7 verify, 2026-10-20] Narrowed: work scheduled for NOW wakes the request at once - a commit with an effect on a topic the pump
+ * claims (Start, Resume, Retry, an acquisition) or a slice released for immediate takeover; work that falls due LATER (a provider
+ * wait's `notBefore`, a review recheck, a lapsed lease) is picked up when the running hold ends, at most 8 s late (it was at most the
+ * 1 s idle poll before the hold).
  */
 import { workerRoute } from "@/app/lib/auth/route-handlers";
 import { resolveMembershipRepository } from "@/app/lib/auth/identity-runtime";

@@ -55,6 +55,16 @@ leases RELEASED for immediate takeover (`releaseSlice`: the attempt's reservatio
 worker then resumes the slice from its last committed checkpoint (attempt + 1). Restarting the worker resumes every task from the durable
 state alone (`l3-worker-process` case 2, `l3-crash-resume`).
 
+[PR-L7 verify, 2026-10-20] The pump transport against a server that holds idle requests (the fixture runtime since increment 7:
+`?hold=<ms>`, at most 8 s, `PUMP_HOLD_MAX_MS`): an idle worker's request is then in flight, not asleep, so a shutdown cannot wake it. It
+ends with its hold - at most 8 s, inside the default 10 s grace, so nothing is aborted - and stopping an idle worker can take up to about
+8 s (it was immediate while the worker slept between idle polls). A `--grace-ms` shorter than the hold aborts the held request when the
+grace ends; `dev:with-worker` ends the worker after 5 s on Windows, which the server sees as a disconnect that ends the hold
+(`l7-pump-idle-backoff` 5 and 9). The worker never asks more hold than the server holds and sleeps any part of an asked hold the server
+did not keep, so a server that claims to hold without holding gets the plain backoff (case 8). Work the server schedules for now - a
+Start, Resume, Retry or acquisition, or a slice released for immediate takeover - wakes the held request at once; work that falls due
+later (a provider wait, a review recheck, a lapsed lease) is picked up when the running hold ends, at most 8 s late (cases 7 and 12).
+
 `/healthz` answers `{ mode, workerId, startedAt, running, lastTickAt, stopping, slicesSettled }`, bound to 127.0.0.1 only. Nothing the
 worker prints carries a secret: no environment value is printed, and an error's text is redacted and stripped of the database URL's
 credentials.

@@ -291,11 +291,11 @@ export function startsPglite(file: string, read: (file: string) => string | null
 // ── [B24-D4, 2026-10-10] OD-30's split of page-browser-e2e (ci-split.md section 11; declared last, so no cited line above moves) ───────
 // page-browser-e2e's first browser step carries an `env:` mapping with exactly one entry, SIRKIT_E2E_SKIP: a quoted comma-separated
 // list of spec globs, each `**` + `/<name>.spec.ts` naming a spec under e2e/ (playwright.config.ts:21 splits it, trims each glob and
-// drops blanks; a `**/` glob matches the file name at any depth). The appended job page-browser-e2e-b24 runs the specs its
-// one `run: pnpm exec playwright test <spec>...` line names, each an `e2e/<name>.spec.ts` that exists. The two lists name the same
-// specs. A malformed mapping, glob or argument, a glob naming no spec, a missing or doubled run line, or a disagreement throws CI_ANCHOR.
+// drops blanks; a `**/` glob matches the file name at any depth). [PR-L7 verify, 2026-10-20] Each appended job (page-browser-e2e-b24, page-browser-e2e-agent, OD-254) runs the specs its
+// one `run: pnpm exec playwright test <spec>...` line names, each an `e2e/<name>.spec.ts` that exists; the skip list names exactly the
+// specs of the two run lines, none in both. A malformed mapping, glob or argument, a glob naming no spec, a missing or doubled run line, or a disagreement throws CI_ANCHOR.
 
-/** Line 21 of playwright.config.ts after `testMatch`, exactly (admitted in place): the SIRKIT_E2E_SKIP reader and its dated note. */
+/** Line 21 of playwright.config.ts after `testMatch`, exactly (admitted in place): the SIRKIT_E2E_SKIP reader and its dated note. [PR-L7 verify, 2026-10-20] Its parenthetical predates OD-254 (page-browser-e2e now skips agent-execution too, which page-browser-e2e-agent runs) and stays as written: `b24-f-verdict-lines` 2 applies this exact text to B24's final-SHA snapshot of the config (ci-census-26dc8b8.json), so the two cannot move apart (ci-split.md section 11.11). */
 export const E2E_SKIP_SUFFIX = `testIgnore: (process.env.SIRKIT_E2E_SKIP ?? "").split(",").map((glob) => glob.trim()).filter(Boolean), // [B24-D4, 2026-10-10] OD-30's split: SIRKIT_E2E_SKIP, a comma-separated list of spec globs, leaves those specs out of a run (page-browser-e2e skips the four page-browser-e2e-b24 runs); unset or empty ignores nothing`;
 const B24_RUN = "run: pnpm exec playwright test ";
 /** Does the repository hold this file (through the reader the derivation was given)? */

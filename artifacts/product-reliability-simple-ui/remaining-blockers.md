@@ -47,7 +47,7 @@ stores; "live" means the owner's real keys, database or tools on this machine.
 4. **Admit the generation event to the orchestration coordinator's artifact set** under `SIRKIT_ORCHESTRATION_ENABLED=1`.
 5. **A durable engineering-notes store** for module contracts.
 6. **Persist sealed artifacts in the chat record.**
-7. **The CI split** (OD-250, default applied; increment 7's admission and re-measurement: the CI builder's OD-254).
+7. **The CI split** (OD-250, default applied; increment 7's admission and re-measurement: the CI builder's OD-254). [PR-L7 verify, 2026-10-20] The merge gate: once `main` has a required-status-check list, it must name `agent-boundary-suites`, `page-browser-e2e-b24` and `page-browser-e2e-agent` (`ci-split.md` section 9 and the end of section 11.11; OD-254); the B16-1A access audit recorded no branch protection on `main` (`ai-control-plane-b16-1a/repository-visibility-and-access-audit.md`).
 8. **Retire `/api/schematic/build-multi`**, unused by the page since L.4 (OD-252 item 8 kept it).
 9. **Exposing the placement → routing feedback loop** as an agent tool (OD-249).
 10. [PR-L7, 2026-10-20] **Section M2's owner decisions** (`component-resolution/m2-acquisition-design.md` section 6; the default applied
