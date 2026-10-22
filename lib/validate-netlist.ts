@@ -41,6 +41,8 @@ import type { CachedPart } from "@/app/lib/parts-cache";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import { UnionFind, buildNetUnionFind } from "@/app/lib/connectivity";
 import { kicadPinWorldPos, pinWorldPos, pointKey } from "@/app/lib/geometry";
+import { resolveProjectConnectivity } from "@/app/lib/schematic/project-connectivity";
+import { assertWholeProject, sheetOf } from "@/app/lib/schematic/sheets";
 
 export type NetlistViolationKind =
   | "self-short"
@@ -83,17 +85,24 @@ function findPin(part: CachedPart, token: string): KicadPin | undefined {
   );
 }
 
-type GeomPin = { pinId: string; refDes: string; point: Point };
+type GeomPin = { pinId: string; refDes: string; sheetId: string; point: Point };
 
 /**
  * Validate the drawn schematic (`state`) against the intended netlist (`logical`).
  * `parts` resolves each placed instance's catalog pins.
+ *
+ * [PR-J, 2026-10-22] Section J increment 2 (OD-255 items 2, 3): the ACTUAL partition is THE project connectivity authority's
+ * (app/lib/schematic/project-connectivity.ts; a document without sheets: the same buildNetUnionFind union as before, so the result
+ * is byte-identical). A document with sheets is validated by its scoped nets: coordinates and local labels join on their own sheet
+ * only, a label is anchored by a pin or wire vertex on ITS sheet, and the intended netlist's ground labels join per exact name (its
+ * logical netlist names AGND and DGND as two ground rails). Every sheet is included; one sheet's view is refused.
  */
 export function validateSchematicNetlist(
   logical: BuildLogicalNetlist,
   state: SchematicState,
   parts: Map<string, CachedPart>,
 ): NetlistValidation {
+  assertWholeProject(state, "netlist-validation");
   const violations: NetlistViolation[] = [];
 
   const instByRef = new Map<string, { inst: KicadComponentInstance; part: CachedPart }>();
@@ -106,38 +115,45 @@ export function validateSchematicNetlist(
   // ── Geometry pins + actual electrical partition ─────────────────────────────
   const geomPins: GeomPin[] = [];
   const pinsByRef = new Map<string, GeomPin[]>();
-  const kicadPinPoints: Point[] = [];
   for (const [refDes, { inst, part }] of instByRef) {
     for (const pin of part.pins) {
       const point = kicadPinWorldPos(inst, pin);
-      const gp: GeomPin = { pinId: `${refDes}.${pin.number}`, refDes, point };
+      const gp: GeomPin = { pinId: `${refDes}.${pin.number}`, refDes, sheetId: sheetOf(inst), point };
       geomPins.push(gp);
-      kicadPinPoints.push(point);
       const list = pinsByRef.get(refDes);
       if (list) list.push(gp);
       else pinsByRef.set(refDes, [gp]);
     }
   }
 
-  const auf = buildNetUnionFind(
-    state.components,
-    state.wires,
-    kicadPinPoints,
-    state.netLabels ?? [],
-  );
+  // THE project connectivity authority: the same union as before for a document without sheets (a pin site it registers beyond
+  // the ones above - a shadowed duplicate reference - joins nothing), the scoped union for a document with sheets.
+  const connectivity = resolveProjectConnectivity(state, (partId) => parts.get(partId) ?? null);
+  if (!connectivity.ok) {
+    const error = connectivity.diagnostics.find((item) => item.severity === "error");
+    throw new Error(`SHEET_HIERARCHY_INVALID: ${error?.code ?? "SHEET_SET_INVALID"}: ${error?.message ?? "the sheet structure is invalid"}`);
+  }
+  const strict = connectivity.mode === "multi-sheet";
   const aRootOf = new Map<string, string>();
   for (const g of geomPins) {
-    const k = pointKey(g.point);
-    aRootOf.set(g.pinId, auf.has(k) ? auf.find(k) : `solo:${g.pinId}`);
+    aRootOf.set(g.pinId, connectivity.rootAt(g.sheetId, g.point) ?? `solo:${g.pinId}`);
   }
 
   // ── Intended electrical partition (union-find over pin ids + net nodes) ──────
   const iuf = new UnionFind();
   const intendedConnected = new Set<string>(); // pins the netlist joins to something
+  // one ground node (a document without sheets), or one per exact ground name (a document with sheets: AGND, DGND, GND)
+  const groundNodesSeen = new Set<string>();
+  const groundNode = (name: string): string => {
+    const node = strict ? `##GND:${netLabelNameKey(name)}##` : GND_NODE;
+    groundNodesSeen.add(node);
+    return node;
+  };
+  const isGroundNode = (id: string): boolean => id === GND_NODE || (strict && id.startsWith("##GND:"));
 
   const resolvePinId = (endpoint: string): string | null => {
     const t = endpoint.trim();
-    if (t.toUpperCase() === "GND") return GND_NODE;
+    if (t.toUpperCase() === "GND") return groundNode("GND");
     const idx = t.indexOf(".");
     const refDes = idx < 0 ? t : t.slice(0, idx);
     const token = idx < 0 ? "" : t.slice(idx + 1);
@@ -156,9 +172,9 @@ export function validateSchematicNetlist(
         continue;
       }
       const kind = conn.labelKind ?? inferNetLabelKind(conn.labelName);
-      const node = kind === "ground" ? GND_NODE : `##LBL:${netLabelNameKey(conn.labelName)}##`;
+      const node = kind === "ground" ? groundNode(conn.labelName) : `##LBL:${netLabelNameKey(conn.labelName)}##`;
       iuf.union(id, node);
-      if (id !== GND_NODE) intendedConnected.add(id);
+      if (!isGroundNode(id)) intendedConnected.add(id);
     } else {
       const a = resolvePinId(conn.from);
       const b = resolvePinId(conn.to);
@@ -167,12 +183,12 @@ export function validateSchematicNetlist(
         continue;
       }
       iuf.union(a, b);
-      if (a !== GND_NODE) intendedConnected.add(a);
-      if (b !== GND_NODE) intendedConnected.add(b);
+      if (!isGroundNode(a)) intendedConnected.add(a);
+      if (!isGroundNode(b)) intendedConnected.add(b);
     }
   }
   const iRootOf = (pinId: string): string => (iuf.has(pinId) ? iuf.find(pinId) : `solo:${pinId}`);
-  const groundRoot = iuf.has(GND_NODE) ? iuf.find(GND_NODE) : null;
+  const groundRoots = new Set([...groundNodesSeen].filter((node) => iuf.has(node)).map((node) => iuf.find(node)));
 
   // ── 1/2. self-shorts (2-terminal parts) ─────────────────────────────────────
   const selfShortRoots = new Set<string>();
@@ -237,7 +253,7 @@ export function validateSchematicNetlist(
       violations.push({
         kind: "broken-connection",
         pins: pinIds,
-        ground: groundRoot !== null && root === groundRoot,
+        ground: groundRoots.has(root),
         message: `Pins that should share one net are split across ${actualRoots.size} nets: ${pinIds.join(", ")}.`,
       });
     }
@@ -258,16 +274,17 @@ export function validateSchematicNetlist(
     }
   }
 
-  // ── 5. net labels must be anchored to a pin or wire vertex ──────────────────
+  // ── 5. net labels must be anchored to a pin or wire vertex (on the label's own sheet) ──
+  const anchorKey = (sheetId: string, point: Point): string => (strict ? `${sheetId}\u0000${pointKey(point)}` : pointKey(point));
   const anchorKeys = new Set<string>();
-  for (const g of geomPins) anchorKeys.add(pointKey(g.point));
+  for (const g of geomPins) anchorKeys.add(anchorKey(g.sheetId, g.point));
   for (const c of state.components) {
     // Theory components in build output are just the shared ground symbol.
-    anchorKeys.add(pointKey(pinWorldPos(c, "pin")));
+    anchorKeys.add(anchorKey(sheetOf(c), pinWorldPos(c, "pin")));
   }
-  for (const w of state.wires) for (const v of w.vertices) anchorKeys.add(pointKey(v));
+  for (const w of state.wires) for (const v of w.vertices) anchorKeys.add(anchorKey(sheetOf(w), v));
   for (const label of state.netLabels ?? []) {
-    if (!anchorKeys.has(pointKey(label.position))) {
+    if (!anchorKeys.has(anchorKey(sheetOf(label), label.position))) {
       violations.push({
         kind: "unanchored-label",
         message: `Net label "${label.name}" at (${label.position.x},${label.position.y}) is not on any pin or wire.`,
@@ -289,6 +306,9 @@ export function validateTheoryNetlist(
   logical: LogicalNetlist,
   state: SchematicState,
 ): NetlistValidation {
+  // [PR-J, 2026-10-22] J2: this validates a freshly laid-out Theory generation (autoLayout output: one sheet by construction); its
+  // coordinate union is not sheet-scoped, so a document with sheets is refused rather than validated across sheets.
+  if (state.sheets !== undefined) throw new Error("SHEET_HIERARCHY_UNSUPPORTED: the Theory netlist validator checks a single-sheet layout; this document has sheets");
   const violations: NetlistViolation[] = [];
   const compById = new Map(state.components.map((c) => [c.id, c]));
   const logicalById = new Map(logical.components.map((c) => [c.id, c]));

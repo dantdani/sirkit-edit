@@ -70,7 +70,7 @@ export function schematicToSpice(
   state: SchematicState,
   options?: { analysis?: SpiceAnalysis; rawOutputPath?: string },
 ): { netlist: string; nodeMap: Record<string, string>; pinNodes: Record<string, string> } {
-  const analysis     = options?.analysis ?? DEFAULT_ANALYSIS;
+  const analysis     = options?.analysis ?? DEFAULT_ANALYSIS; if (state.sheets !== undefined) throw new Error(SPICE_SHEETS_PENDING); // [PR-J, 2026-10-22] J2: no deck from a cross-sheet coordinate union
   const rawOutputPath = options?.rawOutputPath;
 
   if (state.components.length === 0) {
@@ -237,3 +237,8 @@ export function schematicToSpice(
     pinNodes,
   };
 }
+
+/** [PR-J, 2026-10-22] Section J increment 2 (OD-255 item 2): the deck's nodes come from a coordinate union over the whole state, which
+ *  across sheets would join different sheets' local labels and coordinates; a project with sheets is refused until the SPICE export
+ *  reads the project connectivity (the /api/simulate route answers it as "Netlist generation failed: ..."). */
+export const SPICE_SHEETS_PENDING = "SIM_MULTI_SHEET_PENDING: simulation of a project organised into sheets is not available yet; nothing was simulated";

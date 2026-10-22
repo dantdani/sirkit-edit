@@ -124,20 +124,35 @@ type Net = {
   /** Distinct power-label names on this net (e.g. +3V3, VBUS). */
   powerNames: Set<string>;
   hasGround: boolean;
+  /** [PR-J J2] the ground name of a per-name ground net (`groundNodes: "per-name"` only). */
+  groundName?: string;
   /** Any label at all (incl. plain signal labels) — used for display names. */
   labelNames: Set<string>;
 };
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
+/**
+ * [PR-J, 2026-10-22] Section J increment 2 (J.4; OD-255 item 3). `groundNodes` says how ground-kind labels join:
+ *  - "shared" (the default; every document without sheets and every generated netlist): every ground label is the ONE ground node
+ *    whatever its text - the legacy rule existing designs keep (AGND and DGND are checked as one ground);
+ *  - "per-name" (a document with sheets, whose logical netlist names each ground rail exactly): one ground node per ground name, so
+ *    AGND, DGND and GND stay distinct nets - each still a ground reference (driven, a supply return) - and a "GND" endpoint is
+ *    the GND rail.
+ */
+export type ErcOptions = { groundNodes?: "shared" | "per-name" };
+
 export function runErc(
   netlist: BuildLogicalNetlist,
   /** partId → part (the build-loop / validator convention). */
   parts: Map<string, ErcPart>,
+  options: ErcOptions = {},
 ): ErcReport {
   const errors: ErcError[] = [];
   const uf = new UF();
   const GROUND = "@GND";
+  const perName = options.groundNodes === "per-name";
+  const groundNode = (name: string): string => (perName ? `@GND:${name}` : GROUND);
 
   // Resolve each placed component to its part once.
   const partsByRefDes = new Map<string, ErcPart>();
@@ -153,16 +168,16 @@ export function runErc(
     if (isLabelConnection(conn)) {
       const name = conn.labelName.trim().toUpperCase();
       const kind = conn.labelKind ?? inferNetLabelKind(name);
-      const node = kind === "ground" ? GROUND : `@LBL:${name}`;
+      const node = kind === "ground" ? groundNode(name) : `@LBL:${name}`;
       uf.union(`P:${conn.pin.trim()}`, node);
       // ground labels are ground regardless of their text
       if (kind !== "ground") labelKindByName.set(name, kind);
     } else {
       const f = parseEndpoint(conn.from);
       const t = parseEndpoint(conn.to);
-      const fk = "ground" in f ? GROUND : `P:${conn.from.trim()}`;
-      const tk = "ground" in t ? GROUND : `P:${conn.to.trim()}`;
-      if (fk === GROUND && tk === GROUND) continue;
+      const fk = "ground" in f ? groundNode("GND") : `P:${conn.from.trim()}`;
+      const tk = "ground" in t ? groundNode("GND") : `P:${conn.to.trim()}`;
+      if ("ground" in f && "ground" in t) continue;
       uf.union(fk, tk);
     }
   }
@@ -173,6 +188,7 @@ export function runErc(
     const root = uf.find(node);
     const net = nets.get(root) ?? { pins: [], powerNames: new Set(), hasGround: false, labelNames: new Set() };
     if (node === GROUND) net.hasGround = true;
+    else if (perName && node.startsWith("@GND:")) { net.hasGround = true; net.groundName = node.slice(5); }
     else if (node.startsWith("@LBL:")) {
       const name = node.slice(5);
       net.labelNames.add(name);
@@ -188,7 +204,7 @@ export function runErc(
     return nets.get(root);
   };
   const netName = (net: Net): string =>
-    [...net.labelNames][0] ?? (net.hasGround ? "GND" : net.pins.slice(0, 3).join(", "));
+    [...net.labelNames][0] ?? (net.hasGround ? net.groundName ?? "GND" : net.pins.slice(0, 3).join(", "));
 
   // Connected pin set (for floating checks).
   const connectedPins = new Set<string>();

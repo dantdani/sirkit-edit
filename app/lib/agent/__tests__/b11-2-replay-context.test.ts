@@ -21,6 +21,7 @@ import {
   SCH_COMPONENT_OPTIONAL_KEYS, SCH_COMPONENT_REQUIRED_KEYS,
   SCHEMATIC_STATE_OPTIONAL_KEYS, SCHEMATIC_STATE_REQUIRED_KEYS,
   WIRE_REQUIRED_KEYS, projectReplayContext, validateReplayContext,
+  NET_LABEL_OPTIONAL_KEYS, WIRE_OPTIONAL_KEYS,
 } from "../replay-context";
 import {
   AGENT_REPLAY_CAPSULE_SCHEMA, replayCapsule, ReplayCapsuleInvalidError,
@@ -216,9 +217,11 @@ describe("B11.2 §A — versioned replay context (R1)", () => {
     const expectations: Array<[string, readonly string[], readonly string[]]> = [
       ["export type SchematicState = {", SCHEMATIC_STATE_REQUIRED_KEYS, SCHEMATIC_STATE_OPTIONAL_KEYS],
       ["export type SchComponent = {", SCH_COMPONENT_REQUIRED_KEYS, SCH_COMPONENT_OPTIONAL_KEYS],
-      ["export type Wire = {", WIRE_REQUIRED_KEYS, []],
+      // [PR-J, 2026-10-22] pin moved: Wire and NetLabel gained optional sheet fields (sheetId; scope, portId, childSheetId) and the
+      // replay key lists carry them, so the expectation is the lists' optional halves instead of [] (OD-255 item 1).
+      ["export type Wire = {", WIRE_REQUIRED_KEYS, WIRE_OPTIONAL_KEYS],
       ["export type Point = {", POINT_REQUIRED_KEYS, []],
-      ["export type NetLabel = {", NET_LABEL_REQUIRED_KEYS, []],
+      ["export type NetLabel = {", NET_LABEL_REQUIRED_KEYS, NET_LABEL_OPTIONAL_KEYS],
       ["export type KicadComponentInstance = {", KICAD_COMPONENT_REQUIRED_KEYS, KICAD_COMPONENT_OPTIONAL_KEYS],
     ];
     for (const [declaration, required, optional] of expectations) {

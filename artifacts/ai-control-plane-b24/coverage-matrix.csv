@@ -988,4 +988,6 @@ app/page.tsx|shortcut|window|keydown:onKey|onKey,app/page.tsx,dispatcher,view.ca
 -,-,-,project.autosave,-,-,-,-,-,-,1,-
 -,-,-,project.engineering-effects,-,-,-,-,-,-,0,-
 -,-,-,project.service-health,-,-,-,-,-,-,0,-
+-,-,-,schematic.move-to-sheet,schematic_assign_sheet (from-precondition) + schematic_create_sheet + schematic_add_sheet_port + schematic_add_sheet_pin + schematic_add_net_label (+ offset transforms),-,-,-,-,-,2,-
+-,-,-,schematic.sheet-structure,"schematic_{create,delete,rename}_sheet + schematic_reorder_sheets + schematic_{add,remove}_sheet_port + schematic_{add,remove}_sheet_pin + schematic_set_label_scope + schematic_{add,delete,update}_net_label",-,-,-,-,-,2,-
 -,-,-,validation.constraints-inspect,constraint evaluation read,-,-,-,-,-,0,-

@@ -15,6 +15,7 @@
 import type { SchematicState } from "@/lib/schematic-types";
 import { theoryPinContract } from "@/app/lib/schematic/theory-physicality"; // [PR-G, 2026-10-17] the shared rule's own module, not the Stage 4 bridge (forbidden in Stage 3 code)
 import { listUnresolvedInstances, unresolvedInstancesRefusal, UNRESOLVED_MISSING_LABEL, type UnresolvedInstance } from "./unresolved-instances";
+import { assertWholeProject } from "@/app/lib/schematic/sheets"; // [PR-J, 2026-10-22] J2: the census counts every sheet; a sheet view is refused
 
 export const PCB_SYNC_PREFLIGHT_REPORT_SCHEMA = "sirkit.pcb-sync-preflight-report.v1" as const;
 /** The unresolved rows listed in full; the rest are counted (`truncated`), never dropped silently. */
@@ -62,6 +63,7 @@ const SERVER_STAGE_DETAIL: Readonly<Record<PcbSyncServerStage, string>> = Object
 
 /** The report, computed from the SAME functions the editor's handleSync calls, in the same order. */
 export function buildPcbSyncPreflightReport(state: SchematicState): PcbSyncPreflightReport {
+  assertWholeProject(state, "pcb-sync-preflight");
   const unresolved = listUnresolvedInstances(state);
   const rows: PcbSyncPreflightUnresolvedRow[] = unresolved.slice(0, MAX_PREFLIGHT_REPORT_ROWS).map((item) => ({ ...item, missingLabel: UNRESOLVED_MISSING_LABEL[item.missing] }));
   const kicad = state.kicadComponents ?? [];

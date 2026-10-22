@@ -9,7 +9,7 @@
  * Body: { state: SchematicState; title?: string; description?: string; company?: string }
  */
 
-import { exportToKicadSch, SchematicExportLicenseError, SchematicExportValidationError } from "@/app/lib/kicad-export";
+import { exportToKicadSch, EXPORT_HIERARCHY_PENDING, SchematicExportHierarchyPendingError, SchematicExportLicenseError, SchematicExportValidationError } from "@/app/lib/kicad-export";
 import { validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
 import { getFullPartsByIds } from "@/app/lib/parts-search";
 import type { SchematicState } from "@/lib/schematic-types";
@@ -75,7 +75,7 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
       },
       { status: 422 },
     );
-  }
+  } if (state.sheets !== undefined) return Response.json({ ok: false, code: "EXPORT_HIERARCHY_PENDING", error: EXPORT_HIERARCHY_PENDING }, { status: 422, headers: { "Cache-Control": "no-store" } }); // [PR-J, 2026-10-22] J2: a project with sheets is never exported as one flat page (before any catalog read)
 
   // [B19-D I5c rows 15, 16] Every instance that declares an atomic revision is exported from the PUBLISHED snapshot the server
   // loads for that revision — its symbol and its licenses — and the declared symbol version must match. Selections in the
@@ -155,7 +155,7 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
     });
   } catch (error) {
     // [B19-D I5a] a pinned symbol whose license does not permit export: refuse, name the components, send nothing of the symbol
-    if (error instanceof SchematicExportLicenseError) {
+    if (error instanceof SchematicExportHierarchyPendingError) return Response.json({ ok: false, code: error.code, error: error.message }, { status: 422, headers: { "Cache-Control": "no-store" } }); if (error instanceof SchematicExportLicenseError) { // [PR-J J2] the hierarchy refusal: defense in depth
       return Response.json(
         {
           ok: false,

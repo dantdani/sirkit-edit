@@ -60,13 +60,13 @@ function remapConnection(
 
 export function mergeBuildNetlists(
   blocks: NamedBlock[],
-): { netlist: BuildLogicalNetlist; notes: string[] } {
+): { netlist: BuildLogicalNetlist; notes: string[]; /** [PR-J, 2026-10-22] J5-1: each block's own netlist with its FINAL refDes (input order) */ blocks: NamedBlock[] } {
   const used = new Set<string>();
   const components: BuildLogicalComponent[] = [];
   const connections: BuildLogicalConnection[] = [];
   const notes: string[] = [];
-
-  for (const block of blocks) {
+  const merged: NamedBlock[] = []; // [PR-J, 2026-10-22] J5-1: the per-block slices of `components` / `connections` (in place: no line moves)
+  for (const block of blocks) { const start = { components: components.length, connections: connections.length };
     // Pass 1 — assign final refDes for this block (de-collide), build the remap.
     const remap = new Map<string, string>();
     for (const c of block.netlist.components) {
@@ -93,11 +93,11 @@ export function mergeBuildNetlists(
     for (const conn of block.netlist.connections) {
       connections.push(remapConnection(conn, remap));
     }
-  }
+    merged.push({ name: block.name, netlist: { components: components.slice(start.components), connections: connections.slice(start.connections), explanation: block.netlist.explanation } }); }
 
   const explanation = blocks
     .map((b) => `${b.name}: ${b.netlist.explanation || "(no notes)"}`)
     .join("\n\n");
 
-  return { netlist: { components, connections, explanation }, notes };
+  return { netlist: { components, connections, explanation }, notes, blocks: merged };
 }

@@ -103,7 +103,7 @@ export function compileCanonicalIr(input: CompileIrInput): CompileIrResult {
   const { project } = input;
   const test = selectTest(project, input.testId);
   const design = project.designRevisions.find((candidate) => candidate.id === test.baseDesignRevisionId) ?? getActiveDesign(project);
-  const schematic = design.schematic;
+  const schematic = design.schematic; if (schematic.sheets !== undefined) throw new Error("SIM_MULTI_SHEET_PENDING: compiling a simulation of a project organised into sheets is not available yet; nothing was compiled"); // [PR-J, 2026-10-22] J2: never a cross-sheet coordinate union
   const parts = new Map((input.parts ?? []).map((part) => [part.id, part]));
   const kicad = schematic.kicadComponents ?? [];
   const labels = schematic.netLabels ?? [];

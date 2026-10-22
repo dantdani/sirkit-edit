@@ -139,6 +139,10 @@ export const KERNEL_OPERATION_BINDINGS = Object.freeze({
     "schematic_add_wire", "schematic_delete_wire", "schematic_update_wire_geometry",
     "schematic_add_net_label", "schematic_delete_net_label", "schematic_update_net_label",
     "schematic_add_component",
+    // [PR-J, 2026-10-22] sheet-operation inverses (every sheet kind is its own inverse family).
+    "schematic_create_sheet", "schematic_delete_sheet", "schematic_rename_sheet", "schematic_reorder_sheets",
+    "schematic_add_sheet_port", "schematic_remove_sheet_port", "schematic_add_sheet_pin", "schematic_remove_sheet_pin",
+    "schematic_set_label_scope", "schematic_assign_sheet",
   ],
   // ── B06 — canonical schematic semantic mutations ───────────────────────────
   "schematic.delete-component": ["schematic_delete_component"],
@@ -153,6 +157,18 @@ export const KERNEL_OPERATION_BINDINGS = Object.freeze({
     "schematic_add_net_label", "schematic_delete_net_label", "schematic_update_net_label",
   ],
   "schematic.add-component": ["schematic_add_component"],
+  // [PR-J, 2026-10-22] runbook J / OD-255: the sheet tree, ports, sheet pins and label scope (with the hierarchical labels a port
+  // needs), and the move of entities between sheets as ONE transaction (assignments, the ports / sheet pins / hierarchical labels that
+  // carry the crossing nets, and an optional offset). No other command may change sheet membership (the graph diff refuses it).
+  "schematic.sheet-structure": [
+    "schematic_create_sheet", "schematic_delete_sheet", "schematic_rename_sheet", "schematic_reorder_sheets",
+    "schematic_add_sheet_port", "schematic_remove_sheet_port", "schematic_add_sheet_pin", "schematic_remove_sheet_pin",
+    "schematic_set_label_scope", "schematic_add_net_label", "schematic_delete_net_label", "schematic_update_net_label",
+  ],
+  "schematic.move-to-sheet": [
+    "schematic_assign_sheet", "schematic_create_sheet", "schematic_add_sheet_port", "schematic_add_sheet_pin",
+    "schematic_add_net_label", "schematic_transform_component", "schematic_update_wire_geometry", "schematic_update_net_label",
+  ],
   // One chat-initiated tier-1 apply = one atomic transaction that may mix
   // property edits and pre-planned deletes (provider output is compiled by
   // the deterministic tier-1 planner; it never supplies operations directly).

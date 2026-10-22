@@ -38,6 +38,7 @@ import { lineUnitPrice } from "@/app/lib/bom/line-price"; // [B19-D I5b review]
 
 export { lineUnitPrice };
 import { safeSpreadsheetCell } from "@/app/lib/atomic/security";
+import { assertWholeProject } from "@/app/lib/schematic/sheets"; // [PR-J, 2026-10-22] J2: one BOM for the whole project
 import { safeHref } from "@/app/lib/net/href-policy"; // [B19-D I5c review]
 import { vendorProductPageUrl } from "@/app/lib/distributor-links"; // [B19-D I5c review]
 
@@ -152,6 +153,9 @@ export async function buildBom(
   componentSelections: Readonly<Record<string, ProjectComponentPin>> = {},
   options: BomBuildOptions = {},
 ): Promise<BomResult> {
+  // [PR-J, 2026-10-22] J2 (J.5): every part on every sheet is one line item once (sheets organise the drawing, not the board); a
+  // sheet's view is refused (SHEET_LENS_NOT_PROJECT)
+  assertWholeProject(state, "bom");
   const kicadComponents = state.kicadComponents ?? [];
   const components = state.components ?? [];
 

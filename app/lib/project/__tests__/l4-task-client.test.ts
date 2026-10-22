@@ -285,3 +285,27 @@ describe("[L4 client 5] the page's wiring (app/page.tsx read as text, as the PR-
     expect(reattach).not.toContain("startGenerationTask");
   });
 });
+
+describe("[PR-J J.7] the status sentence says how many blocks still wait, and for what (OD-255 item 10)", () => {
+  const at = new Date(T0).toISOString();
+  const block = (index: number, status: string) => ({ blockId: `b${index}`, name: String.fromCharCode(64 + index), status, strategy: "S1-baseline", turnsUsed: 0, blocker: null });
+  const running = (statuses: string[], events: Array<{ seq: number; type: string; blockId: string | null }> = []) => reduceGenerationTaskView(null, {
+    task: readGenerationTaskSnapshot({ schema: "sirkit.generation-task-snapshot.v1", taskId: "generation-task:" + "d".repeat(32), clientRequestId: "00000000-0000-4000-8000-000000000001", scope: { tenantId: "local", ...SCOPE }, state: "running", terminal: false, phase: "designing", provider: "openai", createdAt: at, updatedAt: at, serverNow: at, liveness: { state: "running", since: null, retryAt: null }, plan: { planner: "planned", rationale: "", assumptions: [], blocks: statuses.map((status, index) => block(index + 1, status)) }, blocker: null, failure: null, usage: { slices: 1, attempts: 1, modelCalls: 1, uncertainModelCalls: 0, inputTokens: 0, outputTokens: 0, catalogSearches: 0, cacheHits: 0 }, base: { ...BASE, moved: false }, result: null, review: null, control: { cancelRequested: false, pauseRequested: false }, actions: ["cancel", "pause"], retryBlocks: [], eventCursor: events.length, activity: [] })!,
+    events: events.map((event) => ({ ...event, at, phase: "designing", message: `m${event.seq}` })), gap: false,
+  }).view;
+
+  it("three blocks designing and five queued: the five are said to wait for a free worker slot", () => {
+    expect(generationTaskStatusText(running(["designing", "designing", "designing", "queued", "queued", "queued", "queued", "queued"]))).toBe('Running: designing "A", "B", "C"; 5 more block(s) queued for a free worker slot.');
+  });
+
+  it("nothing queued: the sentence is byte-identical to the one before (saved and blocked blocks are not queued)", () => {
+    expect(generationTaskStatusText(running(["designing", "designing", "saved", "blocked"]))).toBe('Running: designing "A", "B".');
+    expect(generationTaskStatusText(running(["designing"]))).toBe('Running: designing "A".');
+  });
+
+  it("a queued block whose latest milestone is the provider's wait waits for the provider, not for a slot; a block claimed again after its wait is not", () => {
+    const waits = [{ seq: 1, type: "block_started", blockId: "b3" }, { seq: 2, type: "waiting_provider", blockId: "b3" }, { seq: 3, type: "waiting_provider", blockId: "b4" }, { seq: 4, type: "worker_claimed", blockId: "b4" }];
+    expect(generationTaskStatusText(running(["designing", "designing", "queued", "designing", "queued"], waits))).toBe('Running: designing "A", "B", "D"; 1 more block(s) queued for a free worker slot; 1 more block(s) waiting for the model provider.');
+    expect(generationTaskStatusText(running(["designing", "saved", "queued"], waits))).toBe('Running: designing "A"; 1 more block(s) waiting for the model provider.');
+  });
+});

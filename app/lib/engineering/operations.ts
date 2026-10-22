@@ -1,12 +1,14 @@
 import type { BBox } from "../pcb/geometry";
 import type { LayerId } from "../pcb/layers";
 import type { PcbBoard, Track, Via, Zone } from "../pcb/types";
-import { refDesKey } from "@/lib/schematic-types";
+import { ROOT_SHEET_ID, refDesKey } from "@/lib/schematic-types";
+import { railJoinKeys } from "@/app/lib/schematic/project-connectivity";
+import { sheetOf } from "@/app/lib/schematic/sheets";
 import { markZoneFillDirty } from "../pcb/zones/fill-lifecycle";
 import { validateBoardDimension, validatePcbBoardStructure } from "./pcb-board-structure";
 import { computeProjectRevision, flagsForRevisionDelta, semanticStateDigest } from "./revision";
 import { validateSchematicPoint, validateSchematicRotation, validateSchematicWireVertices } from "./schematic-geometry";
-import { parseCanonicalSchematic, validateCanonicalSchematic, type CanonicalSchematic } from "./schematic-model";
+import { CANONICAL_SCHEMATIC_SCHEMA, CANONICAL_SCHEMATIC_SCHEMA_V2, fromCanonicalSchematic, parseCanonicalSchematic, validateCanonicalSchematic, type CanonicalSchematic } from "./schematic-model";
 import { engineeringDigest, objectVersion } from "./stable";
 import type { CanonicalProjectState, EngineeringChangeSet, EngineeringOperation, ProjectRevision } from "./types";
 
@@ -17,6 +19,18 @@ const SCHEMATIC_OPERATION_KINDS = new Set<EngineeringOperation["kind"]>([
   "schematic_add_wire", "schematic_delete_wire", "schematic_update_wire_geometry",
   "schematic_add_net_label", "schematic_delete_net_label", "schematic_update_net_label",
   "schematic_add_component",
+  // [PR-J, 2026-10-22] canonical sheet operations (runbook J, OD-255).
+  "schematic_create_sheet", "schematic_delete_sheet", "schematic_rename_sheet", "schematic_reorder_sheets",
+  "schematic_add_sheet_port", "schematic_remove_sheet_port", "schematic_add_sheet_pin", "schematic_remove_sheet_pin",
+  "schematic_set_label_scope", "schematic_assign_sheet",
+]);
+
+/** [PR-J, 2026-10-22] The sheet operations: a batch holding one is refused when it would join two different rail / isolation
+ *  domains that were not joined before it (OD-255 item 4). */
+export const SHEET_OPERATION_KINDS = new Set<EngineeringOperation["kind"]>([
+  "schematic_create_sheet", "schematic_delete_sheet", "schematic_rename_sheet", "schematic_reorder_sheets",
+  "schematic_add_sheet_port", "schematic_remove_sheet_port", "schematic_add_sheet_pin", "schematic_remove_sheet_pin",
+  "schematic_set_label_scope", "schematic_assign_sheet",
 ]);
 
 /** Schematic ops require the typed canonical model — never guessed from opaque state. */
@@ -64,6 +78,11 @@ function objectEntries(project: CanonicalProjectState): Map<string, ObjectEntry>
     for (const item of schematic.kicadComponents) entries.set(`schcomp:${item.id}`, { key: `schcomp:${item.id}`, kind: "schematic-component", id: item.id, value: item, netIds: [], layers: [], boundsByLayer: {} });
     for (const item of schematic.wires) entries.set(`schwire:${item.id}`, { key: `schwire:${item.id}`, kind: "schematic-wire", id: item.id, value: item, netIds: [], layers: [], boundsByLayer: {} });
     for (const item of schematic.netLabels) entries.set(`schlabel:${item.id}`, { key: `schlabel:${item.id}`, kind: "schematic-label", id: item.id, value: item, netIds: [], layers: [], boundsByLayer: {} });
+    // [PR-J, 2026-10-22] each sheet (with its ports) and the sheet order are change-set objects; a single-sheet document has none.
+    if (schematic.sheets) {
+      for (const item of schematic.sheets.sheets) entries.set(`schsheet:${item.id}`, { key: `schsheet:${item.id}`, kind: "schematic-sheet", id: item.id, value: item, netIds: [], layers: [], boundsByLayer: {} });
+      entries.set("schsheets:order", { key: "schsheets:order", kind: "schematic-sheet-order", id: "order", value: schematic.sheets.sheets.map((item) => item.id), netIds: [], layers: [], boundsByLayer: {} });
+    }
   }
   return entries;
 }
@@ -102,6 +121,8 @@ export interface AppliedOperations { project: CanonicalProjectState; inverseOper
 
 export function applyEngineeringOperations(source: CanonicalProjectState, operations: readonly EngineeringOperation[]): AppliedOperations {
   const project = structuredClone(source); const board = project.pcb; const inverse: EngineeringOperation[] = []; const seen = new Set<string>();
+  // [PR-J, 2026-10-22] OD-255 item 4: the rail / isolation-domain joins present before a batch that holds a sheet operation.
+  const railJoinsBefore = operations.some((operation) => SHEET_OPERATION_KINDS.has(operation.kind)) ? schematicRailJoins(source.schematic) : null;
   let schematicTouched = false;
   let boardTouched = false;
   for (const operation of operations) {
@@ -156,6 +177,7 @@ export function applyEngineeringOperations(source: CanonicalProjectState, operat
   if (schematicTouched) {
     const integrityIssues = validateCanonicalSchematic(project.schematic);
     if (integrityIssues.length > 0) throw new Error(`SCHEMATIC_INTEGRITY:${integrityIssues[0]}`);
+    refuseCreatedRailJoins(railJoinsBefore, project.schematic);
   }
   // B08 — the COMPLETE resulting board must satisfy the structural contract
   // after the batch (global id uniqueness, referential integrity, dimensional
@@ -526,6 +548,11 @@ function validateSchematicOperationGeometry(operation: EngineeringOperation): st
       ];
     case "schematic_add_component":
       return [...validateSchematicPoint({ x: operation.component.x, y: operation.component.y }, at), ...validateSchematicRotation(operation.component.rotation, `${at}.rotation`)];
+    // [PR-J, 2026-10-22] sheet blocks and sheet pins follow the same grid contract.
+    case "schematic_create_sheet":
+      return operation.sheet.block ? [...validateSchematicPoint({ x: operation.sheet.block.x, y: operation.sheet.block.y }, `${at}.sheet.block`), ...validateSchematicPoint({ x: operation.sheet.block.width, y: operation.sheet.block.height }, `${at}.sheet.block.size`)] : [];
+    case "schematic_add_sheet_pin":
+      return [...validateSchematicPoint(operation.pin.position, `${at}.pin.position`), ...validateSchematicRotation(operation.pin.orientation, `${at}.pin.orientation`)];
     case "schematic_replace_component":
       return [
         ...operation.wireEndpointMoves.flatMap((move, index) => validateSchematicPoint(move.to, `${at}.wireEndpointMoves[${index}].to`)),
@@ -793,8 +820,173 @@ function applySchematicOperation(project: CanonicalProjectState, operation: Engi
       inverse.unshift({ ...inverseBase, operationId: `inverse:${operation.operationId}`, kind: "schematic_delete_component", family: "kicad", componentId: operation.component.id, removeWireIds: [], removeNetLabelIds: [] });
       schematic.kicadComponents.splice(operation.atIndex, 0, structuredClone(operation.component) as never);
     }
+  } else if (SHEET_OPERATION_KINDS.has(operation.kind)) {
+    applySheetOperation(schematic, operation, inverse);
   }
   project.schematic = schematic;
+}
+
+/** [PR-J, 2026-10-22] The rail-join keys of an opaque schematic slot (null when it is not a valid canonical schematic). */
+function schematicRailJoins(value: unknown): string[] | null {
+  const parsed = parseCanonicalSchematic(value);
+  return parsed ? railJoinKeys(fromCanonicalSchematic(parsed)) : null;
+}
+
+/** [PR-J, 2026-10-22] OD-255 item 4: a batch holding a sheet operation may not CREATE a join of two different rail / isolation
+ *  domains (joins that already existed are findings, never a reason to refuse an unrelated edit). */
+function refuseCreatedRailJoins(before: string[] | null, after: unknown): void {
+  if (!before) return;
+  const created = (schematicRailJoins(after) ?? []).filter((join) => !before.includes(join));
+  if (created.length > 0) throw new Error(`SHEET_RAIL_JOIN_REFUSED:${created.join(", ")}: this sheet operation would connect different rail / isolation domains (${created.map((join) => join.split("|").join(" + ")).join("; ")}); nothing was changed`);
+}
+
+/**
+ * [PR-J, 2026-10-22] Runbook J / OD-255: the canonical sheet operations, each with an EXACT inverse (digest-identical replay). The
+ * whole-document rules (one root first, parents, cycles, depth, names, ports, label references, one sheet pin per port) are enforced
+ * by the canonical validator after every operation; these branches enforce the per-operation preconditions and keep the document in
+ * its canonical form (the tree exists only while a child sheet exists; schemaVersion is v2 exactly while it exists).
+ */
+function applySheetOperation(schematic: CanonicalSchematic, operation: EngineeringOperation, inverse: EngineeringOperation[]): void {
+  const inverseBase = { schemaVersion: 1 as const, units: "px" as const, operationId: `inverse:${operation.operationId}` };
+  const requireSheets = (): NonNullable<CanonicalSchematic["sheets"]> => {
+    if (!schematic.sheets) throw new Error(`OBJECT_NOT_FOUND:schematic-sheet: the document has no sheets (${operation.operationId})`);
+    return schematic.sheets;
+  };
+  const requireSheet = (sheetId: string) => {
+    const sheet = requireSheets().sheets.find((item) => item.id === sheetId);
+    if (!sheet) throw new Error(`OBJECT_NOT_FOUND:schematic-sheet:${sheetId}`);
+    return sheet;
+  };
+  if (operation.kind === "schematic_create_sheet") {
+    const sheet = operation.sheet;
+    if (sheet.parentId === null || sheet.id === ROOT_SHEET_ID) throw new Error(`INVALID_SHEET:${sheet.id}: only child sheets are created (the root sheet is the overview)`);
+    if (sheet.ports !== undefined) throw new Error(`INVALID_SHEET:${sheet.id}: a new sheet has no ports (add them with schematic_add_sheet_port)`);
+    if (!schematic.sheets) {
+      const root = operation.root;
+      if (!root || root.id !== ROOT_SHEET_ID || root.parentId !== null || root.ports !== undefined || root.block !== undefined) throw new Error(`INVALID_SHEET:${sheet.id}: the first child sheet carries the root record { id: "${ROOT_SHEET_ID}", parentId: null } without ports or block`);
+      if (operation.atIndex !== 1) throw new Error(`INVALID_INDEX:schematic-sheet:${sheet.id}`);
+      schematic.sheets = { version: 1, sheets: [structuredClone(root), structuredClone(sheet)] };
+      schematic.schemaVersion = CANONICAL_SCHEMATIC_SCHEMA_V2;
+    } else {
+      if (operation.root !== undefined) throw new Error(`INVALID_SHEET:${sheet.id}: the sheet tree exists; the root record is only carried by the first child sheet`);
+      if (schematic.sheets.sheets.some((item) => item.id === sheet.id)) throw new Error(`ID_REUSE:schematic-sheet:${sheet.id}`);
+      if (operation.atIndex < 1 || operation.atIndex > schematic.sheets.sheets.length) throw new Error(`INVALID_INDEX:schematic-sheet:${sheet.id}`);
+      schematic.sheets.sheets.splice(operation.atIndex, 0, structuredClone(sheet));
+    }
+    inverse.unshift({ ...inverseBase, kind: "schematic_delete_sheet", sheetId: sheet.id });
+  } else if (operation.kind === "schematic_delete_sheet") {
+    const tree = requireSheets();
+    const index = tree.sheets.findIndex((item) => item.id === operation.sheetId);
+    if (index < 0) throw new Error(`OBJECT_NOT_FOUND:schematic-sheet:${operation.sheetId}`);
+    const sheet = tree.sheets[index]!;
+    if (sheet.parentId === null) throw new Error(`SHEET_DELETE_REFUSED:${sheet.id}: the overview (root) sheet cannot be deleted`);
+    const held: Array<[number, string]> = [
+      [schematic.components.filter((item) => item.sheetId === sheet.id).length + schematic.kicadComponents.filter((item) => item.sheetId === sheet.id).length, "component"],
+      [schematic.wires.filter((item) => item.sheetId === sheet.id).length, "wire"],
+      [schematic.netLabels.filter((item) => item.sheetId === sheet.id || item.childSheetId === sheet.id).length, "label or sheet pin"],
+      [tree.sheets.filter((item) => item.parentId === sheet.id).length, "child sheet"],
+      [sheet.ports?.length ?? 0, "port"],
+    ];
+    const nonEmpty = held.filter(([count]) => count > 0);
+    if (nonEmpty.length > 0) throw new Error(`SHEET_NOT_EMPTY:${sheet.id}: sheet "${sheet.name}" still holds ${nonEmpty.map(([count, noun]) => `${count} ${noun}(s)`).join(", ")}; move its contents to another sheet first. Nothing was deleted.`);
+    tree.sheets.splice(index, 1);
+    const dropTree = !tree.sheets.some((item) => item.parentId !== null);
+    const root = tree.sheets[0]!;
+    if (dropTree) { delete schematic.sheets; schematic.schemaVersion = CANONICAL_SCHEMATIC_SCHEMA; }
+    inverse.unshift({ ...inverseBase, kind: "schematic_create_sheet", sheet: structuredClone(sheet), atIndex: index, ...(dropTree ? { root: structuredClone(root) } : {}) });
+  } else if (operation.kind === "schematic_rename_sheet") {
+    const sheet = requireSheet(operation.sheetId);
+    inverse.unshift({ ...inverseBase, kind: "schematic_rename_sheet", sheetId: sheet.id, name: sheet.name });
+    sheet.name = operation.name;
+  } else if (operation.kind === "schematic_reorder_sheets") {
+    const tree = requireSheets();
+    const byId = new Map(tree.sheets.map((item) => [item.id, item]));
+    if (operation.order.length !== tree.sheets.length || new Set(operation.order).size !== operation.order.length || operation.order.some((id) => !byId.has(id))) {
+      throw new Error(`INVALID_SHEET_ORDER:${operation.operationId}: the order must list every sheet exactly once`);
+    }
+    inverse.unshift({ ...inverseBase, kind: "schematic_reorder_sheets", order: tree.sheets.map((item) => item.id) });
+    tree.sheets = operation.order.map((id) => byId.get(id)!);
+  } else if (operation.kind === "schematic_add_sheet_port") {
+    const sheet = requireSheet(operation.sheetId);
+    if (sheet.parentId === null) throw new Error(`INVALID_SHEET_PORT:${operation.port.id}: ports belong to child sheets, not the overview`);
+    if (requireSheets().sheets.some((item) => (item.ports ?? []).some((port) => port.id === operation.port.id))) throw new Error(`ID_REUSE:schematic-sheet-port:${operation.port.id}`);
+    const ports = sheet.ports ?? [];
+    if (operation.atIndex < 0 || operation.atIndex > ports.length) throw new Error(`INVALID_INDEX:schematic-sheet-port:${operation.port.id}`);
+    sheet.ports = [...ports.slice(0, operation.atIndex), structuredClone(operation.port), ...ports.slice(operation.atIndex)];
+    inverse.unshift({ ...inverseBase, kind: "schematic_remove_sheet_port", sheetId: sheet.id, portId: operation.port.id });
+  } else if (operation.kind === "schematic_remove_sheet_port") {
+    const sheet = requireSheet(operation.sheetId);
+    const ports = sheet.ports ?? [];
+    const index = ports.findIndex((port) => port.id === operation.portId);
+    if (index < 0) throw new Error(`OBJECT_NOT_FOUND:schematic-sheet-port:${operation.portId}`);
+    const port = ports[index]!;
+    const users = schematic.netLabels.filter((label) => label.portId === operation.portId);
+    if (users.length > 0) throw new Error(`SHEET_PORT_IN_USE:${operation.portId}: port "${port.name}" still has ${users.length} hierarchical label(s) or sheet pin(s) (${users.map((label) => label.id).join(", ")}); remove them first. Nothing was changed.`);
+    inverse.unshift({ ...inverseBase, kind: "schematic_add_sheet_port", sheetId: sheet.id, port: structuredClone(port), atIndex: index });
+    const remaining = ports.filter((item) => item.id !== operation.portId);
+    if (remaining.length === 0) delete sheet.ports; else sheet.ports = remaining;
+  } else if (operation.kind === "schematic_add_sheet_pin") {
+    const pin = operation.pin;
+    if (pin.scope !== "sheet-pin") throw new Error(`INVALID_SHEET_PIN:${pin.id}: a sheet pin is a label with scope "sheet-pin"`);
+    if (schematic.netLabels.some((item) => item.id === pin.id)) throw new Error(`ID_REUSE:schematic-label:${pin.id}`);
+    if (pin.name.trim().length === 0) throw new Error(`INVALID_LABEL:${pin.id}: name must be non-empty`);
+    if (operation.atIndex < 0 || operation.atIndex > schematic.netLabels.length) throw new Error(`INVALID_INDEX:schematic-label:${pin.id}`);
+    schematic.netLabels.splice(operation.atIndex, 0, structuredClone(pin) as never);
+    inverse.unshift({ ...inverseBase, kind: "schematic_remove_sheet_pin", labelId: pin.id });
+  } else if (operation.kind === "schematic_remove_sheet_pin") {
+    const index = schematic.netLabels.findIndex((item) => item.id === operation.labelId);
+    if (index < 0) throw new Error(`OBJECT_NOT_FOUND:schematic-label:${operation.labelId}`);
+    if (schematic.netLabels[index]!.scope !== "sheet-pin") throw new Error(`INVALID_SHEET_PIN:${operation.labelId}: the label is not a sheet pin`);
+    inverse.unshift({ ...inverseBase, kind: "schematic_add_sheet_pin", pin: structuredClone(schematic.netLabels[index]!) as never, atIndex: index });
+    schematic.netLabels.splice(index, 1);
+  } else if (operation.kind === "schematic_set_label_scope") {
+    const label = schematic.netLabels.find((item) => item.id === operation.labelId);
+    if (!label) throw new Error(`OBJECT_NOT_FOUND:schematic-label:${operation.labelId}`);
+    inverse.unshift({ ...inverseBase, kind: "schematic_set_label_scope", labelId: label.id, scope: label.scope ?? null, portId: label.portId ?? null, childSheetId: label.childSheetId ?? null });
+    if (operation.scope === null) delete label.scope; else label.scope = operation.scope;
+    if (operation.portId === null) delete label.portId; else label.portId = operation.portId;
+    if (operation.childSheetId === null) delete label.childSheetId; else label.childSheetId = operation.childSheetId;
+  } else if (operation.kind === "schematic_assign_sheet") {
+    if (operation.entries.length === 0) throw new Error(`INVALID_SHEET_ASSIGNMENT:${operation.operationId}: no entries`);
+    const seenTargets = new Set<string>();
+    for (const entry of operation.entries) {
+      const target = `${entry.family}:${entry.id}`;
+      if (seenTargets.has(target)) throw new Error(`INVALID_SHEET_ASSIGNMENT:${target}: listed twice`);
+      seenTargets.add(target);
+      const pool: Array<{ id: string; sheetId?: string }> = entry.family === "theory" ? schematic.components : entry.family === "kicad" ? schematic.kicadComponents : entry.family === "wire" ? schematic.wires : schematic.netLabels;
+      const entity = pool.find((item) => item.id === entry.id);
+      if (!entity) throw new Error(`OBJECT_NOT_FOUND:${entry.family === "wire" ? "schematic-wire" : entry.family === "label" ? "schematic-label" : "schematic-component"}:${entry.id}`);
+      if (sheetOf(entity) !== entry.from) throw new Error(`SHEET_ASSIGN_PRECONDITION_FAILED:${target}: it is on sheet ${sheetOf(entity)}, not ${entry.from}`);
+      if (entry.to !== ROOT_SHEET_ID && !(schematic.sheets?.sheets ?? []).some((sheet) => sheet.id === entry.to)) throw new Error(`OBJECT_NOT_FOUND:schematic-sheet:${entry.to}`);
+      if (entry.to === ROOT_SHEET_ID) delete entity.sheetId; else entity.sheetId = entry.to;
+    }
+    inverse.unshift({ ...inverseBase, kind: "schematic_assign_sheet", entries: operation.entries.map((entry) => ({ family: entry.family, id: entry.id, from: entry.to, to: entry.from })) });
+  }
+}
+
+/**
+ * [PR-J, 2026-10-22] Apply schematic operations to a canonical schematic alone - the same code the executor runs, without a board -
+ * so a planner can verify a candidate batch before proposing it. Throws exactly what the executor would; returns the result and its
+ * exact inverse operations.
+ */
+export function applySchematicOperationsToCanonical(schematic: CanonicalSchematic, operations: readonly EngineeringOperation[]): { schematic: CanonicalSchematic; inverseOperations: EngineeringOperation[] } {
+  const project = { schematic: structuredClone(schematic) } as unknown as CanonicalProjectState;
+  const inverse: EngineeringOperation[] = [];
+  const railJoinsBefore = operations.some((operation) => SHEET_OPERATION_KINDS.has(operation.kind)) ? schematicRailJoins(schematic) : null;
+  const seen = new Set<string>();
+  for (const operation of operations) {
+    if (!SCHEMATIC_OPERATION_KINDS.has(operation.kind)) throw new Error(`UNSUPPORTED_OPERATION_SCHEMA:${operation.operationId}: not a schematic operation`);
+    if (seen.has(operation.operationId)) throw new Error(`DUPLICATE_OPERATION_ID:${operation.operationId}`);
+    seen.add(operation.operationId);
+    if (operation.units !== "px" || operation.schemaVersion !== 1) throw new Error(`UNSUPPORTED_OPERATION_SCHEMA:${operation.operationId}`);
+    const geometryIssues = validateSchematicOperationGeometry(operation);
+    if (geometryIssues.length > 0) throw new Error(geometryIssues[0]);
+    applySchematicOperation(project, operation, inverse);
+  }
+  const integrityIssues = validateCanonicalSchematic(project.schematic);
+  if (integrityIssues.length > 0) throw new Error(`SCHEMATIC_INTEGRITY:${integrityIssues[0]}`);
+  refuseCreatedRailJoins(railJoinsBefore, project.schematic);
+  return { schematic: project.schematic as CanonicalSchematic, inverseOperations: inverse };
 }
 
 function addBounds(target: Partial<Record<LayerId, BBox[]>>, source: Partial<Record<LayerId, BBox[]>>): void { for (const [layer, bounds] of Object.entries(source) as Array<[LayerId, BBox[]]>) (target[layer] ??= []).push(...bounds); }

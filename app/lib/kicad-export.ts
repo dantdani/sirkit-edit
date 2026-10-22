@@ -228,7 +228,7 @@ export function exportToKicadSch(input: KicadExportInput): string {
   // cannot catch (the /api/export/kicad route validates first and returns a
   // structured 422) must not reach serialization with invalid input.
   const validationIssues = validateSchematicStateIntegrity(state);
-  if (validationIssues.length > 0) throw new SchematicExportValidationError(validationIssues);
+  if (validationIssues.length > 0) throw new SchematicExportValidationError(validationIssues); if (state.sheets !== undefined) throw new SchematicExportHierarchyPendingError(); // [PR-J, 2026-10-22] J2: never a flat file for a project with sheets
   const components = state.components ?? [];
   const kicadComponents = state.kicadComponents ?? [];
   const wires = state.wires ?? [];
@@ -596,5 +596,20 @@ function assertSingleSymbolDefinition(raw: string, refDes: string): void {
     if (!head || head.kind !== "symbol" || head.value !== "symbol") throw new Error("not a symbol definition");
   } catch {
     throw new SchematicExportValidationError([`${refDes}: the pinned part's symbol is not exactly one symbol definition`]);
+  }
+}
+
+/**
+ * [PR-J, 2026-10-22] Section J increment 2 (J.8 item 5; OD-255 item 2): this serializer writes ONE flat .kicad_sch whose ordinary
+ * labels become global labels, so for a project organised into sheets it would join every sheet's local labels by name and lose the
+ * hierarchy. Until the native hierarchical export (a root file with sheet symbols plus one file per sheet) exists, a document with
+ * sheets is refused: nothing is serialized. The /api/export/kicad route answers it as a structured 422 before any catalog read.
+ */
+export const EXPORT_HIERARCHY_PENDING = "KiCad export writes one flat schematic page; a project organised into sheets needs the hierarchical export, which is not available yet. Nothing was exported and nothing changed.";
+export class SchematicExportHierarchyPendingError extends Error {
+  readonly code = "EXPORT_HIERARCHY_PENDING" as const;
+  constructor() {
+    super(EXPORT_HIERARCHY_PENDING);
+    this.name = "SchematicExportHierarchyPendingError";
   }
 }

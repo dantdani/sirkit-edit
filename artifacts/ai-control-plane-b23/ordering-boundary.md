@@ -566,7 +566,7 @@ added for the low fixes.
 | C48 | `app/components/pcb/ProviderExchangePanel.tsx` | 129 | `data-testid="p2g-ordering-notice">Ordering through Sirkit is turned off.` |
 | C49 | `app/components/pcb/ProviderExchangePanel.tsx` | 122 | `export function ProviderExchangePanel(props: ProviderExchangePanelProps) {` |
 | C50 | `app/components/pcb/ProviderExchangePanel.tsx` | 157 | `data-testid="p2g-provider-carried"` |
-| C51 | `artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv` | 111 | `manufacturing.provider-order,1,manufacturing,` |
+| C51 | `artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv` | 113 | `manufacturing.provider-order,1,manufacturing,` |
 | C52 | `app/lib/manufacturing-providers/__tests__/b23-a-tier3-vocabulary.test.ts` | 272 | `expect(actionIds).toHaveLength(111); // [PR-M, 2026-10-18] reviewed pin move (D9), was 110` |
 | C53 | `app/lib/engineering/__tests__/b17-a-control-inventory.test.ts` | 63 | `if (record.status === "missing") expect(reached.has(record.id) \|\| routed.has(record.id)` |
 | C54 | `app/lib/engineering/__tests__/b19-e-no-purchase-tripwire.test.ts` | 26 | `const PURCHASE_WORDING = /add to cart` |

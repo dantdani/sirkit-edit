@@ -17,10 +17,10 @@
  */
 
 import type { SchematicState } from "@/lib/schematic-types";
-import { netLabelNameKey, normalizeRefDes, schDisplayRef } from "@/lib/schematic-types";
+import { normalizeRefDes, schDisplayRef } from "@/lib/schematic-types";
 import type { KicadPin } from "@/app/lib/kicad/types";
-import { buildNetUnionFind } from "@/app/lib/connectivity";
-import { pinWorldPos, kicadPinWorldPos, pointKey } from "@/app/lib/geometry";
+import { resolveProjectConnectivity } from "@/app/lib/schematic/project-connectivity"; import { assertWholeProject, sheetOf } from "@/app/lib/schematic/sheets"; // [PR-J, 2026-10-22] J2: THE project connectivity authority
+import { pinWorldPos, kicadPinWorldPos } from "@/app/lib/geometry";
 import type { Point } from "@/lib/schematic-types";
 import type { FootprintSearchHit } from "./footprint-api-types";
 import { parseKicadMod } from "./kicad-mod";
@@ -151,25 +151,31 @@ const THEORY_REF_PREFIX: Record<string, string> = {
 };
 
 /**
- * Derive the netlist from Build-mode schematic state via the same union-find
- * the editor uses. `getPart` resolves placed KiCad components' catalog data
- * (pass the parts cache's getCachedPart after awaiting loads); it defaults to
- * a null lookup so theory-only schematics work without it.
+ * Derive the netlist from Build-mode schematic state. `getPart` resolves placed KiCad components' catalog data (pass the parts
+ * cache's getCachedPart after awaiting loads); it defaults to a null lookup so theory-only schematics work without it.
  *
- * Net naming: net labels win; ground-kind labels and ground symbols → GND;
- * power ports keep their port name; everything else N$<id>.
+ * [PR-J, 2026-10-22] Section J increment 2 (OD-255 items 2, 3, 5): WHICH pins form one net, and what each net is called, is decided
+ * by THE project connectivity authority (app/lib/schematic/project-connectivity.ts `resolveProjectConnectivity`), never re-derived
+ * here. This function only turns its nets into the pinned netlist shape (physical pins, deterministic ids):
+ *  - a document without sheets: the authority runs the editor's own union (buildNetUnionFind) with the legacy naming, so the netlist
+ *    is byte-identical to before section J - net labels win; every ground-kind label and ground symbol → GND (different ground
+ *    names such as AGND / DGND collapse into GND so existing boards keep their nets; the authority reports it as
+ *    LEGACY_GROUND_NAME_COLLAPSE); power ports keep their port name; everything else N$<id>;
+ *  - a document with sheets: the strict scoped rules - a sheet-local net stays separate and is named by its sheet path
+ *    ("Power/OUT"), rails join by exact name (AGND, DGND and GND stay three nets), a port joins exactly the pins it binds;
+ *  - a sheet-structure error, or two distinct nets sharing one name, publishes nothing: PS_SHEET_HIERARCHY_INVALID.
+ * Every sheet is included whatever the editor shows; one sheet's view is refused (SHEET_LENS_NOT_PROJECT).
  */
 export function buildNetlist(
   schematic: SchematicState,
   getPart: PartLookup = () => null,
 ): PcbNetlist {
+  assertWholeProject(schematic, "pcb-netlist");
   const theoryComps = schematic.components;
   const kicadComps = schematic.kicadComponents ?? [];
-  const netLabels = schematic.netLabels ?? [];
-  const wires = schematic.wires;
 
-  // Pin sites: (componentId, pinNumber) → world point, for every physical part.
-  type PinSite = { componentId: string; pinNumber: string; point: Point };
+  // Pin sites: (componentId, pinNumber) → sheet and world point, for every physical part.
+  type PinSite = { componentId: string; pinNumber: string; sheetId: string; point: Point };
   const pinSites: PinSite[] = [];
   const components: NetlistComponent[] = [];
 
@@ -182,21 +188,19 @@ export function buildNetlist(
     const pinMap = theoryPinContract(c.type);
     if (!pinMap) continue;
     const pins = Object.entries(pinMap).map(([pinName, number]) => {
-      pinSites.push({ componentId: c.id, pinNumber: number, point: pinWorldPos(c, pinName) });
+      pinSites.push({ componentId: c.id, pinNumber: number, sheetId: sheetOf(c), point: pinWorldPos(c, pinName) });
       return { number, name: pinName };
     });
     pins.sort((a, b) => compareCodePoints(a.number, b.number));
     components.push({ id: c.id, ref: normalizeRefDes(schDisplayRef(c)), value: c.value, pins });
   }
 
-  const kicadPinPoints: Point[] = [];
   for (const inst of kicadComps) {
     const part = getPart(inst.partId);
     const pins: NetlistComponent["pins"] = [];
     for (const pin of part?.pins ?? []) {
       const point = kicadPinWorldPos(inst, pin);
-      kicadPinPoints.push(point);
-      pinSites.push({ componentId: inst.id, pinNumber: pin.number, point });
+      pinSites.push({ componentId: inst.id, pinNumber: pin.number, sheetId: sheetOf(inst), point });
       pins.push({
         number: pin.number,
         ...(pin.name && pin.name !== "~" ? { name: pin.name } : {}),
@@ -223,15 +227,22 @@ export function buildNetlist(
     });
   }
 
-  // Same union-find the editor and SPICE export use.
-  const uf = buildNetUnionFind(theoryComps, wires, kicadPinPoints, netLabels);
+  // THE project connectivity authority: which pin sites share a net (its union-find root) and that net's name.
+  const connectivity = resolveProjectConnectivity(schematic, getPart);
+  if (!connectivity.ok) {
+    const error = connectivity.diagnostics.find((item) => item.severity === "error");
+    throw new Error(`PS_SHEET_HIERARCHY_INVALID: ${error?.code ?? "SHEET_SET_INVALID"}: ${error?.message ?? "the sheet structure is invalid"}`);
+  }
 
-  // Group component pins by net root.
+  // Group component pins by net root (in pin-site order); each root carries its net's name.
   const refById = new Map(components.map((c) => [c.id, c.ref]));
   type NodeRec = { componentId: string; pinNumber: string; ref: string };
   const rootNodes = new Map<string, NodeRec[]>();
+  const rootName = new Map<string, string | null>();
   for (const site of pinSites) {
-    const root = uf.find(pointKey(site.point));
+    const root = connectivity.rootAt(site.sheetId, site.point);
+    // unreachable: the authority registers every pin site the same part lookup yields
+    if (root === null) throw new Error(`PS_CONNECTIVITY_PIN_UNKNOWN: ${site.componentId} pin ${site.pinNumber}`);
     const bucket = rootNodes.get(root) ?? [];
     bucket.push({
       componentId: site.componentId,
@@ -239,35 +250,9 @@ export function buildNetlist(
       ref: refById.get(site.componentId) ?? "",
     });
     rootNodes.set(root, bucket);
+    if (!rootName.has(root)) rootName.set(root, connectivity.netAt(site.sheetId, site.point)?.name ?? null);
   }
-
-  // Name votes per root: ground beats power beats generic label.
-  const rootGround = new Set<string>();
-  const rootPower = new Map<string, string[]>();
-  const rootLabel = new Map<string, string[]>();
-  for (const label of netLabels) {
-    const key = pointKey(label.position);
-    if (!uf.has(key)) continue;
-    const root = uf.find(key);
-    const name = netLabelNameKey(label.name);
-    if (label.kind === "ground") rootGround.add(root);
-    else if (label.kind === "power") rootPower.set(root, [...(rootPower.get(root) ?? []), name]);
-    else rootLabel.set(root, [...(rootLabel.get(root) ?? []), name]);
-  }
-  for (const c of theoryComps) {
-    if (c.type !== "ground") continue;
-    const key = pointKey(pinWorldPos(c, "pin"));
-    if (uf.has(key)) rootGround.add(uf.find(key));
-  }
-
-  const nameOfRoot = (root: string): string | null => {
-    if (rootGround.has(root)) return "GND";
-    const power = rootPower.get(root);
-    if (power && power.length > 0) return [...power].sort()[0];
-    const label = rootLabel.get(root);
-    if (label && label.length > 0) return [...label].sort()[0];
-    return null;
-  };
+  const nameOfRoot = (root: string): string | null => rootName.get(root) ?? null;
 
   // Merge same-named roots (two unwired ground symbols are still one GND net),
   // drop node-less roots, then assign deterministic ids: named nets sorted
@@ -323,7 +308,7 @@ export function netlistHash(netlist: PcbNetlist): string {
   return (h >>> 0).toString(36);
 }
 
-/** Deterministic, non-mutating graph accepted by the durable PCB-sync publisher. */
+/** Deterministic, non-mutating graph accepted by the durable PCB-sync publisher. [PR-J, 2026-10-22] J2 (OD-255 item 5): built from the WHOLE project (every sheet); each component keeps hierarchyPath ["root"] and each net canonicalScope ["root"] - physical authority is independent of how the schematic is organised into sheets, and a sheet-local net carries its sheet path in its display name only (its stable id stays endpoint-based). */
 export interface PcbSyncPublicationGraph { components: PcbSyncSchematicComponent[]; nets: PcbSyncSchematicNet[]; prerequisiteIssues: PcbSyncIssue[]; sourceDigest: string }
 
 export function buildPcbSyncPublicationGraph(schematic: SchematicState, getPart: PartLookup = () => null): PcbSyncPublicationGraph {

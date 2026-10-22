@@ -30,7 +30,7 @@ import { productionBuildCatalogPort, productionBuildLlmPort, runBuildToolLoop, t
 import { llmRouter } from "@/app/lib/llm/router";
 import { LLMProviderError } from "@/app/lib/llm/errors";
 import type { LLMMessage, LLMProviderId, LLMResponse } from "@/app/lib/llm/types";
-import { mergeBuildNetlists } from "@/app/lib/merge-netlists";
+import { mergeBuildNetlists } from "@/app/lib/merge-netlists"; import { deriveGeneratedSheets, type GeneratedSheets, type GeneratedSheetsPlannedBlock } from "./generated-sheets"; // [PR-J, 2026-10-22] J5-1
 import { getPartsByIds, type AiPartResult } from "@/app/lib/parts-search";
 import {
   BUILD_BUDGET,
@@ -353,13 +353,13 @@ export interface MergeAndValidateInput {
   assumptions?: readonly string[];
   coverage?: readonly string[];
   /** [PR-L6, 2026-10-19] the roles omitted blocks waited for (item 8): a partial explanation names them */
-  unfilledRoles?: readonly string[];
+  unfilledRoles?: readonly string[]; /** [PR-J, 2026-10-22] J5-1 (OD-255 item 9): every planned block in plan order (blockId, name, shared nets, designed or omitted): a planned result of two or more blocks is offered as sheets (`sheets` on the outcome, never in `body`) */ plannedBlocks?: readonly GeneratedSheetsPlannedBlock[];
 }
 /** Every plan shared net must be labelled in at least two blocks (a net one block labels joins nothing): the obligations checked
  *  and the findings, bounded (the result document's `sharedNets`). */
 export interface SharedNetReport { checked: number; findings: string[] }
 export type MergeAndValidateOutcome =
-  | { kind: "merged"; body: BuildMultiSuccess; sharedNets: SharedNetReport; parts: AiPartResult[] | null }
+  | { kind: "merged"; body: BuildMultiSuccess; sharedNets: SharedNetReport; parts: AiPartResult[] | null; /** [PR-J, 2026-10-22] J5-1: only when `plannedBlocks` was given for a planned result */ sheets?: GeneratedSheets }
   | { kind: "refused"; code: "MERGE_NO_BLOCKS" | "MERGE_EMPTY_BLOCK"; blocks: string[]; error: string };
 
 function sharedNetReport(blocks: ReadonlyArray<{ name: string; netlist: BuildLogicalNetlist; sharedNets: readonly string[] }>, parts: ReadonlyMap<string, AiPartResult> | null = null): SharedNetReport {
@@ -430,7 +430,7 @@ export async function mergeAndValidate(input: MergeAndValidateInput): Promise<Me
   const single = designed.length === 1 && input.planner.state !== "planned";
 
   // 4. Deterministic merge (refDes de-collision; nets join by shared label name).
-  const { netlist, notes } = single ? { netlist: designed[0]!.netlist, notes: [] as string[] } : mergeBuildNetlists(designed.map((block) => ({ name: block.name, netlist: block.netlist })));
+  const { netlist, notes, blocks: mergedBlocks } = single ? { netlist: designed[0]!.netlist, notes: [] as string[], blocks: [] } : mergeBuildNetlists(designed.map((block) => ({ name: block.name, netlist: block.netlist })));
 
   // 5. Post-merge ERC (advisory). Each block was ERC-gated in its own loop, but
   // cross-block faults — two blocks both driving a shared net, a rail shorted
@@ -480,7 +480,7 @@ export async function mergeAndValidate(input: MergeAndValidateInput): Promise<Me
     planner: input.planner,
     budget: input.budget(),
   };
-  return { kind: "merged", body, sharedNets: sharedNetReport(designed, parts ? new Map(parts.map((part) => [part.partId, part] as const)) : null), parts };
+  return { kind: "merged", body, sharedNets: sharedNetReport(designed, parts ? new Map(parts.map((part) => [part.partId, part] as const)) : null), parts, ...generatedSheetsOf(input, mergedBlocks, netlist, parts) };
 }
 
 // ─── The request-lifetime composition (the route and the agent's port) ────────────────────────────────────────────────
@@ -668,4 +668,16 @@ async function generateWithinBoundary(input: BuildMultiGenerationInput & { signa
   });
   if (merged.kind === "refused") return failureOutcome({ status: 500, code: "build_loop_failed", error: merged.error, retryable: true });
   return { kind: "success", body: merged.body };
+}
+
+// [PR-J, 2026-10-22] Runbook J.6.3, increment J5-1 (OD-255 item 9), appended after the last line (a function declaration is hoisted): a
+// planned result of two or more blocks carries its sheet set (generated-sheets.ts) beside the body; the merged netlist is unchanged and
+// stays the one truth (a sheet set that would not reproduce it is refused with a finding). A single design never carries sheets, and the
+// request-lifetime route passes no plan blocks, so its body and the single designs' results stay byte-identical.
+function generatedSheetsOf(input: MergeAndValidateInput, merged: ReadonlyArray<{ name: string; netlist: BuildLogicalNetlist }>, netlist: BuildLogicalNetlist, parts: AiPartResult[] | null): { sheets?: GeneratedSheets } {
+  const planned = input.plannedBlocks;
+  if (planned === undefined || input.planner.state !== "planned" || planned.length < 2) return {};
+  const designedIds = planned.filter((block) => block.status === "designed").map((block) => block.blockId);
+  const designed = merged.map((block, index) => ({ blockId: designedIds[index] ?? "", name: block.name, netlist: block.netlist }));
+  return { sheets: deriveGeneratedSheets({ planned, designed, flat: netlist, parts }) };
 }

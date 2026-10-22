@@ -35,6 +35,13 @@ function operationObjectIds(operation: EngineeringOperation): string[] {
   if (operation.kind === "schematic_add_net_label") return [`schlabel:${operation.label.id}`];
   if (operation.kind === "schematic_delete_net_label" || operation.kind === "schematic_update_net_label") return [`schlabel:${operation.labelId}`];
   if (operation.kind === "schematic_add_component") return [`schcomp:${operation.component.id}`];
+  // [PR-J, 2026-10-22] sheet operations declare the sheets, the sheet order and the entities they touch.
+  if (operation.kind === "schematic_create_sheet" || operation.kind === "schematic_delete_sheet") return [`schsheet:${operation.kind === "schematic_create_sheet" ? operation.sheet.id : operation.sheetId}`, "schsheet:root", "schsheets:order"];
+  if (operation.kind === "schematic_rename_sheet" || operation.kind === "schematic_add_sheet_port" || operation.kind === "schematic_remove_sheet_port") return [`schsheet:${operation.sheetId}`];
+  if (operation.kind === "schematic_reorder_sheets") return ["schsheets:order"];
+  if (operation.kind === "schematic_add_sheet_pin") return [`schlabel:${operation.pin.id}`];
+  if (operation.kind === "schematic_remove_sheet_pin" || operation.kind === "schematic_set_label_scope") return [`schlabel:${operation.labelId}`];
+  if (operation.kind === "schematic_assign_sheet") return operation.entries.map((entry) => `${entry.family === "wire" ? "schwire" : entry.family === "label" ? "schlabel" : "schcomp"}:${entry.id}`);
   return [operation.kind === "update_board_outline" ? "board:outline" : "board:routing-preferences"];
 }
 

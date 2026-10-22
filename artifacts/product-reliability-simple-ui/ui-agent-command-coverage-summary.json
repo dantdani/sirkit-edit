@@ -11,9 +11,9 @@
     "legacy",
     "missing"
   ],
-  "rows": 968,
+  "rows": 970,
   "byKind": {
-    "action": 111,
+    "action": 113,
     "control": 794,
     "tool": 63
   },
@@ -26,7 +26,7 @@
     "intentionally-ui-only": 340,
     "unavailable": 11,
     "legacy": 0,
-    "missing": 54
+    "missing": 56
   },
   "byKindAndDisposition": {
     "action": {
@@ -38,7 +38,7 @@
       "intentionally-ui-only": 10,
       "unavailable": 7,
       "legacy": 0,
-      "missing": 14
+      "missing": 16
     },
     "control": {
       "callable-now": 21,
@@ -65,9 +65,9 @@
   },
   "unexplained": 0,
   "missing": {
-    "rows": 54,
+    "rows": 56,
     "withoutGap": 0,
-    "gaps": 176
+    "gaps": 182
   },
   "rowsWithoutTest": {
     "action": 40,
@@ -75,8 +75,8 @@
     "tool": 0
   },
   "actions": {
-    "records": 111,
-    "rows": 111
+    "records": 113,
+    "rows": 113
   },
   "controls": {
     "sites": 663,

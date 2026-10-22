@@ -51,7 +51,7 @@ NOT READY (`eslint .` exits 1, none of its 33 errors introduced by B24), CI read
 | canonical-wrappers | 174 |
 | approved-factories | 3 |
 | raw-handlers | 0 |
-| action-records | 111 |
+| action-records | 113 |
 | registry-tools | 63 |
 | agent-exposed-tools | 51 |
 | mcp-exposed-tools | 9 |
@@ -86,6 +86,8 @@ table are the concurrent PR-F builders' to move with their descriptors and contr
 [PR-M, 2026-10-18] Count lines moved with the regenerated map (runbook section M, M1's page intake): route-methods 174 -> 175 and canonical-wrappers 171 -> 172 (POST /api/component-resolution-authority, the reviewed resolution's fresh-facts endpoint, one canonical wrapper; 3 factories and 0 raw unchanged); control-sites 649 -> 654 and control-surfaces 67 -> 68 (the resolution review dialog `ComponentResolutionReviewDialog.tsx`, a new surface - Approve, Discard, its close and the receipt's Dismiss - and the Missing parts list's Find a replacement in the library, as the B17-A inventory is regenerated).
 
 [PR-M, 2026-10-18] Count lines moved with the regenerated map (runbook section M, M2's acquisition): route-methods 175 -> 177 and canonical-wrappers 172 -> 174 (GET and POST /api/parts/acquisitions); action-records 110 -> 111 (parts.cad-acquisition); registry-tools 59 -> 63, agent-exposed-tools 47 -> 51 and agent-only-tools 38 -> 42 - runbook L.5's two descriptors as the tree holds them and M2's two (the CAD acquisition start and status, both withheld from MCP; mcp-exposed-tools stays 9); control-sites 654 -> 663 and control-surfaces 68 -> 70 - L.5's design control chip (two controls) as the tree holds it, and M2's seven controls on two new surfaces (the Missing parts list's acquisition panel, the Build Library's component review inbox), the B17-A inventory as regenerated; generators 31 -> 32 (the CAD source registry generator `scripts/generate-cad-source-registry.ts`).
+
+[PR-J, 2026-10-22] Count lines moved with the regenerated map (runbook section J increment 1, OD-255): action-records 111 -> 113 (schematic.sheet-structure and schematic.move-to-sheet, the canonical schematic sheet commands; both partial until the Sheets navigator binds them).
 
 ## 4. Earlier verdicts
 

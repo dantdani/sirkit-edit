@@ -30,8 +30,8 @@ import { durableWorkflowDigest, durableWorkflowId } from "../durable-workflow/st
 import { LLM_PROVIDER_IDS, type LLMProviderId } from "../llm/types";
 import type { ProjectRole } from "../engineering/types";
 import { validateSchematicCanonicalMark, type SchematicCanonicalMark } from "../engineering/schematic-projection";
-import { BUILD_BUDGET, resolveBuildIterationCap, type BuildPlannerStatus, type ElectricalCheckStatus } from "../schematic/build-result";
-import type { BuildLogicalNetlist } from "@/lib/schematic-types";
+import { resolveBuildIterationCap, type BuildPlannerStatus, type ElectricalCheckStatus } from "../schematic/build-result"; // [PR-J, 2026-10-22] BUILD_BUDGET no longer sets the worker slots (workerConcurrency below)
+import type { BuildLogicalNetlist } from "@/lib/schematic-types"; import { GENERATED_PORT_DIRECTIONS, GENERATED_SHEETS_BOUNDS, GENERATED_SHEET_KEYS, GENERATION_SHEETS_SCHEMA, generatedSheetsConsistencyIssue, type GeneratedSheets } from "../schematic/generated-sheets"; // [PR-J, 2026-10-22] J5-1
 import { compareCodePoints } from "../stable-compare";
 import { resolveMainCategory } from "../kicad/categories"; // [PR-L6, 2026-10-19] the postgres search key filters on the RESOLVED category (L.6 part 2, item 2a)
 import { electricalCheckJudge, netlistJudge, normalizeElectricalCheck, normalizeNetlist, normalizePartFacts, partFactsDigest, partFactsJudge, type GenerationPartFacts } from "./checkpoint";
@@ -132,7 +132,7 @@ export const GENERATION_SLICE_POLICY = Object.freeze({
   workerPickupGraceMs: 15_000,
   maxAttemptsPerSlice: 5,
   stagnantSlicesPerStrategy: 3,
-  workerConcurrency: BUILD_BUDGET.concurrencyCap,
+  workerConcurrency: 3, // [PR-J, 2026-10-22] J.7: the durable worker's OWN slot count, value unchanged (was BUILD_BUDGET.concurrencyCap, the deprecated synchronous route's pool, so that pool could silently move the queue). Measured reasons: one DB pool (SIRKIT_DB_POOL_MAX, 8) shared with up to 4 catalog slots that leave the store >= 3 connections for claims, renewals and commits; LR-3 met a provider rate_limit even at --concurrency 1. More throughput = more worker processes (two never run one slice twice), not more slots
   /** claim-commit conflicts reload and repeat at most this often (section 3.2 step 4) */
   claimRetries: 5,
   /** the rebase rule's retries (section 3.2) */
@@ -502,24 +502,24 @@ export interface GenerationTaskResultPayload {
   /** every plan shared net labelled in at least two blocks, else a finding */
   sharedNets: { checked: number; findings: string[] };
   /** the saved block checkpoints the merge read (by reference) */
-  blocks: Array<{ blockId: GenerationBlockId; recordId: string; recordDigest: string }>;
+  blocks: Array<{ blockId: GenerationBlockId; recordId: string; recordDigest: string }>; /** [PR-J, 2026-10-22] J5-1 (OD-255 item 9): OPTIONAL - a planned result's sheet set (or why it stays one page); a persisted result without it stays valid and keeps its digest */ sheets?: GeneratedSheets;
   resultDigest: string;
 }
 const resultShape = shape({
   schema: oneOf([GENERATION_TASK_RESULT_SCHEMA]), taskId, at: isoInstant, status: oneOf(["complete", "partial"]), omittedBlocks: arrayOf(line(GENERATION_TASK_BOUNDS.blockNameChars, 1), GENERATION_TASK_BOUNDS.blocks),
   netlist: netlistJudge(1), explanation: modelText(GENERATION_TASK_BOUNDS.explanationChars), electricalCheck: electricalCheckJudge, planner: plannerJudge,
   sharedNets: shape({ checked: count(1_000), findings: arrayOf(line(200, 1), 20) }), blocks: arrayOf(shape({ blockId, recordId, recordDigest: durableDigest }), GENERATION_TASK_BOUNDS.blocks, 1), resultDigest: durableDigest,
-});
+}, { sheets: generationSheetsJudge }); // [PR-J, 2026-10-22] J5-1: an OPTIONAL closed key
 export function generationResultDigest(payload: Omit<GenerationTaskResultPayload, "resultDigest">): string {
-  const { schema, taskId: id, at, status, omittedBlocks, netlist, explanation, electricalCheck, planner, sharedNets, blocks } = payload;
-  return durableWorkflowDigest({ schema, taskId: id, at, status, omittedBlocks, netlist, explanation, electricalCheck, planner, sharedNets, blocks });
+  const { schema, taskId: id, at, status, omittedBlocks, netlist, explanation, electricalCheck, planner, sharedNets, blocks, sheets } = payload;
+  return durableWorkflowDigest({ schema, taskId: id, at, status, omittedBlocks, netlist, explanation, electricalCheck, planner, sharedNets, blocks, ...(sheets !== undefined ? { sheets } : {}) }); // [PR-J, 2026-10-22] J5-1: sheets only when present (a persisted result keeps its digest)
 }
 export function generationTaskResultIssue(value: unknown): Issue {
   const issue = resultShape(value, "result");
   if (issue) return issue;
   const payload = value as GenerationTaskResultPayload;
   if (payload.resultDigest !== generationResultDigest(payload)) return "result.resultDigest: does not match the result";
-  if ((payload.status === "complete") !== (payload.omittedBlocks.length === 0)) return "result.status: complete exactly when no block is omitted";
+  if ((payload.status === "complete") !== (payload.omittedBlocks.length === 0)) return "result.status: complete exactly when no block is omitted"; if (payload.sheets !== undefined) { const sheetsIssue = resultSheetsIssue(payload); if (sheetsIssue) return sheetsIssue; } // [PR-J, 2026-10-22] J5-1
   return canonicalBytes(value) <= GENERATION_TASK_BOUNDS.resultBytes ? null : "result: larger than the result bound";
 }
 /** Build the result document from the merge slice's outputs (normalized, digested, judged; a refusal throws). */
@@ -527,10 +527,10 @@ export function buildGenerationTaskResult(input: Omit<GenerationTaskResultPayloa
   const body: Omit<GenerationTaskResultPayload, "resultDigest"> = {
     schema: GENERATION_TASK_RESULT_SCHEMA, taskId: input.taskId, at: input.at, status: input.status, omittedBlocks: input.omittedBlocks.map((name) => cleanLine(name, GENERATION_TASK_BOUNDS.blockNameChars)),
     netlist: normalizeNetlist(input.netlist), explanation: cleanModelText(input.explanation, GENERATION_TASK_BOUNDS.explanationChars), electricalCheck: normalizeElectricalCheck(input.electricalCheck), planner: structuredClone(input.planner),
-    sharedNets: { checked: input.sharedNets.checked, findings: input.sharedNets.findings.slice(0, 20).map((finding) => cleanLine(finding, 200)) }, blocks: input.blocks.map((entry) => ({ ...entry })),
+    sharedNets: { checked: input.sharedNets.checked, findings: input.sharedNets.findings.slice(0, 20).map((finding) => cleanLine(finding, 200)) }, blocks: input.blocks.map((entry) => ({ ...entry })), ...(input.sheets !== undefined ? { sheets: normalizeGeneratedSheets(input.sheets) } : {}), // [PR-J, 2026-10-22] J5-1
   };
   const payload = { ...body, resultDigest: generationResultDigest(body) };
-  const issue = generationTaskResultIssue(payload);
+  const issue = generationTaskResultIssue(payload); if (issue && payload.sheets?.sheets && issue.endsWith("larger than the result bound")) return buildGenerationTaskResult({ ...input, sheets: onePageSheets(payload.sheets.findings, SHEETS_OVER_RESULT_BOUND) }); // [PR-J, 2026-10-22] J5-1: the sheet set never costs the result
   if (issue) throw new GenerationTaskContractError(issue.endsWith("larger than the result bound") ? "GENERATION_TASK_TOO_LARGE" : "GENERATION_TASK_RESULT_INVALID", issue);
   return payload;
 }
@@ -725,4 +725,74 @@ export function generationTaskTransitionIssue(prev: GenerationTaskHead | null, n
   const rule = generationTransitionRule(from, next.state, actor);
   if (!rule) return `transition ${from ?? "(none)"} -> ${next.state}: not permitted for ${actor}`;
   return EVIDENCE[rule.id]!(prev, next, attest);
+}
+
+// ─── [PR-J, 2026-10-22] Runbook J.6.3, increment J5-1 (OD-255 item 9): the result's optional sheet set ─────────────────────────────────
+// Appended after the last line (function declarations are hoisted; `resultShape` above reads the judge at module load). The sheet set is
+// derived by app/lib/schematic/generated-sheets.ts; here it is judged with closed keys and bounded redacted text, cross-checked against
+// the result's own netlist (the designed sheets hold exactly the netlist's components, each once; only a planned result carries one) and
+// normalized. A sheet set that cannot be recorded never costs the result: it is recorded as one page with a finding saying so.
+
+const SHEETS_NOT_RECORDED = "Kept on one page: the sheet set could not be recorded in the result.";
+const SHEETS_OVER_RESULT_BOUND = "Kept on one page: the sheet set did not fit the result bound.";
+
+/** `sirkit.generation-sheets.v1`, closed at every level, every text a bounded redacted line, and its cross-references sound. */
+function generationSheetsJudge(value: unknown, path: string): Issue {
+  const bound = GENERATED_SHEETS_BOUNDS;
+  const net = line(bound.netChars, 1), portKey = line(bound.netChars + 3, 1), sheetKey = oneOf(GENERATED_SHEET_KEYS), railKind = oneOf(["power", "ground"]), binding = oneOf(["bound", "unbound"]);
+  const child = shape({
+    sheetKey, name: line(bound.sheetNameChars, 1), status: oneOf(["designed", "omitted"]), components: arrayOf(line(bound.refDesChars, 1), bound.components),
+    ports: arrayOf(shape({ portKey, net, direction: oneOf(GENERATED_PORT_DIRECTIONS), state: binding }), bound.portsPerSheet), rails: arrayOf(shape({ net, kind: railKind }), bound.rails), localNets: arrayOf(net, bound.localNetsPerSheet),
+  });
+  const set = shape({
+    root: shape({ sheetKey: oneOf(["overview"]), name: oneOf(["System overview"]) }), children: arrayOf(child, bound.sheets, 2),
+    interfaces: arrayOf(shape({ net, ports: arrayOf(portKey, bound.sheets, 1), state: binding }), bound.interfaces), rails: arrayOf(shape({ net, kind: railKind, sheets: arrayOf(sheetKey, bound.sheets) }), bound.rails),
+  });
+  const issue = shape({ schema: oneOf([GENERATION_SHEETS_SCHEMA]), sheets: nullable(set), findings: arrayOf(line(bound.findingChars, 1), bound.findings) })(value, path);
+  if (issue) return issue;
+  const sheets = (value as GeneratedSheets).sheets;
+  const consistency = sheets === null ? null : generatedSheetsConsistencyIssue(sheets);
+  return consistency === null ? null : `${path}.${consistency}`;
+}
+
+/** The result-level rules of a sheet set: only a planned result carries one, and its designed sheets hold exactly the netlist's
+ *  components in netlist order (every physical component on exactly one sheet; an omitted sheet holds none). */
+function resultSheetsIssue(payload: GenerationTaskResultPayload): Issue {
+  if (payload.planner.state !== "planned") return "result.sheets: only a planned result carries a sheet set";
+  const set = payload.sheets?.sheets;
+  if (!set) return null;
+  const onSheets = set.children.flatMap((child) => child.components), inNetlist = payload.netlist.components.map((component) => component.refDes);
+  return onSheets.length === inNetlist.length && onSheets.every((ref, index) => ref === inNetlist[index]) ? null : "result.sheets: the sheets hold exactly the netlist's components, each once";
+}
+
+/** One page, keeping the derivation's findings and adding why (bounded). */
+function onePageSheets(findings: readonly string[], why: string): GeneratedSheets {
+  return { schema: GENERATION_SHEETS_SCHEMA, sheets: null, findings: [...findings.slice(0, GENERATED_SHEETS_BOUNDS.findings - 1), why] };
+}
+
+/** A derived sheet set in its stored form: every text a clean bounded line (port keys rebuilt from the cleaned nets), judged; a set the
+ *  judge refuses is recorded as one page with a finding, never as a refused result. */
+function normalizeGeneratedSheets(doc: GeneratedSheets): GeneratedSheets {
+  const bound = GENERATED_SHEETS_BOUNDS;
+  const net = (value: string): string => cleanLine(String(value), bound.netChars);
+  const portKey = (key: string): string => {
+    const at = key.indexOf(":");
+    return at < 0 ? cleanLine(key, bound.netChars + 3) : `${key.slice(0, at)}:${net(key.slice(at + 1))}`;
+  };
+  const findings = (Array.isArray(doc.findings) ? doc.findings : []).slice(0, bound.findings).map((finding) => cleanLine(String(finding), bound.findingChars)).filter(Boolean);
+  const set = doc.sheets;
+  const normalized: GeneratedSheets = {
+    schema: GENERATION_SHEETS_SCHEMA, findings,
+    sheets: set === null ? null : {
+      root: { sheetKey: "overview", name: "System overview" },
+      children: set.children.map((child) => ({
+        sheetKey: child.sheetKey, name: cleanLine(child.name, bound.sheetNameChars), status: child.status, components: child.components.map((ref) => cleanLine(ref, bound.refDesChars)),
+        ports: child.ports.map((port) => ({ portKey: `${child.sheetKey}:${net(port.net)}`, net: net(port.net), direction: port.direction, state: port.state })),
+        rails: child.rails.map((rail) => ({ net: net(rail.net), kind: rail.kind })), localNets: child.localNets.map(net),
+      })),
+      interfaces: set.interfaces.map((entry) => ({ net: net(entry.net), ports: entry.ports.map(portKey), state: entry.state })),
+      rails: set.rails.map((rail) => ({ net: net(rail.net), kind: rail.kind, sheets: [...rail.sheets] })),
+    },
+  };
+  return generationSheetsJudge(normalized, "result.sheets") === null ? normalized : onePageSheets(findings, SHEETS_NOT_RECORDED);
 }

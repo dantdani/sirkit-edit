@@ -95,14 +95,16 @@ export const REPLAY_CONTEXT_KEYS = ["schema", "schematic", "board", "schematicHe
 /** `SchematicState`, `SchComponent`, `Wire`, `Point`, `NetLabel`,
  *  `KicadComponentInstance` — lib/schematic-types.ts */
 export const SCHEMATIC_STATE_REQUIRED_KEYS = ["components", "wires"] as const;
-export const SCHEMATIC_STATE_OPTIONAL_KEYS = ["kicadComponents", "netLabels", "pageSize"] as const;
+export const SCHEMATIC_STATE_OPTIONAL_KEYS = ["kicadComponents", "netLabels", "pageSize", "sheets"] as const; // [PR-J, 2026-10-22] + the optional sheet tree (a multi-sheet project is never flattened in a replay capsule; validateSchematicStateIntegrity checks it)
 export const SCH_COMPONENT_REQUIRED_KEYS = ["id", "type", "x", "y", "rotation", "value"] as const;
-export const SCH_COMPONENT_OPTIONAL_KEYS = ["refDes"] as const;
+export const SCH_COMPONENT_OPTIONAL_KEYS = ["refDes", "sheetId"] as const; // [PR-J, 2026-10-22] + sheetId
 export const WIRE_REQUIRED_KEYS = ["id", "vertices"] as const;
+export const WIRE_OPTIONAL_KEYS = ["sheetId"] as const; // [PR-J, 2026-10-22] the wire's sheet
 export const POINT_REQUIRED_KEYS = ["x", "y"] as const;
 export const NET_LABEL_REQUIRED_KEYS = ["id", "position", "name", "kind", "orientation"] as const;
+export const NET_LABEL_OPTIONAL_KEYS = ["sheetId", "scope", "portId", "childSheetId"] as const; // [PR-J, 2026-10-22] the label's sheet and connection scope
 export const KICAD_COMPONENT_REQUIRED_KEYS = ["id", "partId", "x", "y", "rotation", "refDes", "value"] as const;
-export const KICAD_COMPONENT_OPTIONAL_KEYS = ["atomicPartRevisionId", "symbolAssetVersionId", "footprintAssetVersionId", "mappingCertificateId", "selectionRecordId"] as const;
+export const KICAD_COMPONENT_OPTIONAL_KEYS = ["atomicPartRevisionId", "symbolAssetVersionId", "footprintAssetVersionId", "mappingCertificateId", "selectionRecordId", "sheetId"] as const; // [PR-J, 2026-10-22] + sheetId
 
 /** The head mark the ASSEMBLER itself projects (context.ts): exactly three
  *  fields reach `Tier1ProposalHeadMark`, so anything else would be dropped. */
@@ -199,7 +201,7 @@ function projectSchematic(value: unknown): unknown {
   if (Array.isArray(state.wires)) {
     state.wires = state.wires.map((item) => {
       if (!isRec(item)) return item;
-      const wire = pick(item, WIRE_REQUIRED_KEYS);
+      const wire = pick(item, [...WIRE_REQUIRED_KEYS, ...WIRE_OPTIONAL_KEYS]);
       wire.vertices = pickEach(wire.vertices, POINT_REQUIRED_KEYS);
       return wire;
     });
@@ -207,7 +209,7 @@ function projectSchematic(value: unknown): unknown {
   if (Array.isArray(state.netLabels)) {
     state.netLabels = state.netLabels.map((item) => {
       if (!isRec(item)) return item;
-      const label = pick(item, NET_LABEL_REQUIRED_KEYS);
+      const label = pick(item, [...NET_LABEL_REQUIRED_KEYS, ...NET_LABEL_OPTIONAL_KEYS]);
       if (isRec(label.position)) label.position = pick(label.position, POINT_REQUIRED_KEYS);
       return label;
     });
@@ -533,11 +535,11 @@ function validateSchematicShape(value: unknown, issues: ContextIssues): void {
   if (!isRec(value)) { issues.push("context.schematic: must be null or a plain object"); return; }
   if (!exactContextKeys(value, SCHEMATIC_STATE_REQUIRED_KEYS, SCHEMATIC_STATE_OPTIONAL_KEYS, "context.schematic", issues)) return;
   exactElements(value.components, SCH_COMPONENT_REQUIRED_KEYS, SCH_COMPONENT_OPTIONAL_KEYS, "context.schematic.components", issues);
-  exactElements(value.wires, WIRE_REQUIRED_KEYS, [], "context.schematic.wires", issues, (wire, label) => {
+  exactElements(value.wires, WIRE_REQUIRED_KEYS, WIRE_OPTIONAL_KEYS, "context.schematic.wires", issues, (wire, label) => {
     exactElements(wire.vertices, POINT_REQUIRED_KEYS, [], `${label}.vertices`, issues);
   });
   if (value.netLabels !== undefined) {
-    exactElements(value.netLabels, NET_LABEL_REQUIRED_KEYS, [], "context.schematic.netLabels", issues, (label, elementLabel) => {
+    exactElements(value.netLabels, NET_LABEL_REQUIRED_KEYS, NET_LABEL_OPTIONAL_KEYS, "context.schematic.netLabels", issues, (label, elementLabel) => {
       if (!isRec(label.position)) { issues.push(`${elementLabel}.position: must be a plain object`); return; }
       exactContextKeys(label.position, POINT_REQUIRED_KEYS, [], `${elementLabel}.position`, issues);
     });

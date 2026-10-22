@@ -243,7 +243,7 @@ export class GenerationTaskService {
 export function publicResult(result: GenerationTaskResultPayload): Record<string, unknown> {
   return {
     status: result.status, omittedBlocks: [...result.omittedBlocks], netlist: result.netlist, explanation: result.explanation, electricalCheck: result.electricalCheck,
-    planner: result.planner, sharedNets: { checked: result.sharedNets.checked, findings: [...result.sharedNets.findings] }, resultDigest: result.resultDigest, at: result.at,
+    planner: result.planner, sharedNets: { checked: result.sharedNets.checked, findings: [...result.sharedNets.findings] }, resultDigest: result.resultDigest, at: result.at, ...(result.sheets !== undefined ? { sheets: structuredClone(result.sheets) } : {}), // [PR-J, 2026-10-22] J5-1: a planned result's sheet set, read-only, only when present
   };
 }
 

@@ -16,7 +16,7 @@
  */
 import { aiRequestHeaders, type AiRequestScope } from "./ai-request";
 import { projectSelectorQuery } from "./project-selector";
-import type { BuildLogicalNetlist } from "@/lib/schematic-types";
+import type { BuildLogicalNetlist } from "@/lib/schematic-types"; import { readGeneratedSheets, type GeneratedSheets } from "@/app/lib/schematic/generated-sheets"; // [PR-J, 2026-10-22] J5-1: a pure, browser-safe reader
 
 export const GENERATION_TASKS_ENDPOINT = "/api/generation-tasks";
 export const GENERATION_TASK_SNAPSHOT_SCHEMA = "sirkit.generation-task-snapshot.v1";
@@ -66,7 +66,7 @@ export interface GenerationTaskResultView {
   netlist: BuildLogicalNetlist;
   explanation: string;
   electricalCheck: { state: string; [key: string]: unknown };
-  resultDigest: string;
+  resultDigest: string; /** [PR-J, 2026-10-22] J5-1 (OD-255 item 9): a planned result's sheet set (or why it stays one page), read defensively; absent when the result has none or it is malformed. The page does not apply it yet. */ sheets?: GeneratedSheets;
 }
 export interface GenerationTaskFailure { ok: false; status: number; code: string; message: string; retryable: boolean; activeTask?: GenerationTaskSnapshotView | null }
 
@@ -126,7 +126,7 @@ function readEvent(value: unknown): GenerationTaskEventView | null {
 function readResult(value: unknown): GenerationTaskResultView | null {
   if (!isRecord(value) || (value.status !== "complete" && value.status !== "partial") || !isRecord(value.netlist) || !Array.isArray(value.netlist.components) || !Array.isArray(value.netlist.connections)) return null;
   if (!str(value.explanation, 10_000) || !isRecord(value.electricalCheck) || !str(value.electricalCheck.state, 40) || !str(value.resultDigest, 100)) return null;
-  return { status: value.status, omittedBlocks: Array.isArray(value.omittedBlocks) ? value.omittedBlocks.filter((entry): entry is string => str(entry, 200)) : [], netlist: value.netlist as unknown as BuildLogicalNetlist, explanation: value.explanation, electricalCheck: value.electricalCheck as GenerationTaskResultView["electricalCheck"], resultDigest: value.resultDigest };
+  return { status: value.status, omittedBlocks: Array.isArray(value.omittedBlocks) ? value.omittedBlocks.filter((entry): entry is string => str(entry, 200)) : [], netlist: value.netlist as unknown as BuildLogicalNetlist, explanation: value.explanation, electricalCheck: value.electricalCheck as GenerationTaskResultView["electricalCheck"], resultDigest: value.resultDigest, ...sheetsOf(value.sheets) }; // [PR-J, 2026-10-22] J5-1: a malformed sheet set is dropped, never the result
 }
 
 // ─── Requests ────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -417,7 +417,7 @@ export function generationTaskStatusText(view: GenerationTaskView): string {
       const designing = (view.plan?.blocks ?? []).filter((block) => block.status === "designing").map((block) => `"${block.name}"`);
       if (view.phase === "planning") return "Running: planning the design.";
       if (view.phase === "merging" || view.phase === "validating") return "Running: merging the saved blocks and checking the result.";
-      return designing.length ? `Running: designing ${designing.join(", ")}.` : "Running.";
+      return designing.length ? `Running: designing ${designing.join(", ")}${generationQueueClause(view)}.` : "Running."; // [PR-J, 2026-10-22] J.7: the blocks still queued, said (nothing queued: the sentence is unchanged)
     }
     case "waiting-for-provider": return `Waiting for the model provider; the design continues by itself${view.liveness.retryAt ? ` at ${view.liveness.retryAt.slice(11, 19)} UTC` : ""}.`;
     case "waiting-for-resource": return view.blocker ? `Needs your decision: ${view.blocker.message} ${view.blocker.resolution}` : "Needs your decision.";
@@ -447,3 +447,25 @@ export const GENERATION_TASK_ACTION_LABELS: Readonly<Record<"cancel" | "pause" |
 });
 /** Whether "Start again" (a NEW design from the same request) is offered: only once this task can do nothing more. */
 export const generationTaskRestartable = (view: Pick<GenerationTaskView, "state">): boolean => view.state === "cancelled" || view.state === "failed" || view.state === "stale";
+
+// [PR-J, 2026-10-22] Runbook J.7 (OD-255 item 10), appended after the last line (a function declaration is hoisted), so no cited line
+// moves: a design has more logical blocks than a worker has slots (8 blocks, 3 slots per worker), and the blocks that do not fit wait in
+// the durable queue - never dropped. While some blocks design, the status sentence says how many still wait and for what: a queued block
+// whose latest milestone is the model provider's wait waits for the provider; every other queued block waits for a free worker slot.
+// Nothing queued: the empty clause (the sentence is byte-identical to the one before).
+function generationQueueClause(view: Pick<GenerationTaskView, "plan" | "milestones">): string {
+  const queued = (view.plan?.blocks ?? []).filter((block) => block.status === "queued");
+  if (!queued.length) return "";
+  const latest = new Map<string, string>();
+  for (const event of view.milestones) if (event.blockId) latest.set(event.blockId, event.type);
+  const provider = queued.filter((block) => latest.get(block.blockId) === "waiting_provider").length, slot = queued.length - provider;
+  return `${slot ? `; ${slot} more block(s) queued for a free worker slot` : ""}${provider ? `; ${provider} more block(s) waiting for the model provider` : ""}`;
+}
+
+// [PR-J, 2026-10-22] Runbook J.6.3, increment J5-1, appended after the last line (a function declaration is hoisted): the result's optional
+// sheet set read with the shared defensive reader (app/lib/schematic/generated-sheets.ts); anything malformed is dropped and the result kept.
+function sheetsOf(value: unknown): { sheets?: GeneratedSheets } {
+  if (value === undefined) return {};
+  const sheets = readGeneratedSheets(value);
+  return sheets ? { sheets } : {};
+}

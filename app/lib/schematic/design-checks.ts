@@ -7,17 +7,27 @@
  * A check is `pass`, `findings` (with the bounded messages) or `not_run` with the reason (Theory mode, no catalog parts,
  * parts not loaded yet). The result carries the digest of the schematic it was computed on, so a stale result is never
  * shown as current. "Not run" is never a pass.
+ *
+ * [PR-J, 2026-10-22] Section J increment 2 (J.4, J.5; OD-255 items 2-4): the checks read the WHOLE project (every sheet, whatever the
+ * editor shows; one sheet's view is refused) through THE project connectivity authority. A document without sheets gets exactly the
+ * two checks it had (byte-identical). A document with sheets gets them on its scoped nets (ERC with one ground node per rail name,
+ * so AGND and DGND are checked as the two returns they are) plus a third check, "Sheet connections": the authority's findings
+ * (unbound or unanchored ports, isolation-domain and power-rail joins, structural errors). A structural error leaves the two
+ * electrical checks not run, with the reason - never a pass computed on guessed nets.
  */
 import type { BuildLogicalNetlist, SchematicState } from "@/lib/schematic-types";
 import type { CachedPart } from "@/app/lib/parts-cache";
 import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist";
 import { validateSchematicNetlist } from "@/lib/validate-netlist";
 import { runErc, type ErcCategory } from "@/lib/erc";
+import { resolveProjectConnectivity } from "@/app/lib/schematic/project-connectivity";
+import { assertWholeProject } from "@/app/lib/schematic/sheets";
 
 export type DesignCheckState = "pass" | "findings" | "not_run";
 
 export interface DesignCheck {
-  id: "floating-nets" | "supply-rails" | "bom";
+  /** [PR-J J2] "sheet-interfaces" exists only for a document with sheets */
+  id: "floating-nets" | "supply-rails" | "bom" | "sheet-interfaces";
   label: string;
   state: DesignCheckState;
   /** the number of findings (0 for pass and not_run) */
@@ -44,6 +54,8 @@ const fromFindings = (id: DesignCheck["id"], label: string, messages: string[]):
 /** Compute both checks for a Build-mode schematic. `parts` holds the loaded catalog parts (`getCachedPart`); a placed part
  *  that is not loaded yet makes both checks `not_run` (their pins are unknown), never a pass. */
 export function computeDesignChecks(state: SchematicState, parts: Map<string, CachedPart>, digest: string, mode: "build" | "theory"): DesignChecks {
+  assertWholeProject(state, "design-checks");
+  if (state.sheets !== undefined) return computeSheetedDesignChecks(state, parts, digest, mode);
   const kicad = state.kicadComponents ?? [];
   if (mode !== "build") return { digest, checks: [notRun("floating-nets", "No floating nets", "Theory mode has no catalog pins to check"), notRun("supply-rails", "Supply rails connected", "Theory mode has no catalog pins to check")] };
   if (kicad.length === 0) return { digest, checks: [notRun("floating-nets", "No floating nets", "no catalog parts on the sheet"), notRun("supply-rails", "Supply rails connected", "no catalog parts on the sheet")] };
@@ -60,6 +72,37 @@ export function computeDesignChecks(state: SchematicState, parts: Map<string, Ca
     checks: [
       fromFindings("floating-nets", "No floating nets", [...validation.violations.map((violation) => violation.message), ...floatingFindings(netlist, state, parts)]),
       fromFindings("supply-rails", "Supply rails connected", erc.errors.filter((error) => SUPPLY_CATEGORIES.has(error.category)).map((error) => error.message)),
+    ],
+  };
+}
+
+/** [PR-J J2] The checks of a document with sheets: the same two on the project's scoped nets, plus "Sheet connections". */
+function computeSheetedDesignChecks(state: SchematicState, parts: Map<string, CachedPart>, digest: string, mode: "build" | "theory"): DesignChecks {
+  const kicad = state.kicadComponents ?? [];
+  const connectivity = resolveProjectConnectivity(state, (partId) => parts.get(partId) ?? null);
+  // structural findings first, then the rail / isolation joins, each named once
+  const findings = [...new Set([...connectivity.diagnostics].sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "error" ? -1 : 1)).map((item) => item.message))];
+  const sheets = fromFindings("sheet-interfaces", "Sheet connections", findings);
+  if (!connectivity.ok) {
+    const reason = "the sheet structure has an error (see Sheet connections)";
+    return { digest, checks: [notRun("floating-nets", "No floating nets", reason), notRun("supply-rails", "Supply rails connected", reason), sheets] };
+  }
+  if (mode !== "build") return { digest, checks: [notRun("floating-nets", "No floating nets", "Theory mode has no catalog pins to check"), notRun("supply-rails", "Supply rails connected", "Theory mode has no catalog pins to check"), sheets] };
+  if (kicad.length === 0) return { digest, checks: [notRun("floating-nets", "No floating nets", "no catalog parts on any sheet"), notRun("supply-rails", "Supply rails connected", "no catalog parts on any sheet"), sheets] };
+  const missing = kicad.filter((instance) => !parts.has(instance.partId));
+  if (missing.length > 0) {
+    const reason = `${missing.length} part${missing.length === 1 ? "" : "s"} still loading`;
+    return { digest, checks: [notRun("floating-nets", "No floating nets", reason), notRun("supply-rails", "Supply rails connected", reason), sheets] };
+  }
+  const netlist = schematicToBuildNetlist(state, parts);
+  const validation = validateSchematicNetlist(netlist, state, parts);
+  const erc = runErc(netlist, new Map([...parts.entries()].map(([id, part]) => [id, { name: part.name, pins: part.pins }] as const)), { groundNodes: "per-name" });
+  return {
+    digest,
+    checks: [
+      fromFindings("floating-nets", "No floating nets", [...validation.violations.map((violation) => violation.message), ...floatingFindings(netlist, state, parts)]),
+      fromFindings("supply-rails", "Supply rails connected", erc.errors.filter((error) => SUPPLY_CATEGORIES.has(error.category)).map((error) => error.message)),
+      sheets,
     ],
   };
 }

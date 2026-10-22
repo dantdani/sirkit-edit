@@ -23,6 +23,7 @@ import type { SchematicState } from "@/lib/schematic-types";
 import { normalizeRefDes, schDisplayRef } from "@/lib/schematic-types";
 import { theoryPinContract } from "@/app/lib/schematic/theory-physicality"; // [PR-G, 2026-10-17] the shared rule's own module, not the Stage 4 bridge (forbidden in Stage 3 code)
 import { compareNatural } from "@/app/lib/stable-compare";
+import { assertWholeProject } from "@/app/lib/schematic/sheets"; // [PR-J, 2026-10-22] J2: one sheet's view is never the project
 
 export type UnresolvedInstanceFamily = "kicad" | "theory";
 export type UnresolvedInstanceMissing = "published_exact_revision" | "symbol_asset" | "theory_symbol_only";
@@ -53,9 +54,11 @@ export const UNRESOLVED_MISSING_LABEL: Readonly<Record<UnresolvedInstanceMissing
 
 /**
  * Every instance the sync would refuse, ordered by displayed reference (natural, case-insensitive: R2 before R10). Empty when
- * every physical instance carries a published exact revision and its installed symbol asset.
+ * every physical instance carries a published exact revision and its installed symbol asset. [PR-J, 2026-10-22] J2 (J.5): the
+ * WHOLE project - every instance on every sheet, whatever the editor shows (the board is one board); a sheet view is refused.
  */
 export function listUnresolvedInstances(state: SchematicState): UnresolvedInstance[] {
+  assertWholeProject(state, "missing-parts");
   const items: UnresolvedInstance[] = [];
   for (const instance of state.kicadComponents ?? []) {
     const missing: UnresolvedInstanceMissing | null = !instance.atomicPartRevisionId

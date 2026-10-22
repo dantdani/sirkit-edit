@@ -1,0 +1,583 @@
+{
+  "components": [],
+  "wires": [
+    {
+      "id": "00000000-0000-4000-8000-b00000000016",
+      "vertices": [
+        {
+          "x": 1090,
+          "y": 700
+        },
+        {
+          "x": 1090,
+          "y": 720
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000017",
+      "vertices": [
+        {
+          "x": 1090,
+          "y": 720
+        },
+        {
+          "x": 1150,
+          "y": 720
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000018",
+      "vertices": [
+        {
+          "x": 1150,
+          "y": 720
+        },
+        {
+          "x": 1150,
+          "y": 650
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000019",
+      "vertices": [
+        {
+          "x": 1150,
+          "y": 650
+        },
+        {
+          "x": 1170,
+          "y": 650
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000001c",
+      "vertices": [
+        {
+          "x": 1090,
+          "y": 830
+        },
+        {
+          "x": 1090,
+          "y": 850
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000001d",
+      "vertices": [
+        {
+          "x": 1090,
+          "y": 850
+        },
+        {
+          "x": 1150,
+          "y": 850
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000001e",
+      "vertices": [
+        {
+          "x": 1150,
+          "y": 850
+        },
+        {
+          "x": 1150,
+          "y": 690
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000001f",
+      "vertices": [
+        {
+          "x": 1150,
+          "y": 690
+        },
+        {
+          "x": 1170,
+          "y": 690
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000024",
+      "vertices": [
+        {
+          "x": 1420,
+          "y": 730
+        },
+        {
+          "x": 1420,
+          "y": 710
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000025",
+      "vertices": [
+        {
+          "x": 1420,
+          "y": 710
+        },
+        {
+          "x": 1340,
+          "y": 710
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000026",
+      "vertices": [
+        {
+          "x": 1340,
+          "y": 710
+        },
+        {
+          "x": 1340,
+          "y": 570
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000027",
+      "vertices": [
+        {
+          "x": 1340,
+          "y": 570
+        },
+        {
+          "x": 1250,
+          "y": 570
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000028",
+      "vertices": [
+        {
+          "x": 1250,
+          "y": 570
+        },
+        {
+          "x": 1250,
+          "y": 590
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000029",
+      "vertices": [
+        {
+          "x": 1330,
+          "y": 670
+        },
+        {
+          "x": 1350,
+          "y": 670
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000002a",
+      "vertices": [
+        {
+          "x": 1350,
+          "y": 670
+        },
+        {
+          "x": 1500,
+          "y": 670
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000002b",
+      "vertices": [
+        {
+          "x": 1500,
+          "y": 670
+        },
+        {
+          "x": 1500,
+          "y": 700
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000002c",
+      "vertices": [
+        {
+          "x": 1500,
+          "y": 700
+        },
+        {
+          "x": 1500,
+          "y": 720
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000002d",
+      "vertices": [
+        {
+          "x": 1500,
+          "y": 780
+        },
+        {
+          "x": 1500,
+          "y": 800
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000002e",
+      "vertices": [
+        {
+          "x": 1500,
+          "y": 800
+        },
+        {
+          "x": 1660,
+          "y": 800
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000002f",
+      "vertices": [
+        {
+          "x": 1660,
+          "y": 800
+        },
+        {
+          "x": 1660,
+          "y": 830
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000030",
+      "vertices": [
+        {
+          "x": 1660,
+          "y": 830
+        },
+        {
+          "x": 1640,
+          "y": 830
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000031",
+      "vertices": [
+        {
+          "x": 690,
+          "y": 690
+        },
+        {
+          "x": 670,
+          "y": 690
+        }
+      ]
+    }
+  ],
+  "kicadComponents": [
+    {
+      "id": "00000000-0000-4000-8000-b00000000001",
+      "partId": "b16-1c-part-c",
+      "x": 1250,
+      "y": 840,
+      "rotation": 90,
+      "refDes": "C1",
+      "value": "10uF",
+      "atomicPartRevisionId": "atomic_38660f72f1eda8c93b325323cbd38079573aff66f8a8c1df677cb562f0509582",
+      "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
+      "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
+      "mappingCertificateId": "map_340ce951b0a0b3bd0815551d088275a28f14e8d805a4ee2fce96c58088aa4890"
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000002",
+      "partId": "b16-1c-part-c",
+      "x": 1420,
+      "y": 630,
+      "rotation": 0,
+      "refDes": "C2",
+      "value": "100nF",
+      "atomicPartRevisionId": "atomic_d466057118f1a7dd01eccce7f216586fd37b78c2b51bbc34fc1f746334d056dc",
+      "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
+      "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
+      "mappingCertificateId": "map_6f2de14ec76a2c610e063a5de4216ee6e2347aacf5de118c397b8a78619fad9e"
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000003",
+      "partId": "b16-1c-part-c",
+      "x": 1420,
+      "y": 760,
+      "rotation": 0,
+      "refDes": "C3",
+      "value": "10nF",
+      "atomicPartRevisionId": "atomic_948e666999b221cf30946679cafd526083cdeaa265e75469867c28ae6b17f65d",
+      "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
+      "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
+      "mappingCertificateId": "map_e1d0f88eb70843abb5e25e5530603a2d665098243038ebef89a6d337e90b335c"
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000004",
+      "partId": "b16-1c-part-led",
+      "x": 1610,
+      "y": 830,
+      "rotation": 0,
+      "refDes": "D1",
+      "value": "LED",
+      "atomicPartRevisionId": "atomic_e7bf2d52fd37ee5be68b2d90f1e8ecd352bd357cc6a4af42e0c4a308a00f10b4",
+      "symbolAssetVersionId": "symbolv_d26c0f7ed3ec1458acaae93c3fd1b766365336a5447afd8daac73609255c865a",
+      "footprintAssetVersionId": "footprintv_6d13b18971a1582bb2e14eaba3e2e0b33e634f39514e25fbfe173f6b3c93fc7c",
+      "mappingCertificateId": "map_39648e2d1513ac87e8432501abb2ca02df782fd82b495a7d823bac141be95c29"
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000005",
+      "partId": "b16-1c-part-conn-1x02",
+      "x": 730,
+      "y": 670,
+      "rotation": 0,
+      "refDes": "J1",
+      "value": "PWR_5V",
+      "atomicPartRevisionId": "atomic_b9cf71b5db2f9fe7534d7e7e3fed0403febf7432ac60102a76f6eee465815307",
+      "symbolAssetVersionId": "symbolv_8cb1b3c3bcd9c11ff8a6ac717053e986782cfe0c0ae63bb81f4b5b13dc02807b",
+      "footprintAssetVersionId": "footprintv_49af44e6db865d518a68460cddd4f3682566df2b4b26f0cff750768f140942d6",
+      "mappingCertificateId": "map_a11ab74e4c65deeed36c157d12fc8ac2d2d32b1388c2a7d7aa58284b059c224e"
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000006",
+      "partId": "b16-1c-part-r",
+      "x": 1090,
+      "y": 670,
+      "rotation": 0,
+      "refDes": "R1",
+      "value": "10k",
+      "atomicPartRevisionId": "atomic_39f34356ac49aaf5942f05bbb4a2d396dfad878fb33e1d45cb3209efcafc962f",
+      "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+      "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+      "mappingCertificateId": "map_59f66086395063c60395ae0a5b69ef8bce8e163b8467fe8455cfd3e96e06b60d"
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000007",
+      "partId": "b16-1c-part-r",
+      "x": 1090,
+      "y": 800,
+      "rotation": 0,
+      "refDes": "R2",
+      "value": "56k",
+      "atomicPartRevisionId": "atomic_8c9039902f87281f33b2db250a3d1b5a5633aa5d468326707d06a9b6d4722b04",
+      "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+      "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+      "mappingCertificateId": "map_8faec862de3894af5cbe60b2f13baa5eb0416bfe518d0729ee1f5676acbc018a"
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000008",
+      "partId": "b16-1c-part-r",
+      "x": 1500,
+      "y": 750,
+      "rotation": 0,
+      "refDes": "R3",
+      "value": "330",
+      "atomicPartRevisionId": "atomic_570435764b9de4169d7519ef3d4ae820750eaaa693dda8f626471ea912cf556a",
+      "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+      "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+      "mappingCertificateId": "map_05426d48cb5bca4546f9f876c4b2c85e8eea7964994b02404bbd8a28a73f02f9"
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000009",
+      "partId": "b16-1c-part-ne555d",
+      "x": 1250,
+      "y": 670,
+      "rotation": 0,
+      "refDes": "U1",
+      "value": "NE555D",
+      "atomicPartRevisionId": "atomic_7d6e4accfa2d91705e24da2ef5a46724e6ebaf8453aa85fd1415de15ad0e78da",
+      "symbolAssetVersionId": "symbolv_c1e1c29563fc7559ae4d110c40b6de98d80b98e32d499d85c1d7df4804d89b6c",
+      "footprintAssetVersionId": "footprintv_1427431314d9755c85e26cc0a6f5aa86083c9c173d6ff716e00aec2af97c72dc",
+      "mappingCertificateId": "map_4df236ff05c950644e9d261331704a9583101e1f2fb42245f9d0e9a1996bb8e7"
+    }
+  ],
+  "netLabels": [
+    {
+      "id": "00000000-0000-4000-8000-b0000000000b",
+      "position": {
+        "x": 1270,
+        "y": 590
+      },
+      "name": "VCC",
+      "kind": "power",
+      "orientation": 0
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000000c",
+      "position": {
+        "x": 1170,
+        "y": 630
+      },
+      "name": "VCC",
+      "kind": "power",
+      "orientation": 270
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000000d",
+      "position": {
+        "x": 1090,
+        "y": 640
+      },
+      "name": "VCC",
+      "kind": "power",
+      "orientation": 0
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000000e",
+      "position": {
+        "x": 1420,
+        "y": 600
+      },
+      "name": "VCC",
+      "kind": "power",
+      "orientation": 0
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000000f",
+      "position": {
+        "x": 690,
+        "y": 670
+      },
+      "name": "VCC",
+      "kind": "power",
+      "orientation": 270
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000010",
+      "position": {
+        "x": 1250,
+        "y": 750
+      },
+      "name": "GND",
+      "kind": "ground",
+      "orientation": 0
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000011",
+      "position": {
+        "x": 1220,
+        "y": 840
+      },
+      "name": "GND",
+      "kind": "ground",
+      "orientation": 90
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000012",
+      "position": {
+        "x": 1420,
+        "y": 660
+      },
+      "name": "GND",
+      "kind": "ground",
+      "orientation": 0
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000013",
+      "position": {
+        "x": 1420,
+        "y": 790
+      },
+      "name": "GND",
+      "kind": "ground",
+      "orientation": 0
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000014",
+      "position": {
+        "x": 1580,
+        "y": 830
+      },
+      "name": "GND",
+      "kind": "ground",
+      "orientation": 90
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000015",
+      "position": {
+        "x": 670,
+        "y": 690
+      },
+      "name": "GND",
+      "kind": "ground",
+      "orientation": 90
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000001a",
+      "position": {
+        "x": 1090,
+        "y": 770
+      },
+      "name": "NET_QFX8",
+      "kind": "label",
+      "orientation": 270
+    },
+    {
+      "id": "00000000-0000-4000-8000-b0000000001b",
+      "position": {
+        "x": 1170,
+        "y": 650
+      },
+      "name": "NET_QFX8",
+      "kind": "label",
+      "orientation": 180
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000020",
+      "position": {
+        "x": 1090,
+        "y": 830
+      },
+      "name": "NET_NEVM",
+      "kind": "label",
+      "orientation": 90
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000021",
+      "position": {
+        "x": 1170,
+        "y": 710
+      },
+      "name": "NET_NEVM",
+      "kind": "label",
+      "orientation": 180
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000022",
+      "position": {
+        "x": 1280,
+        "y": 840
+      },
+      "name": "NET_X2FB",
+      "kind": "label",
+      "orientation": 0
+    },
+    {
+      "id": "00000000-0000-4000-8000-b00000000023",
+      "position": {
+        "x": 1170,
+        "y": 690
+      },
+      "name": "NET_X2FB",
+      "kind": "label",
+      "orientation": 180
+    }
+  ],
+  "pageSize": "A4"
+}

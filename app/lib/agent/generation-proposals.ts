@@ -32,7 +32,7 @@ import { assertSafeJsonValue, DEFAULT_INPUT_LIMITS, DEFAULT_OUTPUT_LIMITS, valid
 import type { ToolDescriptor, ToolRegistry } from "../engineering/tool-registry";
 import { engineeringDigest } from "../engineering/stable";
 import type { AgentRunContext, GatewayInvocationOutcome } from "./contracts";
-import { sanitizeTraceText } from "./redaction";
+import { sanitizeTraceText } from "./redaction"; import { readGeneratedSheets } from "../schematic/generated-sheets"; // [PR-J, 2026-10-22] J5-1: the pure sheet-set reader
 import {
   GENERATION_TASK_CONTROL_LABELS, GENERATION_TASK_CONTROL_TOOL_ACTIONS, GENERATION_TASK_CONTROL_TOOL_ID, GENERATION_TASK_ID_PATTERN, GENERATION_TASK_INSPECT_MAX_CHARS, GENERATION_TASK_INSPECT_TOOL_ID,
   GENERATION_TASK_INSPECTION_SCHEMA, GENERATION_TASK_REF_SCHEMA, GENERATION_TASK_BLOCK_IDS, GENERATION_START_TOOL_ID, generationChatClientRequestId, sealGenerationTaskControlRequest,
@@ -274,7 +274,7 @@ export function resultSummaryOf(result: unknown): Record<string, unknown> | null
     components: Array.isArray(netlist.components) ? netlist.components.length : 0,
     connections: Array.isArray(netlist.connections) ? netlist.connections.length : 0,
     electricalCheck: { state: typeof check.state === "string" ? check.state : "not_run", criticalCount: typeof check.criticalCount === "number" ? check.criticalCount : null, warningCount: typeof check.warningCount === "number" ? check.warningCount : null },
-    resultDigest: typeof result.resultDigest === "string" ? result.resultDigest : null,
+    resultDigest: typeof result.resultDigest === "string" ? result.resultDigest : null, ...sheetSummaryOf(result.sheets), // [PR-J, 2026-10-22] J5-1: a planned result's sheet summary (names, counts, interfaces; never the netlist)
   };
 }
 
@@ -393,7 +393,7 @@ export class GenerationTaskControlProposalService {
 function fitInspectionBound(report: Record<string, unknown>): Record<string, unknown> {
   const fits = (value: Record<string, unknown>): boolean => JSON.stringify({ report: value }).length <= GENERATION_TASK_INSPECT_MAX_CHARS;
   if (fits(report)) return report;
-  const shortened: Record<string, unknown> = { ...structuredClone(report), truncated: true, truncation: "This inspection is shortened to fit its bound: some missing-part search queries, categories or extra roles, trailing assumptions or coverage lines, or older activity lines are left out. The status card on the page shows them all." };
+  const shortened: Record<string, unknown> = { ...structuredClone(report), truncated: true, truncation: "This inspection is shortened to fit its bound: some missing-part search queries, categories or extra roles, trailing assumptions or coverage lines, or older activity lines, or sheet details (each sheet's rails and ports, trailing interfaces and findings) are left out. The status card on the page shows them all." }; // [PR-J, 2026-10-22] + sheet details
   const task = isRecord(shortened.task) ? shortened.task : null;
   const plan = task && isRecord(task.plan) ? task.plan : null;
   const blocks = plan && Array.isArray(plan.blocks) ? plan.blocks.filter(isRecord) : [];
@@ -402,7 +402,7 @@ function fitInspectionBound(report: Record<string, unknown>): Record<string, unk
     () => { for (const block of blocks) for (const entry of missingOf(block)) delete entry.query; },
     () => { for (const block of blocks) for (const entry of missingOf(block)) delete entry.category; },
     () => { for (const block of blocks) if (Array.isArray(block.missing) && block.missing.length > 1) block.missing = block.missing.slice(0, 1); },
-  ];
+  ...sheetSummarySteps(shortened, fits)]; // [PR-J, 2026-10-22] J5-1: then the sheet summary's details
   for (const step of steps) { step(); if (fits(shortened)) return shortened; }
   const lists = plan ? (["assumptions", "coverage"] as const).filter((key) => Array.isArray(plan[key])) : [];
   for (;;) {
@@ -413,4 +413,46 @@ function fitInspectionBound(report: Record<string, unknown>): Record<string, unk
   }
   while (task && Array.isArray(task.activity) && task.activity.length > 0 && !fits(shortened)) task.activity.shift();
   return shortened;
+}
+
+// [PR-J, 2026-10-22] Runbook J.6.7, increment J5-1 (OD-255 item 9), appended after the last line (function declarations are hoisted): a
+// planned result's sheet set as the inspection's bounded summary - the overview, each sheet's name, status, component COUNT, ports and
+// rails, the interfaces between sheets, the project rails and the findings (why a result stays on one page, an omitted sheet's unbound
+// ports). Never a reference designator list or the netlist. A malformed or absent sheet set adds nothing. `fitInspectionBound` shortens
+// it after the missing-role steps: findings beyond the first 3, each sheet's rails, each sheet's ports, the project rails' sheet lists,
+// then trailing interfaces (counted, never silently).
+/** The inspection's sheet summary of a result's `sheets` field, or nothing. */
+function sheetSummaryOf(value: unknown): { sheets?: Record<string, unknown> } {
+  if (value === undefined) return {};
+  const doc = readGeneratedSheets(value);
+  if (!doc) return {};
+  if (!doc.sheets) return { sheets: { layout: "one-page", findings: [...doc.findings] } };
+  const set = doc.sheets;
+  return {
+    sheets: {
+      layout: "sheets", overview: set.root.name,
+      sheets: set.children.map((child) => ({ sheetKey: child.sheetKey, name: child.name, status: child.status, components: child.components.length, localNets: child.localNets.length, ports: child.ports.map((port) => ({ net: port.net, direction: port.direction, state: port.state })), rails: child.rails.map((rail) => rail.net) })),
+      interfaces: set.interfaces.map((entry) => ({ net: entry.net, sheets: entry.ports.map((key) => key.slice(0, key.indexOf(":"))), state: entry.state })),
+      rails: set.rails.map((rail) => ({ net: rail.net, kind: rail.kind, sheets: [...rail.sheets] })),
+      findings: [...doc.findings],
+    },
+  };
+}
+/** The shortening steps of the sheet summary inside a report copy (each step runs only while the report does not fit). */
+function sheetSummarySteps(report: Record<string, unknown>, fits: (value: Record<string, unknown>) => boolean): Array<() => void> {
+  const result = isRecord(report.result) ? report.result : null;
+  const summary = result && isRecord(result.sheets) ? result.sheets : null;
+  if (!summary) return [];
+  const sheets = Array.isArray(summary.sheets) ? summary.sheets.filter(isRecord) : [];
+  return [
+    () => { if (Array.isArray(summary.findings) && summary.findings.length > 3) summary.findings = summary.findings.slice(0, 3); },
+    () => { for (const sheet of sheets) delete sheet.rails; },
+    () => { for (const sheet of sheets) delete sheet.ports; },
+    () => { if (Array.isArray(summary.rails)) for (const rail of summary.rails) if (isRecord(rail)) delete rail.sheets; },
+    () => {
+      if (!Array.isArray(summary.interfaces)) return;
+      const total = summary.interfaces.length;
+      while (summary.interfaces.length > 0 && !fits(report)) { summary.interfaces.pop(); summary.interfacesOmitted = total - summary.interfaces.length; }
+    },
+  ];
 }

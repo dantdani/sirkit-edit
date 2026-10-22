@@ -154,7 +154,7 @@ against the current sheet with zero model calls (the generation does not depend 
 `GENERATION_SLICE_POLICY`: `leaseMs` 45 s, `renewEveryMs` 15 s, `planWindowMs` 90 s, `blockWindowMs` 300 s, `perCallMs`
 120 s, `minTurnStartMs` 60 s (no new turn when less window remains), `blockTurnsPerSlice` = min(6, `resolveBuildIterationCap()`),
 `mergeWindowMs` 30 s, `controlPollMs` 2 s, `activityMinIntervalMs` 3 s, `workerPickupGraceMs` 15 s, `maxAttemptsPerSlice` 5,
-`stagnantSlicesPerStrategy` 3, worker concurrency 3 (`BUILD_BUDGET.concurrencyCap`). Window deadlines are computed with
+`stagnantSlicesPerStrategy` 3, worker concurrency 3 (its own constant since [PR-J, 2026-10-22]; it was `BUILD_BUDGET.concurrencyCap`). Window deadlines are computed with
 `Date.now()` because `withinBuildBoundary` measures in that frame (frozen under the fixture, where its timer still fires, F8);
 leases and timestamps use the injected task clock (`unfrozenNowMs` under the fixture, `Date.now` otherwise).
 

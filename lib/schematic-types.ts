@@ -33,6 +33,9 @@ export type SchComponent = {
    * theory components' display values.
    */
   refDes?: string;
+  /** [PR-J, 2026-10-22] The schematic sheet this component is drawn on. Absent means the root sheet (`ROOT_SHEET_ID`); the value
+   *  "root" is never written, so a single-sheet document keeps its exact bytes and digests. */
+  sheetId?: string;
 };
 
 /** B07 — the user-visible designator of a theory component. */
@@ -59,6 +62,8 @@ export function refDesKey(value: string): string {
 export type Wire = {
   id: string;
   vertices: Point[];
+  /** [PR-J, 2026-10-22] The schematic sheet the wire is drawn on; absent means the root sheet. */
+  sheetId?: string;
 };
 
 // ─── Net labels ───────────────────────────────────────────────────────────────
@@ -79,6 +84,15 @@ export type NetLabel = {
   name: string;                     // e.g. "VCC", "+3V3", "GND", "MOSI"
   kind: NetLabelKind;
   orientation: Rotation;            // rotation of the glyph around its anchor
+  /** [PR-J, 2026-10-22] The schematic sheet the label is drawn on; absent means the root sheet. */
+  sheetId?: string;
+  /** [PR-J, 2026-10-22] Connection scope (see `NetLabelScope`); absent means LOCAL: the label joins same-named labels on its own
+   *  sheet only. Power and ground kinds are project rails by exact name whatever this says. */
+  scope?: NetLabelScope;
+  /** [PR-J, 2026-10-22] The `SheetPort` a "hierarchical" or "sheet-pin" label belongs to (by identity, never by name). */
+  portId?: string;
+  /** [PR-J, 2026-10-22] For a "sheet-pin" label: the child sheet whose block the pin sits on (the port's own sheet). */
+  childSheetId?: string;
 };
 
 // Two labels with the same (case-insensitive) name belong to the same net.
@@ -112,6 +126,9 @@ export type KicadComponentInstance = {
   footprintAssetVersionId?: string;
   mappingCertificateId?: string;
   selectionRecordId?: string;
+  /** [PR-J, 2026-10-22] The schematic sheet the WHOLE package is drawn on; absent means the root sheet. One package is one instance
+   *  on one sheet: placing its units on different sheets is refused (SHEET_UNIT_SPLIT_UNSUPPORTED) until its own increment. */
+  sheetId?: string;
 };
 
 // ─── Page size ─────────────────────────────────────────────────────────────────
@@ -160,6 +177,9 @@ export type SchematicState = {
   // Sheet size for the canvas boundary + KiCad export. Optional for the same
   // backward-compat reason; treat absence as DEFAULT_PAGE_SIZE.
   pageSize?: PageSize;
+  // [PR-J, 2026-10-22] The schematic sheet tree of a multi-sheet project (OD-255 item 1). ABSENT for a single-sheet project, whose
+  // bytes, digests and exports stay exactly as before; present only while at least one child sheet exists.
+  sheets?: SchematicSheetSet;
 };
 
 export type LogicalComponent = {
@@ -295,3 +315,51 @@ export const PIN_OFFSETS: Record<SchComponentType, Record<string, Point>> = {
   "current-source": { "+": { x: 0, y: -30 }, "-": { x: 0, y: 30 } },
   ground: { pin: { x: 0, y: -20 } },
 };
+
+// ─── [PR-J, 2026-10-22] Schematic sheets (runbook section J; OD-255) ───────────
+// One project, one circuit, one PCB: a multi-sheet project is the SAME document with an optional sheet tree and an optional
+// `sheetId` on every component, wire and label (absent = the root sheet). "Sheet" here is a SCHEMATIC sheet of the hierarchy;
+// the page size (`pageSize`, `changeSheetSize`) keeps its existing meaning. The connection policy (local / global / power and
+// ground / hierarchical) is implemented once, in app/lib/schematic/project-connectivity.ts; the structural contract in
+// app/lib/schematic/sheets.ts.
+
+/** The root (overview) sheet's id: a constant, never a random draw. Entities on the root carry NO `sheetId`. */
+export const ROOT_SHEET_ID = "root" as const;
+
+/** A label's connection scope. Absent = local to its sheet. "global": joins every global, power or ground label of the same name in
+ *  the project. "hierarchical": the child-side anchor of a sheet port (joins its port's sheet pin only). "sheet-pin": the parent-side
+ *  pin of a child sheet's port (joins that port only). Names never connect hierarchical labels or sheet pins. */
+export type NetLabelScope = "global" | "hierarchical" | "sheet-pin";
+
+/** Port direction: the CD-8 hierarchy vocabulary (`HierarchicalPortDefinition["direction"]`, app/lib/schematic-compiler/types.ts),
+ *  asserted equal at compile time in app/lib/schematic/sheets.ts (this file stays import-free). */
+export type SheetPortDirection = "input" | "output" | "bidirectional" | "passive" | "power_in" | "power_out";
+
+/** A scalar interface signal of a child sheet. Bus / bundle ports are refused (SHEET_BUNDLE_UNSUPPORTED). */
+export type SheetPort = {
+  id: string;
+  name: string;              // unique per sheet (case-normalized like net labels); display only, never a connection key
+  direction: SheetPortDirection;
+};
+
+/** One schematic sheet. The root has `parentId: null`; every other sheet has exactly one parent (repeated instances refused).
+ *  Siblings are ordered by their position in `SchematicSheetSet.sheets`. */
+export type SchematicSheet = {
+  id: string;
+  name: string;
+  parentId: string | null;
+  /** The sheet symbol on the parent sheet (grid-aligned, positive size). Presentation only. */
+  block?: { x: number; y: number; width: number; height: number };
+  ports?: SheetPort[];
+};
+
+export type SchematicSheetSet = {
+  version: 1;
+  sheets: SchematicSheet[];
+};
+
+/** A child-side port anchor: a net label with scope "hierarchical" on the port's own sheet. */
+export type HierarchicalLabel = NetLabel & { scope: "hierarchical"; portId: string };
+
+/** A parent-side sheet pin: a net label with scope "sheet-pin" on the child's parent sheet, bound to exactly one port. */
+export type SheetPin = NetLabel & { scope: "sheet-pin"; portId: string; childSheetId: string };

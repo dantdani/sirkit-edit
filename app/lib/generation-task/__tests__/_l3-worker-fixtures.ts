@@ -316,3 +316,54 @@ export async function drive(env: Pick<L3Env, "store" | "scope" | "time">, worker
   throw new Error(`the condition did not hold after ${maxTicks} ticks${describe(last)}`);
 }
 export const settledOrWaiting = (task: GenerationTaskHead): boolean => ["awaiting-review", "waiting-for-resource", "failed", "cancelled", "paused", "succeeded", "stale"].includes(task.state);
+
+// ─── [PR-J, 2026-10-22] Runbook J.7: more logical blocks than worker slots ──────────────────────────────────────────────────
+// Appended after the last line, so no cited line moves. The drone as EIGHT subsystem blocks (the task's block limit) from the same
+// pin-valid offline parts: more blocks than one worker's three slots, each block a search per part and one submission (2-3 calls).
+
+export const EIGHT_BLOCK_PROMPT = "build me a simple drone controlling circuitly with 4 motors, one subsystem block per motor channel";
+export const EIGHT_BLOCKS = Object.freeze([
+  { name: "Flight controller", brief: "An MCU with four PWM outputs and an I2C bus.", sharedNets: ["+3V3", "GND", "SDA", "SCL", "PWM1", "PWM2", "PWM3", "PWM4"] },
+  { name: "Inertial sensor", brief: "A 6-axis IMU on the I2C bus.", sharedNets: ["+3V3", "GND", "SDA", "SCL"] },
+  { name: "Battery input", brief: "A 1S battery connector with a bulk capacitor.", sharedNets: ["VBAT", "GND"] },
+  { name: "3.3 V regulator", brief: "A 3.3 V LDO regulator fed from the battery.", sharedNets: ["VBAT", "+3V3", "GND"] },
+  ...[1, 2, 3, 4].map((n) => ({ name: `Motor channel ${n}`, brief: `One logic-level N-MOSFET low-side switch with a flyback diode for motor ${n}.`, sharedNets: ["VBAT", "GND", `PWM${n}`] })),
+]);
+const pinsTo = (refDes: string, pins: Readonly<Record<string, string>>) => Object.entries(pins).map(([pin, net]) => label(`${refDes}.${pin}`, net));
+const motorChannel = (n: number) => ({
+  components: [{ refDes: "Q1", partId: "p-fet", value: "N-MOSFET", role: "output" }, { refDes: "D1", partId: "p-diode", value: "Schottky", role: "support", parentRefDes: "Q1" }],
+  connections: [label("Q1.G", `PWM${n}`), label("Q1.S", "GND"), { from: "Q1.D", to: "D1.A" }, label("D1.K", "VBAT")],
+  explanation: `Low-side channel ${n} with a flyback diode.`,
+});
+/** Each of the eight blocks' netlist (refDes repeat across blocks on purpose: the merge de-collides them) and its searches, one per part. */
+export const EIGHT_BLOCK_DESIGNS: Readonly<Record<string, { netlist: object; searches: readonly string[] }>> = Object.freeze({
+  "Flight controller": {
+    netlist: { components: [{ refDes: "U1", partId: "p-mcu", value: "MCU", role: "processor" }, { refDes: "C1", partId: "p-cap", value: "100nF", role: "passive" }], connections: [...pinsTo("U1", { VDD: "+3V3", GND: "GND", SDA: "SDA", SCL: "SCL", PA0: "PWM1", PA1: "PWM2", PA2: "PWM3", PA3: "PWM4" }), ...pinsTo("C1", { 1: "+3V3", 2: "GND" })], explanation: "MCU with four PWM outputs on the I2C bus." },
+    searches: ["flight controller mcu", "decoupling capacitor"],
+  },
+  "Inertial sensor": {
+    netlist: { components: [{ refDes: "U1", partId: "p-imu", value: "IMU", role: "input" }, { refDes: "C1", partId: "p-cap", value: "100nF", role: "passive" }], connections: [...pinsTo("U1", { VDD: "+3V3", GND: "GND", SDA: "SDA", SCL: "SCL" }), ...pinsTo("C1", { 1: "+3V3", 2: "GND" })], explanation: "IMU on the I2C bus." },
+    searches: ["imu gyro", "decoupling capacitor"],
+  },
+  "Battery input": {
+    netlist: { components: [{ refDes: "J1", partId: "p-bat", value: "1S", role: "connector" }, { refDes: "C1", partId: "p-cap", value: "100nF", role: "passive" }], connections: [...pinsTo("J1", { VBAT: "VBAT", GND: "GND" }), ...pinsTo("C1", { 1: "VBAT", 2: "GND" })], explanation: "Battery input." },
+    searches: ["battery connector", "decoupling capacitor"],
+  },
+  "3.3 V regulator": {
+    netlist: { components: [{ refDes: "U1", partId: "p-reg", value: "3.3V LDO", role: "regulator" }, { refDes: "C1", partId: "p-cap", value: "100nF", role: "passive" }], connections: [...pinsTo("U1", { VIN: "VBAT", VOUT: "+3V3", GND: "GND" }), ...pinsTo("C1", { 1: "+3V3", 2: "GND" })], explanation: "3.3 V rail from the battery." },
+    searches: ["ldo regulator", "decoupling capacitor"],
+  },
+  ...Object.fromEntries([1, 2, 3, 4].map((n) => [`Motor channel ${n}`, { netlist: motorChannel(n), searches: ["logic level mosfet", "schottky flyback diode"] }])),
+});
+/** One of the eight blocks: search each part, then submit (calls = searches + 1). */
+export function eightBlock(name: string): BlockScript {
+  const design = EIGHT_BLOCK_DESIGNS[name]!, tag = name.replace(/\W/g, "");
+  return ({ turn }) => (turn <= design.searches.length ? reply([search(`call_${tag}_${turn}`, design.searches[turn - 1]!)]) : reply([submit(`call_${tag}_submit_${turn}`, design.netlist)]));
+}
+/** The eight-block plan's scripts (`plan` answers the eight blocks; a block's script by its name). */
+export const eightBlockScripts = (overrides: Partial<Record<string, BlockScript>> = {}) => ({
+  plan: () => planReply(EIGHT_BLOCKS),
+  blocks: { ...Object.fromEntries(EIGHT_BLOCKS.map((block) => [block.name, eightBlock(block.name)])), ...overrides } as Record<string, BlockScript>,
+});
+/** The model calls the eight-block design makes when nothing goes wrong: one plan call and, per block, its searches plus one submission. */
+export const EIGHT_BLOCK_CALLS = 1 + EIGHT_BLOCKS.reduce((sum, block) => sum + EIGHT_BLOCK_DESIGNS[block.name]!.searches.length + 1, 0);

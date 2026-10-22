@@ -146,6 +146,7 @@ describe("[PR-L6 L.7-9] the owner's four-motor request through the real routes, 
     expect(result.electricalCheck).toMatchObject({ state: "passed", criticalCount: 0, warningCount: 2 }); // ADC6 / ADC7 unconnected inputs
     const netlist = result.netlist as BuildLogicalNetlist;
     expect(multiset(netlist)).toEqual(DRONE_4_MULTISET);
+    expectDroneSheets(result.sheets, netlist, false); // [PR-J, 2026-10-22] J5-1: the planned result as 4 subsystem sheets beside its flat netlist
     const parts = fixtureRuntimeCatalog().cachedParts;
     for (const component of netlist.components) expect(publishedAtomicIdentity(parts.get(component.partId), component.value), `${component.refDes} ${component.partId}=${component.value}`).not.toBeNull();
     // every shared net is a real label on real pins in at least two blocks' instances (not prose): check the merged nets
@@ -180,6 +181,7 @@ describe("[PR-L6 L.7-10] a second ordinary circuit, and the blinker still yields
     const { result } = await taskOf(taskId, true);
     const netlist = result.netlist as BuildLogicalNetlist;
     expect(netlist.components).toHaveLength(14);
+    expect(result).not.toHaveProperty("sheets"); // [PR-J, 2026-10-22] J5-1: a single design is one page (no sheet set, its result digest unchanged)
     const byRef = new Map(netlist.components.map((component) => [component.refDes, component] as const));
     expect(byRef.get("U1")!.partId).toBe(BLINKER_PART_IDS.timer);
     for (const ref of ["D1", "D2"]) expect(byRef.get(ref)).toMatchObject({ partId: FIXTURE_RESOLUTION_PART_IDS.eligibleDiode, value: "1N4148W" });
@@ -200,6 +202,7 @@ describe("[PR-L6 L.7-10] a second ordinary circuit, and the blinker still yields
     const submitted = calls.flatMap((call) => call.answer.toolCalls.filter((toolCall) => toolCall.name === "submit_schematic").map((toolCall) => toolCall.input));
     expect(submitted).toEqual([{ components: BLINKER_NETLIST.components, connections: BLINKER_NETLIST.connections, explanation: BLINKER_NETLIST.explanation }]);
     const { result } = await taskOf(taskId, true);
+    expect(result).not.toHaveProperty("sheets"); // [PR-J, 2026-10-22] J5-1: the prompt-to-Gerber design stays one page
     expect(result.netlist.components).toEqual(BLINKER_NETLIST.components);
     expect(result.netlist.connections.map((connection: Record<string, unknown>) => Object.fromEntries(Object.entries(connection).filter(([key]) => key !== "labelKind")))).toEqual(BLINKER_NETLIST.connections); // the loop adds the inferred label kinds
   });
@@ -265,6 +268,7 @@ describe("[PR-L6 L.7-9] pause and resume, a missing part, and a request with no 
     const { result } = await taskOf(taskId, true);
     expect(multiset(result.netlist)).toEqual(DRONE_4_MULTISET);
     expect(result.electricalCheck).toMatchObject({ state: "passed", criticalCount: 0 });
+    expectDroneSheets(result.sheets, result.netlist, true); // [PR-J, 2026-10-22] J5-1: the omitted block stays a visible sheet
   });
 
   it("a request with no recipe ends at a truthful stop: text replies only (no search, no submission, no part); the 60-call allowance parks it first, and an explicit extension lets the strategy ladder end at no_progress", { timeout: 60_000 }, async () => {
@@ -282,3 +286,28 @@ describe("[PR-L6 L.7-9] pause and resume, a missing part, and a request with no 
     expect(calls.every((call) => call.answer.toolCalls.every((toolCall) => toolCall.name !== "search_parts"))).toBe(true);
   });
 });
+
+// [PR-J, 2026-10-22] Runbook J.6.3, increment J5-1 (OD-255 item 9): the four-motor result's sheet set as GET ?include=result answers it -
+// the overview and one sheet per planned block in plan order, ports exactly the 7 shared signal nets with their catalog directions, the
+// 7 interfaces bound, the rails VBAT / +3V3 / GND project-wide, every component on exactly one sheet; with the barometer, its omitted
+// sheet's I2C ports unbound (the subsystem is never dropped).
+const PWM_NETS = ["PWM1", "PWM2", "PWM3", "PWM4"];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function expectDroneSheets(doc: any, netlist: BuildLogicalNetlist, barometer: boolean): void {
+  expect(doc.schema).toBe("sirkit.generation-sheets.v1");
+  const set = doc.sheets;
+  expect(set.root).toEqual({ sheetKey: "overview", name: "System overview" });
+  expect(set.children.map((child: { sheetKey: string; name: string; status: string }) => [child.sheetKey, child.name, child.status])).toEqual([
+    ["b1", DRONE_BLOCK_NAMES.power, "designed"], ["b2", DRONE_BLOCK_NAMES.motors, "designed"], ["b3", DRONE_BLOCK_NAMES.mcu, "designed"], ["b4", DRONE_BLOCK_NAMES.imu, "designed"],
+    ...(barometer ? [["b5", DRONE_BLOCK_NAMES.barometer, "omitted"]] : []),
+  ]);
+  const ports = set.children.map((child: { ports: Array<{ net: string; direction: string; state: string }> }) => child.ports.map((port) => `${port.net}:${port.direction}:${port.state}`));
+  expect(ports).toEqual([
+    [], PWM_NETS.map((net) => `${net}:passive:bound`), [...PWM_NETS, "I2C_SDA", "I2C_SCL", "IMU_INT1"].map((net) => `${net}:bidirectional:bound`), ["I2C_SDA:bidirectional:bound", "I2C_SCL:input:bound", "IMU_INT1:output:bound"],
+    ...(barometer ? [["I2C_SDA:unspecified:unbound", "I2C_SCL:unspecified:unbound"]] : []),
+  ]);
+  expect(set.interfaces.map((entry: { net: string; state: string }) => `${entry.net}:${entry.state}`)).toEqual([...PWM_NETS, "I2C_SDA", "I2C_SCL", "IMU_INT1"].map((net) => `${net}:bound`));
+  expect(set.rails.map((rail: { net: string; kind: string }) => `${rail.net}:${rail.kind}`)).toEqual(["VBAT:power", "GND:ground", "+3V3:power"]);
+  expect(set.children.flatMap((child: { components: string[] }) => child.components)).toEqual(netlist.components.map((component) => component.refDes));
+  expect(doc.findings).toEqual(barometer ? [`${DRONE_BLOCK_NAMES.barometer} was not designed: its ports I2C_SDA, I2C_SCL are unbound.`] : []);
+}

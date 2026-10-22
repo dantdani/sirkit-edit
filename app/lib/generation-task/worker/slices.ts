@@ -246,7 +246,7 @@ async function runPlanSlice(ctx: SliceContext): Promise<GenerationSliceReport> {
   const names = plan.blocks.map((block) => block.name).join(", ");
   const milestone = generationTaskEvent("plan_ready", {
     at: isoOf(now), phase: "planning",
-    message: draft.planner.state === "planned" ? `Planned ${plan.blocks.length} subsystem blocks: ${names}.` : draft.planner.state === "single" ? "Designing the request as one circuit." : "The plan could not be read; designing the request as one circuit.",
+    message: draft.planner.state === "planned" ? `Planned ${plan.blocks.length} subsystem blocks: ${names}.` : draft.planner.state === "single" ? "Designing the request as one circuit." : planned.kind === "refused" && planned.code === "PLAN_TOO_MANY_BLOCKS" ? planLimitMessage() : "The plan could not be read; designing the request as one circuit.", // [PR-J, 2026-10-22] J.7: a plan over the block limit says so (never "could not be read")
     data: { blocks: plan.blocks.length, planner: draft.planner.state },
   });
   return end(ctx, { plan, usage, schedule: "next-work", milestones: [milestone] }, "planned", `planned ${plan.blocks.length} block(s) (${draft.planner.state})`);
@@ -673,13 +673,23 @@ async function mergeSaved(ctx: SliceContext, savedBlocks: NonNullable<Generation
     designed: checkpoints.map((entry) => ({ name: entry.name, netlist: entry.checkpoint.result!.netlist, sharedNets: entry.sharedNets })),
     omittedBlocks: omitted, rationale: task.plan!.rationale, planner: task.plan!.planner, budget, emptyBlocks: "refuse",
     partsByIds: (ids) => ctx.ports.catalog.partsByIds(ids),
-    assumptions: task.plan!.assumptions, coverage: task.plan!.coverage ?? [], unfilledRoles,
+    assumptions: task.plan!.assumptions, coverage: task.plan!.coverage ?? [], unfilledRoles, plannedBlocks: task.plan!.blocks.map((planned) => ({ blockId: planned.blockId, name: planned.name, sharedNets: planned.sharedNets, status: task.blocks[planned.blockId]!.status === "saved" ? "designed" as const : "omitted" as const })), // [PR-J, 2026-10-22] J5-1 (OD-255 item 9): a planned result is offered as sheets
   });
   if (merged.kind === "refused") return { kind: "refused" as const, error: merged.error };
   const result = buildGenerationTaskResult({
     taskId: task.taskId, at: isoOf(ctx.clock()), status: omitted.length ? "partial" : "complete", omittedBlocks: omitted,
     netlist: merged.body.netlist, explanation: merged.body.explanation, electricalCheck: merged.body.electricalCheck, planner: merged.body.planner,
-    sharedNets: merged.sharedNets, blocks: checkpoints.map((entry) => ({ blockId: entry.blockId, recordId: entry.ref.recordId, recordDigest: entry.ref.recordDigest })),
+    sharedNets: merged.sharedNets, blocks: checkpoints.map((entry) => ({ blockId: entry.blockId, recordId: entry.ref.recordId, recordDigest: entry.ref.recordDigest })), ...(merged.sheets ? { sheets: merged.sheets } : {}), // [PR-J, 2026-10-22] J5-1
   });
   return { kind: "merged" as const, result };
+}
+
+// ─── [PR-J, 2026-10-22] Runbook J.7: the block limit, stated where the user meets it ──────────────────────────────────────────
+// Appended after the last line (a function declaration is hoisted), so no cited line moves. A planner that proposed more subsystem blocks
+// than a task holds - after its one correction attempt - is designed as ONE circuit from the whole request (block `main`, designPrompt):
+// nothing is dropped, and the plan_ready milestone names the limit and the remedy instead of claiming the plan was unreadable.
+/** The plan_ready message of a plan refused for holding more than GENERATION_TASK_BOUNDS.blocks blocks (within the 240-character bound). */
+function planLimitMessage(): string {
+  const limit = GENERATION_TASK_BOUNDS.blocks;
+  return `The planner proposed more than ${limit} subsystem blocks (a design task holds at most ${limit}), so the whole request is designed as one circuit. To design subsystems as separate blocks, ask for at most ${limit} or group related ones.`;
 }
