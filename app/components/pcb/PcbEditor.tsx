@@ -140,7 +140,7 @@ import { useManufacturingWorkflow } from "./hooks/useManufacturingWorkflow"; // 
 import { atomicBindRequestBody, reviewableComponentOf, useComponentReview, type ReviewableComponent } from "./hooks/useComponentReview"; // [B16-C.2]; [B19-E E5 review] the shared request bodies
 import { ComponentReviewPanel } from "./ComponentReviewPanel"; // [B16-C.2]
 import { usePcb3dViewSession } from "./hooks/usePcb3dViewSession"; // [B17-C]
-import { usePcbViewSession } from "./hooks/usePcbViewSession"; // [B17-D]
+import { usePcbViewSession } from "./hooks/usePcbViewSession"; import { firstToast, showToast, useToastDismissal } from "./hooks/useToastDismissal"; // [B17-D]; [PR-B24 multitab, 2026-10-22] the toast's import rides this line, so no cited line below it moves
 import { clearNets, LayoutCandidateStore, netsOfSelection, verifyLayoutCandidate, type LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-E]
 import type { StackupCandidate } from "@/app/lib/pcb/candidates/stackup-candidate"; // [PR-G, 2026-10-17]
 import { verifyStackupCandidateAgainstBoard } from "@/app/lib/project/stackup-candidate-events"; // [PR-G, 2026-10-17] the one check: intact, this board's revision, unexpired
@@ -468,7 +468,7 @@ export default function PcbEditor({
   // repair/verification context, or KiCad export. `liveNetlist` (derived from
   // the current schematic) is the only netlist source; when the schematic
   // cannot produce one, the truthful value is null ("unavailable").
-  const [toast, setToast] = useState<string | null>(() => init.diagnostics[0]?.summary ?? null);
+  const [shownToast, setToast] = useReducer(showToast, init.diagnostics[0]?.summary ?? null, firstToast); const toast = shownToast.text; // [PR-B24 multitab, 2026-10-22] numbered shows: an earlier show's dismissal never clears a later one (CI 39795211563)
   const [pendingPreflight, setPendingPreflight] = useState<PcbSyncPreflightResult | null>(null);
   // [PR-C F-08] the persistent trace of a refused/blocked sync (see SyncBlockers); the toast is never its only trace.
   const [syncBlockers, setSyncBlockers] = useState<SyncBlockers | null>(null);
@@ -752,11 +752,11 @@ export default function PcbEditor({
   const handleSceneReady = useCallback((s: PcbScene | null) => setScene(s), []);
 
   // ── Toast auto-dismiss ─────────────────────────────────────────────────────
-  useEffect(() => {
-    if (toast === null) return;
-    const t = setTimeout(() => setToast(null), 6000);
-    return () => clearTimeout(t);
-  }, [toast]);
+  useToastDismissal(shownToast, setToast); // [PR-B24 multitab, 2026-10-22] 6 s per show, cleared only for the show it was armed for
+  // The effect that stood here armed one 6 s timer per text and cleared it only in React's passive effects, so an earlier toast's
+  // timer that came due between a newer toast's commit and that cleanup erased the newer one (CI 39795211563: the stale tab's
+  // "Apply failed: PS_PLAN_DIGEST_OR_LIFECYCLE_MISMATCH" was on screen under 0.4 s). These lines replace that effect line for
+  // line, so no cited line below moves.
 
   // ── Dirty badge: netlist hash vs last synced hash ──────────────────────────
   // Re-hash when async part data lands (getCachedPart triggers loads).
