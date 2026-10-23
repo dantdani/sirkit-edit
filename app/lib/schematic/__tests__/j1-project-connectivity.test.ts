@@ -21,7 +21,8 @@ import type { KicadPin } from "@/app/lib/kicad/types";
 import { buildNetlist, type PartLookup } from "@/app/lib/pcb/netlist-bridge";
 import { LOW_VOLTAGE_SCHEMATIC_PROFILE_V1 } from "@/app/lib/schematic-compiler/capability";
 import { ROOT_SHEET_ID, type NetLabel, type SchComponent, type SchematicSheet, type SchematicState, type Wire } from "@/lib/schematic-types";
-import { resolveProjectConnectivity, type PartPinsLookup } from "../project-connectivity";
+import { compareCodePoints } from "@/app/lib/stable-compare";
+import { resolveProjectConnectivity, type PartPinsLookup, type ProjectConnectivity } from "../project-connectivity";
 import { SHEET_LENS_BRAND, SHEET_LIMITS, SHEET_PORT_DIRECTIONS, assertWholeProject, carriesSheetLens, isSingleSheet, normalizeHierarchy, sheetLens, sheetOf, sheetPathName, validateSheetHierarchy } from "../sheets";
 import { blinkerFixtureState, droneFixtureState, fixturePartLookup, theoryLegacyFixture } from "./_j1-fixtures";
 
@@ -524,5 +525,45 @@ describe("[PR-J1 integration, 2026-10-22] PC-7: a bus name never joins sheets, w
     expect(bundle[0]!.message).toContain(kind);
     expect(resolveProjectConnectivity(sheeted).ok).toBe(false);
     expect(validateSheetHierarchy({ components: [resistor("R1", 100, 100)], wires: [], netLabels: [label("p0", name, { x: 70, y: 100 }, { kind })] })).toEqual([]);
+  });
+});
+
+// ── R2-2: collision diagnostics are canonical ───────────────────────────────────────────────────────────────────────────────
+
+describe("[PR-J1 review, 2026-10-22] R2-2: SHEET_NET_NAME_COLLISION diagnostics follow (name, id) order, never entity order", () => {
+  /** Two global / local pairs (X and Y) on the overview of a two-sheet document: two collisions. `reverse` lists every array backwards. */
+  const pairs = (reverse: boolean): SchematicState => {
+    const r1 = resistor("R1", 100, 100), r2 = resistor("R2", 300, 100), r3 = resistor("R3", 100, 300), r4 = resistor("R4", 300, 300);
+    const components = [r1, r2, r3, r4];
+    const labels = [
+      label("gx", "X", pinWorldPos(r1, "left"), { scope: "global" }), label("lx", "X", pinWorldPos(r2, "left")),
+      label("gy", "Y", pinWorldPos(r3, "left"), { scope: "global" }), label("ly", "Y", pinWorldPos(r4, "left")),
+    ];
+    return { components: reverse ? [...components].reverse() : components, wires: [], netLabels: reverse ? [...labels].reverse() : labels, sheets: tree(sheet("aux", "Aux", ROOT_SHEET_ID)) };
+  };
+  const collisions = (conn: ProjectConnectivity) => conn.diagnostics.filter((item) => item.code === "SHEET_NET_NAME_COLLISION").map((item) => ({ code: item.code, severity: item.severity, message: item.message, refs: item.refs }));
+
+  it("the same document with every array reversed gives identical diagnostics (position, message order, refs)", () => {
+    const forward = resolveProjectConnectivity(pairs(false));
+    const reversed = resolveProjectConnectivity(pairs(true));
+    expect(forward.ok).toBe(false);
+    const found = collisions(forward);
+    expect(found).toHaveLength(2);
+    expect(found.map((item) => /are all named (\S+) /.exec(item.message)?.[1])).toEqual(["X", "Y"]);
+    for (const item of found) expect(item.refs).toEqual([...item.refs].sort(compareCodePoints));
+    expect(collisions(reversed)).toEqual(found);
+    expect(reversed.diagnostics).toEqual(forward.diagnostics);
+    expect(reversed.nets.map((net) => [net.name, net.id])).toEqual(forward.nets.map((net) => [net.name, net.id]));
+  });
+
+  it("PC-1's user-written OUT beside the two port nets: the three refs are the colliding net ids in id order", () => {
+    const state = siblingOuts();
+    state.components.push(resistor("R5", 100, 500));
+    state.netLabels!.push(label("l-out", "OUT", { x: 130, y: 500 }));
+    const found = collisions(resolveProjectConnectivity(state));
+    expect(found).toHaveLength(1);
+    expect(found[0]!.refs).toHaveLength(3);
+    expect(found[0]!.refs).toEqual([...found[0]!.refs].sort(compareCodePoints));
+    expect(collisions(resolveProjectConnectivity({ ...state, components: [...state.components].reverse(), netLabels: [...state.netLabels!].reverse() }))).toEqual(found);
   });
 });

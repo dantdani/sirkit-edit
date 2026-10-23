@@ -268,12 +268,16 @@ function connectionGroups(conn: ProjectConnectivity): Array<{ key: string; pins:
  * document, this resolves its entities under BOTH rules (the strict side through a synthetic, empty child sheet) and returns null
  * when they connect exactly the same pins and labels, else the reason in a sentence. A sheet operation that changes the rules is
  * refused unless this is null: organising a design into sheets never changes its circuit by itself.
+ * [PR-J1 review, 2026-10-22] R2-5: `direction` names the operation the caller refuses - "organize" (the planner, the first
+ * schematic_create_sheet: v1 -> v2) or "flatten" (deleting the last child sheet: v2 -> v1) - so the sentence never tells a user who is
+ * leaving multi-sheet mode to act "before organizing this design into sheets".
  */
-export function singleSheetRuleChange(state: SchematicState, getPart?: PartPinsLookup): string | null {
+export function singleSheetRuleChange(state: SchematicState, getPart?: PartPinsLookup, direction: "organize" | "flatten" = "organize"): string | null {
   if (state.sheets !== undefined) return null;
+  const before = direction === "organize" ? "before organizing this design into sheets" : "before deleting its last sheet";
   const legacy = resolveProjectConnectivity(state, getPart);
   const collapse = legacy.diagnostics.find((item) => item.code === "LEGACY_GROUND_NAME_COLLAPSE");
-  if (collapse) return `${collapse.message} Rename the ground labels to one name, or tie them explicitly, before organizing this design into sheets.`;
+  if (collapse) return `${collapse.message} Rename the ground labels to one name, or tie them explicitly, ${before}.`;
   const strict = resolveProjectConnectivity({ ...state, sheets: { version: 1, sheets: [{ id: ROOT_SHEET_ID, name: "Overview", parentId: null }, { id: "sheet-rule-probe", name: "Rule probe", parentId: ROOT_SHEET_ID }] } }, getPart);
   const error = strict.diagnostics.find((item) => item.severity === "error");
   if (error) return `A multi-sheet project uses the strict connection rules (a plain label never joins a power or ground label, a global label never joins a local one), under which this design has an error: ${error.message}`;
@@ -283,7 +287,7 @@ export function singleSheetRuleChange(state: SchematicState, getPart?: PartPinsL
   const labelName = new Map((state.netLabels ?? []).map((label) => [label.id, label.name] as const));
   const names = sortedUnique(changed.flatMap((group) => group.labels.map((id) => labelName.get(id) ?? id)));
   const detail = names.length > 0 ? `labels ${names.slice(0, 6).join(", ")}` : `pins ${changed.flatMap((group) => group.pins).slice(0, 6).join(", ")}`;
-  return `A multi-sheet project uses the strict connection rules, under which ${changed.length} net(s) of this design would be connected differently (${detail}). Rename or re-kind those labels so both rules agree before organizing this design into sheets.`;
+  return `A multi-sheet project uses the strict connection rules, under which ${changed.length} net(s) of this design would be connected differently (${detail}). Rename or re-kind those labels so both rules agree ${before}.`;
 }
 
 // ── single-sheet: the legacy union, named exactly as the consumers name it today ────────────────────────────────────────────
@@ -470,6 +474,10 @@ function resolveMultiSheet(state: SchematicState, getPart: PartPinsLookup | unde
   // with an "OUT" port each, or two moves' ports), nothing the user wrote collides: each is named by its port's sheet path
   // ("Power/OUT", "Filter/OUT", as KiCad names such nets), and a qualified name that still meets another net's name takes the first
   // free "_2", "_3" suffix in net-identity order. A collision that involves a name the user wrote stays an error.
+  // [PR-J1 review, 2026-10-22] R2-2: the collision loop runs over (name, id)-sorted nets, as before the PC-1 pass moved the sort below
+  // it, so a SHEET_NET_NAME_COLLISION's position, the net order in its message and its refs are canonical (the same nets in another
+  // entity order give identical diagnostics); the qualification pass renames nets, so the sort runs again after it.
+  nets.sort(compareNets);
   const byName = new Map<string, ProjectNet[]>();
   for (const net of nets) if (net.name !== null) byName.set(netLabelNameKey(net.name), [...(byName.get(netLabelNameKey(net.name)) ?? []), net]);
   const qualified: ProjectNet[] = [];

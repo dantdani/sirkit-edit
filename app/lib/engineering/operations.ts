@@ -872,7 +872,8 @@ function refuseSheetChanges(before: SheetGuardSnapshot | null, after: unknown): 
   const error = now.connectivity.diagnostics.find((item) => item.severity === "error");
   if (before.connectivity.ok && error) throw new Error(`SHEET_CONNECTIVITY_INVALID:${error.code}: ${error.message} This sheet operation would leave the project's connections invalid; nothing was changed`);
   if ((before.state.sheets === undefined) !== (now.state.sheets === undefined)) {
-    const change = singleSheetRuleChange(before.state.sheets === undefined ? before.state : now.state);
+    // [PR-J1 review, 2026-10-22] R2-5: the sentence names the direction - the first child sheet created (organize) or the last one deleted (flatten)
+    const change = before.state.sheets === undefined ? singleSheetRuleChange(before.state, undefined, "organize") : singleSheetRuleChange(now.state, undefined, "flatten");
     if (change !== null) throw new Error(`SHEET_NOT_EQUIVALENT: ${change} This sheet operation would change the circuit by changing the connection rules; nothing was changed.`);
   }
 }

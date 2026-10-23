@@ -217,18 +217,21 @@ describe("[PR-J J1] 3. every sheet operation has an exact inverse; the tree exis
 
 // ── 4. executor, registry, graph diff ───────────────────────────────────────────────────────────────────────────────────────
 
-/** The registry as the Sheets navigator (increment 3) will ship it: the two section J records implemented. */
+/** The registry as the Sheets navigator ships it: the two section J records implemented. [PR-J3, 2026-10-22] pin move: the navigator
+ *  landed (app/components/schematic/SheetNavigator.tsx; control rules schematic.sheet-structure and schematic.move-to-sheet), so this
+ *  is now the IDENTITY over the committed registry - asserted below; kept so the executor case reads as it did. */
 function withSheetCommandsImplemented(): ActionCoverageRecord[] {
   return ACTION_COVERAGE_REGISTRY.map((record) => (record.id === "schematic.sheet-structure" || record.id === "schematic.move-to-sheet" ? { ...record, status: "implemented" as const } : record));
 }
 
 describe("[PR-J J1] 4. the commands are bound; only they change sheet membership or scope", () => {
-  it("schematic.sheet-structure and schematic.move-to-sheet are bound Tier-2 mutations, PARTIAL (not kernel-executable) until a control reaches them; undo / redo replays every sheet kind; scope is declared", () => {
+  it("schematic.sheet-structure and schematic.move-to-sheet are bound Tier-2 mutations, IMPLEMENTED and kernel-executable since the Sheets navigator reaches them ([PR-J3, 2026-10-22] pin move: was partial / not executable); undo / redo replays every sheet kind; scope is declared", () => {
     expect(validateActionCoverageRegistry()).toEqual([]);
+    expect(withSheetCommandsImplemented()).toEqual(ACTION_COVERAGE_REGISTRY); // the J1 projection is the committed registry now
     for (const id of ["schematic.sheet-structure", "schematic.move-to-sheet"]) {
       const contract = resolveExecutorContract(id)!;
-      expect(contract, id).toMatchObject({ kind: "mutate", status: "partial", executable: false, approvalTier: "topology-or-geometry" });
-      expect(resolveExecutorContract(id, withSheetCommandsImplemented())!.executable, id).toBe(true);
+      expect(contract, id).toMatchObject({ kind: "mutate", status: "implemented", executable: true, approvalTier: "topology-or-geometry" });
+      expect(ACTION_COVERAGE_REGISTRY.find((record) => record.id === id)!.sources, id).toContain("app/components/schematic/SheetNavigator.tsx");
       expect(permissionTierOfAction(ACTION_COVERAGE_REGISTRY.find((record) => record.id === id)!), id).toBe(2);
     }
     expect(resolveExecutorContract("schematic.move-to-sheet")!.allowedOperationKinds).toContain("schematic_assign_sheet");
@@ -321,14 +324,18 @@ describe("[PR-J J1] 5. moving a connected subsystem to another sheet keeps the c
     expect(schematicSemanticDigest(apply(toCanonicalSchematic(motors.after), motors.inverseOperations).schematic)).toBe(schematicStateDigest(imu.after));
   });
 
-  it("the real session refuses the move while the command is partial (fail-closed until the Sheets UI binds it); nothing changes", async () => {
+  it("the real session executes schematic.move-to-sheet as ONE transaction ([PR-J3, 2026-10-22] pin move: was refused not_executable while the record was partial); a smuggled assign under schematic.connect is still operation_mismatch", async () => {
     if (!imu.ok) throw new Error(imu.message);
-    const editor = new SchematicEditorSession({ tenantId: "tenant-j1", projectId: "project-j1", branchId: "main" }, { store: new InMemoryAtomicProjectStore() });
+    const store = new InMemoryAtomicProjectStore();
+    const editor = new SchematicEditorSession({ tenantId: "tenant-j1", projectId: "project-j1", branchId: "main" }, { store });
     await editor.openForProject(drone, null);
-    const refused = await editor.execute(drone, { commandId: "schematic.move-to-sheet", label: "Move the IMU to its own sheet", buildOperations: () => imu.operations });
-    expect(refused).toMatchObject({ ok: false, reasonCode: "not_executable" });
-    // the same operations under a command that may not move entities are refused too
-    const smuggled = await editor.execute(drone, { commandId: "schematic.connect", label: "Smuggle a move", buildOperations: () => [imu.operations.find((operation) => operation.kind === "schematic_assign_sheet")!] });
+    const executed = await editor.execute(drone, { commandId: "schematic.move-to-sheet", label: "Move the IMU to its own sheet", buildOperations: () => imu.operations });
+    expect(executed).toMatchObject({ ok: true, status: "executed" });
+    if (!executed.ok) throw new Error("unreachable");
+    expect(schematicStateDigest(executed.state)).toBe(schematicStateDigest(imu.after));
+    expect((await store.load("project-j1", "main"))?.transactionLog).toHaveLength(1); // one move = one durable transaction = one undo step
+    // the same operations under a command that may not move entities are refused (the executor binding, not the UI, decides)
+    const smuggled = await editor.execute(imu.after, { commandId: "schematic.connect", label: "Smuggle a move", buildOperations: () => [imu.inverseOperations.find((operation) => operation.kind === "schematic_assign_sheet")!] });
     expect(smuggled).toMatchObject({ ok: false, reasonCode: "operation_mismatch" });
   });
 
@@ -499,5 +506,48 @@ describe("[PR-J1 integration, 2026-10-22] J1-OPS-4: the move planner never prove
     const proven = planMoveToSheet(drone, { entities: [{ family: "kicad", id: u3.id }], target }, lookup);
     if (!proven.ok) throw new Error(`${proven.code}: ${proven.message}`);
     expect(proven.preview.crossings).toHaveLength(5);
+  });
+});
+
+describe("[PR-J1 review, 2026-10-22] R2-5: the rule-change refusal names the operation it refuses", () => {
+  /** A plain label N on R1 and a power label N on R2's net, which a ground symbol also grounds. The legacy rule joins the two N labels
+   *  (one GND net); the strict rule keeps the plain N a local net of its own. With `sheets`, the same drawing as a two-sheet document
+   *  (root + an empty child), already carrying its ISOLATION_DOMAIN_JOIN finding (GND + N on one net). */
+  const splitN = (sheets?: SchematicState["sheets"]): SchematicState => {
+    const r1 = resistorAt("R1", 100, 100);
+    const r2 = resistorAt("R2", 300, 300);
+    const g1: SchComponent = { id: "G1", type: "ground", x: 500, y: 320, rotation: 0, value: "" };
+    return {
+      components: [r1, r2, g1],
+      wires: [wireAt("w", pinWorldPos(r2, "right"), pinWorldPos(g1, "pin"))],
+      netLabels: [label("nl", "N", pinWorldPos(r1, "left")), label("np", "N", pinWorldPos(r2, "right"), { kind: "power" })],
+      ...(sheets ? { sheets } : {}),
+    };
+  };
+
+  it("deleting the last child sheet (v2 -> v1) is refused 'before deleting its last sheet', never 'before organizing this design into sheets'", () => {
+    const sheeted = splitN(twoSheets({ id: "aux", name: "Aux" }));
+    const strict = resolveProjectConnectivity(sheeted);
+    expect(strict.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(strict.netOfPin("R1::1")!.id).not.toBe(strict.netOfPin("R2::2")!.id);
+    const legacy = resolveProjectConnectivity(splitN());
+    expect(legacy.netOfPin("R1::1")!.id).toBe(legacy.netOfPin("R2::2")!.id);
+    const message = attemptApply(sheeted, [{ ...PX, operationId: opId("d"), kind: "schematic_delete_sheet", sheetId: "aux" }]);
+    expect(message).toMatch(/^SHEET_NOT_EQUIVALENT: A multi-sheet project uses the strict connection rules, under which 1 net\(s\) of this design would be connected differently \(labels N\)\. Rename or re-kind those labels so both rules agree before deleting its last sheet\. This sheet operation would change the circuit by changing the connection rules; nothing was changed\.$/);
+    expect(message).not.toContain("organizing this design into sheets");
+  });
+
+  it("creating the first child sheet (v1 -> v2) and the move planner are refused 'before organizing this design into sheets' (both sentences)", () => {
+    const single = splitN();
+    const create = attemptApply(single, [createSheetOperation(single, { operationId: opId("c"), sheet: { id: "aux", name: "Aux", parentId: ROOT_SHEET_ID } })]);
+    expect(create).toMatch(/^SHEET_NOT_EQUIVALENT: A multi-sheet project uses the strict connection rules, under which 1 net\(s\) of this design would be connected differently \(labels N\)\. Rename or re-kind those labels so both rules agree before organizing this design into sheets\. This sheet operation/);
+    expect(create).not.toContain("deleting its last sheet");
+    const plan = planMoveToSheet(single, { entities: [{ family: "theory", id: "R1" }], target: { newSheet: { id: "aux", name: "Aux" } } });
+    expect(plan).toMatchObject({ ok: false, code: "SHEET_MOVE_NOT_EQUIVALENT" });
+    if (!plan.ok) expect(plan.message).toMatch(/so both rules agree before organizing this design into sheets\. Nothing was changed\.$/);
+    // the legacy ground-collapse sentence (the theory design's AGND / DGND -> GND) carries the same clause
+    const theory = theoryLegacyFixture();
+    const collapse = attemptApply(theory, [createSheetOperation(theory, { operationId: opId("c"), sheet: { id: "aux", name: "Aux", parentId: ROOT_SHEET_ID } })]);
+    expect(collapse).toMatch(/^SHEET_NOT_EQUIVALENT: .*GND, AGND, DGND are joined.* Rename the ground labels to one name, or tie them explicitly, before organizing this design into sheets\. This sheet operation/);
   });
 });

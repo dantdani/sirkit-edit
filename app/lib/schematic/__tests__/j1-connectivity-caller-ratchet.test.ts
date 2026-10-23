@@ -28,12 +28,18 @@ const ROOTS = ["app", "lib", "components"] as const;
 const UNION_CALLERS = "buildNetUnionFind|findConnectedGroup|classifyNets|findNetRoot";
 const CALL = new RegExp(`\\b(${UNION_CALLERS})\\s*\\(`, "g");
 const DEFINITION = new RegExp(`export function (${UNION_CALLERS})\\s*\\(`, "g");
-/** An import that renames one of them (`import { classifyNets as colour }`): its calls would escape the count. */
-const ALIASED = new RegExp(`\\b(${UNION_CALLERS})\\s+as\\s+[A-Za-z_$]`);
+/** An import / export clause that renames one of them (`import { classifyNets as colour }`, `export { findNetRoot as root } from`):
+ *  its calls would escape the count. [PR-J1 review, 2026-10-22] R2-4: anchored to the clause ([^}] spans a multi-line list), so the
+ *  English "classifyNets as the ..." in a comment is not an alias. */
+const ALIASED = new RegExp(`\\b(?:import|export)\\b[^;]*?\\{[^}]*\\b(${UNION_CALLERS})\\s+as\\s+[A-Za-z_$]`);
+/** [PR-J1 review, 2026-10-22] R2-4: block and line comments are stripped before matching, so prose ("classifyNets (app/lib/nets.ts)")
+ *  is never a call site. A "//" right after ":" (a URL inside a string) is not a comment; any other "//" inside a string literal on a
+ *  call's line would hide that call - acceptable for a ratchet. */
+const COMMENTS = [/\/\*[\s\S]*?\*\//g, /(?<!:)\/\/.*$/gm] as const;
 
-/** The call sites a file's text holds (its own definitions excluded), and whether it renames one of the functions on import. */
+/** The call sites a file's text holds (comments and its own definitions excluded), and whether it renames one of the functions on import. */
 function unionCallSites(text: string): { calls: number; aliased: boolean } {
-  const body = text.replace(DEFINITION, "");
+  const body = COMMENTS.reduce<string>((acc, comment) => acc.replace(comment, ""), text).replace(DEFINITION, "");
   return { calls: [...body.matchAll(CALL)].length, aliased: ALIASED.test(body) };
 }
 
@@ -90,5 +96,22 @@ describe("[PR-J1 integration, 2026-10-22] J1-CONS-5: the ratchet sees the wrappe
     expect(unionCallSites("export function findNetRoot(point: Point) { return buildNetUnionFind([], []); }")).toEqual({ calls: 1, aliased: false });
     expect(unionCallSites('import { classifyNets as colourNets } from "./lib/nets";').aliased).toBe(true);
     expect(unionCallSites('import { buildNetUnionFind, UnionFind } from "@/app/lib/connectivity";')).toEqual({ calls: 0, aliased: false });
+  });
+});
+
+describe("[PR-J1 review, 2026-10-22] R2-4: prose in a comment is neither a call site nor an alias", () => {
+  it("a line or block comment that mentions a function (even 'X (path)' or 'X as the ...') counts nothing; a call before a trailing comment still counts", () => {
+    expect(unionCallSites("// the colours come from classifyNets (app/lib/nets.ts) once per render")).toEqual({ calls: 0, aliased: false });
+    expect(unionCallSites("// we treat classifyNets as the single source of net colours")).toEqual({ calls: 0, aliased: false });
+    expect(unionCallSites("/* findConnectedGroup (the drag gesture) runs classifyNets as a memo\n   over the lens */\nconst nets = 1;")).toEqual({ calls: 0, aliased: false });
+    expect(unionCallSites("const nets = classifyNets(state.components, state.wires); // classifyNets (app/lib/nets.ts), once per render")).toEqual({ calls: 1, aliased: false });
+    expect(unionCallSites('const url = "https://example.test/x"; const root = findNetRoot(point, components, wires);')).toEqual({ calls: 1, aliased: false });
+  });
+
+  it("only an import / export clause that renames one of the four is an alias; a TypeScript `as` elsewhere is not", () => {
+    expect(unionCallSites('import { classifyNets as colourNets } from "./lib/nets";').aliased).toBe(true);
+    expect(unionCallSites('import {\n  buildNetUnionFind,\n  findNetRoot as rootOf,\n} from "@/app/lib/connectivity";').aliased).toBe(true);
+    expect(unionCallSites('import type { UnionFind } from "@/app/lib/connectivity";\nexport { findConnectedGroup as group } from "@/app/lib/connectivity";').aliased).toBe(true);
+    expect(unionCallSites('import { buildNetUnionFind, UnionFind } from "@/app/lib/connectivity";\nconst text = value as string;')).toEqual({ calls: 0, aliased: false });
   });
 });
