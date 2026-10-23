@@ -750,8 +750,8 @@ every row.
 | C45 | `app/lib/pcb/__tests__/manufacturing-release-gate.test.ts` | 150 | `rejects.toMatchObject({ code: "MFG_ASSEMBLY_AUTHORITY_UNAVAILABLE" });` |
 | C46 | `.github/workflows/deterministic-manufacturing.yml` | 228 | `app/lib/manufacturing-providers/__tests__` |
 | C47 | `app/lib/pcb/fab/release-gate.ts` | 272 | `"No manufacturer upload/order has been performed. External board-house DFM and physical prototype review remain mandatory.",` |
-| C48 | `lib/persistence.ts` | 622 | `export function saveProjectReleaseEngineeringProgram(id: string, releaseEngineeringProgram: ReleaseEngineeringProjectState): boolean {` |
-| C49 | `lib/persistence.ts` | 628 | `try { localStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(updated)); return true; } catch { return false; }` |
+| C48 | `lib/persistence.ts` | 623 | `export function saveProjectReleaseEngineeringProgram(id: string, releaseEngineeringProgram: ReleaseEngineeringProjectState): boolean {` |
+| C49 | `lib/persistence.ts` | 629 | `try { localStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(updated)); return true; } catch { return false; }` |
 | C50 | `app/lib/manufacturing-providers/physical-evidence.ts` | 115 | `const CONTENT_DIGEST = /^sha256:[0-9a-f]{64}$/;` |
 | C51 | `app/lib/manufacturing-providers/physical-evidence.ts` | 121 | `const OPERATOR_REF = /^operator:[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;` |
 | C52 | `app/lib/manufacturing-providers/physical-evidence.ts` | 122 | `const EQUIPMENT_REF = /^equipment:[A-Za-z0-9][A-Za-z0-9_.:/#+-]{0,189}$/;` |
@@ -784,6 +784,8 @@ every row.
 | C79 | `app/lib/manufacturing-providers/physical-evidence.ts` | 575 | `removed.some((subject) => covers(subject, record.subject)) ? withRejection(verdict, "subject_scrapped") : verdict;` |
 | C80 | `app/lib/manufacturing-providers/physical-evidence.ts` | 591 | `const noUnitLeft = units.size >= Math.min(...identities.map((identity) => identity.lotQuantity))` |
 | C81 | `app/lib/manufacturing-providers/physical-evidence.ts` | 595 | `const reworkInstants = (verdicts: readonly JudgedVerdict[], lotId: string): number[] => verdicts.flatMap((verdict) => (verdict.record?.kind === "deviation_rework" && verdict.record.executionClass === "hardware" && !outsideClaim(verdict, verdict.record, lotId)` |
+
+[PR-J3 integration, 2026-10-23] C48 `:622` -> `:623` and C49 `:628` -> `:629` (section J3's `deleteProject` clears the sheet presentation store one line above; both anchors are unchanged).
 
 ## 15. The B23 closeout's export record
 

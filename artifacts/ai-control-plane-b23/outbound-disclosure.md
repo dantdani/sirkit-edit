@@ -458,7 +458,7 @@ it in `app/lib/engineering/control-registry.ts`; the anchor is unchanged.
 | C14 | `app/lib/auth/route-resource-classification.ts` | 99 | `"/api/pcb/provider-exchange": { durable: "read", sensitivity: "project-durable", expensive: true },` |
 | C15 | `app/lib/auth/route-resource-classification.ts` | 200 | `outboundEgress: policy.externalTransfer === true ? "files"` |
 | C16 | `app/lib/engineering/action-registry.ts` | 186 | `action({ id: "manufacturing.provider-exchange", version: 1, area: "manufacturing",` |
-| C17 | `app/lib/engineering/control-registry.ts` | 152 | `rule({ id: "manufacturing.provider-exchange", surface: PCB + "ProviderExchangePanel.tsx",` |
+| C17 | `app/lib/engineering/control-registry.ts` | 153 | `rule({ id: "manufacturing.provider-exchange", surface: PCB + "ProviderExchangePanel.tsx",` |
 | C18 | `app/components/pcb/ProviderExchangePanel.tsx` | 122 | `export function ProviderExchangePanel(props: ProviderExchangePanelProps) {` |
 | C19 | `app/components/pcb/ManufacturingWorkflowPanel.tsx` | 122 | `<ProviderExchangePanel scope={workflow.workflow.scope}` |
 | C20 | `app/components/pcb/ManufacturingWorkflowPanel.tsx` | 19 | `import { ProviderExchangePanel } from "./ProviderExchangePanel"; // [B23-B1] appended in place` |
@@ -478,6 +478,8 @@ it in `app/lib/engineering/control-registry.ts`; the anchor is unchanged.
 | C34 | `app/lib/manufacturing-providers/provider-exchange.ts` | 374 | `return open < this.limits.plansPerProject && openAll < this.limits.plans;` |
 | C35 | `app/lib/manufacturing-providers/outbound-package.ts` | 173 | `...boardNameCutPrefixes(identity[field], manifest.source.boardId)` |
 | C36 | `app/lib/manufacturing-providers/outbound-package.ts` | 232 | `function boardNameCutPrefixes(value: string, boardId: string): string[] {` |
+
+[PR-J3 integration, 2026-10-23] C17 `:152` -> `:153` (the Sheets controls' rules were inserted above it in `control-registry.ts`; its anchor is unchanged).
 
 ## 13. The adversarial review of the first B1 tree, and what it changed
 
