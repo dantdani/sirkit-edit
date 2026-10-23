@@ -533,14 +533,16 @@ describe("[PR-J1 review, 2026-10-22] R2-5: the rule-change refusal names the ope
     const legacy = resolveProjectConnectivity(splitN());
     expect(legacy.netOfPin("R1::1")!.id).toBe(legacy.netOfPin("R2::2")!.id);
     const message = attemptApply(sheeted, [{ ...PX, operationId: opId("d"), kind: "schematic_delete_sheet", sheetId: "aux" }]);
-    expect(message).toMatch(/^SHEET_NOT_EQUIVALENT: A multi-sheet project uses the strict connection rules, under which 1 net\(s\) of this design would be connected differently \(labels N\)\. Rename or re-kind those labels so both rules agree before deleting its last sheet\. This sheet operation would change the circuit by changing the connection rules; nothing was changed\.$/);
+    // [PR-J4, 2026-10-23] pin move (OD-258 item 3): the sentence now NAMES the labels - `"N" at (x, y) on R1.1` - so the person can find them (was `(labels N)`)
+    expect(message).toMatch(/^SHEET_NOT_EQUIVALENT: A multi-sheet project uses the strict connection rules, under which 1 net\(s\) of this design would be connected differently \(labels "N" at \(-?\d+, -?\d+\) on R1\.\d+, "N" at \(-?\d+, -?\d+\) on R2\.\d+\)\. Rename or re-kind those labels so both rules agree before deleting its last sheet\. This sheet operation would change the circuit by changing the connection rules; nothing was changed\.$/);
     expect(message).not.toContain("organizing this design into sheets");
   });
 
   it("creating the first child sheet (v1 -> v2) and the move planner are refused 'before organizing this design into sheets' (both sentences)", () => {
     const single = splitN();
     const create = attemptApply(single, [createSheetOperation(single, { operationId: opId("c"), sheet: { id: "aux", name: "Aux", parentId: ROOT_SHEET_ID } })]);
-    expect(create).toMatch(/^SHEET_NOT_EQUIVALENT: A multi-sheet project uses the strict connection rules, under which 1 net\(s\) of this design would be connected differently \(labels N\)\. Rename or re-kind those labels so both rules agree before organizing this design into sheets\. This sheet operation/);
+    // [PR-J4, 2026-10-23] pin move (OD-258 item 3): the labels are named with their positions and pins (was `(labels N)`)
+    expect(create).toMatch(/^SHEET_NOT_EQUIVALENT: A multi-sheet project uses the strict connection rules, under which 1 net\(s\) of this design would be connected differently \(labels "N" at \(-?\d+, -?\d+\) on R1\.\d+, "N" at \(-?\d+, -?\d+\) on R2\.\d+\)\. Rename or re-kind those labels so both rules agree before organizing this design into sheets\. This sheet operation/);
     expect(create).not.toContain("deleting its last sheet");
     const plan = planMoveToSheet(single, { entities: [{ family: "theory", id: "R1" }], target: { newSheet: { id: "aux", name: "Aux" } } });
     expect(plan).toMatchObject({ ok: false, code: "SHEET_MOVE_NOT_EQUIVALENT" });

@@ -82,7 +82,7 @@ describe("[PR-J3] the Sheets navigator", () => {
     expect(within(panel).queryByTestId("sheets-tree")).toBeNull();
     expect(within(panel).queryByTestId("sheets-rename")).toBeNull();
     expect(within(panel).queryByTestId("sheets-delete")).toBeNull();
-    expect(within(panel).getAllByRole("button").map(nameOf)).toEqual(["New sheet"]);
+    expect(within(panel).getAllByRole("button").map(nameOf)).toEqual(["Organize into sheets…", "New sheet"]); // [PR-J4, 2026-10-23] pin move (OD-258 item 4): + Organize into sheets beside New sheet (j4-organize-dialog proves it)
     expect(within(screen.getByTestId("sheets-chip-row")).getAllByRole("button").map(nameOf)).toEqual(["1 sheet", "Move to sheet…"]); // Move is reachable without the tree, even on one sheet
     expect(screen.queryByTestId("sheets-breadcrumb")).toBeNull();
     fireEvent.click(within(panel).getByTestId("sheets-new"));

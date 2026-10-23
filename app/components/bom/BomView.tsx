@@ -218,7 +218,7 @@ type SortKey =
   | "risk"
   | "stock"
   | "unit"
-  | "ext";
+  | "ext" | "sheet"; // [PR-J4, 2026-10-23] the Sheet column of a project with sheets (in place: lines 448 / 488 are pinned)
 
 // ─── Lifecycle presentation ────────────────────────────────────────────────────
 const LIFECYCLE_BADGE: Record<LifecycleStatus, { label: string; className: string; tip: string }> = {
@@ -291,7 +291,7 @@ function compareRows(a: BomRow, b: BomRow, key: SortKey, bestWithheld: (row: Bom
   // [B19-E E1-C review] a withheld best offer sorts as no price and no stock, so the order does not reveal them
   const stock = (row: BomRow): number | null => (bestWithheld(row) ? null : stockOf(row));
   const unit = (row: BomRow): number | null => (bestWithheld(row) ? null : bestUnit(row));
-  switch (key) {
+  switch (key) { case "sheet": return compareSheets(a, b); /* [PR-J4, 2026-10-23] sheet names, then the reference (in place) */
     case "refDes":
       return refDesSort(a.refDesList[0] ?? a.name, b.refDesList[0] ?? b.name);
     case "qty":
@@ -1183,6 +1183,8 @@ function ProjectBomView(props: Props) {
             <tr>
               <Th className="w-10">#</Th>
               <Th sortKey="refDes" sort={sort} onSort={toggleSort}>RefDes</Th>
+              {/* [PR-J4, 2026-10-23] J.5: the sheets a line's parts are drawn on - only for a project with sheets; sorting by it groups the lines per sheet */}
+              {state.sheets !== undefined && <Th sortKey="sheet" sort={sort} onSort={toggleSort}>Sheet</Th>}
               <Th sortKey="qty" sort={sort} onSort={toggleSort} className="text-right">Qty</Th>
               <Th sortKey="name" sort={sort} onSort={toggleSort}>Name</Th>
               <Th sortKey="mpn" sort={sort} onSort={toggleSort}>MPN</Th>
@@ -1214,8 +1216,15 @@ function ProjectBomView(props: Props) {
               const rowKey = `${row.partId ?? row.name}|${row.value ?? ""}|${row.refDesList.join(",")}`;
               const isExpandable = hasPricing && offers.length > 0; // [B19-E E1-C review] pricing None opens no offers
               const isOpen = isExpandable && expanded.has(rowKey);
+              // [PR-J4, 2026-10-23] sorted by Sheet, a project with sheets gets a group line before each new sheet set (text only, no control)
+              const sheetGroup = state.sheets !== undefined && sort.key === "sheet" && (i === 0 || sheetsText(rows[i - 1]!) !== sheetsText(row)) ? sheetsText(row) : null;
               return (
                 <Fragment key={rowKey}>
+                  {sheetGroup !== null && (
+                    <tr data-testid="bom-sheet-group" data-sheets={sheetGroup}>
+                      <td colSpan={17} className="px-3 py-1 text-[10px] uppercase tracking-wide text-teal-300/80 bg-zinc-900/40 border-b border-zinc-800/70">Sheet: {sheetGroup}</td>
+                    </tr>
+                  )}
                   <tr
                     className={`hover:bg-zinc-900/50 ${isExpandable ? "cursor-pointer" : ""} ${
                       row.partId && row.partId === highlightPartId ? "ring-1 ring-inset ring-teal-400/70 bg-teal-500/10" : ""
@@ -1231,6 +1240,7 @@ function ProjectBomView(props: Props) {
                       </span>
                     </Td>
                     <Td className="font-mono text-[11px] text-zinc-200">{row.refDes}</Td>
+                    {state.sheets !== undefined && <Td className="text-[11px] text-zinc-400"><span data-testid="bom-row-sheets">{sheetsText(row)}</span></Td>}
                     <Td className="text-right tabular-nums">{row.qty}</Td>
                     <Td>
                       <div className="font-medium text-zinc-100">{row.name}</div>
@@ -1888,6 +1898,16 @@ function Th({
 
 function Td({ children, className = "" }: { children?: ReactNode; className?: string }) {
   return <td className={`${TD_BASE} ${className}`}>{children}</td>;
+}
+
+/** [PR-J4, 2026-10-23] The Sheet cell: a line's sheet names joined ("IMU, Overview"); "" for a row without the field. */
+function sheetsText(row: BomRow): string {
+  return (row.sheets ?? []).join(", ");
+}
+
+/** [PR-J4, 2026-10-23] Sort by sheet set, then by the first reference (stable: equal sheet sets keep the reference order). */
+function compareSheets(a: BomRow, b: BomRow): number {
+  return sheetsText(a).localeCompare(sheetsText(b)) || refDesSort(a.refDesList[0] ?? a.name, b.refDesList[0] ?? b.name);
 }
 
 function Muted({ children }: { children: ReactNode }) {

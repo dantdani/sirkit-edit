@@ -6,6 +6,8 @@ import type {
 import { PIN_NAMES, normalizeRefDes, schDisplayRef } from "@/lib/schematic-types";
 import { pinWorldPos, pointKey } from "./geometry";
 import { buildNetUnionFind } from "./connectivity"; import { assertWholeProject, sheetErrors, validateSheetHierarchy } from "./schematic/sheets"; // [PR-J1 integration, 2026-10-22] on this line so no line moves
+import { sheetOf, sheetsOf } from "./schematic/sheets";
+import { projectSpiceNodes, type ProjectSpiceNodes } from "./spice/project-nodes"; // [PR-J4, 2026-10-23] a multi-sheet deck names its nodes from the project connectivity
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -66,11 +68,17 @@ function spiceName(comp: SchComponent): string {
 
 // ─── Main serializer ──────────────────────────────────────────────────────────
 
+/** The deck and its probe maps. `nodeMap`: union-find root -> node name for a single-sheet document, project net identity -> node name
+ *  for one with sheets. `warnings` is present ONLY for a project organised into sheets ([PR-J4, 2026-10-23]; a single-sheet document's
+ *  result is byte-identical to before section J: j1-sheet-operations GOLDEN spiceSha). `pinNodes` keys: "x,y" on the probe sheet (the
+ *  root unless `probeSheetId` names another sheet), "<sheetId>|x,y" on every other sheet. */
+export interface SpiceDeck { netlist: string; nodeMap: Record<string, string>; pinNodes: Record<string, string>; warnings?: string[] }
+
 export function schematicToSpice(
   state: SchematicState,
-  options?: { analysis?: SpiceAnalysis; rawOutputPath?: string },
-): { netlist: string; nodeMap: Record<string, string>; pinNodes: Record<string, string> } {
-  const analysis     = options?.analysis ?? DEFAULT_ANALYSIS; assertWholeProject(state, "spice"); if (state.sheets !== undefined || sheetErrors(validateSheetHierarchy(state)).length > 0) throw new Error(SPICE_SHEETS_PENDING); // [PR-J, 2026-10-22] J2: no deck from a cross-sheet coordinate union; [PR-J1 integration, 2026-10-22] PC-3 / J1-CONS-7: never one sheet's view, never sheet references without their tree
+  options?: { analysis?: SpiceAnalysis; rawOutputPath?: string; probeSheetId?: string },
+): SpiceDeck {
+  const analysis     = options?.analysis ?? DEFAULT_ANALYSIS; assertWholeProject(state, "spice"); if (state.sheets !== undefined || sheetErrors(validateSheetHierarchy(state)).length > 0) return schematicToSpiceOnProjectConnectivity(state, analysis, options?.rawOutputPath, options?.probeSheetId); // [PR-J, 2026-10-22] J2: no deck from a cross-sheet coordinate union; [PR-J1 integration, 2026-10-22] PC-3 / J1-CONS-7: never one sheet's view, never sheet references without their tree; [PR-J4, 2026-10-23] OD-258 item 1: the multi-sheet branch BEFORE the legacy body (which stays verbatim below): its nodes come from the project connectivity, and a document with sheet references but no tree is refused SIM_SHEET_HIERARCHY_INVALID there
   const rawOutputPath = options?.rawOutputPath;
 
   if (state.components.length === 0) {
@@ -238,7 +246,75 @@ export function schematicToSpice(
   };
 }
 
-/** [PR-J, 2026-10-22] Section J increment 2 (OD-255 item 2): the deck's nodes come from a coordinate union over the whole state, which
- *  across sheets would join different sheets' local labels and coordinates; a project with sheets is refused until the SPICE export
- *  reads the project connectivity (the /api/simulate route answers it as "Netlist generation failed: ..."). */
-export const SPICE_SHEETS_PENDING = "SIM_MULTI_SHEET_PENDING: simulation of a project organised into sheets is not available yet; nothing was simulated";
+/** [PR-J4, 2026-10-23] Section J increment 4 (J.5; OD-258 item 1): the deck of a project organised into sheets - or of a document that
+ *  carries sheet references without its tree, which is refused - built on THE project connectivity (app/lib/spice/project-nodes.ts):
+ *  nodes named from project nets (sheet-local nets by sanitized sheet path, "IMU/I2C_SCL" -> IMU_I2C_SCL; rails by exact name; unnamed
+ *  nets N001.. in net-identity order), node 0 the GND rail under the strict rule, every other ground rail a separate node with a deck
+ *  comment and a response warning (never collapsed), structural errors refused SIM_SHEET_HIERARCHY_INVALID and an ambiguous ground
+ *  SIM_GROUND_AMBIGUOUS (structured messages the simulate route maps to `code`). The element, model, analysis and control lines follow
+ *  the legacy emitter above line for line (j4-spice-sheets proves the deck of a design organised into sheets isomorphic to its flat
+ *  original under a node relabelling with 0 fixed); the legacy emitter stays verbatim for single-sheet decks.
+ *  Retired here: SPICE_SHEETS_PENDING ("SIM_MULTI_SHEET_PENDING", [PR-J, 2026-10-22] J2) - pin moves dated [PR-J4, 2026-10-23] in
+ *  j2-simulate-sheets-refusal, j2-project-consumers and j1-connectivity-caller-ratchet. */
+export { SIM_GROUND_AMBIGUOUS, SIM_SHEET_HIERARCHY_INVALID } from "./spice/project-nodes";
+
+/** The two pins of each Theory element in the order the legacy emitter writes them. */
+const ELEMENT_PINS: Record<Exclude<SchComponentType, "ground">, readonly [string, string]> = {
+  resistor: ["left", "right"], capacitor: ["left", "right"], inductor: ["left", "right"], diode: ["anode", "cathode"],
+  "voltage-source": ["+", "-"], "current-source": ["+", "-"],
+};
+
+function schematicToSpiceOnProjectConnectivity(state: SchematicState, analysis: SpiceAnalysis, rawOutputPath: string | undefined, probeSheetId: string | undefined): SpiceDeck {
+  const nodes: ProjectSpiceNodes = projectSpiceNodes(state, { consumer: "spice", probeSheetId }); // refuses before any deck line
+  if (state.components.length === 0) return { netlist: "* Generated by sirkit\n.end\n", nodeMap: {}, pinNodes: {}, warnings: nodes.warnings };
+  const nodeForPin = (comp: SchComponent, pin: string): string => nodes.nodeAt(sheetOf(comp), pinWorldPos(comp, pin)) ?? "N???";
+
+  // Probe map: every Theory pin, then every wire vertex that lies on a net, keyed per sheet (see SpiceDeck).
+  const pinNodes: Record<string, string> = {};
+  for (const comp of state.components) {
+    for (const pin of PIN_NAMES[comp.type] ?? []) pinNodes[nodes.keyOf(sheetOf(comp), pinWorldPos(comp, pin))] = nodeForPin(comp, pin);
+  }
+  for (const wire of state.wires) {
+    for (const v of wire.vertices) {
+      const key = nodes.keyOf(sheetOf(wire), v);
+      if (key in pinNodes) continue;
+      const name = nodes.nodeAt(sheetOf(wire), v);
+      if (name) pinNodes[key] = name;
+    }
+  }
+
+  const lines: string[] = [
+    "* Generated by sirkit",
+    `* Project connectivity: ${sheetsOf(state).length} sheets; nodes named from project nets (sheet-local nets by sheet path, rails by exact name)`,
+    ...nodes.comments.map((comment) => `* ${comment}`),
+    "",
+  ];
+  let hasDiode = false;
+  const seenNames = new Set<string>();
+  const uniqueName = (base: string): string => { let name = base, n = 1; while (seenNames.has(name)) name = `${base}_${++n}`; seenNames.add(name); return name; };
+  const voltageSrcs = state.components.filter((c) => c.type === "voltage-source");
+  const currentSrcs = state.components.filter((c) => c.type === "current-source");
+  const passives    = state.components.filter((c) => !["voltage-source", "current-source", "ground"].includes(c.type)).sort((a, b) => a.id.localeCompare(b.id));
+  for (const comp of [...voltageSrcs, ...currentSrcs, ...passives]) {
+    if (comp.type === "ground") continue;
+    const name = uniqueName(spiceName(comp));
+    const val  = normalizeValue(comp.value, comp.type);
+    const [first, second] = ELEMENT_PINS[comp.type];
+    const a = nodeForPin(comp, first), b = nodeForPin(comp, second);
+    if (comp.type === "voltage-source") lines.push(val.startsWith("AC") ? `${name} ${a} ${b} ${val}` : `${name} ${a} ${b} DC ${val} AC 1`);
+    else if (comp.type === "current-source") lines.push(`${name} ${a} ${b} DC ${val}`);
+    else if (comp.type === "diode") { lines.push(`${name} ${a} ${b} D1N4148`); hasDiode = true; }
+    else lines.push(`${name} ${a} ${b} ${val}`);
+  }
+
+  lines.push("");
+  if (hasDiode) lines.push(".model D1N4148 D(IS=2.52e-9 N=1.752)");
+  switch (analysis.type) {
+    case "tran": lines.push(`.tran ${analysis.tstep} ${analysis.tstop}${analysis.uic ? " uic" : ""}`); break;
+    case "ac":   lines.push(`.ac ${analysis.sweep} ${analysis.points} ${analysis.fstart} ${analysis.fstop}`); break;
+    case "dc":   lines.push(`.dc ${analysis.source} ${analysis.vstart} ${analysis.vstop} ${analysis.vstep}`); break;
+    case "op":   lines.push(".op"); break;
+  }
+  lines.push(".control", "set filetype=ascii", "run", rawOutputPath ? `write ${rawOutputPath}` : "write", ".endc", ".end");
+  return { netlist: lines.join("\n"), nodeMap: Object.fromEntries(nodes.nodeOfNet), pinNodes, warnings: nodes.warnings };
+}

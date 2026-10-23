@@ -39,7 +39,8 @@ import { fromCanonicalSchematic, schematicStateDigest, toCanonicalSchematic, typ
 import type { EngineeringOperation } from "@/app/lib/engineering/types";
 import { randomGenerationUuid } from "@/app/lib/project/generation-task-client";
 import { emptySheetView, pruneSheetView, readSheetView, resolveStoredActiveSheet, withActiveSheet, withSheetCamera, writeSheetView, type SheetCamera, type SheetViewRecord, type StorageLike } from "@/app/lib/project/sheet-navigation-store";
-import { resolveProjectConnectivity, type PartPinsLookup, type ProjectConnectivity } from "@/app/lib/schematic/project-connectivity";
+import { resolveProjectConnectivity, singleSheetRuleChange, type PartPinsLookup, type ProjectConnectivity } from "@/app/lib/schematic/project-connectivity";
+import { organizeGroupInputs, planOrganizeIntoSheets, proposeSheetGroups, type OrganizeGroupInput, type OrganizePlan, type OrganizeProposal } from "@/app/lib/schematic/sheet-organization"; // [PR-J4, 2026-10-23] Organize into sheets (J.3 item 4, OD-258 item 4)
 import {
   MOVE_OFFSET_CANDIDATES,
   addPortOperations,
@@ -61,7 +62,7 @@ import {
   type SheetSelection,
   type SignalDestination,
 } from "@/app/lib/schematic/sheet-lens";
-import { createSheetOperation, planMoveToSheet, renameSheetOperation, reorderSheetsOperation, type MoveEntityRef, type MoveToSheetInput, type MoveToSheetPlan } from "@/app/lib/schematic/sheet-operations";
+import { createSheetOperation, planMoveToSheet, planRailLabelNormalisation, renameSheetOperation, reorderSheetsOperation, type MoveEntityRef, type MoveToSheetInput, type MoveToSheetPlan, type RailLabelNormalisationPlan } from "@/app/lib/schematic/sheet-operations"; // [PR-J4, 2026-10-23] + the rail-named label normalisation (OD-258 item 3)
 import { sheetOf, sheetsOf } from "@/app/lib/schematic/sheets";
 import { ROOT_SHEET_ID, type SchematicState, type SheetPortDirection } from "@/lib/schematic-types";
 
@@ -128,6 +129,16 @@ export interface ReplayCommand {
   payload: unknown;
 }
 
+/** [PR-J4, 2026-10-23] The organise preview (J.3 item 4; OD-258 item 4): the deterministic proposal and its proven plan over the base. */
+export type PlannedOrganize =
+  | { ok: true; sourceSheetId: string; proposal: Extract<OrganizeProposal, { ok: true }>; groups: OrganizeGroupInput[]; plan: Extract<OrganizePlan, { ok: true }>; baseDigest: string }
+  | { ok: false; sourceSheetId: string; message: string; code: string | null; proposal: Extract<OrganizeProposal, { ok: true }> | null; step: { name: string; refs: string[] } | null };
+
+/** [PR-J4, 2026-10-23] The "Normalise N rail-named labels" preview (OD-258 item 3): one previewed, undoable sheet-structure transaction. */
+export type PlannedNormalisation =
+  | { ok: true; plan: Extract<RailLabelNormalisationPlan, { ok: true }>; baseDigest: string }
+  | { ok: false; message: string; code: string | null; count: number };
+
 /** The navigator's controls call exactly these (bound arrow functions, so the B17 scanner sees their names). */
 export interface SheetNavigatorApi {
   openSheet(sheetId: string): void;
@@ -145,6 +156,13 @@ export interface SheetNavigatorApi {
   applyMove(planned: PlannedMove): Promise<SheetCommandOutcome>;
   interfaceSignals(): InterfaceSignal[];
   followDestination(destination: SignalDestination): void;
+  // [PR-J4, 2026-10-23] Organize into sheets and the rail-named label normalisation (OD-258 items 3, 4)
+  planOrganize(input: { sourceSheetId?: string }): PlannedOrganize;
+  applyOrganize(planned: PlannedOrganize): Promise<SheetCommandOutcome>;
+  planNormalise(): PlannedNormalisation;
+  applyNormalise(planned: PlannedNormalisation): Promise<SheetCommandOutcome>;
+  /** Why this single-sheet design cannot take a first sheet as it is (the connection rules would change its circuit), or null. */
+  ruleChange(): string | null;
 }
 
 const isEmptyDocument = (state: SchematicState): boolean =>
@@ -155,6 +173,9 @@ const messageOf = (error: unknown): string => (error instanceof Error ? error.me
 export const CAMERA_WRITE_DELAY_MS = 250;
 /** [PR-J3 integration, 2026-10-23] J3N-6: the operation-id prefix of a PREVIEW plan (pure); the applied transaction gets its own. */
 export const MOVE_PREVIEW_PREFIX = "sheets:move:preview";
+/** [PR-J4, 2026-10-23] The preview prefixes of the organise plan and the normalisation (the applied transactions stamp their own). */
+export const ORGANIZE_PREVIEW_PREFIX = "sheets:organize:preview";
+export const NORMALISE_PREVIEW_PREFIX = "sheets:normalise:preview";
 
 export class SheetNavigationController {
   private readonly listeners = new Set<() => void>();
@@ -169,6 +190,10 @@ export class SheetNavigationController {
   private connectivityCache: { state: SchematicState; conn: ProjectConnectivity } | null = null;
   /** [PR-J3 integration, 2026-10-23] J3N-6: the last move plan and what it was planned over. */
   private planCache: { key: string; authoritative: SchematicState; activeSheetId: string; planned: PlannedMove } | null = null;
+  /** [PR-J4, 2026-10-23] The organise, normalisation and rule-change answers, each over the document they were computed for (by identity). */
+  private organizeCache: { key: string; authoritative: SchematicState; planned: PlannedOrganize } | null = null;
+  private normaliseCache: { authoritative: SchematicState; planned: PlannedNormalisation } | null = null;
+  private ruleChangeCache: { authoritative: SchematicState; change: string | null } | null = null;
   /** [PR-J3 integration, 2026-10-23] J3N-1: the projects this controller has seen WITH a sheet tree (the boundary remount hands the live camera only then). */
   private readonly seenSheets = new Set<string>();
   private readonly lastKnownParents = new Map<string, string>();
@@ -598,6 +623,103 @@ export class SheetNavigationController {
     return interfaceSignals(state, this.connectivity(), this.snapshot.activeSheetId);
   };
 
+  // ── [PR-J4, 2026-10-23] Organize into sheets (schematic.move-to-sheet; J.3 item 4, OD-258 item 4) ────────────────────────
+
+  /** The deterministic proposal for the parts of `sourceSheetId` (the active sheet by default) and its proven plan; pure and cached by
+   *  the document's identity, the sheet and the parts still unresolved (a re-render never re-plans the chain). */
+  readonly planOrganize = (input: { sourceSheetId?: string }): PlannedOrganize => {
+    const state = this.inputs.authoritative;
+    const sourceSheetId = input.sourceSheetId ?? this.snapshot.activeSheetId;
+    const unresolved = (state.kicadComponents ?? []).filter((item) => !this.inputs.getPart(item.partId)).map((item) => item.partId).sort();
+    const key = JSON.stringify([sourceSheetId, unresolved]);
+    const cached = this.organizeCache;
+    if (cached !== null && cached.authoritative === state && cached.key === key) return cached.planned;
+    const planned = this.computeOrganizePlan(state, sourceSheetId);
+    this.organizeCache = { key, authoritative: state, planned };
+    return planned;
+  };
+
+  private computeOrganizePlan(state: SchematicState, sourceSheetId: string): PlannedOrganize {
+    const getPart = this.inputs.getPart;
+    const proposal = proposeSheetGroups(state, getPart, { sourceSheetId });
+    if (!proposal.ok) return { ok: false, sourceSheetId, message: proposal.message, code: proposal.code, proposal: null, step: null };
+    const groups = organizeGroupInputs(proposal);
+    const plan = planOrganizeIntoSheets(state, groups, getPart, { sourceSheetId, rootName: "Overview", operationIdPrefix: ORGANIZE_PREVIEW_PREFIX });
+    if (!plan.ok) return { ok: false, sourceSheetId, message: plan.message, code: plan.code, proposal, step: plan.step };
+    return { ok: true, sourceSheetId, proposal, groups, plan, baseDigest: schematicStateDigest(state) };
+  }
+
+  /** Apply the previewed organisation as ONE schematic.move-to-sheet transaction: the SAME groups re-planned on the canonical base
+   *  inside the serialized queue, refused unless the previewed partition digest results (nothing is applied otherwise). */
+  readonly applyOrganize = async (planned: PlannedOrganize): Promise<SheetCommandOutcome> => {
+    if (!planned.ok) return this.refuse(planned.message);
+    const token = this.token();
+    const scope = this.inputs.captureScope?.() ?? null;
+    const getPart = this.inputs.getPart;
+    const label = `Organized ${planned.plan.preview.componentCount} part${planned.plan.preview.componentCount === 1 ? "" : "s"} into ${planned.groups.length} sheets`;
+    const operationIdPrefix = this.operationPrefix("organize"); // stamped once, here, never during a render
+    let refusal: string | null = null;
+    const result = await this.inputs.runSchematicCommand(label, "schematic.move-to-sheet", (canonical) => {
+      const again = planOrganizeIntoSheets(fromCanonicalSchematic(canonical), planned.groups, getPart, { sourceSheetId: planned.sourceSheetId, rootName: "Overview", operationIdPrefix });
+      if (!again.ok) { refusal = again.message; throw new Error(again.message); }
+      if (again.preview.partitionDigest !== planned.plan.preview.partitionDigest) {
+        refusal = "The design changed since this organisation was previewed: the connections it would produce differ from the preview. Review it again. Nothing was changed.";
+        throw new Error(refusal);
+      }
+      return again.operations;
+    }, { expectedBaseDigest: planned.baseDigest, ...(scope ? { scope } : {}) });
+    if (result.ok) return { ok: true };
+    const message = refusal ?? `"${label}" was not applied. Nothing was changed.`;
+    if (this.isCurrent(token)) this.setNotice(message);
+    return { ok: false, message };
+  };
+
+  // ── [PR-J4, 2026-10-23] the rail-named label normalisation (schematic.sheet-structure; OD-258 item 3) ───────────────────
+
+  /** Why this single-sheet document cannot take a first sheet as it is (`singleSheetRuleChange`, naming the labels), or null. */
+  readonly ruleChange = (): string | null => {
+    const state = this.inputs.authoritative;
+    if (this.ruleChangeCache?.authoritative === state) return this.ruleChangeCache.change;
+    const change = state.sheets === undefined ? singleSheetRuleChange(state, this.partLookup()) : null;
+    this.ruleChangeCache = { authoritative: state, change };
+    return change;
+  };
+
+  /** The previewed normalisation (pure, cached by the document's identity): the labels it re-kinds, the nets it renames, the proof. */
+  readonly planNormalise = (): PlannedNormalisation => {
+    const state = this.inputs.authoritative;
+    if (this.normaliseCache?.authoritative === state) return this.normaliseCache.planned;
+    const plan = planRailLabelNormalisation(state, this.partLookup(), NORMALISE_PREVIEW_PREFIX);
+    const planned: PlannedNormalisation = plan.ok ? { ok: true, plan, baseDigest: schematicStateDigest(state) } : { ok: false, message: plan.message, code: plan.code, count: plan.labels.length };
+    this.normaliseCache = { authoritative: state, planned };
+    return planned;
+  };
+
+  /** Apply the previewed normalisation as ONE schematic.sheet-structure transaction (one undo step), re-planned on the canonical base. */
+  readonly applyNormalise = async (planned: PlannedNormalisation): Promise<SheetCommandOutcome> => {
+    if (!planned.ok) return this.refuse(planned.message);
+    const token = this.token();
+    const scope = this.inputs.captureScope?.() ?? null;
+    const lookup = this.partLookup();
+    const count = planned.plan.labels.length;
+    const label = `Normalised ${count} rail-named label${count === 1 ? "" : "s"}`;
+    const operationIdPrefix = this.operationPrefix("normalise");
+    let refusal: string | null = null;
+    const result = await this.inputs.runSchematicCommand(label, "schematic.sheet-structure", (canonical) => {
+      const again = planRailLabelNormalisation(fromCanonicalSchematic(canonical), lookup, operationIdPrefix);
+      if (!again.ok) { refusal = again.message; throw new Error(again.message); }
+      if (again.partitionDigest !== planned.plan.partitionDigest || again.labels.map((entry) => entry.id).join("\u0000") !== planned.plan.labels.map((entry) => entry.id).join("\u0000")) {
+        refusal = "The design changed since this normalisation was previewed. Review it again. Nothing was changed.";
+        throw new Error(refusal);
+      }
+      return again.operations;
+    }, { expectedBaseDigest: planned.baseDigest, ...(scope ? { scope } : {}) });
+    if (result.ok) return { ok: true };
+    const message = refusal ?? `"${label}" was not applied. Nothing was changed.`;
+    if (this.isCurrent(token)) this.setNotice(message);
+    return { ok: false, message };
+  };
+
   /** The controls' API (bound methods only). */
   readonly api: SheetNavigatorApi = {
     openSheet: this.openSheet,
@@ -615,5 +737,10 @@ export class SheetNavigationController {
     applyMove: this.applyMove,
     interfaceSignals: this.interfaceSignals,
     followDestination: this.followDestination,
+    planOrganize: this.planOrganize,
+    applyOrganize: this.applyOrganize,
+    planNormalise: this.planNormalise,
+    applyNormalise: this.applyNormalise,
+    ruleChange: this.ruleChange,
   };
 }

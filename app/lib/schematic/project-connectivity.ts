@@ -280,14 +280,39 @@ export function singleSheetRuleChange(state: SchematicState, getPart?: PartPinsL
   if (collapse) return `${collapse.message} Rename the ground labels to one name, or tie them explicitly, ${before}.`;
   const strict = resolveProjectConnectivity({ ...state, sheets: { version: 1, sheets: [{ id: ROOT_SHEET_ID, name: "Overview", parentId: null }, { id: "sheet-rule-probe", name: "Rule probe", parentId: ROOT_SHEET_ID }] } }, getPart);
   const error = strict.diagnostics.find((item) => item.severity === "error");
-  if (error) return `A multi-sheet project uses the strict connection rules (a plain label never joins a power or ground label, a global label never joins a local one), under which this design has an error: ${error.message}`;
+  // [PR-J4, 2026-10-23] OD-258 item 3: both sentences NAME the offending labels - "GND" at (300, 100) on R2.2 - so the person can find and
+  // re-kind them (the label tool mints kind "label" for every name; `planRailLabelNormalisation` offers the fix as one transaction)
+  if (error) {
+    // a name collision is between the nets the error names: the LOCAL side's labels are the offending ones (plain labels the strict rule
+    // keeps on their sheet), the project-wide side is summarised as the rail it is; any other error names the labels it refers to
+    const nets = error.refs.flatMap((ref) => strict.nets.filter((net) => net.id === ref));
+    const local = describeLabels(state, legacy, nets.filter((net) => net.scope !== "global").flatMap((net) => net.labels.map((label) => label.id)));
+    const rails = nets.filter((net) => net.scope === "global").map((net) => `the ${net.name} ${net.kind === "label" ? "global net" : "rail"} (${net.labels.length} ${net.kind === "label" ? "global" : net.kind} label${net.labels.length === 1 ? "" : "s"}${net.groundSymbol ? " and a ground symbol" : ""})`);
+    const direct = describeLabels(state, legacy, error.refs.filter((ref) => (state.netLabels ?? []).some((label) => label.id === ref)));
+    const named = local.length > 0 ? `The labels involved: ${local.join(", ")} (plain label${local.length === 1 ? "" : "s"}: give ${local.length === 1 ? "it" : "them"} the rail's kind or another name)${rails.length > 0 ? ` beside ${rails.join(" and ")}` : ""}.` : direct.length > 0 ? `The labels involved: ${direct.join(", ")}.` : "";
+    return `A multi-sheet project uses the strict connection rules (a plain label never joins a power or ground label, a global label never joins a local one), under which this design has an error: ${error.message}${named.length > 0 ? ` ${named}` : ""}`;
+  }
   const kept = new Set(connectionGroups(strict).map((group) => group.key));
   const changed = connectionGroups(legacy).filter((group) => !kept.has(group.key));
   if (changed.length === 0) return null;
-  const labelName = new Map((state.netLabels ?? []).map((label) => [label.id, label.name] as const));
-  const names = sortedUnique(changed.flatMap((group) => group.labels.map((id) => labelName.get(id) ?? id)));
-  const detail = names.length > 0 ? `labels ${names.slice(0, 6).join(", ")}` : `pins ${changed.flatMap((group) => group.pins).slice(0, 6).join(", ")}`;
+  const described = describeLabels(state, legacy, changed.flatMap((group) => group.labels));
+  const detail = described.length > 0 ? `labels ${described.join(", ")}` : `pins ${changed.flatMap((group) => group.pins).slice(0, 6).join(", ")}`;
   return `A multi-sheet project uses the strict connection rules, under which ${changed.length} net(s) of this design would be connected differently (${detail}). Rename or re-kind those labels so both rules agree ${before}.`;
+}
+
+/** [PR-J4, 2026-10-23] Labels named for a person: `"GND" at (300, 100) on R2.2`, the pin at the label's point when there is one (the
+ *  component by reference designator, else its id), the sheet path when the label is not on the overview; at most six, sorted, unique. */
+function describeLabels(state: SchematicState, conn: ProjectConnectivity, labelIds: readonly string[]): string[] {
+  const refOf = (componentId: string): string => (state.kicadComponents ?? []).find((item) => item.id === componentId)?.refDes ?? state.components.find((item) => item.id === componentId)?.refDes ?? componentId;
+  const described = sortedUnique(labelIds).flatMap((id) => {
+    const label = (state.netLabels ?? []).find((item) => item.id === id);
+    if (!label) return [];
+    const sheetId = sheetOf(label);
+    const pin = conn.pins.find((item) => item.sheetId === sheetId && item.point.x === label.position.x && item.point.y === label.position.y);
+    const where = sheetId === ROOT_SHEET_ID ? "" : ` on sheet ${sheetPathName(state, sheetId) || sheetId}`;
+    return [`"${label.name}" at (${label.position.x}, ${label.position.y})${pin ? ` on ${refOf(pin.componentId)}.${pin.pinId}` : ""}${where}`];
+  });
+  return described.length > 6 ? [...described.slice(0, 6), "..."] : described;
 }
 
 // ── single-sheet: the legacy union, named exactly as the consumers name it today ────────────────────────────────────────────

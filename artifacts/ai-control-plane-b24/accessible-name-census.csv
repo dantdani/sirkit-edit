@@ -41,7 +41,7 @@ app/components/bom/BomView.tsx|click|div|(none)|setSnapPopoverOpen,app/component
 app/components/bom/BomView.tsx|click|KindToggle|(none)|setShowDropIn,app/components/bom/BomView.tsx,click,KindToggle,no,named:forwarded,label to text: Drop-in
 app/components/bom/BomView.tsx|click|KindToggle|(none)|setShowFff,app/components/bom/BomView.tsx,click,KindToggle,no,named:forwarded,label to text: FFF
 app/components/bom/BomView.tsx|click|th|(none)|onSort,app/components/bom/BomView.tsx,click,th,no,named:text,* *
-app/components/bom/BomView.tsx|click|tr|(none)|noop|undefined,app/components/bom/BomView.tsx,click,tr,no,named:text,▾ ▸ * * * * * Review successor * * * — * * alt s — * · * …
+app/components/bom/BomView.tsx|click|tr|(none)|noop|undefined,app/components/bom/BomView.tsx,click,tr,no,named:text,▾ ▸ * * * * * * Review successor * * * — * * alt s — * · …
 app/components/bom/BomView.tsx|dialog|Dialog|(none)|onClose,app/components/bom/BomView.tsx,dialog,Dialog,no,exempt:dialog-titled,"Sourcing worksheet (CSV, unverified)"
 app/components/bom/BomView.tsx|dialog|Dialog|(none)|onClose#2,app/components/bom/BomView.tsx,dialog,Dialog,no,exempt:dialog-titled,Snapshot history
 app/components/bom/BomView.tsx|dialog|Dialog|(none)|onClose#3,app/components/bom/BomView.tsx,dialog,Dialog,no,exempt:dialog-titled,Notifications
@@ -264,7 +264,7 @@ app/components/pcb/PcbEditor.tsx|click|button|pcb-3d-open-pcb|onOpenPcbTab,app/c
 app/components/pcb/PcbEditor.tsx|click|button|pcb-release-button|handleRelease,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,Releasing… Request release
 app/components/pcb/PcbEditor.tsx|click|button|Placement options|setSyncDialogOpen,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,Placement options
 app/components/pcb/PcbEditor.tsx|click|button|sync-blockers-dismiss|onDismiss,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,Dismiss
-app/components/pcb/PcbEditor.tsx|click|button|sync-schematic-to-pcb|handleSync,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,* Schematic → PCB
+app/components/pcb/PcbEditor.tsx|click|button|sync-schematic-to-pcb|handleSync,app/components/pcb/PcbEditor.tsx,click,button,no,named:aria-label,Schematic → PCB: synchronise the whole project (* sheet*)…
 app/components/pcb/PcbEditor.tsx|palette|palette|3d|pcb3d.toggle,app/components/pcb/PcbEditor.tsx,palette,palette,no,named:palette-title,Toggle 3D preview
 app/components/pcb/PcbEditor.tsx|palette|palette|align-*|commit,app/components/pcb/PcbEditor.tsx,palette,palette,no,unnamed,untitled-palette-action
 app/components/pcb/PcbEditor.tsx|palette|palette|assist|setAssistOpen,app/components/pcb/PcbEditor.tsx,palette,palette,no,named:palette-title,Ask AI to edit the board…
@@ -374,7 +374,7 @@ app/components/pcb/SnapshotConflictDialog.tsx|dialog|Dialog|(none)|onDismiss,app
 app/components/pcb/StackupCandidatePanel.tsx|click|button|stackup-candidate-accept|onAccept,app/components/pcb/StackupCandidatePanel.tsx,click,button,no,named:text,Applying… Accept — set this stackup
 app/components/pcb/StackupCandidatePanel.tsx|click|button|stackup-candidate-discard|onDiscard,app/components/pcb/StackupCandidatePanel.tsx,click,button,no,named:aria-label,Discard the stackup recommendation
 app/components/pcb/SyncButton.tsx|click|button|Schematic to PCB placement options|onOptions,app/components/pcb/SyncButton.tsx,click,button,no,named:aria-label,Schematic to PCB placement options
-app/components/pcb/SyncButton.tsx|click|button|Schematic to PCB|onSync,app/components/pcb/SyncButton.tsx,click,button,no,named:aria-label,Schematic to PCB
+app/components/pcb/SyncButton.tsx|click|button|Schematic to PCB: *|onSync,app/components/pcb/SyncButton.tsx,click,button,no,named:aria-label,Schematic to PCB: *
 app/components/pcb/SyncPlacementDialog.tsx|change|input|(none)|setSpread,app/components/pcb/SyncPlacementDialog.tsx,change,input,no,named:label-wrap,Spread overlapping or unplaced parts Uses courtyard bound…
 app/components/pcb/SyncPlacementDialog.tsx|change|input|sync-placement|setMode,app/components/pcb/SyncPlacementDialog.tsx,change,input,no,named:label-wrap,Place new parts near board center Recommended for schemat…
 app/components/pcb/SyncPlacementDialog.tsx|change|input|sync-placement|setMode#2,app/components/pcb/SyncPlacementDialog.tsx,change,input,no,named:label-wrap,Preserve import coordinates Use for trusted PCB coordinat…
@@ -423,6 +423,7 @@ app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog#2,ap
 app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog#3,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Cancel
 app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog#4,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Cancel
 app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog#5,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Cancel
+app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog#6,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Cancel
 app/components/schematic/SheetNavigator.tsx|click|button|Close|closeDialog,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Close
 app/components/schematic/SheetNavigator.tsx|click|button|Dismiss the sheets notice|dismissNotice,app/components/schematic/SheetNavigator.tsx,click,button,no,named:aria-label,Dismiss the sheets notice
 app/components/schematic/SheetNavigator.tsx|click|button|sheets-add-port|openDialog:port,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Add port
@@ -437,6 +438,10 @@ app/components/schematic/SheetNavigator.tsx|click|button|sheets-follow|openDialo
 "app/components/schematic/SheetNavigator.tsx|click|button|sheets-move|openDialog:move,mintId",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Move to sheet…
 app/components/schematic/SheetNavigator.tsx|click|button|sheets-new|openDialog:new,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,New sheet
 app/components/schematic/SheetNavigator.tsx|click|button|sheets-new|openDialog:new#2,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,New sheet
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-normalise-apply|onApply,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Normalise * rail-named label s
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-organize-apply|run,applyOrganize",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Apply organisation
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-organize|openDialog:organize,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Organize into sheets…
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-organize|openDialog:organize#2,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Organize…
 app/components/schematic/SheetNavigator.tsx|click|button|sheets-rename|openDialog:rename,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Rename
 "app/components/schematic/SheetNavigator.tsx|click|button|sheets-reorder-down|run,reorderSheet",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Down
 "app/components/schematic/SheetNavigator.tsx|click|button|sheets-reorder-up|run,reorderSheet",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Up
@@ -447,6 +452,7 @@ app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#3,a
 app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#4,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,Delete sheet
 app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#5,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,Move to sheet
 app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#6,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,Follow a signal
+app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#7,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,Organize into sheets
 app/components/schematic/SheetNavigator.tsx|key|div|sheets-panel|onPanelKeyDown,app/components/schematic/SheetNavigator.tsx,key,div,no,named:aria-label,Sheets
 app/components/schematic/SheetNavigator.tsx|key|div|sheets-tree|onTreeKeyDown,app/components/schematic/SheetNavigator.tsx,key,div,no,named:aria-label,Sheets
 app/components/schematic/SheetNavigator.tsx|submit|form|(none)|submitNew,app/components/schematic/SheetNavigator.tsx,submit,form,no,exempt:form-submit,Create sheet

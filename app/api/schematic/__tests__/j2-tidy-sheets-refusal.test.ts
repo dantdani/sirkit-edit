@@ -3,6 +3,9 @@
  * schematic out as one page from its logical netlist, so a project organised into sheets would come back flattened. Until per-sheet
  * tidy exists the route refuses such a project with 422 SHEETS_TIDY_PENDING BEFORE any part read or model call (nothing sent, nothing
  * billed, nothing changed); a project without sheets is tidied exactly as before. Fake router and parts search (vi.mock), no credits.
+ * [PR-J4, 2026-10-23] Pin move (OD-258 item 5): per-sheet tidy exists (app/lib/schematic/sheet-tidy.ts; j4-tidy-sheet.test.ts) - a
+ * project with sheets is tidied one named leaf sheet at a time, so the refusal of a sheeted body WITHOUT a sheet is now
+ * SHEETS_TIDY_SHEET_REQUIRED, still before any part read or model call; the single-sheet and broken-structure cases are unchanged.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { injectAuthorizedPrincipal, resetInjectedIdentity } from "@/app/lib/auth/test-support";
@@ -31,11 +34,11 @@ const flat = { components: [], wires: [], kicadComponents: [{ id: "c1", partId: 
 const sheeted = { ...flat, sheets: { version: 1, sheets: [{ id: "root", name: "Overview", parentId: null }, { id: "s1", name: "Stage 2", parentId: "root" }] } };
 
 describe("[PR-J J2] Tidy refuses a project organised into sheets instead of flattening it", () => {
-  it("a project with sheets: 422 SHEETS_TIDY_PENDING, no part read, no model call", async () => {
+  it("a project with sheets and no sheet named: 422 SHEETS_TIDY_SHEET_REQUIRED, no part read, no model call ([PR-J4, 2026-10-23] pin move: was SHEETS_TIDY_PENDING for every sheeted body)", async () => {
     injectAuthorizedPrincipal({ userId: "e1", tenantId: "local", projectId: "proj-j2", role: "editor" });
     const res = await layoutCriticPost(jsonReq({ state: sheeted, image: "data:image/png;base64,aGk=", provider: "anthropic" }));
     expect(res.status).toBe(422);
-    expect(await res.json()).toEqual({ ok: false, code: "SHEETS_TIDY_PENDING", error: "Tidy re-lays the whole schematic out as one page, so it is not available for a project organised into sheets yet. Nothing was sent and nothing changed." });
+    expect(await res.json()).toEqual({ ok: false, code: "SHEETS_TIDY_SHEET_REQUIRED", error: "Tidy re-lays out ONE sheet of a project organised into sheets; the request names no sheet (open the sheet to tidy and try again). Nothing was sent and nothing changed." });
     expect(generate).not.toHaveBeenCalled();
     expect(partsRead).not.toHaveBeenCalled();
   });

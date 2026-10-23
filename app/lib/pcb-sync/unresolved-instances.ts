@@ -23,7 +23,7 @@ import type { SchematicState } from "@/lib/schematic-types";
 import { normalizeRefDes, schDisplayRef } from "@/lib/schematic-types";
 import { theoryPinContract } from "@/app/lib/schematic/theory-physicality"; // [PR-G, 2026-10-17] the shared rule's own module, not the Stage 4 bridge (forbidden in Stage 3 code)
 import { compareNatural } from "@/app/lib/stable-compare";
-import { assertWholeProject } from "@/app/lib/schematic/sheets"; // [PR-J, 2026-10-22] J2: one sheet's view is never the project
+import { assertWholeProject, sheetOf, sheetPathName, sheetsOf } from "@/app/lib/schematic/sheets"; // [PR-J, 2026-10-22] J2: one sheet's view is never the project; [PR-J4, 2026-10-23] + the instance's sheet
 
 export type UnresolvedInstanceFamily = "kicad" | "theory";
 export type UnresolvedInstanceMissing = "published_exact_revision" | "symbol_asset" | "theory_symbol_only";
@@ -36,6 +36,9 @@ export interface UnresolvedInstance {
   missing: UnresolvedInstanceMissing;
   /** Where that fact is produced — the step the user (or a reviewer) can actually take. */
   reviewPath: string;
+  /** [PR-J4, 2026-10-23] The sheet the instance is drawn on (its id and path name; the root by its own name). Present ONLY for a
+   *  project with sheets, so a single-sheet listing keeps its exact bytes (j2-consumers-golden). */
+  sheet?: { id: string; name: string };
 }
 
 /** The review path per missing fact (one sentence each, shown verbatim in the list). */
@@ -60,17 +63,21 @@ export const UNRESOLVED_MISSING_LABEL: Readonly<Record<UnresolvedInstanceMissing
 export function listUnresolvedInstances(state: SchematicState): UnresolvedInstance[] {
   assertWholeProject(state, "missing-parts");
   const items: UnresolvedInstance[] = [];
+  // [PR-J4, 2026-10-23] the sheet is named per instance only for a project with sheets (no key otherwise: byte identity)
+  const rootName = sheetsOf(state).find((sheet) => sheet.parentId === null)?.name ?? "Overview";
+  const sheetOfInstance = (entity: { sheetId?: string }): { sheet: { id: string; name: string } } | Record<string, never> =>
+    state.sheets === undefined ? {} : { sheet: { id: sheetOf(entity), name: sheetPathName(state, sheetOf(entity)) || rootName } };
   for (const instance of state.kicadComponents ?? []) {
     const missing: UnresolvedInstanceMissing | null = !instance.atomicPartRevisionId
       ? "published_exact_revision"
       : !instance.symbolAssetVersionId
         ? "symbol_asset"
         : null;
-    if (missing !== null) items.push({ refDes: instance.refDes, family: "kicad", missing, reviewPath: UNRESOLVED_REVIEW_PATH[missing] });
+    if (missing !== null) items.push({ refDes: instance.refDes, family: "kicad", missing, reviewPath: UNRESOLVED_REVIEW_PATH[missing], ...sheetOfInstance(instance) });
   }
   for (const component of state.components) {
     if (theoryPinContract(component.type) === null) continue; // ground symbols, voltage/current sources: no footprint, never on the board
-    items.push({ refDes: normalizeRefDes(schDisplayRef(component)), family: "theory", missing: "theory_symbol_only", reviewPath: UNRESOLVED_REVIEW_PATH.theory_symbol_only });
+    items.push({ refDes: normalizeRefDes(schDisplayRef(component)), family: "theory", missing: "theory_symbol_only", reviewPath: UNRESOLVED_REVIEW_PATH.theory_symbol_only, ...sheetOfInstance(component) });
   }
   // Stable sort: a KiCad and a Theory instance sharing a reference keep the KiCad row first.
   return items.sort((a, b) => compareNatural(a.refDes, b.refDes, { caseInsensitive: true }));

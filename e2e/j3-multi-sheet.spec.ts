@@ -14,8 +14,14 @@
  *     checks list Sheet connections; [PR-J3 integration, 2026-10-23] J3-PAGE-1: the project file exported AFTER the sync carries the
  *     board checkpoint WITH its sheet tree and re-imports (as a copy) with every checkpoint;
  *  4. the AI refusal: the Build sentence on the multi-sheet project is refused with the guard's message; no generation task, no
- *     provider-bound request;
- *  5. at 1280 x 720 the chip overlaps neither Go to, the status bar nor the workspace tabs.
+ *     provider-bound request; [PR-J4, 2026-10-23] pin move (OD-258 item 5): Tidy on the overview (child blocks) sends nothing, Tidy on the
+ *     IMU leaf sheet posts ONE layout-critic request carrying sheetId = sheet-imu (the fixture runtime's router answers
+ *     provider_unavailable: nothing leaves the origin, nothing changes);
+ *  5. at 1280 x 720 the chip overlaps neither Go to, the status bar nor the workspace tabs;
+ *  6. [PR-J4, 2026-10-23] Organize into sheets (J.3 item 4; OD-258 items 4, 7: the organise proof rides this spec): a fresh browser opens
+ *     the FLAT drone (fixtures/j4-drone-flat-project.sirkit.json), the preview lists the deterministic proposal (four groups, their ports,
+ *     the tie-breaks under "check these"), Apply is ONE transaction (five sheets, 41 instances, every identity and the pin-to-net
+ *     partition kept, four blocks on the overview), Undo restores the flat page exactly, Redo re-organises, reload keeps it.
  * Fake-backed: the fixture runtime's committed catalog and scripted provider; nothing leaves the origin.
  *
  * Control ids: the agreed J3-B ids (j3-plan.md section 2). The ones marked PROPOSED are this spec's additions for builder B.
@@ -24,7 +30,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page, type Request } from "@playwright/test";
 import { flatReplacementRefusal } from "../app/lib/project/sheet-replace-guard";
+import { resolveProjectConnectivity } from "../app/lib/schematic/project-connectivity";
+import { fixturePartLookup } from "../app/lib/schematic/__tests__/_j1-fixtures";
 import { J3_FIXTURE_PROJECT_ID, J3_FIXTURE_PROJECT_NAME, J3_SHEETS } from "../app/lib/schematic/__tests__/_j3-fixtures";
+import { J4_DRONE_PROPOSAL, J4_FLAT_PROJECT_FILE, J4_FLAT_PROJECT_ID, J4_FLAT_PROJECT_NAME, flatDroneProjectState } from "../app/lib/schematic/__tests__/_j4-organize-fixtures";
 import type { SchematicState } from "../lib/schematic-types";
 import { actAs, expectHydrated, installDeterministicBrowser, reloadAs } from "./fixture-journey";
 
@@ -70,6 +79,21 @@ async function savedRecord(page: Page, projectId = J3_FIXTURE_PROJECT_ID): Promi
 }
 const refs = (state: SchematicState): string[] => (state.kicadComponents ?? []).map((item) => item.refDes).sort();
 const fixtureState = (): SchematicState => (JSON.parse(readFileSync(FIXTURE_FILE, "utf8")) as { payload: { project: { state: SchematicState } } }).payload.project.state;
+/** [PR-J4, 2026-10-23] Every instance without its placement and sheet: id, reference, value, part and authority fields. */
+const identityOf = (state: SchematicState) => state.kicadComponents!.map(({ sheetId: _sheet, x: _x, y: _y, rotation: _r, ...rest }) => { void _sheet; void _x; void _y; void _r; return rest; }).sort((a, b) => a.refDes.localeCompare(b.refDes));
+
+/** [PR-J4, 2026-10-23] A fresh editor opens the committed FLAT drone project file (one sheet, 41 instances). */
+async function openFlatFixture(page: Page, context: Parameters<typeof actAs>[0], origin: string): Promise<void> {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await installDeterministicBrowser(page, context, UUID_NAMESPACE);
+  await actAs(context, "editor", origin);
+  await page.goto("/");
+  await expect(page.getByTestId("fixture-runtime-banner")).toBeVisible();
+  await expectHydrated(page);
+  await page.locator('input[type="file"]').setInputFiles(J4_FLAT_PROJECT_FILE);
+  await expect(page.getByRole("button", { name: new RegExp(J4_FLAT_PROJECT_NAME.replace(/[()]/g, "\\$&")) })).toBeVisible({ timeout: 60_000 });
+  await expect.poll(async () => (await savedState(page, J4_FLAT_PROJECT_ID))?.kicadComponents?.length ?? 0, { timeout: 30_000 }).toBe(41);
+}
 
 /** A fresh editor opens the committed multi-sheet project file through the page's hidden file input (page.tsx importInputRef). */
 async function openFixture(page: Page, context: Parameters<typeof actAs>[0], origin: string, viewport = { width: 1366, height: 768 }): Promise<void> {
@@ -352,6 +376,26 @@ test("4. the AI refusal: the Build sentence on the multi-sheet project is refuse
   expect(traffic.leftOrigin).toEqual([]);
   expect(await savedState(page)).toEqual(fixtureState()); // nothing was changed
   await page.screenshot({ path: `${SCREENSHOTS}/j3-ai-refusal-1366x768.png` });
+
+  // [PR-J4, 2026-10-23] pin move (OD-258 item 5; was: Tidy sends nothing on a sheeted project). Tidy on the overview, which holds the three
+  // child blocks, is refused before any request; on the IMU leaf sheet it posts ONE layout-critic request carrying sheetId = sheet-imu and
+  // the whole project (the fixture runtime's router answers provider_unavailable, so nothing leaves the origin and nothing is applied)
+  await page.getByRole("button", { name: "More checks" }).click();
+  await page.getByRole("button", { name: "Re-tidy layout" }).click();
+  await page.waitForTimeout(1_000);
+  expect(traffic.tidies, "a sheet with child blocks: no request").toBe(0);
+  await openSheet(page, "sheet-imu", "IMU");
+  const tidyRequest = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname === "/api/schematic/layout-critic", { timeout: 30_000 });
+  await page.getByRole("button", { name: "More checks" }).click();
+  await page.getByRole("button", { name: "Re-tidy layout" }).click();
+  const sent = (await tidyRequest).postDataJSON() as { sheetId?: string; state: SchematicState };
+  expect(sent.sheetId).toBe("sheet-imu");
+  expect(sent.state.sheets).toEqual(fixtureState().sheets);
+  expect(sent.state.kicadComponents).toHaveLength(41);
+  await page.waitForTimeout(1_000);
+  expect(traffic.tidies, "the IMU sheet: one request").toBe(1);
+  expect(traffic.leftOrigin).toEqual([]);
+  expect(await savedState(page)).toEqual(fixtureState()); // nothing was changed
 });
 
 test("5. at the editor's minimum width (1280 x 720) the Sheets chip overlaps neither Go to, the status bar nor the workspace tabs", async ({ page, context, baseURL }) => {
@@ -382,4 +426,69 @@ test("5. at the editor's minimum width (1280 x 720) the Sheets chip overlaps nei
   const widths = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth }));
   expect(widths.scrollWidth).toBeLessThanOrEqual(widths.innerWidth);
   await page.screenshot({ path: `${SCREENSHOTS}/j3-chip-layout-1280x720.png` });
+});
+
+test("6. [PR-J4] Organize into sheets: the flat drone's deterministic proposal is previewed, applied as ONE transaction (five sheets, 41 instances, the partition kept), undone, redone and kept across a reload", async ({ page, context, baseURL }) => {
+  const origin = baseURL!;
+  const traffic = watch(page, origin);
+  await openFlatFixture(page, context, origin);
+  const flat = flatDroneProjectState();
+  const opened = await savedState(page, J4_FLAT_PROJECT_ID);
+  expect(opened.sheets).toBeUndefined();
+  expect(refs(opened)).toEqual(refs(flat));
+
+  // the single-sheet panel offers Organize into sheets; the preview is the deterministic proposal
+  await page.getByTestId(T.chip).click();
+  await expect(page.getByTestId("sheets-panel")).toBeVisible();
+  await page.getByTestId("sheets-organize").click();
+  const preview = page.getByTestId("sheets-organize-preview");
+  await expect(preview).toBeVisible();
+  const groups = page.getByTestId("sheets-organize-group");
+  await expect(groups).toHaveCount(J4_DRONE_PROPOSAL.length);
+  expect(await groups.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-name")))).toEqual(J4_DRONE_PROPOSAL.map((group) => group.name));
+  expect(await groups.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-refs")))).toEqual(J4_DRONE_PROPOSAL.map((group) => group.refs.join(" ")));
+  for (const port of ["PWM1", "PWM2", "PWM3", "PWM4", "I2C_SCL", "I2C_SDA", "IMU_INT1"]) await expect(preview).toContainText(port);
+  await expect(page.getByTestId("sheets-organize-check")).toBeVisible();
+  await expect(page.getByTestId("sheets-organize-refusal")).toHaveCount(0);
+  await page.screenshot({ path: `${SCREENSHOTS}/j4-organize-preview-1366x768.png` });
+
+  // Apply: one transaction
+  await page.getByTestId("sheets-organize-apply").click();
+  await expect(preview).toBeHidden();
+  await expect.poll(async () => (await savedState(page, J4_FLAT_PROJECT_ID)).sheets?.sheets.length ?? 0, { timeout: 30_000 }).toBe(J4_DRONE_PROPOSAL.length + 1);
+  const organised = await savedState(page, J4_FLAT_PROJECT_ID);
+  expect(organised.sheets!.sheets.map((sheet) => sheet.name)).toEqual(["Overview", ...J4_DRONE_PROPOSAL.map((group) => group.name)]);
+  expect(organised.kicadComponents).toHaveLength(41);
+  expect(refs(organised)).toEqual(refs(flat));
+  expect(identityOf(organised)).toEqual(identityOf(flat));
+  for (const group of J4_DRONE_PROPOSAL) {
+    const sheet = organised.sheets!.sheets.find((item) => item.name === group.name)!;
+    expect(organised.kicadComponents!.filter((item) => item.sheetId === sheet.id).map((item) => item.refDes).sort()).toEqual([...group.refs].sort());
+    expect((sheet.ports ?? []).map((port) => port.name).sort()).toEqual([...group.ports].sort());
+  }
+  const lookup = fixturePartLookup();
+  expect(resolveProjectConnectivity(organised, lookup).partitionDigest).toBe(resolveProjectConnectivity(flat, lookup).partitionDigest);
+  // the overview holds the four blocks and no part
+  for (const sheet of organised.sheets!.sheets.slice(1)) await expect(page.getByTestId(T.block(sheet.id))).toBeVisible();
+  expect(await drawnRefs(page)).toEqual([]);
+  await expect(page.getByTestId(T.chip)).toContainText("5 sheets");
+  await page.screenshot({ path: `${SCREENSHOTS}/j4-organize-overview-1366x768.png` });
+
+  // Undo (one step): the flat page exactly as opened; Redo: organised again
+  await page.getByRole("button", { name: "Undo schematic action" }).click();
+  await expect.poll(async () => (await savedState(page, J4_FLAT_PROJECT_ID)).sheets === undefined, { timeout: 30_000 }).toBe(true);
+  expect(await savedState(page, J4_FLAT_PROJECT_ID)).toEqual(opened);
+  await page.getByRole("button", { name: "Redo schematic action" }).click();
+  await expect.poll(async () => (await savedState(page, J4_FLAT_PROJECT_ID)).sheets?.sheets.length ?? 0, { timeout: 30_000 }).toBe(J4_DRONE_PROPOSAL.length + 1);
+  expect(await savedState(page, J4_FLAT_PROJECT_ID)).toEqual(organised);
+
+  // reload keeps the organised project
+  await page.reload();
+  await expect(page.getByTestId("fixture-runtime-banner")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Drone \(flat\)/ })).toBeVisible({ timeout: 120_000 });
+  expect(await savedState(page, J4_FLAT_PROJECT_ID)).toEqual(organised);
+  await openTree(page);
+  await expect(page.locator('[data-testid^="sheets-tree-item-"]')).toHaveCount(J4_DRONE_PROPOSAL.length + 1);
+  expect(traffic.leftOrigin).toEqual([]);
+  expect([traffic.generationStarts, traffic.edits, traffic.tidies, traffic.buildMulti]).toEqual([0, 0, 0, 0]);
 });

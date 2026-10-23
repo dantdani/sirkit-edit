@@ -57,7 +57,8 @@ describe("[PR-J3] 1. app/page.tsx carries the sheet tree iff present at every si
       ["design-state watcher", "const snap: SchematicSnapshot = { components, wires, kicadComponents, netLabels, ...(schHistoryRef.current.present.sheets !== undefined ? { sheets: schHistoryRef.current.present.sheets } : {}) };"],
       ["checkpoint restore", `${spread("checkpoint.schematic")},`],
       ["applied AI result", `...(state.pageSize ? { pageSize: state.pageSize } : { ...(liveStateRef.current.pageSize ? { pageSize: liveStateRef.current.pageSize } : {}) }), ${spread("state")},`],
-      ["simulate body", `body: JSON.stringify({ state: { components: authoritative.components, wires: authoritative.wires, netLabels: authoritative.netLabels ?? [], ${spread("authoritative")} }, analysis: analysisConfig }),`],
+      // [PR-J4, 2026-10-23] pin move (OD-258 item 1): + the active sheet as the probe sheet, iff present (the same line, in place)
+      ["simulate body", `body: JSON.stringify({ state: { components: authoritative.components, wires: authoritative.wires, netLabels: authoritative.netLabels ?? [], ${spread("authoritative")} }, analysis: analysisConfig, ...(authoritative.sheets !== undefined ? { probeSheetId: sheetLens.activeSheetId } : {}) }),`],
     ];
     for (const [name, literal] of sites) expect(count(page, literal), name).toBe(1);
     expect(count(page, ".sheets !== undefined ? { sheets:")).toBe(sites.length);
@@ -82,9 +83,11 @@ describe("[PR-J3] 2. the sheet lens wiring", () => {
     expect(count(page, "kicadComponents={sheetLens.kicadComponents}")).toBe(1);
     expect(count(page, "{...sheetLens.editorProps}")).toBe(1);
     expect(count(page, "<SheetNavigator {...sheetLens.navigatorProps} />")).toBe(1);
-    // the lens is used for nothing else
+    // the lens is used for nothing else. [PR-J4, 2026-10-23] pin move: + activeSheetId, read by the Tidy guard / request body (the sheet to
+    // tidy, OD-258 item 5) and by the simulate body (the probe sheet, OD-258 item 1) - both iff the project has sheets
     const uses = new Set([...page.matchAll(/sheetLens\.(\w+)/g)].map((match) => match[1]));
-    expect([...uses].sort()).toEqual(["activation", "components", "editorProps", "graph", "kicadComponents", "legacy", "navigatorProps", "netLabels", "wires"]);
+    expect([...uses].sort()).toEqual(["activation", "activeSheetId", "components", "editorProps", "graph", "kicadComponents", "legacy", "navigatorProps", "netLabels", "wires"]);
+    expect(count(page, "sheetLens.activeSheetId")).toBe(2); // the tidy sheet (one read, carried into the request body), the probe sheet
   });
 
   it("the editor consumes the four sheet props: a stored camera replaces the mount fit, camera writes, the block layer, Go to's fallback; the scoped glyph", () => {
@@ -137,7 +140,7 @@ describe("[PR-J3] 3. the whole-project consumers read the whole state regardless
 
 describe("[PR-J3] 4. the AI replace-result guard sits at the Build start, the edit request, Tidy, the offer and the final apply", () => {
   it("call sites and their order", () => {
-    expect(count(page, "multiSheetReplaceRefusal(")).toBe(3);
+    expect(count(page, "multiSheetReplaceRefusal(")).toBe(2); // [PR-J4, 2026-10-23] pin move: was 3 - Tidy's flat-replacement refusal became the per-sheet guard below (OD-258 item 5)
     expect(count(page, "flatReplacementRefusal(")).toBe(2);
     const at = (literal: string): number => { const index = page.indexOf(literal); expect(index, literal).toBeGreaterThan(0); expect(page.indexOf(literal, index + 1), `${literal} once`).toBe(-1); return index; };
     // Build: refused before the activity log and before any task start (no task, no spend)
@@ -148,10 +151,14 @@ describe("[PR-J3] 4. the AI replace-result guard sits at the Build start, the ed
     // edit: before /api/schematic/edit
     const editGuard = at("const editRefusal = multiSheetReplaceRefusal(snapshot); if (editRefusal !== null) { setScopedGenError(scope, editRefusal, 12000); return; }");
     expect(editGuard).toBeLessThan(at('const res = await fetch("/api/schematic/edit", {'));
-    // tidy: before the capture and the layout-critic request
-    const tidyGuard = at("const tidyRefusal = multiSheetReplaceRefusal(tidySnapshot); if (tidyRefusal !== null) { if (!auto) setScopedGenError(tidyScope, tidyRefusal, 12000); return; }");
+    // tidy: before the capture and the layout-critic request. [PR-J4, 2026-10-23] pin move (OD-258 item 5): the guard now names the ACTIVE
+    // sheet to tidy and refuses only when no sheet is open, the open sheet holds child blocks or it has no catalog parts (was the
+    // flat-replacement refusal of every project with sheets); the request carries that sheet iff the project has sheets
+    const tidyGuard = at("const tidySheetId = tidySnapshot.sheets === undefined ? null : sheetLens.activeSheetId; const tidyRefusal = tidySnapshot.sheets === undefined ? null : !tidySnapshot.sheets.sheets.some((sheet) => sheet.id === tidySheetId) ?");
+    expect(page).toContain("if (tidyRefusal !== null) { if (!auto) setScopedGenError(tidyScope, tidyRefusal, 12000); return; }");
     expect(tidyGuard).toBeLessThan(at("const image = await captureSchematicPng();"));
     expect(tidyGuard).toBeLessThan(at('const res = await fetch("/api/schematic/layout-critic", {'));
+    expect(at("state: { ...tidySnapshot, pageSize: tidySnapshot.pageSize ?? pageSize }, ...(tidySheetId !== null ? { sheetId: tidySheetId } : {}),")).toBeGreaterThan(tidyGuard);
     // the offer (chat-started tasks arrive here) refuses before any proposal state exists
     const offerGuard = at("const flatRefusal = flatReplacementRefusal(gestureCoordinatorRef.current!.authoritativeState(), state); if (resultIssues.length > 0 || flatRefusal !== null) {");
     expect(offerGuard).toBeLessThan(at("setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin, validationNote });"));

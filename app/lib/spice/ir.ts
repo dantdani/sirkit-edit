@@ -1,6 +1,9 @@
 import { buildNetUnionFind } from "@/app/lib/connectivity"; import { assertWholeProject, sheetErrors, validateSheetHierarchy } from "@/app/lib/schematic/sheets"; // [PR-J1 integration, 2026-10-22] on this line so no line moves
+import type { PartPinsLookup } from "@/app/lib/schematic/project-connectivity";
+import { sheetOf } from "@/app/lib/schematic/sheets";
+import { projectSpiceNodes } from "./project-nodes"; // [PR-J4, 2026-10-23] a multi-sheet IR names its nodes from the project connectivity
 import { kicadPinWorldPos, pinWorldPos, pointKey } from "@/app/lib/geometry";
-import { PIN_NAMES, netLabelNameKey, normalizeRefDes, schDisplayRef, type KicadComponentInstance, type Point, type SchComponent } from "@/lib/schematic-types";
+import { PIN_NAMES, netLabelNameKey, normalizeRefDes, schDisplayRef, type KicadComponentInstance, type NetLabel, type Point, type SchComponent, type SchematicState } from "@/lib/schematic-types";
 import { createId } from "./identity";
 import { getActiveDesign } from "./project";
 import type {
@@ -22,6 +25,9 @@ export interface CompileIrInput {
   project: SimulationProject;
   testId: string;
   parts?: SimulationPartSnapshot[];
+  /** [PR-J4, 2026-10-23] For a project organised into sheets: the sheet whose points take bare "x,y" probe keys in `pointNodes` (the
+   *  root when absent); every other sheet's points are keyed "<sheetId>|x,y". Ignored for a single-sheet document. */
+  probeSheetId?: string;
 }
 
 export interface CompileIrResult {
@@ -103,11 +109,14 @@ export function compileCanonicalIr(input: CompileIrInput): CompileIrResult {
   const { project } = input;
   const test = selectTest(project, input.testId);
   const design = project.designRevisions.find((candidate) => candidate.id === test.baseDesignRevisionId) ?? getActiveDesign(project);
-  const schematic = design.schematic; assertWholeProject(schematic, "spice-ir"); if (schematic.sheets !== undefined || sheetErrors(validateSheetHierarchy(schematic)).length > 0) throw new Error("SIM_MULTI_SHEET_PENDING: compiling a simulation of a project organised into sheets is not available yet; nothing was compiled"); // [PR-J, 2026-10-22] J2: never a cross-sheet coordinate union; [PR-J1 integration, 2026-10-22] PC-3 / J1-CONS-7: never one sheet's view, never sheet references without their tree
+  const schematic = design.schematic; assertWholeProject(schematic, "spice-ir"); const sheeted = schematic.sheets !== undefined || sheetErrors(validateSheetHierarchy(schematic)).length > 0; // [PR-J, 2026-10-22] J2: never a cross-sheet coordinate union; [PR-J1 integration, 2026-10-22] PC-3 / J1-CONS-7: never one sheet's view, never sheet references without their tree; [PR-J4, 2026-10-23] OD-258 item 1: such a document takes the project-connectivity stage below (sheetedIrConnectivity) instead of a refusal
   const parts = new Map((input.parts ?? []).map((part) => [part.id, part]));
   const kicad = schematic.kicadComponents ?? [];
   const labels = schematic.netLabels ?? [];
   const warnings: string[] = [];
+  // [PR-J4, 2026-10-23] a project with sheets resolves its nodes here, BEFORE any device: a structural error, an ambiguous ground or an
+  // unresolved part refuses (SIM_SHEET_HIERARCHY_INVALID / SIM_GROUND_AMBIGUOUS); the legacy stage below is untouched for single-sheet documents
+  const sheetedConnectivity = sheeted ? sheetedIrConnectivity(schematic, parts, input.probeSheetId, warnings) : null;
 
   const kicadPinPoints: Array<{ component: KicadComponentInstance; pinName: string; point: Point }> = [];
   for (const component of kicad) {
@@ -121,91 +130,8 @@ export function compileCanonicalIr(input: CompileIrInput): CompileIrResult {
     }
   }
 
-  const uf = buildNetUnionFind(
-    schematic.components,
-    schematic.wires,
-    kicadPinPoints.map((entry) => entry.point),
-    labels,
-  );
-
-  const groundSites: string[] = schematic.components
-    .filter((component) => component.type === "ground")
-    .map((component) => pointKey(pinWorldPos(component, "pin")));
-  for (const label of labels) {
-    const name = netLabelNameKey(label.name);
-    if (label.kind === "ground" || name === "GND" || name === "0") groundSites.push(pointKey(label.position));
-  }
-  let groundRoot: string | null = null;
-  for (const site of groundSites) {
-    if (groundRoot === null) groundRoot = uf.find(site);
-    else uf.union(groundRoot, site);
-  }
-  if (groundRoot !== null) groundRoot = uf.find(groundRoot);
-
-  const allSites = new Set<string>();
-  for (const component of schematic.components) {
-    for (const pin of PIN_NAMES[component.type] ?? []) allSites.add(pointKey(pinWorldPos(component, pin)));
-  }
-  for (const entry of kicadPinPoints) allSites.add(pointKey(entry.point));
-  for (const wire of schematic.wires) for (const vertex of wire.vertices) allSites.add(pointKey(vertex));
-  for (const label of labels) allSites.add(pointKey(label.position));
-
-  const roots = new Set([...allSites].map((site) => uf.find(site)));
-  const aliasesByRoot = new Map<string, Set<string>>();
-  for (const label of labels) {
-    const root = uf.find(pointKey(label.position));
-    let aliases = aliasesByRoot.get(root);
-    if (!aliases) {
-      aliases = new Set();
-      aliasesByRoot.set(root, aliases);
-    }
-    aliases.add(label.name.trim());
-  }
-
-  const usedNodeNames = new Set<string>();
-  const nodeNameByRoot = new Map<string, string>();
-  if (groundRoot !== null) {
-    nodeNameByRoot.set(groundRoot, "0");
-    usedNodeNames.add("0");
-  }
-  let anonymousIndex = 1;
-  for (const root of [...roots].sort()) {
-    if (root === groundRoot) continue;
-    const aliases = [...(aliasesByRoot.get(root) ?? [])].map(sanitizeNodeName).filter(Boolean).sort();
-    const preferred = aliases.find((alias) => alias !== "0") ?? `N${String(anonymousIndex++).padStart(3, "0")}`;
-    let unique = preferred;
-    let suffix = 2;
-    while (usedNodeNames.has(unique.toUpperCase())) unique = `${preferred}_${suffix++}`;
-    usedNodeNames.add(unique.toUpperCase());
-    nodeNameByRoot.set(root, unique);
-  }
-
-  const pointNodes: Record<string, string> = {};
-  for (const site of allSites) pointNodes[site] = nodeNameByRoot.get(uf.find(site)) ?? "N_UNRESOLVED";
-
-  const nodes: IrNode[] = [...roots]
-    .sort((a, b) => (nodeNameByRoot.get(a) ?? a).localeCompare(nodeNameByRoot.get(b) ?? b))
-    .map((root) => ({
-      id: `node_${nodeNameByRoot.get(root) ?? stableRootId(root)}`,
-      name: nodeNameByRoot.get(root) ?? "N_UNRESOLVED",
-      aliases: [...(aliasesByRoot.get(root) ?? [])].sort(),
-      ground: root === groundRoot,
-      sourceRefs: [
-        ...labels
-          .filter((label) => uf.find(pointKey(label.position)) === root)
-          .map((label): SourceRef => ({ kind: "schematic-net", id: label.id, label: label.name })),
-      ],
-    }));
-  const nodeIdByName = new Map(nodes.map((node) => [node.name.toUpperCase(), node.id]));
-  for (const node of nodes) for (const alias of node.aliases) nodeIdByName.set(alias.toUpperCase(), node.id);
-
+  const { nodes, nodeIdByName, pointNodes, nodeIdAt } = sheetedConnectivity ?? legacyIrConnectivity(schematic, kicadPinPoints, labels); // [PR-J4, 2026-10-23] one stage per document kind
   const componentPinNodes: Record<string, string> = {};
-  function nodeIdAt(point: Point): string {
-    const name = pointNodes[pointKey(point)];
-    const id = nodeIdByName.get(name?.toUpperCase());
-    if (!id) throw new Error(`Could not resolve simulation node at ${pointKey(point)}`);
-    return id;
-  }
 
   const devices: IrDevice[] = [];
   const seenDeviceNames = new Set<string>();
@@ -213,7 +139,7 @@ export function compileCanonicalIr(input: CompileIrInput): CompileIrResult {
     const prefix = THEORY_PREFIX[component.type];
     if (!prefix) continue;
     const pins = (PIN_NAMES[component.type] ?? []).map((pin) => {
-      const nodeId = nodeIdAt(pinWorldPos(component, pin));
+      const nodeId = nodeIdAt(pinWorldPos(component, pin), sheetOf(component)); // [PR-J4, 2026-10-23] the pin's own sheet
       componentPinNodes[`${component.id}.${pin}`] = nodeId;
       return { name: pin, nodeId };
     });
@@ -244,7 +170,7 @@ export function compileCanonicalIr(input: CompileIrInput): CompileIrResult {
     const model = binding ? models.get(binding.modelId) ?? project.modelAssets.find((asset) => asset.id === binding.modelId) : undefined;
     const resolvedPins = part?.pins.map((pin) => {
       const point = kicadPinWorldPos(component, pin);
-      const nodeId = nodeIdAt(point);
+      const nodeId = nodeIdAt(point, sheetOf(component)); // [PR-J4, 2026-10-23] the pin's own sheet
       componentPinNodes[`${component.id}.${pin.number}`] = nodeId;
       componentPinNodes[`${component.id}.${pin.name}`] = nodeId;
       return { pin, nodeId, mapped: binding?.pinMap[pin.number] ?? binding?.pinMap[pin.name] };
@@ -377,6 +303,150 @@ export function compileCanonicalIr(input: CompileIrInput): CompileIrResult {
     warnings,
   };
   return { ir, componentPinNodes, pointNodes };
+}
+
+/** [PR-J4, 2026-10-23] The connectivity stage of the IR: its nodes, their name index (upper-cased names and aliases), the probe map and
+ *  the node of a point on a sheet (throws when the point lies on no net). One implementation per document kind, below. */
+interface IrConnectivity {
+  nodes: IrNode[];
+  nodeIdByName: Map<string, string>;
+  pointNodes: Record<string, string>;
+  nodeIdAt(point: Point, sheetId: string): string;
+}
+
+/** The single-sheet stage: the body compileCanonicalIr ran before section J increment 4, moved here verbatim (its output is pinned by
+ *  j4-ir-sheets for six fixtures): the coordinate union over the whole state, ground from every ground-kind / GND / 0 label and symbol,
+ *  node names from label aliases, bare point keys. The sheet argument of `nodeIdAt` is ignored: one page is the project. */
+function legacyIrConnectivity(schematic: SchematicState, kicadPinPoints: Array<{ point: Point }>, labels: NetLabel[]): IrConnectivity {
+  const uf = buildNetUnionFind(
+    schematic.components,
+    schematic.wires,
+    kicadPinPoints.map((entry) => entry.point),
+    labels,
+  );
+
+  const groundSites: string[] = schematic.components
+    .filter((component) => component.type === "ground")
+    .map((component) => pointKey(pinWorldPos(component, "pin")));
+  for (const label of labels) {
+    const name = netLabelNameKey(label.name);
+    if (label.kind === "ground" || name === "GND" || name === "0") groundSites.push(pointKey(label.position));
+  }
+  let groundRoot: string | null = null;
+  for (const site of groundSites) {
+    if (groundRoot === null) groundRoot = uf.find(site);
+    else uf.union(groundRoot, site);
+  }
+  if (groundRoot !== null) groundRoot = uf.find(groundRoot);
+
+  const allSites = new Set<string>();
+  for (const component of schematic.components) {
+    for (const pin of PIN_NAMES[component.type] ?? []) allSites.add(pointKey(pinWorldPos(component, pin)));
+  }
+  for (const entry of kicadPinPoints) allSites.add(pointKey(entry.point));
+  for (const wire of schematic.wires) for (const vertex of wire.vertices) allSites.add(pointKey(vertex));
+  for (const label of labels) allSites.add(pointKey(label.position));
+
+  const roots = new Set([...allSites].map((site) => uf.find(site)));
+  const aliasesByRoot = new Map<string, Set<string>>();
+  for (const label of labels) {
+    const root = uf.find(pointKey(label.position));
+    let aliases = aliasesByRoot.get(root);
+    if (!aliases) {
+      aliases = new Set();
+      aliasesByRoot.set(root, aliases);
+    }
+    aliases.add(label.name.trim());
+  }
+
+  const usedNodeNames = new Set<string>();
+  const nodeNameByRoot = new Map<string, string>();
+  if (groundRoot !== null) {
+    nodeNameByRoot.set(groundRoot, "0");
+    usedNodeNames.add("0");
+  }
+  let anonymousIndex = 1;
+  for (const root of [...roots].sort()) {
+    if (root === groundRoot) continue;
+    const aliases = [...(aliasesByRoot.get(root) ?? [])].map(sanitizeNodeName).filter(Boolean).sort();
+    const preferred = aliases.find((alias) => alias !== "0") ?? `N${String(anonymousIndex++).padStart(3, "0")}`;
+    let unique = preferred;
+    let suffix = 2;
+    while (usedNodeNames.has(unique.toUpperCase())) unique = `${preferred}_${suffix++}`;
+    usedNodeNames.add(unique.toUpperCase());
+    nodeNameByRoot.set(root, unique);
+  }
+
+  const pointNodes: Record<string, string> = {};
+  for (const site of allSites) pointNodes[site] = nodeNameByRoot.get(uf.find(site)) ?? "N_UNRESOLVED";
+
+  const nodes: IrNode[] = [...roots]
+    .sort((a, b) => (nodeNameByRoot.get(a) ?? a).localeCompare(nodeNameByRoot.get(b) ?? b))
+    .map((root) => ({
+      id: `node_${nodeNameByRoot.get(root) ?? stableRootId(root)}`,
+      name: nodeNameByRoot.get(root) ?? "N_UNRESOLVED",
+      aliases: [...(aliasesByRoot.get(root) ?? [])].sort(),
+      ground: root === groundRoot,
+      sourceRefs: [
+        ...labels
+          .filter((label) => uf.find(pointKey(label.position)) === root)
+          .map((label): SourceRef => ({ kind: "schematic-net", id: label.id, label: label.name })),
+      ],
+    }));
+  const nodeIdByName = new Map(nodes.map((node) => [node.name.toUpperCase(), node.id]));
+  for (const node of nodes) for (const alias of node.aliases) nodeIdByName.set(alias.toUpperCase(), node.id);
+
+  function nodeIdAt(point: Point): string {
+    const name = pointNodes[pointKey(point)];
+    const id = nodeIdByName.get(name?.toUpperCase());
+    if (!id) throw new Error(`Could not resolve simulation node at ${pointKey(point)}`);
+    return id;
+  }
+  return { nodes, nodeIdByName, pointNodes, nodeIdAt: (point) => nodeIdAt(point) };
+}
+
+/** [PR-J4, 2026-10-23] The multi-sheet stage (OD-258 item 1) on THE project connectivity through app/lib/spice/project-nodes.ts: one
+ *  IR node per project net (named from the net: sheet-local nets by sanitized sheet path, rails by exact name, unnamed nets N001..),
+ *  node 0 the GND rail under the strict rule and every other ground rail its own node (a warning per rail), the net's display name as
+ *  the node's alias (so an overlay's `net` target names a scoped net exactly: "IMU/OUT", never two sheets' "OUT"), probe keys per
+ *  sheet ("x,y" on the probe sheet, "<sheetId>|x,y" elsewhere). A structural error, an ambiguous ground or a KiCad part whose pins are
+ *  unknown refuses before any device is placed: nothing is guessed. */
+function sheetedIrConnectivity(schematic: SchematicState, parts: Map<string, SimulationPartSnapshot>, probeSheetId: string | undefined, warnings: string[]): IrConnectivity {
+  const getPart: PartPinsLookup = (partId) => parts.get(partId) ?? null;
+  const project = projectSpiceNodes(schematic, { consumer: "spice-ir", getPart, requireResolvedParts: true, probeSheetId });
+  warnings.push(...project.warnings);
+  const { conn, nodeOfNet } = project;
+  const nodes: IrNode[] = conn.nets
+    .filter((net) => nodeOfNet.has(net.id))
+    .map((net): IrNode => {
+      const name = nodeOfNet.get(net.id)!;
+      return {
+        id: `node_${name}`,
+        name,
+        aliases: net.name === null ? [] : [net.name],
+        ground: net.id === project.groundNetId,
+        sourceRefs: net.labels.map((label): SourceRef => ({ kind: "schematic-net", id: label.id, label: label.name })),
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const nodeIdByName = new Map(nodes.map((node) => [node.name.toUpperCase(), node.id]));
+  for (const node of nodes) for (const alias of node.aliases) nodeIdByName.set(alias.toUpperCase(), node.id);
+  const pointNodes: Record<string, string> = {};
+  const site = (sheetId: string, point: Point): void => { const name = project.nodeAt(sheetId, point); if (name) pointNodes[project.keyOf(sheetId, point)] = name; };
+  for (const pin of conn.pins) site(pin.sheetId, pin.point);
+  for (const wire of schematic.wires) for (const vertex of wire.vertices) site(sheetOf(wire), vertex);
+  for (const label of schematic.netLabels ?? []) site(sheetOf(label), label.position);
+  return {
+    nodes,
+    nodeIdByName,
+    pointNodes,
+    nodeIdAt: (point, sheetId) => {
+      const name = project.nodeAt(sheetId, point);
+      const id = name === null ? undefined : nodeIdByName.get(name.toUpperCase());
+      if (!id) throw new Error(`Could not resolve simulation node at ${pointKey(point)} on sheet ${sheetId}`);
+      return id;
+    },
+  };
 }
 
 function inferModelPrefix(model: ModelAsset): IrDevice["deviceType"] {

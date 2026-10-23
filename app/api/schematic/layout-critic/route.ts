@@ -15,7 +15,14 @@
  *
  * "Vision proposes crowded regions, deterministic geometry disposes the moves."
  *
- * Body:     { state: SchematicState; image: string (data URL: png/jpeg/webp) }
+ * Body:     { state: SchematicState; image: string (data URL: png/jpeg/webp); sheetId?: string }
+ *           [PR-J4, 2026-10-23] J.3 item 5 / OD-258 item 5: a project with sheets names the LEAF sheet to tidy (the page sends the active
+ *           sheet); the manifest and the image are that sheet's, the re-layout is merged back onto the whole project with every component
+ *           re-identified by reference designator (app/lib/schematic/sheet-tidy.ts) and proven to keep the project connectivity; the
+ *           response returns the WHOLE project state plus `sheetId`. Refusals (422, nothing sent, nothing changed): SHEETS_TIDY_SHEET_REQUIRED
+ *           (no sheet named), SHEETS_TIDY_SHEET_UNKNOWN, SHEETS_TIDY_BLOCKS_PENDING (a sheet with child blocks), SHEETS_TIDY_PARTS_UNRESOLVED,
+ *           SHEETS_TIDY_NOT_EQUIVALENT (the re-laid sheet would change a connection: original kept). A document without sheets is tidied
+ *           exactly as before (same request, same response bytes).
  * Response: { ok: true; applied: boolean; state: SchematicState;
  *             critique: { groups: Group[]; summary: string };
  *             validation: { ok: boolean; violations: number };
@@ -35,7 +42,7 @@ import {
   nearestNeighborGaps,
   evaluateRespacing,
 } from "@/lib/build-auto-layout";
-import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist"; import { sheetErrors, validateSheetHierarchy } from "@/app/lib/schematic/sheets"; // [PR-J1 integration, 2026-10-22] on this line so no line moves
+import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist"; import { sheetErrors, validateSheetHierarchy, sheetOf } from "@/app/lib/schematic/sheets"; import { tidySheet, tidySheetRefusal } from "@/app/lib/schematic/sheet-tidy"; // [PR-J1 integration, 2026-10-22] on this line so no line moves; [PR-J4, 2026-10-23] + the per-sheet tidy (OD-258 item 5)
 import type { CachedPart } from "@/app/lib/parts-cache";
 import type { SchematicState } from "@/lib/schematic-types";
 
@@ -45,7 +52,7 @@ export const runtime = "nodejs";
 // Grid snap is 20px, so these are ~1–3.5 grid steps of additional breathing room.
 const SPREAD_PX: Record<string, number> = { low: 24, medium: 44, high: 70 };
 
-type Group = { refDes: string[]; reason: string; severity: string }; /** [PR-J, 2026-10-22] J2 / OD-255 item 6 */ const SHEETS_TIDY_PENDING = "Tidy re-lays the whole schematic out as one page, so it is not available for a project organised into sheets yet. Nothing was sent and nothing changed.";
+type Group = { refDes: string[]; reason: string; severity: string }; /** [PR-J, 2026-10-22] J2 / OD-255 item 6: was the SHEETS_TIDY_PENDING sentence; [PR-J4, 2026-10-23] retired - a project with sheets is tidied one leaf sheet at a time (tidySheetRefusal names what is still refused) */ const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 const SUPPORTED_IMAGE = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
@@ -66,7 +73,7 @@ function parseDataUrl(
 // (16 MB / 45 s) run inside the wrapper; the callback receives the parsed body
 // only and cannot reach the raw request.
 export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000 }, async ({ body: rawBody }): Promise<Response> => {
-  const body = rawBody as unknown as { state?: SchematicState; image?: unknown; provider?: unknown };
+  const body = rawBody as unknown as { state?: SchematicState; image?: unknown; provider?: unknown; sheetId?: unknown };
 
   const state = body.state;
   const provider = requestedProvider(body.provider);
@@ -76,7 +83,13 @@ export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 4
       { ok: false, error: "Layout critic needs a Build-mode schematic with catalog parts" },
       { status: 400 },
     );
-  } if (state.sheets !== undefined) return Response.json({ ok: false, code: "SHEETS_TIDY_PENDING", error: SHEETS_TIDY_PENDING }, { status: 422, headers: { "Cache-Control": "no-store" } }); const sheetError = sheetErrors(validateSheetHierarchy(state))[0]; if (sheetError) return Response.json({ ok: false, code: "SHEET_HIERARCHY_INVALID", error: `The schematic's sheet structure has an error (${sheetError.code}: ${sheetError.message}), so it cannot be tidied. Nothing was sent and nothing changed.` }, { status: 422, headers: { "Cache-Control": "no-store" } }); // [PR-J, 2026-10-22] J2 / OD-255 item 6: the re-layout returns ONE flat page, so a project with sheets is refused before any model call - never flattened; [PR-J1 integration, 2026-10-22] J1-CONS-7: so is a document whose sheet references are broken (it would otherwise be billed, then fail)
+  } const sheetError = sheetErrors(validateSheetHierarchy(state))[0]; if (sheetError) return Response.json({ ok: false, code: "SHEET_HIERARCHY_INVALID", error: `The schematic's sheet structure has an error (${sheetError.code}: ${sheetError.message}), so it cannot be tidied. Nothing was sent and nothing changed.` }, { status: 422, headers: NO_STORE }); // [PR-J1 integration, 2026-10-22] J1-CONS-7: a document whose sheet references are broken is refused before the part read and the model call (it would otherwise be billed, then fail)
+  // [PR-J4, 2026-10-23] J.3 item 5 / OD-258 item 5 (was [PR-J, 2026-10-22] J2's SHEETS_TIDY_PENDING refusal of every project with sheets):
+  // a project with sheets is tidied ONE named leaf sheet at a time - the manifest, the image and the re-layout are that sheet's, the
+  // result is merged back onto the whole project; a missing / unknown sheet or a sheet with child blocks is refused before any read or call
+  const tidyRefusal = tidySheetRefusal(state, body.sheetId); if (tidyRefusal) return Response.json({ ok: false, code: tidyRefusal.code, error: tidyRefusal.message }, { status: 422, headers: NO_STORE });
+  const sheetId: string | null = state.sheets === undefined ? null : (body.sheetId as string);
+  const scoped = sheetId === null ? kicad : kicad.filter((inst) => sheetOf(inst) === sheetId); // a document without sheets: every instance, exactly as before
 
   const image = parseDataUrl(body.image);
   if (!image) {
@@ -88,12 +101,12 @@ export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 4
 
   // Load real part geometry (server-side) so the manifest boxes and the re-layout
   // both use the same source of truth as the original generation.
-  const partIds = [...new Set(kicad.map((c) => c.partId))];
+  const partIds = [...new Set(scoped.map((c) => c.partId))];
   const loaded = await getFullPartsByIds(partIds);
   const parts = new Map<string, CachedPart>(loaded.map((p) => [p.id, p] as const));
 
-  // Ground-truth manifest: every placed component the model is allowed to name.
-  const manifest = kicad
+  // Ground-truth manifest: every placed component the model is allowed to name (the tidied sheet's, [PR-J4] above).
+  const manifest = scoped
     .map((inst) => {
       const part = parts.get(inst.partId);
       if (!part) return null;
@@ -169,6 +182,32 @@ export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 4
       critique: { groups, summary },
       validation: { ok: true, violations: 0 },
       spreadRefDes,
+      ...(sheetId !== null ? { sheetId } : {}), // [PR-J4, 2026-10-23] the tidied sheet (absent for a document without sheets: bytes unchanged)
+    });
+  }
+
+  // [PR-J4, 2026-10-23] a project with sheets: ONE leaf sheet re-laid out from its own logical netlist and merged back onto the whole
+  // project with every component re-identified by reference designator (ids and authority fields kept), proven to keep the project
+  // connectivity (else 422 SHEETS_TIDY_NOT_EQUIVALENT, nothing applied); the improved / regressed gates run over that sheet's instances
+  if (sheetId !== null) {
+    let tidied: ReturnType<typeof tidySheet>;
+    try { tidied = tidySheet(state, sheetId, parts, { spread }); }
+    catch (error) { return Response.json({ ok: false, code: "SHEET_HIERARCHY_INVALID", error: `The project's connectivity has an error (${error instanceof Error ? error.message : String(error)}), so the sheet cannot be tidied. Nothing changed.` }, { status: 422, headers: NO_STORE }); }
+    if (!tidied.ok) return Response.json({ ok: false, code: tidied.code, error: tidied.message, critique: { groups, summary }, spreadRefDes }, { status: 422, headers: NO_STORE });
+    const sheetBeforeGaps = nearestNeighborGaps(scoped, parts);
+    const sheetAfterGaps = nearestNeighborGaps(tidied.instances, parts);
+    const sheetRespacing = evaluateRespacing(sheetBeforeGaps, sheetAfterGaps, spreadRefDes);
+    const sheetApplied = tidied.validation.ok && sheetRespacing.improved && sheetRespacing.regressed.length === 0;
+    return Response.json({
+      ok: true,
+      applied: sheetApplied,
+      state: sheetApplied ? tidied.state : state,
+      sheetId,
+      critique: { groups, summary },
+      validation: { ok: tidied.validation.ok, violations: tidied.validation.violations.length },
+      spreadRefDes,
+      regressedRefDes: sheetRespacing.regressed,
+      improved: sheetRespacing.improved,
     });
   }
 

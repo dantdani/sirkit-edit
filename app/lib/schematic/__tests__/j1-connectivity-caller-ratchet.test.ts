@@ -50,9 +50,12 @@ const CLASSIFIED: Record<string, { calls: number; why: string }> = {
   "app/lib/connectivity.ts": { calls: 1, why: "findNetRoot, a legacy single-sheet helper over the arrays it is given" },
   // [PR-J, 2026-10-22] J2: was 2 calls, "UNMIGRATED whole-project consumer (netlist validation)"; validateSchematicNetlist moved onto the authority
   "lib/validate-netlist.ts": { calls: 1, why: "validateTheoryNetlist only: a freshly laid-out Theory generation (one page by construction); it refuses a document with sheets (SHEET_HIERARCHY_UNSUPPORTED)" },
-  // [PR-J, 2026-10-22] J2: guarded, not yet migrated (was "refused or migrated in increment 2")
-  "app/lib/netlist.ts": { calls: 1, why: "SPICE /api/simulate deck: a document with sheets is refused before the union (SIM_MULTI_SHEET_PENDING) until the SPICE export reads the project connectivity" },
-  "app/lib/spice/ir.ts": { calls: 1, why: "SPICE IR /api/spice/compile: a document with sheets is refused before the union (SIM_MULTI_SHEET_PENDING) until the IR reads the project connectivity" },
+  // [PR-J, 2026-10-22] J2: guarded, not yet migrated (was "refused or migrated in increment 2"); [PR-J4, 2026-10-23] MIGRATED (OD-258 item 1): both
+  // compilers branch BEFORE their legacy body - a document with sheets (or with sheet references and no tree) takes the project-connectivity
+  // stage (app/lib/spice/project-nodes.ts, resolveProjectConnectivity) and never reaches the union; the one call left in each file is the
+  // single-sheet stage, whose output is pinned byte for byte (j1-sheet-operations spiceSha; j4-ir-sheets)
+  "app/lib/netlist.ts": { calls: 1, why: "SPICE /api/simulate deck: the legacy single-sheet body only (byte-pinned); a document with sheets is built on resolveProjectConnectivity before this call (schematicToSpiceOnProjectConnectivity)" },
+  "app/lib/spice/ir.ts": { calls: 1, why: "SPICE IR /api/spice/compile: the legacy single-sheet stage only (legacyIrConnectivity, output pinned); a document with sheets takes sheetedIrConnectivity on resolveProjectConnectivity before this call" },
   "app/lib/nets.ts": { calls: 1, why: "editor net colouring over the visible arrays (increment 3 passes a sheet lens)" },
   // [PR-J1 integration, 2026-10-22] J1-CONS-5 pin move: was 2 calls (the drag-group gestures); the net-colouring memo's classifyNets is now counted
   "app/page.tsx": { calls: 3, why: "editor drag-group gestures (findConnectedGroup x2) and the net-colouring memo (classifyNets) over the visible arrays - since [PR-J3, 2026-10-22] the ACTIVE sheet's plain lens arrays (useSchematicSheetLens; a single-sheet document is the same arrays)" },

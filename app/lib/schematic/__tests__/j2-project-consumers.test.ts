@@ -34,7 +34,7 @@ import { planSchematicDelete, planSchematicReplacement } from "@/app/lib/enginee
 import type { EngineeringOperation } from "@/app/lib/engineering/types";
 import { kicadPinWorldPos, pointKey } from "@/app/lib/geometry";
 import { exportToKicadSch, EXPORT_HIERARCHY_PENDING, SchematicExportHierarchyPendingError } from "@/app/lib/kicad-export";
-import { schematicToSpice, SPICE_SHEETS_PENDING } from "@/app/lib/netlist";
+import { schematicToSpice, SIM_SHEET_HIERARCHY_INVALID } from "@/app/lib/netlist"; // [PR-J4, 2026-10-23] pin move: SPICE_SHEETS_PENDING retired, SPICE reads the project connectivity
 import type { KicadPin } from "@/app/lib/kicad/types";
 import type { FootprintSearchHit } from "@/app/lib/pcb/footprint-api-types";
 import { parseKicadMod } from "@/app/lib/pcb/kicad-mod";
@@ -118,7 +118,12 @@ describe("[PR-J J2] 1. project-wide ERC / BOM / PCB sync include every sheet, wh
     expect(graph.nets.every((net) => net.canonicalScope.length === 1 && net.canonicalScope[0] === "root")).toBe(true);
     expect(listUnresolvedInstances(organised)).toEqual(listUnresolvedInstances(drone));
     expect(buildPcbSyncPreflightReport(organised)).toEqual(buildPcbSyncPreflightReport(drone));
-    expect(await bomRows(organised)).toEqual(await bomRows(drone));
+    // [PR-J4, 2026-10-23] pin move (J4-B): a project with sheets names each line's sheets (`sheets`, absent for the flat drone); every other field is the flat drone's
+    const organisedRows = await bomRows(organised);
+    const stripSheets = (row: (typeof organisedRows)[number]): Omit<typeof row, "sheets"> => { const copy = { ...row }; delete copy.sheets; return copy; };
+    expect(organisedRows.map(stripSheets)).toEqual(await bomRows(drone));
+    expect(organisedRows.every((row) => Array.isArray(row.sheets) && row.sheets.length > 0)).toBe(true);
+    expect(new Set(organisedRows.flatMap((row) => row.sheets ?? []))).toEqual(new Set(["Drone overview", "IMU", "Motor drivers"]));
     // the ERC's logical netlist lists every part on every sheet
     expect(schematicToBuildNetlist(organised, parts).components).toEqual(schematicToBuildNetlist(drone, parts).components);
     expect(buildReviewInput(organised, parts).components).toEqual(buildReviewInput(drone, parts).components);
@@ -387,13 +392,20 @@ describe("[PR-J J2] 4. the strict sheet rules reach every consumer", () => {
     expect(computeDesignChecks(droneFixtureState(), parts, "d", "build").checks.map((check) => check.id)).toEqual(["floating-nets", "supply-rails"]);
   });
 
-  it("the outputs not yet on the project connectivity (flat KiCad export, both SPICE compilers) refuse a document with sheets; a single-sheet one is unchanged", () => {
+  it("the flat KiCad export refuses a document with sheets; both SPICE compilers build it on the project connectivity ([PR-J4, 2026-10-23] pin move); a single-sheet one is unchanged", () => {
     const sheeted: SchematicState = { ...boundPorts(), components: [...boundPorts().components, { id: "G1", type: "ground", x: 100, y: 500, rotation: 0, value: "" }, { id: "V1", type: "voltage-source", x: 300, y: 500, rotation: 0, value: "5" }] };
     expect(() => exportToKicadSch({ state: sheeted, parts })).toThrow(SchematicExportHierarchyPendingError);
     expect(() => exportToKicadSch({ state: sheeted, parts })).toThrow(EXPORT_HIERARCHY_PENDING);
-    expect(() => schematicToSpice(sheeted)).toThrow(SPICE_SHEETS_PENDING);
+    // [PR-J4, 2026-10-23] pin move (was: both refuse SIM_MULTI_SHEET_PENDING): the port SIG is one node for R1.right and R2.right, the local LOC another (j4-spice-sheets, j4-ir-sheets)
+    const deck = schematicToSpice(sheeted);
+    expect(deck.netlist).toMatch(/^R1 N\d{3} SIG 1k$/m);
+    expect(deck.netlist).toMatch(/^R2 N\d{3} SIG 1k$/m);
+    expect(deck.netlist).toMatch(/^R3 N\d{3} LOC 1k$/m);
+    expect(deck.warnings).toEqual([]);
     const project = createSimulationProject(sheeted, { now: "2026-10-22T00:00:00.000Z" });
-    expect(() => compileCanonicalIr({ project, testId: project.tests[0]!.id })).toThrow(/^SIM_MULTI_SHEET_PENDING: /);
+    const compiled = compileCanonicalIr({ project, testId: project.tests[0]!.id });
+    expect(compiled.ir.nodes.map((node) => node.name)).toEqual(expect.arrayContaining(["0", "SIG", "LOC"]));
+    expect(compiled.ir.devices.find((device) => device.id === "R1")!.pins[1]!.nodeId).toBe(compiled.ir.devices.find((device) => device.id === "R2")!.pins[1]!.nodeId);
     // the same circuit without sheets (every entity on one page) exports and simulates as before
     const onRoot = <T extends { sheetId?: string }>(item: T): T => { const copy = { ...item }; delete copy.sheetId; return copy; };
     const flat: SchematicState = { components: sheeted.components.map(onRoot), wires: sheeted.wires.map(onRoot), netLabels: [] };
@@ -507,11 +519,11 @@ describe("[PR-J1 integration, 2026-10-22] PC-3: the SPICE compilers, the flat Ki
 });
 
 describe("[PR-J1 integration, 2026-10-22] J1-CONS-7: a document carrying sheet references without its tree is never compiled as one flat circuit", () => {
-  it("both SPICE compilers refuse it (SIM_MULTI_SHEET_PENDING) instead of joining the two sheets' coordinates", () => {
+  it("both SPICE compilers refuse it (SIM_SHEET_HIERARCHY_INVALID; [PR-J4, 2026-10-23] pin move from SIM_MULTI_SHEET_PENDING) instead of joining the two sheets' coordinates", () => {
     const orphaned = theoryOnTwoSheets(false);
-    expect(() => schematicToSpice(orphaned)).toThrow(SPICE_SHEETS_PENDING);
+    expect(() => schematicToSpice(orphaned)).toThrow(new RegExp(`^${SIM_SHEET_HIERARCHY_INVALID}: `));
     const project = createSimulationProject(orphaned, { now: "2026-10-22T00:00:00.000Z" });
-    expect(() => compileCanonicalIr({ project, testId: project.tests[0]!.id })).toThrow(/^SIM_MULTI_SHEET_PENDING: /);
+    expect(() => compileCanonicalIr({ project, testId: project.tests[0]!.id })).toThrow(new RegExp(`^${SIM_SHEET_HIERARCHY_INVALID}: `));
     // the same circuit with every entity on one page simulates as before
     const flat: SchematicState = { ...orphaned, components: orphaned.components.map((item) => (item.id === "R9" ? { ...item, sheetId: undefined, x: 200, y: 400 } : item)).map((item) => { const copy = { ...item }; if (copy.sheetId === undefined) delete copy.sheetId; return copy; }) };
     expect(schematicToSpice(flat).netlist).toContain("R9");

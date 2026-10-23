@@ -70,7 +70,7 @@ function assertSchematicFieldsSafe(state: SchematicState, analysis?: SpiceAnalys
   }
   for (const label of state.netLabels ?? []) {
     if (unsafe(label.name)) throw new Error("a net label name contains an illegal control character");
-  }
+  } for (const sheet of state.sheets?.sheets ?? []) if (unsafe(sheet.name)) throw new Error("a sheet name contains an illegal control character"); // [PR-J4, 2026-10-23] a sheet name becomes part of a node name in a multi-sheet deck (sanitized to [A-Za-z0-9_+.-] first); screened like a label name, on this line so the cited lines below hold
   if (analysis) {
     for (const value of Object.values(analysis as Record<string, unknown>)) {
       if (unsafe(value)) throw new Error("an analysis field contains an illegal control character");
@@ -155,10 +155,10 @@ export { readBoundedRawFile, type BoundedRawRead } from "@/app/lib/computation/d
 // bounded 8 MB / 30 s object read happen BEFORE this callback; the request
 // abort signal reaches the runner only through the declared `exposeAbortSignal`
 // input.
-export const POST = authenticatedJsonRoute<{ state?: SchematicState; analysis?: SpiceAnalysis }>(
+export const POST = authenticatedJsonRoute<{ state?: SchematicState; analysis?: SpiceAnalysis; probeSheetId?: string }>( // [PR-J4, 2026-10-23] probeSheetId: the editor's active sheet (sent only for a project with sheets)
   { maxBytes: MAX_BODY_BYTES, deadlineMs: BODY_DEADLINE_MS, exposeAbortSignal: true },
   async ({ context, body, signal }) => {
-  const { state, analysis } = body;
+  const { state, analysis, probeSheetId } = body; // [PR-J4, 2026-10-23] the probe sheet's points take bare "x,y" keys in pinNodes; never part of the deck
 
   // Semantic validation — BEFORE any temp file or process work.
   if (!state?.components?.length) {
@@ -180,15 +180,15 @@ export const POST = authenticatedJsonRoute<{ state?: SchematicState; analysis?: 
   // deck that will run for injected control/include/shell directives BEFORE anything runs.
   let netlist: string;
   let nodeMap: Record<string, string>;
-  let pinNodes: Record<string, string>;
+  let pinNodes: Record<string, string>; let warnings: string[] | undefined; // [PR-J4, 2026-10-23] warnings exist only for a project with sheets (separate returns, a renamed ground, plain GND labels)
   try {
     assertSchematicFieldsSafe(state, analysis);
-    ({ netlist, nodeMap, pinNodes } = schematicToSpice(state, { analysis, rawOutputPath: "result.raw" }));
+    ({ netlist, nodeMap, pinNodes, warnings } = schematicToSpice(state, { analysis, rawOutputPath: "result.raw", ...(typeof probeSheetId === "string" ? { probeSheetId } : {}) })); // [PR-J4, 2026-10-23] a project with sheets is built on the project connectivity (OD-258 item 1)
     netlist = seedDiagnosticDeck(netlist); // [B22-A3] D22-11: the profile's seed option; the screen reads the deck that runs
     assertNetlistSafe(netlist);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return Response.json({ ...(msg.startsWith("SIM_MULTI_SHEET_PENDING") ? { code: "SIM_MULTI_SHEET_PENDING" } : {}), error: `Netlist generation failed: ${msg}` }, { status: 400 }); // [PR-J1 integration, 2026-10-22] J1-CONS-7: the sheets refusal is structured, like EXPORT_HIERARCHY_PENDING
+    const code = /^SIM_[A-Z_]+/.exec(msg)?.[0]; return Response.json({ ...(code ? { code } : {}), error: `Netlist generation failed: ${msg}` }, { status: 400 }); // [PR-J1 integration, 2026-10-22] J1-CONS-7: the sheets refusal is structured, like EXPORT_HIERARCHY_PENDING; [PR-J4, 2026-10-23] every structured SIM_* refusal is mapped in place (SIM_SHEET_HIERARCHY_INVALID, SIM_GROUND_AMBIGUOUS); SIM_MULTI_SHEET_PENDING is retired
   }
 
   // [B22-A3] OD-136: the diagnostic runner writes the deck into its own per-run directory, runs the pinned ngspice with the
@@ -256,7 +256,7 @@ export const POST = authenticatedJsonRoute<{ state?: SchematicState; analysis?: 
     points:       parsed.points,
     netlist,
     nodeMap,
-    pinNodes,
+    pinNodes, ...(warnings !== undefined ? { warnings } : {}), // [PR-J4, 2026-10-23] a project with sheets only; a single-sheet body's response is unchanged
     runner:       diagnosticProvenance(run), // [B22-A3] diagnostic_only, environment_dependent, the profile and the observed install digest
   });
   });

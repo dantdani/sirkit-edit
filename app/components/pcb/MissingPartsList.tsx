@@ -26,6 +26,8 @@
  * admitted CAD sources only, a validated review package a person sends for component review, two humans publish, and the replacement
  * is then offered through the same review path as "Find a replacement in the library".
  * Nothing here binds, publishes, buys or applies anything; the catalog part record comes from the page's parts cache.
+ * [PR-J4, 2026-10-23] Section J4 (J.5): for a project with sheets each row also names the sheet its instance is drawn on (" · sheet IMU";
+ * the listing's `sheet`, present only with sheets) - text only, no new control; navigation stays the existing Go to / Follow signal.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { normalizeRefDes, schDisplayRef, type SchematicState } from "@/lib/schematic-types";
@@ -216,7 +218,7 @@ function MissingPartRow({ item, schematic, projectScope }: { item: UnresolvedIns
     <li data-testid={`sync-unresolved-${ref}`} data-missing={item.missing} data-physical={checklist.physical ? "true" : "false"} className="rounded border border-red-950 bg-red-950/20 p-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div><span className="font-mono text-zinc-100">{ref}</span><span className="text-red-200"> — {UNRESOLVED_MISSING_LABEL[item.missing]}</span></div>
+          <div><span className="font-mono text-zinc-100">{ref}</span><span className="text-red-200"> — {UNRESOLVED_MISSING_LABEL[item.missing]}</span>{item.sheet && <span className="text-zinc-400" data-testid={`sync-unresolved-sheet-${ref}`} data-sheet-id={item.sheet.id}> · sheet {item.sheet.name}</span>}</div>
           <div className="mt-0.5 text-[11px] text-zinc-400">Review path: {item.reviewPath}</div>
         </div>
         <button type="button" onClick={() => setExpanded((open) => !open)} aria-expanded={expanded} aria-controls={checklistId} aria-label={`${expanded ? "Hide" : "Show"} the missing-facts checklist for ${ref}`} data-testid={`missing-checklist-toggle-${ref}`} className="shrink-0 rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-200 hover:border-zinc-500">

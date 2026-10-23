@@ -27,7 +27,7 @@ import { classifyNets, type NetRole } from "./lib/nets";
 import { rangeAwareTickFormatter } from "./lib/format";
 import { schDisplayRef, type SchComponent, type Wire, type Point, type SchComponentType, type SchematicState, type KicadComponentInstance, type BuildLogicalNetlist, type NetLabel, type NetLabelKind, type Rotation, type SchematicEditOp, type PageSize, type SchematicSheetSet } from "@/lib/schematic-types";
 import { useSchematicViewSession } from "@/app/components/schematic/hooks/useSchematicViewSession"; // [B17-D]
-import { describeExportRefusal } from "@/app/lib/project/io-outcome"; // [B17-E]
+import { describeExportRefusal, filenameFromDisposition } from "@/app/lib/project/io-outcome"; // [B17-E]; [PR-J4, 2026-10-23] + the export's own file name (a project with sheets downloads a zip)
 import { ProjectOperationTimeline } from "@/app/lib/project/operation-timeline"; // [B17-E]
 import { engineeringDigest } from "@/app/lib/engineering/stable"; import { useSchematicSheetLens } from "@/app/components/schematic/hooks/useSchematicSheetLens"; import { SheetNavigator } from "@/app/components/schematic/SheetNavigator"; import { ScopedNetLabelGlyph } from "@/app/components/schematic/ScopedNetLabelGlyph"; import { flatReplacementRefusal, multiSheetReplaceRefusal } from "@/app/lib/project/sheet-replace-guard"; import type { SheetCamera } from "@/app/lib/project/sheet-navigation-store"; // [PR-J3, 2026-10-22] the Sheets editor increment (runbook J.3, OD-255 item 7, OD-257): the sheet lens, the navigator, the scoped label glyph and the AI replace-result guard
 import { useWorkspaceViewSession } from "@/app/components/workspace/useWorkspaceViewSession"; // [B17-D]
@@ -6101,7 +6101,7 @@ export default function Home() {
     const tidyPin = captureLifecycleInvocationContext();
     const tidyScope = tidyPin.scope;
     const tidySnapshot = currentSchematicState();
-    const tidyRefusal = multiSheetReplaceRefusal(tidySnapshot); if (tidyRefusal !== null) { if (!auto) setScopedGenError(tidyScope, tidyRefusal, 12000); return; } if ((tidySnapshot.kicadComponents ?? []).length === 0) { // [PR-J3, 2026-10-22] OD-257 item 3: Tidy is a flat replacement until J4; refused before the capture and the layout-critic request
+    const tidySheetId = tidySnapshot.sheets === undefined ? null : sheetLens.activeSheetId; const tidyRefusal = tidySnapshot.sheets === undefined ? null : !tidySnapshot.sheets.sheets.some((sheet) => sheet.id === tidySheetId) ? "Tidy re-lays out the open sheet, but no sheet is open. Nothing was sent and nothing changed." : tidySnapshot.sheets.sheets.some((sheet) => sheet.parentId === tidySheetId) ? "Tidy re-lays out a subsystem sheet without child blocks; this sheet holds blocks, so open one of its subsystem sheets to tidy it. Nothing was sent and nothing changed." : !(tidySnapshot.kicadComponents ?? []).some((inst) => (inst.sheetId ?? "root") === tidySheetId) ? "This sheet has no catalog parts to tidy. Nothing was sent and nothing changed." : null; if (tidyRefusal !== null) { if (!auto) setScopedGenError(tidyScope, tidyRefusal, 12000); return; } if ((tidySnapshot.kicadComponents ?? []).length === 0) { // [PR-J4, 2026-10-23] OD-258 item 5 (was [PR-J3, 2026-10-22] OD-257 item 3's flat-replacement refusal of every project with sheets): Tidy re-lays out the ACTIVE leaf sheet of a project with sheets - refused before the capture and the layout-critic request only when no sheet is open, the open sheet holds child blocks or it has no catalog parts; the route merges the re-laid sheet back onto the whole project
       if (!auto) setScopedGenError(tidyScope, "Tidy is available for Build-mode schematics with catalog parts.", 5000);
       return;
     }
@@ -6121,7 +6121,7 @@ export default function Home() {
         headers: aiRequestHeaders(tidyScope),
         body: JSON.stringify({
           provider: aiBrainRef.current,
-          state: { ...tidySnapshot, pageSize: tidySnapshot.pageSize ?? pageSize },
+          state: { ...tidySnapshot, pageSize: tidySnapshot.pageSize ?? pageSize }, ...(tidySheetId !== null ? { sheetId: tidySheetId } : {}), // [PR-J4, 2026-10-23] the sheet to tidy, iff the project has sheets (a single-sheet request body is byte-identical)
           image,
         }),
         signal: tidyScope.signal,
@@ -6491,7 +6491,7 @@ export default function Home() {
           // [B16.0.2 §A] ngspice execution is authenticated + project-scoped:
           // the active project identity travels as a SELECTOR only.
           headers: { "Content-Type": "application/json", ...projectSelectorHeaders(scope.projectId ? { tenantId: "local", projectId: scope.projectId, branchId: scope.branchId } : null) },
-          body: JSON.stringify({ state: { components: authoritative.components, wires: authoritative.wires, netLabels: authoritative.netLabels ?? [], ...(authoritative.sheets !== undefined ? { sheets: authoritative.sheets } : {}) }, analysis: analysisConfig }), // [PR-J3, 2026-10-22] + the sheet tree iff present: the server refuses SIM_MULTI_SHEET_PENDING instead of simulating a cross-sheet coordinate union
+          body: JSON.stringify({ state: { components: authoritative.components, wires: authoritative.wires, netLabels: authoritative.netLabels ?? [], ...(authoritative.sheets !== undefined ? { sheets: authoritative.sheets } : {}) }, analysis: analysisConfig, ...(authoritative.sheets !== undefined ? { probeSheetId: sheetLens.activeSheetId } : {}) }), // [PR-J3, 2026-10-22] + the sheet tree iff present; [PR-J4, 2026-10-23] + the active sheet as the probe sheet iff present (OD-258 item 1: the deck is built on the project connectivity and this sheet's points take the bare probe keys the panel reads); a single-sheet body is byte-identical
           signal,
         });
         const data = await res.json() as SimResult & { ok?: boolean; error?: string; details?: string };
@@ -6550,7 +6550,7 @@ export default function Home() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "sirkit-export.kicad_sch";
+      a.download = filenameFromDisposition(res.headers.get("Content-Disposition"), "sirkit-export.kicad_sch"); // [PR-J4, 2026-10-23] OD-258 item 2: a project with sheets downloads the route's zip (root and child sheet files) under the name the response carries; a single-sheet export keeps sirkit-export.kicad_sch
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

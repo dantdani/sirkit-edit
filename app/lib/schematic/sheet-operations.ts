@@ -26,7 +26,7 @@ import { fromCanonicalSchematic, toCanonicalSchematic } from "@/app/lib/engineer
 import type { EngineeringOperation, SchematicNetLabelSnapshot, SchematicSheetAssignment, SchematicSheetSnapshot } from "@/app/lib/engineering/types";
 import { kicadPinExitDirection, pinDirection, type Direction } from "@/app/lib/geometry";
 import { compareCodePoints } from "@/app/lib/stable-compare";
-import { ROOT_SHEET_ID, netLabelNameKey, type Point, type Rotation, type SchematicState, type SheetPortDirection } from "@/lib/schematic-types";
+import { ROOT_SHEET_ID, inferNetLabelKind, netLabelNameKey, type NetLabelKind, type Point, type Rotation, type SchematicState, type SheetPortDirection } from "@/lib/schematic-types"; // [PR-J4, 2026-10-23] + inferNetLabelKind / NetLabelKind for the rail-named label normalisation
 import { resolveProjectConnectivity, singleSheetRuleChange, type ConnectivityDiagnostic, type PartPinsLookup, type ProjectConnectivity, type ProjectNet } from "./project-connectivity";
 import { sheetOf, sheetsOf } from "./sheets";
 
@@ -380,4 +380,81 @@ export function planMoveToSheet(state: SchematicState, input: MoveToSheetInput, 
       partitionDigest: afterConn.partitionDigest,
     },
   };
+}
+
+// ── [PR-J4, 2026-10-23] the rail-named label normalisation (OD-258 item 3) ──────────────────────────────────────────────────
+
+export interface RailLabelNormalisationEntry {
+  id: string;
+  name: string;
+  from: NetLabelKind;
+  to: NetLabelKind;
+  sheetId: string;
+  position: Point;
+}
+
+export type RailLabelNormalisationCode = "NORMALISE_NOTHING" | "NORMALISE_NOT_EQUIVALENT" | "NORMALISE_REFUSED";
+
+export type RailLabelNormalisationPlan =
+  | {
+      ok: true;
+      labels: RailLabelNormalisationEntry[];
+      /** ONE schematic.sheet-structure batch: a delete + add pair per label at its own index (a kind change is a re-creation; the
+       *  update patch carries no kind), so the document order and every id are kept. */
+      operations: EngineeringOperation[];
+      after: SchematicState;
+      /** The pin-to-net partition after the normalisation: equal to the one before (proven) - the PCB netlist is unchanged. */
+      partitionDigest: string;
+      /** Nets that keep every connection but change their board name (a lone "VSS" plain label becomes the GND rail). */
+      renamedNets: Array<{ netId: string; from: string | null; to: string | null }>;
+      /** What still keeps the design from taking a first sheet after the normalisation (null: it is then accepted). */
+      ruleChangeAfter: string | null;
+    }
+  | { ok: false; code: RailLabelNormalisationCode; message: string; labels: RailLabelNormalisationEntry[] };
+
+/** The scope-less plain labels whose name is a rail name (inferNetLabelKind: GND / 0 / VSS / AGND ... ground; VCC* / VDD* / +NV / VBUS /
+ *  VIN / V+ power): the label tool mints kind "label" whatever the name, and under the strict rules such a label is LOCAL while the
+ *  same-named power / ground label or ground symbol is the project rail. */
+export function railNamedPlainLabels(state: SchematicState): RailLabelNormalisationEntry[] {
+  return (state.netLabels ?? []).flatMap((label) => {
+    if (label.scope !== undefined || label.kind !== "label") return [];
+    const to = inferNetLabelKind(label.name);
+    return to === "label" ? [] : [{ id: label.id, name: label.name, from: label.kind, to, sheetId: sheetOf(label), position: { ...label.position } }];
+  });
+}
+
+/**
+ * Plan "Normalise N rail-named labels" as ONE previewed, undoable schematic.sheet-structure transaction: every scope-less kind-"label"
+ * label whose name is a rail name takes the inferred power / ground kind. The plan exists only when the project pin-to-net partition
+ * is unchanged (for a single-sheet document the legacy rule already joined the label and the rail by name, so the PCB netlist is the
+ * same; the ERC and the KiCad export then read the label as the rail it names, as previewed) and the executor's own guards accept the
+ * batch (a rail join it would create - a plain "VSS" beside a ground symbol - refuses it, NORMALISE_REFUSED). Deterministic: the
+ * operation ids come from `operationIdPrefix`; nothing is drawn at random.
+ */
+export function planRailLabelNormalisation(state: SchematicState, getPart?: PartPinsLookup, operationIdPrefix = "normalise"): RailLabelNormalisationPlan {
+  const labels = railNamedPlainLabels(state);
+  if (labels.length === 0) return { ok: false, code: "NORMALISE_NOTHING", message: "Every rail-named label already carries its power or ground kind; nothing to normalise.", labels };
+  const netLabels = state.netLabels ?? [];
+  const operations: EngineeringOperation[] = [];
+  labels.forEach((entry, ordinal) => {
+    const index = netLabels.findIndex((label) => label.id === entry.id);
+    const label = netLabels[index]!;
+    const snapshot: SchematicNetLabelSnapshot = { id: label.id, position: { ...label.position }, name: label.name, kind: entry.to, orientation: label.orientation, ...(label.sheetId !== undefined ? { sheetId: label.sheetId } : {}) };
+    operations.push({ ...PX, operationId: `${operationIdPrefix}:${ordinal}:del:${label.id}`, kind: "schematic_delete_net_label", labelId: label.id });
+    operations.push({ ...PX, operationId: `${operationIdPrefix}:${ordinal}:add:${label.id}`, kind: "schematic_add_net_label", label: snapshot, atIndex: index });
+  });
+  let after: SchematicState;
+  try { after = fromCanonicalSchematic(applySchematicOperationsToCanonical(toCanonicalSchematic(state), operations).schematic); }
+  catch (error) { return { ok: false, code: "NORMALISE_REFUSED", message: `The normalisation cannot be applied: ${error instanceof Error ? error.message : String(error)}. Nothing was changed.`, labels }; }
+  const before = resolveProjectConnectivity(state, getPart);
+  const now = resolveProjectConnectivity(after, getPart);
+  if (!now.ok || now.partitionDigest !== before.partitionDigest) {
+    const changed = before.pins.filter((pin) => { const was = before.netOfPin(pin.key); const is = now.netOfPin(pin.key); return !was || !is || was.members.join("\u0000") !== is.members.join("\u0000"); }).map((pin) => pin.key);
+    return { ok: false, code: "NORMALISE_NOT_EQUIVALENT", message: `Normalising ${labels.map((entry) => `"${entry.name}"`).join(", ")} would change which pins are connected (${changed.slice(0, 6).join(", ")}${changed.length > 6 ? ", ..." : ""}); rename those labels by hand instead. Nothing was changed.`, labels };
+  }
+  const renamedNets = before.nets.flatMap((net) => {
+    const next = net.members.length > 0 ? now.netOfPin(net.members[0]!) : null;
+    return next && next.name !== net.name ? [{ netId: net.id, from: net.name, to: next.name }] : [];
+  });
+  return { ok: true, labels, operations, after, partitionDigest: now.partitionDigest, renamedNets, ruleChangeAfter: singleSheetRuleChange(after, getPart) };
 }

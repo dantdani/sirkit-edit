@@ -17,16 +17,24 @@
  *    the canonical base; the dialog is disabled with the planner's own message while it refuses, e.g. unresolved part pins), Follow
  *    signal (the interface anchors of this sheet and where each reaches: "<sheet path> > <label>").
  *  - Previews are keyed by the lens activation: a sheet switch closes them (SR-3).
- * Controls are named for a person (text, aria-label or a wrapping label); data-testids are the J3 plan's.
+ *  - [PR-J4, 2026-10-23] J.3 item 4 / OD-258 items 3, 4: Organize into sheets (the single-sheet panel beside New sheet; a sheet's
+ *    actions in the tree) opens the organise preview - the deterministic proposal's groups with their hubs and parts, the ports each
+ *    boundary needs, the parts a tie-break placed ("check these"), the residue, the nets whose board name changes - and ONE Apply, a
+ *    schematic.move-to-sheet transaction re-planned on the canonical base (never auto-applied). When a single-sheet design is refused
+ *    because the strict rules would read it differently (a plain "GND" label beside a ground symbol), the refusal names the labels and
+ *    the dialogs offer "Normalise N rail-named labels" first: a previewed, undoable sheet-structure transaction of its own.
+ * Controls are named for a person (text, aria-label or a wrapping label); data-testids are the J3 plan's (+ the J4 plan's sheets-organize*,
+ * sheets-normalise*).
  */
 
 import { useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Layers, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Layers, LayoutGrid, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SHEET_PORT_DIRECTIONS, sheetPathName, sheetsOf } from "@/app/lib/schematic/sheets";
 import type { InterfaceSignal } from "@/app/lib/schematic/sheet-lens";
+import { organizePlanPorts } from "@/app/lib/schematic/sheet-organization";
 import { ROOT_SHEET_ID, type SchematicSheet, type SchematicState, type SheetPortDirection } from "@/lib/schematic-types";
-import type { MovePlanMode, PlannedMove, SheetNavigatorApi } from "./hooks/sheet-navigation-controller";
+import type { MovePlanMode, PlannedMove, PlannedNormalisation, PlannedOrganize, SheetNavigatorApi } from "./hooks/sheet-navigation-controller";
 
 export type { SheetNavigatorApi } from "./hooks/sheet-navigation-controller";
 
@@ -46,7 +54,8 @@ type DialogState =
   | { kind: "port"; sheetId: string }
   | { kind: "delete"; sheetId: string }
   | { kind: "move"; newSheetId: string }
-  | { kind: "follow" };
+  | { kind: "follow" }
+  | { kind: "organize"; sourceSheetId: string }; // [PR-J4, 2026-10-23]
 
 interface Drafts {
   name: string;
@@ -79,8 +88,33 @@ function flattenTree(sheets: readonly SchematicSheet[]): Array<{ sheet: Schemati
   return out;
 }
 
+/**
+ * [PR-J4, 2026-10-23] OD-258 item 3: the "Normalise N rail-named labels" offer, shown in the New sheet, Move to sheet and Organize
+ * dialogs of a single-sheet design the strict rules would read differently. One explicit button; one sheet-structure transaction.
+ */
+function NormaliseOffer({ change, planned, busy, onApply }: { change: string; planned: PlannedNormalisation; busy: boolean; onApply: () => void }) {
+  return (
+    <div className="rounded border border-amber-800/60 px-2 py-1.5 text-[11px] text-amber-200 space-y-1" data-testid="sheets-normalise" data-count={planned.ok ? planned.plan.labels.length : 0}>
+      <div data-testid="sheets-normalise-rule-change">{change}</div>
+      {planned.ok ? (
+        <>
+          <div className="text-zinc-300">Normalise {planned.plan.labels.length} rail-named label{planned.plan.labels.length === 1 ? "" : "s"} first: each plain label named like a rail takes that rail&apos;s kind, so both connection rules read it the same way. The PCB netlist is unchanged (proven); the ERC and the KiCad export then read the label as the rail. One transaction, one undo step.</div>
+          <ul className="text-zinc-400">
+            {planned.plan.labels.map((entry) => <li key={entry.id} data-testid="sheets-normalise-label">&quot;{entry.name}&quot; at ({entry.position.x}, {entry.position.y}): {entry.from} → {entry.to}</li>)}
+          </ul>
+          {planned.plan.renamedNets.length > 0 && <div className="text-amber-300">Board names change (connections do not): {planned.plan.renamedNets.map((net) => `${net.from ?? "(unnamed)"} → ${net.to ?? "(unnamed)"}`).join(", ")}</div>}
+          {planned.plan.ruleChangeAfter !== null && <div className="text-amber-300">After normalising, a first sheet is still refused: {planned.plan.ruleChangeAfter}</div>}
+          <button type="button" data-testid="sheets-normalise-apply" className={primary} disabled={busy} onClick={onApply}>Normalise {planned.plan.labels.length} rail-named label{planned.plan.labels.length === 1 ? "" : "s"}</button>
+        </>
+      ) : (
+        <div className="text-zinc-400" data-testid="sheets-normalise-refusal" data-code={planned.code ?? ""}>{planned.message}</div>
+      )}
+    </div>
+  );
+}
+
 export function SheetNavigator({ state, activeSheetId, activation, notice, controller }: SheetNavigatorProps) {
-  const { openSheet, goBack, dismissNotice, mintId, currentSelection, createSheet, renameSheet, reorderSheet, addPort, deleteImpact, deleteSheet, planMove, applyMove, interfaceSignals, followDestination } = controller;
+  const { openSheet, goBack, dismissNotice, mintId, currentSelection, createSheet, renameSheet, reorderSheet, addPort, deleteImpact, deleteSheet, planMove, applyMove, interfaceSignals, followDestination, planOrganize, applyOrganize, planNormalise, applyNormalise, ruleChange } = controller;
   const legacy = state.sheets === undefined;
   const sheets = sheetsOf(state);
   const active = sheets.find((sheet) => sheet.id === activeSheetId) ?? sheets[0]!;
@@ -162,6 +196,13 @@ export function SheetNavigator({ state, activeSheetId, activation, notice, contr
     : null;
   const signals: InterfaceSignal[] = dialog?.kind === "follow" ? [...interfaceSignals()].sort((a, b) => a.name.localeCompare(b.name) || a.labelId.localeCompare(b.labelId)) : [];
   const destinationRows = signals.flatMap((signal) => signal.destinations.map((destination) => ({ signal, destination })));
+  // [PR-J4, 2026-10-23] the organise preview (pure; the controller answers from its cache) and the normalisation offer of a single-sheet
+  // design the strict rules would read differently (shown by the dialogs that lead to a first sheet: New, Move, Organize)
+  const organized: PlannedOrganize | null = dialog?.kind === "organize" ? planOrganize({ sourceSheetId: dialog.sourceSheetId }) : null;
+  const change = legacy && (dialog?.kind === "new" || dialog?.kind === "move" || dialog?.kind === "organize") ? ruleChange() : null;
+  const normalisation: PlannedNormalisation | null = change !== null ? planNormalise() : null;
+  const offer = change !== null && normalisation !== null ? <NormaliseOffer change={change} planned={normalisation} busy={busy} onApply={() => void run(() => applyNormalise(normalisation), false)} /> : null;
+  const organizedPorts = organized?.ok ? organizePlanPorts(organized.plan) : [];
 
   const submitNew = (event: FormEvent): void => { event.preventDefault(); if (dialog?.kind === "new") void run(() => createSheet(drafts.name, dialog.parentId)); };
   const submitRename = (event: FormEvent): void => { event.preventDefault(); if (dialog?.kind === "rename") void run(() => renameSheet(dialog.sheetId, drafts.name)); };
@@ -183,8 +224,11 @@ export function SheetNavigator({ state, activeSheetId, activation, notice, contr
           <div className="pb-1 border-b border-zinc-800 text-[11px] font-mono text-zinc-500">{legacy ? "One sheet" : `${sheets.length} sheets · ${sheets.length - 1} subsystem${sheets.length === 2 ? "" : "s"}`}</div>
           {legacy ? (
             <div className="py-2 space-y-2">
-              <p className="text-[11px] text-zinc-400">This project is one sheet. Create a subsystem sheet to organise it, or move the selected part to a new one (Move to sheet, beside the chip); the overview then shows each sheet as a block with its ports.</p>
-              <button type="button" data-testid="sheets-new" className={primary} onClick={() => openDialog({ kind: "new", parentId: ROOT_SHEET_ID })}><Plus className="size-3" /> New sheet</button>
+              <p className="text-[11px] text-zinc-400">This project is one sheet. Organize it into subsystem sheets from its connectivity (previewed), create a subsystem sheet, or move the selected part to a new one (Move to sheet, beside the chip); the overview then shows each sheet as a block with its ports.</p>
+              <div className="flex flex-wrap gap-1">
+                <button type="button" data-testid="sheets-organize" className={primary} onClick={() => openDialog({ kind: "organize", sourceSheetId: ROOT_SHEET_ID })}><LayoutGrid className="size-3" /> Organize into sheets…</button>
+                <button type="button" data-testid="sheets-new" className={button} onClick={() => openDialog({ kind: "new", parentId: ROOT_SHEET_ID })}><Plus className="size-3" /> New sheet</button>
+              </div>
             </div>
           ) : (
             <>
@@ -221,6 +265,7 @@ export function SheetNavigator({ state, activeSheetId, activation, notice, contr
                 <button type="button" data-testid="sheets-reorder-down" className={button} disabled={focusedSheet.parentId === null || busy} onClick={() => void run(() => reorderSheet(focused, 1), false)}><ArrowDown className="size-3" /> Down</button>
                 <button type="button" data-testid="sheets-add-port" className={button} disabled={focusedSheet.parentId === null} onClick={() => openDialog({ kind: "port", sheetId: focused })}><Plus className="size-3" /> Add port</button>
                 <button type="button" data-testid="sheets-delete" className={button} disabled={focusedSheet.parentId === null} onClick={() => openDialog({ kind: "delete", sheetId: focused })}><Trash2 className="size-3" /> Delete</button>
+                <button type="button" data-testid="sheets-organize" className={button} onClick={() => openDialog({ kind: "organize", sourceSheetId: focused })} title="Organize this sheet's parts into subsystem sheets (previewed)"><LayoutGrid className="size-3" /> Organize…</button>
               </div>
             </>
           )}
@@ -254,6 +299,7 @@ export function SheetNavigator({ state, activeSheetId, activation, notice, contr
           <DialogHeader><DialogTitle>New sheet</DialogTitle></DialogHeader>
           <form className="space-y-3 text-sm" onSubmit={submitNew}>
             <p className="text-xs text-zinc-400">A subsystem sheet under {dialog?.kind === "new" ? (sheets.find((sheet) => sheet.id === dialog.parentId)?.parentId === null ? "the overview" : `"${sheets.find((sheet) => sheet.id === dialog.parentId)?.name ?? ""}"`) : "the overview"}; it is drawn there as a block. One transaction, one undo step.</p>
+            {offer}
             <label className="block text-xs text-zinc-400">Sheet name
               <input data-testid="sheets-new-name" className={field} value={drafts.name} autoFocus onChange={(event) => setDrafts((current) => ({ ...current, name: event.target.value }))} placeholder="Power, IMU, Motor drivers…" />
             </label>
@@ -386,6 +432,7 @@ export function SheetNavigator({ state, activeSheetId, activation, notice, contr
               // [PR-J3 integration, 2026-10-23] J3N-3: the SHEET_MOVE_* code inline and as data-code (a refusal of the controller's own, e.g. no selection, shows the message alone)
               <div className="rounded border border-amber-800/60 px-2 py-1.5 text-[11px] text-amber-300" data-testid="sheets-move-refusal" data-code={planned.code ?? ""}>{planned.code ? `${planned.code} — ` : ""}{planned.message}</div>
             ))}
+            {planned && !planned.ok && offer}
             <DialogFooter>
               <button type="button" className={button} onClick={closeDialog}>Cancel</button>
               <button type="button" data-testid="sheets-move-apply" className={primary} disabled={busy || planned === null || !planned.ok} onClick={() => { if (planned) void run(() => applyMove(planned)); }}>Apply move</button>
@@ -422,6 +469,57 @@ export function SheetNavigator({ state, activeSheetId, activation, notice, contr
             )}
             <DialogFooter>
               <button type="button" className={button} onClick={closeDialog}>Close</button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* [PR-J4, 2026-10-23] Organize into sheets (J.3 item 4; OD-258 item 4): the deterministic proposal, previewed; ONE Apply */}
+      <Dialog open={dialog?.kind === "organize"} onOpenChange={(value) => { if (!value && !busy) closeDialog(); }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+          <DialogHeader><DialogTitle>Organize into sheets</DialogTitle></DialogHeader>
+          <div className="space-y-3 text-sm" data-testid="sheets-organize-preview" data-source={organized?.sourceSheetId ?? ""}>
+            <p className="text-xs text-zinc-400">
+              The parts of {organized ? (organized.sourceSheetId === ROOT_SHEET_ID ? "the overview" : `"${sheets.find((sheet) => sheet.id === organized.sourceSheetId)?.name ?? organized.sourceSheetId}"`) : "this sheet"} grouped by their connectivity and roles: each processor, regulator or connector forms a subsystem with the parts connected to it; repeated channels are one subsystem. Every net a boundary cuts is carried by an explicit port. Identities, values and the pin-to-net partition are unchanged (proven). Nothing moves until Apply: one transaction, one undo step.
+            </p>
+            {organized && (organized.proposal ? (
+              <div className="space-y-2">
+                <table className="w-full text-left text-[11px]">
+                  <thead><tr className="text-zinc-500"><th className="pr-2">Sheet</th><th className="pr-2">Around</th><th className="pr-2">Parts</th><th>Ports</th></tr></thead>
+                  <tbody>
+                    {organized.proposal.groups.map((group, index) => (
+                      <tr key={group.name} data-testid="sheets-organize-group" data-name={group.name} data-refs={group.refs.join(" ")} className="align-top">
+                        <td className="pr-2 text-teal-300">{group.name}</td>
+                        <td className="pr-2 text-zinc-300">{group.hubs.join(", ") || "—"}</td>
+                        <td className="pr-2 text-zinc-400">{group.refs.join(", ")}</td>
+                        <td className="text-zinc-400" data-testid="sheets-organize-ports">{organized.ok ? (organizedPorts[index]?.ports.join(", ") || "none") : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {organized.proposal.residue.length > 0 && (
+                  <div className="text-[11px] text-zinc-400" data-testid="sheets-organize-residue">Stays here: {organized.proposal.residue.map((item) => item.ref).join(", ")} — {organized.proposal.residue[0]!.reason}</div>
+                )}
+                {organized.proposal.checkThese.length > 0 && (
+                  <div className="text-[11px] text-amber-200 space-y-0.5" data-testid="sheets-organize-check">
+                    <div>Check these — a tie-break placed them:</div>
+                    <ul className="list-disc pl-4 text-zinc-400">
+                      {organized.proposal.checkThese.map((check) => <li key={check.refs.join(",")} data-testid="sheets-organize-check-item" data-refs={check.refs.join(" ")}>{check.reason}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {organized.ok && organized.plan.preview.steps.some((step) => step.renamedNets.length > 0) && (
+                  <div className="text-[11px] text-amber-300" data-testid="sheets-organize-renamed">Board names change (connections do not): {organized.plan.preview.steps.flatMap((step) => step.renamedNets.map((net) => `${net.from} → ${net.to ?? "(unnamed)"}`)).join(", ")}</div>
+                )}
+              </div>
+            ) : null)}
+            {organized && !organized.ok && (
+              <div className="rounded border border-amber-800/60 px-2 py-1.5 text-[11px] text-amber-300" data-testid="sheets-organize-refusal" data-code={organized.code ?? ""}>{organized.code ? `${organized.code} — ` : ""}{organized.message}</div>
+            )}
+            {organized && !organized.ok && offer}
+            <DialogFooter>
+              <button type="button" className={button} onClick={closeDialog}>Cancel</button>
+              <button type="button" data-testid="sheets-organize-apply" className={primary} disabled={busy || organized === null || !organized.ok} onClick={() => { if (organized) void run(() => applyOrganize(organized)); }}>Apply organisation</button>
             </DialogFooter>
           </div>
         </DialogContent>

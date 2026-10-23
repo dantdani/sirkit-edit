@@ -2665,6 +2665,8 @@ export default function PcbEditor({
             onClick={() => void handleSync({ centerNewParts: true, spreadOverlaps: true })}
             disabled={syncing}
             data-testid="sync-schematic-to-pcb"
+            aria-label={`Schematic → PCB: synchronise the whole project (${schematic.sheets?.sheets.length ?? 1} sheet${(schematic.sheets?.sheets.length ?? 1) === 1 ? "" : "s"}) to the board`} // [PR-J4, 2026-10-23] runbook J.5 / OD-258 item 6: the sync states that it synchronises the COMPLETE project, every sheet, whatever sheet is open
+            title={`Synchronises the whole project (${schematic.sheets?.sheets.length ?? 1} sheet${(schematic.sheets?.sheets.length ?? 1) === 1 ? "" : "s"}) to the board, whatever sheet is open`}
             className="mt-4 flex items-center gap-2 px-3 py-1.5 rounded bg-teal-600 text-sm text-white hover:bg-teal-500 transition-colors disabled:opacity-50"
           >
             {syncing && <Loader2 className="size-3.5 animate-spin" />}
@@ -2776,6 +2778,7 @@ export default function PcbEditor({
             progress={syncProgress}
             onSync={() => void handleSync({ centerNewParts: true, spreadOverlaps: true })}
             onOptions={() => setSyncDialogOpen(true)}
+            sheetCount={schematic.sheets?.sheets.length ?? 1} // [PR-J4, 2026-10-23] OD-258 item 6: the control states that it synchronises the whole project
           />
           {syncBlockedByProtectedCopper && <button type="button" onClick={() => void handlePreviewBoardRevision()} disabled={syncing || applying || boardRevisionBusy} data-testid="derive-board-revision" className="ml-2 rounded border border-amber-500 px-2 py-1 text-[11px] text-amber-200 disabled:opacity-50">Derive new board revision…</button>}
           {pendingPreflight?.plan && <button type="button" data-testid="apply-sync-plan-toolbar" onClick={() => void handleApplySync()} disabled={applying} className="ml-2 rounded border border-teal-500 px-2 py-1 text-[11px] text-teal-200 disabled:opacity-50">{applying ? "Applying…" : "Apply sync plan"}</button>}

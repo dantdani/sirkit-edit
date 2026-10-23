@@ -114,7 +114,7 @@ export interface FlagInventoryExclusion {
 }
 
 const EXCLUSIONS: readonly FlagInventoryExclusion[] = [
-  { token: "SIRKIT_D1N4148", match: "exact", names: [], sites: ["app/lib/spice/ir.ts:234", "app/lib/spice/project.ts:72"], reason: "the name of Sirkit's own 1N4148 diode SPICE model (a .model card), not an environment name" },
+  { token: "SIRKIT_D1N4148", match: "exact", names: [], sites: ["app/lib/spice/ir.ts:160", "app/lib/spice/project.ts:72"], reason: "the name of Sirkit's own 1N4148 diode SPICE model (a .model card), not an environment name" }, // [PR-J4, 2026-10-23] pin move: ir.ts:234 -> :160 (the IR's connectivity stage moved below its device loop; the token's line, not its text, changed)
   { token: "SIRKIT_ELECTRICAL_TRUTH", match: "exact", names: [], sites: ["app/lib/pcb/fab/build-bundle.ts:150"], reason: "the bundle file name SIRKIT_ELECTRICAL_TRUTH.json written into the fabrication bundle, not an environment name" },
   { token: "SIRKIT_READINESS_REPORT", match: "exact", names: [], sites: ["app/lib/pcb/fab/build-bundle.ts:151"], reason: "the bundle file name SIRKIT_READINESS_REPORT.json written into the fabrication bundle, not an environment name" },
   { token: "SIRKIT_RELEASE_MANIFEST", match: "exact", names: [], sites: ["app/lib/pcb/fab/build-bundle.ts:265", "app/components/pcb/hooks/useFabExport.ts:94", "app/components/pcb/hooks/useFabExport.ts:95"], reason: "the bundle file name SIRKIT_RELEASE_MANIFEST.json, written by the bundle builder and looked for by the export hook" },

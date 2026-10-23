@@ -33,7 +33,7 @@ const declare = (d: Omit<IoOutcomeDeclaration, "schema">): IoOutcomeDeclaration 
 
 /** The declarations, one per import/export path (record id → direction → declaration). */
 export const IO_OUTCOMES: readonly IoOutcomeDeclaration[] = [
-  declare({ recordId: "schematic.import-export-kicad", direction: "export", produces: "file-artifact", validation: "none (read-only export of validated state)", reportedAs: "a .kicad_sch download; a refused export is a structured toast naming the SCHEMATIC_STATE_INVALID issues (nothing changed)" }),
+  declare({ recordId: "schematic.import-export-kicad", direction: "export", produces: "file-artifact", validation: "none (read-only export of validated state)", reportedAs: "a .kicad_sch download (a project with sheets: one .zip holding the root and child sheet files, [PR-J4, 2026-10-23]); a refused export is a structured toast naming the SCHEMATIC_STATE_INVALID issues (nothing changed)" }),
   declare({ recordId: "schematic.import-export-kicad", direction: "import", produces: "canonical-state", validation: "structural+semantic", reportedAs: "not applicable — the path does not exist yet", unavailable: "no .kicad_sch import path exists (no control, no route); the only reader (app/lib/schematic-compiler/kicad-adapter.ts) answers CD8_KICAD_SEMANTIC_ADAPTER_NOT_CERTIFIED" }),
   declare({ recordId: "pcb.export-kicad", direction: "export", produces: "file-artifact", validation: "none (read-only export of validated state)", reportedAs: "a .kicad_pcb download gated on a verified authoritative board; unsupported content is reported as a toast (X-Sirkit-Export-Unsupported) from every entry point" }),
   declare({ recordId: "pcb.autoroute-import", direction: "import", produces: "canonical-state", validation: "structural+semantic", reportedAs: "a routing candidate (sirkit.layout-candidate.v1) reviewed before apply; the apply is one canonical transaction with a toast" }),
@@ -58,4 +58,14 @@ export function describeExportRefusal(status: number, body: unknown): string {
     return `${code} — ${error}${issues.length > 0 ? ` (${count} issue${count === 1 ? "" : "s"}: ${issues.join("; ")}${count > issues.length ? "; …" : ""})` : ""}`;
   }
   return `HTTP ${status} — the export was refused; nothing was changed.`;
+}
+
+/**
+ * [PR-J4, 2026-10-23] The file name an export response names in its Content-Disposition (`attachment; filename="x.zip"`), else the
+ * fallback: a sheeted KiCad export downloads as `<title>.zip`, a single-sheet one as `<title>.kicad_sch` (the same rule the fab
+ * export's hook applies, app/components/pcb/hooks/useFabExport.ts). Pure.
+ */
+export function filenameFromDisposition(header: string | null | undefined, fallback: string): string {
+  const match = header?.match(/filename="([^"]+)"/);
+  return match ? match[1]! : fallback;
 }

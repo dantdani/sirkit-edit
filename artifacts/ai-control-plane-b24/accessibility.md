@@ -296,7 +296,7 @@ then the strengthened suite was run on the same breakage, then the source was re
 - **correctness-3 (the drawers' "✕").** Breakage: a "✕" close re-added to `HistoryPanel` and to `AlternatesDrawer` (with
   `title="Close"`). The old suite: 16 of 16 green (`d3fix-c3-repro-old-suite`): a "✕" is named by its content, so the count of
   buttons named "Close" stayed 1. The strengthened `b24-d3-bom-dialogs` 4 and `b24-d3-accessible-names` 5 on the same breakage:
-  `HistoryPanel` 4 and `AlternatesDrawer` 4 red ("a button named by a glyph alone"), case 5 red (`BomView.tsx:1535 <button> "✕"`,
+  `HistoryPanel` 4 and `AlternatesDrawer` 4 red ("a button named by a glyph alone"), case 5 red (`BomView.tsx:1545 <button> "✕"` ([PR-J4, 2026-10-23] was `:1535`),
   `:1709`) (`d3fix-c3-red-new-suites`). `BomView.tsx` restored byte-identical (`946ae534…`).
 - **correctness-2 (the focus return took focus from a pointer person).** New `b24-d3-accessible-names` 11 runs the page's own code
   (send's busy line, the root element's pointer capture, the run end's block) over a focus model, five runs. Red on the D3 code
@@ -633,9 +633,9 @@ Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on 
 | C34 | `app/layout.tsx` | 31 | — | `lang="en"` | 3.1.1 |
 | C35 | `app/components/bom/BomView.tsx` | 42 | — | `import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";` | the BOM dialogs on the shared dialog |
 | C36 | `app/components/bom/BomView.tsx` | 926 | — | `ref={exportTriggerRef}` | the worksheet's return target |
-| C37 | `app/components/bom/BomView.tsx` | 1443 | — | `<DialogContent finalFocus={finalFocus}` | passed as `finalFocus` |
-| C38 | `app/components/bom/BomView.tsx` | 1446 | — | `Priced from cached offers, each with its source and when it was observed.` | the worksheet sentence, verbatim |
-| C39 | `app/components/bom/BomView.tsx` | 1560 | — | `const BOM_DRAWER_CLASS =` | the drawers, by className only |
+| C37 | `app/components/bom/BomView.tsx` | 1453 | — | `<DialogContent finalFocus={finalFocus}` | passed as `finalFocus` |
+| C38 | `app/components/bom/BomView.tsx` | 1456 | — | `Priced from cached offers, each with its source and when it was observed.` | the worksheet sentence, verbatim |
+| C39 | `app/components/bom/BomView.tsx` | 1570 | — | `const BOM_DRAWER_CLASS =` | the drawers, by className only |
 | C40 | `components/ui/dialog.tsx` | 45 | — | `showCloseButton = true,` | the default Close |
 | C41 | `components/ui/dialog.tsx` | 75 | — | `<span className="sr-only">Close</span>` | its name |
 | C42 | `app/components/pcb/GrantedExecutionDialog.tsx` | 54 | — | `onOpenChange={(open) => { if (!open && !busy) onCancel(); }}` | Escape reaches onCancel |
@@ -667,3 +667,5 @@ Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on 
 | C68 | `app/components/pcb/GrantedExecutionDialog.tsx` | 125 | — | `return prompt && !prompt.disabled ? prompt : false;` | [B24-D4, 2026-10-10] the prompt when enabled; [B24-D4 review, 2026-10-10] else no focus move (was: Base UI's default, `: true`) |
 | C69 | `e2e/keyboard-and-focus.spec.ts` | 235 | — | `await expect(prompt, "focus returns to the prompt after Escape").toBeFocused({ timeout: 10_000 });` | [B24-D4, 2026-10-10] case 4, stricter, in place |
 | C70 | `.github/workflows/deterministic-manufacturing.yml` | 796 | — | `run: pnpm exec playwright test e2e/multi-tab.spec.ts e2e/crash-recovery.spec.ts e2e/keyboard-and-focus.spec.ts e2e/minimum-width.spec.ts` | [B24-D4, 2026-10-10] the two specs' job since OD-30's split (`ci-split.md` section 11); [B24-D4 lead, 2026-10-10] `page-browser-e2e-b24`, which also runs B24-D2's two specs (the lead's option (b); Playwright runs the four files in name order, `multi-tab` last) [PR-G, 2026-10-17] re-pinned +59: PR-G's 39 prompt-to-gerber lines at `:294-312`, `:316` and `:352-370` and 20 agent-boundary-suites lines at `:622` and `:658-676` (OD-250) [PR-L7, 2026-10-20] re-pinned +86: PR-L7's 71 prompt-to-gerber lines at `:313-381` and `:440-441`, its 13 database-delivery entries at `:495-507` and agent-boundary-suites' two lines at `:761-762` (OD-254) |
+[PR-J4, 2026-10-23] C37 `:1443` -> `:1453`, C38 `:1446` -> `:1456`, C39 `:1560` -> `:1570` (section J4-B's BOM Sheet column - the header, the per-line cell and the per-sheet group line - was inserted above them in `BomView.tsx`; all three anchors are unchanged). The census row of the BOM table's `tr` click control is re-rendered for the same reason (its text now includes the Sheet cell); the other builders' rows and the summary are regenerated at the J4 integration.
+
