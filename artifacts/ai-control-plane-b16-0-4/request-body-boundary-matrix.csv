@@ -162,7 +162,7 @@ POST,/api/schematic/edit,auth+csrf,authenticated,authenticatedJsonRoute(…),app
 POST,/api/schematic/layout-critic,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,16000000,45000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/schematic/review,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,16000000,45000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/schematic,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,16000000,45000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
-POST,/api/simulate,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,process,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/simulate,auth+csrf,authenticated,POST,-,-,-,no-body,-,process,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/spice/ai,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/spice/compile,public,public,POST,application/json,8000000,30000,bounded-body-before-compute,canonical-wrapper:publicJsonRoute,process,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
 POST,/api/spice/models/import,auth+csrf,authenticated,POST,-,-,-,no-body,-,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior

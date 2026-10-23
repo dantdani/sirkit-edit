@@ -10,6 +10,11 @@
  *    label on "Sensors" (its own net), every second pin on GND.
  *  - `unpinnedInstances(state)`: the same document without the exact-revision fields, so a route test exports from the catalog mock
  *    instead of loading published snapshots (the hierarchy does not depend on them).
+ *  - [PR-J4 integration, 2026-10-23] `collinearPinsFixture()` (review J4R-OUT-1): two child blocks side by side on the overview, A
+ *    {400,100,300,200} with port PA anchored at (400,50) above its top-left corner and B {800,100,300,200} with port PB anchored at
+ *    (200,100), level with the blocks' top edge, so PB's nearest edge point (800,100) would be reached by a straight wire passing exactly
+ *    over PA's pin at (400,100); R1 / R2 on the overview feed PA / PB, R3 on A and R4 on B carry the hierarchical labels. Six nets:
+ *    {R1.1, R3.1}, {R2.1, R4.1} and four singletons - the exporter must keep R1/R3 apart from R2/R4.
  * Every coordinate is on the 10 px grid; every id is a literal (no randomness).
  */
 import { kicadPinWorldPos } from "@/app/lib/geometry";
@@ -86,6 +91,37 @@ export function globalFixture(): SchematicState {
         { id: ROOT_SHEET_ID, name: "Overview", parentId: null },
         { id: "clock", name: "Clock", parentId: ROOT_SHEET_ID, block: { x: 400, y: 100, width: 300, height: 200 } },
         { id: "sensors", name: "Sensors", parentId: ROOT_SHEET_ID, block: { x: 800, y: 100, width: 300, height: 200 } },
+      ],
+    },
+  };
+}
+
+/** [PR-J4 integration, 2026-10-23] Review J4R-OUT-1's geometry (see the header): a later sheet pin's straight wire would cross an earlier pin. */
+export function collinearPinsFixture(): SchematicState {
+  const r1 = resistor("x-r1", "R1", 100, 100);
+  const r2 = resistor("x-r2", "R2", 100, 300);
+  const r3 = resistor("x-r3", "R3", 200, 200, "a");
+  const r4 = resistor("x-r4", "R4", 200, 200, "b");
+  return {
+    components: [],
+    kicadComponents: [r1, r2, r3, r4],
+    wires: [
+      { id: "x-w1", vertices: [resistorPin(r1, "1"), { x: 400, y: 50 }] },
+      { id: "x-w2", vertices: [resistorPin(r2, "1"), { x: 200, y: 100 }] },
+    ],
+    netLabels: [
+      { id: "x-pin-a", position: { x: 400, y: 50 }, name: "PA", kind: "label", orientation: 0, scope: "sheet-pin", portId: "x-port-a", childSheetId: "a" },
+      { id: "x-lbl-a", position: resistorPin(r3, "1"), name: "PA", kind: "label", orientation: 0, sheetId: "a", scope: "hierarchical", portId: "x-port-a" },
+      { id: "x-pin-b", position: { x: 200, y: 100 }, name: "PB", kind: "label", orientation: 0, scope: "sheet-pin", portId: "x-port-b", childSheetId: "b" },
+      { id: "x-lbl-b", position: resistorPin(r4, "1"), name: "PB", kind: "label", orientation: 0, sheetId: "b", scope: "hierarchical", portId: "x-port-b" },
+    ],
+    pageSize: "A4",
+    sheets: {
+      version: 1,
+      sheets: [
+        { id: ROOT_SHEET_ID, name: "Overview", parentId: null },
+        { id: "a", name: "A", parentId: ROOT_SHEET_ID, block: { x: 400, y: 100, width: 300, height: 200 }, ports: [{ id: "x-port-a", name: "PA", direction: "passive" }] },
+        { id: "b", name: "B", parentId: ROOT_SHEET_ID, block: { x: 800, y: 100, width: 300, height: 200 }, ports: [{ id: "x-port-b", name: "PB", direction: "passive" }] },
       ],
     },
   };

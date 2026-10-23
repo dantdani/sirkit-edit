@@ -17,12 +17,16 @@
  *
  * Body:     { state: SchematicState; image: string (data URL: png/jpeg/webp); sheetId?: string }
  *           [PR-J4, 2026-10-23] J.3 item 5 / OD-258 item 5: a project with sheets names the LEAF sheet to tidy (the page sends the active
- *           sheet); the manifest and the image are that sheet's, the re-layout is merged back onto the whole project with every component
- *           re-identified by reference designator (app/lib/schematic/sheet-tidy.ts) and proven to keep the project connectivity; the
- *           response returns the WHOLE project state plus `sheetId`. Refusals (422, nothing sent, nothing changed): SHEETS_TIDY_SHEET_REQUIRED
- *           (no sheet named), SHEETS_TIDY_SHEET_UNKNOWN, SHEETS_TIDY_BLOCKS_PENDING (a sheet with child blocks), SHEETS_TIDY_PARTS_UNRESOLVED,
- *           SHEETS_TIDY_NOT_EQUIVALENT (the re-laid sheet would change a connection: original kept). A document without sheets is tidied
- *           exactly as before (same request, same response bytes).
+ *           sheet); the manifest, the image and the `<schematic_state>` context are that sheet's ([PR-J4 integration, 2026-10-23] C-TIDY-3:
+ *           the admitted input shrinks with the sheet) while the part read covers the WHOLE project (C-TIDY-1: the proof needs every pin);
+ *           the re-layout is merged back onto the whole project with every component re-identified by reference designator
+ *           (app/lib/schematic/sheet-tidy.ts) and proven to keep the project connectivity; the response returns the WHOLE project state
+ *           plus `sheetId`. Refusals before the model call (422, nothing sent, nothing changed): SHEETS_TIDY_SHEET_REQUIRED (no sheet named),
+ *           SHEETS_TIDY_SHEET_UNKNOWN, SHEETS_TIDY_BLOCKS_PENDING (a sheet with child blocks), SHEETS_TIDY_THEORY_PENDING (a sheet holding a
+ *           Theory symbol, C-TIDY-4) - each before the part read -, SHEETS_TIDY_PARTS_UNRESOLVED (a catalog record missing: after the one
+ *           part read, before the call; C-TIDY-2). Refusal after the model call (422, the critique was requested and billed, nothing applied):
+ *           SHEETS_TIDY_NOT_EQUIVALENT (the re-laid sheet would change a connection or drop a port's label: original kept). A document
+ *           without sheets is tidied exactly as before (same request, same response bytes).
  * Response: { ok: true; applied: boolean; state: SchematicState;
  *             critique: { groups: Group[]; summary: string };
  *             validation: { ok: boolean; violations: number };
@@ -42,7 +46,7 @@ import {
   nearestNeighborGaps,
   evaluateRespacing,
 } from "@/lib/build-auto-layout";
-import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist"; import { sheetErrors, validateSheetHierarchy, sheetOf } from "@/app/lib/schematic/sheets"; import { tidySheet, tidySheetRefusal } from "@/app/lib/schematic/sheet-tidy"; // [PR-J1 integration, 2026-10-22] on this line so no line moves; [PR-J4, 2026-10-23] + the per-sheet tidy (OD-258 item 5)
+import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist"; import { sheetErrors, validateSheetHierarchy, sheetOf } from "@/app/lib/schematic/sheets"; import { sheetTidyContext, tidySheet, tidySheetRefusal } from "@/app/lib/schematic/sheet-tidy"; import { compareCodePoints } from "@/app/lib/stable-compare"; // [PR-J1 integration, 2026-10-22] on this line so no line moves; [PR-J4, 2026-10-23] + the per-sheet tidy (OD-258 item 5); [PR-J4 integration, 2026-10-23] + the sheet's critic context (C-TIDY-3) and the stable sort of the pre-call part check (C-TIDY-2)
 import type { CachedPart } from "@/app/lib/parts-cache";
 import type { SchematicState } from "@/lib/schematic-types";
 
@@ -101,10 +105,10 @@ export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 4
 
   // Load real part geometry (server-side) so the manifest boxes and the re-layout
   // both use the same source of truth as the original generation.
-  const partIds = [...new Set(scoped.map((c) => c.partId))];
+  const partIds = [...new Set(kicad.map((c) => c.partId))]; // [PR-J4 integration, 2026-10-23] review C-TIDY-1: the WHOLE project's parts (exactly the pre-J4 flat read) - the sheeted proof below needs every pin, else a lost cross-sheet link is invisible to it; the manifest stays the sheet's
   const loaded = await getFullPartsByIds(partIds);
   const parts = new Map<string, CachedPart>(loaded.map((p) => [p.id, p] as const));
-
+  if (sheetId !== null) { const unresolved = [...new Set(kicad.filter((inst) => !parts.has(inst.partId)).map((inst) => inst.refDes))].sort(compareCodePoints); if (unresolved.length > 0) return Response.json({ ok: false, code: "SHEETS_TIDY_PARTS_UNRESOLVED", error: `The catalog record of ${unresolved.join(", ")} is not loaded, so the re-layout cannot be proven to keep every connection. Nothing was sent and nothing changed.` }, { status: 422, headers: NO_STORE }); } // [PR-J4 integration, 2026-10-23] review C-TIDY-2: the sheeted path refuses a missing record BEFORE the model call (tidySheet would refuse the same after the billed call); the single-sheet path is byte-identical
   // Ground-truth manifest: every placed component the model is allowed to name (the tidied sheet's, [PR-J4] above).
   const manifest = scoped
     .map((inst) => {
@@ -129,7 +133,7 @@ export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 4
       system: LAYOUT_CRITIC_SYSTEM_PROMPT,
       tools: [LAYOUT_CRITIC_TOOL],
       toolChoice: { name: "report_layout_issues" },
-      schematicState: state,
+      schematicState: sheetId === null ? state : sheetTidyContext(state, sheetId), // [PR-J4 integration, 2026-10-23] review C-TIDY-3: a sheeted request's `<schematic_state>` is the tidied sheet's entities with the sheet tree (the admitted input shrinks with the sheet, as the manifest and image do); the single-sheet request is byte-identical
       messages: [
         {
           role: "user",

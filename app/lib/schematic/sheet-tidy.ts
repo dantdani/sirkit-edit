@@ -7,7 +7,12 @@
  * (SHEETS_TIDY_PENDING). This module tidies ONE sheet and puts it back:
  *
  *  1. `tidySheetRefusal`: the sheet must exist and be a LEAF (OD-258 item 5: a sheet with child blocks refuses
- *     SHEETS_TIDY_BLOCKS_PENDING - blocks and their sheet pins are hand-placed presentation, not re-laid out in this increment);
+ *     SHEETS_TIDY_BLOCKS_PENDING - blocks and their sheet pins are hand-placed presentation, not re-laid out in this increment) and hold
+ *     catalog parts only ([PR-J4 integration, 2026-10-23] review C-TIDY-4: a Theory symbol on the sheet refuses SHEETS_TIDY_THEORY_PENDING
+ *     naming it, before any read or call - the Build layout returns none, so the merge would drop it and the proof would refuse after a
+ *     billed call with a message about other pins); `sheetTidyContext` is the sheet's four entity arrays with the project's sheet tree,
+ *     the `<schematic_state>` the route hands the critic for a sheeted request (review C-TIDY-3: the admitted input shrinks with the
+ *     sheet; a single-sheet request keeps the whole state);
  *  2. `sheetLogicalNetlist`: the strict whole-project logical netlist (lib/schematic-to-netlist.ts over THE project connectivity)
  *     filtered to the sheet's own parts: a connection to a port is a label named by the PORT, a rail keeps its exact name and kind,
  *     a sheet-local net its own (path-less) name - exactly what the sheet draws;
@@ -18,7 +23,13 @@
  *     position (further laid-out labels of the port's name become further anchors of the same port); a global label keeps its scope;
  *     every other sheet is byte-identical;
  *  4. the proof: the project connectivity's pin-to-net partition digest is unchanged and the canonical validator is clean, else the
- *     result is refused (SHEETS_TIDY_NOT_EQUIVALENT) and nothing is applied.
+ *     result is refused (SHEETS_TIDY_NOT_EQUIVALENT) and nothing is applied. [PR-J4 integration, 2026-10-23] review C-TIDY-1: the proof
+ *     is only as good as the pins it sees - a part whose catalog record is not loaded has no pins on EITHER side of the digest, so its
+ *     connections could vanish unproven; `tidySheet` and `mergeTidiedSheet` therefore refuse SHEETS_TIDY_PARTS_UNRESOLVED unless EVERY
+ *     project part's pins are resolved (as planMoveToSheet does, J1-OPS-4), and a port of the tidied sheet that would lose its last
+ *     hierarchical label is refused even when its net has no pin beyond the sheet (the digest cannot see that loss). A refusal reached
+ *     after the layout says "The original layout was kept; nothing changed." - never that nothing was sent (review C-TIDY-2: the route
+ *     reaches it after its model call).
  *
  * Pure: no I/O, no model call (the route owns the admission bound, the model call and the improved / regressed gates). The auto-layout
  * mints wire and label ids with crypto.randomUUID on the server, as the flat tidy always did; component ids never change here.
@@ -32,17 +43,18 @@ import { autoLayoutBuildValidated, type AutoLayoutOptions } from "@/lib/build-au
 import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist";
 import { ROOT_SHEET_ID, netLabelNameKey, type BuildLogicalConnection, type BuildLogicalNetlist, type KicadComponentInstance, type NetLabel, type SchematicState } from "@/lib/schematic-types";
 import type { NetlistValidation } from "@/lib/validate-netlist";
-import { resolveProjectConnectivity, type PartPinsLookup } from "./project-connectivity";
+import { resolveProjectConnectivity, type PartPinsLookup, type ProjectConnectivity } from "./project-connectivity";
 import { mergeSheetAfter, projectSheet } from "./sheet-lens";
 import { assertWholeProject, sheetOf, sheetsOf } from "./sheets";
 
-export type SheetTidyRefusalCode = "SHEETS_TIDY_SHEET_REQUIRED" | "SHEETS_TIDY_SHEET_UNKNOWN" | "SHEETS_TIDY_BLOCKS_PENDING" | "SHEETS_TIDY_PARTS_UNRESOLVED" | "SHEETS_TIDY_NOT_EQUIVALENT";
+export type SheetTidyRefusalCode = "SHEETS_TIDY_SHEET_REQUIRED" | "SHEETS_TIDY_SHEET_UNKNOWN" | "SHEETS_TIDY_BLOCKS_PENDING" | "SHEETS_TIDY_THEORY_PENDING" | "SHEETS_TIDY_PARTS_UNRESOLVED" | "SHEETS_TIDY_NOT_EQUIVALENT";
 
 export interface SheetTidyRefusal { ok: false; code: SheetTidyRefusalCode; message: string }
 
-const refuse = (code: SheetTidyRefusalCode, message: string): SheetTidyRefusal => ({ ok: false, code, message: `${message} Nothing was sent and nothing changed.` });
+/** [PR-J4 integration, 2026-10-23] review C-TIDY-2: a refusal BEFORE the layout (and the route's model call) says nothing was sent; one after the layout says only that the original layout was kept. */
+const refuse = (code: SheetTidyRefusalCode, message: string, stage: "before-layout" | "after-layout" = "before-layout"): SheetTidyRefusal => ({ ok: false, code, message: `${message} ${stage === "before-layout" ? "Nothing was sent and nothing changed." : "The original layout was kept; nothing changed."}` });
 
-/** The sheet Tidy may re-lay out: a named, existing LEAF sheet of a document with sheets (OD-258 item 5); null when the document has no sheets. */
+/** The sheet Tidy may re-lay out: a named, existing LEAF sheet of a document with sheets holding catalog parts only (OD-258 item 5); null when the document has no sheets. */
 export function tidySheetRefusal(state: SchematicState, sheetId: unknown): SheetTidyRefusal | null {
   if (state.sheets === undefined) return null;
   if (typeof sheetId !== "string" || sheetId.length === 0) return refuse("SHEETS_TIDY_SHEET_REQUIRED", "Tidy re-lays out ONE sheet of a project organised into sheets; the request names no sheet (open the sheet to tidy and try again).");
@@ -54,7 +66,33 @@ export function tidySheetRefusal(state: SchematicState, sheetId: unknown): Sheet
     const where = sheet.parentId === null ? "The overview" : `Sheet "${sheet.name}"`;
     return refuse("SHEETS_TIDY_BLOCKS_PENDING", `${where} holds ${blocks.length} subsystem block${blocks.length === 1 ? "" : "s"} (${blocks.map((item) => item.name).join(", ")}); Tidy re-lays out subsystem sheets without child blocks only - open one of them to tidy it.`);
   }
+  // [PR-J4 integration, 2026-10-23] review C-TIDY-4: the Build layout returns no Theory symbol, so a sheet holding one cannot be re-laid out
+  // in this increment; refused here, before any read or call, naming the symbols (not after a billed call with a message about other pins)
+  const theory = state.components.filter((component) => sheetOf(component) === sheetId);
+  if (theory.length > 0) {
+    const where = sheet.parentId === null ? "The overview" : `Sheet "${sheet.name}"`;
+    return refuse("SHEETS_TIDY_THEORY_PENDING", `${where} holds ${theory.length} Theory symbol${theory.length === 1 ? "" : "s"} (${theory.map((component) => component.refDes ?? component.type).join(", ")}); Tidy re-lays out catalog parts only in this increment - move or remove ${theory.length === 1 ? "it" : "them"} first.`);
+  }
   return null;
+}
+
+/**
+ * [PR-J4 integration, 2026-10-23] review C-TIDY-3: the `<schematic_state>` context of a sheeted layout-critic request - the sheet's own
+ * components, wires, catalog instances and labels with the project's sheet tree and page size (no `sheetId` key: it is a document, not a
+ * projection), so the critic's prompt and the SPEND-3 input bound shrink with the sheet exactly as its manifest and image do. The whole
+ * `state` still drives `tidySheet` and the merge.
+ */
+export function sheetTidyContext(state: SchematicState, sheetId: string): SchematicState {
+  const view = projectSheet(state, sheetId);
+  return { ...state, components: view.components, wires: view.wires, kicadComponents: view.kicadComponents, netLabels: view.netLabels };
+}
+
+/** [PR-J4 integration, 2026-10-23] review C-TIDY-1 (as planMoveToSheet, J1-OPS-4): the proof covers no pin of a part whose record is not loaded, so such a project is never tidied. */
+function unresolvedPartsRefusal(state: SchematicState, conn: ProjectConnectivity, stage: "before-layout" | "after-layout"): SheetTidyRefusal | null {
+  if ((state.kicadComponents ?? []).length === 0 || (conn.kicadPinsResolved && conn.unresolvedPartIds.length === 0)) return null;
+  const unresolved = new Set(conn.unresolvedPartIds);
+  const refs = [...new Set((state.kicadComponents ?? []).filter((item) => !conn.kicadPinsResolved || unresolved.has(item.partId)).map((item) => item.refDes))].sort(compareCodePoints);
+  return refuse("SHEETS_TIDY_PARTS_UNRESOLVED", `The catalog record of ${refs.join(", ")} is not loaded, so the re-layout cannot be proven to keep every connection.`, stage);
 }
 
 const pinRef = (connection: BuildLogicalConnection): string[] => (connection.kind === "label" ? [connection.pin] : [connection.from, connection.to]);
@@ -108,7 +146,7 @@ export function mergeTidiedSheet(base: SchematicState, sheetId: string, laidOut:
   const laidOutByRef = new Map((laidOut.kicadComponents ?? []).map((item) => [item.refDes, item] as const));
   const missing = view.kicadComponents.filter((item) => !laidOutByRef.has(item.refDes)).map((item) => item.refDes);
   const extra = [...laidOutByRef.keys()].filter((refDes) => !view.kicadComponents.some((item) => item.refDes === refDes));
-  if (missing.length > 0 || extra.length > 0) return refuse("SHEETS_TIDY_NOT_EQUIVALENT", `The re-layout does not hold exactly this sheet's parts (${[...missing.map((ref) => `${ref} missing`), ...extra.map((ref) => `${ref} extra`)].join(", ")}).`);
+  if (missing.length > 0 || extra.length > 0) return refuse("SHEETS_TIDY_NOT_EQUIVALENT", `The re-layout does not hold exactly this sheet's parts (${[...missing.map((ref) => `${ref} missing`), ...extra.map((ref) => `${ref} extra`)].join(", ")}).`, "after-layout");
   // components by reference designator: ids and authority fields kept, only the placement taken
   const instances: KicadComponentInstance[] = view.kicadComponents.map((item) => {
     const placed = laidOutByRef.get(item.refDes)!;
@@ -141,14 +179,26 @@ export function mergeTidiedSheet(base: SchematicState, sheetId: string, laidOut:
   const state: SchematicState = { ...base, components: merged.components ?? base.components, kicadComponents: merged.kicadComponents ?? base.kicadComponents ?? [], wires: merged.wires ?? base.wires, netLabels: merged.netLabels ?? base.netLabels ?? [] };
   // the proof: the same pins connected the same way, and a valid canonical document
   const before = resolveProjectConnectivity(base, lookup);
+  const unresolvedRefusal = unresolvedPartsRefusal(base, before, "after-layout"); // [PR-J4 integration, 2026-10-23] review C-TIDY-1: no proof without every pin
+  if (unresolvedRefusal) return unresolvedRefusal;
   const now = resolveProjectConnectivity(state, lookup);
-  if (!now.ok) return refuse("SHEETS_TIDY_NOT_EQUIVALENT", `The re-laid sheet leaves the project's connectivity invalid (${now.diagnostics.find((item) => item.severity === "error")?.message ?? "see Sheet connections"}).`);
+  if (!now.ok) return refuse("SHEETS_TIDY_NOT_EQUIVALENT", `The re-laid sheet leaves the project's connectivity invalid (${now.diagnostics.find((item) => item.severity === "error")?.message ?? "see Sheet connections"}).`, "after-layout");
   if (now.partitionDigest !== before.partitionDigest) {
     const changed = before.pins.filter((pin) => { const was = before.netOfPin(pin.key); const is = now.netOfPin(pin.key); return was && is && was.members.join("\u0000") !== is.members.join("\u0000"); }).map((pin) => pin.key);
-    return refuse("SHEETS_TIDY_NOT_EQUIVALENT", `The re-laid sheet would change which pins are connected (${changed.slice(0, 6).join(", ")}${changed.length > 6 ? ", ..." : ""}), so the original layout was kept.`);
+    return refuse("SHEETS_TIDY_NOT_EQUIVALENT", `The re-laid sheet would change which pins are connected (${changed.slice(0, 6).join(", ")}${changed.length > 6 ? ", ..." : ""}).`, "after-layout");
+  }
+  // [PR-J4 integration, 2026-10-23] review C-TIDY-1: a port whose every hierarchical label the layout dropped is a lost interface even when its
+  // net has no pin beyond this sheet (the digest cannot see that loss; the validator reports it as a warning only)
+  const anchoredBefore = new Set(view.netLabels.filter((label) => label.scope === "hierarchical" && typeof label.portId === "string").map((label) => label.portId!));
+  const anchoredAfter = new Set(netLabels.filter((label) => label.scope === "hierarchical" && typeof label.portId === "string").map((label) => label.portId!));
+  const lostPorts = [...anchoredBefore].filter((portId) => !anchoredAfter.has(portId)).sort(compareCodePoints);
+  if (lostPorts.length > 0) {
+    const ports = sheetsOf(base).find((sheet) => sheet.id === sheetId)?.ports ?? [];
+    const names = lostPorts.map((portId) => ports.find((port) => port.id === portId)?.name ?? portId);
+    return refuse("SHEETS_TIDY_NOT_EQUIVALENT", `The re-laid sheet would leave port${names.length === 1 ? "" : "s"} ${names.join(", ")} without a hierarchical label on the sheet.`, "after-layout");
   }
   const issues = validateSchematicStateIntegrity(state);
-  if (issues.length > 0) return refuse("SHEETS_TIDY_NOT_EQUIVALENT", `The re-laid sheet is not a valid document (${issues[0]}), so the original layout was kept.`);
+  if (issues.length > 0) return refuse("SHEETS_TIDY_NOT_EQUIVALENT", `The re-laid sheet is not a valid document (${issues[0]}).`, "after-layout");
   // the flat validator reads the sheet alone, so a port net's one pin on this sheet is "floating" to it; the port carries that pin to the
   // other sheets (proven above by the project connectivity), so such a violation is expected and not a reason to keep the old layout
   const refOf = (componentId: string): string => (state.kicadComponents ?? []).find((item) => item.id === componentId)?.refDes ?? componentId;
@@ -164,10 +214,12 @@ export function mergeTidiedSheet(base: SchematicState, sheetId: string, laidOut:
 export function tidySheet(base: SchematicState, sheetId: string, parts: Map<string, CachedPart>, options?: AutoLayoutOptions): TidiedSheet | SheetTidyRefusal {
   const refusal = tidySheetRefusal(base, sheetId);
   if (refusal) return refusal;
-  // a part whose catalog record is not loaded has no pins on either side of the proof, so its connections could vanish unproven: refuse
-  const unresolved = [...new Set(projectSheet(base, sheetId).kicadComponents.filter((item) => !parts.has(item.partId)).map((item) => item.refDes))].sort(compareCodePoints);
-  if (unresolved.length > 0) return refuse("SHEETS_TIDY_PARTS_UNRESOLVED", `The catalog record of ${unresolved.join(", ")} is not loaded, so the re-layout cannot be proven to keep every connection.`);
+  // a part whose catalog record is not loaded has no pins on either side of the proof, so its connections could vanish unproven: refuse.
+  // [PR-J4 integration, 2026-10-23] review C-TIDY-1: EVERY project part's, not only the sheet's (a lost cross-sheet link is invisible otherwise)
+  const lookup: PartPinsLookup = (partId) => parts.get(partId) ?? null;
+  const unresolvedRefusal = unresolvedPartsRefusal(base, resolveProjectConnectivity(base, lookup), "before-layout");
+  if (unresolvedRefusal) return unresolvedRefusal;
   const netlist = sheetLogicalNetlist(base, sheetId, parts);
   const { state: laidOut, validation } = autoLayoutBuildValidated(netlist, parts, 3, options);
-  return mergeTidiedSheet(base, sheetId, laidOut, (partId) => parts.get(partId) ?? null, validation);
+  return mergeTidiedSheet(base, sheetId, laidOut, lookup, validation);
 }

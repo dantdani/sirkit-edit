@@ -52,7 +52,9 @@
       "Close AI assist",
       "Design rule check",
       "Run DRC to check the board against the current fab preset.",
-      "Schematic → PCB refusal"
+      "Schematic → PCB refusal",
+      "Schematic → PCB: synchronise the whole project (* sheet*) to the board",
+      "Synchronises the whole project (* sheet*) to the board, whatever sheet is open"
     ],
     "app/components/pcb/PcbToolbar.tsx": [
       "3D preview",
@@ -96,8 +98,8 @@
     ],
     "app/components/pcb/SyncButton.tsx": [
       "Schematic changed since last sync",
-      "Schematic to PCB",
-      "Schematic to PCB placement options"
+      "Schematic to PCB placement options",
+      "Schematic to PCB: *"
     ],
     "app/components/pcb/FabDialog.tsx": [
       "Fab preset",

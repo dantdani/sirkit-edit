@@ -70,7 +70,7 @@ function validationRefusal(error: SchematicExportValidationError): Response {
   );
 }
 
-/** [PR-J4, 2026-10-23] A hierarchical-export refusal (connectivity error, shadowed port or name, pin placement): structured, nothing zipped. */
+/** [PR-J4, 2026-10-23] A hierarchical-export refusal (connectivity error, shadowed port or name, a name spelled two ways in one scope - [PR-J4 integration, 2026-10-23] EXPORT_NAME_CASE_AMBIGUOUS -, pin placement): structured, nothing zipped. */
 function hierarchyRefusal(error: SchematicExportHierarchyError): Response {
   return Response.json(
     { ok: false, code: error.code, error: error.message.slice(0, 2000), refs: error.refs.slice(0, 50) },

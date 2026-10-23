@@ -121,6 +121,11 @@ describe("[PR-J4] 3. the other rail names", () => {
     expect(plan.labels.map((entry) => [entry.name, entry.to])).toEqual([["AGND", "ground"]]);
     expect(plan.renamedNets.map((net) => [net.from, net.to])).toEqual([["AGND", "GND"]]);
     expect(plan.partitionDigest).toBe(resolveProjectConnectivity(state).partitionDigest);
+    // [PR-J4 integration, 2026-10-23] review C-NORM-1 (OD-258 item 3 amended): the board connects the same pins, but the renamed net moves the PCB netlist's name and hash - previewed, never silent
+    const partition = (nets: ReturnType<typeof buildNetlist>["nets"]): string[] => nets.map((net) => net.endpointKeys.join("|")).sort();
+    expect(partition(buildNetlist(plan.after).nets)).toEqual(partition(buildNetlist(state).nets));
+    expect(buildNetlist(plan.after).nets.map((net) => net.name).sort()).not.toEqual(buildNetlist(state).nets.map((net) => net.name).sort());
+    expect(netlistHash(buildNetlist(plan.after))).not.toBe(netlistHash(buildNetlist(state)));
   });
 
   it("a plain VSS beside a ground symbol is refused: as a ground label the legacy rule would name it GND and JOIN it to the ground net (NORMALISE_NOT_EQUIVALENT naming the pins); nothing changes", () => {

@@ -42,7 +42,7 @@ import { ROOT_SHEET_ID, schDisplayRef, type SchematicState } from "@/lib/schemat
 import { fixturePartLookup, fixtureParts } from "../schematic/__tests__/_j1-fixtures";
 import { dimmerFixtureState } from "../schematic/__tests__/_j2-fixtures";
 import { J3_SHEETS, attachedSelection, multiSheetDroneFixtureState } from "../schematic/__tests__/_j3-fixtures";
-import { globalFixture, stageFixture, unpinnedInstances } from "./_j4-fixtures";
+import { collinearPinsFixture, globalFixture, stageFixture, unpinnedInstances } from "./_j4-fixtures";
 import { readKicadHierarchyPartition } from "./_kicad-hierarchy-oracle";
 
 const sha = (value: string | Uint8Array): string => createHash("sha256").update(value).digest("hex");
@@ -231,6 +231,26 @@ describe("[PR-J4 J4-B] 2. the oracle round trip holds for the LED dimmer organis
     expect(authorityPartition(state).nets).toEqual([["j4-g-r1::1", "j4-g-r2::1"], ["j4-g-r1::2", "j4-g-r2::2", "j4-g-r3::2"], ["j4-g-r3::1"]]);
   });
 
+  it("two child blocks in a row: a later pin's connecting wire never passes over an earlier pin and no pin lands on an earlier wire (placed pins and their wires are obstacles for the rest of the parent sheet)", () => {
+    // [PR-J4 integration, 2026-10-23] review J4R-OUT-1: PB's nearest edge point (800,100) would be reached by the wire (200,100) -> (800,100),
+    // which passes exactly over PA's pin at (400,100); KiCad connects a wire to a sheet pin it passes over, so R1/R3 and R2/R4 would short
+    const state = collinearPinsFixture();
+    expect(validateSchematicStateIntegrity(state)).toEqual([]);
+    expect(refuseKicadHierarchy(state, fixturePartLookup())).toBeNull();
+    const authority = authorityPartition(state).nets;
+    expect(authority).toContainEqual(["x-r1::1", "x-r3::1"]);
+    expect(authority).toContainEqual(["x-r2::1", "x-r4::1"]);
+    const out = roundTrip(state, "cross"); // the oracle's partition equals the authority's
+    const root = fileOf(out, ROOT_SHEET_ID);
+    const pins = Object.fromEntries([...root.matchAll(/\(pin "([^"]+)" \w+ \(at ([-\d.]+) ([-\d.]+) (\d+)\)/g)].map((match) => [match[1], { x: Number(match[2]), y: Number(match[3]) }] as const));
+    expect(pins.PA).toEqual({ x: mmFromPx(400), y: mmFromPx(100) });
+    expect(pins.PB!.y).not.toBe(mmFromPx(100)); // not on the line through PA that its anchor shares
+    const wires = [...root.matchAll(/\(pts \(xy ([-\d.]+) ([-\d.]+)\) \(xy ([-\d.]+) ([-\d.]+)\)\)/g)].map((match) => match.slice(1, 5).map(Number) as [number, number, number, number]);
+    const over = (x: number, y: number, [ax, ay, bx, by]: [number, number, number, number]): boolean => Math.abs((bx - ax) * (y - ay) - (by - ay) * (x - ax)) < 1e-6 && x >= Math.min(ax, bx) - 1e-6 && x <= Math.max(ax, bx) + 1e-6 && y >= Math.min(ay, by) - 1e-6 && y <= Math.max(ay, by) + 1e-6;
+    expect(wires.filter((wire) => over(pins.PA!.x, pins.PA!.y, wire))).toEqual([[mmFromPx(400), mmFromPx(50), mmFromPx(400), mmFromPx(100)]]); // only PA's own connecting wire touches PA
+    expect(wires.filter((wire) => over(pins.PB!.x, pins.PB!.y, wire))).toHaveLength(1); // and only PB's own touches PB
+  });
+
   it("the oracle refuses a symbol the file does not embed (a stock-library Theory part): it never guesses a pin", () => {
     // a Theory capacitor: Device:C is referenced by lib_id only (the fixture's KiCad resistor embeds Device:R, which a Theory resistor would share)
     const theory: SchematicState = { ...stageFixture(), components: [{ id: "t-c9", type: "capacitor", x: 600, y: 600, rotation: 0, value: "100n", refDes: "C9" }] };
@@ -271,6 +291,22 @@ describe("[PR-J4 J4-B] 3. determinism: byte-identical exports, a pinned zip, sta
     expect(before.rootUuid).toBe(uuidFor("schematic", "root"));
   });
 
+  it("junction uuids are project-unique: two child sheets with a three-way wire meeting at one coordinate write different uuids; the root keeps the flat exporter's coordinate key", () => {
+    // [PR-J4 integration, 2026-10-23] review J4R-OUT-5: the junction uuid was keyed by millimetre coordinates alone, so two files of one project could share one
+    const meet = (prefix: string, sheetId?: string) => [[600, 600, 600, 700], [600, 600, 700, 600], [600, 600, 500, 600]].map(([ax, ay, bx, by], index) => ({ id: `${prefix}-${index}`, ...(sheetId ? { sheetId } : {}), vertices: [{ x: ax!, y: ay! }, { x: bx!, y: by! }] }));
+    const base = stageFixture();
+    const state: SchematicState = { ...base, wires: [...base.wires, ...meet("j4-j-root"), ...meet("j4-j-stage", "stage"), ...meet("j4-j-inner", "inner")] };
+    expect(validateSchematicStateIntegrity(state)).toEqual([]);
+    const out = exportOf(state, "junctions");
+    const junctions = (text: string): string[] => [...text.matchAll(/\(junction\n\t\t\(at ([-\d.]+) ([-\d.]+)\)[\s\S]*?\(uuid "([^"]+)"\)/g)].map((match) => match[3]!);
+    const at = `${mmFromPx(600)},${mmFromPx(600)}`;
+    expect(junctions(fileOf(out, ROOT_SHEET_ID))).toEqual([uuidFor("junction", at)]); // the root's bytes are the flat exporter's for the same coordinates
+    expect(junctions(fileOf(out, "stage"))).toEqual([uuidFor("junction", `stage:${at}`)]);
+    expect(junctions(fileOf(out, "inner"))).toEqual([uuidFor("junction", `inner:${at}`)]);
+    const all = out.files.flatMap((file) => [...file.content.matchAll(/\(uuid "([^"]+)"\)/g)].map((match) => match[1]!));
+    expect(new Set(all).size).toBe(all.length); // every uuid of the project is written once
+  });
+
   it("the module draws no random uuid (ids are digests of stable identities)", () => {
     const source = readFileSync("app/lib/kicad-export-hierarchy.ts", "utf8");
     const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(?<!:)\/\/.*$/gm, ""); // the header comment names what is NOT used
@@ -309,6 +345,28 @@ describe("[PR-J4 J4-B] 4. refusals serialize nothing and name what is wrong", ()
     const elsewhere = withLabel(stageFixture(), { id: "j4-local-gnd", position: { x: 600, y: 400 }, name: "GND", kind: "label", orientation: 0, sheetId: "stage" });
     expect(refuseKicadHierarchy(elsewhere)).toBeNull();
     expect(fileOf(exportOf(elsewhere, "stage"), "stage")).toContain(`\t(label "GND"\n`);
+  });
+
+  it("two spellings of one net name in one scope (joined case-insensitively by this project, read apart by KiCad): EXPORT_NAME_CASE_AMBIGUOUS naming the labels", () => {
+    // [PR-J4 integration, 2026-10-23] review J4R-OUT-4: local "OUT" / "out" on one sheet; power "Vcc" / "VCC" across sheets; a ground label
+    // "gnd" beside a Theory ground symbol (written GND); the same two local spellings on DIFFERENT sheets are two nets under both readings
+    const base = stageFixture();
+    const local = withLabel(withLabel(base, { id: "j4-out-1", position: { x: 600, y: 400 }, name: "OUT", kind: "label", orientation: 0, sheetId: "stage" }), { id: "j4-out-2", position: { x: 600, y: 500 }, name: "out", kind: "label", orientation: 0, sheetId: "stage" });
+    const refusal = refuseKicadHierarchy(local);
+    expect(refusal).toBeInstanceOf(SchematicExportHierarchyError);
+    expect(refusal!.code).toBe("EXPORT_NAME_CASE_AMBIGUOUS");
+    expect(refusal!.refs).toEqual(["j4-out-1", "j4-out-2"]);
+    expect(refusal!.message).toContain('"OUT" (j4-out-1) and "out" (j4-out-2) on sheet "Stage"');
+    expect(() => exportOf(local, "case")).toThrow(SchematicExportHierarchyError);
+    expect(refuseKicadHierarchy(local, fixturePartLookup())!.code).toBe("EXPORT_NAME_CASE_AMBIGUOUS"); // with or without the parts: the same answer
+    const apart = withLabel(withLabel(base, { id: "j4-out-1", position: { x: 600, y: 400 }, name: "OUT", kind: "label", orientation: 0, sheetId: "stage" }), { id: "j4-out-2", position: { x: 600, y: 500 }, name: "out", kind: "label", orientation: 0, sheetId: "inner" });
+    expect(refuseKicadHierarchy(apart)).toBeNull();
+    expect(fileOf(exportOf(apart, "apart"), "inner")).toContain(`\t(label "out"\n`);
+    const rails = withLabel(withLabel(base, { id: "j4-vcc-1", position: { x: 600, y: 600 }, name: "Vcc", kind: "power", orientation: 0 }), { id: "j4-vcc-2", position: { x: 600, y: 600 }, name: "VCC", kind: "power", orientation: 0, sheetId: "inner" });
+    expect(refuseKicadHierarchy(rails)).toMatchObject({ code: "EXPORT_NAME_CASE_AMBIGUOUS", refs: ["j4-vcc-1", "j4-vcc-2"] });
+    expect(refuseKicadHierarchy(rails)!.message).toContain("project-wide");
+    const ground: SchematicState = withLabel({ ...base, components: [{ id: "j4-gnd-sym", type: "ground", x: 600, y: 600, rotation: 0, value: "", sheetId: "stage" }] }, { id: "j4-gnd-low", position: { x: 600, y: 600 }, name: "gnd", kind: "ground", orientation: 0 });
+    expect(refuseKicadHierarchy(ground)).toMatchObject({ code: "EXPORT_NAME_CASE_AMBIGUOUS", refs: ["j4-gnd-low", "j4-gnd-sym", "j4-l-gnd"] }); // the fixture's own GND label is the third spelling-bearer
   });
 
   it("a connectivity error (two different nets named X): SHEET_HIERARCHY_INVALID naming the diagnostic", () => {

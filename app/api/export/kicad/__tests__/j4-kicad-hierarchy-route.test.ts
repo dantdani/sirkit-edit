@@ -98,6 +98,16 @@ describe("[PR-J4 J4-B] 3. refusals are structured 422s before any catalog read; 
     expect(reads.parts).toBe(before);
   });
 
+  it("two spellings of one local name on one sheet: 422 EXPORT_NAME_CASE_AMBIGUOUS naming both labels", async () => {
+    // [PR-J4 integration, 2026-10-23] review J4R-OUT-4
+    const before = reads.parts;
+    const response = await post(withLabel(withLabel(stageFixture(), { id: "j4-out-1", position: { x: 600, y: 400 }, name: "OUT", kind: "label", orientation: 0, sheetId: "stage" }), { id: "j4-out-2", position: { x: 600, y: 500 }, name: "out", kind: "label", orientation: 0, sheetId: "stage" }), "stage");
+    expect(response.status).toBe(422);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.json()).toMatchObject({ ok: false, code: "EXPORT_NAME_CASE_AMBIGUOUS", refs: ["j4-out-1", "j4-out-2"] });
+    expect(reads.parts).toBe(before);
+  });
+
   it("a connectivity error: 422 SHEET_HIERARCHY_INVALID naming the diagnostic", async () => {
     const before = reads.parts;
     const state = withLabel(withLabel(stageFixture(), { id: "j4-x-root", position: { x: 600, y: 600 }, name: "X", kind: "label", orientation: 0 }), { id: "j4-x-global", position: { x: 600, y: 400 }, name: "X", kind: "label", orientation: 0, sheetId: "stage", scope: "global" });

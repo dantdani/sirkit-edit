@@ -12,7 +12,10 @@
  *  - a hierarchical label (scope "hierarchical") -> `(hierarchical_label "<port name>" (shape <dir>))` on the child file;
  *  - a sheet pin (scope "sheet-pin") -> a `(pin "<port name>" <shape>)` on the child's sheet symbol in the PARENT file, placed at the
  *    nearest free grid point of the child's block edge, with a two-point wire from the Sirkit anchor when the anchor is not on the
- *    edge (OD-258 item 2: lossless; the editor's planner anchors a pin at the parent-side cut point, not on the block);
+ *    edge (OD-258 item 2: lossless; the editor's planner anchors a pin at the parent-side cut point, not on the block); every pin
+ *    placed and every connecting wire written earlier on the parent sheet is an obstacle for the pins placed after it ([PR-J4
+ *    integration, 2026-10-23] review J4R-OUT-1: a later wire passing over an earlier pin, or a later pin on an earlier wire's interior,
+ *    would be a connection in KiCad that this project does not have);
  *  - coordinates connect per file only, so identical XY on two sheets never meet; symbol instance paths chain the SHEET SYMBOL uuids
  *    (`/<root uuid>/<sheet symbol uuid>/...`), pages are numbered depth-first in document order, `(sheet_instances (path "/" (page
  *    "1")))` is written on the root only.
@@ -20,15 +23,20 @@
  * Fail closed (the route answers a structured 422, nothing is zipped): a connectivity error (`SHEET_HIERARCHY_INVALID`); a local label
  * that carries a port anchor's name on its sheet on another net (`EXPORT_SHADOWED_PORT`, the authority's SHEET_LOCAL_SHADOWS_PORT:
  * KiCad would read one net where this project keeps two); a local label equal to a global, power or ground name on its own sheet
- * (`EXPORT_NAME_SHADOWS_GLOBAL`: a conservative reading of KiCad's scope rules - refused rather than guessed); a sheet pin that finds
- * no free edge point (`EXPORT_SHEET_PIN_PLACEMENT`). Port directions power_in / power_out become the KiCad pin shapes input / output
- * (sheet pins have no power shapes).
+ * (`EXPORT_NAME_SHADOWS_GLOBAL`: a conservative reading of KiCad's scope rules - refused rather than guessed); two spellings of one
+ * net name within one scope - local labels on one sheet, or the project-wide global / power / ground names, a Theory ground symbol
+ * counting as "GND" - ([PR-J4 integration, 2026-10-23] review J4R-OUT-4, `EXPORT_NAME_CASE_AMBIGUOUS`: the authority joins label
+ * names case-insensitively and trimmed, KiCad by exact text, so "OUT" beside "out" is one net here and two in the file); a sheet pin
+ * that finds no free edge point (`EXPORT_SHEET_PIN_PLACEMENT`). Port directions power_in / power_out become the KiCad pin shapes
+ * input / output (sheet pins have no power shapes).
  *
- * Deterministic: every uuid is `uuidFor(prefix, stable id)` (a SHA-256 digest; no `crypto.randomUUID` anywhere), file names carry a
- * digest of the sheet id (two sheets whose sanitized names coincide stay distinct; renaming an UNRELATED sheet moves no other file),
- * the title block date is `today` (defaults to the flat exporter's TODAY) and the zip entries are sorted with a fixed DOS date, so
- * two exports of one project are byte-identical. A document WITHOUT sheets is never written here: the route hands it to
- * `exportToKicadSch`, whose bytes are pinned (j1-sheet-operations GOLDEN).
+ * Deterministic: every uuid is `uuidFor(prefix, stable id)` (a SHA-256 digest; no `crypto.randomUUID` anywhere; a child sheet's
+ * junction is keyed by its sheet id and coordinates, the root's by coordinates alone as the flat exporter's - [PR-J4 integration,
+ * 2026-10-23] review J4R-OUT-5, so two sheets meeting wires at one coordinate never share a uuid), file names carry a digest of the
+ * sheet id (two sheets whose sanitized names coincide stay distinct; renaming an UNRELATED sheet moves no other file), the title
+ * block date is `today` (defaults to the flat exporter's TODAY) and the zip entries are sorted with a fixed DOS date, so two exports
+ * of one project are byte-identical. A document WITHOUT sheets is never written here: the route hands it to `exportToKicadSch`,
+ * whose bytes are pinned (j1-sheet-operations GOLDEN).
  *
  * Proof: a Sirkit reader over the pinned format (app/lib/__tests__/_kicad-hierarchy-oracle.ts) parses the files back and proves their
  * connectivity equals the authority's pin partition; no KiCad run is claimed (J.8 item 5).
@@ -74,7 +82,7 @@ import type { CachedPart } from "./parts-cache";
 
 // ── refusals ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export type KicadHierarchyRefusalCode = "SHEET_HIERARCHY_INVALID" | "EXPORT_SHADOWED_PORT" | "EXPORT_NAME_SHADOWS_GLOBAL" | "EXPORT_SHEET_PIN_PLACEMENT";
+export type KicadHierarchyRefusalCode = "SHEET_HIERARCHY_INVALID" | "EXPORT_SHADOWED_PORT" | "EXPORT_NAME_SHADOWS_GLOBAL" | "EXPORT_NAME_CASE_AMBIGUOUS" | "EXPORT_SHEET_PIN_PLACEMENT";
 
 /** A typed, fail-closed refusal of the hierarchical export: the route maps it to a structured 422; nothing was serialized. */
 export class SchematicExportHierarchyError extends Error {
@@ -152,6 +160,36 @@ export function refuseKicadHierarchy(state: SchematicState, getPart?: PartPinsLo
   }
   if (shadowed.length > 0) {
     return new SchematicExportHierarchyError("EXPORT_NAME_SHADOWS_GLOBAL", `A local label carries the name of a global, power or ground net on the same sheet: ${shadowed.join("; ")}. KiCad's reading of such a pair is not this project's (the local label is its own net here), so nothing was exported. Rename the local label, or make it global if it is meant to be that net.`, refs);
+  }
+  // [PR-J4 integration, 2026-10-23] review J4R-OUT-4: the authority joins names by netLabelNameKey (trimmed, case-insensitive), KiCad by
+  // exact text; two spellings of one key within one scope (a sheet's local labels; the project-wide global / power / ground names, a
+  // Theory ground symbol spelled "GND") are one net here and two in the file, so they are refused rather than written
+  const PROJECT_SCOPE = "\u0001project";
+  const spellings = new Map<string, Map<string, Map<string, string[]>>>(); // scope -> name key -> spelling -> entity ids
+  const spell = (scope: string, name: string, id: string): void => {
+    const byKey = spellings.get(scope) ?? new Map<string, Map<string, string[]>>();
+    const bySpelling = byKey.get(netLabelNameKey(name)) ?? new Map<string, string[]>();
+    bySpelling.set(name, [...(bySpelling.get(name) ?? []), id]);
+    byKey.set(netLabelNameKey(name), bySpelling);
+    spellings.set(scope, byKey);
+  };
+  for (const label of labels) {
+    if (label.scope === "global" || label.kind === "power" || label.kind === "ground") spell(PROJECT_SCOPE, label.name, label.id);
+    else if (label.scope === undefined && label.kind === "label") spell(sheetOf(label), label.name, label.id);
+  }
+  for (const component of state.components) if (component.type === "ground") spell(PROJECT_SCOPE, "GND", component.id);
+  const ambiguous: string[] = [];
+  const ambiguousRefs: string[] = [];
+  for (const [scope, byKey] of [...spellings.entries()].sort(([a], [b]) => compareCodePoints(a, b))) {
+    for (const [, bySpelling] of [...byKey.entries()].sort(([a], [b]) => compareCodePoints(a, b))) {
+      if (bySpelling.size < 2) continue;
+      const variants = [...bySpelling.entries()].sort(([a], [b]) => compareCodePoints(a, b));
+      ambiguous.push(`${variants.map(([spelling, ids]) => `"${spelling}" (${[...ids].sort(compareCodePoints).join(", ")})`).join(" and ")} ${scope === PROJECT_SCOPE ? "among the project-wide rail and global names" : `on ${describeSheet(state, scope)}`}`);
+      for (const [, ids] of variants) ambiguousRefs.push(...ids);
+    }
+  }
+  if (ambiguous.length > 0) {
+    return new SchematicExportHierarchyError("EXPORT_NAME_CASE_AMBIGUOUS", `One net name is spelled two ways within one scope: ${ambiguous.join("; ")}. This project reads the spellings as one net (names compare case-insensitively), KiCad as separate nets, so nothing was exported. Use one spelling.`, ambiguousRefs);
   }
   return null;
 }
@@ -239,7 +277,10 @@ function parentSheetNodes(state: SchematicState, conn: ProjectConnectivity, shee
  * Where a sheet pin is written: the nearest grid point of the child's block edge to the Sirkit anchor that no other sheet pin of
  * this parent sheet takes, that no wire, pin or label of the parent sheet sits on (KiCad connects a wire end to whatever it
  * touches, a segment's interior included), and whose connecting wire from the anchor passes through no such point. The anchor
- * itself on the edge is taken as is (no wire). Clockwise perimeter walk from the nearest point; deterministic.
+ * itself on the edge is taken as is (no wire). Clockwise perimeter walk from the nearest point; deterministic. [PR-J4 integration,
+ * 2026-10-23] review J4R-OUT-1: the caller adds every placed pin to `parent.nodes` and every connecting wire it writes to
+ * `parent.segments`, so the pins placed earlier on this parent sheet and their wires are obstacles too (a later wire over an earlier
+ * pin fails the crossing test, a later candidate on an earlier wire's interior the segment test).
  */
 function placeSheetPin(block: Block, anchor: Point, parent: ParentSheetNodes, taken: Set<string>): Point | null {
   const nearest = nearestBlockEdgePoint(block, anchor);
@@ -456,7 +497,7 @@ export function exportToKicadHierarchy(input: KicadHierarchyExportInput): KicadH
       for (let index = 0; index + 1 < vertices.length; index += 1) lines.push(buildWire(mmFromPx(vertices[index]!.x), mmFromPx(vertices[index]!.y), mmFromPx(vertices[index + 1]!.x), mmFromPx(vertices[index + 1]!.y), uuidFor("wire", `${wire.id}:${index}`)));
       for (const vertex of vertices) tally(mmFromPx(vertex.x), mmFromPx(vertex.y));
     }
-    for (const { x, y, count } of endpointCounts.values()) if (count >= 3) lines.push(buildJunction(x, y, uuidFor("junction", `${x},${y}`)));
+    for (const { x, y, count } of endpointCounts.values()) if (count >= 3) lines.push(buildJunction(x, y, uuidFor("junction", sheet.parentId === null ? `${x},${y}` : `${sheet.id}:${x},${y}`))); // [PR-J4 integration, 2026-10-23] review J4R-OUT-5: a child sheet's junction is keyed by its sheet too (the root keeps the flat exporter's key)
 
     // (D) the child sheets' symbols: one (pin) per bound port at a free block-edge point, wired from the Sirkit anchor when it differs
     const parent = parentSheetNodes(state, conn, sheet.id);
@@ -474,7 +515,11 @@ export function exportToKicadHierarchy(input: KicadHierarchyExportInput): KicadH
         const placed = placeSheetPin(block, label.position, parent, taken);
         if (!placed) throw new SchematicExportHierarchyError("EXPORT_SHEET_PIN_PLACEMENT", `Sheet pin "${bound.port.name}" of sheet "${child.name}" finds no free point on its block edge on ${describeSheet(state, sheet.id)}; move or enlarge the block. Nothing was exported.`, [label.id, bound.port.id]);
         taken.add(pointKey(placed));
-        if (!sameKey(placed, label.position)) lines.push(buildWire(mmFromPx(label.position.x), mmFromPx(label.position.y), mmFromPx(placed.x), mmFromPx(placed.y), uuidFor("wire", `sheet-pin:${label.id}`)));
+        parent.nodes.set(pointKey(placed), placed); // [PR-J4 integration, 2026-10-23] review J4R-OUT-1: the placed pin is an obstacle for every pin placed after it on this parent sheet
+        if (!sameKey(placed, label.position)) {
+          lines.push(buildWire(mmFromPx(label.position.x), mmFromPx(label.position.y), mmFromPx(placed.x), mmFromPx(placed.y), uuidFor("wire", `sheet-pin:${label.id}`)));
+          parent.segments.push([label.position, placed]); // and so is its connecting wire (a later pin on this wire's interior would join it)
+        }
         const { angle, justify } = pinAngle(block, placed);
         pins.push({ name: bound.port.name, shape: sheetPinShape(bound.port.direction), x: mmFromPx(placed.x), y: mmFromPx(placed.y), angle, justify, uuid: uuidFor("sheet-pin", label.id) });
       }

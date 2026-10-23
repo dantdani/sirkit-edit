@@ -212,7 +212,14 @@ describe("[PR-J3] 3. connectivity: the same circuit as the flat drone, now expli
     expect(graph.components).toEqual(buildPcbSyncPublicationGraph(flat, lookup).components);
     expect(listUnresolvedInstances(fixture)).toEqual(listUnresolvedInstances(flat));
     expect(listUnresolvedInstances(fixture)).toEqual([]);
-    expect((await buildBom(fixture, "none")).rows).toEqual((await buildBom(flat, "none")).rows);
+    // [PR-J4 integration, 2026-10-23] pin move (J4-B's BomRow.sheets, as j2-project-consumers): the sheeted fixture's rows carry the sheet column (the root and the three sheets), every other field is the flat drone's; the flat rows carry no such key
+    const organisedRows = (await buildBom(fixture, "none")).rows;
+    const flatRows = (await buildBom(flat, "none")).rows;
+    const stripSheets = (row: (typeof organisedRows)[number]): Omit<typeof row, "sheets"> => { const copy = { ...row }; delete copy.sheets; return copy; };
+    expect(organisedRows.map(stripSheets)).toEqual(flatRows);
+    expect(organisedRows.every((row) => Array.isArray(row.sheets) && row.sheets.length > 0)).toBe(true);
+    expect(new Set(organisedRows.flatMap((row) => row.sheets ?? []))).toEqual(new Set([J3_ROOT_NAME, ...J3_SHEETS.map((sheet) => sheet.name)]));
+    expect(flatRows.some((row) => "sheets" in row)).toBe(false);
     const checks = computeDesignChecks(fixture, parts, "j3", "build").checks;
     expect(checks.map((check) => check.id)).toEqual(["floating-nets", "supply-rails", "sheet-interfaces"]);
     expect(checks[2]).toMatchObject({ id: "sheet-interfaces", label: "Sheet connections", state: "pass" });

@@ -57,7 +57,7 @@ NOT READY (`eslint .` exits 1, none of its 33 errors introduced by B24), CI read
 | mcp-exposed-tools | 9 |
 | agent-only-tools | 42 |
 | agent-exposed-tier-3-tools | 0 |
-| control-sites | 709 |
+| control-sites | 715 |
 | control-surfaces | 73 |
 | sql-migrations | 32 |
 | generators | 32 |
@@ -92,6 +92,11 @@ table are the concurrent PR-F builders' to move with their descriptors and contr
 [PR-J3, 2026-10-22] Count lines moved with the regenerated map (runbook section J increment 3, OD-255 item 7, OD-257): control-sites 663 -> 708 (707 with the navigator's surfaces, 708 once app/page.tsx's label map gained the scoped label glyph's pointer-down site under schematic.drag-gesture) and control-surfaces 70 -> 73 - the Sheets navigator (the canvas chip, its tree and keys, New / Rename / Up / Down / Add port / Delete, the Move to sheet and Follow signal dialogs with their drafts), the overview block's double-click and the scoped label glyph's drag, each classified under a PR-J3 control rule; action-records stays 113 (schematic.sheet-structure and schematic.move-to-sheet flipped partial -> implemented: their controls now reach them; no record added).
 
 [PR-J3 integration, 2026-10-23] Count lines moved with the regenerated map (section J increment 3 review, J3N-5): control-sites 708 -> 709 - the overview block of the Sheets navigator (app/components/schematic/SheetBlocksLayer.tsx) is announced as a button, so it gained a key handler (Enter / Space open the sheet, `onBlockKeyDown`), one more `key` control site classified under view.sheets-navigation; control-surfaces stays 73, action-records 113.
+
+[PR-J4 integration, 2026-10-23] Count line moved with the regenerated map (section J4): control-sites 709 -> 715 (the B17-A inventory
+as J4 left it - the Sheets navigator's Organize into sheets and Normalise rail-named labels controls and the BOM Sheet column's sort
+header; the sync control's accessible name now states that it synchronises the whole project, OD-258 item 6); control-surfaces stays
+73; no action record added (113).
 
 ## 4. Earlier verdicts
 

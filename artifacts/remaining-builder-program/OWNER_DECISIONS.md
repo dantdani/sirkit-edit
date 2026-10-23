@@ -3618,6 +3618,11 @@ Under the existing OD-217 heading (`:2599`), append:
   project (N sheets); the accessible-name census is regenerated once at J4's integration. (7) New suites are admitted by exact-path
   positional entries and the organise proof rides `e2e/j3-multi-sheet.spec.ts` unless the OD-30 headroom re-measurement allows its
   own spec.
+- **Amendment to item 3 ([PR-J4 integration, 2026-10-23], review C-NORM-1):** the pin-to-net partition is unchanged by the
+  normalisation, but a lone plain label named for a non-GND ground (AGND / DGND / PGND / VSS) is published as GND by the legacy rule
+  once it is a ground label, so that net's board name and the PCB netlist hash change - previewed as `renamedNets` ("Board names
+  change (connections do not)"), never silently; `planRailLabelNormalisation`'s contract and j4-rail-label-normalisation pin the
+  behaviour. The owner may instead have such labels left untouched by the normalisation (refused with a named reason).
 - **The owner may choose otherwise:** each item independently (one ground node with explicit ties, lossy sheet-pin placement,
   exporting shadowed names with a warning, N separate downloads, refusing ambiguous organise proposals, tidying overview sheets).
 

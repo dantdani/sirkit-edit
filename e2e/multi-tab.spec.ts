@@ -96,7 +96,7 @@ async function syncAndPublish(page: Page): Promise<{ status: number; body: Recor
     if (response.request().method() !== "POST" || new URL(response.url()).pathname !== "/api/pcb-sync") return false;
     try { const sent = response.request().postDataJSON() as { operation?: unknown; request?: { requestId?: unknown } }; return sent.operation === "publish_demo_snapshot" && String(sent.request?.requestId ?? "").startsWith("publish:"); } catch { return false; } // [B24-D2B, 2026-10-10] the wire shape is { operation, request } (d2b-multitab-3's trace)
   }, { timeout: 90_000 });
-  await page.getByRole("button", { name: "Schematic to PCB", exact: true }).click(); // [B24-D2B, 2026-10-10] the board's toolbar control (d2b-multitab-2: the empty state's test id waited 90 s)
+  await page.getByRole("button", { name: /^Schematic to PCB: synchronises the whole project/ }).click(); // [PR-J4 integration, 2026-10-23] pin move: the control states it synchronises the whole project (OD-258 item 6; was the exact "Schematic to PCB"; the anchored regex still excludes the "placement options" button); [B24-D2B, 2026-10-10] the board's toolbar control (d2b-multitab-2: the empty state's test id waited 90 s)
   const response = await published;
   return { status: response.status(), body: (await response.json().catch(() => ({}))) as Record<string, unknown> };
 }

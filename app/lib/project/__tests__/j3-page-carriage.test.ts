@@ -75,7 +75,10 @@ describe("[PR-J3] 2. the sheet lens wiring", () => {
     expect(count(page, "const rawSchematicGraphApi = useMemo(() => ({")).toBe(1);
     expect(count(page, "const sheetLens = useSchematicSheetLens({ authoritative: authoritativeSchematic, graph: rawSchematicGraphApi, runSchematicCommand, projectId: project?.id ?? null, getPart: getCachedPart, components, wires, kicadComponents, netLabels, viewSessionBridge: viewSessionBridgeRef.current, selectedId, selectedKicadId, captureScope: captureSheetScope, onSheetSwitch: clearSheetSelection }); const schematicGraphApi = sheetLens.graph;")).toBe(1);
     expect(count(page, "graph={schematicGraphApi}")).toBe(1); // b07-1's adversarial anchor
-    expect(count(page, "const captureSheetScope = useCallback(() => projectScopeRegistryRef.current?.capture() ?? null, []); const clearSheetSelection = useCallback(() => { setWireDraftStart(null); setSelectedId(null); setSelectedKicadId(null); }, []);")).toBe(1);
+    // [PR-J4 integration, 2026-10-23] pin move, review J4R-OUT-2: a sheet switch also retires the simulation result taken on the previous sheet (its bare probe keys are that sheet's points); the panes stay
+    expect(count(page, "const captureSheetScope = useCallback(() => projectScopeRegistryRef.current?.capture() ?? null, []); const clearSheetSelection = useCallback(() => { setWireDraftStart(null); setSelectedId(null); setSelectedKicadId(null); setSimResult(null); setSimError(null); }, []);")).toBe(1);
+    expect(page).toContain("setSelectedKicadId(null); setSimResult(null); setSimError(null); }, []); // [PR-J3, 2026-10-22]");
+    expect(count(page, "setSimResult(")).toBe(3); // the project switch, the sheet switch, the applied result
     expect(count(page, "<SchematicEditor key={sheetLens.legacy ? undefined : sheetLens.activation}")).toBe(1);
     expect(count(page, "components={sheetLens.components}")).toBe(2); // the editor and the SPICE legacy panel
     expect(count(page, "wires={sheetLens.wires}")).toBe(2);

@@ -2,7 +2,10 @@
  * [PR-J4, 2026-10-23] Runbook section J increment 4 (J.3 item 5 "a tidy operation affects the selected sheet by default"; OD-258 item 5):
  * the pure per-sheet tidy (app/lib/schematic/sheet-tidy.ts) on the frozen multi-sheet drone.
  *
- *  1. the refusals: no sheet named, an unknown sheet, a sheet with child blocks (the overview), a part whose catalog record is missing;
+ *  1. the refusals: no sheet named, an unknown sheet, a sheet with child blocks (the overview), a part whose catalog record is missing -
+ *     [PR-J4 integration, 2026-10-23] review C-TIDY-1: ANY project part's, not only the sheet's (the proof needs every pin: with only the
+ *     sheet's parts loaded a lost cross-sheet link is invisible to the partition digest); review C-TIDY-4: a sheet holding a Theory symbol
+ *     (SHEETS_TIDY_THEORY_PENDING naming it) - each before any layout;
  *  2. the sheet's logical netlist holds exactly its parts, its port nets as labels named by the PORT, its rails by exact name and kind, and
  *     no sheet-path name;
  *  3. tidying the IMU sheet: every one of the 41 instances keeps its id and authority fields (only the IMU's x / y / rotation move); the
@@ -10,7 +13,9 @@
  *     partition digest, the PCB netlist and its hash are unchanged; the result is a valid document; the base is not mutated (the page's undo
  *     is the previous state);
  *  4. a re-layout that would detach a port anchor (the port's labels renamed) or lose a part is refused SHEETS_TIDY_NOT_EQUIVALENT with
- *     nothing changed;
+ *     nothing changed; [PR-J4 integration, 2026-10-23] review C-TIDY-1: so is the realistic case - the overview's local label on a port's
+ *     net renamed by the user, after which the IMU's laid-out labels no longer match the port and its anchor would be dropped - and a
+ *     post-layout refusal never claims that nothing was sent (review C-TIDY-2);
  *  5. the same input twice gives the same placements (the layout is deterministic; only wire / label ids are minted).
  * Pure / in-memory: no network, no database, no model.
  */
@@ -20,7 +25,10 @@ import { validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic
 import { buildNetlist, netlistHash } from "@/app/lib/pcb/netlist-bridge";
 import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
 import { resolveProjectConnectivity } from "../project-connectivity";
-import { mergeTidiedSheet, sheetLogicalNetlist, tidySheet, tidySheetRefusal } from "../sheet-tidy";
+import { ROOT_SHEET_ID, type KicadComponentInstance, type SchematicState } from "@/lib/schematic-types";
+import { J4_RESISTOR_PART_ID, resistorPin } from "../../__tests__/_j4-fixtures";
+import { mergeTidiedSheet, sheetLogicalNetlist, sheetTidyContext, tidySheet, tidySheetRefusal } from "../sheet-tidy";
+import { sheetOf } from "../sheets";
 import { fixturePartLookup, fixtureParts } from "./_j1-fixtures";
 import { J3_SHEETS, multiSheetDroneFixtureState } from "./_j3-fixtures";
 
@@ -56,6 +64,45 @@ describe("[PR-J4] 1. the per-sheet tidy refuses what it cannot re-lay out, befor
     const u3 = fixture.kicadComponents!.find((item) => item.refDes === "U3")!;
     const missing = new Map([...parts.entries()].filter(([id]) => id !== u3.partId));
     expect(tidySheet(fixture, IMU, missing)).toMatchObject({ ok: false, code: "SHEETS_TIDY_PARTS_UNRESOLVED", message: expect.stringContaining("U3") });
+  });
+
+  it("[PR-J4 integration, 2026-10-23] C-TIDY-1: a part OFF the tidied sheet whose record is not loaded refuses too - the proof needs every project pin (only the IMU's parts loaded, as the route once read them)", () => {
+    const imuPartIds = new Set(fixture.kicadComponents!.filter((item) => item.sheetId === IMU).map((item) => item.partId));
+    const imuOnly = new Map([...parts.entries()].filter(([id]) => imuPartIds.has(id)));
+    expect(imuOnly.size).toBeLessThan(parts.size);
+    const refused = tidySheet(fixture, IMU, imuOnly);
+    expect(refused).toMatchObject({ ok: false, code: "SHEETS_TIDY_PARTS_UNRESOLVED" });
+    expect((refused as { message: string }).message).toContain("U2"); // the MCU on the overview, the far side of the IMU's ports
+    expect((refused as { message: string }).message).toMatch(/Nothing was sent and nothing changed\.$/);
+    // the merge proves nothing without every pin: handed a laid-out page and the partial lookup, it refuses the same way
+    const { state: laidOut, validation } = autoLayoutBuildValidated(sheetLogicalNetlist(fixture, IMU, parts), parts, 3, {});
+    expect(mergeTidiedSheet(fixture, IMU, laidOut, (partId) => imuOnly.get(partId) ?? null, validation)).toMatchObject({ ok: false, code: "SHEETS_TIDY_PARTS_UNRESOLVED" });
+    expect(mergeTidiedSheet(fixture, IMU, laidOut, lookup, validation).ok).toBe(true);
+  });
+
+  it("[PR-J4 integration, 2026-10-23] C-TIDY-4: a sheet holding a Theory symbol refuses SHEETS_TIDY_THEORY_PENDING naming it, before any layout", () => {
+    const withGround = { ...fixture, components: [...fixture.components, { id: "j4-g-imu", type: "ground" as const, x: 1000, y: 1000, rotation: 0 as const, value: "", sheetId: IMU }] };
+    const refusal = tidySheetRefusal(withGround, IMU);
+    expect(refusal).toMatchObject({ ok: false, code: "SHEETS_TIDY_THEORY_PENDING" });
+    expect(refusal!.message).toContain("holds 1 Theory symbol (ground)"); // named by reference designator when it has one, else by type
+    expect(refusal!.message).toMatch(/Nothing was sent and nothing changed\.$/);
+    expect(tidySheet(withGround, IMU, parts)).toMatchObject({ ok: false, code: "SHEETS_TIDY_THEORY_PENDING" });
+    expect(tidySheetRefusal(withGround, "sheet-power")).toBeNull(); // the symbol is on the IMU only
+  });
+});
+
+describe("[PR-J4 integration, 2026-10-23] 1b. the sheet's context for the critic (review C-TIDY-3)", () => {
+  it("holds the sheet's four entity arrays with the project's sheet tree and page size, and no sheetId key", () => {
+    const fixture = multiSheetDroneFixtureState();
+    const context = sheetTidyContext(fixture, IMU);
+    expect(context.kicadComponents!.map((item) => item.refDes).sort()).toEqual(IMU_REFS);
+    expect(context.components).toEqual(fixture.components.filter((item) => sheetOf(item) === IMU));
+    expect(context.wires).toEqual(fixture.wires.filter((item) => sheetOf(item) === IMU));
+    expect(context.netLabels).toEqual(fixture.netLabels!.filter((item) => sheetOf(item) === IMU));
+    expect(context.sheets).toEqual(fixture.sheets);
+    expect(context.pageSize).toBe(fixture.pageSize);
+    expect("sheetId" in context).toBe(false);
+    expect(JSON.stringify(context).length).toBeLessThan(JSON.stringify(fixture).length / 3);
   });
 });
 
@@ -159,5 +206,44 @@ describe("[PR-J4] 4. a re-layout that would change a connection is refused with 
     const { state, validation } = laidOut();
     const tampered = { ...state, kicadComponents: state.kicadComponents!.filter((item) => item.refDes !== "R11") };
     expect(mergeTidiedSheet(fixture, IMU, tampered, lookup, validation)).toMatchObject({ ok: false, code: "SHEETS_TIDY_NOT_EQUIVALENT", message: expect.stringContaining("R11 missing") });
+  });
+
+  it("[PR-J4 integration, 2026-10-23] C-TIDY-1: the overview's local label on the I2C_SCL port net renamed SCL by the user - the IMU's laid-out labels no longer name the port, its anchor would be dropped and U2.28 left alone: refused with every part loaded, nothing changed", () => {
+    const state = multiSheetDroneFixtureState();
+    const rootLabel = state.netLabels!.find((label) => sheetOf(label) === "root" && label.scope === undefined && label.name === "I2C_SCL");
+    expect(rootLabel).toBeDefined();
+    rootLabel!.name = "SCL";
+    expect(resolveProjectConnectivity(state, lookup).ok).toBe(true); // a legal edit: the net is simply named SCL now
+    const frozen = JSON.stringify(state);
+    const result = tidySheet(state, IMU, parts, {});
+    expect(result).toMatchObject({ ok: false, code: "SHEETS_TIDY_NOT_EQUIVALENT" });
+    expect((result as { message: string }).message).toMatch(/would change which pins are connected|without a hierarchical label/);
+    expect((result as { message: string }).message).not.toContain("Nothing was sent"); // a post-layout refusal never claims that (review C-TIDY-2)
+    expect(JSON.stringify(state)).toBe(frozen);
+  });
+
+  it("[PR-J4 integration, 2026-10-23] C-TIDY-1: a laid-out page that drops a port's anchor is refused even when the digest cannot see it (the port's net has no pin beyond the sheet)", () => {
+    // one resistor on a leaf sheet, its pin 1 the port IN whose sheet pin on the overview connects nothing: dropping the anchor leaves R1.1
+    // alone before and after (the digest is blind), yet the sheet would lose its interface
+    const r1: KicadComponentInstance = { id: "u-r1", partId: J4_RESISTOR_PART_ID, x: 200, y: 200, rotation: 0, refDes: "R1", value: "1k", sheetId: "leaf" };
+    const unbound: SchematicState = {
+      components: [], kicadComponents: [r1], wires: [], pageSize: "A4",
+      netLabels: [
+        { id: "u-pin", position: { x: 300, y: 50 }, name: "IN", kind: "label", orientation: 0, scope: "sheet-pin", portId: "u-port", childSheetId: "leaf" },
+        { id: "u-lbl", position: resistorPin(r1, "1"), name: "IN", kind: "label", orientation: 0, sheetId: "leaf", scope: "hierarchical", portId: "u-port" },
+        { id: "u-gnd", position: resistorPin(r1, "2"), name: "GND", kind: "ground", orientation: 0, sheetId: "leaf" },
+      ],
+      sheets: { version: 1, sheets: [{ id: ROOT_SHEET_ID, name: "Overview", parentId: null }, { id: "leaf", name: "Leaf", parentId: ROOT_SHEET_ID, block: { x: 400, y: 100, width: 300, height: 200 }, ports: [{ id: "u-port", name: "IN", direction: "input" }] }] },
+    };
+    expect(validateSchematicStateIntegrity(unbound)).toEqual([]);
+    expect(tidySheet(unbound, "leaf", parts).ok).toBe(true); // the honest layout keeps the anchor
+    const { state, validation } = autoLayoutBuildValidated(sheetLogicalNetlist(unbound, "leaf", parts), parts, 3, {});
+    const tampered = { ...state, netLabels: state.netLabels!.map((label) => (label.name === "IN" ? { ...label, name: "INX" } : label)) };
+    const merged = { ...unbound, netLabels: unbound.netLabels!.filter((label) => label.sheetId !== "leaf") }; // what the merge would publish for the leaf: no hierarchical label
+    expect(resolveProjectConnectivity(merged, lookup).partitionDigest).toBe(resolveProjectConnectivity({ ...unbound, netLabels: unbound.netLabels!.filter((label) => label.id !== "u-lbl") }, lookup).partitionDigest); // the digest alone cannot tell
+    const result = mergeTidiedSheet(unbound, "leaf", tampered, lookup, validation);
+    expect(result).toMatchObject({ ok: false, code: "SHEETS_TIDY_NOT_EQUIVALENT" });
+    expect((result as { message: string }).message).toContain("would leave port IN without a hierarchical label");
+    expect((result as { message: string }).message).toMatch(/The original layout was kept; nothing changed\.$/);
   });
 });

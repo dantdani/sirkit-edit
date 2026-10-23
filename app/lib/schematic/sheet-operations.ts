@@ -403,7 +403,8 @@ export type RailLabelNormalisationPlan =
        *  update patch carries no kind), so the document order and every id are kept. */
       operations: EngineeringOperation[];
       after: SchematicState;
-      /** The pin-to-net partition after the normalisation: equal to the one before (proven) - the PCB netlist is unchanged. */
+      /** The pin-to-net partition after the normalisation: equal to the one before (proven) - the PCB netlist connects the same pins; a
+       *  board NAME may change and is previewed in `renamedNets` ([PR-J4 integration, 2026-10-23] review C-NORM-1, OD-258 item 3 amended). */
       partitionDigest: string;
       /** Nets that keep every connection but change their board name (a lone "VSS" plain label becomes the GND rail). */
       renamedNets: Array<{ netId: string; from: string | null; to: string | null }>;
@@ -426,10 +427,13 @@ export function railNamedPlainLabels(state: SchematicState): RailLabelNormalisat
 /**
  * Plan "Normalise N rail-named labels" as ONE previewed, undoable schematic.sheet-structure transaction: every scope-less kind-"label"
  * label whose name is a rail name takes the inferred power / ground kind. The plan exists only when the project pin-to-net partition
- * is unchanged (for a single-sheet document the legacy rule already joined the label and the rail by name, so the PCB netlist is the
- * same; the ERC and the KiCad export then read the label as the rail it names, as previewed) and the executor's own guards accept the
- * batch (a rail join it would create - a plain "VSS" beside a ground symbol - refuses it, NORMALISE_REFUSED). Deterministic: the
- * operation ids come from `operationIdPrefix`; nothing is drawn at random.
+ * is unchanged (for a single-sheet document the legacy rule already joined the label and the rail by name, so the PCB netlist connects
+ * the same pins; the ERC and the KiCad export then read the label as the rail it names, as previewed) and the executor's own guards
+ * accept the batch (a rail join it would create - a plain "VSS" beside a ground symbol - refuses it, NORMALISE_REFUSED). A board NAME
+ * may still change: a lone plain label named for a non-GND ground (AGND, DGND, PGND, VSS) is published as GND by the legacy rule once it
+ * is a ground label, so that net's PCB name and the netlist hash move - previewed as `renamedNets`, never silently ([PR-J4 integration,
+ * 2026-10-23] review C-NORM-1; OD-258 item 3 amended). Deterministic: the operation ids come from `operationIdPrefix`; nothing is drawn
+ * at random.
  */
 export function planRailLabelNormalisation(state: SchematicState, getPart?: PartPinsLookup, operationIdPrefix = "normalise"): RailLabelNormalisationPlan {
   const labels = railNamedPlainLabels(state);

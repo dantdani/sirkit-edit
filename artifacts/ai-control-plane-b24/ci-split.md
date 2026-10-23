@@ -629,7 +629,7 @@ Test-first on `chapter/b24-production-qualification`, two runs. The first run (f
 | C45 | `artifacts/ai-control-plane-b24/observability-and-replay.md` | 526 | `deterministic-manufacturing.yml:378` |
 | C46 | `artifacts/ai-control-plane-b24/observability-and-replay.md` | 1336 | `deterministic-manufacturing.yml:380` |
 | C47 | `artifacts/ai-control-plane-b24/retention-and-deletion.md` | 274 | `deterministic-manufacturing.yml:379` |
-| C48 | `app/lib/qualification/__tests__/b24-d0-ci-split.test.ts` | 607 | `it("12. [B24-D0 review, 2026-10-09] the review round` |
+| C48 | `app/lib/qualification/__tests__/b24-d0-ci-split.test.ts` | 608 | `it("12. [B24-D0 review, 2026-10-09] the review round` |
 | C49 | `app/lib/deployment/secret-scan.ts` | 34 | `export const SECRET_SCAN_RULES: readonly SecretScanRule[] = Object.freeze([` |
 | C50 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 95 | `describe("[B19-E E2 review] CI job scope", () => {` |
 
@@ -638,6 +638,12 @@ Test-first on `chapter/b24-production-qualification`, two runs. The first run (f
 - [B24-D1 lead, 2026-10-09] C24's anchor re-pinned in place, `toHaveLength(15)` -> `toHaveLength(17)`: the lead's reviewed move of A1 case 16 after B24-D1's six insertion rows (A1 planned four groups for D1; lead decision D19 added agent-boundary-suites's two).
 
 [PR-G, 2026-10-17] C2 and C8-C14 re-pinned in place after PR-G's insertions (OD-250: the 19 admitted entries at `:294-312`, the orchestration filter's exclude at `:316`, the 19 excludes at `:352-370`; agent-boundary-suites' orchestration line at `:622` and 19 entries at `:658-676`): C2 332 -> 371, C8 294 -> 313, C9 296 -> 315, C10 302 -> 322, C11 331 -> 351, C12 564 -> 603, C13 618 -> 677, C14 623 -> 682 (C3-C7 above `:294` unmoved); section 11.10's D4-C1-C7 likewise (+39 to `:458`, +59 from `:692`) and D4-C21's anchor `const JOB_FIRST_LINE = 560;` -> `599;` (the suite's pin moved with its dated note); C24's anchor re-pinned in place, `toHaveLength(19)` -> `toHaveLength(24)` (A1 case 16 after PR-G's five insertion rows). [B24-D1, 2026-10-09] C2-C14 re-pinned in place after B24-D1's OD-30 steps (prompt-to-gerber's start step at `:32`, +1 from `:32`; its headroom step at `:344-345`, +2 more from `:343`; page-browser-e2e's start and headroom steps at `:405` and `:432-433`, +1 and +2 more from `:402` and `:428`; agent-boundary-suites's start step at `:565`, +1 more from `:559`); C45-C47 stand on their lines, which keep their text with a dated note. [B24-D1, 2026-10-09] C16 and C17 re-pinned 100 -> 101 and 216 -> 220 (`_ci-admission.ts` gained the benchmark-latency job's id, anchor, filter, env and jobsOf lines before them); C48 re-pinned 590 -> 607 (the dated pin moves in cases 1, 5, 7, 10 and 11 of this suite, above case 12). [B24-D2, 2026-10-09] C12-C14 re-pinned +1 in place after B24-D2's database-delivery entry at `:384` (the rows carry no note cell; this line holds the note). [B24-D4, 2026-10-10] C12-C14 re-pinned +2 in place after B24-D4's `env:` mapping at `:418-419` (OD-30's split of page-browser-e2e, section 11); C24's anchor re-pinned in place, `toHaveLength(17)` -> `toHaveLength(19)` (A1 case 16 after B24-D4's two insertion rows).
+
+[PR-J4 integration, 2026-10-23] C48 re-pinned in place (`:607` -> `:608`, the anchor unchanged and verified by content) after the one line section J4's
+integration added above it: the `J4_SET_ASIDE` constant beside `SELF` (J4-B's `app/lib/pcb-sync/__tests__/j4-missing-parts-sheets.test.ts` joined
+prompt-to-gerber's `app/lib/pcb-sync/__tests__` filter after the measurement and is set aside like this suite until the J CI step's one
+re-measurement, OD-254 / OD-258 item 7; case 7's count 586 -> 587 moved the same way). The citation helper re-points rows of the
+`| Cn | path | line | — | anchor |` shape only, so this row was moved by hand.
 
 ## 11. B24-D4 - the OD-30 split of page-browser-e2e
 
@@ -1043,13 +1049,15 @@ Test-first on `chapter/b24-production-qualification` from `1fe719e`: two runs, t
 | D4-C18 | `app/lib/pcb/board-persistence.ts` | 262 | `restored = stored && JSON.stringify(stored.board) === JSON.stringify(restoredBoard) ? stored : null;` |
 | D4-C19 | `app/components/pcb/GrantedExecutionDialog.tsx` | 55 | `finalFocus={promptFocus}` |
 | D4-C20 | `e2e/keyboard-and-focus.spec.ts` | 235 | `"focus returns to the prompt after Escape"` |
-| D4-C21 | `app/lib/qualification/__tests__/b24-d0-ci-split.test.ts` | 90 | `const JOB_FIRST_LINE = 683;` |
+| D4-C21 | `app/lib/qualification/__tests__/b24-d0-ci-split.test.ts` | 91 | `const JOB_FIRST_LINE = 683;` |
 | D4-C22 | `app/lib/agent/orchestration/__tests__/b21-f-page.test.ts` | 266 | `"two browser runs, one after the other").toEqual([` |
 | D4-C23 | `artifacts/ai-control-plane-b21/evaluation-matrix.md` | 1183 | `\| C93 \|` |
 | D4-C24 | `app/components/pcb/GrantedExecutionDialog.tsx` | 125 | `return prompt && !prompt.disabled ? prompt : false;` |
 | D4-C25 | `app/components/pcb/PcbEditor.tsx` | 647 | `rememberStoredWorkingCopy(init.scope.projectId, board); adoptBoardLifecycle("checkpoint-restore", board);` |
 | D4-C26 | `app/components/pcb/PcbEditor.tsx` | 674 | `rememberStoredWorkingCopy(syncIdentity.projectId, restored); adoptBoardLifecycle("checkpoint-restore", restored);` |
 | D4-C27 | `app/lib/pcb/board-persistence.ts` | 261 | `export function rememberStoredWorkingCopy(projectId: string, restoredBoard: PcbBoard): void {` |
+
+[PR-J4 integration, 2026-10-23] D4-C21 `:90` -> `:91` (`J4_SET_ASIDE` was added beside `SELF` in `b24-d0-ci-split.test.ts`; the anchor is unchanged).
 
 [PR-L7, 2026-10-20] D4-C1 to D4-C7 re-pinned in place after PR-L7's insertions above them (OD-254: +84 for page-browser-e2e's lines - the 71 prompt-to-gerber lines at `:313-381` and `:440-441` and the 13 database-delivery entries at `:495-507` - and +86 for page-browser-e2e-b24's, with agent-boundary-suites' two lines at `:761-762`): D4-C1 `:456` -> `:540`, D4-C2 `:457` -> `:541`, D4-C3 `:458` -> `:542` (its anchor re-pinned too: the skip list names agent-execution since OD-254), D4-C4 `:692` -> `:778`, D4-C5 `:694` -> `:780`, D4-C6 `:710` -> `:796`, D4-C7 `:722` -> `:808`; D4-C11's anchor re-pinned in place (`CI_JOB_IDS` names `page-browser-e2e-agent` after `page-browser-e2e-b24`) and D4-C14 `:311` -> `:312` (`browserSplit`'s doc comment gained a line, the reader of both appended jobs); D4-C21's anchor re-pinned in place, `JOB_FIRST_LINE` 599 -> 683 (b24-d0-ci-split's reviewed move: agent-boundary-suites' first line +84).
 
