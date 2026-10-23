@@ -18,6 +18,7 @@
  * union over whatever arrays they are handed (`classifyNets`, app/lib/nets.ts; `findNetRoot`, app/lib/connectivity.ts), accepts
  * whitespace before the parenthesis, and refuses an aliased import of any of the four (an alias would hide every call from the count).
  * Pin move: app/page.tsx 2 -> 3 (its net-colouring memo calls classifyNets with the whole state's arrays); every other count holds.
+ * [PR-J3, 2026-10-22] + app/lib/schematic/sheet-lens.ts (1): the Sheets navigator's connected-group selection over one sheet's entities.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -54,7 +55,11 @@ const CLASSIFIED: Record<string, { calls: number; why: string }> = {
   "app/lib/spice/ir.ts": { calls: 1, why: "SPICE IR /api/spice/compile: a document with sheets is refused before the union (SIM_MULTI_SHEET_PENDING) until the IR reads the project connectivity" },
   "app/lib/nets.ts": { calls: 1, why: "editor net colouring over the visible arrays (increment 3 passes a sheet lens)" },
   // [PR-J1 integration, 2026-10-22] J1-CONS-5 pin move: was 2 calls (the drag-group gestures); the net-colouring memo's classifyNets is now counted
-  "app/page.tsx": { calls: 3, why: "editor drag-group gestures (findConnectedGroup x2) and the net-colouring memo (classifyNets) over the visible arrays (increment 3 passes a sheet lens)" },
+  "app/page.tsx": { calls: 3, why: "editor drag-group gestures (findConnectedGroup x2) and the net-colouring memo (classifyNets) over the visible arrays - since [PR-J3, 2026-10-22] the ACTIVE sheet's plain lens arrays (useSchematicSheetLens; a single-sheet document is the same arrays)" },
+  // [PR-J3, 2026-10-22] pin move (runbook J.3 item 3, OD-257 item 1): + the sheet lens's connected-group selection for Move to sheet - sheet-aware by
+  // construction (it runs over ONE sheet's own entities, projectSheet, so a same-named label on another sheet never joins); the whole-project
+  // partition stays resolveProjectConnectivity's
+  "app/lib/schematic/sheet-lens.ts": { calls: 1, why: "connectedSelection: the drag-group union over the active sheet's own entities only (Move to sheet's 'connected group' option); project-wide nets come from resolveProjectConnectivity" },
   // [PR-J, 2026-10-22] J2: removed (moved onto resolveProjectConnectivity): app/lib/pcb/netlist-bridge.ts (1), lib/schematic-to-netlist.ts (1),
   // lib/netlist-review.ts (1), app/lib/engineering/agent-delete-connectivity.ts (2)
 };

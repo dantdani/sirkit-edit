@@ -57,8 +57,8 @@ NOT READY (`eslint .` exits 1, none of its 33 errors introduced by B24), CI read
 | mcp-exposed-tools | 9 |
 | agent-only-tools | 42 |
 | agent-exposed-tier-3-tools | 0 |
-| control-sites | 663 |
-| control-surfaces | 70 |
+| control-sites | 708 |
+| control-surfaces | 73 |
 | sql-migrations | 32 |
 | generators | 32 |
 
@@ -88,6 +88,8 @@ table are the concurrent PR-F builders' to move with their descriptors and contr
 [PR-M, 2026-10-18] Count lines moved with the regenerated map (runbook section M, M2's acquisition): route-methods 175 -> 177 and canonical-wrappers 172 -> 174 (GET and POST /api/parts/acquisitions); action-records 110 -> 111 (parts.cad-acquisition); registry-tools 59 -> 63, agent-exposed-tools 47 -> 51 and agent-only-tools 38 -> 42 - runbook L.5's two descriptors as the tree holds them and M2's two (the CAD acquisition start and status, both withheld from MCP; mcp-exposed-tools stays 9); control-sites 654 -> 663 and control-surfaces 68 -> 70 - L.5's design control chip (two controls) as the tree holds it, and M2's seven controls on two new surfaces (the Missing parts list's acquisition panel, the Build Library's component review inbox), the B17-A inventory as regenerated; generators 31 -> 32 (the CAD source registry generator `scripts/generate-cad-source-registry.ts`).
 
 [PR-J, 2026-10-22] Count lines moved with the regenerated map (runbook section J increment 1, OD-255): action-records 111 -> 113 (schematic.sheet-structure and schematic.move-to-sheet, the canonical schematic sheet commands; both partial until the Sheets navigator binds them).
+
+[PR-J3, 2026-10-22] Count lines moved with the regenerated map (runbook section J increment 3, OD-255 item 7, OD-257): control-sites 663 -> 708 (707 with the navigator's surfaces, 708 once app/page.tsx's label map gained the scoped label glyph's pointer-down site under schematic.drag-gesture) and control-surfaces 70 -> 73 - the Sheets navigator (the canvas chip, its tree and keys, New / Rename / Up / Down / Add port / Delete, the Move to sheet and Follow signal dialogs with their drafts), the overview block's double-click and the scoped label glyph's drag, each classified under a PR-J3 control rule; action-records stays 113 (schematic.sheet-structure and schematic.move-to-sheet flipped partial -> implemented: their controls now reach them; no record added).
 
 ## 4. Earlier verdicts
 

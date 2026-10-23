@@ -61,8 +61,11 @@ export const PROJECT_FILE_VERSION_SHEETS = 2;
 /** The newest project-file version this build reads. */
 export const PROJECT_FILE_MAX_VERSION = PROJECT_FILE_VERSION_SHEETS;
 /** [PR-J, 2026-10-22] The editor cannot open a multi-sheet project until the Sheets navigator lands (section J increment 3): until
- *  then a multi-sheet file is validated completely and then refused recoverably, never loaded into the single-sheet editor. */
-export const MULTI_SHEET_EDITOR_AVAILABLE = false;
+ *  then a multi-sheet file is validated completely and then refused recoverably, never loaded into the single-sheet editor.
+ *  [PR-J3, 2026-10-22] That increment landed (OD-257 item 8): the page carries the tree through hydration, history, autosave and
+ *  checkpoints and the Sheets navigator opens it, so a valid multi-sheet file now imports; the refusal below stays as the record of
+ *  the recoverable path (unreachable while this is true). */
+export const MULTI_SHEET_EDITOR_AVAILABLE = true;
 export const SHEETS_EDITOR_PENDING = "SHEETS_EDITOR_PENDING";
 export const PROJECT_FILE_EXTENSION = ".sirkit.json";
 

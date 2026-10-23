@@ -88,6 +88,19 @@ export class ViewSessionBridge {
     return [...this.registrations.entries()].filter(([, registration]) => registration.isCurrent()).map(([editor]) => editor).sort();
   }
 
+  /**
+   * [PR-J3, 2026-10-22] The PAGE's own view command on a live surface, as the human actor: the Sheets navigator replays select / focus /
+   * highlight after a sheet switch remounts the schematic editor (a new bus the page cannot reach otherwise). Not the agent path:
+   * no request parse, no tool id, the editor's human actor label (`local`, role viewer - view commands carry no authority). Null when
+   * the editor is not open.
+   */
+  async dispatchPageCommand(editor: ViewEditor, commandId: string, payload: unknown): Promise<ViewCommandResult<unknown> | null> {
+    const registration = this.registrations.get(editor);
+    if (!registration || !registration.isCurrent()) return null;
+    const envelope = createViewCommand({ identity: registration.identity, commandId, payload, actor: { actorId: "local", role: "viewer", actorKind: "human" }, expectedViewRevision: registration.viewRevision() });
+    return registration.dispatch(envelope);
+  }
+
   /** ONE bounded view-context snapshot, or null when no live surface exists. */
   capture(timeline?: ProjectOperationTimeline | null): CapturedViewContext | null {
     const editors: Partial<Record<ViewEditor, CapturedEditorView>> = {};

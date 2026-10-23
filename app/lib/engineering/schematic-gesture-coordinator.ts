@@ -401,6 +401,7 @@ export class SchematicGestureCoordinator {
           kicadComponents: finalGraph.kicadComponents ?? base.kicadComponents,
           netLabels: finalGraph.netLabels ?? base.netLabels,
           ...(base.pageSize ? { pageSize: base.pageSize } : {}),
+          ...(base.sheets !== undefined ? { sheets: base.sheets } : {}), // [PR-J3, 2026-10-22] the sheet tree is not geometry: a gesture never changes it, so `final` carries the base's (a zero-delta drag stays a zero-delta; a real drag commits with the tree intact)
         };
         const baseDigest = schematicStateDigest(base);
         if (schematicStateDigest(final) === baseDigest) {

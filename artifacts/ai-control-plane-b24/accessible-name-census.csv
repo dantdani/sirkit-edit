@@ -407,6 +407,50 @@ app/components/schematic/ComponentResolutionReviewDialog.tsx|dialog|Dialog|(none
 app/components/schematic/ReplacementReviewDialog.tsx|click|Button|Applying…|Apply exact replacement|onApply,app/components/schematic/ReplacementReviewDialog.tsx,click,Button,yes,named:text,Applying… Apply exact replacement
 app/components/schematic/ReplacementReviewDialog.tsx|click|Button|Cancel — change nothing|onCancel,app/components/schematic/ReplacementReviewDialog.tsx,click,Button,yes,named:text,Cancel — change nothing
 app/components/schematic/ReplacementReviewDialog.tsx|dialog|Dialog|(none)|onCancel,app/components/schematic/ReplacementReviewDialog.tsx,dialog,Dialog,yes,exempt:dialog-titled,Exact component replacement — review before applying
+app/components/schematic/ScopedNetLabelGlyph.tsx|pointer|g|scoped-label-*|onMouseDown,app/components/schematic/ScopedNetLabelGlyph.tsx,pointer,g,no,named:aria-label,* *
+app/components/schematic/SheetBlocksLayer.tsx|double-click|g|sheet-block-*|openSheet,app/components/schematic/SheetBlocksLayer.tsx,double-click,g,no,named:aria-label,Open sheet *
+app/components/schematic/SheetNavigator.tsx|change|input|sheets-move-mode|setDrafts,app/components/schematic/SheetNavigator.tsx,change,input,no,named:label-wrap,the part with its attached wires and local labels
+app/components/schematic/SheetNavigator.tsx|change|input|sheets-move-mode|setDrafts#2,app/components/schematic/SheetNavigator.tsx,change,input,no,named:label-wrap,its connected group on this sheet
+app/components/schematic/SheetNavigator.tsx|change|input|sheets-move-new-name|setDrafts,app/components/schematic/SheetNavigator.tsx,change,input,no,named:label-wrap,New sheet name
+app/components/schematic/SheetNavigator.tsx|change|input|sheets-new-name|setDrafts,app/components/schematic/SheetNavigator.tsx,change,input,no,named:label-wrap,Sheet name
+app/components/schematic/SheetNavigator.tsx|change|input|sheets-port-name|setDrafts,app/components/schematic/SheetNavigator.tsx,change,input,no,named:label-wrap,Port name
+app/components/schematic/SheetNavigator.tsx|change|input|sheets-rename-name|setDrafts,app/components/schematic/SheetNavigator.tsx,change,input,no,named:label-wrap,New name
+app/components/schematic/SheetNavigator.tsx|change|select|sheets-move-target|setDrafts,app/components/schematic/SheetNavigator.tsx,change,select,no,named:label-wrap,Target sheet
+app/components/schematic/SheetNavigator.tsx|change|select|sheets-port-direction|setDrafts,app/components/schematic/SheetNavigator.tsx,change,select,no,named:label-wrap,Direction
+app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Cancel
+app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog#2,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Cancel
+app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog#3,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Cancel
+app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog#4,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Cancel
+app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog#5,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Cancel
+app/components/schematic/SheetNavigator.tsx|click|button|Close|closeDialog,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Close
+app/components/schematic/SheetNavigator.tsx|click|button|Dismiss the sheets notice|dismissNotice,app/components/schematic/SheetNavigator.tsx,click,button,no,named:aria-label,Dismiss the sheets notice
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-add-port|openDialog:port,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Add port
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-back|goBack,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Back
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-chip|setOpen,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,*
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-delete-confirm|run,deleteSheet",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Delete sheet
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-delete-move-contents|run,applyMove",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Move contents to parent
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-delete|openDialog:delete,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Delete
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-follow-destination-*|closeDialog,followDestination",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Overview * › * (port) (sheet pin) (global) (label)
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-follow|openDialog:follow,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Follow signal…
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-move-apply|run,applyMove",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Apply move
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-move|openDialog:move,mintId",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Move to sheet…
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-new|openDialog:new,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,New sheet
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-new|openDialog:new#2,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,New sheet
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-rename|openDialog:rename,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Rename
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-reorder-down|run,reorderSheet",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Down
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-reorder-up|run,reorderSheet",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Up
+"app/components/schematic/SheetNavigator.tsx|click|div|sheets-tree-item-*|setFocusedId,openSheet",app/components/schematic/SheetNavigator.tsx,click,div,no,named:text,Overview * * port s
+app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,New sheet
+app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#2,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,Rename sheet
+app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#3,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,Add a port
+app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#4,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,Delete sheet
+app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#5,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,Move to sheet
+app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#6,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,Follow a signal
+app/components/schematic/SheetNavigator.tsx|key|div|sheets-panel|onPanelKeyDown,app/components/schematic/SheetNavigator.tsx,key,div,no,named:aria-label,Sheets
+app/components/schematic/SheetNavigator.tsx|key|div|sheets-tree|onTreeKeyDown,app/components/schematic/SheetNavigator.tsx,key,div,no,named:aria-label,Sheets
+app/components/schematic/SheetNavigator.tsx|submit|form|(none)|submitNew,app/components/schematic/SheetNavigator.tsx,submit,form,no,exempt:form-submit,Create sheet
+app/components/schematic/SheetNavigator.tsx|submit|form|(none)|submitPort,app/components/schematic/SheetNavigator.tsx,submit,form,no,exempt:form-submit,Add port
+app/components/schematic/SheetNavigator.tsx|submit|form|(none)|submitRename,app/components/schematic/SheetNavigator.tsx,submit,form,no,exempt:form-submit,Rename
 app/components/spice/SpiceStudio.tsx|change|input|(none)|mutate,app/components/spice/SpiceStudio.tsx,change,input,no,named:label-wrap,Enable statistical study
 "app/components/spice/SpiceStudio.tsx|change|input|(none)|mutate,?.find,draft.cornerSets.find",app/components/spice/SpiceStudio.tsx,change,input,no,unnamed,none
 "app/components/spice/SpiceStudio.tsx|change|input|(none)|mutate,draft.measurements.find",app/components/spice/SpiceStudio.tsx,change,input,no,unnamed,none
@@ -655,6 +699,7 @@ app/page.tsx|pointer|NetLabelGlyph|(none)|onLabelMouseDown,app/page.tsx,pointer,
 app/page.tsx|pointer|polyline|(none)|handleWireClick,app/page.tsx,pointer,polyline,no,unnamed,none
 app/page.tsx|pointer|polyline|(none)|onWireMouseDown,app/page.tsx,pointer,polyline,no,exempt:canvas-gesture,go to: Go to component (schematic-goto-input)
 app/page.tsx|pointer|rect|(none)|onMouseDown,app/page.tsx,pointer,rect,no,unnamed,none
+app/page.tsx|pointer|ScopedNetLabelGlyph|(none)|onLabelMouseDown,app/page.tsx,pointer,ScopedNetLabelGlyph,no,exempt:canvas-gesture,go to: Go to component (schematic-goto-input)
 app/page.tsx|pointer|svg|(none)|onSvgDown,app/page.tsx,pointer,svg,no,unnamed,none
 app/page.tsx|pointer|svg|schematic-canvas|onSvgMouseDown,app/page.tsx,pointer,svg,no,exempt:canvas-gesture,go to: Go to component (schematic-goto-input)
 app/page.tsx|shortcut|window|keydown:onKey|onKey,app/page.tsx,shortcut,window,no,exempt:listener,keydown:onKey

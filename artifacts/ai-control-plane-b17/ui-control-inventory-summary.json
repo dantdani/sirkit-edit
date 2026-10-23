@@ -1,25 +1,25 @@
 {
   "schemaVersion": "sirkit.ui-control-inventory-summary.v1",
-  "sites": 663,
-  "surfaces": 70,
+  "sites": 708,
+  "surfaces": 73,
   "byKind": {
-    "change": 178,
-    "click": 379,
+    "change": 186,
+    "click": 402,
     "context-menu": 1,
-    "dialog": 18,
-    "double-click": 1,
+    "dialog": 24,
+    "double-click": 2,
     "gesture": 12,
-    "key": 11,
+    "key": 13,
     "palette": 23,
-    "pointer": 24,
+    "pointer": 26,
     "shortcut": 13,
-    "submit": 3
+    "submit": 6
   },
   "byClassification": {
     "dispatcher": 24,
     "internal": 8,
-    "semantic": 302,
-    "view": 329
+    "semantic": 312,
+    "view": 364
   },
   "recordsReached": [
     "agent.autonomy-setting",
@@ -90,6 +90,7 @@
     "schematic.generate",
     "schematic.import-export-kicad",
     "schematic.move-rotate",
+    "schematic.move-to-sheet",
     "schematic.replace-component",
     "schematic.replace-component-propose",
     "schematic.resolve-components",
@@ -97,6 +98,7 @@
     "schematic.review-advisory",
     "schematic.set-property",
     "schematic.sheet-size",
+    "schematic.sheet-structure",
     "spice.workbench",
     "validation.erc-drc",
     "view.canvas-navigation",

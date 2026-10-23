@@ -7,8 +7,9 @@
  *     exported file of the blinker, the drone and a Theory design hash to the values pinned before section J.
  *  2. A multi-sheet project round-trips through the saved record (sheets, sheet ids, ports and scoped labels intact, same canonical
  *     digest) and exports as project-file version 2 (forward-only) carrying its whole tree; importing it is validated completely and
- *     then refused recoverably (SHEETS_EDITOR_PENDING) until the editor can open one - nothing is written. Inconsistent files (sheets
- *     in a version-1 file, an invalid tree, a newer version) are refused with a reason.
+ *     [PR-J3, 2026-10-22] then hydrates the same state and re-exports the same bytes (the Sheets editor opens it: MULTI_SHEET_EDITOR_AVAILABLE
+ *     is true since section J increment 3, OD-257 item 8; the SHEETS_EDITOR_PENDING refusal stays as the record of the recoverable
+ *     path that held before). Inconsistent files (sheets in a version-1 file, an invalid tree, a newer version) are refused with a reason.
  * jsdom localStorage, a stubbed parts route; no network, no database.
  */
 import { createHash } from "node:crypto";
@@ -101,7 +102,7 @@ describe("[PR-J J1] 2. a multi-sheet project persists completely; the file forma
     expect(loaded.state.kicadComponents!.filter((item) => item.sheetId === "sheet-imu")).toHaveLength(1);
   });
 
-  it("export writes format version 2 carrying the tree; import validates it fully and refuses recoverably until the Sheets editor lands", async () => {
+  it("export writes format version 2 carrying the tree; import validates it fully, hydrates the same state and re-exports it byte for byte (the Sheets editor opens it)", async () => {
     const state = multiSheetDrone();
     saveProject({ id: "j1-multi", name: "Drone (sheets)", state, createdAt: 1, updatedAt: 1, schemaVersion: 2 } as SavedProject);
     const file = await exportProjectFile("j1-multi");
@@ -112,12 +113,23 @@ describe("[PR-J J1] 2. a multi-sheet project persists completely; the file forma
     expect(parsed.payload.project.state.sheets).toEqual(state.sheets);
     expect(schematicStateDigest(parsed.payload.project.state)).toBe(schematicStateDigest(state));
     localStorage.clear();
-    expect(MULTI_SHEET_EDITOR_AVAILABLE).toBe(false);
+    // [PR-J3, 2026-10-22] pin move (runbook J.3, OD-257 item 8): before this increment the flag was false and the import was refused
+    // `${SHEETS_EDITOR_PENDING}: this project has 2 schematic sheets, ... open it again after the Sheets update.` with nothing written;
+    // the Sheets editor is that update, so the file imports, the stored record holds the whole tree and the re-export is the same bytes.
+    expect(MULTI_SHEET_EDITOR_AVAILABLE).toBe(true);
+    expect(SHEETS_EDITOR_PENDING).toBe("SHEETS_EDITOR_PENDING"); // the recoverable path's code stays exported for the record
     const result = await importProjectFile(file.content);
-    expect(result).toMatchObject({ ok: false });
-    if (result.ok) throw new Error("unreachable");
-    expect(result.reason).toBe(`${SHEETS_EDITOR_PENDING}: this project has 2 schematic sheets, and this version of the editor cannot open a multi-sheet project yet. Nothing was imported; keep the file and open it again after the Sheets update.`);
-    expect(localStorage.length).toBe(0);
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.importedAsCopy).toBe(false);
+    expect(result.project.id).toBe("j1-multi");
+    expect(result.project.state).toEqual(state);
+    expect(result.project.state.sheets!.sheets.map((sheet) => sheet.name)).toEqual(["Overview", "IMU"]);
+    expect(loadProject("j1-multi")!.state).toEqual(state);
+    expect(schematicStateDigest(loadProject("j1-multi")!.state)).toBe(schematicStateDigest(state));
+    const again = await exportProjectFile("j1-multi");
+    if (!again.ok) throw new Error(again.reason);
+    expect(again.content).toBe(file.content);
+    expect(JSON.parse(again.content).formatVersion).toBe(PROJECT_FILE_VERSION_SHEETS);
   });
 
   it("inconsistent files are refused with a reason and nothing is written", async () => {

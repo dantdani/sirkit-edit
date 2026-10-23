@@ -3595,3 +3595,46 @@ Under the existing OD-217 heading (`:2599`), append:
 - **The owner may choose otherwise:** each item independently (a marquee selection, a one-command sheet delete, refusing Build only
   at apply, a digest over the four arrays only, no presentation store, a port-name prompt in the move preview, a reviewed PAGE_LINES
   move, keeping import refused until J4).
+
+## OD-258 — section J4 defaults: SPICE and KiCad export on the project connectivity, per-sheet Tidy, Organize into sheets, the rail-named label normalisation (product reliability J4, 2026-10-22)
+
+- **Question:** the J4 build plan (project-wide outputs and the organise refactor; `multi-sheet/progress.md`) names choices the owner
+  has not made. The owner's instruction ("complete everything; you are the chief SWE") asks the lead to proceed. Which defaults apply?
+- **Default applied:** (1) SPICE under the strict rule: node 0 is the GND rail (a Theory ground symbol, or a ground-kind net named GND
+  or 0; a lone ground rail of another name when it is the only one); every other ground-kind rail (AGND, DGND, PGND) is a separate
+  named node with a deck comment and a response warning, never collapsed; several ground rails with none named GND refuse
+  `SIM_GROUND_AMBIGUOUS` naming them. Sheet-local nets take sanitized sheet-path names; single-sheet decks stay byte-identical.
+  (2) The KiCad hierarchical export writes each sheet pin at the nearest block-edge point with a two-point wire from the Sirkit anchor;
+  it refuses on name shadowing (`EXPORT_SHADOWED_PORT`; a local label equal to a global or rail name on its sheet) rather than
+  emit a file KiCad would read differently; a sheeted project downloads as one zip from the same `POST /api/export/kicad` (sorted
+  entries, fixed dates); the single-sheet response and bytes are unchanged. (3) Rail-named plain labels (the label-tool `GND` case):
+  the first-sheet refusal names the offending labels, and a previewed, undoable "Normalise N rail-named labels" transaction is
+  offered before organising; the single-sheet PCB netlist is unchanged by it. (4) Organize into sheets derives groups
+  deterministically from connectivity and roles; a passive attached to two hubs with equal weight goes by hint, then the smaller
+  refDes, and is listed under "check these" in the preview (a usable proposal, not a refusal); the pure planner
+  `planOrganizeIntoSheets` is built in J4 and J5's proposal tool reuses it. (5) Per-sheet Tidy tidies leaf sheets only (a sheet
+  with child blocks refuses `SHEETS_TIDY_BLOCKS_PENDING`); the apply path keeps the lifecycle replacement with components
+  re-identified by refDes so ids and authority fields survive. (6) "Sync schematic to PCB" states that it synchronises the whole
+  project (N sheets); the accessible-name census is regenerated once at J4's integration. (7) New suites are admitted by exact-path
+  positional entries and the organise proof rides `e2e/j3-multi-sheet.spec.ts` unless the OD-30 headroom re-measurement allows its
+  own spec.
+- **The owner may choose otherwise:** each item independently (one ground node with explicit ties, lossy sheet-pin placement,
+  exporting shadowed names with a warning, N separate downloads, refusing ambiguous organise proposals, tidying overview sheets).
+
+## OD-259 — section J5 defaults: generated results as sheets, the organise proposal tool, sheet-aware inspection, planner interfaces kept fixture-only (product reliability J5, 2026-10-22)
+
+- **Question:** the J5 build plan (sheet-aware AI; `multi-sheet/progress.md`) names choices the owner has not made. Which defaults
+  apply?
+- **Default applied:** (1) A generated multi-sheet result over a multi-sheet project replaces every sheet in one undoable
+  transaction and the review dialog names the replaced sheets; per-sheet regeneration (J5-6) is deferred to a later round with its
+  design recorded. (2) OD-257 item 3 is revised once J5-2 lands: the Build composer no longer refuses on a multi-sheet base (an
+  advisory activity step says the result will replace the sheets); the refusal stays for a FLAT result at the offer and apply
+  boundaries. (3) The overview of a generated design connects blocks with plain local labels named after each interface at the
+  sheet-pin points. (4) In an organise proposal, components the model leaves unassigned stay on their source sheet; unnamed crossing
+  nets take `SIG<n>` with an optional model-supplied name. (5) The page's organise receiver case shares an existing line (PAGE_LINES
+  9,156 stays); the pinned flat-layout literal stays, so a planned result lays out flat once before its sheeted layout. (6) Typed
+  planner interfaces stay a fixture-only plan field: `PLAN_SYSTEM_PROMPT` is each task's identity and is not edited until a live
+  qualification is authorised. (7) Every J5 proof is fixture-backed at US$0; a live multi-sheet generation needs the owner's spend
+  approval under the cumulative US$5 allowance.
+- **The owner may choose otherwise:** each item independently (merge instead of replace, keeping the composer refusal, routed
+  overview wires, requiring every component assigned, a reviewed PAGE_LINES move, editing the live planner prompt, a live run).

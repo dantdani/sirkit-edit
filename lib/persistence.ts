@@ -8,6 +8,7 @@ import type { ProjectComponentPin } from "@/app/lib/atomic/types";
 import { portableSnapshotIntegrityErrors } from "@/app/lib/atomic/portable";
 import { migrateBoardConstraintState } from "@/app/lib/constraints/legacy";
 import type { DesignRequirementsPackage } from "@/app/lib/requirements/types";
+import { clearSheetView } from "@/app/lib/project/sheet-navigation-store"; // [PR-J3, 2026-10-22] the Sheets navigator's presentation store (sirkit:sheet-view:<id>) goes with the project
 import { validateDesignRequirementsPackage } from "@/app/lib/requirements/validation";
 import type { ArchitectureProjectState } from "@/app/lib/architecture/types";
 import { validateArchitectureProjectState } from "@/app/lib/architecture/project";
@@ -701,6 +702,7 @@ export function deleteProject(id: string): boolean {
     const index = getIndex();
     if (!index.includes(id)) return false;
     localStorage.removeItem(STORAGE_PREFIX + id);
+    clearSheetView(id); // [PR-J3, 2026-10-22] the active sheet, cameras and history stored for this project (never the document) are removed with it
     setIndex(index.filter((i) => i !== id));
     return true;
   } catch {

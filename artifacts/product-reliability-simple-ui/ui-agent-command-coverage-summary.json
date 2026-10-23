@@ -11,42 +11,42 @@
     "legacy",
     "missing"
   ],
-  "rows": 970,
+  "rows": 1015,
   "byKind": {
     "action": 113,
-    "control": 794,
+    "control": 839,
     "tool": 63
   },
   "byDisposition": {
     "callable-now": 54,
     "proposal-only": 271,
     "grant-required": 68,
-    "human-admin-only": 85,
-    "view-session-only": 85,
-    "intentionally-ui-only": 340,
+    "human-admin-only": 97,
+    "view-session-only": 91,
+    "intentionally-ui-only": 369,
     "unavailable": 11,
     "legacy": 0,
-    "missing": 56
+    "missing": 54
   },
   "byKindAndDisposition": {
     "action": {
       "callable-now": 6,
       "proposal-only": 44,
       "grant-required": 7,
-      "human-admin-only": 17,
+      "human-admin-only": 19,
       "view-session-only": 6,
       "intentionally-ui-only": 10,
       "unavailable": 7,
       "legacy": 0,
-      "missing": 16
+      "missing": 14
     },
     "control": {
       "callable-now": 21,
       "proposal-only": 215,
       "grant-required": 55,
-      "human-admin-only": 64,
-      "view-session-only": 73,
-      "intentionally-ui-only": 330,
+      "human-admin-only": 74,
+      "view-session-only": 79,
+      "intentionally-ui-only": 359,
       "unavailable": 0,
       "legacy": 0,
       "missing": 36
@@ -65,13 +65,13 @@
   },
   "unexplained": 0,
   "missing": {
-    "rows": 56,
+    "rows": 54,
     "withoutGap": 0,
-    "gaps": 182
+    "gaps": 176
   },
   "rowsWithoutTest": {
     "action": 40,
-    "control": 437,
+    "control": 466,
     "tool": 0
   },
   "actions": {
@@ -79,10 +79,10 @@
     "rows": 113
   },
   "controls": {
-    "sites": 663,
-    "rows": 794,
-    "surfaces": 70,
-    "recordsReached": 83
+    "sites": 708,
+    "rows": 839,
+    "surfaces": 73,
+    "recordsReached": 85
   },
   "tools": {
     "descriptors": 63,

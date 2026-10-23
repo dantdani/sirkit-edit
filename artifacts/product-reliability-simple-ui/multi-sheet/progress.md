@@ -22,8 +22,18 @@ Four maps of the current source (the model, the editor and downstream path, the 
 |---|---|---|---|
 | J1 | sheet contract, one project connectivity authority, canonical sheet operations (library only; single-sheet byte identity) | DONE `99a68df8` + integration fixes (15 confirmed review findings: create-sheet changed a design's nets, delete-last-sheet rejoined distinct grounds, sheet-pin-only net name collisions, lens copies lose the brand, replay-context shape, cross-verify 500 -> 422, degenerate golden pins) | `j1-*`, `j2-*` suites; gates: every CI selection, browser jobs, generators, secret scans green at `99a68df8` |
 | J2 | consumers on project connectivity (PCB publication, ERC, design checks, BOM, missing parts) with byte-identity proofs | DONE in round 1 (`99a68df8`); SPICE, KiCad export and tidy refuse multi-sheet documents until J4 | `j2-project-consumers`, `j2-consumers-golden`, `j2-*-refusal` |
-| J3 | the Sheets navigator, overview, open / create / rename / delete, ports and sheet pins, follow a signal, move to sheet; persistence and undo | planned (OD-257; build plan `scratchpad/j/j3-plan.md`: A page carriage, B navigator and hooks, C fixture and browser proof) | — |
+| J3 | the Sheets navigator, overview, open / create / rename / delete, ports and sheet pins, follow a signal, move to sheet; persistence and undo | DONE (checkpoint; integration verify next): page carriage of `sheets` at eleven sites in place (9,156 lines), import hydrates a multi-sheet file, the lens / navigator / blocks / scoped glyphs wired, the AI replace-result guard at five sites (OD-257); three product defects the browser proof found fixed (StrictMode disposal of the controller, the navigator column swallowing canvas clicks, the move preview's Apply below the fold) | `j3-*` suites (sheet lens, navigation store, hook, navigator, page carriage, history step, coordinator, canonical adoption, fixture); `e2e/j3-multi-sheet.spec.ts` 4 cases green with prompt-to-gerber and journey-contract (0 ROUTE_FIXTURE_MISS); evidence `j3-editor.md` |
 | J4 | project-wide outputs (SPICE, native hierarchical KiCad export) and "Organize into sheets" | — | — |
 | J5 | sheet-aware generation (blocks become sheets), sheet-aware inspection and the organise proposal tool; fixture multi-sheet journeys | — | — |
 | J6 | workload limits stated truthfully, queue proof (J7-1 .. J7-3) | — | — |
 | J7 | CI admission, browser evidence, verdict | — | — |
+
+## Open items from the J1 review round (2026-10-22)
+
+- A label typed with the editor's label tool is minted `kind: "label"` whatever its name (`app/page.tsx` commitLabelDraft), so a
+  design whose return is a ground symbol plus a typed `GND` label reads as one net under the legacy rule and two under the strict
+  rule; organising it into sheets is refused with a sentence that names no label. Not introduced by J1 (the planner refused it at
+  `99a68df8` too) but a real obstacle: J3-A or J4 must classify a scope-less label whose `inferNetLabelKind` is ground / power as
+  that rail (or mint the kind at the label tool with a one-off normalisation) and name the offending labels in the refusal.
+- `SHEET_LOCAL_SHADOWS_PORT` also warns for a parent-side sheet pin beside a same-named local label on another net (refuted as a
+  defect: the warning is advisory; wording may be narrowed later).

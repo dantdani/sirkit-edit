@@ -25,11 +25,11 @@ import { GRID, snap, pointEquals, pointKey, closestPointOnSegment, distance, pin
 import { findConnectedGroup, splitWiresAtPoint, consolidateWires, type KicadPinSite } from "./lib/connectivity";
 import { classifyNets, type NetRole } from "./lib/nets";
 import { rangeAwareTickFormatter } from "./lib/format";
-import { schDisplayRef, type SchComponent, type Wire, type Point, type SchComponentType, type SchematicState, type KicadComponentInstance, type BuildLogicalNetlist, type NetLabel, type NetLabelKind, type Rotation, type SchematicEditOp, type PageSize } from "@/lib/schematic-types";
+import { schDisplayRef, type SchComponent, type Wire, type Point, type SchComponentType, type SchematicState, type KicadComponentInstance, type BuildLogicalNetlist, type NetLabel, type NetLabelKind, type Rotation, type SchematicEditOp, type PageSize, type SchematicSheetSet } from "@/lib/schematic-types";
 import { useSchematicViewSession } from "@/app/components/schematic/hooks/useSchematicViewSession"; // [B17-D]
 import { describeExportRefusal } from "@/app/lib/project/io-outcome"; // [B17-E]
 import { ProjectOperationTimeline } from "@/app/lib/project/operation-timeline"; // [B17-E]
-import { engineeringDigest } from "@/app/lib/engineering/stable";
+import { engineeringDigest } from "@/app/lib/engineering/stable"; import { useSchematicSheetLens } from "@/app/components/schematic/hooks/useSchematicSheetLens"; import { SheetNavigator } from "@/app/components/schematic/SheetNavigator"; import { ScopedNetLabelGlyph } from "@/app/components/schematic/ScopedNetLabelGlyph"; import { flatReplacementRefusal, multiSheetReplaceRefusal } from "@/app/lib/project/sheet-replace-guard"; import type { SheetCamera } from "@/app/lib/project/sheet-navigation-store"; // [PR-J3, 2026-10-22] the Sheets editor increment (runbook J.3, OD-255 item 7, OD-257): the sheet lens, the navigator, the scoped label glyph and the AI replace-result guard
 import { useWorkspaceViewSession } from "@/app/components/workspace/useWorkspaceViewSession"; // [B17-D]
 import { WORKSPACE_TABS } from "@/app/lib/view-session/workspace"; // [B17-D]
 import { PIN_NAMES, normalizeComponentRole } from "@/lib/schematic-types";
@@ -141,7 +141,7 @@ type SchematicSnapshot = {
   components: SchComponent[];
   wires: Wire[];
   kicadComponents: KicadComponentInstance[];
-  netLabels: NetLabel[];
+  netLabels: NetLabel[]; sheets?: SchematicSheetSet; // [PR-J3, 2026-10-22] the sheet tree is model state, undoable with the four arrays (PR-L6 class: a step target that dropped it would rebase the lineage)
 };
 type LeftPanel = "projects" | "library" | null;
 // [B19-D I5e row 32] `advisory`: another model's output (build explanation, review, second opinion) — shown, never resent as the assistant's words
@@ -1221,7 +1221,7 @@ function SchematicEditor({
   onDeleteComponent,
   graph,
   viewScope,
-  viewSessionBridge,
+  viewSessionBridge, initialCamera, onCameraChange, sheetLayer, onLocateElsewhere, // [PR-J3, 2026-10-22] the sheet lens's editor props (useSchematicSheetLens editorProps)
 }: {
   tool: Tool;
   setTool: (t: Tool) => void;
@@ -1259,11 +1259,11 @@ function SchematicEditor({
   /** [B17-D] the project/branch the schematic view session is scoped to. */
   viewScope: { projectId: string; branchId: string };
   /** [B17-F] the page-owned view-session bridge (the schematic surface registers while mounted). */
-  viewSessionBridge: ViewSessionBridge;
+  viewSessionBridge: ViewSessionBridge; initialCamera?: SheetCamera; onCameraChange?: (camera: SheetCamera) => void; sheetLayer?: React.ReactNode; onLocateElsewhere?: (ref: string) => boolean; // [PR-J3, 2026-10-22] J.3 items 1, 2, 5: the active sheet's stored camera (the mount fits the page when absent), its camera writes, the overview's subsystem blocks, and Go to's fallback to the part's sheet
 }) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [pan, setPan]     = useState<Point>({ x: 100, y: 80 });
-  const [zoom, setZoom]   = useState(1);
+  const svgRef = useRef<SVGSVGElement>(null); const fittedForRef = useRef<PageSize | null>(initialCamera !== undefined ? pageSize : null); // [PR-J3, 2026-10-22] a stored sheet camera replaces the mount-time fit (J.3 item 5); the fit still runs when the page size changes (StrictMode-safe: the ref survives the dev double effect)
+  const [pan, setPan]     = useState<Point>(initialCamera?.pan ?? { x: 100, y: 80 });
+  const [zoom, setZoom]   = useState(initialCamera?.zoom ?? 1);
   const [cursor, setCursor] = useState<Point>({ x: -9999, y: -9999 });
   const [inCanvas, setInCanvas] = useState(false);
   const [deleteHoveredId, setDeleteHoveredId] = useState<string | null>(null);
@@ -1300,8 +1300,8 @@ function SchematicEditor({
   // Frame the sheet on mount and whenever the sheet size changes (a manual pick,
   // or the size auto-layout chose for a freshly generated circuit).
   useEffect(() => {
-    fitToPage();
-  }, [fitToPage]);
+    if (fittedForRef.current === pageSize) return; fittedForRef.current = pageSize; fitToPage();
+  }, [fitToPage, pageSize]); useEffect(() => { onCameraChange?.({ pan, zoom }); }, [pan, zoom, onCameraChange]); // [PR-J3, 2026-10-22] the per-sheet camera (J.3 item 5): every pan / zoom reaches the presentation store through the lens (debounced there)
 
   // ── [B17-D] the schematic view session ──────────────────────────────────────
   // Fit, zoom, pan/focus, select and net highlight are `schematic.*` view commands on ONE bus per editor
@@ -1330,7 +1330,7 @@ function SchematicEditor({
   /** Toolbar "Go to": select the component and frame it; a refusal is shown, never guessed around. */
   const goToSchematicComponent = async (ref: string): Promise<void> => {
     const selected = await schematicView.select({ kind: "component", ref });
-    if (!selected.ok) { setSchematicViewNotice(`${selected.code} — ${selected.message}`); return; }
+    if (!selected.ok) { if (onLocateElsewhere?.(ref)) { setSchematicViewNotice(null); return; } setSchematicViewNotice(`${selected.code} — ${selected.message}`); return; } // [PR-J3, 2026-10-22] J.3 item 2: a part on another sheet opens that sheet; the lens replays the select and focus there
     const focused = await schematicView.focus({ kind: "component", ref });
     setSchematicViewNotice(focused.ok ? null : `${focused.code} — ${focused.message}`);
   };
@@ -2244,8 +2244,8 @@ function SchematicEditor({
               ))}
             </g>
           )}
-          {netLabels.map((label) => (
-            <NetLabelGlyph
+          {sheetLayer /* [PR-J3, 2026-10-22] the overview's subsystem blocks (J.3 item 1), before the label map */}{netLabels.map((label) => (
+            label.scope !== undefined ? <ScopedNetLabelGlyph key={label.id} label={label} role={nets.roleAt(label.position)} zoom={zoom} deleteHovered={tool === "delete" && deleteHoveredId === label.id} pointerEvents={tool === "select" || tool === "delete" ? "auto" : "none"} onMouseDown={(e) => onLabelMouseDown(e, label)} onMouseEnter={() => { if (tool === "delete") setDeleteHoveredId(label.id); }} onMouseLeave={() => setDeleteHoveredId((prev) => prev === label.id ? null : prev)} /> : <NetLabelGlyph // [PR-J3, 2026-10-22] J.3 item 3 / J.4: a scoped label (hierarchical, sheet pin, global) draws its own glyph; the same label drag
               key={label.id}
               label={label}
               role={nets.roleAt(label.position)}
@@ -2948,7 +2948,7 @@ export default function Home() {
         setAuthoritativeSchematic(authoritative);
         gestureCoordinatorRef.current?.notifyAuthoritativeProjection(authoritative);
       },
-      snapshot: (authoritative) => ({ components: authoritative.components, wires: authoritative.wires, kicadComponents: authoritative.kicadComponents!, netLabels: authoritative.netLabels! }),
+      snapshot: (authoritative) => ({ components: authoritative.components, wires: authoritative.wires, kicadComponents: authoritative.kicadComponents!, netLabels: authoritative.netLabels!, ...(authoritative.sheets !== undefined ? { sheets: authoritative.sheets } : {}) }), // [PR-J3, 2026-10-22] the sheet tree is in the undo snapshot
       historyRecorded: () => publishSchematicHistory("commit"),
       // The design-state watcher's existing applying-history guard: it
       // clears the flag, schedules autosave, and records NOTHING for this
@@ -2963,7 +2963,7 @@ export default function Home() {
    *  adoption, gesture rollback) — applied without recording history. */
   const applyLifecycleSchematicProjection = useCallback((state: SchematicState) => {
     applyingHistoryRef.current = true;
-    const authoritative: SchematicState = { components: state.components ?? [], wires: state.wires ?? [], kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [], ...(state.pageSize ? { pageSize: state.pageSize } : {}) };
+    const authoritative: SchematicState = { components: state.components ?? [], wires: state.wires ?? [], kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [], ...(state.pageSize ? { pageSize: state.pageSize } : {}), ...(state.sheets !== undefined ? { sheets: state.sheets } : {}) }; // [PR-J3, 2026-10-22] + the sheet tree iff present (hydration, undo / redo, rollback, recovery, checkpoint restore all carry it)
     setComponents(authoritative.components);
     setWires(authoritative.wires);
     setKicadComponents(authoritative.kicadComponents!);
@@ -2988,7 +2988,7 @@ export default function Home() {
   // [PR-C] the persisted proposal's base is the schematic's CONTENT digest (components, wires, catalog instances, labels):
   // the canonical digest also covers the sheet size, which a fresh project gains on its first save, so a reload would
   // read every first proposal as stale. The approval itself still checks the full digest through the pin captured at restore.
-  const proposalContentDigest = useCallback((state: SchematicState): string => schematicStateDigest({ components: state.components ?? [], wires: state.wires ?? [], kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [] }), []);
+  const proposalContentDigest = useCallback((state: SchematicState): string => schematicStateDigest({ components: state.components ?? [], wires: state.wires ?? [], kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [], ...(state.sheets !== undefined ? { sheets: state.sheets } : {}) }), []); // [PR-J3, 2026-10-22] OD-257 item 4: + the sheet tree iff present (a proposal made before the project was organised reads stale after a reload and is discarded)
   const persistedProposalRef = useRef<{ projectId: string } | null>(null); // the record this mount wrote, so only ITS retirement clears it (a fresh mount must not clear before the restore)
   useEffect(() => {
     if (pendingReplace?.pin && project) {
@@ -3051,7 +3051,7 @@ export default function Home() {
     // that this state never adopted). Unopened → untouched.
     const session = schematicSessionRef.current;
     const ok = saveProjectFields(meta.id, {
-      state: { components: authoritative.components, wires: authoritative.wires, kicadComponents: authoritative.kicadComponents ?? [], netLabels: authoritative.netLabels ?? [], pageSize: authoritative.pageSize ?? live.pageSize },
+      state: { components: authoritative.components, wires: authoritative.wires, kicadComponents: authoritative.kicadComponents ?? [], netLabels: authoritative.netLabels ?? [], pageSize: authoritative.pageSize ?? live.pageSize, ...(authoritative.sheets !== undefined ? { sheets: authoritative.sheets } : {}) }, // [PR-J3, 2026-10-22] + the sheet tree iff present (every autosave would otherwise drop it)
       chat: toStoredChat(live.messages),
       designPrompt: live.lastDesignPrompt,
       workflowView: live.view,
@@ -3104,7 +3104,7 @@ export default function Home() {
     setSelectedId(null); setSelectedKicadId(null); setWireDraftStart(null);
     schHistoryRef.current = new SchematicHistory<SchematicSnapshot>({
       components: adopted.components, wires: adopted.wires,
-      kicadComponents: adopted.kicadComponents ?? [], netLabels: adopted.netLabels ?? [],
+      kicadComponents: adopted.kicadComponents ?? [], netLabels: adopted.netLabels ?? [], ...(adopted.sheets !== undefined ? { sheets: adopted.sheets } : {}), // [PR-J3, 2026-10-22]
     }, { label });
     publishSchematicHistory("restore", label);
     session.confirmAdoption(adopted);
@@ -3236,12 +3236,12 @@ export default function Home() {
         storedView: viewCandidate === "schematic" || viewCandidate === "pcb" || viewCandidate === "3d" || viewCandidate === "bom" || viewCandidate === "sim" ? viewCandidate : null,
         history: new SchematicHistory<SchematicSnapshot>({
           components: state.components ?? [], wires: state.wires ?? [],
-          kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [],
+          kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [], ...(state.sheets !== undefined ? { sheets: state.sheets } : {}), // [PR-J3, 2026-10-22]
         }, { label: "Opened project" }),
         // B06: a fresh canonical schematic session per hydrated project — no
         // phantom history entries, no lineage carry-over across projects.
         session: new SchematicEditorSession({ tenantId: "local", projectId: record.id, branchId: "main" }),
-        projectionForOpen: { components: state.components ?? [], wires: state.wires ?? [], kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [], pageSize: state.pageSize },
+        projectionForOpen: { components: state.components ?? [], wires: state.wires ?? [], kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [], pageSize: state.pageSize, ...(state.sheets !== undefined ? { sheets: state.sheets } : {}) }, // [PR-J3, 2026-10-22] + the sheet tree iff present: the session compares this projection's canonical digest with the stored head mark (without it a multi-sheet record would open into recovery)
       };
     } catch (error) {
       return { ok: false, detail: `activation prepare failed: ${error instanceof Error ? error.message : String(error)}` };
@@ -3439,7 +3439,7 @@ export default function Home() {
     // gesture commits canonically (which flows through here after preview
     // ownership clears at pointer-up).
     if (gestureCoordinatorRef.current?.previewActive) return;
-    const snap: SchematicSnapshot = { components, wires, kicadComponents, netLabels };
+    const snap: SchematicSnapshot = { components, wires, kicadComponents, netLabels, ...(schHistoryRef.current.present.sheets !== undefined ? { sheets: schHistoryRef.current.present.sheets } : {}) }; // [PR-J3, 2026-10-22] the React arrays never hold the sheet tree: carried from the recorded present (every tree change is a canonical adoption, recorded with its own snapshot)
     if (applyingHistoryRef.current) {
       applyingHistoryRef.current = false;
       autosaverRef.current?.schedule();
@@ -3774,18 +3774,18 @@ export default function Home() {
     }
     return { ok: outcome.ok };
   }, [runSchematicCommand]);
-
+  const captureSheetScope = useCallback(() => projectScopeRegistryRef.current?.capture() ?? null, []); const clearSheetSelection = useCallback(() => { setWireDraftStart(null); setSelectedId(null); setSelectedKicadId(null); }, []); // [PR-J3, 2026-10-22] the sheet lens's optional inputs: sheet commands carry the B07.4 project scope; a sheet switch clears the wire draft and the selection (as a recovery adoption does)
   /** The single graph-mutation authority handed to the canvas (stable).
    *  B07.1: the gesture lifecycle delegates to the race-safe coordinator —
    *  `begin` reports ownership (false while another gesture is active or a
    *  commit is in flight), `preview` renders frames only for the owner. */
-  const schematicGraphApi = useMemo(() => ({
+  const rawSchematicGraphApi = useMemo(() => ({
     run: (label: string, commandId: string, buildAfter: (state: SchematicState) => SchematicGraphAfter | null) => { void graphCommand(label, commandId, buildAfter); },
     begin: () => gestureCoordinator.begin(),
     preview: (frame: SchematicGraphAfter) => gestureCoordinator.preview(frame),
     cancel: () => gestureCoordinator.cancel(),
     commit: (label: string, finalGraph: SchematicGraphAfter) => { void gestureCoordinator.commit(label, finalGraph); },
-  }), [graphCommand, gestureCoordinator]);
+  }), [graphCommand, gestureCoordinator]); const sheetLens = useSchematicSheetLens({ authoritative: authoritativeSchematic, graph: rawSchematicGraphApi, runSchematicCommand, projectId: project?.id ?? null, getPart: getCachedPart, components, wires, kicadComponents, netLabels, viewSessionBridge: viewSessionBridgeRef.current, selectedId, selectedKicadId, captureScope: captureSheetScope, onSheetSwitch: clearSheetSelection }); const schematicGraphApi = sheetLens.graph; // [PR-J3, 2026-10-22] the sheet lens (runbook J.3; OD-255 item 7): the canvas edits the ACTIVE sheet through this wrapper (merged back onto the whole project by id); a single-sheet document gets the raw object back
 
   // ── B06.1: sealed tier-1 proposal apply/cancel ─────────────────────────────
   // Apply re-verifies the sealed proposal (identity digest, operations
@@ -4192,7 +4192,7 @@ export default function Home() {
       wires: checkpoint.schematic.wires ?? [],
       kicadComponents: checkpoint.schematic.kicadComponents ?? [],
       netLabels: checkpoint.schematic.netLabels ?? [],
-      ...(checkpoint.schematic.pageSize ? { pageSize: checkpoint.schematic.pageSize } : { ...(liveStateRef.current.pageSize ? { pageSize: liveStateRef.current.pageSize } : {}) }),
+      ...(checkpoint.schematic.pageSize ? { pageSize: checkpoint.schematic.pageSize } : { ...(liveStateRef.current.pageSize ? { pageSize: liveStateRef.current.pageSize } : {}) }), ...(checkpoint.schematic.sheets !== undefined ? { sheets: checkpoint.schematic.sheets } : {}), // [PR-J3, 2026-10-22] a checkpoint restores its sheet tree
     };
     const session = schematicSessionRef.current;
     const restoredForProject = meta.id;
@@ -5157,8 +5157,8 @@ export default function Home() {
     const appliedState: SchematicState = {
       components: state.components, wires: state.wires,
       kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [],
-      ...(state.pageSize ? { pageSize: state.pageSize } : { ...(liveStateRef.current.pageSize ? { pageSize: liveStateRef.current.pageSize } : {}) }),
-    };
+      ...(state.pageSize ? { pageSize: state.pageSize } : { ...(liveStateRef.current.pageSize ? { pageSize: liveStateRef.current.pageSize } : {}) }), ...(state.sheets !== undefined ? { sheets: state.sheets } : {}), // [PR-J3, 2026-10-22] a sheet-aware result (J5-2) keeps its tree
+    }; const flatRefusal = flatReplacementRefusal(gestureCoordinator.authoritativeState(), appliedState); if (flatRefusal !== null) { showToast(flatRefusal); return false; } // [PR-J3, 2026-10-22] OD-257 item 3, the FINAL guard: a flat result never replaces a multi-sheet document (the review dialog's Approve reports not applied)
     const applyForProject = opts?.pin ? opts.pin.projectId : (projectRef.current?.id ?? null);
     const outcome = await gestureCoordinator.adoptLifecycle({
       state: appliedState,
@@ -5263,7 +5263,7 @@ export default function Home() {
     if (!entryGate.allowed) {
       setScopedGenError(projectScopeRegistryRef.current!.capture(), entryGate.reason);
       return;
-    }
+    } const sheetRefusal = multiSheetReplaceRefusal(gestureCoordinatorRef.current!.authoritativeState()); if (sheetRefusal !== null) { setScopedGenError(projectScopeRegistryRef.current!.capture(), sheetRefusal, 12000); return; } // [PR-J3, 2026-10-22] OD-257 item 3: the composer refuses at the START on a multi-sheet project (no task, no spend; chat-started tasks are refused at the offer; the final guard in applySchematic stays)
     const pin = captureLifecycleInvocationContext();
     const scope = pin.scope;
     const logId = startActivityLog("Generating schematic", "Preparing request", prompt);
@@ -5419,9 +5419,9 @@ export default function Home() {
       failActivityLog(logId, "Result discarded — the project changed while generating");
       return false;
     }
-    if (resultIssues.length > 0) {
-      failActivityLog(logId, "Generated schematic failed validation — nothing applied");
-      setScopedGenError(scope, `The generated schematic failed validation (${resultIssues[0]}). Nothing was changed.`);
+    const flatRefusal = flatReplacementRefusal(gestureCoordinatorRef.current!.authoritativeState(), state); if (resultIssues.length > 0 || flatRefusal !== null) { // [PR-J3, 2026-10-22] OD-257 item 3: a flat result over a multi-sheet project is refused at the offer like an invalid one (chat-started tasks arrive here)
+      failActivityLog(logId, flatRefusal !== null ? "Generated schematic would replace the project's sheets — nothing applied" : "Generated schematic failed validation — nothing applied");
+      setScopedGenError(scope, flatRefusal ?? `The generated schematic failed validation (${resultIssues[0]}). Nothing was changed.`, flatRefusal !== null ? 12000 : undefined);
       return false;
     }
     const authoritativeDigestNow = schematicStateDigest(gestureCoordinatorRef.current!.authoritativeState());
@@ -5666,7 +5666,7 @@ export default function Home() {
     const scope = pin.scope;
     const snapshot = currentSchematicState();
     const hasSchematic = snapshot.components.length > 0 || (snapshot.kicadComponents ?? []).length > 0;
-    if (!hasSchematic) return;
+    if (!hasSchematic) return; const editRefusal = multiSheetReplaceRefusal(snapshot); if (editRefusal !== null) { setScopedGenError(scope, editRefusal, 12000); return; } // [PR-J3, 2026-10-22] OD-257 item 3: an AI edit is a flat replacement until J5-2; refused before /api/schematic/edit (no request, no spend)
 
     const logId = startActivityLog("Editing schematic", "Interpreting edit request", opts?.displayPrompt ?? prompt);
     const isApplyingSuggestions = isGuardedSupportApplyInstruction(prompt);
@@ -6101,7 +6101,7 @@ export default function Home() {
     const tidyPin = captureLifecycleInvocationContext();
     const tidyScope = tidyPin.scope;
     const tidySnapshot = currentSchematicState();
-    if ((tidySnapshot.kicadComponents ?? []).length === 0) {
+    const tidyRefusal = multiSheetReplaceRefusal(tidySnapshot); if (tidyRefusal !== null) { if (!auto) setScopedGenError(tidyScope, tidyRefusal, 12000); return; } if ((tidySnapshot.kicadComponents ?? []).length === 0) { // [PR-J3, 2026-10-22] OD-257 item 3: Tidy is a flat replacement until J4; refused before the capture and the layout-critic request
       if (!auto) setScopedGenError(tidyScope, "Tidy is available for Build-mode schematics with catalog parts.", 5000);
       return;
     }
@@ -6491,7 +6491,7 @@ export default function Home() {
           // [B16.0.2 §A] ngspice execution is authenticated + project-scoped:
           // the active project identity travels as a SELECTOR only.
           headers: { "Content-Type": "application/json", ...projectSelectorHeaders(scope.projectId ? { tenantId: "local", projectId: scope.projectId, branchId: scope.branchId } : null) },
-          body: JSON.stringify({ state: { components: authoritative.components, wires: authoritative.wires, netLabels: authoritative.netLabels ?? [] }, analysis: analysisConfig }),
+          body: JSON.stringify({ state: { components: authoritative.components, wires: authoritative.wires, netLabels: authoritative.netLabels ?? [], ...(authoritative.sheets !== undefined ? { sheets: authoritative.sheets } : {}) }, analysis: analysisConfig }), // [PR-J3, 2026-10-22] + the sheet tree iff present: the server refuses SIM_MULTI_SHEET_PENDING instead of simulating a cross-sheet coordinate union
           signal,
         });
         const data = await res.json() as SimResult & { ok?: boolean; error?: string; details?: string };
@@ -6908,25 +6908,25 @@ export default function Home() {
             <div className="flex-1 min-h-0 relative">
               {view === "schematic" ? (
                 <>
-                  <SchematicEditor
+                  <SchematicEditor key={sheetLens.legacy ? undefined : sheetLens.activation} // [PR-J3, 2026-10-22] a sheet switch is a fresh mount (SR-3: a fresh view bus, the bridge re-registers); a single-sheet document is never remounted
                     tool={tool} setTool={setTool}
-                    components={components}
-                    wires={wires}
+                    components={sheetLens.components}
+                    wires={sheetLens.wires}
                     selectedId={selectedId} setSelectedId={setSelectedId}
                     wireDraftStart={wireDraftStart} setWireDraftStart={setWireDraftStart}
                     placementRotation={placementRotation}
-                    kicadComponents={kicadComponents}
+                    kicadComponents={sheetLens.kicadComponents}
                     selectedKicadId={selectedKicadId} setSelectedKicadId={setSelectedKicadId}
                     placementPartId={placementPartId}
                     placementExactIdentity={placementExactIdentity}
-                    netLabels={netLabels}
+                    netLabels={sheetLens.netLabels}
                     pendingNetLabel={pendingNetLabel} setPendingNetLabel={setPendingNetLabel}
                     pageSize={pageSize}
                     onDeleteComponent={(family, componentId) => void deleteComponentCanonical(family, componentId)}
                     graph={schematicGraphApi}
                     viewScope={{ projectId: project?.id ?? "local", branchId: "main" }}
-                    viewSessionBridge={viewSessionBridgeRef.current!} // [B17-F]
-                  />
+                    viewSessionBridge={viewSessionBridgeRef.current!} {...sheetLens.editorProps} // [B17-F]; [PR-J3, 2026-10-22] + the lens's initialCamera / onCameraChange / sheetLayer / onLocateElsewhere
+                  /><SheetNavigator {...sheetLens.navigatorProps} />{/* [PR-J3, 2026-10-22] the Sheets chip and tree (OD-255 item 7): a sibling of the editor, positioned bottom-right by itself */}
                   {/* Empty state: the circuit-entry action is right here ([PR-E]); the canvas keeps its pointer behaviour around it */}
                   {components.length === 0 && wires.length === 0 && kicadComponents.length === 0 && netLabels.length === 0 && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none select-none">
@@ -6988,9 +6988,9 @@ export default function Home() {
                   projectScope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} // [B16.0.2 §B] the ACTIVE project identity (selector only)
                   legacyPanel={(
                     <SimView
-                      components={components}
-                      wires={wires}
-                      netLabels={netLabels}
+                      components={sheetLens.components}
+                      wires={sheetLens.wires}
+                      netLabels={sheetLens.netLabels}
                       simResult={simResult}
                       simLoading={simLoading}
                       simError={simError}

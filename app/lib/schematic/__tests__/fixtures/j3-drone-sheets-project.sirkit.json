@@ -1,0 +1,2325 @@
+{
+  "format": "sirkit-project",
+  "formatVersion": 2,
+  "exportedAt": "2026-10-22T00:00:00.000Z",
+  "integrity": "sha256:729a18c01421c0977d47aa5b8288c72b30e7bcc83121122891642dad4478ab0b",
+  "payload": {
+    "checkpoints": [],
+    "project": {
+      "createdAt": 1,
+      "id": "j3-drone-sheets",
+      "name": "Drone (sheets)",
+      "schemaVersion": 2,
+      "state": {
+        "components": [],
+        "kicadComponents": [
+          {
+            "atomicPartRevisionId": "atomic_38660f72f1eda8c93b325323cbd38079573aff66f8a8c1df677cb562f0509582",
+            "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
+            "id": "00000000-0000-4000-8000-d00000000001",
+            "mappingCertificateId": "map_340ce951b0a0b3bd0815551d088275a28f14e8d805a4ee2fce96c58088aa4890",
+            "partId": "b16-1c-part-c",
+            "refDes": "C1",
+            "rotation": 0,
+            "sheetId": "sheet-power",
+            "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
+            "value": "10uF",
+            "x": 2210,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_d466057118f1a7dd01eccce7f216586fd37b78c2b51bbc34fc1f746334d056dc",
+            "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
+            "id": "00000000-0000-4000-8000-d00000000002",
+            "mappingCertificateId": "map_6f2de14ec76a2c610e063a5de4216ee6e2347aacf5de118c397b8a78619fad9e",
+            "partId": "b16-1c-part-c",
+            "refDes": "C10",
+            "rotation": 0,
+            "sheetId": "sheet-imu",
+            "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
+            "value": "100nF",
+            "x": 2310,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_38660f72f1eda8c93b325323cbd38079573aff66f8a8c1df677cb562f0509582",
+            "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
+            "id": "00000000-0000-4000-8000-d00000000003",
+            "mappingCertificateId": "map_340ce951b0a0b3bd0815551d088275a28f14e8d805a4ee2fce96c58088aa4890",
+            "partId": "b16-1c-part-c",
+            "refDes": "C2",
+            "rotation": 0,
+            "sheetId": "sheet-power",
+            "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
+            "value": "10uF",
+            "x": 2410,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_38660f72f1eda8c93b325323cbd38079573aff66f8a8c1df677cb562f0509582",
+            "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
+            "id": "00000000-0000-4000-8000-d00000000004",
+            "mappingCertificateId": "map_340ce951b0a0b3bd0815551d088275a28f14e8d805a4ee2fce96c58088aa4890",
+            "partId": "b16-1c-part-c",
+            "refDes": "C3",
+            "rotation": 0,
+            "sheetId": "sheet-power",
+            "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
+            "value": "10uF",
+            "x": 510,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_d466057118f1a7dd01eccce7f216586fd37b78c2b51bbc34fc1f746334d056dc",
+            "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
+            "id": "00000000-0000-4000-8000-d00000000005",
+            "mappingCertificateId": "map_6f2de14ec76a2c610e063a5de4216ee6e2347aacf5de118c397b8a78619fad9e",
+            "partId": "b16-1c-part-c",
+            "refDes": "C4",
+            "rotation": 0,
+            "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
+            "value": "100nF",
+            "x": 2510,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_d466057118f1a7dd01eccce7f216586fd37b78c2b51bbc34fc1f746334d056dc",
+            "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
+            "id": "00000000-0000-4000-8000-d00000000006",
+            "mappingCertificateId": "map_6f2de14ec76a2c610e063a5de4216ee6e2347aacf5de118c397b8a78619fad9e",
+            "partId": "b16-1c-part-c",
+            "refDes": "C5",
+            "rotation": 0,
+            "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
+            "value": "100nF",
+            "x": 2610,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_d466057118f1a7dd01eccce7f216586fd37b78c2b51bbc34fc1f746334d056dc",
+            "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
+            "id": "00000000-0000-4000-8000-d00000000007",
+            "mappingCertificateId": "map_6f2de14ec76a2c610e063a5de4216ee6e2347aacf5de118c397b8a78619fad9e",
+            "partId": "b16-1c-part-c",
+            "refDes": "C6",
+            "rotation": 0,
+            "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
+            "value": "100nF",
+            "x": 2710,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_d466057118f1a7dd01eccce7f216586fd37b78c2b51bbc34fc1f746334d056dc",
+            "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
+            "id": "00000000-0000-4000-8000-d00000000008",
+            "mappingCertificateId": "map_6f2de14ec76a2c610e063a5de4216ee6e2347aacf5de118c397b8a78619fad9e",
+            "partId": "b16-1c-part-c",
+            "refDes": "C7",
+            "rotation": 0,
+            "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
+            "value": "100nF",
+            "x": 2810,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_38660f72f1eda8c93b325323cbd38079573aff66f8a8c1df677cb562f0509582",
+            "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
+            "id": "00000000-0000-4000-8000-d00000000009",
+            "mappingCertificateId": "map_340ce951b0a0b3bd0815551d088275a28f14e8d805a4ee2fce96c58088aa4890",
+            "partId": "b16-1c-part-c",
+            "refDes": "C8",
+            "rotation": 0,
+            "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
+            "value": "10uF",
+            "x": 2910,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_d466057118f1a7dd01eccce7f216586fd37b78c2b51bbc34fc1f746334d056dc",
+            "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
+            "id": "00000000-0000-4000-8000-d0000000000a",
+            "mappingCertificateId": "map_6f2de14ec76a2c610e063a5de4216ee6e2347aacf5de118c397b8a78619fad9e",
+            "partId": "b16-1c-part-c",
+            "refDes": "C9",
+            "rotation": 0,
+            "sheetId": "sheet-imu",
+            "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
+            "value": "100nF",
+            "x": 3010,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_de309eb3a304a40136dcce67e57c3bb858d6857270503a21099c1a37762d2a51",
+            "footprintAssetVersionId": "footprintv_0792a207088663a18bcb13729b59c1b6d725915e4b3bf934046fcab99f2c55c1",
+            "id": "00000000-0000-4000-8000-d0000000000b",
+            "mappingCertificateId": "map_98b77fbfe159775779c0609c43763addfe9d66e83dbbec54f9b8f7b6e1cdc5ad",
+            "partId": "l7-part-ss14",
+            "refDes": "D1",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_37c165a83872c6d512824cd20a532fc2220d9253dcc476ab08262306c95b0146",
+            "value": "SS14",
+            "x": 630,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_de309eb3a304a40136dcce67e57c3bb858d6857270503a21099c1a37762d2a51",
+            "footprintAssetVersionId": "footprintv_0792a207088663a18bcb13729b59c1b6d725915e4b3bf934046fcab99f2c55c1",
+            "id": "00000000-0000-4000-8000-d0000000000c",
+            "mappingCertificateId": "map_98b77fbfe159775779c0609c43763addfe9d66e83dbbec54f9b8f7b6e1cdc5ad",
+            "partId": "l7-part-ss14",
+            "refDes": "D2",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_37c165a83872c6d512824cd20a532fc2220d9253dcc476ab08262306c95b0146",
+            "value": "SS14",
+            "x": 760,
+            "y": 1400
+          },
+          {
+            "atomicPartRevisionId": "atomic_de309eb3a304a40136dcce67e57c3bb858d6857270503a21099c1a37762d2a51",
+            "footprintAssetVersionId": "footprintv_0792a207088663a18bcb13729b59c1b6d725915e4b3bf934046fcab99f2c55c1",
+            "id": "00000000-0000-4000-8000-d0000000000d",
+            "mappingCertificateId": "map_98b77fbfe159775779c0609c43763addfe9d66e83dbbec54f9b8f7b6e1cdc5ad",
+            "partId": "l7-part-ss14",
+            "refDes": "D3",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_37c165a83872c6d512824cd20a532fc2220d9253dcc476ab08262306c95b0146",
+            "value": "SS14",
+            "x": 890,
+            "y": 1400
+          },
+          {
+            "atomicPartRevisionId": "atomic_de309eb3a304a40136dcce67e57c3bb858d6857270503a21099c1a37762d2a51",
+            "footprintAssetVersionId": "footprintv_0792a207088663a18bcb13729b59c1b6d725915e4b3bf934046fcab99f2c55c1",
+            "id": "00000000-0000-4000-8000-d0000000000e",
+            "mappingCertificateId": "map_98b77fbfe159775779c0609c43763addfe9d66e83dbbec54f9b8f7b6e1cdc5ad",
+            "partId": "l7-part-ss14",
+            "refDes": "D4",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_37c165a83872c6d512824cd20a532fc2220d9253dcc476ab08262306c95b0146",
+            "value": "SS14",
+            "x": 910,
+            "y": 1490
+          },
+          {
+            "atomicPartRevisionId": "atomic_e7bf2d52fd37ee5be68b2d90f1e8ecd352bd357cc6a4af42e0c4a308a00f10b4",
+            "footprintAssetVersionId": "footprintv_6d13b18971a1582bb2e14eaba3e2e0b33e634f39514e25fbfe173f6b3c93fc7c",
+            "id": "00000000-0000-4000-8000-d0000000000f",
+            "mappingCertificateId": "map_39648e2d1513ac87e8432501abb2ca02df782fd82b495a7d823bac141be95c29",
+            "partId": "b16-1c-part-led",
+            "refDes": "D5",
+            "rotation": 0,
+            "symbolAssetVersionId": "symbolv_d26c0f7ed3ec1458acaae93c3fd1b766365336a5447afd8daac73609255c865a",
+            "value": "LED",
+            "x": 1230,
+            "y": 1460
+          },
+          {
+            "atomicPartRevisionId": "atomic_b9cf71b5db2f9fe7534d7e7e3fed0403febf7432ac60102a76f6eee465815307",
+            "footprintAssetVersionId": "footprintv_49af44e6db865d518a68460cddd4f3682566df2b4b26f0cff750768f140942d6",
+            "id": "00000000-0000-4000-8000-d00000000010",
+            "mappingCertificateId": "map_a11ab74e4c65deeed36c157d12fc8ac2d2d32b1388c2a7d7aa58284b059c224e",
+            "partId": "b16-1c-part-conn-1x02",
+            "refDes": "J1",
+            "rotation": 0,
+            "sheetId": "sheet-power",
+            "symbolAssetVersionId": "symbolv_8cb1b3c3bcd9c11ff8a6ac717053e986782cfe0c0ae63bb81f4b5b13dc02807b",
+            "value": "BATT_1S",
+            "x": 1590,
+            "y": 720
+          },
+          {
+            "atomicPartRevisionId": "atomic_b9cf71b5db2f9fe7534d7e7e3fed0403febf7432ac60102a76f6eee465815307",
+            "footprintAssetVersionId": "footprintv_49af44e6db865d518a68460cddd4f3682566df2b4b26f0cff750768f140942d6",
+            "id": "00000000-0000-4000-8000-d00000000011",
+            "mappingCertificateId": "map_a11ab74e4c65deeed36c157d12fc8ac2d2d32b1388c2a7d7aa58284b059c224e",
+            "partId": "b16-1c-part-conn-1x02",
+            "refDes": "J2",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_8cb1b3c3bcd9c11ff8a6ac717053e986782cfe0c0ae63bb81f4b5b13dc02807b",
+            "value": "MOTOR1",
+            "x": 350,
+            "y": 620
+          },
+          {
+            "atomicPartRevisionId": "atomic_b9cf71b5db2f9fe7534d7e7e3fed0403febf7432ac60102a76f6eee465815307",
+            "footprintAssetVersionId": "footprintv_49af44e6db865d518a68460cddd4f3682566df2b4b26f0cff750768f140942d6",
+            "id": "00000000-0000-4000-8000-d00000000012",
+            "mappingCertificateId": "map_a11ab74e4c65deeed36c157d12fc8ac2d2d32b1388c2a7d7aa58284b059c224e",
+            "partId": "b16-1c-part-conn-1x02",
+            "refDes": "J3",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_8cb1b3c3bcd9c11ff8a6ac717053e986782cfe0c0ae63bb81f4b5b13dc02807b",
+            "value": "MOTOR2",
+            "x": 350,
+            "y": 780
+          },
+          {
+            "atomicPartRevisionId": "atomic_b9cf71b5db2f9fe7534d7e7e3fed0403febf7432ac60102a76f6eee465815307",
+            "footprintAssetVersionId": "footprintv_49af44e6db865d518a68460cddd4f3682566df2b4b26f0cff750768f140942d6",
+            "id": "00000000-0000-4000-8000-d00000000013",
+            "mappingCertificateId": "map_a11ab74e4c65deeed36c157d12fc8ac2d2d32b1388c2a7d7aa58284b059c224e",
+            "partId": "b16-1c-part-conn-1x02",
+            "refDes": "J4",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_8cb1b3c3bcd9c11ff8a6ac717053e986782cfe0c0ae63bb81f4b5b13dc02807b",
+            "value": "MOTOR3",
+            "x": 350,
+            "y": 940
+          },
+          {
+            "atomicPartRevisionId": "atomic_b9cf71b5db2f9fe7534d7e7e3fed0403febf7432ac60102a76f6eee465815307",
+            "footprintAssetVersionId": "footprintv_49af44e6db865d518a68460cddd4f3682566df2b4b26f0cff750768f140942d6",
+            "id": "00000000-0000-4000-8000-d00000000014",
+            "mappingCertificateId": "map_a11ab74e4c65deeed36c157d12fc8ac2d2d32b1388c2a7d7aa58284b059c224e",
+            "partId": "b16-1c-part-conn-1x02",
+            "refDes": "J5",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_8cb1b3c3bcd9c11ff8a6ac717053e986782cfe0c0ae63bb81f4b5b13dc02807b",
+            "value": "MOTOR4",
+            "x": 350,
+            "y": 1100
+          },
+          {
+            "atomicPartRevisionId": "atomic_103c8bddcdb43bbf39de24c46999c401bd6a9694e516784e91454a458c677d9f",
+            "footprintAssetVersionId": "footprintv_af71d9b904b3364f04d3f354a2dfd777669253c271316a600ddd014afcf01918",
+            "id": "00000000-0000-4000-8000-d00000000015",
+            "mappingCertificateId": "map_c6a908c88404fefc1b273ed26850274ba9d866a0fa7fcf8f402f7f4c447deb2a",
+            "partId": "l7-part-conn-2x03",
+            "refDes": "J6",
+            "rotation": 0,
+            "symbolAssetVersionId": "symbolv_6ca4d09374694fd3848c972739a24590e857ba158bc2a58fec1d9f63eb77581e",
+            "value": "ISP",
+            "x": 350,
+            "y": 1260
+          },
+          {
+            "atomicPartRevisionId": "atomic_c8a24692939cded117d69cd59c8ab1f844af07ac86946b236d5eedb5a91e1f6a",
+            "footprintAssetVersionId": "footprintv_62592e0f86885148634ccea0aacbdb6a64b82bf0f9c89df249b2f38d88318a7b",
+            "id": "00000000-0000-4000-8000-d00000000016",
+            "mappingCertificateId": "map_69a83d71ca3f65b6ef5bdd49b538a209fdab495a757c174468c69937098f5e2e",
+            "partId": "l7-part-conn-1x04",
+            "refDes": "J7",
+            "rotation": 0,
+            "symbolAssetVersionId": "symbolv_b78dfa7b847b99b0cb91e4768f3b54252994684c9555cb0ae960016814adcb19",
+            "value": "UART_RX",
+            "x": 350,
+            "y": 1420
+          },
+          {
+            "atomicPartRevisionId": "atomic_56486aa4446b83795e57a1bc595082c8d79f10b8feee601373d8f98eeedc4dfd",
+            "footprintAssetVersionId": "footprintv_2f2eaf5c44fd4db439eb6087be9dacc5472b67d5b224090b6d4eb7eb1e4c0df3",
+            "id": "00000000-0000-4000-8000-d00000000017",
+            "mappingCertificateId": "map_acd8cfe91d3faaf9a219668fff93446046beaa35848bd33f8bf21e71efd4df74",
+            "partId": "l7-part-ao3400a",
+            "refDes": "Q1",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_ea4f665b08b694682047f1986aadc8b3eaf206ae6514a84c9f5c5f1184f27df3",
+            "value": "AO3400A",
+            "x": 1230,
+            "y": 780
+          },
+          {
+            "atomicPartRevisionId": "atomic_56486aa4446b83795e57a1bc595082c8d79f10b8feee601373d8f98eeedc4dfd",
+            "footprintAssetVersionId": "footprintv_2f2eaf5c44fd4db439eb6087be9dacc5472b67d5b224090b6d4eb7eb1e4c0df3",
+            "id": "00000000-0000-4000-8000-d00000000018",
+            "mappingCertificateId": "map_acd8cfe91d3faaf9a219668fff93446046beaa35848bd33f8bf21e71efd4df74",
+            "partId": "l7-part-ao3400a",
+            "refDes": "Q2",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_ea4f665b08b694682047f1986aadc8b3eaf206ae6514a84c9f5c5f1184f27df3",
+            "value": "AO3400A",
+            "x": 1230,
+            "y": 940
+          },
+          {
+            "atomicPartRevisionId": "atomic_56486aa4446b83795e57a1bc595082c8d79f10b8feee601373d8f98eeedc4dfd",
+            "footprintAssetVersionId": "footprintv_2f2eaf5c44fd4db439eb6087be9dacc5472b67d5b224090b6d4eb7eb1e4c0df3",
+            "id": "00000000-0000-4000-8000-d00000000019",
+            "mappingCertificateId": "map_acd8cfe91d3faaf9a219668fff93446046beaa35848bd33f8bf21e71efd4df74",
+            "partId": "l7-part-ao3400a",
+            "refDes": "Q3",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_ea4f665b08b694682047f1986aadc8b3eaf206ae6514a84c9f5c5f1184f27df3",
+            "value": "AO3400A",
+            "x": 1230,
+            "y": 1100
+          },
+          {
+            "atomicPartRevisionId": "atomic_56486aa4446b83795e57a1bc595082c8d79f10b8feee601373d8f98eeedc4dfd",
+            "footprintAssetVersionId": "footprintv_2f2eaf5c44fd4db439eb6087be9dacc5472b67d5b224090b6d4eb7eb1e4c0df3",
+            "id": "00000000-0000-4000-8000-d0000000001a",
+            "mappingCertificateId": "map_acd8cfe91d3faaf9a219668fff93446046beaa35848bd33f8bf21e71efd4df74",
+            "partId": "l7-part-ao3400a",
+            "refDes": "Q4",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_ea4f665b08b694682047f1986aadc8b3eaf206ae6514a84c9f5c5f1184f27df3",
+            "value": "AO3400A",
+            "x": 1230,
+            "y": 1260
+          },
+          {
+            "atomicPartRevisionId": "atomic_570435764b9de4169d7519ef3d4ae820750eaaa693dda8f626471ea912cf556a",
+            "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+            "id": "00000000-0000-4000-8000-d0000000001b",
+            "mappingCertificateId": "map_05426d48cb5bca4546f9f876c4b2c85e8eea7964994b02404bbd8a28a73f02f9",
+            "partId": "b16-1c-part-r",
+            "refDes": "R1",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+            "value": "330",
+            "x": 1070,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_570435764b9de4169d7519ef3d4ae820750eaaa693dda8f626471ea912cf556a",
+            "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+            "id": "00000000-0000-4000-8000-d0000000001c",
+            "mappingCertificateId": "map_05426d48cb5bca4546f9f876c4b2c85e8eea7964994b02404bbd8a28a73f02f9",
+            "partId": "b16-1c-part-r",
+            "refDes": "R10",
+            "rotation": 0,
+            "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+            "value": "330",
+            "x": 1160,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_39f34356ac49aaf5942f05bbb4a2d396dfad878fb33e1d45cb3209efcafc962f",
+            "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+            "id": "00000000-0000-4000-8000-d0000000001d",
+            "mappingCertificateId": "map_59f66086395063c60395ae0a5b69ef8bce8e163b8467fe8455cfd3e96e06b60d",
+            "partId": "b16-1c-part-r",
+            "refDes": "R11",
+            "rotation": 0,
+            "sheetId": "sheet-imu",
+            "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+            "value": "10k",
+            "x": 1250,
+            "y": 1400
+          },
+          {
+            "atomicPartRevisionId": "atomic_39f34356ac49aaf5942f05bbb4a2d396dfad878fb33e1d45cb3209efcafc962f",
+            "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+            "id": "00000000-0000-4000-8000-d0000000001e",
+            "mappingCertificateId": "map_59f66086395063c60395ae0a5b69ef8bce8e163b8467fe8455cfd3e96e06b60d",
+            "partId": "b16-1c-part-r",
+            "refDes": "R12",
+            "rotation": 0,
+            "sheetId": "sheet-imu",
+            "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+            "value": "10k",
+            "x": 1340,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_39f34356ac49aaf5942f05bbb4a2d396dfad878fb33e1d45cb3209efcafc962f",
+            "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+            "id": "00000000-0000-4000-8000-d0000000001f",
+            "mappingCertificateId": "map_59f66086395063c60395ae0a5b69ef8bce8e163b8467fe8455cfd3e96e06b60d",
+            "partId": "b16-1c-part-r",
+            "refDes": "R2",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+            "value": "10k",
+            "x": 1430,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_570435764b9de4169d7519ef3d4ae820750eaaa693dda8f626471ea912cf556a",
+            "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+            "id": "00000000-0000-4000-8000-d00000000020",
+            "mappingCertificateId": "map_05426d48cb5bca4546f9f876c4b2c85e8eea7964994b02404bbd8a28a73f02f9",
+            "partId": "b16-1c-part-r",
+            "refDes": "R3",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+            "value": "330",
+            "x": 1510,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_39f34356ac49aaf5942f05bbb4a2d396dfad878fb33e1d45cb3209efcafc962f",
+            "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+            "id": "00000000-0000-4000-8000-d00000000021",
+            "mappingCertificateId": "map_59f66086395063c60395ae0a5b69ef8bce8e163b8467fe8455cfd3e96e06b60d",
+            "partId": "b16-1c-part-r",
+            "refDes": "R4",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+            "value": "10k",
+            "x": 1610,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_570435764b9de4169d7519ef3d4ae820750eaaa693dda8f626471ea912cf556a",
+            "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+            "id": "00000000-0000-4000-8000-d00000000022",
+            "mappingCertificateId": "map_05426d48cb5bca4546f9f876c4b2c85e8eea7964994b02404bbd8a28a73f02f9",
+            "partId": "b16-1c-part-r",
+            "refDes": "R5",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+            "value": "330",
+            "x": 1710,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_39f34356ac49aaf5942f05bbb4a2d396dfad878fb33e1d45cb3209efcafc962f",
+            "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+            "id": "00000000-0000-4000-8000-d00000000023",
+            "mappingCertificateId": "map_59f66086395063c60395ae0a5b69ef8bce8e163b8467fe8455cfd3e96e06b60d",
+            "partId": "b16-1c-part-r",
+            "refDes": "R6",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+            "value": "10k",
+            "x": 1810,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_570435764b9de4169d7519ef3d4ae820750eaaa693dda8f626471ea912cf556a",
+            "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+            "id": "00000000-0000-4000-8000-d00000000024",
+            "mappingCertificateId": "map_05426d48cb5bca4546f9f876c4b2c85e8eea7964994b02404bbd8a28a73f02f9",
+            "partId": "b16-1c-part-r",
+            "refDes": "R7",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+            "value": "330",
+            "x": 1910,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_39f34356ac49aaf5942f05bbb4a2d396dfad878fb33e1d45cb3209efcafc962f",
+            "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+            "id": "00000000-0000-4000-8000-d00000000025",
+            "mappingCertificateId": "map_59f66086395063c60395ae0a5b69ef8bce8e163b8467fe8455cfd3e96e06b60d",
+            "partId": "b16-1c-part-r",
+            "refDes": "R8",
+            "rotation": 0,
+            "sheetId": "sheet-motors",
+            "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+            "value": "10k",
+            "x": 2010,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_39f34356ac49aaf5942f05bbb4a2d396dfad878fb33e1d45cb3209efcafc962f",
+            "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+            "id": "00000000-0000-4000-8000-d00000000026",
+            "mappingCertificateId": "map_59f66086395063c60395ae0a5b69ef8bce8e163b8467fe8455cfd3e96e06b60d",
+            "partId": "b16-1c-part-r",
+            "refDes": "R9",
+            "rotation": 0,
+            "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+            "value": "10k",
+            "x": 2110,
+            "y": 1340
+          },
+          {
+            "atomicPartRevisionId": "atomic_a49a95bccea1a114cd5a89db23b01a943409f639f70e149f867629c68b43197a",
+            "footprintAssetVersionId": "footprintv_176b229ac3aefad782676fcbe4170e2449cd769f4b4e708afb4f00859fdc7548",
+            "id": "00000000-0000-4000-8000-d00000000027",
+            "mappingCertificateId": "map_60ce227858840aef259fdeb05c26599de9e54558409bf64022f37e2d8e768ac5",
+            "partId": "l7-part-mic5504-3v3",
+            "refDes": "U1",
+            "rotation": 0,
+            "sheetId": "sheet-power",
+            "symbolAssetVersionId": "symbolv_e2244bf399fc1a3c382aa90e1acb436297dcc5ffe7e73db232e8e5185229f45c",
+            "value": "MIC5504-3.3YM5",
+            "x": 1410,
+            "y": 720
+          },
+          {
+            "atomicPartRevisionId": "atomic_03c04312f7e6c5fddfe3f7bd0d03311710488b1ac05cc15019981ee0f1c993d3",
+            "footprintAssetVersionId": "footprintv_30b6c841a57da1b0ae3b76f635d497d1f9ed050b3388e72e622b8751e75ff512",
+            "id": "00000000-0000-4000-8000-d00000000028",
+            "mappingCertificateId": "map_485058188d1bf3e60dfdf7482f1c94e83092647d9b4c9395020991a3f58b32f9",
+            "partId": "l7-part-atmega328p-au",
+            "refDes": "U2",
+            "rotation": 0,
+            "symbolAssetVersionId": "symbolv_35112448e1e5bf9fe294aeca8ce814b277924a985caf311d1b07ec24e7db4689",
+            "value": "ATmega328P-AU",
+            "x": 870,
+            "y": 1020
+          },
+          {
+            "atomicPartRevisionId": "atomic_b1ff744ef6d6d918125888dc2f6b162f0357d6266491830487a18bf12a41a6b2",
+            "footprintAssetVersionId": "footprintv_571594074cfebf859479b2bca7e471c4c4cf327e718a193f93cb65f3ec5b267f",
+            "id": "00000000-0000-4000-8000-d00000000029",
+            "mappingCertificateId": "map_9b4f4cbd73147989627ef96a34c490035148553eae45728502a0174421ca3c49",
+            "partId": "l7-part-lsm6ds3tr-c",
+            "refDes": "U3",
+            "rotation": 0,
+            "sheetId": "sheet-imu",
+            "symbolAssetVersionId": "symbolv_84d85546cd79845cde9f6b1457b2b6979bfe0b59dea190ea11de7bfbaffebab6",
+            "value": "LSM6DS3TR-C",
+            "x": 550,
+            "y": 1020
+          }
+        ],
+        "netLabels": [
+          {
+            "id": "00000000-0000-4000-8000-d0000000002b",
+            "kind": "power",
+            "name": "VBAT",
+            "orientation": 270,
+            "position": {
+              "x": 1550,
+              "y": 720
+            },
+            "sheetId": "sheet-power"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000002c",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 90,
+            "position": {
+              "x": 1530,
+              "y": 740
+            },
+            "sheetId": "sheet-power"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000002d",
+            "kind": "power",
+            "name": "VBAT",
+            "orientation": 270,
+            "position": {
+              "x": 1330,
+              "y": 700
+            },
+            "sheetId": "sheet-power"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000002e",
+            "kind": "power",
+            "name": "VBAT",
+            "orientation": 270,
+            "position": {
+              "x": 1330,
+              "y": 740
+            },
+            "sheetId": "sheet-power"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000002f",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 1410,
+              "y": 780
+            },
+            "sheetId": "sheet-power"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000030",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 90,
+            "position": {
+              "x": 1490,
+              "y": 700
+            },
+            "sheetId": "sheet-power"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000031",
+            "kind": "power",
+            "name": "VBAT",
+            "orientation": 0,
+            "position": {
+              "x": 2210,
+              "y": 1310
+            },
+            "sheetId": "sheet-power"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000032",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 2210,
+              "y": 1370
+            },
+            "sheetId": "sheet-power"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000033",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 0,
+            "position": {
+              "x": 2410,
+              "y": 1310
+            },
+            "sheetId": "sheet-power"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000034",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 2410,
+              "y": 1370
+            },
+            "sheetId": "sheet-power"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000035",
+            "kind": "power",
+            "name": "VBAT",
+            "orientation": 0,
+            "position": {
+              "x": 510,
+              "y": 1310
+            },
+            "sheetId": "sheet-power"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000036",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 510,
+              "y": 1370
+            },
+            "sheetId": "sheet-power"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000037",
+            "kind": "label",
+            "name": "PWM1",
+            "orientation": 270,
+            "position": {
+              "x": 1070,
+              "y": 1310
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000038",
+            "kind": "label",
+            "name": "M1_GATE",
+            "orientation": 90,
+            "position": {
+              "x": 1070,
+              "y": 1370
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000039",
+            "kind": "label",
+            "name": "M1_GATE",
+            "orientation": 180,
+            "position": {
+              "x": 1190,
+              "y": 780
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000003a",
+            "kind": "label",
+            "name": "M1_GATE",
+            "orientation": 270,
+            "position": {
+              "x": 1430,
+              "y": 1310
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000003b",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 1430,
+              "y": 1370
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000003c",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 1250,
+              "y": 820
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000003d",
+            "kind": "label",
+            "name": "M1_DRAIN",
+            "orientation": 270,
+            "position": {
+              "x": 1250,
+              "y": 740
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000003e",
+            "kind": "label",
+            "name": "M1_DRAIN",
+            "orientation": 180,
+            "position": {
+              "x": 290,
+              "y": 640
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000003f",
+            "kind": "label",
+            "name": "M1_DRAIN",
+            "orientation": 0,
+            "position": {
+              "x": 660,
+              "y": 1340
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000040",
+            "kind": "power",
+            "name": "VBAT",
+            "orientation": 270,
+            "position": {
+              "x": 600,
+              "y": 1340
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000041",
+            "kind": "power",
+            "name": "VBAT",
+            "orientation": 270,
+            "position": {
+              "x": 310,
+              "y": 620
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000042",
+            "kind": "label",
+            "name": "PWM2",
+            "orientation": 270,
+            "position": {
+              "x": 1510,
+              "y": 1310
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000043",
+            "kind": "label",
+            "name": "M2_GATE",
+            "orientation": 90,
+            "position": {
+              "x": 1510,
+              "y": 1370
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000044",
+            "kind": "label",
+            "name": "M2_GATE",
+            "orientation": 180,
+            "position": {
+              "x": 1190,
+              "y": 940
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000045",
+            "kind": "label",
+            "name": "M2_GATE",
+            "orientation": 270,
+            "position": {
+              "x": 1610,
+              "y": 1310
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000046",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 1610,
+              "y": 1370
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000047",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 1250,
+              "y": 980
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000048",
+            "kind": "label",
+            "name": "M2_DRAIN",
+            "orientation": 270,
+            "position": {
+              "x": 1250,
+              "y": 880
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000049",
+            "kind": "label",
+            "name": "M2_DRAIN",
+            "orientation": 180,
+            "position": {
+              "x": 290,
+              "y": 800
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000004a",
+            "kind": "label",
+            "name": "M2_DRAIN",
+            "orientation": 0,
+            "position": {
+              "x": 790,
+              "y": 1400
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000004b",
+            "kind": "power",
+            "name": "VBAT",
+            "orientation": 270,
+            "position": {
+              "x": 730,
+              "y": 1400
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000004c",
+            "kind": "power",
+            "name": "VBAT",
+            "orientation": 270,
+            "position": {
+              "x": 310,
+              "y": 780
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000004d",
+            "kind": "label",
+            "name": "PWM3",
+            "orientation": 270,
+            "position": {
+              "x": 1710,
+              "y": 1310
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000004e",
+            "kind": "label",
+            "name": "M3_GATE",
+            "orientation": 90,
+            "position": {
+              "x": 1710,
+              "y": 1370
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000004f",
+            "kind": "label",
+            "name": "M3_GATE",
+            "orientation": 180,
+            "position": {
+              "x": 1190,
+              "y": 1100
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000050",
+            "kind": "label",
+            "name": "M3_GATE",
+            "orientation": 270,
+            "position": {
+              "x": 1810,
+              "y": 1310
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000051",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 1810,
+              "y": 1370
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000052",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 1250,
+              "y": 1140
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000053",
+            "kind": "label",
+            "name": "M3_DRAIN",
+            "orientation": 270,
+            "position": {
+              "x": 1250,
+              "y": 1060
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000054",
+            "kind": "label",
+            "name": "M3_DRAIN",
+            "orientation": 180,
+            "position": {
+              "x": 290,
+              "y": 960
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000055",
+            "kind": "label",
+            "name": "M3_DRAIN",
+            "orientation": 0,
+            "position": {
+              "x": 920,
+              "y": 1400
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000056",
+            "kind": "power",
+            "name": "VBAT",
+            "orientation": 270,
+            "position": {
+              "x": 860,
+              "y": 1400
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000057",
+            "kind": "power",
+            "name": "VBAT",
+            "orientation": 270,
+            "position": {
+              "x": 310,
+              "y": 940
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000058",
+            "kind": "label",
+            "name": "PWM4",
+            "orientation": 270,
+            "position": {
+              "x": 1910,
+              "y": 1310
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000059",
+            "kind": "label",
+            "name": "M4_GATE",
+            "orientation": 90,
+            "position": {
+              "x": 1910,
+              "y": 1370
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000005a",
+            "kind": "label",
+            "name": "M4_GATE",
+            "orientation": 180,
+            "position": {
+              "x": 1190,
+              "y": 1260
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000005b",
+            "kind": "label",
+            "name": "M4_GATE",
+            "orientation": 270,
+            "position": {
+              "x": 2010,
+              "y": 1310
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000005c",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 2010,
+              "y": 1370
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000005d",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 1250,
+              "y": 1320
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000005e",
+            "kind": "label",
+            "name": "M4_DRAIN",
+            "orientation": 270,
+            "position": {
+              "x": 1250,
+              "y": 1220
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000005f",
+            "kind": "label",
+            "name": "M4_DRAIN",
+            "orientation": 180,
+            "position": {
+              "x": 290,
+              "y": 1120
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000060",
+            "kind": "label",
+            "name": "M4_DRAIN",
+            "orientation": 0,
+            "position": {
+              "x": 940,
+              "y": 1490
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000061",
+            "kind": "power",
+            "name": "VBAT",
+            "orientation": 270,
+            "position": {
+              "x": 880,
+              "y": 1490
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000062",
+            "kind": "power",
+            "name": "VBAT",
+            "orientation": 270,
+            "position": {
+              "x": 310,
+              "y": 1100
+            },
+            "sheetId": "sheet-motors"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000063",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 0,
+            "position": {
+              "x": 870,
+              "y": 720
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000064",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 0,
+            "position": {
+              "x": 890,
+              "y": 700
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000065",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 870,
+              "y": 1320
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000066",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 0,
+            "position": {
+              "x": 2510,
+              "y": 1310
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000067",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 2510,
+              "y": 1370
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000068",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 0,
+            "position": {
+              "x": 2610,
+              "y": 1310
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000069",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 2610,
+              "y": 1370
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000006a",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 0,
+            "position": {
+              "x": 2710,
+              "y": 1310
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000006b",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 2710,
+              "y": 1370
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000006c",
+            "kind": "label",
+            "name": "AREF",
+            "orientation": 270,
+            "position": {
+              "x": 750,
+              "y": 780
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000006d",
+            "kind": "label",
+            "name": "AREF",
+            "orientation": 270,
+            "position": {
+              "x": 2810,
+              "y": 1310
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000006e",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 2810,
+              "y": 1370
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000006f",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 0,
+            "position": {
+              "x": 2910,
+              "y": 1310
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000070",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 2910,
+              "y": 1370
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000071",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 0,
+            "position": {
+              "x": 2110,
+              "y": 1310
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000072",
+            "kind": "label",
+            "name": "RESET",
+            "orientation": 90,
+            "position": {
+              "x": 2110,
+              "y": 1370
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000073",
+            "kind": "label",
+            "name": "RESET",
+            "orientation": 0,
+            "position": {
+              "x": 990,
+              "y": 1080
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000074",
+            "kind": "label",
+            "name": "PWM1",
+            "orientation": 90,
+            "position": {
+              "x": 990,
+              "y": 1240
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000075",
+            "kind": "label",
+            "name": "PWM2",
+            "orientation": 90,
+            "position": {
+              "x": 990,
+              "y": 1220
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000076",
+            "kind": "label",
+            "name": "PWM3",
+            "orientation": 270,
+            "position": {
+              "x": 990,
+              "y": 800
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000077",
+            "kind": "label",
+            "name": "PWM4",
+            "orientation": 270,
+            "position": {
+              "x": 990,
+              "y": 820
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000078",
+            "kind": "label",
+            "name": "I2C_SDA",
+            "orientation": 0,
+            "position": {
+              "x": 990,
+              "y": 1040
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000079",
+            "kind": "label",
+            "name": "I2C_SCL",
+            "orientation": 0,
+            "position": {
+              "x": 1010,
+              "y": 1060
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000007a",
+            "kind": "label",
+            "name": "IMU_INT1",
+            "orientation": 90,
+            "position": {
+              "x": 990,
+              "y": 1160
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000007b",
+            "kind": "label",
+            "name": "MISO",
+            "orientation": 180,
+            "position": {
+              "x": 310,
+              "y": 1240
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000007c",
+            "kind": "label",
+            "name": "MISO",
+            "orientation": 270,
+            "position": {
+              "x": 990,
+              "y": 860
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000007d",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 90,
+            "position": {
+              "x": 410,
+              "y": 1240
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000007e",
+            "kind": "label",
+            "name": "SCK",
+            "orientation": 180,
+            "position": {
+              "x": 290,
+              "y": 1260
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000007f",
+            "kind": "label",
+            "name": "SCK",
+            "orientation": 270,
+            "position": {
+              "x": 990,
+              "y": 880
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000080",
+            "kind": "label",
+            "name": "MOSI",
+            "orientation": 0,
+            "position": {
+              "x": 430,
+              "y": 1260
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000081",
+            "kind": "label",
+            "name": "MOSI",
+            "orientation": 270,
+            "position": {
+              "x": 990,
+              "y": 840
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000082",
+            "kind": "label",
+            "name": "RESET",
+            "orientation": 180,
+            "position": {
+              "x": 310,
+              "y": 1280
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000083",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 270,
+            "position": {
+              "x": 410,
+              "y": 1280
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000084",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 180,
+            "position": {
+              "x": 310,
+              "y": 1400
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000085",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 270,
+            "position": {
+              "x": 310,
+              "y": 1420
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000086",
+            "kind": "label",
+            "name": "UART_RXD",
+            "orientation": 180,
+            "position": {
+              "x": 290,
+              "y": 1440
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000087",
+            "kind": "label",
+            "name": "UART_RXD",
+            "orientation": 0,
+            "position": {
+              "x": 990,
+              "y": 1120
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000088",
+            "kind": "label",
+            "name": "UART_TXD",
+            "orientation": 90,
+            "position": {
+              "x": 310,
+              "y": 1460
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000089",
+            "kind": "label",
+            "name": "UART_TXD",
+            "orientation": 0,
+            "position": {
+              "x": 1010,
+              "y": 1140
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000008a",
+            "kind": "label",
+            "name": "LED_DRV",
+            "orientation": 270,
+            "position": {
+              "x": 990,
+              "y": 780
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000008b",
+            "kind": "label",
+            "name": "LED_DRV",
+            "orientation": 270,
+            "position": {
+              "x": 1160,
+              "y": 1310
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000008c",
+            "kind": "label",
+            "name": "LED_A",
+            "orientation": 90,
+            "position": {
+              "x": 1160,
+              "y": 1370
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000008d",
+            "kind": "label",
+            "name": "LED_A",
+            "orientation": 0,
+            "position": {
+              "x": 1260,
+              "y": 1460
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000008e",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 90,
+            "position": {
+              "x": 1200,
+              "y": 1460
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000008f",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 0,
+            "position": {
+              "x": 570,
+              "y": 880
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000090",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 0,
+            "position": {
+              "x": 550,
+              "y": 900
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000091",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 550,
+              "y": 1140
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000092",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 270,
+            "position": {
+              "x": 430,
+              "y": 1080
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000093",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 90,
+            "position": {
+              "x": 430,
+              "y": 960
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000094",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 90,
+            "position": {
+              "x": 410,
+              "y": 980
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000095",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 90,
+            "position": {
+              "x": 430,
+              "y": 1000
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000096",
+            "kind": "label",
+            "name": "I2C_SDA",
+            "orientation": 180,
+            "position": {
+              "x": 430,
+              "y": 1040
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000097",
+            "kind": "label",
+            "name": "I2C_SCL",
+            "orientation": 180,
+            "position": {
+              "x": 410,
+              "y": 1060
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000098",
+            "kind": "label",
+            "name": "IMU_INT1",
+            "orientation": 0,
+            "position": {
+              "x": 670,
+              "y": 960
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d00000000099",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 0,
+            "position": {
+              "x": 1250,
+              "y": 1370
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000009a",
+            "kind": "label",
+            "name": "I2C_SDA",
+            "orientation": 90,
+            "position": {
+              "x": 1250,
+              "y": 1430
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000009b",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 0,
+            "position": {
+              "x": 1340,
+              "y": 1310
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000009c",
+            "kind": "label",
+            "name": "I2C_SCL",
+            "orientation": 90,
+            "position": {
+              "x": 1340,
+              "y": 1370
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000009d",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 0,
+            "position": {
+              "x": 3010,
+              "y": 1310
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000009e",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 3010,
+              "y": 1370
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d0000000009f",
+            "kind": "power",
+            "name": "+3V3",
+            "orientation": 0,
+            "position": {
+              "x": 2310,
+              "y": 1310
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000a0",
+            "kind": "ground",
+            "name": "GND",
+            "orientation": 0,
+            "position": {
+              "x": 2310,
+              "y": 1370
+            },
+            "sheetId": "sheet-imu"
+          },
+          {
+            "id": "port:sheet-motors:ab337d1f6791:label",
+            "kind": "label",
+            "name": "PWM1",
+            "orientation": 0,
+            "portId": "port:sheet-motors:ab337d1f6791",
+            "position": {
+              "x": 1070,
+              "y": 1310
+            },
+            "scope": "hierarchical",
+            "sheetId": "sheet-motors"
+          },
+          {
+            "childSheetId": "sheet-motors",
+            "id": "port:sheet-motors:ab337d1f6791:pin",
+            "kind": "label",
+            "name": "PWM1",
+            "orientation": 0,
+            "portId": "port:sheet-motors:ab337d1f6791",
+            "position": {
+              "x": 990,
+              "y": 1240
+            },
+            "scope": "sheet-pin"
+          },
+          {
+            "id": "port:sheet-motors:b6b78378c80d:label",
+            "kind": "label",
+            "name": "PWM2",
+            "orientation": 0,
+            "portId": "port:sheet-motors:b6b78378c80d",
+            "position": {
+              "x": 1510,
+              "y": 1310
+            },
+            "scope": "hierarchical",
+            "sheetId": "sheet-motors"
+          },
+          {
+            "childSheetId": "sheet-motors",
+            "id": "port:sheet-motors:b6b78378c80d:pin",
+            "kind": "label",
+            "name": "PWM2",
+            "orientation": 0,
+            "portId": "port:sheet-motors:b6b78378c80d",
+            "position": {
+              "x": 990,
+              "y": 1220
+            },
+            "scope": "sheet-pin"
+          },
+          {
+            "id": "port:sheet-motors:b09c0319a05a:label",
+            "kind": "label",
+            "name": "PWM3",
+            "orientation": 0,
+            "portId": "port:sheet-motors:b09c0319a05a",
+            "position": {
+              "x": 1710,
+              "y": 1310
+            },
+            "scope": "hierarchical",
+            "sheetId": "sheet-motors"
+          },
+          {
+            "childSheetId": "sheet-motors",
+            "id": "port:sheet-motors:b09c0319a05a:pin",
+            "kind": "label",
+            "name": "PWM3",
+            "orientation": 0,
+            "portId": "port:sheet-motors:b09c0319a05a",
+            "position": {
+              "x": 990,
+              "y": 800
+            },
+            "scope": "sheet-pin"
+          },
+          {
+            "id": "port:sheet-motors:6a804d10a8a0:label",
+            "kind": "label",
+            "name": "PWM4",
+            "orientation": 0,
+            "portId": "port:sheet-motors:6a804d10a8a0",
+            "position": {
+              "x": 1910,
+              "y": 1310
+            },
+            "scope": "hierarchical",
+            "sheetId": "sheet-motors"
+          },
+          {
+            "childSheetId": "sheet-motors",
+            "id": "port:sheet-motors:6a804d10a8a0:pin",
+            "kind": "label",
+            "name": "PWM4",
+            "orientation": 0,
+            "portId": "port:sheet-motors:6a804d10a8a0",
+            "position": {
+              "x": 990,
+              "y": 820
+            },
+            "scope": "sheet-pin"
+          },
+          {
+            "id": "port:sheet-imu:e8326fa78411:label",
+            "kind": "label",
+            "name": "I2C_SCL",
+            "orientation": 0,
+            "portId": "port:sheet-imu:e8326fa78411",
+            "position": {
+              "x": 1340,
+              "y": 1370
+            },
+            "scope": "hierarchical",
+            "sheetId": "sheet-imu"
+          },
+          {
+            "childSheetId": "sheet-imu",
+            "id": "port:sheet-imu:e8326fa78411:pin",
+            "kind": "label",
+            "name": "I2C_SCL",
+            "orientation": 0,
+            "portId": "port:sheet-imu:e8326fa78411",
+            "position": {
+              "x": 990,
+              "y": 1060
+            },
+            "scope": "sheet-pin"
+          },
+          {
+            "id": "port:sheet-imu:38d4e5ba2c0b:label",
+            "kind": "label",
+            "name": "I2C_SDA",
+            "orientation": 0,
+            "portId": "port:sheet-imu:38d4e5ba2c0b",
+            "position": {
+              "x": 1250,
+              "y": 1430
+            },
+            "scope": "hierarchical",
+            "sheetId": "sheet-imu"
+          },
+          {
+            "childSheetId": "sheet-imu",
+            "id": "port:sheet-imu:38d4e5ba2c0b:pin",
+            "kind": "label",
+            "name": "I2C_SDA",
+            "orientation": 0,
+            "portId": "port:sheet-imu:38d4e5ba2c0b",
+            "position": {
+              "x": 990,
+              "y": 1040
+            },
+            "scope": "sheet-pin"
+          },
+          {
+            "id": "port:sheet-imu:0b5ed5f8877d:label",
+            "kind": "label",
+            "name": "IMU_INT1",
+            "orientation": 0,
+            "portId": "port:sheet-imu:0b5ed5f8877d",
+            "position": {
+              "x": 670,
+              "y": 960
+            },
+            "scope": "hierarchical",
+            "sheetId": "sheet-imu"
+          },
+          {
+            "childSheetId": "sheet-imu",
+            "id": "port:sheet-imu:0b5ed5f8877d:pin",
+            "kind": "label",
+            "name": "IMU_INT1",
+            "orientation": 0,
+            "portId": "port:sheet-imu:0b5ed5f8877d",
+            "position": {
+              "x": 990,
+              "y": 1160
+            },
+            "scope": "sheet-pin"
+          }
+        ],
+        "pageSize": "A3",
+        "sheets": {
+          "sheets": [
+            {
+              "id": "root",
+              "name": "Overview",
+              "parentId": null
+            },
+            {
+              "block": {
+                "height": 200,
+                "width": 500,
+                "x": 400,
+                "y": 1640
+              },
+              "id": "sheet-power",
+              "name": "Power",
+              "parentId": "root"
+            },
+            {
+              "block": {
+                "height": 200,
+                "width": 500,
+                "x": 1100,
+                "y": 1640
+              },
+              "id": "sheet-motors",
+              "name": "Motor drivers",
+              "parentId": "root",
+              "ports": [
+                {
+                  "direction": "passive",
+                  "id": "port:sheet-motors:ab337d1f6791",
+                  "name": "PWM1"
+                },
+                {
+                  "direction": "passive",
+                  "id": "port:sheet-motors:b6b78378c80d",
+                  "name": "PWM2"
+                },
+                {
+                  "direction": "passive",
+                  "id": "port:sheet-motors:b09c0319a05a",
+                  "name": "PWM3"
+                },
+                {
+                  "direction": "passive",
+                  "id": "port:sheet-motors:6a804d10a8a0",
+                  "name": "PWM4"
+                }
+              ]
+            },
+            {
+              "block": {
+                "height": 200,
+                "width": 500,
+                "x": 1800,
+                "y": 1640
+              },
+              "id": "sheet-imu",
+              "name": "IMU",
+              "parentId": "root",
+              "ports": [
+                {
+                  "direction": "passive",
+                  "id": "port:sheet-imu:e8326fa78411",
+                  "name": "I2C_SCL"
+                },
+                {
+                  "direction": "passive",
+                  "id": "port:sheet-imu:38d4e5ba2c0b",
+                  "name": "I2C_SDA"
+                },
+                {
+                  "direction": "passive",
+                  "id": "port:sheet-imu:0b5ed5f8877d",
+                  "name": "IMU_INT1"
+                }
+              ]
+            }
+          ],
+          "version": 1
+        },
+        "wires": [
+          {
+            "id": "00000000-0000-4000-8000-d000000000a1",
+            "sheetId": "sheet-motors",
+            "vertices": [
+              {
+                "x": 310,
+                "y": 640
+              },
+              {
+                "x": 290,
+                "y": 640
+              }
+            ]
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000a2",
+            "sheetId": "sheet-motors",
+            "vertices": [
+              {
+                "x": 310,
+                "y": 800
+              },
+              {
+                "x": 290,
+                "y": 800
+              }
+            ]
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000a3",
+            "sheetId": "sheet-motors",
+            "vertices": [
+              {
+                "x": 310,
+                "y": 960
+              },
+              {
+                "x": 290,
+                "y": 960
+              }
+            ]
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000a4",
+            "sheetId": "sheet-motors",
+            "vertices": [
+              {
+                "x": 310,
+                "y": 1120
+              },
+              {
+                "x": 290,
+                "y": 1120
+              }
+            ]
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000a5",
+            "vertices": [
+              {
+                "x": 310,
+                "y": 1260
+              },
+              {
+                "x": 290,
+                "y": 1260
+              }
+            ]
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000a6",
+            "vertices": [
+              {
+                "x": 310,
+                "y": 1440
+              },
+              {
+                "x": 290,
+                "y": 1440
+              }
+            ]
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000a7",
+            "sheetId": "sheet-imu",
+            "vertices": [
+              {
+                "x": 430,
+                "y": 980
+              },
+              {
+                "x": 410,
+                "y": 980
+              }
+            ]
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000a8",
+            "sheetId": "sheet-imu",
+            "vertices": [
+              {
+                "x": 430,
+                "y": 1060
+              },
+              {
+                "x": 410,
+                "y": 1060
+              }
+            ]
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000a9",
+            "sheetId": "sheet-power",
+            "vertices": [
+              {
+                "x": 1550,
+                "y": 740
+              },
+              {
+                "x": 1530,
+                "y": 740
+              }
+            ]
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000aa",
+            "sheetId": "sheet-motors",
+            "vertices": [
+              {
+                "x": 1250,
+                "y": 1300
+              },
+              {
+                "x": 1250,
+                "y": 1320
+              }
+            ]
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000ab",
+            "vertices": [
+              {
+                "x": 410,
+                "y": 1260
+              },
+              {
+                "x": 430,
+                "y": 1260
+              }
+            ]
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000ac",
+            "vertices": [
+              {
+                "x": 990,
+                "y": 1060
+              },
+              {
+                "x": 1010,
+                "y": 1060
+              }
+            ]
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000ad",
+            "vertices": [
+              {
+                "x": 990,
+                "y": 1140
+              },
+              {
+                "x": 1010,
+                "y": 1140
+              }
+            ]
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000ae",
+            "sheetId": "sheet-imu",
+            "vertices": [
+              {
+                "x": 570,
+                "y": 900
+              },
+              {
+                "x": 570,
+                "y": 880
+              }
+            ]
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000af",
+            "vertices": [
+              {
+                "x": 890,
+                "y": 720
+              },
+              {
+                "x": 890,
+                "y": 700
+              }
+            ]
+          },
+          {
+            "id": "00000000-0000-4000-8000-d000000000b0",
+            "sheetId": "sheet-motors",
+            "vertices": [
+              {
+                "x": 1250,
+                "y": 900
+              },
+              {
+                "x": 1250,
+                "y": 880
+              }
+            ]
+          }
+        ]
+      },
+      "updatedAt": 1
+    }
+  }
+}
