@@ -409,6 +409,7 @@ app/components/schematic/ReplacementReviewDialog.tsx|click|Button|Cancel — cha
 app/components/schematic/ReplacementReviewDialog.tsx|dialog|Dialog|(none)|onCancel,app/components/schematic/ReplacementReviewDialog.tsx,dialog,Dialog,yes,exempt:dialog-titled,Exact component replacement — review before applying
 app/components/schematic/ScopedNetLabelGlyph.tsx|pointer|g|scoped-label-*|onMouseDown,app/components/schematic/ScopedNetLabelGlyph.tsx,pointer,g,no,named:aria-label,* *
 app/components/schematic/SheetBlocksLayer.tsx|double-click|g|sheet-block-*|openSheet,app/components/schematic/SheetBlocksLayer.tsx,double-click,g,no,named:aria-label,Open sheet *
+app/components/schematic/SheetBlocksLayer.tsx|key|g|sheet-block-*|onBlockKeyDown,app/components/schematic/SheetBlocksLayer.tsx,key,g,no,named:aria-label,Open sheet *
 app/components/schematic/SheetNavigator.tsx|change|input|sheets-move-mode|setDrafts,app/components/schematic/SheetNavigator.tsx,change,input,no,named:label-wrap,the part with its attached wires and local labels
 app/components/schematic/SheetNavigator.tsx|change|input|sheets-move-mode|setDrafts#2,app/components/schematic/SheetNavigator.tsx,change,input,no,named:label-wrap,its connected group on this sheet
 app/components/schematic/SheetNavigator.tsx|change|input|sheets-move-new-name|setDrafts,app/components/schematic/SheetNavigator.tsx,change,input,no,named:label-wrap,New sheet name

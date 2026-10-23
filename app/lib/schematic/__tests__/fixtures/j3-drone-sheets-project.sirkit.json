@@ -2,7 +2,7 @@
   "format": "sirkit-project",
   "formatVersion": 2,
   "exportedAt": "2026-10-22T00:00:00.000Z",
-  "integrity": "sha256:729a18c01421c0977d47aa5b8288c72b30e7bcc83121122891642dad4478ab0b",
+  "integrity": "sha256:fe7451d4c492196d5fd6757e0d4458bc87ce3706368e61da98ff3a14b3e3f97b",
   "payload": {
     "checkpoints": [],
     "project": {
@@ -1980,7 +1980,7 @@
             "id": "port:sheet-imu:38d4e5ba2c0b:pin",
             "kind": "label",
             "name": "I2C_SDA",
-            "orientation": 0,
+            "orientation": 90,
             "portId": "port:sheet-imu:38d4e5ba2c0b",
             "position": {
               "x": 990,
@@ -1992,7 +1992,7 @@
             "id": "port:sheet-imu:0b5ed5f8877d:label",
             "kind": "label",
             "name": "IMU_INT1",
-            "orientation": 0,
+            "orientation": 90,
             "portId": "port:sheet-imu:0b5ed5f8877d",
             "position": {
               "x": 670,

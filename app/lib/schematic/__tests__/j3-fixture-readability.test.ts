@@ -14,6 +14,8 @@
  *     components and the same netlist partition (the j2 proof, reused on this fixture);
  *  4. readability: every sheet's content fits the A3 page; no wire is longer than a quarter of the page; the overview blocks do not
  *     overlap each other, the page edge, or any entity that stays on the overview; blocks and entities sit on the 10 px grid;
+ *     [PR-J3 integration, 2026-10-23] J3N-2: no two labels of one sheet share both a position and an orientation (a port anchor on a
+ *     labelled pin takes another orientation, so the local label stays selectable under the scoped glyph);
  *  5. the project file: formatVersion 2, integrity verified, byte-stable (the canonical payload), and it imports and re-exports byte
  *     for byte through the real importer and exporter (jsdom localStorage, a stubbed parts route). MULTI_SHEET_EDITOR_AVAILABLE gates
  *     the import: while it is false the import is the recoverable SHEETS_EDITOR_PENDING refusal and nothing is written;
@@ -257,6 +259,19 @@ describe("[PR-J3] 4. readability: everything fits the page, no off-page wire run
       const inside = rootPoints.filter((point) => point.x > box.minX - 20 && point.x < box.maxX + 20 && point.y > box.minY - 20 && point.y < box.maxY + 20);
       expect(inside, `${name} overlaps overview circuitry at ${JSON.stringify(inside.slice(0, 3))}`).toEqual([]);
     }
+    // [PR-J3 integration, 2026-10-23] J3N-2: a port anchor shares its grid point with the net's local label on a generated page (13 such
+    // points here, each a local label under a scoped anchor); the two never share an orientation, so both glyphs can be hovered and
+    // dragged - the root's I2C_SDA sheet pin and the IMU's IMU_INT1 hierarchical label turned south (90) beside local labels pointing east
+    const byPoint = new Map<string, Array<{ name: string; scope: string; orientation: number }>>();
+    for (const label of fixture.netLabels!) { const key = `${sheetOf(label)}|${label.position.x},${label.position.y}`; byPoint.set(key, [...(byPoint.get(key) ?? []), { name: label.name, scope: label.scope ?? "local", orientation: label.orientation }]); }
+    const sharedPoints = [...byPoint.entries()].filter(([, labels]) => labels.length > 1);
+    expect(sharedPoints).toHaveLength(13);
+    for (const [key, labels] of sharedPoints) {
+      expect(labels.map((label) => label.scope).sort(), key).toEqual(["local", labels.find((label) => label.scope !== "local")!.scope].sort());
+      expect(new Set(labels.map((label) => label.orientation)).size, `${key}: ${labels.map((label) => `${label.name}/${label.scope}/${label.orientation}`).join(" + ")}`).toBe(labels.length);
+    }
+    expect(byPoint.get(`${ROOT_SHEET_ID}|990,1040`)!.map((label) => `${label.scope}/${label.orientation}`).sort()).toEqual(["local/0", "sheet-pin/90"]);
+    expect(byPoint.get("sheet-imu|670,960")!.map((label) => `${label.scope}/${label.orientation}`).sort()).toEqual(["hierarchical/90", "local/0"]);
     // every part anchor, wire vertex and label sits on the schematic grid (the planner moved nothing off it)
     const onGrid = (value: number): boolean => value % GRID === 0;
     for (const sheetId of [ROOT_SHEET_ID, ...J3_SHEETS.map((sheet) => sheet.id)]) {

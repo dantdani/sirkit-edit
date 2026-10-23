@@ -11,7 +11,8 @@
  *  2. New sheet "MCU" -> Go to U2 -> Move to sheet -> the preview lists the crossings -> Apply -> the overview block -> open MCU ->
  *     Follow I2C_SCL to IMU (highlight) -> Undo / Redo -> reload keeps 5 sheets and 41 instances;
  *  3. with IMU active: Prepare PCB through the binding review -> sync -> apply -> awaiting qualification with 41 footprints; the design
- *     checks list Sheet connections;
+ *     checks list Sheet connections; [PR-J3 integration, 2026-10-23] J3-PAGE-1: the project file exported AFTER the sync carries the
+ *     board checkpoint WITH its sheet tree and re-imports (as a copy) with every checkpoint;
  *  4. the AI refusal: the Build sentence on the multi-sheet project is refused with the guard's message; no generation task, no
  *     provider-bound request;
  *  5. at 1280 x 720 the chip overlaps neither Go to, the status bar nor the workspace tabs.
@@ -297,6 +298,37 @@ test("3. with the IMU sheet active: Prepare PCB through the binding review, the 
   // intercepts a pointer click on them (a pre-existing PCB-tab layout, not J3; reported to the lead); the tab switch is what is under test
   await page.getByTestId("view-tab-schematic").dispatchEvent("click");
   await expect(page.getByTestId(T.breadcrumb)).toContainText("IMU");
+
+  // [PR-J3 integration, 2026-10-23] review J3-PAGE-1: the board checkpoint the sync wrote (PcbEditor boardCheckpoint) carries the sheet
+  // tree, so the project file exported AFTER the sync (case 1 exported before any checkpoint existed) re-imports with its checkpoints
+  // instead of being refused as "A checkpoint's schematic in the file is invalid"
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save project file" }).click();
+  const downloadPath = (await (await downloadPromise).path())!;
+  const exported = JSON.parse(readFileSync(downloadPath, "utf8")) as { formatVersion: number; payload: { checkpoints: Array<{ label: string; schematic: SchematicState }> } };
+  expect(exported.formatVersion).toBe(2);
+  expect(exported.payload.checkpoints.length).toBeGreaterThanOrEqual(1);
+  expect(exported.payload.checkpoints.some((checkpoint) => /Synchronized PCB/.test(checkpoint.label))).toBe(true);
+  for (const checkpoint of exported.payload.checkpoints) {
+    expect(checkpoint.schematic.sheets, checkpoint.label).toEqual(fixtureState().sheets);
+    expect(checkpoint.schematic.kicadComponents, checkpoint.label).toHaveLength(41);
+  }
+  await page.locator('input[type="file"][accept*=".sirkit.json"]').setInputFiles({ name: "drone-sheets-after-sync.sirkit.json", mimeType: "application/json", buffer: readFileSync(downloadPath) });
+  await expect(page.getByRole("button", { name: /Drone \(sheets\) \(imported copy\)/ })).toBeVisible({ timeout: 60_000 });
+  const copyId = await page.evaluate(() => Object.keys(window.localStorage).filter((key) => key.startsWith("sirkit:project:")).map((key) => JSON.parse(window.localStorage.getItem(key)!) as { id: string; name: string }).find((record) => record.name.endsWith("(imported copy)"))!.id);
+  expect(copyId).not.toBe(J3_FIXTURE_PROJECT_ID);
+  expect((await savedState(page, copyId)).sheets).toEqual(fixtureState().sheets);
+  const restoredCheckpoints = await page.evaluate((projectId) => new Promise<number>((resolve, reject) => {
+    const open = indexedDB.open("sirkit-checkpoints");
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const request = db.transaction("checkpoints", "readonly").objectStore("checkpoints").index("byProject").getAll(projectId);
+      request.onsuccess = () => { db.close(); resolve((request.result as unknown[]).length); };
+      request.onerror = () => reject(request.error);
+    };
+  }), copyId);
+  expect(restoredCheckpoints).toBe(exported.payload.checkpoints.length);
 });
 
 test("4. the AI refusal: the Build sentence on the multi-sheet project is refused with the guard's message; no generation task is started and nothing provider-bound is sent", async ({ page, context, baseURL }) => {

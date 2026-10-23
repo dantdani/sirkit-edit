@@ -1,6 +1,6 @@
 {
   "schemaVersion": "sirkit.accessible-name-census-summary.v1",
-  "sites": 708,
+  "sites": 709,
   "surfaces": 73,
   "byStatus": {
     "exempt:backdrop": 1,
@@ -9,7 +9,7 @@
     "exempt:dialog-titled": 24,
     "exempt:form-submit": 6,
     "exempt:listener": 25,
-    "named:aria-label": 148,
+    "named:aria-label": 149,
     "named:forwarded": 10,
     "named:label-for": 3,
     "named:label-wrap": 45,
@@ -33,7 +33,7 @@
     "structuralProblems": 0
   },
   "outOfScope": {
-    "sites": 533,
+    "sites": 534,
     "unnamed": 102
   }
 }

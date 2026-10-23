@@ -15,7 +15,7 @@
  */
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { kicadPinWorldPos, pinWorldPos, pointKey } from "@/app/lib/geometry";
+import { kicadPinExitDirection, kicadPinWorldPos, pinWorldPos, pointKey } from "@/app/lib/geometry";
 import { exportToKicadSch } from "@/app/lib/kicad-export";
 import { schematicToSpice } from "@/app/lib/netlist";
 import { buildNetlist, buildPcbSyncPublicationGraph, netlistHash, type NetlistPartData } from "@/app/lib/pcb/netlist-bridge";
@@ -549,5 +549,70 @@ describe("[PR-J1 review, 2026-10-22] R2-5: the rule-change refusal names the ope
     const theory = theoryLegacyFixture();
     const collapse = attemptApply(theory, [createSheetOperation(theory, { operationId: opId("c"), sheet: { id: "aux", name: "Aux", parentId: ROOT_SHEET_ID } })]);
     expect(collapse).toMatch(/^SHEET_NOT_EQUIVALENT: .*GND, AGND, DGND are joined.* Rename the ground labels to one name, or tie them explicitly, before organizing this design into sheets\. This sheet operation/);
+  });
+});
+
+describe("[PR-J3 integration, 2026-10-23] J3N-2: a port anchor never lies exactly over the local label it joins", () => {
+  /** R1 -- R2 on the overview, the net labelled at R1's right pin (where the hierarchical label will anchor when R1 moves). */
+  const pair = (labels: NetLabel[]): SchematicState => {
+    const r1 = resistorAt("R1", 100, 100), r2 = resistorAt("R2", 300, 100);
+    return { components: [r1, r2], wires: [wireAt("w1", pinWorldPos(r1, "right"), pinWorldPos(r2, "left"))], netLabels: labels };
+  };
+  const move = (state: SchematicState) => planMoveToSheet(state, { entities: [{ family: "theory", id: "R1" }, ...state.netLabels!.map((label) => ({ family: "label" as const, id: label.id }))], target: { newSheet: { id: "s1", name: "Stage" } } });
+  const anchorsOf = (state: SchematicState) => state.netLabels!.filter((label) => label.scope === "hierarchical" || label.scope === "sheet-pin");
+
+  it("the anchor takes the pin's exit direction; when the local label there already extends that way it takes the first free orientation, never the one into the part", () => {
+    const r1 = resistorAt("R1", 100, 100);
+    const at = pinWorldPos(r1, "right");
+    // the local label points east, out of R1's right pin (exit east): the hierarchical label at the same point takes south (90)
+    const east = move(pair([{ id: "l-a", position: at, name: "A", kind: "label", orientation: 0 }]));
+    if (!east.ok) throw new Error(`${east.code}: ${east.message}`);
+    const hierarchical = anchorsOf(east.after).find((label) => label.scope === "hierarchical")!;
+    expect(hierarchical.position).toEqual(at); // electrically unchanged: the anchor is the pin point
+    expect(hierarchical.orientation).toBe(90);
+    // the sheet pin anchors at R2's left pin (exit west), where no label sits: it takes the exit direction itself
+    const pin = anchorsOf(east.after).find((label) => label.scope === "sheet-pin")!;
+    expect(pin.position).toEqual(pinWorldPos(resistorAt("R2", 300, 100), "left"));
+    expect(pin.orientation).toBe(180);
+    expect(resolveProjectConnectivity(east.after).partitionDigest).toBe(resolveProjectConnectivity(pair([])).partitionDigest);
+    // the local label points north: the exit direction (east) is free and the anchor takes it
+    const north = move(pair([{ id: "l-a", position: at, name: "A", kind: "label", orientation: 270 }]));
+    if (!north.ok) throw new Error(north.message);
+    expect(anchorsOf(north.after).find((label) => label.scope === "hierarchical")!.orientation).toBe(0);
+    // east and south taken by two local labels at the point: north (270) comes before west (180), the direction into the part
+    const two = move(pair([{ id: "l-a", position: at, name: "A", kind: "label", orientation: 0 }, { id: "l-b", position: at, name: "A", kind: "label", orientation: 90 }]));
+    if (!two.ok) throw new Error(two.message);
+    expect(anchorsOf(two.after).find((label) => label.scope === "hierarchical")!.orientation).toBe(270);
+    // deterministic: the same input plans the same orientations
+    expect(move(pair([{ id: "l-a", position: at, name: "A", kind: "label", orientation: 0 }]))).toEqual(east);
+  });
+
+  it("on the fixture drone's IMU move no two labels of one sheet share a position and an orientation; the anchors on part pins follow the pins' exits", () => {
+    const lookup = fixturePartLookup();
+    const drone = droneFixtureState();
+    const plan = planMoveToSheet(drone, { entities: attachedSelection(drone, ["U3"], lookup), target: { newSheet: { id: "sheet-imu", name: "IMU" } }, rootName: "Overview", operationIdPrefix: "j3n2" }, lookup);
+    if (!plan.ok) throw new Error(`${plan.code}: ${plan.message}`);
+    const seen = new Map<string, NetLabel[]>();
+    for (const label of plan.after.netLabels!) { const key = `${label.sheetId ?? ROOT_SHEET_ID}|${pointKey(label.position)}`; seen.set(key, [...(seen.get(key) ?? []), label]); }
+    const shared = [...seen.values()].filter((labels) => labels.length > 1);
+    expect(shared.length).toBeGreaterThan(0); // the generated page labels the nets on the pins: every anchor shares its point with a local label
+    for (const labels of shared) expect(new Set(labels.map((label) => label.orientation)).size, labels.map((label) => `${label.name}/${label.scope ?? "local"}/${label.orientation}`).join(" ")).toBe(labels.length);
+    // U3's INT1 pin exits east and its local label points east: the hierarchical label takes south
+    const imuInt1 = plan.after.netLabels!.filter((label) => label.name === "IMU_INT1" && label.sheetId === "sheet-imu");
+    expect(imuInt1.map((label) => [label.scope ?? "local", label.orientation]).sort()).toEqual([["hierarchical", 90], ["local", 0]]);
+    // every anchor on a part pin extends along the pin's exit unless a label at that point already does; it never shares an orientation there
+    const exitOrientation = { east: 0, south: 90, west: 180, north: 270 } as const;
+    const anchors = plan.after.netLabels!.filter((label) => label.scope === "hierarchical" || label.scope === "sheet-pin");
+    expect(anchors).toHaveLength(plan.preview.crossings.length * 2); // a hierarchical label and a sheet pin per crossing (I2C_SCL, I2C_SDA, IMU_INT1)
+    expect(plan.preview.crossings.map((crossing) => crossing.port.name).sort()).toEqual(["I2C_SCL", "I2C_SDA", "IMU_INT1"]);
+    let onPins = 0;
+    for (const anchor of anchors) {
+      const sheetId = anchor.sheetId ?? ROOT_SHEET_ID;
+      const exits = plan.after.kicadComponents!.filter((item) => (item.sheetId ?? ROOT_SHEET_ID) === sheetId).flatMap((item) => (lookup(item.partId)?.pins ?? []).filter((pin) => pointKey(kicadPinWorldPos(item, pin)) === pointKey(anchor.position)).map((pin) => exitOrientation[kicadPinExitDirection(item, pin)]));
+      const others = plan.after.netLabels!.filter((label) => label.id !== anchor.id && (label.sheetId ?? ROOT_SHEET_ID) === sheetId && pointKey(label.position) === pointKey(anchor.position)).map((label) => label.orientation);
+      expect(others, `${anchor.name} ${anchor.scope}`).not.toContain(anchor.orientation);
+      if (exits.length > 0) { onPins += 1; if (!others.includes(exits[0]!)) expect(anchor.orientation, `${anchor.name} ${anchor.scope}`).toBe(exits[0]); }
+    }
+    expect(onPins).toBe(anchors.length); // on the generated page every anchor sits on a part pin
   });
 });

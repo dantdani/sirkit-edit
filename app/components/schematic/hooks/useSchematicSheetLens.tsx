@@ -24,6 +24,9 @@
  * async-retirement rules (SR-1..SR-4). The optional inputs (`selectedId` / `selectedKicadId`, `captureScope`, `onSheetSwitch`,
  * `storage`) are not part of the frozen call: without them the selection is read through the view-session bridge, the controller's
  * own project / activation token guards continuations, and the page's selection is cleared through the bus after each remount.
+ *
+ * [PR-J3 integration, 2026-10-23] Review J3N-1 / J3-PAGE-3: `initialCamera` is the controller's live camera of the active sheet (see
+ * `editorProps` below), and a single-sheet document never writes the presentation store (the controller gates the write).
  */
 
 import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -113,7 +116,11 @@ export function useSchematicSheetLens(input: UseSchematicSheetLensInput): Schema
 
   const sheetLayer: ReactNode = legacy ? null : <SheetBlocksLayer state={authoritative} activeSheetId={activeSheetId} openSheet={controller.openSheet} />;
   const editorProps: SheetLensEditorProps = {
-    initialCamera: legacy ? undefined : snapshot.initialCamera,
+    // [PR-J3 integration, 2026-10-23] review J3N-1: the camera comes from the controller's LIVE record (onCameraChange updates it
+    // synchronously; a switch and a project load read the same record), not from the snapshot emitted at the last switch, so the editor
+    // remounted when `sheets` appears or disappears (the page keys it `legacy ? undefined : activation`) starts from the camera the person
+    // was at. A single-sheet document that has not had sheets in this project still fits the page on mount (hook test 1).
+    initialCamera: legacy && !controller.hasSeenSheets(projectId) ? undefined : controller.cameraOf(activeSheetId),
     onCameraChange: controller.onCameraChange,
     sheetLayer,
     onLocateElsewhere: controller.locateElsewhere,

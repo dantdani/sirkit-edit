@@ -19,7 +19,11 @@
  *  8. Follow signal: the overview's I2C_SCL sheet pin lists "IMU › I2C_SCL"; choosing it opens the IMU sheet and replays the highlight
  *     and the focus on the view bus;
  *  9. Rename, Add port and Up / Down through their controls; a refused rename (a sibling's name) surfaces in the notice and changes
- *     nothing.
+ *     nothing;
+ * 10. [PR-J3 integration, 2026-10-23] J3N-6: the move plan is pure (two previews of one input are identical, operation ids included; the
+ *     applied transaction stamps its own ids) and is not recomputed by a re-render with the same inputs, only by a changed one.
+ * [PR-J3 integration, 2026-10-23] Test 2 also pins J3N-5 (the overview block opens on Enter / Space; the chip's aria-controls names the
+ * panel only while it is in the DOM) and test 6 pins J3N-3 (the planner's SHEET_MOVE_* code shown inline and as data-code).
  * jsdom; no network; nothing on disk.
  */
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
@@ -29,7 +33,9 @@ import { fromCanonicalSchematic, schematicStateDigest, toCanonicalSchematic } fr
 import type { EngineeringOperation } from "@/app/lib/engineering/types";
 import { resolveProjectConnectivity } from "@/app/lib/schematic/project-connectivity";
 import type { PartPinsSource } from "@/app/lib/schematic/sheet-lens";
+import * as sheetOperations from "@/app/lib/schematic/sheet-operations";
 import { createSheetOperation } from "@/app/lib/schematic/sheet-operations";
+import { MOVE_PREVIEW_PREFIX } from "../hooks/sheet-navigation-controller";
 import { droneFixtureState } from "@/app/lib/schematic/__tests__/_j1-fixtures";
 import { ROOT_SHEET_ID, type SchematicState } from "@/lib/schematic-types";
 import type { SchematicSheetLens } from "../hooks/useSchematicSheetLens";
@@ -117,7 +123,10 @@ describe("[PR-J3] the Sheets navigator", () => {
     expect(screen.getByTestId("sheet-block-sheet-imu")).toBeTruthy();
     expect(screen.getByTestId("sheet-block-sheet-power")).toBeTruthy();
     expect(screen.getByTestId("sheet-block-sheet-imu").dataset.portCount).toBe("3");
+    expect(screen.getByTestId("sheets-chip").getAttribute("aria-controls")).toBeNull(); // [PR-J3 integration, 2026-10-23] J3N-5: no dangling reference while the panel is not in the DOM
     openPanel();
+    expect(screen.getByTestId("sheets-chip").getAttribute("aria-controls")).toBe("sheets-panel");
+    expect(document.getElementById("sheets-panel")).toBe(screen.getByTestId("sheets-panel"));
     expect(screen.getByTestId("sheets-breadcrumb").textContent).toBe("Overview");
     expect(treeItems().map((item) => item.dataset.sheetName)).toEqual(["Overview", "IMU", "Power"]);
     expect(treeItems().map((item) => item.getAttribute("aria-level"))).toEqual(["1", "2", "2"]);
@@ -153,6 +162,29 @@ describe("[PR-J3] the Sheets navigator", () => {
     expect(summary().dataset.active).toBe("sheet-power");
     expect(summary().dataset.kicad).toBe("");
     expect(lens().activation).toBe(4);
+    // [PR-J3 integration, 2026-10-23] J3N-5: the block is announced as a button, so it is focusable and opens on Enter / Space too; a single
+    // click still does nothing (a click on the overview never changes the sheet by accident)
+    fireEvent.click(screen.getByTestId("sheets-back"));
+    await settle();
+    const block = screen.getByTestId("sheet-block-sheet-imu");
+    expect(block.getAttribute("role")).toBe("button");
+    expect(block.getAttribute("tabindex")).toBe("0");
+    expect(block.getAttribute("aria-label")).toBe("Open sheet IMU");
+    fireEvent.click(block);
+    await settle();
+    expect(summary().dataset.active).toBe(ROOT_SHEET_ID);
+    fireEvent.keyDown(block, { key: "Tab" });
+    await settle();
+    expect(summary().dataset.active).toBe(ROOT_SHEET_ID);
+    fireEvent.keyDown(block, { key: "Enter" });
+    await settle();
+    expect(summary().dataset.active).toBe("sheet-imu");
+    fireEvent.click(screen.getByTestId("sheets-back"));
+    await settle();
+    fireEvent.keyDown(screen.getByTestId("sheet-block-sheet-power"), { key: " " });
+    await settle();
+    expect(summary().dataset.active).toBe("sheet-power");
+    expect(lens().activation).toBe(8);
     expect(page.commands).toEqual([]); // navigation never touches the document
   });
 
@@ -260,7 +292,8 @@ describe("[PR-J3] the Sheets navigator", () => {
     const target = screen.getByTestId("sheets-move-target") as HTMLSelectElement;
     expect([...target.options].map((option) => option.value)).toEqual(["new", imu.id]);
     fireEvent.click(screen.getByLabelText(/its connected group on this sheet/));
-    expect(screen.getByTestId("sheets-move-refusal").textContent).toMatch(/The selected part is on sheet "IMU", not on the open sheet; open that sheet to move it\. Nothing was changed\./); // U3 is on the IMU sheet now: never moved blind from another sheet
+    expect(screen.getByTestId("sheets-move-refusal").textContent).toMatch(/^The selected part is on sheet "IMU", not on the open sheet; open that sheet to move it\. Nothing was changed\./); // U3 is on the IMU sheet now: never moved blind from another sheet
+    expect(screen.getByTestId("sheets-move-refusal").dataset.code).toBe(""); // [PR-J3 integration, 2026-10-23] J3N-3: a refusal of the controller's own (no planner code) shows the message alone
     expect((screen.getByTestId("sheets-move-apply") as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -276,6 +309,9 @@ describe("[PR-J3] the Sheets navigator", () => {
     fireEvent.change(screen.getByTestId("sheets-move-new-name"), { target: { value: "IMU" } });
     expect(screen.getByTestId("sheets-move-refusal").textContent).toMatch(/pins of part .* are not loaded, so the move cannot be proven to keep every connection\. Wait until all parts are loaded, then try again\. Nothing was changed\./);
     expect((screen.getByTestId("sheets-move-apply") as HTMLButtonElement).disabled).toBe(true);
+    // [PR-J3 integration, 2026-10-23] J3N-3: the planner's code is shown inline and carried as data-code (two refusals with similar prose stay distinguishable)
+    expect(screen.getByTestId("sheets-move-refusal").dataset.code).toBe("SHEET_MOVE_CONNECTIVITY_INVALID");
+    expect(screen.getByTestId("sheets-move-refusal").textContent!.startsWith("SHEET_MOVE_CONNECTIVITY_INVALID — The pins of part")).toBe(true);
   });
 
   it("7. Apply re-plans on the canonical base: a base that moved under the preview is refused, nothing changes, the notice says so", async () => {
@@ -369,5 +405,46 @@ describe("[PR-J3] the Sheets navigator", () => {
     expect(screen.getByTestId("sheets-notice").textContent).toMatch(/cannot move further down/);
     expect(page.commands).toHaveLength(3);
     expect(page.commands.every((command) => command.commandId === "schematic.sheet-structure")).toBe(true);
+  });
+
+  it("10. [PR-J3 integration, 2026-10-23] J3N-6: the move plan is pure and planned once per distinct input, not once per render", async () => {
+    const drone = droneFixtureState();
+    const u3 = drone.kicadComponents!.find((item) => item.refDes === "U3")!;
+    const page = new FakePage(drone);
+    const planner = vi.spyOn(sheetOperations, "planMoveToSheet");
+    const view = render(<Harness page={page} graph={recordingGraph().graph} projectId="p1" storage={new MemoryStorage()} selectedKicadId={u3.id} onLens={onLens} />);
+    await settle();
+    // purity: two previews of one input are identical, operation ids included (no counter runs during a render)
+    const input = { mode: "selection" as const, selection: { family: "kicad" as const, id: u3.id }, target: { newSheet: { id: "sheet-preview", name: "IMU" } } };
+    const first = lens().controller.api.planMove(input);
+    const again = lens().controller.api.planMove({ ...input, target: { newSheet: { ...input.target.newSheet } } });
+    expect(first).toEqual(again);
+    if (!first.ok) throw new Error(first.message);
+    expect(first.input.operationIdPrefix).toBe(MOVE_PREVIEW_PREFIX);
+    expect(first.plan.operations.every((operation) => operation.operationId.startsWith(`${MOVE_PREVIEW_PREFIX}:`))).toBe(true);
+    expect(planner).toHaveBeenCalledTimes(1); // the second preview came from the cache
+    planner.mockClear();
+    // the dialog: one plan for the opened dialog, none for a re-render with the same inputs, one per changed input
+    openPanel();
+    fireEvent.click(screen.getByTestId("sheets-move"));
+    await screen.findByTestId("sheets-move-preview");
+    expect(planner).toHaveBeenCalledTimes(1); // the new sheet's minted id is a new input
+    view.rerender(<Harness page={page} graph={recordingGraph().graph} projectId="p1" storage={new MemoryStorage()} selectedKicadId={u3.id} onLens={onLens} />);
+    await settle();
+    expect(planner).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByTestId("sheets-move-new-name"), { target: { value: "I" } });
+    fireEvent.change(screen.getByTestId("sheets-move-new-name"), { target: { value: "IM" } });
+    fireEvent.change(screen.getByTestId("sheets-move-new-name"), { target: { value: "IMU" } });
+    expect(planner).toHaveBeenCalledTimes(4);
+    fireEvent.change(screen.getByTestId("sheets-move-new-name"), { target: { value: "IMU " } }); // the trimmed name is the input: no re-plan
+    expect(planner).toHaveBeenCalledTimes(4);
+    // the applied transaction stamps its own operation ids (the preview's never reach the document)
+    planner.mockClear();
+    await act(async () => { fireEvent.click(screen.getByTestId("sheets-move-apply")); });
+    await settle();
+    expect(page.commands.map((command) => command.commandId)).toEqual(["schematic.move-to-sheet"]);
+    const applied = planner.mock.calls.find(([, planInput]) => planInput.operationIdPrefix !== MOVE_PREVIEW_PREFIX);
+    expect(applied?.[1].operationIdPrefix).toMatch(/^sheets:move:\d+$/);
+    expect(page.current().sheets!.sheets.map((sheet) => sheet.name)).toEqual(["Overview", "IMU"]);
   });
 });

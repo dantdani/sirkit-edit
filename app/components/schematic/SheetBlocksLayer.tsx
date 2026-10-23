@@ -7,8 +7,13 @@
  * power_in on the left, the rest on the right). A double-click opens the sheet (view.canvas-navigation). Rendered by the editor
  * inside its world group through the `sheetLayer` prop, so coordinates are sheet px; the sheet pins themselves are labels and are
  * drawn by the editor's label map (ScopedNetLabelGlyph). Presentation only: nothing here changes the document.
+ *
+ * [PR-J3 integration, 2026-10-23] Review J3N-5: the block is announced as a button, so it is focusable and opens on Enter / Space as
+ * well (the Sheets tree stays the primary keyboard path); a single click still does nothing, so a click on the overview never changes
+ * the sheet by accident.
  */
 
+import type { KeyboardEvent } from "react";
 import type { SchematicSheet, SchematicState } from "@/lib/schematic-types";
 import { sheetBlockOf } from "@/app/lib/schematic/sheet-lens";
 import { sheetsOf } from "@/app/lib/schematic/sheets";
@@ -32,6 +37,7 @@ export function SheetBlocksLayer({ state, activeSheetId, openSheet }: SheetBlock
         const ports = sheet.ports ?? [];
         const left = ports.filter((port) => INBOUND.has(port.direction));
         const right = ports.filter((port) => !INBOUND.has(port.direction));
+        const onBlockKeyDown = (event: KeyboardEvent<SVGGElement>): void => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSheet(sheet.id); } }; // [PR-J3 integration, 2026-10-23] J3N-5
         return (
           <g
             key={sheet.id}
@@ -39,9 +45,11 @@ export function SheetBlocksLayer({ state, activeSheetId, openSheet }: SheetBlock
             data-sheet-name={sheet.name}
             data-port-count={ports.length}
             role="button"
+            tabIndex={0}
             aria-label={`Open sheet ${sheet.name}`}
             style={{ cursor: "pointer" }}
             onDoubleClick={() => openSheet(sheet.id)}
+            onKeyDown={onBlockKeyDown}
           >
             <rect x={block.x} y={block.y} width={block.width} height={block.height} rx={4} fill="#0f766e" fillOpacity={0.08} stroke="#14b8a6" strokeWidth={1.5} strokeDasharray="6 3" />
             <text x={block.x + block.width / 2} y={block.y - 10} textAnchor="middle" fontSize={16} fontWeight={600} fontFamily="monospace" fill="#5eead4" style={{ userSelect: "none" }}>

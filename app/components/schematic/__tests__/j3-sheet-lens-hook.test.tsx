@@ -15,7 +15,10 @@
  *     command carried the captured project scope;
  *  6. J.8.4: a stored active sheet that no longer exists falls back to the root with a notice and no document write;
  *  7. the store tolerates a throwing localStorage; no `storage` event listener is registered; the per-sheet camera is written after
- *     its delay and comes back as the sheet's initial camera.
+ *     its delay and comes back as the sheet's initial camera;
+ *  8. [PR-J3 integration, 2026-10-23] J3-PAGE-3: a single-sheet document writes nothing to the presentation store;
+ *  9. [PR-J3 integration, 2026-10-23] J3N-1: the editor remounted at the single-sheet <-> multi-sheet boundary (the first sheet created,
+ *     the last sheet deleted) is handed the camera the person was at, not the one stored at open; a fresh single-sheet open still fits.
  * jsdom, fake timers where noted; no network; nothing on disk.
  */
 import { cleanup, render, screen } from "@testing-library/react";
@@ -276,5 +279,49 @@ describe("[PR-J3] the sheet lens hook", () => {
     await settle();
     expect(lens().editorProps.initialCamera).toEqual({ pan: { x: 42, y: 52 }, zoom: 1.5 });
     expect(JSON.parse(storage.getItem(sheetViewStorageKey("p1"))!)).toMatchObject({ activeSheetId: "sheet-imu", history: ["sheet-imu", ROOT_SHEET_ID, "sheet-imu"] });
+  });
+
+  it("8. [PR-J3 integration, 2026-10-23] J3-PAGE-3: a single-sheet document writes nothing to the presentation store, however the camera moves", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const storage = new MemoryStorage();
+    render(<Harness page={new FakePage(droneFixtureState())} graph={recordingGraph().graph} projectId="p1" storage={storage} onLens={onLens} />);
+    await settle();
+    expect(lens().legacy).toBe(true);
+    lens().editorProps.onCameraChange({ pan: { x: 500, y: 600 }, zoom: 2 }); // the editor reports every pan / zoom, the mount included
+    lens().editorProps.onCameraChange({ pan: { x: 510, y: 610 }, zoom: 2.5 });
+    vi.advanceTimersByTime(CAMERA_WRITE_DELAY_MS * 4);
+    expect(storage.getItem(sheetViewStorageKey("p1"))).toBeNull();
+    expect(storage.map.size).toBe(0);
+    cleanup(); // the unmount flushes a pending write, when there is one: none for a single-sheet document
+    expect(storage.map.size).toBe(0);
+  });
+
+  it("9. [PR-J3 integration, 2026-10-23] J3N-1: the boundary remount is handed the live camera, not the one stored at open; a fresh single-sheet open still fits", async () => {
+    const storage = new MemoryStorage();
+    storage.setItem(sheetViewStorageKey("p1"), JSON.stringify({ version: 1, activeSheetId: ROOT_SHEET_ID, cameras: { [ROOT_SHEET_ID]: { pan: { x: 1, y: 2 }, zoom: 0.5 } }, history: [] }));
+    const page = new FakePage(droneFixtureState());
+    render(<Harness page={page} graph={recordingGraph().graph} projectId="p1" storage={storage} onLens={onLens} />);
+    await settle();
+    expect(lens().legacy).toBe(true);
+    expect(lens().editorProps.initialCamera).toBeUndefined(); // hook test 1: a single-sheet document fits the page on mount, stored camera or not
+    lens().editorProps.onCameraChange({ pan: { x: 500, y: 600 }, zoom: 2 });
+    // the first sheet: one sheet-structure transaction, no sheet switch (the lens stays on the overview), the page's key flips undefined -> activation
+    const created = await lens().controller.createSheet("Power", ROOT_SHEET_ID);
+    expect(created.ok).toBe(true);
+    await settle();
+    expect(lens().legacy).toBe(false);
+    expect(lens().activation).toBe(1);
+    expect(lens().editorProps.initialCamera).toEqual({ pan: { x: 500, y: 600 }, zoom: 2 }); // the camera the person was at - never the stored { 1, 2, 0.5 }
+    // the way back: the last sheet goes, the document is single-sheet again, the key flips activation -> undefined: still the live camera
+    lens().editorProps.onCameraChange({ pan: { x: 700, y: 800 }, zoom: 3 });
+    const deleted = await lens().controller.deleteSheet(page.current().sheets!.sheets[1]!.id);
+    expect(deleted.ok).toBe(true);
+    await settle();
+    expect(lens().legacy).toBe(true);
+    expect(lens().activation).toBe(1);
+    expect(lens().editorProps.initialCamera).toEqual({ pan: { x: 700, y: 800 }, zoom: 3 });
+    expect(page.commands.map((command) => command.commandId)).toEqual(["schematic.sheet-structure", "schematic.sheet-structure"]);
+    // a sheet switch still hands the sheet's own stored camera (hook test 7): the live record is what the switch read
+    expect(lens().controller.cameraOf(ROOT_SHEET_ID)).toEqual({ pan: { x: 700, y: 800 }, zoom: 3 });
   });
 });

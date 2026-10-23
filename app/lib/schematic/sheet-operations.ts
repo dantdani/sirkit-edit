@@ -12,13 +12,21 @@
  * connection rules alone would change its circuit (`singleSheetRuleChange`), so a design whose one ground name is AGND or VSS can be
  * organised - the preview names the nets whose board name changes (`renamedNets`); (PC-1) a new port on an unnamed net takes the
  * first SIG<n> that no net, label or port of the project already uses, so consecutive moves never mint two "SIG1" nets.
+ *
+ * [PR-J3 integration, 2026-10-23] Review J3N-2: a port anchor (the hierarchical label on the child, the sheet pin on the parent) sits
+ * at the cut net's grid point, which on a generated page is a part pin that already carries the net's LOCAL label; drawn with the same
+ * orientation the two glyphs lay exactly on each other and the scoped glyph (painted last) took every pointer, so the local label could
+ * not be hovered, dragged or deleted. The anchor now takes an orientation no label at that point uses (`anchorOrientation`: the pin's
+ * exit direction first, then the free orientations, the one pointing back into the part last) - deterministic, nothing electrical
+ * changes (a label connects by its position; the partition proof in step 4 still gates every plan).
  */
 
 import { applySchematicOperationsToCanonical } from "@/app/lib/engineering/operations";
 import { fromCanonicalSchematic, toCanonicalSchematic } from "@/app/lib/engineering/schematic-model";
 import type { EngineeringOperation, SchematicNetLabelSnapshot, SchematicSheetAssignment, SchematicSheetSnapshot } from "@/app/lib/engineering/types";
+import { kicadPinExitDirection, pinDirection, type Direction } from "@/app/lib/geometry";
 import { compareCodePoints } from "@/app/lib/stable-compare";
-import { ROOT_SHEET_ID, netLabelNameKey, type Point, type SchematicState, type SheetPortDirection } from "@/lib/schematic-types";
+import { ROOT_SHEET_ID, netLabelNameKey, type Point, type Rotation, type SchematicState, type SheetPortDirection } from "@/lib/schematic-types";
 import { resolveProjectConnectivity, singleSheetRuleChange, type ConnectivityDiagnostic, type PartPinsLookup, type ProjectConnectivity, type ProjectNet } from "./project-connectivity";
 import { sheetOf, sheetsOf } from "./sheets";
 
@@ -140,6 +148,36 @@ function anchorOf(state: SchematicState, conn: ProjectConnectivity, net: Project
   return null;
 }
 
+/** A glyph's orientation steps clockwise from east (lib/schematic-types `Rotation`; ScopedNetLabelGlyph and NetLabelGlyph agree). */
+const DIRECTION_ORIENTATION: Readonly<Record<Direction, Rotation>> = Object.freeze({ east: 0, south: 90, west: 180, north: 270 });
+
+/**
+ * [PR-J3 integration, 2026-10-23] Review J3N-2: the orientation of a port anchor placed at `point` on `sheetId`. Preferred: the direction
+ * the part pin at that point exits (a KiCad pin's exit, a Theory pin's direction; east when the anchor is a label or a wire end, as
+ * every label starts). When a label at that point already extends that way (a generated page puts the net's local label on the pin,
+ * pointing out of the part), the first free orientation in the fixed order 0, 90, 180, 270 is taken, the one pointing back into the
+ * part last - so the scoped glyph never lies exactly over the local label it joins and both stay selectable. `placed` are the anchors
+ * this batch has already put down (two ports anchored at one point take two orientations). Pure and deterministic.
+ */
+function anchorOrientation(state: SchematicState, conn: ProjectConnectivity, sheetId: string, point: Point, placed: readonly SchematicNetLabelSnapshot[], getPart: PartPinsLookup | undefined): Rotation {
+  const at = (label: { position: Point; sheetId?: string }): boolean => sheetOf(label) === sheetId && label.position.x === point.x && label.position.y === point.y;
+  const used = new Set<Rotation>([...(state.netLabels ?? []).filter(at).map((label) => label.orientation), ...placed.filter(at).map((label) => label.orientation)]);
+  const pin = conn.pins.find((item) => item.sheetId === sheetId && item.point.x === point.x && item.point.y === point.y);
+  let exit: Direction = "east";
+  if (pin?.family === "kicad") {
+    const instance = (state.kicadComponents ?? []).find((item) => item.id === pin.componentId);
+    const kicadPin = instance ? getPart?.(instance.partId)?.pins.find((item) => item.number === pin.pinId) : undefined;
+    if (instance && kicadPin) exit = kicadPinExitDirection(instance, kicadPin);
+  } else if (pin?.family === "theory") {
+    const component = state.components.find((item) => item.id === pin.componentId);
+    if (component) exit = pinDirection(component, pin.pinName);
+  }
+  const preferred = DIRECTION_ORIENTATION[exit];
+  const inward = ((preferred + 180) % 360) as Rotation;
+  const candidates: Rotation[] = [preferred, ...([0, 90, 180, 270] as Rotation[]).filter((orientation) => orientation !== preferred && orientation !== inward), inward];
+  return candidates.find((orientation) => !used.has(orientation)) ?? preferred;
+}
+
 const componentIdentity = (state: SchematicState): string[] => [
   ...state.components.map((item) => JSON.stringify([item.id, item.type, item.value, item.refDes ?? null])),
   ...(state.kicadComponents ?? []).map((item) => JSON.stringify([item.id, item.partId, item.refDes, item.value, item.atomicPartRevisionId ?? null, item.symbolAssetVersionId ?? null, item.footprintAssetVersionId ?? null, item.mappingCertificateId ?? null, item.selectionRecordId ?? null])),
@@ -246,6 +284,7 @@ export function planMoveToSheet(state: SchematicState, input: MoveToSheetInput, 
   const crossings: MoveCrossing[] = [];
   const portOps: EngineeringOperation[] = [];
   const anchorOps: EngineeringOperation[] = [];
+  const placedAnchors: SchematicNetLabelSnapshot[] = []; // [PR-J3 integration, 2026-10-23] J3N-2: the anchors already placed (orientations at a shared point)
   let labelIndex = (mid.netLabels ?? []).length;
   let unnamed = 0;
   const cutNets = before.nets.filter((net) => net.members.length > 0 && new Set(net.members.map((member) => midConn.netOfPin(member)?.id)).size > 1);
@@ -282,8 +321,9 @@ export function planMoveToSheet(state: SchematicState, input: MoveToSheetInput, 
     const hierarchical: MoveCrossing["hierarchicalLabels"] = [];
     const addHierarchical = (point: Point, port: { id: string; name: string }): void => {
       const id = freshId(`${port.id}:label`, takenIds);
-      const label: SchematicNetLabelSnapshot = { id, position: { ...point }, name: port.name, kind: "label", orientation: 0, sheetId: childSheetId, scope: "hierarchical", portId: port.id };
+      const label: SchematicNetLabelSnapshot = { id, position: { ...point }, name: port.name, kind: "label", orientation: anchorOrientation(mid, midConn, childSheetId, point, placedAnchors, getPart), sheetId: childSheetId, scope: "hierarchical", portId: port.id }; // [PR-J3 integration, 2026-10-23] J3N-2: never exactly over the local label at the anchor
       anchorOps.push({ ...PX, operationId: opId("hlabel", id), kind: "schematic_add_net_label", label, atIndex: labelIndex++ });
+      placedAnchors.push(label);
       hierarchical.push({ sheetId: childSheetId, position: { ...point } });
     };
     if (hubPort) {
@@ -297,8 +337,9 @@ export function planMoveToSheet(state: SchematicState, input: MoveToSheetInput, 
     parentAnchors.forEach((point, index) => {
       const port = ports[index]!;
       const id = freshId(`${port.id}:pin`, takenIds);
-      const pin: SchematicNetLabelSnapshot = { id, position: { ...point! }, name: port.name, kind: "label", orientation: 0, scope: "sheet-pin", portId: port.id, childSheetId, ...(parentSheetId === ROOT_SHEET_ID ? {} : { sheetId: parentSheetId }) };
+      const pin: SchematicNetLabelSnapshot = { id, position: { ...point! }, name: port.name, kind: "label", orientation: anchorOrientation(mid, midConn, parentSheetId, point!, placedAnchors, getPart), scope: "sheet-pin", portId: port.id, childSheetId, ...(parentSheetId === ROOT_SHEET_ID ? {} : { sheetId: parentSheetId }) }; // [PR-J3 integration, 2026-10-23] J3N-2
       anchorOps.push({ ...PX, operationId: opId("pin", id), kind: "schematic_add_sheet_pin", pin, atIndex: labelIndex++ });
+      placedAnchors.push(pin);
       crossings.push({ netName: net.name, netId: net.id, port: { id: port.id, name: port.name, sheetId: childSheetId }, sheetPin: { sheetId: parentSheetId, position: { ...point! } }, hierarchicalLabels: hierarchical });
     });
   }

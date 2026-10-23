@@ -859,7 +859,7 @@ export default function PcbEditor({
     const s = schematicRef.current;
     void checkpointStore().add({
       projectId: scope.projectId, label, at: Date.now(),
-      schematic: { components: s.components, wires: s.wires, kicadComponents: s.kicadComponents ?? [], netLabels: s.netLabels ?? [] },
+      schematic: { components: s.components, wires: s.wires, kicadComponents: s.kicadComponents ?? [], netLabels: s.netLabels ?? [], ...(s.pageSize ? { pageSize: s.pageSize } : {}), ...(s.sheets !== undefined ? { sheets: s.sheets } : {}) }, // [PR-J3 integration, 2026-10-23] review J3-PAGE-1: the twelfth site that rebuilds the schematic fields carries the sheet tree (and the page size) iff present - a flat copy of an organised project stored sheet-stamped entities without their tree, could never be restored (the session refuses it) and made the project file exported afterwards un-importable
       board,
       boardBase: { revision: authorityRef.current?.revision ?? null, digest: authorityRef.current?.digest ?? null },
       workflowView: "pcb",

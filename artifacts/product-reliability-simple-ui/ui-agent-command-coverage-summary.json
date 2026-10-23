@@ -11,10 +11,10 @@
     "legacy",
     "missing"
   ],
-  "rows": 1015,
+  "rows": 1016,
   "byKind": {
     "action": 113,
-    "control": 839,
+    "control": 840,
     "tool": 63
   },
   "byDisposition": {
@@ -22,7 +22,7 @@
     "proposal-only": 271,
     "grant-required": 68,
     "human-admin-only": 97,
-    "view-session-only": 91,
+    "view-session-only": 92,
     "intentionally-ui-only": 369,
     "unavailable": 11,
     "legacy": 0,
@@ -45,7 +45,7 @@
       "proposal-only": 215,
       "grant-required": 55,
       "human-admin-only": 74,
-      "view-session-only": 79,
+      "view-session-only": 80,
       "intentionally-ui-only": 359,
       "unavailable": 0,
       "legacy": 0,
@@ -79,8 +79,8 @@
     "rows": 113
   },
   "controls": {
-    "sites": 708,
-    "rows": 839,
+    "sites": 709,
+    "rows": 840,
     "surfaces": 73,
     "recordsReached": 85
   },

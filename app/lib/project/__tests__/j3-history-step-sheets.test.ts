@@ -7,7 +7,9 @@
  *  2. a REAL session + coordinator + SchematicHistory of the page's snapshots (app/page.tsx's composition): creating the first sheet is
  *     one canonical transaction, Undo restores the document WITHOUT `sheets` (digest-identical to the opened flat drone) and is REPLAYED
  *     on the same lineage (`undo-reconciled`, never a rebase), Redo replays the creation (`redo-reconciled`);
- *  3. the multi-sheet fixture's step target is the document itself (same digest), so a step on an organised project replays too.
+ *  3. the multi-sheet fixture's step target is the document itself (same digest), so a step on an organised project replays too;
+ *  4. [PR-J3 integration, 2026-10-23] J3N-4: the two-transaction delete of a populated sheet (Move contents to parent, then Delete
+ *     sheet) undoes twice and redoes twice by REPLAY, digest-identical at every step with the hierarchy valid.
  * No network, no database (an in-memory atomic store).
  */
 import { describe, expect, it } from "vitest";
@@ -18,10 +20,12 @@ import { SchematicEditorSession } from "@/app/lib/engineering/schematic-session"
 import { adoptCanonicalResult } from "@/app/lib/project/canonical-adoption";
 import { historyStepState, type HistoryStepSnapshot } from "@/app/lib/project/history-step-state";
 import { SchematicHistory } from "@/app/lib/project/schematic-history";
-import { createSheetOperation } from "@/app/lib/schematic/sheet-operations";
-import { droneFixtureState } from "@/app/lib/schematic/__tests__/_j1-fixtures";
+import { deleteSheetOperations, movableContents } from "@/app/lib/schematic/sheet-lens";
+import { createSheetOperation, planMoveToSheet, type MoveToSheetInput } from "@/app/lib/schematic/sheet-operations";
+import { validateSheetHierarchy } from "@/app/lib/schematic/sheets";
+import { droneFixtureState, fixturePartLookup } from "@/app/lib/schematic/__tests__/_j1-fixtures";
 import { multiSheetDroneFixtureState } from "@/app/lib/schematic/__tests__/_j3-fixtures";
-import type { SchematicState } from "@/lib/schematic-types";
+import { ROOT_SHEET_ID, type SchematicState } from "@/lib/schematic-types";
 
 const SCOPE = { tenantId: "local", projectId: "p-j3-history-sheets", branchId: "main" } as const;
 
@@ -132,6 +136,72 @@ describe("[PR-J3] 2. the first sheet's creation undoes to a document without `sh
     expect(schematicStateDigest(redone)).toBe(createdDigest);
     expect(p.editor.headMark()!.lineageId).toBe(lineage);
     expect(p.editor.events.some((event) => event.kind === "redo-reconciled")).toBe(true);
+  });
+});
+
+describe("[PR-J3 integration, 2026-10-23] 4. the two-transaction delete of a populated sheet undoes twice and redoes twice by replay", () => {
+  it("Move contents of IMU to the overview, Delete sheet IMU -> undo, undo -> redo, redo: digest-identical at every step, the hierarchy valid, the lineage kept", async () => {
+    const fixture = multiSheetDroneFixtureState();
+    const lookup = fixturePartLookup();
+    const p = await openEditor(fixture);
+    const lineage = p.editor.headMark()!.lineageId;
+    const fixtureDigest = schematicStateDigest(p.coordinator.authoritativeState());
+    // 1. Move contents to parent (schematic.move-to-sheet): previewed, then re-planned inside buildOperations as the controller does
+    const moveInput: MoveToSheetInput = { entities: movableContents(fixture, "sheet-imu"), target: { sheetId: ROOT_SHEET_ID }, rootName: "Overview", operationIdPrefix: "j3-history-move", offset: { dx: 0, dy: 0 } };
+    const preview = planMoveToSheet(fixture, moveInput, lookup);
+    if (!preview.ok) throw new Error(`${preview.code}: ${preview.message}`);
+    const moved = await p.coordinator.runCanonicalCommand({
+      label: "Moved contents to Overview",
+      execute: (base) => p.editor.execute(base, {
+        commandId: "schematic.move-to-sheet",
+        label: "Moved contents to Overview",
+        buildOperations: (canonical) => {
+          const again = planMoveToSheet(fromCanonicalSchematic(canonical), moveInput, lookup);
+          if (!again.ok) throw new Error(again.message);
+          expect(again.preview.partitionDigest).toBe(preview.preview.partitionDigest);
+          return again.operations;
+        },
+      }),
+    });
+    expect(moved.status).toBe("applied");
+    const afterMove = p.coordinator.authoritativeState();
+    const afterMoveDigest = schematicStateDigest(afterMove);
+    expect(afterMove.kicadComponents!.find((item) => item.refDes === "U3")!.sheetId).toBeUndefined();
+    expect(afterMove.sheets!.sheets.find((sheet) => sheet.id === "sheet-imu")!.ports!.map((port) => port.name)).toEqual(["I2C_SCL", "I2C_SDA", "IMU_INT1"]);
+    expect(validateSheetHierarchy(afterMove)).toEqual([]);
+    // 2. Delete sheet IMU (schematic.sheet-structure): the sheet pins, the hierarchical labels, the ports, the sheet - one batch
+    const built = deleteSheetOperations(afterMove, "sheet-imu", "j3-history-delete");
+    if (!built.ok) throw new Error(built.message);
+    expect(built.operations.map((operation) => operation.kind)).toEqual([...Array<string>(3).fill("schematic_remove_sheet_pin"), ...Array<string>(3).fill("schematic_delete_net_label"), ...Array<string>(3).fill("schematic_remove_sheet_port"), "schematic_delete_sheet"]);
+    const deleted = await p.coordinator.runCanonicalCommand({ label: "Deleted sheet IMU", execute: (base) => p.editor.execute(base, { commandId: "schematic.sheet-structure", label: "Deleted sheet IMU", buildOperations: () => built.operations }) });
+    expect(deleted.status).toBe("applied");
+    const afterDelete = p.coordinator.authoritativeState();
+    const afterDeleteDigest = schematicStateDigest(afterDelete);
+    expect(afterDelete.sheets!.sheets.map((sheet) => sheet.name)).toEqual(["Overview", "Power", "Motor drivers"]);
+    expect(validateSheetHierarchy(afterDelete)).toEqual([]);
+    expect(p.editor.headMark()!.lineageId).toBe(lineage);
+    // undo, undo
+    await p.step("undo");
+    const undoneOnce = p.coordinator.authoritativeState();
+    expect(schematicStateDigest(undoneOnce)).toBe(afterMoveDigest);
+    expect(undoneOnce.sheets!.sheets.find((sheet) => sheet.id === "sheet-imu")!.ports!.map((port) => port.name)).toEqual(["I2C_SCL", "I2C_SDA", "IMU_INT1"]); // the ports back in order, their anchors with them
+    expect(validateSheetHierarchy(undoneOnce)).toEqual([]);
+    await p.step("undo");
+    const undoneTwice = p.coordinator.authoritativeState();
+    expect(schematicStateDigest(undoneTwice)).toBe(fixtureDigest);
+    expect(undoneTwice.kicadComponents!.find((item) => item.refDes === "U3")!.sheetId).toBe("sheet-imu");
+    expect(validateSheetHierarchy(undoneTwice)).toEqual([]);
+    expect(schematicStateDigest(p.visible())).toBe(fixtureDigest);
+    // redo, redo
+    await p.step("redo");
+    expect(schematicStateDigest(p.coordinator.authoritativeState())).toBe(afterMoveDigest);
+    await p.step("redo");
+    expect(schematicStateDigest(p.coordinator.authoritativeState())).toBe(afterDeleteDigest);
+    expect(validateSheetHierarchy(p.coordinator.authoritativeState())).toEqual([]);
+    expect(p.editor.headMark()!.lineageId).toBe(lineage);
+    expect(p.editor.events.filter((event) => event.kind === "undo-reconciled")).toHaveLength(2);
+    expect(p.editor.events.filter((event) => event.kind === "redo-reconciled")).toHaveLength(2);
+    expect(p.editor.events.some((event) => String(event.kind).includes("rebase"))).toBe(false);
   });
 });
 

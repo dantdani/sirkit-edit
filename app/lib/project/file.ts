@@ -223,7 +223,8 @@ export interface ProjectImportResult {
   warnings: string[];
 }
 
-function validateSchematicState(value: unknown): { ok: true; state: SchematicState } | { ok: false; reason: string } {
+/** `sheetContract`: the state is well-formed but fails the sheet contract (sheets.ts) - the one failure a checkpoint may be left out for. */
+function validateSchematicState(value: unknown): { ok: true; state: SchematicState } | { ok: false; reason: string; sheetContract?: true } {
   if (typeof value !== "object" || value === null) return { ok: false, reason: "Missing schematic state" };
   const state = value as Record<string, unknown>;
   if (!Array.isArray(state["components"]) || !(state["components"] as unknown[]).every(isComponent)) return { ok: false, reason: "Invalid components array" };
@@ -245,7 +246,7 @@ function validateSchematicState(value: unknown): { ok: true; state: SchematicSta
     ...(state["sheets"] !== undefined ? { sheets: state["sheets"] } : {}),
   } as SchematicState;
   const sheetProblems = sheetErrors(validateSheetHierarchy(rebuilt));
-  if (sheetProblems.length > 0) return { ok: false, reason: `Invalid schematic sheets (${sheetProblems[0]!.code}): ${sheetProblems[0]!.message}` };
+  if (sheetProblems.length > 0) return { ok: false, reason: `Invalid schematic sheets (${sheetProblems[0]!.code}): ${sheetProblems[0]!.message}`, sheetContract: true };
   return { ok: true, state: rebuilt };
 }
 
@@ -338,6 +339,8 @@ async function importProjectFileChecked(content: string): Promise<ProjectImportR
 
   const rawCheckpoints = (payload as Record<string, unknown>)["checkpoints"];
   const checkpoints: ProjectCheckpoint[] = [];
+  /** [PR-J3 integration, 2026-10-23] review J3-PAGE-1: checkpoints left out because their schematic fails the sheet contract (named in a warning). */
+  const unrestorableCheckpoints: string[] = [];
   if (rawCheckpoints !== undefined) {
     if (!Array.isArray(rawCheckpoints)) return { ok: false, reason: "Invalid checkpoints in file." };
     if (rawCheckpoints.length > PROJECT_IMPORT_LIMITS.checkpoints) return { ok: false, reason: `The file has too many checkpoints (${rawCheckpoints.length}; the limit is ${PROJECT_IMPORT_LIMITS.checkpoints}). Nothing was imported.` };
@@ -346,6 +349,11 @@ async function importProjectFileChecked(content: string): Promise<ProjectImportR
       // [B19-D I5e row 11] a checkpoint is restored into the page like a project: its schematic, chat and board get the
       // same validation (the header check alone let a checkpoint crash the restore or carry any chat markup)
       const checkpointState = validateSchematicState(checkpoint.schematic);
+      // [PR-J3 integration, 2026-10-23] review J3-PAGE-1: a checkpoint whose schematic is well-formed but fails the SHEET contract (the
+      // previous build's board checkpoint stored an organised project's entities without their tree) can never be restored - the
+      // session refuses it - but it is no reason to refuse the person's project: it is left out and named in a warning. Every other
+      // checkpoint refusal (malformed tables, over the limits, chat, board) still refuses the whole file, as B19-D I5e decided.
+      if (!checkpointState.ok && checkpointState.sheetContract) { unrestorableCheckpoints.push(`"${checkpoint.label}" (${checkpointState.reason})`); continue; }
       if (!checkpointState.ok || tableOverLimit(checkpointState.state)) return { ok: false, reason: "A checkpoint's schematic in the file is invalid. Nothing was imported." };
       const checkpointChat: unknown = checkpoint.chat;
       if (checkpointChat !== undefined && (!Array.isArray(checkpointChat) || checkpointChat.length > PROJECT_IMPORT_LIMITS.chatMessages || !checkpointChat.every(isStoredChatMessage))) {
@@ -368,6 +376,7 @@ async function importProjectFileChecked(content: string): Promise<ProjectImportR
   if (sheetCounts.some((count) => count > 0) && !MULTI_SHEET_EDITOR_AVAILABLE) return { ok: false, reason: `${SHEETS_EDITOR_PENDING}: this project has ${Math.max(...sheetCounts)} schematic sheets, and this version of the editor cannot open a multi-sheet project yet. Nothing was imported; keep the file and open it again after the Sheets update.` };
 
   const warnings: string[] = [];
+  if (unrestorableCheckpoints.length > 0) warnings.push(`${unrestorableCheckpoints.length} checkpoint(s) in the file were left out because their schematic fails the sheet contract and could not be restored: ${unrestorableCheckpoints.slice(0, 3).join("; ")}${unrestorableCheckpoints.length > 3 ? "; …" : ""}. The project and its other checkpoints imported.`); // [PR-J3 integration, 2026-10-23] review J3-PAGE-1
   const distinctParts = [...new Set((stateResult.state.kicadComponents ?? []).map((instance) => instance.partId))];
   if (distinctParts.length > PROJECT_IMPORT_LIMITS.distinctParts) {
     return { ok: false, reason: `The project references too many distinct catalog parts (${distinctParts.length}; the limit is ${PROJECT_IMPORT_LIMITS.distinctParts}). Nothing was imported.` };

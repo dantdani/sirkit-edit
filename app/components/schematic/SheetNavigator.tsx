@@ -141,7 +141,8 @@ export function SheetNavigator({ state, activeSheetId, activation, notice, contr
     chipRef.current?.focus();
   };
 
-  // ── the move preview (planned on every render of the dialog; pure) ──
+  // ── the move preview (asked for on every render of the dialog; [PR-J3 integration, 2026-10-23] J3N-6: the controller's planMove is
+  // pure and answers from its cache unless the document, the active sheet, the input, the selection or the unresolved parts changed) ──
   const selection = dialog?.kind === "move" ? currentSelection() : null;
   const moveTargetOptions = useMemo(() => {
     const children = sheets.filter((sheet) => sheet.parentId === activeSheetId);
@@ -236,7 +237,7 @@ export function SheetNavigator({ state, activeSheetId, activation, notice, contr
           data-testid="sheets-chip"
           aria-haspopup="true"
           aria-expanded={open}
-          aria-controls="sheets-panel"
+          aria-controls={open ? "sheets-panel" : undefined} // [PR-J3 integration, 2026-10-23] J3N-5: the panel is in the DOM only while open
           className={`${button} ${open ? "bg-zinc-800 text-zinc-100" : ""}`}
           onClick={() => setOpen((value) => !value)}
         >
@@ -317,7 +318,8 @@ export function SheetNavigator({ state, activeSheetId, activation, notice, contr
                       {contentsPlan.plan.preview.crossings.length > 0 && <div className="text-zinc-500">{contentsPlan.plan.preview.crossings.length} net(s) are carried through a port: {contentsPlan.plan.preview.crossings.map((crossing) => crossing.port.name).join(", ")}</div>}
                     </>
                   ) : (
-                    <div className="text-amber-300" data-testid="sheets-delete-move-refusal">{contentsPlan.message}</div>
+                    // [PR-J3 integration, 2026-10-23] J3N-3: the planner's SHEET_MOVE_* code shown inline and as data-code, as the page's Go to and Undo refusals show theirs
+                    <div className="text-amber-300" data-testid="sheets-delete-move-refusal" data-code={contentsPlan.code ?? ""}>{contentsPlan.code ? `${contentsPlan.code} — ` : ""}{contentsPlan.message}</div>
                   )}
                 </div>
               )}
@@ -381,7 +383,8 @@ export function SheetNavigator({ state, activeSheetId, activation, notice, contr
                 )}
               </div>
             ) : (
-              <div className="rounded border border-amber-800/60 px-2 py-1.5 text-[11px] text-amber-300" data-testid="sheets-move-refusal">{planned.message}</div>
+              // [PR-J3 integration, 2026-10-23] J3N-3: the SHEET_MOVE_* code inline and as data-code (a refusal of the controller's own, e.g. no selection, shows the message alone)
+              <div className="rounded border border-amber-800/60 px-2 py-1.5 text-[11px] text-amber-300" data-testid="sheets-move-refusal" data-code={planned.code ?? ""}>{planned.code ? `${planned.code} — ` : ""}{planned.message}</div>
             ))}
             <DialogFooter>
               <button type="button" className={button} onClick={closeDialog}>Cancel</button>

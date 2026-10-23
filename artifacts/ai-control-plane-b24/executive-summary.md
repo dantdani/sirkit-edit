@@ -57,7 +57,7 @@ NOT READY (`eslint .` exits 1, none of its 33 errors introduced by B24), CI read
 | mcp-exposed-tools | 9 |
 | agent-only-tools | 42 |
 | agent-exposed-tier-3-tools | 0 |
-| control-sites | 708 |
+| control-sites | 709 |
 | control-surfaces | 73 |
 | sql-migrations | 32 |
 | generators | 32 |
@@ -90,6 +90,8 @@ table are the concurrent PR-F builders' to move with their descriptors and contr
 [PR-J, 2026-10-22] Count lines moved with the regenerated map (runbook section J increment 1, OD-255): action-records 111 -> 113 (schematic.sheet-structure and schematic.move-to-sheet, the canonical schematic sheet commands; both partial until the Sheets navigator binds them).
 
 [PR-J3, 2026-10-22] Count lines moved with the regenerated map (runbook section J increment 3, OD-255 item 7, OD-257): control-sites 663 -> 708 (707 with the navigator's surfaces, 708 once app/page.tsx's label map gained the scoped label glyph's pointer-down site under schematic.drag-gesture) and control-surfaces 70 -> 73 - the Sheets navigator (the canvas chip, its tree and keys, New / Rename / Up / Down / Add port / Delete, the Move to sheet and Follow signal dialogs with their drafts), the overview block's double-click and the scoped label glyph's drag, each classified under a PR-J3 control rule; action-records stays 113 (schematic.sheet-structure and schematic.move-to-sheet flipped partial -> implemented: their controls now reach them; no record added).
+
+[PR-J3 integration, 2026-10-23] Count lines moved with the regenerated map (section J increment 3 review, J3N-5): control-sites 708 -> 709 - the overview block of the Sheets navigator (app/components/schematic/SheetBlocksLayer.tsx) is announced as a button, so it gained a key handler (Enter / Space open the sheet, `onBlockKeyDown`), one more `key` control site classified under view.sheets-navigation; control-surfaces stays 73, action-records 113.
 
 ## 4. Earlier verdicts
 
