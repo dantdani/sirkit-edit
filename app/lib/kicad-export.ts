@@ -21,7 +21,7 @@
 import { createHash } from "node:crypto";
 import type { SchematicState, SchComponentType } from "@/lib/schematic-types";
 import { DEFAULT_PAGE_SIZE, schDisplayRef } from "@/lib/schematic-types";
-import { validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
+import { validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model"; import { assertWholeProject } from "@/app/lib/schematic/sheets"; // [PR-J1 integration, 2026-10-22] on this line so no line moves
 import { KICAD_SCALE_PX_PER_MM } from "@/app/lib/geometry";
 import type { CachedPart } from "./parts-cache";
 import { getPowerSymbol, buildGenericPowerSymbol } from "./kicad-power-symbols";
@@ -218,7 +218,7 @@ const TODAY = new Date().toISOString().slice(0, 10);
 // ─── Main export ────────────────────────────────────────────────────────────
 
 export function exportToKicadSch(input: KicadExportInput): string {
-  const { state, parts } = input;
+  const { state, parts } = input; assertWholeProject(state, "kicad-export"); // [PR-J1 integration, 2026-10-22] review PC-3: one sheet's view is never the project
   // B07.2 — FAIL-CLOSED ingress: the COMPLETE state must satisfy the shared
   // canonical identity + geometry contract before a single byte is
   // serialized. Duplicate stable ids, duplicate case-insensitive displayed

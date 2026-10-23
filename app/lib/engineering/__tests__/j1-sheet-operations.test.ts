@@ -374,3 +374,130 @@ describe("[PR-J J1] 5. moving a connected subsystem to another sheet keeps the c
     expect(anchors).toMatchObject({ ok: false, code: "SHEET_MOVE_SELECTION_INVALID" });
   });
 });
+
+// ── [PR-J1 integration, 2026-10-22] the round-1 review's confirmed findings (PC-1, PC-4, PC-5, J1-OPS-1 .. J1-OPS-4) ──────────
+
+const resistorAt = (id: string, x: number, y: number, sheetId?: string): SchComponent => ({ id, type: "resistor", x, y, rotation: 0, value: "1k", ...(sheetId ? { sheetId } : {}) });
+const wireAt = (id: string, a: { x: number; y: number }, b: { x: number; y: number }, sheetId?: string) => ({ id, vertices: [a, b], ...(sheetId ? { sheetId } : {}) });
+const attemptApply = (state: SchematicState, operations: EngineeringOperation[]): string => { try { apply(toCanonicalSchematic(state), operations); return "applied"; } catch (error) { return (error as Error).message; } };
+const twoSheets = (...children: Array<{ id: string; name: string; ports?: Array<{ id: string; name: string; direction: "passive" }> }>): SchematicState["sheets"] => ({ version: 1, sheets: [{ id: ROOT_SHEET_ID, name: "Overview", parentId: null }, ...children.map((child) => ({ ...child, parentId: ROOT_SHEET_ID }))] });
+
+describe("[PR-J1 integration, 2026-10-22] PC-1: organising into sheets one move at a time", () => {
+  it("two consecutive moves of unrelated unnamed connections get distinct port names (SIG1, SIG2) and keep the partition", () => {
+    const start: SchematicState = {
+      components: [resistorAt("R1", 100, 100), resistorAt("R2", 200, 100), resistorAt("R3", 100, 300), resistorAt("R4", 200, 300)],
+      wires: [wireAt("w1", { x: 130, y: 100 }, { x: 170, y: 100 }), wireAt("w2", { x: 130, y: 300 }, { x: 170, y: 300 })],
+      netLabels: [],
+    };
+    const first = planMoveToSheet(start, { entities: [{ family: "theory", id: "R2" }], target: { newSheet: { id: "sa", name: "Stage A" } } });
+    if (!first.ok) throw new Error(`${first.code}: ${first.message}`);
+    expect(first.preview.crossings.map((crossing) => crossing.port.name)).toEqual(["SIG1"]);
+    const second = planMoveToSheet(first.after, { entities: [{ family: "theory", id: "R4" }], target: { newSheet: { id: "sb", name: "Stage B" } } });
+    if (!second.ok) throw new Error(`${second.code}: ${second.message} ${second.diagnostics.map((item) => item.message).join(" ")}`);
+    expect(second.preview.crossings.map((crossing) => crossing.port.name)).toEqual(["SIG2"]);
+    const after = resolveProjectConnectivity(second.after);
+    expect(after.ok).toBe(true);
+    expect(after.partitionDigest).toBe(resolveProjectConnectivity(start).partitionDigest);
+    expect([after.netOfPin("R1::2")!.name, after.netOfPin("R3::2")!.name]).toEqual(["SIG1", "SIG2"]);
+  });
+});
+
+describe("[PR-J1 integration, 2026-10-22] PC-4 / PC-5: designs with one ground name organise into sheets", () => {
+  it("a design whose only ground name is AGND moves to a sheet; the preview shows the board-name change GND -> AGND", () => {
+    const state: SchematicState = {
+      components: [resistorAt("R1", 100, 100), resistorAt("R2", 300, 100)],
+      wires: [wireAt("w1", { x: 130, y: 100 }, { x: 270, y: 100 })],
+      netLabels: [label("a1", "AGND", { x: 70, y: 100 }, { kind: "ground" }), label("a2", "AGND", { x: 330, y: 100 }, { kind: "ground" })],
+    };
+    const plan = planMoveToSheet(state, { entities: [{ family: "theory", id: "R2" }], target: { newSheet: { id: "sa", name: "A" } } });
+    if (!plan.ok) throw new Error(`${plan.code}: ${plan.message}`);
+    expect(resolveProjectConnectivity(plan.after).partitionDigest).toBe(resolveProjectConnectivity(state).partitionDigest);
+    expect(plan.preview.renamedNets).toEqual([{ netId: resolveProjectConnectivity(state).netOfPin("R1::1")!.id, from: "GND", to: "AGND" }]);
+  });
+
+  it("a ground symbol and a power-kind GND label (one GND net) take a first sheet: no rail join is invented", () => {
+    const state: SchematicState = {
+      components: [{ id: "G1", type: "ground", x: 70, y: 120, rotation: 0, value: "" }, resistorAt("R1", 100, 100), resistorAt("R2", 300, 100)],
+      wires: [wireAt("w1", { x: 130, y: 100 }, { x: 270, y: 100 })],
+      netLabels: [label("p", "GND", { x: 330, y: 100 }, { kind: "power" })],
+    };
+    expect(attemptApply(state, [createSheetOperation(state, { operationId: opId("c"), sheet: { id: "sa", name: "A", parentId: ROOT_SHEET_ID } })])).toBe("applied");
+    expect(planMoveToSheet(state, { entities: [{ family: "theory", id: "R2" }], target: { newSheet: { id: "sa", name: "A" } } }).ok).toBe(true);
+  });
+});
+
+describe("[PR-J1 integration, 2026-10-22] J1-OPS-1: a sheet operation never changes the circuit by changing the connection rules", () => {
+  it("creating an empty first sheet on the legacy AGND/DGND design is refused (the strict rules would split its GND net); nothing changes", () => {
+    const theory = theoryLegacyFixture();
+    const message = attemptApply(theory, [createSheetOperation(theory, { operationId: opId("c"), sheet: { id: "aux", name: "Aux", parentId: ROOT_SHEET_ID } })]);
+    expect(message).toMatch(/^SHEET_NOT_EQUIVALENT: /);
+    expect(message).toContain("GND, AGND, DGND are joined");
+  });
+
+  it("creating a first sheet on a design whose plain VCC label and VCC power label are one net is refused (two nets named VCC)", () => {
+    const r1 = resistorAt("R1", 100, 100);
+    const r2 = resistorAt("R2", 300, 100);
+    const state: SchematicState = { components: [r1, r2], wires: [], netLabels: [label("lp", "VCC", pinWorldPos(r1, "left"), { kind: "power" }), label("ll", "VCC", pinWorldPos(r2, "left"))] };
+    expect(resolveProjectConnectivity(state).netOfPin("R1::1")!.members).toEqual(["R1::1", "R2::1"]);
+    expect(attemptApply(state, [createSheetOperation(state, { operationId: opId("c"), sheet: { id: "aux", name: "Aux", parentId: ROOT_SHEET_ID } })])).toMatch(/^SHEET_CONNECTIVITY_INVALID:SHEET_NET_NAME_COLLISION: /);
+  });
+
+  it("making one of two same-named overview labels global is refused (a global and a local net both named X)", () => {
+    const r1 = resistorAt("R1", 100, 100);
+    const r2 = resistorAt("R2", 300, 100);
+    const state: SchematicState = { components: [r1, r2], wires: [], netLabels: [label("x1", "X", pinWorldPos(r1, "left")), label("x2", "X", pinWorldPos(r2, "left"))], sheets: twoSheets({ id: "aux", name: "Aux" }) };
+    expect(resolveProjectConnectivity(state).ok).toBe(true);
+    expect(attemptApply(state, [{ ...PX, operationId: opId("g"), kind: "schematic_set_label_scope", labelId: "x1", scope: "global", portId: null, childSheetId: null }])).toMatch(/^SHEET_CONNECTIVITY_INVALID:SHEET_NET_NAME_COLLISION: /);
+  });
+});
+
+describe("[PR-J1 integration, 2026-10-22] J1-OPS-2: deleting the last child sheet never joins two ground rails", () => {
+  it("AGND and DGND on the overview of a document with one empty child: deleting the child is refused as a rail join", () => {
+    const r1 = resistorAt("R1", 100, 100);
+    const r2 = resistorAt("R2", 300, 100);
+    const state: SchematicState = { components: [r1, r2], wires: [], netLabels: [label("ag", "AGND", pinWorldPos(r1, "left"), { kind: "ground" }), label("dg", "DGND", pinWorldPos(r2, "left"), { kind: "ground" })], sheets: twoSheets({ id: "aux", name: "Aux" }) };
+    expect(resolveProjectConnectivity(state).railJoins).toEqual([]);
+    expect(attemptApply(state, [{ ...PX, operationId: opId("d"), kind: "schematic_delete_sheet", sheetId: "aux" }])).toMatch(/^SHEET_RAIL_JOIN_REFUSED:AGND\|DGND: /);
+  });
+});
+
+describe("[PR-J1 integration, 2026-10-22] J1-OPS-3: a port binding made by a label edit is a sheet operation too", () => {
+  const railsOnTwoSheets = (): SchematicState => ({
+    components: [],
+    wires: [wireAt("wa", { x: 0, y: 0 }, { x: 50, y: 0 }), wireAt("wd", { x: 0, y: 0 }, { x: 50, y: 0 }, "dig")],
+    netLabels: [label("ag", "AGND", { x: 0, y: 0 }, { kind: "ground" }), label("dg", "DGND", { x: 0, y: 0 }, { kind: "ground", sheetId: "dig" })],
+    sheets: twoSheets({ id: "dig", name: "Digital", ports: [{ id: "px", name: "X", direction: "passive" }] }),
+  });
+  const sheetPin = (position: { x: number; y: number }): EngineeringOperation => ({ ...PX, operationId: opId("pin"), kind: "schematic_add_sheet_pin", pin: { id: "pxp", position, name: "X", kind: "label", orientation: 0, scope: "sheet-pin", portId: "px", childSheetId: "dig" }, atIndex: 2 });
+  const hierarchical = (atIndex: number): EngineeringOperation => ({ ...PX, operationId: opId("h"), kind: "schematic_add_net_label", label: { id: "hx", position: { x: 50, y: 0 }, name: "X", kind: "label", orientation: 0, sheetId: "dig", scope: "hierarchical", portId: "px" }, atIndex });
+
+  it("the sheet pin first, then the hierarchical label alone (schematic_add_net_label): the second batch is refused", () => {
+    const pinned = fromCanonicalSchematic(apply(toCanonicalSchematic(railsOnTwoSheets()), [sheetPin({ x: 50, y: 0 })]).schematic);
+    expect(resolveProjectConnectivity(pinned).railJoins).toEqual([]);
+    expect(attemptApply(pinned, [hierarchical(3)])).toMatch(/^SHEET_RAIL_JOIN_REFUSED:AGND\|DGND: /);
+  });
+
+  it("a sheet pin dragged onto the AGND net with an ordinary label move (schematic_update_net_label) is refused", () => {
+    const bound = fromCanonicalSchematic(apply(toCanonicalSchematic(railsOnTwoSheets()), [sheetPin({ x: 300, y: 300 }), hierarchical(3)]).schematic);
+    expect(resolveProjectConnectivity(bound).railJoins).toEqual([]);
+    expect(attemptApply(bound, [{ ...PX, operationId: opId("mv"), kind: "schematic_update_net_label", labelId: "pxp", patch: { position: { x: 50, y: 0 } } }])).toMatch(/^SHEET_RAIL_JOIN_REFUSED:AGND\|DGND: /);
+  });
+});
+
+describe("[PR-J1 integration, 2026-10-22] J1-OPS-4: the move planner never proves a KiCad move without the parts' pins", () => {
+  const lookup = fixturePartLookup();
+  const drone = droneFixtureState();
+  const u3 = drone.kicadComponents!.find((item) => item.refDes === "U3")!;
+
+  it("moving U3 without a part lookup, or with a lookup that does not know U3's part, is refused; with the real lookup it plans 5 crossings", () => {
+    const target = { newSheet: { id: "imu", name: "IMU" } };
+    const blind = planMoveToSheet(drone, { entities: [{ family: "kicad", id: u3.id }], target });
+    expect(blind).toMatchObject({ ok: false, code: "SHEET_MOVE_CONNECTIVITY_INVALID" });
+    const partial = planMoveToSheet(drone, { entities: [{ family: "kicad", id: u3.id }], target }, (partId) => (partId === u3.partId ? null : lookup(partId)));
+    expect(partial).toMatchObject({ ok: false, code: "SHEET_MOVE_CONNECTIVITY_INVALID" });
+    if (!partial.ok) expect(partial.message).toContain(u3.partId);
+    const proven = planMoveToSheet(drone, { entities: [{ family: "kicad", id: u3.id }], target }, lookup);
+    if (!proven.ok) throw new Error(`${proven.code}: ${proven.message}`);
+    expect(proven.preview.crossings).toHaveLength(5);
+  });
+});

@@ -13,9 +13,13 @@ vi.mock("@/app/lib/parts-search", () => ({
   getFullPartsByIds: vi.fn(async () => []),
   searchParts: vi.fn(async () => []),
 }));
+// [PR-J1 integration, 2026-10-22] J1-CONS-7: a configured second-opinion endpoint (a fake: nothing is called) for cross-verify
+const schgen = vi.hoisted(() => ({ call: vi.fn() }));
+vi.mock("@/app/lib/schgen/endpoint-client", () => ({ schgenEndpointFromEnv: () => ({ url: "https://schgen.invalid/v1" }), callSchGenEndpoint: schgen.call, SCHGEN_FAILURE_SENTENCES: {} }));
 import { llmRouter } from "@/app/lib/llm/router";
 import { getFullPartsByIds } from "@/app/lib/parts-search";
 import { POST as layoutCriticPost } from "../layout-critic/route";
+import { POST as crossVerifyPost } from "../cross-verify/route";
 
 const generate = vi.mocked(llmRouter.generate);
 const partsRead = vi.mocked(getFullPartsByIds);
@@ -44,5 +48,39 @@ describe("[PR-J J2] Tidy refuses a project organised into sheets instead of flat
     const res = await layoutCriticPost(jsonReq({ state: { ...flat, kicadComponents: [flat.kicadComponents[0], secondOnRoot] }, image: "data:image/png;base64,aGk=", provider: "anthropic" }));
     expect(res.status).toBe(200);
     expect(generate).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── [PR-J1 integration, 2026-10-22] review J1-CONS-7: a broken sheet structure is a structured refusal, before any read or call ──
+
+const routeReq = (route: string, body: unknown): Request => new Request(`http://localhost/api/schematic/${route}`, { method: "POST", headers: { "content-type": "application/json", origin: "http://localhost", ...SEL }, body: JSON.stringify(body) });
+/** Sheet references without their tree: the canonical sheet contract refuses it (SHEET_REFERENCE_INVALID). */
+const orphaned = { components: [], wires: [], kicadComponents: [{ id: "c1", partId: "p1", refDes: "R1", x: 0, y: 0, rotation: 0, value: "1k" }, { id: "c2", partId: "p1", refDes: "R2", x: 200, y: 0, rotation: 0, value: "1k", sheetId: "s1" }] };
+/** A hierarchical label that names a port that does not exist (SHEET_PIN_PORT_MISSING). */
+const missingPort = { ...sheeted, netLabels: [{ id: "h1", position: { x: 0, y: 0 }, name: "X", kind: "label", orientation: 0, sheetId: "s1", scope: "hierarchical", portId: "nope" }] };
+/** A valid tree whose overview has a global and a local net both named X (SHEET_NET_NAME_COLLISION). */
+const collision = { ...sheeted, netLabels: [{ id: "g", position: { x: 0, y: 0 }, name: "X", kind: "label", orientation: 0, scope: "global" }, { id: "l", position: { x: 500, y: 500 }, name: "X", kind: "label", orientation: 0 }] };
+
+describe("[PR-J1 integration, 2026-10-22] J1-CONS-7: Tidy and the second opinion refuse an invalid sheet structure with 422 SHEET_HIERARCHY_INVALID", () => {
+  it("Tidy: a document carrying sheet references without its tree is refused before the part read and the model call", async () => {
+    injectAuthorizedPrincipal({ userId: "e1", tenantId: "local", projectId: "proj-j2", role: "editor" });
+    const res = await layoutCriticPost(jsonReq({ state: orphaned, image: "data:image/png;base64,aGk=", provider: "anthropic" }));
+    expect(res.status).toBe(422);
+    const body = await res.json() as { ok: boolean; code: string; error: string };
+    expect([body.ok, body.code]).toEqual([false, "SHEET_HIERARCHY_INVALID"]);
+    expect(body.error).toContain("SHEET_REFERENCE_INVALID");
+    expect(generate).not.toHaveBeenCalled();
+    expect(partsRead).not.toHaveBeenCalled();
+  });
+
+  it.each([["a missing port", missingPort, "SHEET_PIN_PORT_MISSING"], ["a net-name collision", collision, "SHEET_NET_NAME_COLLISION"]] as const)("cross-verify: %s is refused before the part read and the second-opinion call (never a 500)", async (_label, state, code) => {
+    injectAuthorizedPrincipal({ userId: "e1", tenantId: "local", projectId: "proj-j2", role: "editor" });
+    const res = await crossVerifyPost(routeReq("cross-verify", { prompt: "an LED blinker", state }));
+    expect(res.status).toBe(422);
+    const body = await res.json() as { ok: boolean; code: string; error: string };
+    expect([body.ok, body.code]).toEqual([false, "SHEET_HIERARCHY_INVALID"]);
+    expect(body.error).toContain(code);
+    expect(partsRead).not.toHaveBeenCalled();
+    expect(schgen.call).not.toHaveBeenCalled();
   });
 });

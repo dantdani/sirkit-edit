@@ -5,7 +5,7 @@ import type {
 } from "@/lib/schematic-types";
 import { PIN_NAMES, normalizeRefDes, schDisplayRef } from "@/lib/schematic-types";
 import { pinWorldPos, pointKey } from "./geometry";
-import { buildNetUnionFind } from "./connectivity";
+import { buildNetUnionFind } from "./connectivity"; import { assertWholeProject, sheetErrors, validateSheetHierarchy } from "./schematic/sheets"; // [PR-J1 integration, 2026-10-22] on this line so no line moves
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -70,7 +70,7 @@ export function schematicToSpice(
   state: SchematicState,
   options?: { analysis?: SpiceAnalysis; rawOutputPath?: string },
 ): { netlist: string; nodeMap: Record<string, string>; pinNodes: Record<string, string> } {
-  const analysis     = options?.analysis ?? DEFAULT_ANALYSIS; if (state.sheets !== undefined) throw new Error(SPICE_SHEETS_PENDING); // [PR-J, 2026-10-22] J2: no deck from a cross-sheet coordinate union
+  const analysis     = options?.analysis ?? DEFAULT_ANALYSIS; assertWholeProject(state, "spice"); if (state.sheets !== undefined || sheetErrors(validateSheetHierarchy(state)).length > 0) throw new Error(SPICE_SHEETS_PENDING); // [PR-J, 2026-10-22] J2: no deck from a cross-sheet coordinate union; [PR-J1 integration, 2026-10-22] PC-3 / J1-CONS-7: never one sheet's view, never sheet references without their tree
   const rawOutputPath = options?.rawOutputPath;
 
   if (state.components.length === 0) {

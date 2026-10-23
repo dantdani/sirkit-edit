@@ -3569,3 +3569,29 @@ Under the existing OD-217 heading (`:2599`), append:
   are stated truthfully in the task card and larger designs are organised into more sheets after review; no new spend.
 - **The owner may choose otherwise:** each item independently (notably a retroactive ground-split with a board re-sync, real sheet paths in
   PCB publication, raising the block limit or the specialist cap, an editor-chosen workload size).
+
+## OD-256 — page-browser-e2e-b24 keeps OD-30's 30-minute browser limit (PR-J1 integration, 2026-10-22)
+
+- **Question:** PR #16's run 39822933120 (`e1830cfc`) cancelled page-browser-e2e-b24 at its 20-minute limit after `playwright install --with-deps chromium` took 13 minutes on that runner (19-26 s on the previous runs); every finished case was green. Raise the limit, cache the browser, or move specs again?
+- **Default applied:** `timeout-minutes: 30`, the limit the other two browser jobs carry under OD-30; no spec moved, no step changed; the pins moved with dated notes (`ci-split.md` section 11.12). The headroom step still reports OD-30's five minutes against the job's elapsed time, so a slow setup is visible, not hidden.
+- **The owner may choose otherwise:** add an `actions/cache` step for `~/.cache/ms-playwright` keyed on the Playwright version (removes the download share, not the `apt` share), or move `keyboard-and-focus` to its own job.
+
+## OD-257 — section J3 defaults: the Sheets navigator, carriage of the sheet set through the page, moving a selection, the AI replace-result refusal (product reliability J3, 2026-10-22)
+
+- **Question:** the J3 build plan (the editor increment of section J; `multi-sheet/progress.md`) names choices the owner has not made. The
+  owner's instruction ("complete everything; you are the chief SWE") asks the lead to proceed. Which defaults apply?
+- **Default applied:** (1) `Move to sheet` moves the selected part with its attached wires and local labels on the active sheet; a
+  second option, `Move connected group`, moves the connected group restricted to the active sheet; no marquee or multi-select is added.
+  (2) Deleting a populated sheet is two previewed transactions (move its contents to the parent, then delete the empty sheet; two undo
+  steps); no executor binding mixes the two. (3) The AI replace-result refusal (OD-255 item 6) fires at the Build composer's start on a
+  multi-sheet project (no task, no spend); a chat-started task is refused at the offer; the final guard in the apply path stays in both
+  cases. (4) The pending-proposal digest includes the sheet set when present, so a proposal made before the project was organised reads
+  stale and is discarded. (5) The active sheet and per-sheet camera live in a per-project localStorage presentation store, cleared with
+  the project; never in the document. (6) A port created for an unnamed crossing net takes the first unused `SIG<n>` name; it is renamed
+  afterwards through the port's Rename action. (7) `app/page.tsx` keeps 9,156 lines: in-place edits only, new logic in components and
+  hooks. (8) Importing a multi-sheet project file is enabled in J3 (the editor now hydrates the sheet set); SPICE and the hierarchical
+  KiCad export stay refused until J4. (9) The browser proof organises the fixture four-motor drone into subsystem sheets and imports a
+  committed multi-sheet project file; no router recording and no live-model proof (US$0).
+- **The owner may choose otherwise:** each item independently (a marquee selection, a one-command sheet delete, refusing Build only
+  at apply, a digest over the four arrays only, no presentation store, a port-name prompt in the move preview, a reviewed PAGE_LINES
+  move, keeping import refused until J4).

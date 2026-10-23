@@ -22,10 +22,20 @@
  *
  * Findings on both kinds of document: ISOLATION_DOMAIN_JOIN (two different ground / return names, or a ground and a power name, on one
  * net) and POWER_RAIL_JOIN (two different power names on one net) are reported, never repaired; a sheet operation that would CREATE one
- * is refused by the canonical executor (OD-255 item 4, `railJoinKeys`).
+ * is refused by the canonical executor (OD-255 item 4; it compares the `railJoins` of the result before and after the batch).
  *
  * Pure: no I/O, no randomness. KiCad pin positions come from the caller's part lookup (the parts cache in the browser, the committed
  * catalog in tests); without one, KiCad parts contribute no pins (connectivity between labels and wires is unaffected).
+ *
+ * [PR-J1 integration, 2026-10-22] Round-1 review fixes: (PC-1) a net whose only names are port anchors (sheet pins, hierarchical
+ * labels) is named by the port's sheet path ("Power/OUT") when another net would carry the same name - a collision is an error only
+ * when a name the user wrote (a local, global, power or ground label, a ground symbol) is involved; (PC-2) the single-sheet
+ * derivation is linear in the pins; (PC-3) the authority refuses a sheet lens itself; (PC-4) LEGACY_GROUND_NAME_COLLAPSE is
+ * reported only when the legacy rule really joins nets the strict rule keeps apart (a lone non-GND ground name is the finding
+ * LEGACY_GROUND_RENAMED), and (J1-OPS-2) that collapse is a rail-join key, so a sheet operation that brings it back is refused;
+ * (PC-5) one name on a net is never a rail join; (PC-6) a local label that carries a port anchor's name on the same sheet, on a
+ * different net, is the finding SHEET_LOCAL_SHADOWS_PORT whether or not the port is bound; (J1-OPS-1) `singleSheetRuleChange`
+ * says whether turning a single-sheet document into a multi-sheet one (or back) would change its circuit by the change of rules.
  */
 
 import { buildNetUnionFind, UnionFind } from "@/app/lib/connectivity";
@@ -46,7 +56,7 @@ import {
   type SchematicState,
   type Wire,
 } from "@/lib/schematic-types";
-import { sheetDepth, sheetOf, sheetPathName, validateSheetHierarchy, type SheetDiagnosticCode } from "./sheets";
+import { assertWholeProject, sheetDepth, sheetOf, sheetPathName, validateSheetHierarchy, type SheetDiagnosticCode } from "./sheets";
 
 export const PROJECT_CONNECTIVITY_SCHEMA = "sirkit.project-connectivity.v1" as const;
 
@@ -99,7 +109,9 @@ export interface ProjectNet {
   rootKeys: string[];
 }
 
-export type ConnectivityDiagnosticCode = SheetDiagnosticCode | "ISOLATION_DOMAIN_JOIN" | "POWER_RAIL_JOIN" | "LEGACY_GROUND_NAME_COLLAPSE" | "SHEET_NET_NAME_COLLISION";
+export type ConnectivityDiagnosticCode = SheetDiagnosticCode | "ISOLATION_DOMAIN_JOIN" | "POWER_RAIL_JOIN" | "LEGACY_GROUND_NAME_COLLAPSE" | "SHEET_NET_NAME_COLLISION"
+  // [PR-J1 integration, 2026-10-22] review PC-4 and PC-6
+  | "LEGACY_GROUND_RENAMED" | "SHEET_LOCAL_SHADOWS_PORT";
 
 export interface ConnectivityDiagnostic {
   code: ConnectivityDiagnosticCode;
@@ -186,8 +198,9 @@ function railFindings(buckets: Iterable<{ labels: readonly NetLabel[]; groundSym
   const joins = new Set<string>();
   for (const bucket of buckets) {
     const { ground, power } = railNames(bucket);
-    if (ground.length >= 2 || (ground.length >= 1 && power.length >= 1)) {
-      const names = sortedUnique([...ground, ...power]);
+    // [PR-J1 integration, 2026-10-22] review PC-5: one name is never a join (a ground symbol and a power-kind "GND" label are one rail)
+    const names = sortedUnique([...ground, ...power]);
+    if (names.length >= 2 && (ground.length >= 2 || (ground.length >= 1 && power.length >= 1))) {
       joins.add(names.join("|"));
       diagnostics.push({ code: "ISOLATION_DOMAIN_JOIN", severity: "warning", message: `One net joins ${names.join(", ")}: different ground / return or power domains are connected here. Check that this is an intended tie (a sheet operation never creates one).`, refs: sortedUnique(bucket.refs) });
     }
@@ -237,12 +250,40 @@ const compareNets = (a: ProjectNet, b: ProjectNet): number => {
 // ── the one entry point ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export function resolveProjectConnectivity(state: SchematicState, getPart?: PartPinsLookup): ProjectConnectivity {
+  assertWholeProject(state, "project-connectivity"); // [PR-J1 integration, 2026-10-22] review PC-3: one sheet's view is never the project
   return state.sheets === undefined ? resolveSingleSheet(state, getPart) : resolveMultiSheet(state, getPart);
 }
 
-/** The rail-join keys of a document without part data (labels, wires and Theory symbols decide them): what sheet operations compare. */
-export function railJoinKeys(state: SchematicState): string[] {
-  return resolveProjectConnectivity(state).railJoins;
+/** The pin-and-label partition of a result: each net's member pin keys and label ids (a pin-less, label-only net included). */
+function connectionGroups(conn: ProjectConnectivity): Array<{ key: string; pins: string[]; labels: string[] }> {
+  return conn.nets
+    .map((net) => { const labels = sortedUnique(net.labels.map((label) => label.id)); return { key: JSON.stringify([net.members, labels]), pins: net.members, labels }; })
+    .filter((group) => group.pins.length + group.labels.length > 0);
+}
+
+/**
+ * [PR-J1 integration, 2026-10-22] Review J1-OPS-1. A document gains sheets (v1 -> v2) or loses its last child sheet (v2 -> v1) by a
+ * sheet operation, and that alone switches its connection rules: the legacy single-sheet rule (every ground name is GND; a plain
+ * label joins a power or ground label of the same name) or the strict multi-sheet rule (OD-255 items 2, 3). For a single-sheet
+ * document, this resolves its entities under BOTH rules (the strict side through a synthetic, empty child sheet) and returns null
+ * when they connect exactly the same pins and labels, else the reason in a sentence. A sheet operation that changes the rules is
+ * refused unless this is null: organising a design into sheets never changes its circuit by itself.
+ */
+export function singleSheetRuleChange(state: SchematicState, getPart?: PartPinsLookup): string | null {
+  if (state.sheets !== undefined) return null;
+  const legacy = resolveProjectConnectivity(state, getPart);
+  const collapse = legacy.diagnostics.find((item) => item.code === "LEGACY_GROUND_NAME_COLLAPSE");
+  if (collapse) return `${collapse.message} Rename the ground labels to one name, or tie them explicitly, before organizing this design into sheets.`;
+  const strict = resolveProjectConnectivity({ ...state, sheets: { version: 1, sheets: [{ id: ROOT_SHEET_ID, name: "Overview", parentId: null }, { id: "sheet-rule-probe", name: "Rule probe", parentId: ROOT_SHEET_ID }] } }, getPart);
+  const error = strict.diagnostics.find((item) => item.severity === "error");
+  if (error) return `A multi-sheet project uses the strict connection rules (a plain label never joins a power or ground label, a global label never joins a local one), under which this design has an error: ${error.message}`;
+  const kept = new Set(connectionGroups(strict).map((group) => group.key));
+  const changed = connectionGroups(legacy).filter((group) => !kept.has(group.key));
+  if (changed.length === 0) return null;
+  const labelName = new Map((state.netLabels ?? []).map((label) => [label.id, label.name] as const));
+  const names = sortedUnique(changed.flatMap((group) => group.labels.map((id) => labelName.get(id) ?? id)));
+  const detail = names.length > 0 ? `labels ${names.slice(0, 6).join(", ")}` : `pins ${changed.flatMap((group) => group.pins).slice(0, 6).join(", ")}`;
+  return `A multi-sheet project uses the strict connection rules, under which ${changed.length} net(s) of this design would be connected differently (${detail}). Rename or re-kind those labels so both rules agree before organizing this design into sheets.`;
 }
 
 // ── single-sheet: the legacy union, named exactly as the consumers name it today ────────────────────────────────────────────
@@ -276,11 +317,30 @@ function resolveSingleSheet(state: SchematicState, getPart: PartPinsLookup | und
   };
 
   const railJoins = railFindings([...buckets.entries()].map(([root, bucket]) => ({ labels: bucket.labels, groundSymbol: bucket.groundSymbol, refs: [root, ...bucket.labels.map((label) => label.id)] })), diagnostics);
-  const collapsedGroundNames = sortedUnique([...buckets.values()].flatMap((bucket) => railNames(bucket).ground)).filter((name) => name !== "GND");
-  if (collapsedGroundNames.length > 0) {
+  // [PR-J1 integration, 2026-10-22] review PC-4 / J1-OPS-2: the legacy rule names every ground root "GND" and merges them; it JOINS
+  // nets only where the strict rule (a ground name, a ground symbol or a power "GND" label joins by its exact name) keeps two or more
+  // ground groups apart. Only then is it the collapse finding - and a rail-join key, so a sheet operation that re-creates it (the
+  // last child sheet deleted) is refused like any other join. A single non-GND ground name is a rename of that one net, never a join.
+  const groundNamesOf = (bucket: RootBucket): string[] => { const { ground, power } = railNames(bucket); return sortedUnique([...ground, ...power.filter((name) => name === "GND")]); };
+  const groundBuckets = [...buckets.values()].map(groundNamesOf).filter((names) => names.length > 0);
+  const groundGroups = new UnionFind();
+  for (const names of groundBuckets) for (const name of names) groundGroups.union(names[0]!, name);
+  const strictGroundGroups = new Set(groundBuckets.map((names) => groundGroups.find(names[0]!))).size;
+  const groundNames = sortedUnique(groundBuckets.flat());
+  const collapsedGroundNames = groundNames.filter((name) => name !== "GND");
+  /** The name the strict rule gives the one ground net (a ground name beats a power "GND"; a ground symbol is GND). */
+  const strictGroundName = sortedUnique([...buckets.values()].flatMap((bucket) => railNames(bucket).ground))[0] ?? "GND";
+  if (strictGroundGroups >= 2) {
+    railJoins.splice(0, railJoins.length, ...sortedUnique([...railJoins, groundNames.join("|")]));
     diagnostics.push({
       code: "LEGACY_GROUND_NAME_COLLAPSE", severity: "warning",
       message: `This single-sheet design's PCB netlist and ERC publish every ground label as one net named GND: ${["GND", ...collapsedGroundNames].join(", ")} are joined (the legacy rule, kept so existing boards keep their nets; OD-255 item 3). A multi-sheet project keeps each ground name separate, so organizing this design into sheets would split that net.`,
+      refs: collapsedGroundNames,
+    });
+  } else if (groundNames.length > 0 && strictGroundName !== "GND") {
+    diagnostics.push({
+      code: "LEGACY_GROUND_RENAMED", severity: "warning",
+      message: `This single-sheet design's PCB netlist and ERC publish its ground net as GND (the legacy rule; OD-255 item 3), while its ground label${collapsedGroundNames.length === 1 ? " names" : "s name"} it ${collapsedGroundNames.join(", ")}. No two nets are merged; a multi-sheet project names that net ${strictGroundName}, so organizing this design into sheets renames it on the board (its connections are unchanged).`,
       refs: collapsedGroundNames,
     });
   }
@@ -294,17 +354,21 @@ function resolveSingleSheet(state: SchematicState, getPart: PartPinsLookup | und
   }
   const nets: ProjectNet[] = [];
   const netByRoot = new Map<string, ProjectNet>();
+  // [PR-J1 integration, 2026-10-22] review PC-2: document order by index (each pin and label is in exactly one bucket), never a scan
+  // of every pin once per net - that made each edit's design checks and live netlist quadratic in the pins
+  const pinIndex = new Map(pins.map((pin, index) => [pin, index] as const));
+  const labelIndex = new Map(netLabels.map((label, index) => [label, index] as const));
   for (const [groupKey, roots] of groups) {
     const parts = roots.map((root) => buckets.get(root)!);
-    const groupPins = parts.flatMap((bucket) => bucket.pins);
-    const labels = netLabels.filter((label) => parts.some((bucket) => bucket.labels.includes(label))).map(labelRef);
+    const groupPins = parts.flatMap((bucket) => bucket.pins).sort((a, b) => pinIndex.get(a)! - pinIndex.get(b)!);
+    const labels = parts.flatMap((bucket) => bucket.labels).sort((a, b) => labelIndex.get(a)! - labelIndex.get(b)!).map(labelRef);
     const members = sortedUnique(groupPins.map((pin) => pin.key));
     const named = groupKey.startsWith("name\u0000") ? groupKey.slice(5) : null;
     const groundSymbol = parts.some((bucket) => bucket.groundSymbol);
     const kind: ProjectNetKind = named === null ? "unnamed" : groundSymbol || labels.some((label) => label.kind === "ground") ? "ground" : labels.some((label) => label.kind === "power") ? "power" : "label";
     const net: ProjectNet = {
       id: netIdentity(members, labels), name: named, kind, scope: named === null ? "local" : "global", homeSheetId: ROOT_SHEET_ID, sheetIds: [ROOT_SHEET_ID],
-      members, pins: pins.filter((pin) => groupPins.includes(pin)), labels, portIds: [], groundSymbol, rootKeys: sortedUnique(roots),
+      members, pins: groupPins, labels, portIds: [], groundSymbol, rootKeys: sortedUnique(roots),
     };
     nets.push(net);
     for (const root of roots) netByRoot.set(root, net);
@@ -362,6 +426,9 @@ function resolveMultiSheet(state: SchematicState, getPart: PartPinsLookup | unde
   for (const sheet of state.sheets!.sheets) { depthOf.set(sheet.id, sheetDepth(state, sheet.id) ?? 0); pathOf.set(sheet.id, sheetPathName(state, sheet.id)); }
   const nets: ProjectNet[] = [];
   const netByRoot = new Map<string, ProjectNet>();
+  /** [PR-J1 integration, 2026-10-22] review PC-1: the nets named ONLY by a port anchor (no name the user wrote), with the sheet that
+   *  owns that port and the port's name - such a name is qualified by the port's sheet path when another net would carry it. */
+  const portNamed = new Map<ProjectNet, { portSheetId: string; portName: string }>();
   for (const [root, bucket] of buckets) {
     const labels = bucket.labels.map(labelRef);
     const sheetIds = sortedUnique([...bucket.pins.map((pin) => pin.sheetId), ...labels.map((label) => label.sheetId)]);
@@ -374,29 +441,81 @@ function resolveMultiSheet(state: SchematicState, getPart: PartPinsLookup | unde
     if (ground.length > 0) { name = ground[0]!; kind = "ground"; scope = "global"; }
     else if (power.length > 0) { name = power[0]!; kind = "power"; scope = "global"; }
     else if (globals.length > 0) { name = globals[0]!; kind = "label"; scope = "global"; }
-    else {
+    let anchoredBy: { portSheetId: string; portName: string } | null = null;
+    if (name === null) {
       const onHome = bucket.labels.filter((label) => sheetOf(label) === homeSheetId);
-      const candidate = sortedUnique(onHome.filter((label) => label.scope === undefined).map((label) => netLabelNameKey(label.name)))[0]
-        ?? sortedUnique(onHome.filter((label) => label.scope === "hierarchical" || label.scope === "sheet-pin").map((label) => netLabelNameKey(label.name)))[0];
+      const local = sortedUnique(onHome.filter((label) => label.scope === undefined).map((label) => netLabelNameKey(label.name)))[0];
+      const anchors = onHome.filter((label) => label.scope === "hierarchical" || label.scope === "sheet-pin");
+      const anchor = sortedUnique(anchors.map((label) => netLabelNameKey(label.name)))[0];
+      const candidate = local ?? anchor;
       if (candidate !== undefined) { name = homeSheetId === ROOT_SHEET_ID ? candidate : `${pathOf.get(homeSheetId)}/${candidate}`; kind = "label"; }
+      if (local === undefined && anchor !== undefined) {
+        // the sheet that owns the naming port: a sheet pin's child sheet, a hierarchical label's own sheet (the first path in order)
+        const owners = sortedUnique(anchors.filter((label) => netLabelNameKey(label.name) === anchor).map((label) => (label.scope === "sheet-pin" ? label.childSheetId! : sheetOf(label))));
+        anchoredBy = { portSheetId: owners.sort((a, b) => compareCodePoints(pathOf.get(a) ?? "", pathOf.get(b) ?? ""))[0]!, portName: anchor };
+      }
     }
     const members = sortedUnique(bucket.pins.map((pin) => pin.key));
     const net: ProjectNet = {
       id: netIdentity(members, labels), name, kind, scope, homeSheetId, sheetIds, members, pins: bucket.pins, labels,
       portIds: sortedUnique(bucket.labels.flatMap((label) => (label.portId !== undefined ? [label.portId] : []))), groundSymbol: bucket.groundSymbol, rootKeys: [root],
     };
+    if (anchoredBy) portNamed.set(net, anchoredBy);
     nets.push(net);
     netByRoot.set(root, net);
   }
-  nets.sort(compareNets);
 
   // Distinct nets must never share a display / board name (a local label shadowing a global name, for example).
+  // [PR-J1 integration, 2026-10-22] review PC-1: when every net of a shared name is named only by a port anchor (two sibling sheets
+  // with an "OUT" port each, or two moves' ports), nothing the user wrote collides: each is named by its port's sheet path
+  // ("Power/OUT", "Filter/OUT", as KiCad names such nets), and a qualified name that still meets another net's name takes the first
+  // free "_2", "_3" suffix in net-identity order. A collision that involves a name the user wrote stays an error.
   const byName = new Map<string, ProjectNet[]>();
   for (const net of nets) if (net.name !== null) byName.set(netLabelNameKey(net.name), [...(byName.get(netLabelNameKey(net.name)) ?? []), net]);
+  const qualified: ProjectNet[] = [];
   for (const [name, same] of byName) {
     if (same.length < 2) continue;
+    if (same.every((net) => portNamed.has(net))) {
+      for (const net of same) { const anchor = portNamed.get(net)!; net.name = `${pathOf.get(anchor.portSheetId) ?? anchor.portSheetId}/${anchor.portName}`; qualified.push(net); }
+      continue;
+    }
     const where = same.map((net) => `${net.scope} net on ${net.sheetIds.map((id) => pathOf.get(id) || "the overview").join(" + ")}`).join("; ");
     diagnostics.push({ code: "SHEET_NET_NAME_COLLISION", severity: "error", message: `${same.length} different nets are all named ${name} (${where}). Rename one label, or make the labels global if they are meant to be one net.`, refs: same.map((net) => net.id) });
+  }
+  if (qualified.length > 0) {
+    const qualifiedSet = new Set(qualified);
+    const taken = new Set(nets.filter((net) => net.name !== null && !qualifiedSet.has(net)).map((net) => netLabelNameKey(net.name!)));
+    for (const net of [...qualified].sort((a, b) => compareCodePoints(a.id, b.id))) {
+      const base = net.name!;
+      let unique = base;
+      for (let suffix = 2; taken.has(netLabelNameKey(unique)); suffix += 1) unique = `${base}_${suffix}`;
+      net.name = unique;
+      taken.add(netLabelNameKey(unique));
+    }
+  }
+  nets.sort(compareNets);
+
+  // [PR-J1 integration, 2026-10-22] review PC-6: a LOCAL label that carries a port anchor's name on the same sheet, on a different net,
+  // is never joined by name (J.4: ports connect by identity) and is always flagged - whether or not the port is bound - so the drawing
+  // never silently means two nets where KiCad would read one.
+  const netOfLabel = new Map<string, ProjectNet>();
+  for (const net of nets) for (const label of net.labels) netOfLabel.set(label.id, net);
+  const siteKey = (label: NetLabel): string => JSON.stringify([sheetOf(label), netLabelNameKey(label.name)]);
+  const anchorsAt = new Map<string, NetLabel[]>();
+  for (const anchor of netLabels) if (anchor.scope === "hierarchical" || anchor.scope === "sheet-pin") anchorsAt.set(siteKey(anchor), [...(anchorsAt.get(siteKey(anchor)) ?? []), anchor]);
+  const shadows = new Map<string, { sheetId: string; name: string; refs: Set<string> }>();
+  for (const local of netLabels) {
+    if (local.scope !== undefined || local.kind !== "label") continue;
+    for (const anchor of anchorsAt.get(siteKey(local)) ?? []) {
+      if (netOfLabel.get(anchor.id) === netOfLabel.get(local.id)) continue;
+      const entry = shadows.get(siteKey(local)) ?? { sheetId: sheetOf(local), name: netLabelNameKey(local.name), refs: new Set<string>() };
+      entry.refs.add(local.id).add(anchor.id);
+      shadows.set(siteKey(local), entry);
+    }
+  }
+  for (const { sheetId, name, refs } of shadows.values()) {
+    const where = pathOf.get(sheetId) ? `sheet "${pathOf.get(sheetId)}"` : "the overview";
+    diagnostics.push({ code: "SHEET_LOCAL_SHADOWS_PORT", severity: "warning", message: `On ${where}, the local label ${name} and the port label ${name} are different nets: a port connects only through its sheet pin and hierarchical label, never by a same-named label. Wire them together if they are one signal, or rename the local label.`, refs: sortedUnique(refs) });
   }
   return finish({ mode: "multi-sheet", diagnostics, pins, nets, kicadPinsResolved: getPart !== undefined, unresolvedPartIds: unresolved, railJoins, keyOf, uf, netByRoot });
 }

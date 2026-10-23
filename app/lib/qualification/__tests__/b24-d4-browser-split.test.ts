@@ -15,7 +15,7 @@
  *     its steps in order - B24-D1's start step, page-browser-e2e's checkout, pnpm, node, install and browser-install steps verbatim,
  *     one named step running `pnpm exec playwright test` with the four specs ([B24-D4 lead, 2026-10-10] B24-D2's two, then B24-D3's
  *     two, in that fixed order), an always() upload of its own report and test results
- *     under its own artifact name, B24-D1's headroom step - with `timeout-minutes: 20`, `CI: "true"` and no secret, database or live
+ *     under its own artifact name, B24-D1's headroom step - with `timeout-minutes: 30` ([PR-J1 integration, 2026-10-22] OD-256; was 20), `CI: "true"` and no secret, database or live
  *     resource; every other job's limit unchanged;
  *  2. (ii) the `SIRKIT_E2E_SKIP` value inserted under page-browser-e2e's first browser step names exactly the specs the two appended jobs run ([PR-L7 verify, 2026-10-20] OD-254; was: the new job),
  *     each spec exists, each glob is `**` + `/<name>.spec.ts`, and no other line of the workflow names the variable; the admission
@@ -134,7 +134,7 @@ const minutesSeconds = (value: number): string => {
 };
 
 describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
-  it("1. (i) the new job is appended last with exactly its steps in order: B24-D1's start step, page-browser-e2e's setup verbatim, one named step running the four specs ([B24-D4 lead, 2026-10-10] option (b)), an always() upload under its own name, B24-D1's headroom step; 20 minutes, CI true, no secret, database or live resource; every other job's limit unchanged", () => {
+  it("1. (i) the new job is appended last with exactly its steps in order: B24-D1's start step, page-browser-e2e's setup verbatim, one named step running the four specs ([B24-D4 lead, 2026-10-10] option (b)), an always() upload under its own name, B24-D1's headroom step; 30 minutes ([PR-J1 integration, 2026-10-22] OD-256, was 20), CI true, no secret, database or live resource; every other job's limit unchanged", () => {
     const workflow = lines(WORKFLOW);
     const keys = workflow.flatMap((line, index) => (index > workflow.indexOf("jobs:") && /^ {2}[a-z][a-z0-9-]*:$/.test(line) ? [line.trim()] : []));
     expect(keys).toEqual(["prompt-to-gerber:", "database-delivery:", "page-browser-e2e:", "production-smoke:", "secret-scan:", "agent-boundary-suites:", `${JOB}:`, `${AGENT_JOB}:`]); // [PR-L7, 2026-10-20] reviewed pin move: + page-browser-e2e-agent, appended after this job (OD-254)
@@ -156,7 +156,7 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
     expect(block).toEqual([
       `  ${JOB}:`,
       "    runs-on: ubuntu-latest",
-      "    timeout-minutes: 20",
+      "    timeout-minutes: 30", // [PR-J1 integration, 2026-10-22] reviewed pin move, OD-256: 20 -> 30 (OD-30's browser limit; PR #16 run 39822933120 lost 13 min to `playwright install --with-deps` and was cancelled at 20 min with every finished test green)
       "    env:",
       '      CI: "true"',
       "    steps:",
@@ -182,7 +182,7 @@ describe("[B24-D4] the OD-30 split of page-browser-e2e", () => {
     // the run step is named, so its line never holds B21's C49 anchor (`- run: pnpm exec playwright test`, cited exactly once)
     expect(workflow.filter((line) => line.includes("- run: pnpm exec playwright test"))).toEqual(["      - run: pnpm exec playwright test"]);
     // no timeout-minutes raised: the six earlier jobs keep theirs, the new job has 20
-    expect(workflow.filter((line) => /^ {4}timeout-minutes: /.test(line)).map((line) => line.trim())).toEqual(["timeout-minutes: 25", "timeout-minutes: 15", "timeout-minutes: 30", "timeout-minutes: 20", "timeout-minutes: 10", "timeout-minutes: 20", "timeout-minutes: 20", "timeout-minutes: 30"]); // [PR-L7, 2026-10-20] reviewed pin move: + page-browser-e2e-agent's 30 (OD-254); no limit raised
+    expect(workflow.filter((line) => /^ {4}timeout-minutes: /.test(line)).map((line) => line.trim())).toEqual(["timeout-minutes: 25", "timeout-minutes: 15", "timeout-minutes: 30", "timeout-minutes: 20", "timeout-minutes: 10", "timeout-minutes: 20", "timeout-minutes: 30", "timeout-minutes: 30"]); // [PR-J1 integration, 2026-10-22] reviewed pin move, OD-256: page-browser-e2e-b24 20 -> 30 (the seventh); [PR-L7, 2026-10-20] reviewed pin move: + page-browser-e2e-agent's 30 (OD-254); no limit raised
     expect(workflow.some((line) => /^\s+needs:/.test(line)), "no job waits on another").toBe(false); const agentStart = workflow.indexOf(`  ${AGENT_JOB}:`); let agentAbove = agentStart - 1; while (workflow[agentAbove]!.startsWith("  # ")) agentAbove -= 1; expect(workflow[agentAbove]).toBe(""); expect(workflow[agentAbove - 1]).toBe(`        run: pnpm exec tsx scripts/ci-job-headroom.ts ${WORKFLOW} ${JOB}`); expect(workflow.slice(agentAbove + 1, agentStart).join(NEWLINE)).toContain("[PR-L7]"); expect(workflow.slice(agentStart, lineCount(workflow))).toEqual([`  ${AGENT_JOB}:`, "    runs-on: ubuntu-latest", "    timeout-minutes: 30", "    env:", '      CI: "true"', "    steps:", `      - run: echo "SIRKIT_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV" # [B24-D1] OD-30: ${AGENT_JOB}'s start`, ...setup, "      - name: The agent-execution browser spec (OD-254; OD-30's split)", `        run: pnpm exec playwright test ${AGENT_SPECS.join(" ")}`, "      - name: Upload browser evidence (the agent-execution spec)", "        if: always()", "        uses: actions/upload-artifact@v4", "        with:", `          name: ${AGENT_JOB}-report`, "          path: |", "            playwright-report", "            test-results", "          if-no-files-found: ignore", "          retention-days: 14", `      - if: always() # [B24-D1] OD-30: ${AGENT_JOB}'s headroom`, `        run: pnpm exec tsx scripts/ci-job-headroom.ts ${WORKFLOW} ${AGENT_JOB}`]); for (const absent of ["secrets.", "permissions:", "DATABASE_URL", "SUPABASE", "OPENAI", "ANTHROPIC", "next build", "next start", SKIP_ENV.concat(":")]) expect(workflow.slice(agentAbove, lineCount(workflow)).join(NEWLINE), absent).not.toContain(absent); // [PR-L7, 2026-10-20] OD-254: the second appended browser job, last: its [PR-L7] comment lines, page-browser-e2e's setup verbatim, one named step running agent-execution, its own upload, B24-D1's headroom step; 30 minutes (OD-30's browser limit)
   });
 

@@ -35,7 +35,7 @@ import {
   nearestNeighborGaps,
   evaluateRespacing,
 } from "@/lib/build-auto-layout";
-import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist";
+import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist"; import { sheetErrors, validateSheetHierarchy } from "@/app/lib/schematic/sheets"; // [PR-J1 integration, 2026-10-22] on this line so no line moves
 import type { CachedPart } from "@/app/lib/parts-cache";
 import type { SchematicState } from "@/lib/schematic-types";
 
@@ -76,7 +76,7 @@ export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 4
       { ok: false, error: "Layout critic needs a Build-mode schematic with catalog parts" },
       { status: 400 },
     );
-  } if (state.sheets !== undefined) return Response.json({ ok: false, code: "SHEETS_TIDY_PENDING", error: SHEETS_TIDY_PENDING }, { status: 422, headers: { "Cache-Control": "no-store" } }); // [PR-J, 2026-10-22] J2 / OD-255 item 6: the re-layout returns ONE flat page, so a project with sheets is refused before any model call - never flattened
+  } if (state.sheets !== undefined) return Response.json({ ok: false, code: "SHEETS_TIDY_PENDING", error: SHEETS_TIDY_PENDING }, { status: 422, headers: { "Cache-Control": "no-store" } }); const sheetError = sheetErrors(validateSheetHierarchy(state))[0]; if (sheetError) return Response.json({ ok: false, code: "SHEET_HIERARCHY_INVALID", error: `The schematic's sheet structure has an error (${sheetError.code}: ${sheetError.message}), so it cannot be tidied. Nothing was sent and nothing changed.` }, { status: 422, headers: { "Cache-Control": "no-store" } }); // [PR-J, 2026-10-22] J2 / OD-255 item 6: the re-layout returns ONE flat page, so a project with sheets is refused before any model call - never flattened; [PR-J1 integration, 2026-10-22] J1-CONS-7: so is a document whose sheet references are broken (it would otherwise be billed, then fail)
 
   const image = parseDataUrl(body.image);
   if (!image) {

@@ -188,7 +188,7 @@ export const POST = authenticatedJsonRoute<{ state?: SchematicState; analysis?: 
     assertNetlistSafe(netlist);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return Response.json({ error: `Netlist generation failed: ${msg}` }, { status: 400 });
+    return Response.json({ ...(msg.startsWith("SIM_MULTI_SHEET_PENDING") ? { code: "SIM_MULTI_SHEET_PENDING" } : {}), error: `Netlist generation failed: ${msg}` }, { status: 400 }); // [PR-J1 integration, 2026-10-22] J1-CONS-7: the sheets refusal is structured, like EXPORT_HIERARCHY_PENDING
   }
 
   // [B22-A3] OD-136: the diagnostic runner writes the deck into its own per-run directory, runs the pinned ngspice with the

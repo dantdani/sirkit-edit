@@ -1,8 +1,8 @@
 import type { BBox } from "../pcb/geometry";
 import type { LayerId } from "../pcb/layers";
 import type { PcbBoard, Track, Via, Zone } from "../pcb/types";
-import { ROOT_SHEET_ID, refDesKey } from "@/lib/schematic-types";
-import { railJoinKeys } from "@/app/lib/schematic/project-connectivity";
+import { ROOT_SHEET_ID, refDesKey, type SchematicState } from "@/lib/schematic-types";
+import { resolveProjectConnectivity, singleSheetRuleChange, type ProjectConnectivity } from "@/app/lib/schematic/project-connectivity"; // [PR-J1 integration, 2026-10-22] the whole connectivity, not only its rail joins
 import { sheetOf } from "@/app/lib/schematic/sheets";
 import { markZoneFillDirty } from "../pcb/zones/fill-lifecycle";
 import { validateBoardDimension, validatePcbBoardStructure } from "./pcb-board-structure";
@@ -122,7 +122,7 @@ export interface AppliedOperations { project: CanonicalProjectState; inverseOper
 export function applyEngineeringOperations(source: CanonicalProjectState, operations: readonly EngineeringOperation[]): AppliedOperations {
   const project = structuredClone(source); const board = project.pcb; const inverse: EngineeringOperation[] = []; const seen = new Set<string>();
   // [PR-J, 2026-10-22] OD-255 item 4: the rail / isolation-domain joins present before a batch that holds a sheet operation.
-  const railJoinsBefore = operations.some((operation) => SHEET_OPERATION_KINDS.has(operation.kind)) ? schematicRailJoins(source.schematic) : null;
+  const railJoinsBefore = guardsSheetStructure(source.schematic, operations) ? sheetGuardSnapshot(source.schematic) : null; // [PR-J1 integration, 2026-10-22] J1-OPS-1/3: the whole connectivity, for every structural or port-binding batch
   let schematicTouched = false;
   let boardTouched = false;
   for (const operation of operations) {
@@ -177,7 +177,7 @@ export function applyEngineeringOperations(source: CanonicalProjectState, operat
   if (schematicTouched) {
     const integrityIssues = validateCanonicalSchematic(project.schematic);
     if (integrityIssues.length > 0) throw new Error(`SCHEMATIC_INTEGRITY:${integrityIssues[0]}`);
-    refuseCreatedRailJoins(railJoinsBefore, project.schematic);
+    refuseSheetChanges(railJoinsBefore, project.schematic);
   }
   // B08 — the COMPLETE resulting board must satisfy the structural contract
   // after the batch (global id uniqueness, referential integrity, dimensional
@@ -826,18 +826,55 @@ function applySchematicOperation(project: CanonicalProjectState, operation: Engi
   project.schematic = schematic;
 }
 
-/** [PR-J, 2026-10-22] The rail-join keys of an opaque schematic slot (null when it is not a valid canonical schematic). */
-function schematicRailJoins(value: unknown): string[] | null {
+/** [PR-J, 2026-10-22] The project connectivity (no part data: labels, wires and Theory symbols decide it) of an opaque schematic slot,
+ *  with its state (null when it is not a valid canonical schematic). [PR-J1 integration, 2026-10-22] was its rail-join keys only. */
+interface SheetGuardSnapshot { state: SchematicState; connectivity: ProjectConnectivity }
+function sheetGuardSnapshot(value: unknown): SheetGuardSnapshot | null {
   const parsed = parseCanonicalSchematic(value);
-  return parsed ? railJoinKeys(fromCanonicalSchematic(parsed)) : null;
+  if (!parsed) return null;
+  const state = fromCanonicalSchematic(parsed);
+  return { state, connectivity: resolveProjectConnectivity(state) };
 }
 
-/** [PR-J, 2026-10-22] OD-255 item 4: a batch holding a sheet operation may not CREATE a join of two different rail / isolation
- *  domains (joins that already existed are findings, never a reason to refuse an unrelated edit). */
-function refuseCreatedRailJoins(before: string[] | null, after: unknown): void {
+type ScopedLabelFields = { scope?: unknown; portId?: unknown; childSheetId?: unknown };
+
+/** [PR-J1 integration, 2026-10-22] Review J1-OPS-3: the batches the sheet guard runs on - every sheet operation, and an ordinary label
+ *  operation that adds, moves, renames, removes or restores a label carrying a connection scope or a port binding (a hierarchical label,
+ *  a sheet pin, a global label): binding a port through schematic_add_net_label or dragging a sheet pin onto another net is the same
+ *  structural join as schematic_add_sheet_pin. Plain wire and label edits stay findings (OD-255 item 4). */
+function guardsSheetStructure(schematic: unknown, operations: readonly EngineeringOperation[]): boolean {
+  if (operations.some((operation) => SHEET_OPERATION_KINDS.has(operation.kind))) return true;
+  const scoped = (label: ScopedLabelFields | undefined): boolean => label !== undefined && (label.scope !== undefined || label.portId !== undefined || label.childSheetId !== undefined);
+  let existing: Map<string, ScopedLabelFields> | null = null;
+  const labelOf = (labelId: string): ScopedLabelFields | undefined => {
+    existing ??= new Map(((schematic as { netLabels?: Array<ScopedLabelFields & { id: string }> } | null)?.netLabels ?? []).map((label) => [label.id, label] as const));
+    return existing.get(labelId);
+  };
+  return operations.some((operation) =>
+    (operation.kind === "schematic_add_net_label" && scoped(operation.label))
+    || ((operation.kind === "schematic_update_net_label" || operation.kind === "schematic_delete_net_label") && scoped(labelOf(operation.labelId)))
+    || (operation.kind === "schematic_restore_entities" && operation.netLabels.some((entry) => scoped(entry.entity)))
+    || (operation.kind === "schematic_replace_component" && operation.netLabelMoves.some((move) => scoped(labelOf(move.labelId)))));
+}
+
+/** [PR-J, 2026-10-22] OD-255 item 4: a guarded batch may not CREATE a join of two different rail / isolation domains (joins that
+ *  already existed are findings, never a reason to refuse an unrelated edit). [PR-J1 integration, 2026-10-22] review J1-OPS-1 / 2: nor
+ *  may it turn a valid project connectivity invalid (SHEET_CONNECTIVITY_INVALID: a name collision from a new sheet or a new global
+ *  scope), nor change the circuit by switching the connection rules - creating the first child sheet or deleting the last one
+ *  (SHEET_NOT_EQUIVALENT, `singleSheetRuleChange`); the legacy ground collapse a deleted last sheet would bring back is a rail join
+ *  like any other. */
+function refuseSheetChanges(before: SheetGuardSnapshot | null, after: unknown): void {
   if (!before) return;
-  const created = (schematicRailJoins(after) ?? []).filter((join) => !before.includes(join));
+  const now = sheetGuardSnapshot(after);
+  if (!now) return;
+  const created = now.connectivity.railJoins.filter((join) => !before.connectivity.railJoins.includes(join));
   if (created.length > 0) throw new Error(`SHEET_RAIL_JOIN_REFUSED:${created.join(", ")}: this sheet operation would connect different rail / isolation domains (${created.map((join) => join.split("|").join(" + ")).join("; ")}); nothing was changed`);
+  const error = now.connectivity.diagnostics.find((item) => item.severity === "error");
+  if (before.connectivity.ok && error) throw new Error(`SHEET_CONNECTIVITY_INVALID:${error.code}: ${error.message} This sheet operation would leave the project's connections invalid; nothing was changed`);
+  if ((before.state.sheets === undefined) !== (now.state.sheets === undefined)) {
+    const change = singleSheetRuleChange(before.state.sheets === undefined ? before.state : now.state);
+    if (change !== null) throw new Error(`SHEET_NOT_EQUIVALENT: ${change} This sheet operation would change the circuit by changing the connection rules; nothing was changed.`);
+  }
 }
 
 /**
@@ -972,7 +1009,7 @@ function applySheetOperation(schematic: CanonicalSchematic, operation: Engineeri
 export function applySchematicOperationsToCanonical(schematic: CanonicalSchematic, operations: readonly EngineeringOperation[]): { schematic: CanonicalSchematic; inverseOperations: EngineeringOperation[] } {
   const project = { schematic: structuredClone(schematic) } as unknown as CanonicalProjectState;
   const inverse: EngineeringOperation[] = [];
-  const railJoinsBefore = operations.some((operation) => SHEET_OPERATION_KINDS.has(operation.kind)) ? schematicRailJoins(schematic) : null;
+  const railJoinsBefore = guardsSheetStructure(schematic, operations) ? sheetGuardSnapshot(schematic) : null; // [PR-J1 integration, 2026-10-22] J1-OPS-1/3
   const seen = new Set<string>();
   for (const operation of operations) {
     if (!SCHEMATIC_OPERATION_KINDS.has(operation.kind)) throw new Error(`UNSUPPORTED_OPERATION_SCHEMA:${operation.operationId}: not a schematic operation`);
@@ -985,7 +1022,7 @@ export function applySchematicOperationsToCanonical(schematic: CanonicalSchemati
   }
   const integrityIssues = validateCanonicalSchematic(project.schematic);
   if (integrityIssues.length > 0) throw new Error(`SCHEMATIC_INTEGRITY:${integrityIssues[0]}`);
-  refuseCreatedRailJoins(railJoinsBefore, project.schematic);
+  refuseSheetChanges(railJoinsBefore, project.schematic);
   return { schematic: project.schematic as CanonicalSchematic, inverseOperations: inverse };
 }
 

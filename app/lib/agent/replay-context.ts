@@ -105,6 +105,14 @@ export const NET_LABEL_REQUIRED_KEYS = ["id", "position", "name", "kind", "orien
 export const NET_LABEL_OPTIONAL_KEYS = ["sheetId", "scope", "portId", "childSheetId"] as const; // [PR-J, 2026-10-22] the label's sheet and connection scope
 export const KICAD_COMPONENT_REQUIRED_KEYS = ["id", "partId", "x", "y", "rotation", "refDes", "value"] as const;
 export const KICAD_COMPONENT_OPTIONAL_KEYS = ["atomicPartRevisionId", "symbolAssetVersionId", "footprintAssetVersionId", "mappingCertificateId", "selectionRecordId", "sheetId"] as const; // [PR-J, 2026-10-22] + sheetId
+/** [PR-J1 integration, 2026-10-22] review J1-PERS-6: `SchematicSheetSet`, `SchematicSheet` (and its inline `block`), `SheetPort` -
+ *  lib/schematic-types.ts. The optional sheet tree is projected and key-checked at every depth like the rest of the schematic (it was
+ *  carried whole, so an unknown key inside it was neither refused nor dropped). Its SEMANTIC validity stays a step-8 verdict. */
+export const SHEET_SET_REQUIRED_KEYS = ["version", "sheets"] as const;
+export const SHEET_REQUIRED_KEYS = ["id", "name", "parentId"] as const;
+export const SHEET_OPTIONAL_KEYS = ["block", "ports"] as const;
+export const SHEET_BLOCK_REQUIRED_KEYS = ["x", "y", "width", "height"] as const;
+export const SHEET_PORT_REQUIRED_KEYS = ["id", "name", "direction"] as const;
 
 /** The head mark the ASSEMBLER itself projects (context.ts): exactly three
  *  fields reach `Tier1ProposalHeadMark`, so anything else would be dropped. */
@@ -216,6 +224,20 @@ function projectSchematic(value: unknown): unknown {
   }
   if (Array.isArray(state.kicadComponents)) {
     state.kicadComponents = pickEach(state.kicadComponents, [...KICAD_COMPONENT_REQUIRED_KEYS, ...KICAD_COMPONENT_OPTIONAL_KEYS]);
+  }
+  if (isRec(state.sheets)) {
+    // [PR-J1 integration, 2026-10-22] J1-PERS-6: field by field, like every other subtree
+    const tree = pick(state.sheets, SHEET_SET_REQUIRED_KEYS);
+    if (Array.isArray(tree.sheets)) {
+      tree.sheets = tree.sheets.map((item) => {
+        if (!isRec(item)) return item;
+        const sheet = pick(item, [...SHEET_REQUIRED_KEYS, ...SHEET_OPTIONAL_KEYS]);
+        if (isRec(sheet.block)) sheet.block = pick(sheet.block, SHEET_BLOCK_REQUIRED_KEYS);
+        if (Array.isArray(sheet.ports)) sheet.ports = pickEach(sheet.ports, SHEET_PORT_REQUIRED_KEYS);
+        return sheet;
+      });
+    }
+    state.sheets = tree;
   }
   return state;
 }
@@ -548,6 +570,18 @@ function validateSchematicShape(value: unknown, issues: ContextIssues): void {
     exactElements(value.kicadComponents, KICAD_COMPONENT_REQUIRED_KEYS, KICAD_COMPONENT_OPTIONAL_KEYS, "context.schematic.kicadComponents", issues);
   }
   if (value.pageSize !== undefined && typeof value.pageSize !== "string") issues.push("context.schematic.pageSize: must be a string");
+  if (value.sheets !== undefined) {
+    // [PR-J1 integration, 2026-10-22] J1-PERS-6: the sheet tree is exact at every depth (an unknown key is refused, never carried)
+    if (!isRec(value.sheets)) { issues.push("context.schematic.sheets: must be a plain object"); return; }
+    if (!exactContextKeys(value.sheets, SHEET_SET_REQUIRED_KEYS, [], "context.schematic.sheets", issues)) return;
+    exactElements(value.sheets.sheets, SHEET_REQUIRED_KEYS, SHEET_OPTIONAL_KEYS, "context.schematic.sheets.sheets", issues, (sheet, label) => {
+      if (sheet.block !== undefined) {
+        if (!isRec(sheet.block)) issues.push(`${label}.block: must be a plain object`);
+        else exactContextKeys(sheet.block, SHEET_BLOCK_REQUIRED_KEYS, [], `${label}.block`, issues);
+      }
+      if (sheet.ports !== undefined) exactElements(sheet.ports, SHEET_PORT_REQUIRED_KEYS, [], `${label}.ports`, issues);
+    });
+  }
 }
 
 /**

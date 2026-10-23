@@ -6,6 +6,12 @@
  * (`applySchematicOperationsToCanonical`) and resolving the project connectivity before and after: a plan exists only when the
  * project pin-to-net partition is unchanged and the component set (stable ids, references, values, part identities) is untouched.
  * Ambiguous or non-equivalent moves are refused with named diagnostics and no operations.
+ *
+ * [PR-J1 integration, 2026-10-22] Round-1 review fixes: (J1-OPS-4) a KiCad design is planned only with every part's pins (a plan
+ * proven without them would be vacuous); (J1-OPS-1, PC-4) the first move of a single-sheet design is refused only when the change of
+ * connection rules alone would change its circuit (`singleSheetRuleChange`), so a design whose one ground name is AGND or VSS can be
+ * organised - the preview names the nets whose board name changes (`renamedNets`); (PC-1) a new port on an unnamed net takes the
+ * first SIG<n> that no net, label or port of the project already uses, so consecutive moves never mint two "SIG1" nets.
  */
 
 import { applySchematicOperationsToCanonical } from "@/app/lib/engineering/operations";
@@ -13,7 +19,7 @@ import { fromCanonicalSchematic, toCanonicalSchematic } from "@/app/lib/engineer
 import type { EngineeringOperation, SchematicNetLabelSnapshot, SchematicSheetAssignment, SchematicSheetSnapshot } from "@/app/lib/engineering/types";
 import { compareCodePoints } from "@/app/lib/stable-compare";
 import { ROOT_SHEET_ID, netLabelNameKey, type Point, type SchematicState, type SheetPortDirection } from "@/lib/schematic-types";
-import { resolveProjectConnectivity, type ConnectivityDiagnostic, type PartPinsLookup, type ProjectConnectivity, type ProjectNet } from "./project-connectivity";
+import { resolveProjectConnectivity, singleSheetRuleChange, type ConnectivityDiagnostic, type PartPinsLookup, type ProjectConnectivity, type ProjectNet } from "./project-connectivity";
 import { sheetOf, sheetsOf } from "./sheets";
 
 const PX = { schemaVersion: 1 as const, units: "px" as const };
@@ -89,6 +95,9 @@ export interface MoveToSheetPreview {
   moved: { components: number; wires: number; labels: number };
   /** Every net the selection boundary cuts, and the explicit port / sheet pin that keeps it one net. */
   crossings: MoveCrossing[];
+  /** [PR-J1 integration, 2026-10-22] Nets that keep every connection but change their board name (a single-sheet AGND net published
+   *  as GND by the legacy rule is named AGND in a multi-sheet project), keyed by the net's identity before the move. */
+  renamedNets: Array<{ netId: string; from: string; to: string | null }>;
   partitionDigest: string;
 }
 
@@ -180,10 +189,17 @@ export function planMoveToSheet(state: SchematicState, input: MoveToSheetInput, 
 
   const before = resolveProjectConnectivity(state, getPart);
   if (!before.ok) return refuse("SHEET_MOVE_CONNECTIVITY_INVALID", "The project's connectivity has errors; fix them before moving circuitry between sheets.", before.diagnostics.filter((item) => item.severity === "error"));
+  // [PR-J1 integration, 2026-10-22] review J1-OPS-4: without every KiCad part's pins the partition proof below covers no KiCad pin
+  // (they would silently disconnect on the new sheet), so such a plan is never offered.
+  if ((state.kicadComponents ?? []).length > 0 && (!before.kicadPinsResolved || before.unresolvedPartIds.length > 0)) {
+    return refuse("SHEET_MOVE_CONNECTIVITY_INVALID", before.kicadPinsResolved ? `The pins of part${before.unresolvedPartIds.length === 1 ? "" : "s"} ${before.unresolvedPartIds.join(", ")} are not loaded, so the move cannot be proven to keep every connection. Wait until all parts are loaded, then try again. Nothing was changed.` : "The parts' pin data was not supplied, so the move cannot be proven to keep every connection. Nothing was changed.");
+  }
   // OD-255 item 3: a single-sheet design whose PCB joins different ground names into one GND would lose that join in a multi-sheet
-  // document (which keeps every ground name separate): refuse rather than silently split its ground net.
-  const legacyGround = before.mode === "single-sheet" ? before.diagnostics.find((item) => item.code === "LEGACY_GROUND_NAME_COLLAPSE") : undefined;
-  if (legacyGround) return refuse("SHEET_MOVE_NOT_EQUIVALENT", `${legacyGround.message} Rename the ground labels to one name, or tie them explicitly, before organizing this design into sheets. Nothing was changed.`, [legacyGround]);
+  // document (which keeps every ground name separate): refuse rather than silently split its ground net. [PR-J1 integration,
+  // 2026-10-22] review PC-4 / J1-OPS-1: the test is the change of rules itself (the legacy collapse that joins nets, or any other
+  // connection the strict rules read differently), the same one the canonical executor applies to the batch.
+  const ruleChange = before.mode === "single-sheet" ? singleSheetRuleChange(state, getPart) : null;
+  if (ruleChange !== null) return refuse("SHEET_MOVE_NOT_EQUIVALENT", `${ruleChange} Nothing was changed.`, before.diagnostics.filter((item) => item.code === "LEGACY_GROUND_NAME_COLLAPSE"));
 
   // 1. the move itself: (new sheet) + assignments + offset
   const ops: EngineeringOperation[] = [];
@@ -220,6 +236,13 @@ export function planMoveToSheet(state: SchematicState, input: MoveToSheetInput, 
   // 3. every net the move cut: one port per parent-side piece, hierarchical labels on the child side
   const takenIds = new Set<string>([...sheets.flatMap((sheet) => (sheet.ports ?? []).map((port) => port.id)), ...(state.netLabels ?? []).map((label) => label.id)]);
   const childPortNames = new Set((sheets.find((sheet) => sheet.id === childSheetId)?.ports ?? []).map((port) => netLabelNameKey(port.name)));
+  // [PR-J1 integration, 2026-10-22] review PC-1: an unnamed net's port takes a SIG<n> no net, label or port of the project uses yet
+  const projectNames = new Set<string>([
+    ...before.nets.flatMap((net) => (net.name === null ? [] : [netLabelNameKey(net.name.split("/").pop()!)])),
+    ...(state.netLabels ?? []).map((label) => netLabelNameKey(label.name)),
+    ...sheets.flatMap((sheet) => (sheet.ports ?? []).map((port) => netLabelNameKey(port.name))),
+  ]);
+  const nextSignalName = (): string => { let name = `SIG${(unnamed += 1)}`; while (projectNames.has(netLabelNameKey(name))) name = `SIG${(unnamed += 1)}`; projectNames.add(netLabelNameKey(name)); return name; };
   const crossings: MoveCrossing[] = [];
   const portOps: EngineeringOperation[] = [];
   const anchorOps: EngineeringOperation[] = [];
@@ -243,7 +266,7 @@ export function planMoveToSheet(state: SchematicState, input: MoveToSheetInput, 
     const childAnchors = childPieces.map((piece) => anchorOf(mid, midConn, piece, childSheetId));
     const parentAnchors = parentPieces.map((piece) => anchorOf(mid, midConn, piece, parentSheetId));
     if (childAnchors.some((point) => point === null) || parentAnchors.some((point) => point === null) || (hub && hubChildAnchor === null)) return refuse("SHEET_MOVE_AMBIGUOUS", `Net ${net.name ?? net.id} has no grid point to anchor its port on one side. Nothing was changed.`);
-    const base = (net.name?.split("/").pop() ?? `SIG${(unnamed += 1)}`).replace(/[^A-Za-z0-9_+\-.]/g, "_") || `SIG${(unnamed += 1)}`;
+    const base = (net.name?.split("/").pop() ?? nextSignalName()).replace(/[^A-Za-z0-9_+\-.]/g, "_") || nextSignalName();
     // one NEW port per parent-side piece (a port has exactly one sheet pin)
     const ports: Array<{ id: string; name: string }> = [];
     parentPieces.forEach((_, index) => {
@@ -298,6 +321,10 @@ export function planMoveToSheet(state: SchematicState, input: MoveToSheetInput, 
     return refuse("SHEET_MOVE_NOT_EQUIVALENT", `The move would change which pins are connected (${changed.slice(0, 6).join(", ")}${changed.length > 6 ? ", ..." : ""}).${legacy ? ` ${legacy.message}` : ""} Nothing was changed.`, legacy ? [legacy] : []);
   }
   if (JSON.stringify(componentIdentity(after)) !== JSON.stringify(componentIdentity(state))) return refuse("SHEET_MOVE_NOT_EQUIVALENT", "The move would change a component's identity; nothing was changed.");
+  const renamedNets = before.nets.flatMap((net) => {
+    const now = net.members.length > 0 ? afterConn.netOfPin(net.members[0]!) : null;
+    return net.name !== null && now && now.name !== net.name ? [{ netId: net.id, from: net.name, to: now.name }] : [];
+  });
   return {
     ok: true,
     operations,
@@ -308,6 +335,7 @@ export function planMoveToSheet(state: SchematicState, input: MoveToSheetInput, 
       createdSheet: newSheet ? { id: newSheet.id, name: newSheet.name, parentId: sourceSheetId } : null,
       moved: { components: input.entities.filter((ref) => ref.family === "theory" || ref.family === "kicad").length, wires: input.entities.filter((ref) => ref.family === "wire").length, labels: input.entities.filter((ref) => ref.family === "label").length },
       crossings,
+      renamedNets,
       partitionDigest: afterConn.partitionDigest,
     },
   };

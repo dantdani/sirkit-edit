@@ -18,7 +18,7 @@
 
 import { lineCurrency, lineUnitPrice } from "@/app/lib/bom/line-price"; // [B19-D I5b review]
 import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react"; import { firstToast, showToast, useToastDismissal } from "@/app/components/pcb/hooks/useToastDismissal"; // [PR-J1 integration, 2026-10-22] the banner's numbered shows, on this line so no line moves
 import type {
   SchematicState,
   SchComponent,
@@ -103,7 +103,7 @@ const SEVERITY_STYLE: Record<NotificationSeverity, { glyph: string; className: s
   critical: { glyph: "⛔", className: "text-red-400" },
 };
 
-const STORAGE_KEY = "sirkit:bom:pricingChoice";
+const STORAGE_KEY = "sirkit:bom:pricingChoice"; /** [PR-J1 integration, 2026-10-22] how long a post-action banner stays after its show */ const BANNER_DISMISS_MS = 8000;
 
 type ChoiceOption = { value: string; label: string; selectable: boolean };
 
@@ -445,7 +445,7 @@ function ProjectBomView(props: Props) {
   // Export-for-distributor menu + sourcing worksheet modal + post-action banners.
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [fileExporting, setFileExporting] = useState(false);
-  const [banner, setBanner] = useState<string | null>(null);
+  const [shownBanner, setBanner] = useReducer(showToast, null, firstToast); const banner = shownBanner.text; // [PR-J1 integration, 2026-10-22] numbered shows: an earlier banner's dismissal never clears a later one
   // [B19-E E1] after a distributor import file downloads: stays until dismissed, so the upload link stays reachable
   const [exportNotice, setExportNotice] = useState<{ dist: CartDistributor; mpnOnly: number } | null>(null);
   const [worksheetOpen, setWorksheetOpen] = useState(false);
@@ -485,11 +485,11 @@ function ProjectBomView(props: Props) {
   const unreadCount = notifications.filter((n) => !n.readAt).length;
 
   // Auto-dismiss the post-action banner after 8s.
-  useEffect(() => {
-    if (!banner) return;
-    const t = setTimeout(() => setBanner(null), 8000);
-    return () => clearTimeout(t);
-  }, [banner]);
+  useToastDismissal(shownBanner, setBanner, BANNER_DISMISS_MS); // [PR-J1 integration, 2026-10-22] 8 s per show, cleared only for the show it was armed for
+  // [PR-J1 integration, 2026-10-22] was an effect keyed on the banner TEXT (an 8 s setTimeout that set null): the same text shown again
+  // re-armed nothing, so the first show's timer erased the second banner early, and an earlier timer that came due between a newer
+  // banner's commit and React's passive effects erased the newer one - the PCB editor toast's race (e1830cfc). Every show is numbered
+  // now (app/components/pcb/hooks/useToastDismissal.ts); this block replaces the former effect line for line.
 
   // [B19-E E1-C review] whenever a result is shown, online or offline, the clock advances every 30 s, so an offer that expires
   // meanwhile reads expired and is blanked instead of kept on screen

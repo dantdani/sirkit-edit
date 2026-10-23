@@ -20,9 +20,9 @@ Four maps of the current source (the model, the editor and downstream path, the 
 
 | # | increment | state | evidence |
 |---|---|---|---|
-| J1 | sheet contract, one project connectivity authority, canonical sheet operations (library only; single-sheet byte identity) | in progress | — |
-| J2 | consumers on project connectivity (PCB publication, ERC, design checks, BOM, missing parts) with byte-identity proofs | next | — |
-| J3 | the Sheets navigator, overview, open / create / rename / delete, ports and sheet pins, follow a signal, move to sheet; persistence and undo | — | — |
+| J1 | sheet contract, one project connectivity authority, canonical sheet operations (library only; single-sheet byte identity) | DONE `99a68df8` + integration fixes (15 confirmed review findings: create-sheet changed a design's nets, delete-last-sheet rejoined distinct grounds, sheet-pin-only net name collisions, lens copies lose the brand, replay-context shape, cross-verify 500 -> 422, degenerate golden pins) | `j1-*`, `j2-*` suites; gates: every CI selection, browser jobs, generators, secret scans green at `99a68df8` |
+| J2 | consumers on project connectivity (PCB publication, ERC, design checks, BOM, missing parts) with byte-identity proofs | DONE in round 1 (`99a68df8`); SPICE, KiCad export and tidy refuse multi-sheet documents until J4 | `j2-project-consumers`, `j2-consumers-golden`, `j2-*-refusal` |
+| J3 | the Sheets navigator, overview, open / create / rename / delete, ports and sheet pins, follow a signal, move to sheet; persistence and undo | planned (OD-257; build plan `scratchpad/j/j3-plan.md`: A page carriage, B navigator and hooks, C fixture and browser proof) | — |
 | J4 | project-wide outputs (SPICE, native hierarchical KiCad export) and "Organize into sheets" | — | — |
 | J5 | sheet-aware generation (blocks become sheets), sheet-aware inspection and the organise proposal tool; fixture multi-sheet journeys | — | — |
 | J6 | workload limits stated truthfully, queue proof (J7-1 .. J7-3) | — | — |

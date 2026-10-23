@@ -22,7 +22,7 @@
  * The deprecated synchronous route's loop pool (`BUILD_BUDGET.concurrencyCap`) is moved to 5 in this suite: the durable worker's slots are
  * its own documented constant (contracts.ts `workerConcurrency`) and must not move with it.
  *
- * Fixture proof only: the scripted provider, the in-memory durable repository and a simulated clock - no paid call, no database, no network.
+ * Fixture proof only: the scripted provider, the in-memory durable repository and a fake clock - no paid call, no database, no network.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

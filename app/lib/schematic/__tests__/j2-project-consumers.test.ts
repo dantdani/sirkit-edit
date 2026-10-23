@@ -461,3 +461,86 @@ describe("[PR-J J2] 5. the agent delete and replacement planners and the connect
     expect(planned.plan.netLabelMoves.map((move) => move.labelId)).toEqual(["la"]);
   });
 });
+
+// ── [PR-J1 integration, 2026-10-22] the round-1 review's confirmed findings (PC-3, J1-CONS-7, J1-TEST-8) ───────────────────────
+
+/** Every runErc call's options (the third argument), recorded by a pass-through mock: what the design checks ask the ERC for. */
+const ercOptions = vi.hoisted(() => [] as unknown[]);
+vi.mock("@/lib/erc", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/erc")>();
+  return { ...actual, runErc: (...args: Parameters<typeof actual.runErc>) => { ercOptions.push(args[2]); return actual.runErc(...args); } };
+});
+
+/** A Theory circuit with a source and ground on the overview and R9 on sheet "sa" at the overview's coordinates. */
+function theoryOnTwoSheets(withTree: boolean): SchematicState {
+  return {
+    components: [
+      { id: "V1", type: "voltage-source", x: 100, y: 200, rotation: 0, value: "5" },
+      { id: "G1", type: "ground", x: 100, y: 260, rotation: 0, value: "" },
+      { id: "R1", type: "resistor", x: 200, y: 170, rotation: 0, value: "1k" },
+      { id: "R9", type: "resistor", x: 200, y: 170, rotation: 0, value: "2k", sheetId: "sa" },
+    ],
+    wires: [wire("w1", { x: 100, y: 170 }, { x: 170, y: 170 }), wire("w2", { x: 100, y: 230 }, { x: 100, y: 240 })],
+    netLabels: [],
+    ...(withTree ? { sheets: tree(sheet("sa", "A", ROOT_SHEET_ID)) } : {}),
+  };
+}
+
+describe("[PR-J1 integration, 2026-10-22] PC-3: the SPICE compilers, the flat KiCad export and the authority refuse one sheet's view too", () => {
+  it("a sheet's view, with the tree kept or as the bare lens, is refused with SHEET_LENS_NOT_PROJECT before any other answer", () => {
+    const organised = organisedDrone();
+    for (const sheetId of [ROOT_SHEET_ID, "sheet-imu"]) {
+      for (const candidate of [lensState(organised, sheetId), sheetLens(organised, sheetId) as unknown as SchematicState]) {
+        expect(() => schematicToSpice(candidate), sheetId).toThrow("SHEET_LENS_NOT_PROJECT:spice");
+        expect(() => exportToKicadSch({ state: candidate, parts }), sheetId).toThrow("SHEET_LENS_NOT_PROJECT:kicad-export");
+        expect(() => resolveProjectConnectivity(candidate, lookup), sheetId).toThrow("SHEET_LENS_NOT_PROJECT:project-connectivity");
+        const project = createSimulationProject(organised, { now: "2026-10-22T00:00:00.000Z" });
+        project.designRevisions[0]!.schematic = candidate;
+        expect(() => compileCanonicalIr({ project, testId: project.tests[0]!.id }), sheetId).toThrow("SHEET_LENS_NOT_PROJECT:spice-ir");
+      }
+    }
+  });
+
+  it("a Theory sheet's lens handed to the SPICE deck builder is refused (it used to build that one sheet's deck)", () => {
+    for (const sheetId of [ROOT_SHEET_ID, "sa"]) expect(() => schematicToSpice(sheetLens(theoryOnTwoSheets(true), sheetId) as unknown as SchematicState)).toThrow("SHEET_LENS_NOT_PROJECT:spice");
+  });
+});
+
+describe("[PR-J1 integration, 2026-10-22] J1-CONS-7: a document carrying sheet references without its tree is never compiled as one flat circuit", () => {
+  it("both SPICE compilers refuse it (SIM_MULTI_SHEET_PENDING) instead of joining the two sheets' coordinates", () => {
+    const orphaned = theoryOnTwoSheets(false);
+    expect(() => schematicToSpice(orphaned)).toThrow(SPICE_SHEETS_PENDING);
+    const project = createSimulationProject(orphaned, { now: "2026-10-22T00:00:00.000Z" });
+    expect(() => compileCanonicalIr({ project, testId: project.tests[0]!.id })).toThrow(/^SIM_MULTI_SHEET_PENDING: /);
+    // the same circuit with every entity on one page simulates as before
+    const flat: SchematicState = { ...orphaned, components: orphaned.components.map((item) => (item.id === "R9" ? { ...item, sheetId: undefined, x: 200, y: 400 } : item)).map((item) => { const copy = { ...item }; if (copy.sheetId === undefined) delete copy.sheetId; return copy; }) };
+    expect(schematicToSpice(flat).netlist).toContain("R9");
+  });
+});
+
+describe("[PR-J1 integration, 2026-10-22] J1-TEST-8: a single-sheet design keeps ONE ERC ground node, the design checks included", () => {
+  /** Two NE555 outputs, one on a ground-kind AGND label and one on a ground-kind DGND label. */
+  function outputsOnTwoGrounds(sheets: boolean): SchematicState {
+    const out = parts.get("b16-1c-part-ne555d")!.pins.find((pin) => pin.number === "3")!;
+    const u = (id: string, refDes: string, x: number): KicadComponentInstance => ({ id, partId: "b16-1c-part-ne555d", x, y: 300, rotation: 0, refDes, value: "NE555D", symbolAssetVersionId: "symbolv_fixture_ne555" });
+    const a = u("u-a", "U1", 400);
+    const b = u("u-b", "U2", 1000);
+    return {
+      components: [], kicadComponents: [a, b], wires: [],
+      netLabels: [label("ga", "AGND", kicadPinWorldPos(a, out), { kind: "ground" }), label("gd", "DGND", kicadPinWorldPos(b, out), { kind: "ground" })],
+      ...(sheets ? { sheets: tree(sheet("spare", "Spare", ROOT_SHEET_ID)) } : {}),
+    };
+  }
+
+  it("without sheets the two outputs share the legacy GND node (a driver conflict); with sheets they are two rails; the design checks ask the ERC for exactly that", () => {
+    const conflicts = (state: SchematicState, groundNodes?: "per-name") => runErc(schematicToBuildNetlist(state, parts), ercParts, groundNodes ? { groundNodes } : undefined).errors.filter((error) => error.category === "erc_conflict").map((error) => error.message);
+    const single = conflicts(outputsOnTwoGrounds(false));
+    expect(single).toHaveLength(1);
+    expect(single[0]).toMatch(/^Net \[GND\] has 2 push-pull drivers shorted together: U1\.\S+, U2\.\S+\.$/);
+    expect(conflicts(outputsOnTwoGrounds(true), "per-name")).toEqual([]);
+    ercOptions.length = 0;
+    computeDesignChecks(outputsOnTwoGrounds(false), parts, "d", "build");
+    computeDesignChecks(outputsOnTwoGrounds(true), parts, "d", "build");
+    expect(ercOptions).toEqual([undefined, { groundNodes: "per-name" }]);
+  });
+});

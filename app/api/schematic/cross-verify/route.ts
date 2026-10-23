@@ -19,7 +19,7 @@
 
 import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { getFullPartsByIds } from "@/app/lib/parts-search";
-import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist";
+import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist"; import { resolveProjectConnectivity } from "@/app/lib/schematic/project-connectivity"; // [PR-J1 integration, 2026-10-22] on this line so no line moves
 import { normalizeBuildNetlist, crossCheckNetlists } from "@/lib/netlist-crosscheck";
 import { parseSchGenSource } from "@/lib/schgen-netlist";
 import type { CachedPart } from "@/app/lib/parts-cache";
@@ -62,7 +62,7 @@ export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 4
   }
 
   // Sirkit's netlist (primary), normalized for comparison.
-  const partIds = [...new Set(kicad.map((c) => c.partId))];
+  const sheetError = resolveProjectConnectivity(state).diagnostics.find((item) => item.severity === "error"); if (sheetError) return Response.json({ ok: false, code: "SHEET_HIERARCHY_INVALID", error: `The schematic's sheet structure has an error (${sheetError.code}: ${sheetError.message}), so there is no netlist to compare. Nothing was sent.` }, { status: 422, headers: { "Cache-Control": "no-store" } }); const partIds = [...new Set(kicad.map((c) => c.partId))]; // [PR-J1 integration, 2026-10-22] J1-CONS-7: a structured refusal before the part read and the second-opinion call (was a 500 from the netlist builder)
   const loaded = await getFullPartsByIds(partIds);
   const parts = new Map<string, CachedPart>(loaded.map((p) => [p.id, p] as const));
   const primary = normalizeBuildNetlist(schematicToBuildNetlist(state, parts), parts);

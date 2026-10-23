@@ -12,8 +12,10 @@
  *    unique port names, port-bound labels that reference a real port on the right sheet, one sheet pin per port) and the explicit
  *    refusals of what is not supported yet (bus / bundle ports, repeated sheet instances, one package's units on different sheets);
  *  - `sheetLens`: a BRANDED read-only view of one sheet. Its arrays are readonly (a lens is not assignable to `SchematicState` at
- *    compile time) and carry a non-enumerable brand that `assertWholeProject` refuses at run time, so a whole-project consumer (PCB
- *    publication, ERC, BOM, SPICE, export) can never be handed one sheet by mistake.
+ *    compile time) and the lens and its arrays carry a non-enumerable brand that `assertWholeProject` refuses at run time; every
+ *    whole-project consumer (PCB publication, ERC, design checks, BOM, SPICE and its IR, KiCad export, the connectivity authority)
+ *    calls it first. [PR-J1 integration, 2026-10-22] review PC-3: the run-time half detects the lens and its own arrays, NOT a copy -
+ *    a spread, filter, map or slice of a lens array is an ordinary array again; the guarantee for copies is the compile-time type.
  *
  * Connectivity (which pins form one net across sheets) is NOT decided here: app/lib/schematic/project-connectivity.ts is the one
  * authority. Pure module: no I/O, no randomness, no React.
@@ -370,7 +372,9 @@ function validateLabelFields(label: NetLabel, tree: { byId: Map<string, Schemati
   const needsPort = scope === "hierarchical" || scope === "sheet-pin";
   if (!needsPort && label.portId !== undefined) out.push(diagnostic("SHEET_LABEL_SCOPE_INVALID", "error", `Label ${id} names a port but is not a hierarchical label or a sheet pin.`, [id]));
   if (scope !== "sheet-pin" && label.childSheetId !== undefined) out.push(diagnostic("SHEET_LABEL_SCOPE_INVALID", "error", `Label ${id} names a child sheet but is not a sheet pin.`, [id]));
-  if (scope === "global" && typeof label.name === "string" && isBusLikeName(label.name) && tree) out.push(diagnostic("SHEET_BUNDLE_UNSUPPORTED", "error", `Global label "${label.name}" is a bus name: buses are not supported yet and a bus name is not proof of a connection.`, [id]));
+  // [PR-J1 integration, 2026-10-22] review PC-7: power and ground labels join sheets by name exactly like global labels, so a bus name
+  // on any of them is refused in a document with sheets (was: global labels only)
+  if ((scope === "global" || label.kind === "power" || label.kind === "ground") && typeof label.name === "string" && isBusLikeName(label.name) && tree) out.push(diagnostic("SHEET_BUNDLE_UNSUPPORTED", "error", `${scope === "global" ? "Global" : label.kind === "power" ? "Power" : "Ground"} label "${label.name}" (a ${scope === "global" ? "global" : label.kind} label) is a bus name: buses are not supported yet and a bus name is not proof of a connection.`, [id]));
   if (!needsPort) return;
   if (tree === null) { out.push(diagnostic("SHEET_REFERENCE_INVALID", "error", `Label ${id} is a ${scope === "sheet-pin" ? "sheet pin" : "hierarchical label"}, but the document has no sheets.`, [id])); return; }
   if (typeof label.portId !== "string" || label.portId.length === 0) { out.push(diagnostic("SHEET_LABEL_SCOPE_INVALID", "error", `${scope === "sheet-pin" ? "Sheet pin" : "Hierarchical label"} ${id} names no port.`, [id])); return; }
@@ -404,8 +408,9 @@ export const SHEET_LENS_BRAND: unique symbol = Symbol.for("sirkit.schematic.shee
 /** A readonly lens array: not assignable to a `SchematicState` field (which is mutable). */
 export type SheetLensArray<T> = readonly T[] & { readonly [SHEET_LENS_BRAND]: string };
 
-/** One sheet's entities, read-only. NOT a `SchematicState`: feeding it to a whole-project consumer fails to compile, and a state
- *  rebuilt from its arrays is refused at run time by `assertWholeProject`. */
+/** One sheet's entities, read-only. NOT a `SchematicState`: feeding it to a whole-project consumer fails to compile, and the lens or
+ *  a state holding its own arrays is refused at run time by `assertWholeProject`. [PR-J1 integration, 2026-10-22] review PC-3: a COPY
+ *  of a lens array (spread, filter, map, slice, JSON, structuredClone) carries no brand and is not detected at run time. */
 export interface SheetLens {
   readonly [SHEET_LENS_BRAND]: string;
   readonly sheetId: string;

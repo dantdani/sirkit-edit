@@ -335,3 +335,194 @@ describe("[PR-J J1] 6. one package is one instance; the lens is never the projec
     expect(pinWorldPos(state.components[0]!, "right")).toEqual({ x: 130, y: 100 });
   });
 });
+
+// ── [PR-J1 integration, 2026-10-22] the round-1 review's confirmed findings (PC-1 .. PC-7, J1-OPS-2) ─────────────────────────
+
+/** Two sibling sheets "Power" and "Filter", each with an output port "OUT" bound by a sheet pin on the overview and wired (or not
+ *  yet) to its own overview resistor. No user label anywhere: the only names are the port anchors (the J.1 layout). */
+function siblingOuts(withOverviewWires = true): SchematicState {
+  return {
+    components: [resistor("R1", 100, 100), resistor("R2", 100, 300), resistor("R3", 100, 100, "pa"), resistor("R4", 100, 100, "pb")],
+    wires: withOverviewWires ? [wire("w1", { x: 130, y: 100 }, { x: 300, y: 100 }), wire("w2", { x: 130, y: 300 }, { x: 300, y: 300 })] : [],
+    netLabels: [
+      label("pin-a", "OUT", { x: 300, y: 100 }, { scope: "sheet-pin", portId: "pa-out", childSheetId: "pa" }),
+      label("pin-b", "OUT", { x: 300, y: 300 }, { scope: "sheet-pin", portId: "pb-out", childSheetId: "pb" }),
+      label("h-a", "OUT", { x: 130, y: 100 }, { sheetId: "pa", scope: "hierarchical", portId: "pa-out" }),
+      label("h-b", "OUT", { x: 130, y: 100 }, { sheetId: "pb", scope: "hierarchical", portId: "pb-out" }),
+    ],
+    sheets: tree(
+      sheet("pa", "Power", ROOT_SHEET_ID, { ports: [{ id: "pa-out", name: "OUT", direction: "output" }] }),
+      sheet("pb", "Filter", ROOT_SHEET_ID, { ports: [{ id: "pb-out", name: "OUT", direction: "output" }] }),
+    ),
+  };
+}
+
+const codesOf = (state: SchematicState): string[] => resolveProjectConnectivity(state).diagnostics.map((item) => `${item.severity}:${item.code}`);
+
+describe("[PR-J1 integration, 2026-10-22] PC-1: nets named only by their port anchors never collide", () => {
+  it("two sibling sheets with an OUT port each, bound on the overview: two nets named by the port's sheet path, published", () => {
+    const state = siblingOuts();
+    expect(validateSheetHierarchy(state).filter((item) => item.severity === "error")).toEqual([]);
+    const conn = resolveProjectConnectivity(state);
+    expect(conn.ok, codesOf(state).join(" ")).toBe(true);
+    expect(conn.diagnostics.map((item) => item.code)).not.toContain("SHEET_NET_NAME_COLLISION");
+    const power = conn.netOfPin(key("R1", "2"))!;
+    const filter = conn.netOfPin(key("R2", "2"))!;
+    expect([power.name, power.members]).toEqual(["Power/OUT", [key("R1", "2"), key("R3", "2")]]);
+    expect([filter.name, filter.members]).toEqual(["Filter/OUT", [key("R2", "2"), key("R4", "2")]]);
+    expect(buildNetlist(state).nets.map((net) => net.name).filter((name) => name.endsWith("OUT")).sort()).toEqual(["Filter/OUT", "Power/OUT"]);
+  });
+
+  it("the same sheet pins with nothing wired on the overview yet are still a valid project", () => {
+    const conn = resolveProjectConnectivity(siblingOuts(false));
+    expect(conn.ok).toBe(true);
+    expect([conn.netOfPin(key("R3", "2"))!.name, conn.netOfPin(key("R4", "2"))!.name]).toEqual(["Power/OUT", "Filter/OUT"]);
+  });
+
+  it("a name the user wrote is still never shared: a local OUT on the overview next to the two port nets is a collision", () => {
+    const state = siblingOuts();
+    state.components.push(resistor("R5", 100, 500));
+    state.netLabels!.push(label("l-out", "OUT", { x: 130, y: 500 }));
+    const conn = resolveProjectConnectivity(state);
+    expect(conn.ok).toBe(false);
+    expect(conn.diagnostics.find((item) => item.code === "SHEET_NET_NAME_COLLISION")?.message).toContain("OUT");
+  });
+
+  it("a qualified port name that meets a user's name on that sheet gets a deterministic suffix (the shadow is reported)", () => {
+    const state = siblingOuts();
+    state.components.push(resistor("R6", 100, 300, "pa"));
+    state.netLabels!.push(label("l-pa-out", "OUT", { x: 130, y: 300 }, { sheetId: "pa" }));
+    const conn = resolveProjectConnectivity(state);
+    expect(conn.ok, codesOf(state).join(" ")).toBe(true);
+    expect(conn.netOfPin(key("R6", "2"))!.name).toBe("Power/OUT");
+    expect(conn.netOfPin(key("R1", "2"))!.name).toBe("Power/OUT_2");
+    expect(conn.netOfPin(key("R2", "2"))!.name).toBe("Filter/OUT");
+    expect(new Set(conn.nets.flatMap((net) => (net.name === null ? [] : [net.name]))).size).toBe(conn.nets.filter((net) => net.name !== null).length);
+    expect(conn.diagnostics.find((item) => item.code === "SHEET_LOCAL_SHADOWS_PORT")).toMatchObject({ severity: "warning", refs: ["h-a", "l-pa-out"] });
+  });
+});
+
+describe("[PR-J1 integration, 2026-10-22] PC-2: the single-sheet derivation is linear in the pins", () => {
+  const mkPins = (count: number): KicadPin[] => Array.from({ length: count }, (_, index) => ({ number: String(index + 1), name: `P${index + 1}`, type: "passive", position: { x: (index % 2 === 0 ? -1 : 1) * 7.62, y: -Math.floor(index / 2) * 2.54 }, orientation: 0, length: 2.54 }) as unknown as KicadPin);
+  const PARTS = new Map<string, { pins: KicadPin[] }>([["p2", { pins: mkPins(2) }], ["p40", { pins: mkPins(40) }]]);
+  const partLookup: PartPinsLookup = (partId) => PARTS.get(partId) ?? null;
+  /** mulberry32: a fixed pseudo-random sequence (no Math.random). */
+  const sequence = (seed: number): (() => number) => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+  const fastest = (run: () => unknown): number => { run(); let best = Number.POSITIVE_INFINITY; for (let round = 0; round < 5; round += 1) { const start = performance.now(); run(); best = Math.min(best, performance.now() - start); } return best; };
+
+  it("1,000 parts (17,200 pins) and 4,000 wires: the nets are the union's partition in document order, at a small multiple of the union's cost", () => {
+    const next = sequence(11);
+    const kicadComponents = Array.from({ length: 1000 }, (_, index) => ({ id: `k${index}`, partId: index < 400 ? "p40" : "p2", x: (index % 40) * 400, y: Math.floor(index / 40) * 400, rotation: 0 as const, refDes: `U${index}`, value: "v" }));
+    const points = kicadComponents.flatMap((instance) => PARTS.get(instance.partId)!.pins.map((pin) => kicadPinWorldPos(instance, pin)));
+    expect(points).toHaveLength(17_200);
+    const wires: Wire[] = Array.from({ length: 4000 }, (_, index) => { const a = points[Math.floor(next() * points.length)]!; const b = points[Math.floor(next() * points.length)]!; return { id: `w${index}`, vertices: [a, { x: a.x, y: b.y }, b] }; });
+    const state: SchematicState = { components: [], wires, kicadComponents, netLabels: [] };
+    const conn = resolveProjectConnectivity(state, partLookup);
+    // correctness: one net per union root (no labels, so no name merging), each net's pins in document order
+    const uf = buildNetUnionFind([], wires, points, []);
+    const byRoot = new Map<string, string[]>();
+    conn.pins.forEach((pin) => { const root = uf.find(pointKey(pin.point)); byRoot.set(root, [...(byRoot.get(root) ?? []), pin.key]); });
+    expect(conn.nets.map((net) => net.members.join("|")).sort()).toEqual([...byRoot.values()].map((members) => [...members].sort().join("|")).sort());
+    const order = new Map(conn.pins.map((pin, index) => [pin, index] as const));
+    for (const net of conn.nets) expect(net.pins.every((pin, index) => index === 0 || order.get(net.pins[index - 1]!)! < order.get(pin)!)).toBe(true);
+    // cost: the derivation must not scan every pin once per net (that was ~45x the union here; linear is ~6x)
+    const unionMs = fastest(() => buildNetUnionFind([], wires, points, []));
+    const resolveMs = fastest(() => resolveProjectConnectivity(state, partLookup));
+    expect(resolveMs, `resolve ${resolveMs.toFixed(1)} ms, union ${unionMs.toFixed(1)} ms`).toBeLessThan(25 * unionMs + 20);
+  });
+});
+
+describe("[PR-J1 integration, 2026-10-22] PC-3: the authority itself refuses one sheet's view", () => {
+  it("resolveProjectConnectivity refuses a lens, and a state rebuilt from a lens's arrays", () => {
+    const lens = sheetLens(twinSheets(), "sa");
+    expect(() => resolveProjectConnectivity(lens as unknown as SchematicState)).toThrow(/^SHEET_LENS_NOT_PROJECT:project-connectivity/);
+    expect(() => resolveProjectConnectivity({ components: lens.components, wires: lens.wires } as unknown as SchematicState)).toThrow(/^SHEET_LENS_NOT_PROJECT:project-connectivity/);
+    expect(() => resolveProjectConnectivity(twinSheets())).not.toThrow();
+  });
+});
+
+describe("[PR-J1 integration, 2026-10-22] PC-4 / J1-OPS-2: the legacy ground collapse is reported (and is a rail join) only when it joins nets", () => {
+  const oneGroundName = (name: string): SchematicState => ({
+    components: [resistor("R1", 100, 100), resistor("R2", 300, 100)],
+    wires: [wire("w1", { x: 130, y: 100 }, { x: 270, y: 100 })],
+    netLabels: [label("g1", name, { x: 70, y: 100 }, { kind: "ground" }), label("g2", name, { x: 330, y: 100 }, { kind: "ground" })],
+  });
+
+  it.each(["AGND", "VSS"])("a design whose only ground name is %s: nothing is joined, so no collapse - a rename finding, no rail join", (name) => {
+    const conn = resolveProjectConnectivity(oneGroundName(name));
+    expect(conn.ok).toBe(true);
+    expect(conn.diagnostics.map((item) => item.code)).not.toContain("LEGACY_GROUND_NAME_COLLAPSE");
+    const renamed = conn.diagnostics.find((item) => item.code === "LEGACY_GROUND_RENAMED");
+    expect(renamed?.severity).toBe("warning");
+    expect(renamed?.message).toContain(name);
+    expect(renamed?.message).not.toContain("joined");
+    expect(renamed?.refs).toEqual([name]);
+    expect(conn.railJoins).toEqual([]);
+    expect(conn.netOfPin(key("R1", "1"))!.name).toBe("GND");
+  });
+
+  it("the theory fixture's AGND, DGND and ground symbol on three nets ARE joined: the collapse is reported and is a rail-join key", () => {
+    const conn = resolveProjectConnectivity(theoryLegacyFixture());
+    expect(conn.diagnostics.find((item) => item.code === "LEGACY_GROUND_NAME_COLLAPSE")?.message).toContain("GND, AGND, DGND are joined");
+    expect(conn.diagnostics.map((item) => item.code)).not.toContain("LEGACY_GROUND_RENAMED");
+    expect(conn.railJoins).toEqual(["AGND|DGND|GND"]);
+  });
+
+  it("AGND and DGND wired together on one net: the existing join is the isolation finding, the collapse joins nothing more", () => {
+    const state: SchematicState = { components: [], wires: [wire("w", { x: 0, y: 0 }, { x: 50, y: 0 })], netLabels: [label("a", "AGND", { x: 0, y: 0 }, { kind: "ground" }), label("d", "DGND", { x: 50, y: 0 }, { kind: "ground" })] };
+    const conn = resolveProjectConnectivity(state);
+    expect(conn.railJoins).toEqual(["AGND|DGND"]);
+    expect(conn.diagnostics.map((item) => item.code)).not.toContain("LEGACY_GROUND_NAME_COLLAPSE");
+  });
+});
+
+describe("[PR-J1 integration, 2026-10-22] PC-5: one name is never a rail join", () => {
+  it("a ground symbol and a power-kind GND label on one pin: no isolation-domain finding and no rail-join key, with or without sheets", () => {
+    const single: SchematicState = { components: [{ id: "G1", type: "ground", x: 100, y: 120, rotation: 0, value: "" }, resistor("R1", 130, 100)], wires: [], netLabels: [label("p", "GND", { x: 100, y: 100 }, { kind: "power" })] };
+    for (const state of [single, { ...single, sheets: tree(sheet("s1", "Spare", ROOT_SHEET_ID)) }]) {
+      const conn = resolveProjectConnectivity(state);
+      expect(conn.railJoins).toEqual([]);
+      expect(conn.diagnostics.map((item) => item.code)).not.toContain("ISOLATION_DOMAIN_JOIN");
+    }
+  });
+});
+
+describe("[PR-J1 integration, 2026-10-22] PC-6: a local label with a port anchor's name on the same sheet is always flagged", () => {
+  const shadowed = (bound: boolean): SchematicState => ({
+    components: [resistor("R1", 100, 100), resistor("R3", 100, 100, "pa"), resistor("R5", 100, 300, "pa")],
+    wires: [wire("w1", { x: 130, y: 100 }, { x: 300, y: 100 })],
+    netLabels: [
+      ...(bound ? [label("pin-a", "SIG", { x: 300, y: 100 }, { scope: "sheet-pin", portId: "pa-sig", childSheetId: "pa" })] : []),
+      label("h-a", "SIG", { x: 130, y: 100 }, { sheetId: "pa", scope: "hierarchical", portId: "pa-sig" }),
+      label("loc", "SIG", { x: 130, y: 300 }, { sheetId: "pa" }),
+    ],
+    sheets: tree(sheet("pa", "Power", ROOT_SHEET_ID, { ports: [{ id: "pa-sig", name: "SIG", direction: "input" }] })),
+  });
+
+  it("bound or not, the pair is the named finding SHEET_LOCAL_SHADOWS_PORT (two nets, never joined by name)", () => {
+    for (const bound of [true, false]) {
+      const conn = resolveProjectConnectivity(shadowed(bound));
+      const shadow = conn.diagnostics.find((item) => item.code === "SHEET_LOCAL_SHADOWS_PORT");
+      expect(shadow, `bound=${bound}`).toMatchObject({ severity: "warning", refs: ["h-a", "loc"] });
+      expect(shadow!.message).toContain("SIG");
+    }
+    const bound = resolveProjectConnectivity(shadowed(true));
+    expect(bound.ok).toBe(true);
+    expect(bound.netOfPin(key("R5", "2"))!.id).not.toBe(bound.netOfPin(key("R3", "2"))!.id);
+  });
+});
+
+describe("[PR-J1 integration, 2026-10-22] PC-7: a bus name never joins sheets, whatever the label kind", () => {
+  it.each([["power", "DATA[0..7]"], ["ground", "{SDA SCL}"]] as const)("a %s label named %s in a document with sheets is refused (SHEET_BUNDLE_UNSUPPORTED); without sheets it is not", (kind, name) => {
+    const sheeted: SchematicState = {
+      components: [resistor("R1", 100, 100), resistor("R2", 100, 100, "sa")], wires: [],
+      netLabels: [label("p0", name, { x: 70, y: 100 }, { kind }), label("p1", name, { x: 70, y: 100 }, { kind, sheetId: "sa" })],
+      sheets: tree(sheet("sa", "A", ROOT_SHEET_ID)),
+    };
+    const bundle = validateSheetHierarchy(sheeted).filter((item) => item.code === "SHEET_BUNDLE_UNSUPPORTED");
+    expect(bundle.map((item) => item.severity)).toEqual(["error", "error"]);
+    expect(bundle[0]!.message).toContain(kind);
+    expect(resolveProjectConnectivity(sheeted).ok).toBe(false);
+    expect(validateSheetHierarchy({ components: [resistor("R1", 100, 100)], wires: [], netLabels: [label("p0", name, { x: 70, y: 100 }, { kind })] })).toEqual([]);
+  });
+});

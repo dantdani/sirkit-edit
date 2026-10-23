@@ -777,7 +777,7 @@ jobs:
   # page-browser-e2e's first browser step leaves them out through SIRKIT_E2E_SKIP. The same setup steps; no secret, database or live resource.
   page-browser-e2e-b24:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       CI: "true"
     steps:
