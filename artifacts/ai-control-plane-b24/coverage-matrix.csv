@@ -632,6 +632,9 @@ app/components/schematic/SheetNavigator.tsx|key|div|sheets-tree|onTreeKeyDown,ap
 app/components/schematic/SheetNavigator.tsx|submit|form|(none)|submitNew,app/components/schematic/SheetNavigator.tsx,semantic,schematic.sheet-structure,"schematic_{create,delete,rename}_sheet + schematic_reorder_sheets + schematic_{add,remove}_sheet_port + schematic_{add,remove}_sheet_pin + schematic_set_label_scope + schematic_{add,delete,update}_net_label",-,-,-,-,-,2,-
 app/components/schematic/SheetNavigator.tsx|submit|form|(none)|submitPort,app/components/schematic/SheetNavigator.tsx,semantic,schematic.sheet-structure,"schematic_{create,delete,rename}_sheet + schematic_reorder_sheets + schematic_{add,remove}_sheet_port + schematic_{add,remove}_sheet_pin + schematic_set_label_scope + schematic_{add,delete,update}_net_label",-,-,-,-,-,2,-
 app/components/schematic/SheetNavigator.tsx|submit|form|(none)|submitRename,app/components/schematic/SheetNavigator.tsx,semantic,schematic.sheet-structure,"schematic_{create,delete,rename}_sheet + schematic_reorder_sheets + schematic_{add,remove}_sheet_port + schematic_{add,remove}_sheet_pin + schematic_set_label_scope + schematic_{add,delete,update}_net_label",-,-,-,-,-,2,-
+app/components/schematic/SheetOrganizationReviewCard.tsx|click|Button|sheet-organization-approve|onApprove,app/components/schematic/SheetOrganizationReviewCard.tsx,semantic,schematic.move-to-sheet,schematic_assign_sheet (from-precondition) + schematic_create_sheet + schematic_add_sheet_port + schematic_add_sheet_pin + schematic_add_net_label (+ offset transforms),-,-,-,-,-,2,-
+app/components/schematic/SheetOrganizationReviewCard.tsx|click|Button|sheet-organization-discard|onDiscard,app/components/schematic/SheetOrganizationReviewCard.tsx,view,-,-,-,-,-,-,-,-,-
+app/components/schematic/SheetOrganizationReviewCard.tsx|dialog|Dialog|(none)|onDiscard,app/components/schematic/SheetOrganizationReviewCard.tsx,view,-,-,-,-,-,-,-,-,-
 app/components/spice/SpiceStudio.tsx|change|input|(none)|mutate,app/components/spice/SpiceStudio.tsx,semantic,spice.workbench,run lifecycle,-,-,-,-,-,1,-
 "app/components/spice/SpiceStudio.tsx|change|input|(none)|mutate,?.find,draft.cornerSets.find",app/components/spice/SpiceStudio.tsx,semantic,spice.workbench,run lifecycle,-,-,-,-,-,1,-
 "app/components/spice/SpiceStudio.tsx|change|input|(none)|mutate,Number",app/components/spice/SpiceStudio.tsx,semantic,spice.workbench,run lifecycle,-,-,-,-,-,1,-
@@ -1054,4 +1057,5 @@ app/page.tsx|shortcut|window|keydown:onKey|onKey,app/page.tsx,dispatcher,view.ca
 -,-,-,project.autosave,-,-,-,-,-,-,1,-
 -,-,-,project.engineering-effects,-,-,-,-,-,-,0,-
 -,-,-,project.service-health,-,-,-,-,-,-,0,-
+-,-,-,schematic.sheet-organize-propose,sealed sheet organisation proposal (sirkit.sheet-organization-proposal.v1),sirkit.schematic.propose-sheet-organization,true,pcb_editor;reviewer;project_admin,coordinator,false,2,2
 -,-,-,validation.constraints-inspect,constraint evaluation read,-,-,-,-,-,0,-

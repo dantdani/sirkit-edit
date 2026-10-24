@@ -19,6 +19,29 @@ import {
   GENERATION_TASK_CONTROL_SCHEMA, GENERATION_TASK_REF_SCHEMA, readGenerationTaskReference, verifySealedGenerationTaskControlRequest,
   type GenerationTaskReference, type SealedGenerationTaskControlRequest,
 } from "../agent/generation-task-tools";
+import type { GeneratedSheets } from "../schematic/generated-sheets";
+import type { GeneratedSheetLayout } from "@/lib/build-sheet-layout"; // [PR-J5, 2026-10-23] a TYPE import only (erased): this module stays out of the layout's closure (generation-task-tools.ts and tool-catalog.ts import it)
+
+/** [PR-J5, 2026-10-23] The review and activity sentence of a laid-out result: "Laid out as System overview + 4 subsystem sheets: Power (6 parts), …". */
+export function describeGeneratedSheetLayout(layout: Pick<Extract<GeneratedSheetLayout, { kind: "sheets" }>, "sheets" | "interfaces">): string {
+  const designed = layout.sheets.filter((sheet) => sheet.status === "designed");
+  const omitted = layout.sheets.filter((sheet) => sheet.status === "omitted");
+  const count = layout.sheets.length;
+  return `Laid out as System overview + ${count} subsystem sheet${count === 1 ? "" : "s"}: ${designed.map((sheet) => `${sheet.name} (${sheet.components} part${sheet.components === 1 ? "" : "s"})`).join(", ")}${omitted.length > 0 ? `; incomplete: ${omitted.map((sheet) => sheet.name).join(", ")}` : ""}${layout.interfaces.length > 0 ? `; interfaces ${layout.interfaces.join(", ")}` : ""}. Approving replaces the whole project as one undoable transaction.`;
+}
+
+/**
+ * [PR-J5, 2026-10-23] Runbook J.6.1 / J.6.3 (OD-255 item 9): the notes a planned result's sheet set adds beside the proposal - the
+ * derivation's findings (why it stayed one page; an omitted block; an unbound interface), the layout's own kept-flat finding, and for a
+ * sheeted layout the one sentence naming the overview, the sheets and the interfaces. Empty for a result without a sheet set.
+ */
+export function generatedSheetsProposalNotes(sheets: GeneratedSheets | undefined, laid: GeneratedSheetLayout | null): string[] {
+  if (!sheets) return [];
+  const notes = [...sheets.findings];
+  if (laid?.kind === "flat") notes.push(laid.finding);
+  else if (laid?.kind === "sheets") notes.push(describeGeneratedSheetLayout(laid));
+  return notes;
+}
 
 export interface ReceivedGenerationTask {
   task: GenerationTaskReference;

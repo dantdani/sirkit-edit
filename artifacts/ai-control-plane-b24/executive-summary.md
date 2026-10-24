@@ -51,11 +51,11 @@ NOT READY (`eslint .` exits 1, none of its 33 errors introduced by B24), CI read
 | canonical-wrappers | 174 |
 | approved-factories | 3 |
 | raw-handlers | 0 |
-| action-records | 113 |
-| registry-tools | 63 |
-| agent-exposed-tools | 51 |
+| action-records | 114 |
+| registry-tools | 64 |
+| agent-exposed-tools | 52 |
 | mcp-exposed-tools | 9 |
-| agent-only-tools | 42 |
+| agent-only-tools | 43 |
 | agent-exposed-tier-3-tools | 0 |
 | control-sites | 715 |
 | control-surfaces | 73 |
@@ -97,6 +97,12 @@ table are the concurrent PR-F builders' to move with their descriptors and contr
 as J4 left it - the Sheets navigator's Organize into sheets and Normalise rail-named labels controls and the BOM Sheet column's sort
 header; the sync control's accessible name now states that it synchronises the whole project, OD-258 item 6); control-surfaces stays
 73; no action record added (113).
+
+[PR-J5, 2026-10-23] Count lines moved with the regenerated map (runbook section J increment 5, J.6 / OD-259 item 4): action-records
+113 -> 114 (schematic.sheet-organize-propose, the agent's sealed organise proposal, placed before the two-record tail), registry-tools
+63 -> 64, agent-exposed-tools 51 -> 52 and agent-only-tools 42 -> 43 - the organise proposal descriptor
+sirkit.schematic.propose-sheet-organization (a Tier 2 sealed proposal the human applies through schematic.move-to-sheet; withheld from
+MCP, so mcp-exposed-tools stays 9); control-sites and control-surfaces unchanged (the page's review card is increment J5-B's).
 
 ## 4. Earlier verdicts
 

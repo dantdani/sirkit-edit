@@ -17,6 +17,12 @@
  * Truth boundary: the ATmega328P pin-function table below (which port pin carries PWM, I2C, the interrupt and the ISP lines) is
  * engineering knowledge held in recipe DATA, not catalog authority; the engine refuses to design when a returned part lacks a named pin.
  * Fake-backed: a scripted provider over a committed catalog - not a live model, a live catalog or a datasheet check.
+ *
+ * [PR-J5, 2026-10-23] Runbook J.6.1-J.6.2 (OD-259 item 6): the drone plan's blocks carry typed INTERFACES - for each shared net of a
+ * block its direction at that block, its kind (signal / power / ground) and its domain - as a FIXTURE-ONLY plan field. The live planner
+ * prompt (`PLAN_SYSTEM_PROMPT`, each task's identity) is not edited; the scripted provider emits the field in its `submit_plan` and the
+ * server reads it only once its plan reader does (until then the field is dropped unread and every stored plan keeps its digest). The
+ * single designs (the blinker, the LED dimmer) have no plan and therefore no interfaces: the prompt-to-Gerber replay is untouched.
  */
 import { BLINKER_NETLIST } from "./blinker/catalog";
 import type { ComponentRole, NetLabelKind } from "@/lib/schematic-types";
@@ -50,8 +56,22 @@ export interface DesignSpec {
   connections: readonly ConnectionSpec[];
   explanation: string;
 }
+/** [PR-J5, 2026-10-23] The direction of a shared net AT a block (KiCad's hierarchical-label shapes a plan may declare; `passive` for a
+ *  net the block neither drives nor reads as a signal - its ground return). */
+export const PLAN_INTERFACE_DIRECTIONS = Object.freeze(["input", "output", "bidirectional", "passive"] as const);
+export type PlanInterfaceDirection = (typeof PLAN_INTERFACE_DIRECTIONS)[number];
+/** [PR-J5, 2026-10-23] What a shared net carries: a signal, a power rail, a ground return, or a bus (never planned by a recipe: bus
+ *  interfaces keep the flat page, OD-255 item 8). */
+export const PLAN_INTERFACE_KINDS = Object.freeze(["signal", "power", "ground", "bus"] as const);
+export type PlanInterfaceKind = (typeof PLAN_INTERFACE_KINDS)[number];
+/** [PR-J5, 2026-10-23] The most interfaces a block declares (the task plan's own shared-net bound). */
+export const PLAN_INTERFACES_PER_BLOCK = 16;
+/** [PR-J5, 2026-10-23] One typed interface of a planned block: the shared net it names, its direction at THIS block, its kind and its
+ *  voltage / return domain ("battery", "logic", "return"). The recipe declares exactly one per shared net, in the shared nets' order. */
+export interface PlanInterfaceSpec { net: string; direction: PlanInterfaceDirection; kind: PlanInterfaceKind; domain: string }
+export interface PlanBlockSpec { name: string; brief: string; sharedNets: string[]; /** [PR-J5, 2026-10-23] fixture-only (OD-259 item 6) */ interfaces?: PlanInterfaceSpec[] }
 export interface PlanSpec {
-  blocks: Array<{ name: string; brief: string; sharedNets: string[] }>;
+  blocks: PlanBlockSpec[];
   rationale: string;
   /** material assumptions the plan discloses (OD-253 (3)) */
   assumptions: string[];
@@ -337,15 +357,28 @@ function barometerBlock(): DesignSpec {
   };
 }
 
+// [PR-J5, 2026-10-23] The drone's typed interfaces (OD-259 item 6; J.6.2 "named typed interfaces"): the rails by domain - VBAT is the
+// battery domain (sourced by the power block, consumed by the motors), +3V3 the logic domain (sourced by the regulator, consumed by the
+// logic blocks), GND the one return (passive everywhere); the signals are logic-level: PWMn leaves the MCU (output) and enters a motor
+// stage (input), I2C_SDA / I2C_SCL are bidirectional on every I2C block, IMU_INT1 leaves the IMU and enters the MCU.
+const iface = (net: string, direction: PlanInterfaceDirection, kind: PlanInterfaceKind, domain: string): PlanInterfaceSpec => ({ net, direction, kind, domain });
+const RAIL = Object.freeze({
+  vbatSource: iface("VBAT", "output", "power", "battery"), vbat: iface("VBAT", "input", "power", "battery"),
+  v33Source: iface("+3V3", "output", "power", "logic"), v33: iface("+3V3", "input", "power", "logic"),
+  gnd: iface("GND", "passive", "ground", "return"),
+});
+const signal = (net: string, direction: PlanInterfaceDirection): PlanInterfaceSpec => iface(net, direction, "signal", "logic");
+const I2C = (): PlanInterfaceSpec[] => [signal("I2C_SDA", "bidirectional"), signal("I2C_SCL", "bidirectional")];
+
 /** The drone's plan for `motors` (1..4) motors, with a barometer block when one was requested. */
 export function dronePlan(motors: number, barometer: boolean): PlanSpec {
   const pwm = pwmNets(motors);
-  const blocks = [
-    { name: DRONE_BLOCK_NAMES.power, brief: "One 1S LiPo battery header and a MIC5504 3.3 V LDO with input, output and bulk capacitors: VBAT for the motors and +3V3 for the logic.", sharedNets: ["VBAT", "+3V3", "GND"] },
-    { name: DRONE_BLOCK_NAMES.motors, brief: `${motors} low-side N-MOSFET (AO3400A) motor driver stage(s), each with a gate resistor, a gate pulldown, a Schottky flyback diode and a 2-pin motor header, driven by ${pwm.join(", ")}.`, sharedNets: ["VBAT", "GND", ...pwm] },
-    { name: DRONE_BLOCK_NAMES.mcu, brief: `ATmega328P flight-controller MCU on its internal 8 MHz oscillator with decoupling, a reset pull-up, a 6-pin ISP header, a 4-pin UART header for a receiver and a status LED; ${pwm.join(", ")} to the motor drivers, I2C and the IMU interrupt to the IMU.`, sharedNets: ["+3V3", "GND", ...pwm, "I2C_SDA", "I2C_SCL", "IMU_INT1"] },
-    { name: DRONE_BLOCK_NAMES.imu, brief: "LSM6DS3 6-axis IMU (accelerometer and gyroscope) on I2C with pull-ups and decoupling; INT1 to the MCU.", sharedNets: ["+3V3", "GND", "I2C_SDA", "I2C_SCL", "IMU_INT1"] },
-    ...(barometer ? [{ name: DRONE_BLOCK_NAMES.barometer, brief: "BMP280 barometric pressure sensor on the shared I2C bus with decoupling.", sharedNets: ["+3V3", "GND", "I2C_SDA", "I2C_SCL"] }] : []),
+  const blocks: PlanBlockSpec[] = [
+    { name: DRONE_BLOCK_NAMES.power, brief: "One 1S LiPo battery header and a MIC5504 3.3 V LDO with input, output and bulk capacitors: VBAT for the motors and +3V3 for the logic.", sharedNets: ["VBAT", "+3V3", "GND"], interfaces: [RAIL.vbatSource, RAIL.v33Source, RAIL.gnd] },
+    { name: DRONE_BLOCK_NAMES.motors, brief: `${motors} low-side N-MOSFET (AO3400A) motor driver stage(s), each with a gate resistor, a gate pulldown, a Schottky flyback diode and a 2-pin motor header, driven by ${pwm.join(", ")}.`, sharedNets: ["VBAT", "GND", ...pwm], interfaces: [RAIL.vbat, RAIL.gnd, ...pwm.map((net) => signal(net, "input"))] },
+    { name: DRONE_BLOCK_NAMES.mcu, brief: `ATmega328P flight-controller MCU on its internal 8 MHz oscillator with decoupling, a reset pull-up, a 6-pin ISP header, a 4-pin UART header for a receiver and a status LED; ${pwm.join(", ")} to the motor drivers, I2C and the IMU interrupt to the IMU.`, sharedNets: ["+3V3", "GND", ...pwm, "I2C_SDA", "I2C_SCL", "IMU_INT1"], interfaces: [RAIL.v33, RAIL.gnd, ...pwm.map((net) => signal(net, "output")), ...I2C(), signal("IMU_INT1", "input")] },
+    { name: DRONE_BLOCK_NAMES.imu, brief: "LSM6DS3 6-axis IMU (accelerometer and gyroscope) on I2C with pull-ups and decoupling; INT1 to the MCU.", sharedNets: ["+3V3", "GND", "I2C_SDA", "I2C_SCL", "IMU_INT1"], interfaces: [RAIL.v33, RAIL.gnd, ...I2C(), signal("IMU_INT1", "output")] },
+    ...(barometer ? [{ name: DRONE_BLOCK_NAMES.barometer, brief: "BMP280 barometric pressure sensor on the shared I2C bus with decoupling.", sharedNets: ["+3V3", "GND", "I2C_SDA", "I2C_SCL"], interfaces: [RAIL.v33, RAIL.gnd, ...I2C()] }] : []),
   ];
   return {
     blocks,
@@ -366,6 +399,13 @@ export function dronePlan(motors: number, barometer: boolean): PlanSpec {
       ...(barometer ? ["barometric pressure sensor on I2C (requested)"] : []),
     ],
   };
+}
+
+/** [PR-J5, 2026-10-23] Whether a declared interface direction agrees with the direction a generated sheet set derived from the catalog's
+ *  pin types (generated-sheets.ts): they disagree only when one says input and the other output - a passive, bidirectional or
+ *  unspecified port carries either, and a declared `passive` net is never a signal port. */
+export function interfaceDirectionAgrees(declared: PlanInterfaceDirection, derived: string): boolean {
+  return !((declared === "input" && derived === "output") || (declared === "output" && derived === "input"));
 }
 
 /** The design of one planned drone block, from its name and its shared nets (the motor count is the number of PWMn nets); null when

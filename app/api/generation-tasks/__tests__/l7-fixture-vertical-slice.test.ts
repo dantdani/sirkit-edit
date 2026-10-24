@@ -17,6 +17,9 @@
  *     is invented), and review-partial merges the saved blocks into a partial result that names the omitted block;
  *  5. a request with no recipe gets text replies only: the task allowance parks it first (allowance_exhausted), and after an explicit
  *     extension the strategy ladder ends at no_progress - zero searches, zero submissions, calls bounded by the allowances granted.
+ *  6. [PR-J5, 2026-10-23] OD-259 item 6: the scripted planner's submit_plan carries each drone block's typed interfaces (a fixture-only
+ *     plan field) and they agree with the result's catalog-derived port directions and rails; the blinker's path carries no plan and no
+ *     interfaces (the prompt-to-Gerber guard beside the no-sheets pins of cases 2).
  * Fake-backed: a scripted provider over a committed catalog - not a live model, a live catalog or a live router.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -26,7 +29,7 @@ import { resetGenerationSlicePortsFactory, setGenerationSlicePortsFactory } from
 import { resetFixtureContainer } from "@/app/lib/fixture-runtime/container";
 import { BLINKER_ACCEPTANCE_PROMPT, BLINKER_NETLIST, BLINKER_PART_IDS, FIXTURE_RESOLUTION_PART_IDS, GENERATION_FIXTURE_PART_IDS, fixtureRuntimeCatalog } from "@/app/lib/fixture-runtime/blinker/catalog";
 import { FIXTURE_GENERATION_MODEL, fixtureGenerationCatalogPort, fixtureGenerationLlmPort } from "@/app/lib/fixture-runtime/generation-ports";
-import { DRONE_BLOCK_NAMES, dronePlan } from "@/app/lib/fixture-runtime/generation-recipes";
+import { DRONE_BLOCK_NAMES, dronePlan, interfaceDirectionAgrees, type PlanInterfaceSpec, type PlanSpec } from "@/app/lib/fixture-runtime/generation-recipes";
 import { autoLayoutBuildValidated, publishedAtomicIdentity } from "@/lib/build-auto-layout";
 import { listUnresolvedInstances } from "@/app/lib/pcb-sync/unresolved-instances";
 import { buildPcbSyncPreflightReport } from "@/app/lib/pcb-sync/preflight-read";
@@ -147,6 +150,12 @@ describe("[PR-L6 L.7-9] the owner's four-motor request through the real routes, 
     const netlist = result.netlist as BuildLogicalNetlist;
     expect(multiset(netlist)).toEqual(DRONE_4_MULTISET);
     expectDroneSheets(result.sheets, netlist, false); // [PR-J, 2026-10-22] J5-1: the planned result as 4 subsystem sheets beside its flat netlist
+    // [PR-J5, 2026-10-23] OD-259 item 6: the scripted planner's submit_plan carried each block's typed interfaces (a fixture-only plan
+    // field; the stored plan reads them only once the server's plan reader does - j5-plan-interfaces, builder A); every declared direction
+    // agrees with the catalog-derived direction of the result's port, and every declared rail is one of the result's project rails
+    const planCall = calls.find((call) => typeof call.request.toolChoice === "object" && call.request.toolChoice !== null)!;
+    expect((planCall.answer.toolCalls[0]!.input as { blocks: Array<{ interfaces?: PlanInterfaceSpec[] }> }).blocks.map((block) => block.interfaces)).toEqual(recipe.blocks.map((block) => block.interfaces));
+    expectDeclaredInterfacesAgree(result.sheets, recipe);
     const parts = fixtureRuntimeCatalog().cachedParts;
     for (const component of netlist.components) expect(publishedAtomicIdentity(parts.get(component.partId), component.value), `${component.refDes} ${component.partId}=${component.value}`).not.toBeNull();
     // every shared net is a real label on real pins in at least two blocks' instances (not prose): check the merged nets
@@ -203,6 +212,8 @@ describe("[PR-L6 L.7-10] a second ordinary circuit, and the blinker still yields
     expect(submitted).toEqual([{ components: BLINKER_NETLIST.components, connections: BLINKER_NETLIST.connections, explanation: BLINKER_NETLIST.explanation }]);
     const { result } = await taskOf(taskId, true);
     expect(result).not.toHaveProperty("sheets"); // [PR-J, 2026-10-22] J5-1: the prompt-to-Gerber design stays one page
+    expect(calls.flatMap((call) => call.answer.toolCalls).some((toolCall) => toolCall.name === "submit_plan")).toBe(false); // [PR-J5, 2026-10-23] a single design: no plan, so no typed interfaces anywhere on the prompt-to-Gerber path
+    expect(JSON.stringify(calls.map((call) => call.answer))).not.toContain("interfaces");
     expect(result.netlist.components).toEqual(BLINKER_NETLIST.components);
     expect(result.netlist.connections.map((connection: Record<string, unknown>) => Object.fromEntries(Object.entries(connection).filter(([key]) => key !== "labelKind")))).toEqual(BLINKER_NETLIST.connections); // the loop adds the inferred label kinds
   });
@@ -310,4 +321,26 @@ function expectDroneSheets(doc: any, netlist: BuildLogicalNetlist, barometer: bo
   expect(set.rails.map((rail: { net: string; kind: string }) => `${rail.net}:${rail.kind}`)).toEqual(["VBAT:power", "GND:ground", "+3V3:power"]);
   expect(set.children.flatMap((child: { components: string[] }) => child.components)).toEqual(netlist.components.map((component) => component.refDes));
   expect(doc.findings).toEqual(barometer ? [`${DRONE_BLOCK_NAMES.barometer} was not designed: its ports I2C_SDA, I2C_SCL are unbound.`] : []);
+}
+
+// [PR-J5, 2026-10-23] Increment J5-C (OD-259 item 6): the plan's typed interfaces against the result's sheet set - every port of a sheet is
+// a declared SIGNAL of its block whose declared direction agrees with the catalog-derived one (never input against output), and every
+// declared power / ground interface is one of the set's project rails of that kind (never a port). Fixture-declared, catalog-derived: two
+// independent sources that must not contradict each other.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function expectDeclaredInterfacesAgree(doc: any, recipe: PlanSpec): void {
+  for (const [index, block] of recipe.blocks.entries()) {
+    const child = doc.sheets.children[index] as { name: string; ports: Array<{ net: string; direction: string }> };
+    expect(child.name).toBe(block.name);
+    const declared = new Map(block.interfaces!.map((entry) => [entry.net, entry]));
+    for (const port of child.ports) {
+      const entry = declared.get(port.net);
+      expect(entry, `${block.name}: ${port.net} is a declared interface`).toMatchObject({ kind: "signal" });
+      expect(interfaceDirectionAgrees(entry!.direction, port.direction), `${block.name} ${port.net}: declared ${entry!.direction}, derived ${port.direction}`).toBe(true);
+    }
+    for (const rail of block.interfaces!.filter((entry) => entry.kind !== "signal")) {
+      expect((doc.sheets.rails as Array<{ net: string; kind: string }>).find((item) => item.net === rail.net), `${block.name}: ${rail.net} is a project rail`).toMatchObject({ kind: rail.kind });
+      expect(child.ports.map((port) => port.net)).not.toContain(rail.net);
+    }
+  }
 }

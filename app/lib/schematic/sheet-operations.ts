@@ -84,6 +84,10 @@ export interface MoveToSheetInput {
   rootName?: string;
   /** Operation-id prefix (deterministic; default "move"). */
   operationIdPrefix?: string;
+  /** [PR-J5, 2026-10-23] OD-259 item 4: names for the ports of UNNAMED cut nets, keyed by the `SIG<n>` name this planner would mint for
+   *  them (the name the organise proposal reported). A supplied name must be a plain port name (letters, digits, `_`, `+`, `-`, `.`; at
+   *  most 64 characters) that no net, label or port of the project already uses, else the move is refused. Absent: today's `SIG<n>`. */
+  portNames?: Readonly<Record<string, string>>;
 }
 
 export interface MoveCrossing {
@@ -91,6 +95,8 @@ export interface MoveCrossing {
   netName: string | null;
   netId: string;
   port: { id: string; name: string; sheetId: string };
+  /** [PR-J5, 2026-10-23] present only when `portNames` replaced the `SIG<n>` name this planner minted for an unnamed net: that default name. */
+  renamedFrom?: string;
   /** Where the sheet pin sits on the parent sheet and where the hierarchical label(s) sit on the child sheet. */
   sheetPin: { sheetId: string; position: Point };
   hierarchicalLabels: Array<{ sheetId: string; position: Point }>;
@@ -118,6 +124,8 @@ export type MoveRefusalCode =
   | "SHEET_MOVE_NOT_EQUIVALENT" | "SHEET_MOVE_REFUSED";
 
 const refuse = (code: MoveRefusalCode, message: string, diagnostics: ConnectivityDiagnostic[] = []): MoveToSheetPlan => ({ ok: false, code, message, diagnostics });
+/** [PR-J5, 2026-10-23] a caller-supplied port name (MoveToSheetInput.portNames): the characters the planner's own names use, 1-64 long. */
+export const PORT_NAME_PATTERN = /^[A-Za-z0-9_+\-.]{1,64}$/;
 
 function entityOf(state: SchematicState, ref: MoveEntityRef): { sheetId?: string; id: string } | undefined {
   const pool: ReadonlyArray<{ id: string; sheetId?: string }> = ref.family === "theory" ? state.components : ref.family === "kicad" ? state.kicadComponents ?? [] : ref.family === "wire" ? state.wires : state.netLabels ?? [];
@@ -305,7 +313,17 @@ export function planMoveToSheet(state: SchematicState, input: MoveToSheetInput, 
     const childAnchors = childPieces.map((piece) => anchorOf(mid, midConn, piece, childSheetId));
     const parentAnchors = parentPieces.map((piece) => anchorOf(mid, midConn, piece, parentSheetId));
     if (childAnchors.some((point) => point === null) || parentAnchors.some((point) => point === null) || (hub && hubChildAnchor === null)) return refuse("SHEET_MOVE_AMBIGUOUS", `Net ${net.name ?? net.id} has no grid point to anchor its port on one side. Nothing was changed.`);
-    const base = (net.name?.split("/").pop() ?? nextSignalName()).replace(/[^A-Za-z0-9_+\-.]/g, "_") || nextSignalName();
+    const defaultBase = (net.name?.split("/").pop() ?? nextSignalName()).replace(/[^A-Za-z0-9_+\-.]/g, "_") || nextSignalName();
+    // [PR-J5, 2026-10-23] OD-259 item 4: an unnamed net's port takes the caller's name for its SIG<n> when one is supplied (validated
+    // as a plain, unused port name); every other path is byte-identical to before
+    const supplied = net.name === null && input.portNames ? input.portNames[defaultBase] : undefined;
+    if (supplied !== undefined) {
+      if (typeof supplied !== "string" || !PORT_NAME_PATTERN.test(supplied)) return refuse("SHEET_MOVE_REFUSED", `The interface name for ${defaultBase} must be 1-64 letters, digits, "_", "+", "-" or "." (got "${String(supplied).slice(0, 40)}"). Nothing was changed.`);
+      if (projectNames.has(netLabelNameKey(supplied))) return refuse("SHEET_MOVE_REFUSED", `The interface name "${supplied}" (for ${defaultBase}) is already a net, label or port name in this project; choose another. Nothing was changed.`);
+      projectNames.add(netLabelNameKey(supplied));
+    }
+    const base = supplied ?? defaultBase;
+    const renamedFrom = supplied !== undefined ? defaultBase : undefined;
     // one NEW port per parent-side piece (a port has exactly one sheet pin)
     const ports: Array<{ id: string; name: string }> = [];
     parentPieces.forEach((_, index) => {
@@ -340,7 +358,7 @@ export function planMoveToSheet(state: SchematicState, input: MoveToSheetInput, 
       const pin: SchematicNetLabelSnapshot = { id, position: { ...point! }, name: port.name, kind: "label", orientation: anchorOrientation(mid, midConn, parentSheetId, point!, placedAnchors, getPart), scope: "sheet-pin", portId: port.id, childSheetId, ...(parentSheetId === ROOT_SHEET_ID ? {} : { sheetId: parentSheetId }) }; // [PR-J3 integration, 2026-10-23] J3N-2
       anchorOps.push({ ...PX, operationId: opId("pin", id), kind: "schematic_add_sheet_pin", pin, atIndex: labelIndex++ });
       placedAnchors.push(pin);
-      crossings.push({ netName: net.name, netId: net.id, port: { id: port.id, name: port.name, sheetId: childSheetId }, sheetPin: { sheetId: parentSheetId, position: { ...point! } }, hierarchicalLabels: hierarchical });
+      crossings.push({ netName: net.name, netId: net.id, port: { id: port.id, name: port.name, sheetId: childSheetId }, sheetPin: { sheetId: parentSheetId, position: { ...point! } }, hierarchicalLabels: hierarchical, ...(renamedFrom !== undefined ? { renamedFrom } : {}) }); // [PR-J5, 2026-10-23] renamedFrom only when portNames renamed a SIG<n>
     });
   }
 

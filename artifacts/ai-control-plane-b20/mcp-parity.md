@@ -8,8 +8,8 @@ that wrote it (OD-95): change the code and regenerate, never this page.
 ## 1. Identity
 
 - Report schema: `sirkit.mcp-provider-parity.v1`.
-- Registry digest `eng1-9c4c16b205eb5939`; listing digest (B1's, role-independent: the manifest identity) `eng1-a7c5fa4d1b852a8c`.
-- 63 registry descriptors, 51 agent-exposed, 9 MCP-exposed, 42 agent-only.
+- Registry digest `eng1-d52f7ce216027497`; listing digest (B1's, role-independent: the manifest identity) `eng1-59679d612fb73578`.
+- 64 registry descriptors, 52 agent-exposed, 9 MCP-exposed, 43 agent-only.
 
 ## 2. The MCP-exposed tools, leg by leg
 
@@ -81,15 +81,16 @@ members: object nodes of the declared output schema with no `properties` of thei
 | `sirkit.project.history-inspect` | 1.0.0 | `sirkit_project_history-inspect` | `withheld` |
 | `sirkit.routing.propose` | 1.1.0 | `sirkit_routing_propose` | `withheld` |
 | `sirkit.schematic.generate-proposal` | 2.0.0 | `sirkit_schematic_generate-proposal` | `withheld` |
-| `sirkit.schematic.inspect` | 1.1.0 | `sirkit_schematic_inspect` | `withheld` |
+| `sirkit.schematic.inspect` | 1.2.0 | `sirkit_schematic_inspect` | `withheld` |
 | `sirkit.schematic.instance-inspect` | 1.0.0 | `sirkit_schematic_instance-inspect` | `withheld` |
 | `sirkit.schematic.propose-component-replacement` | 1.0.0 | `sirkit_schematic_propose-component-replacement` | `withheld` |
 | `sirkit.schematic.propose-component-resolution` | 1.0.0 | `sirkit_schematic_propose-component-resolution` | `withheld` |
+| `sirkit.schematic.propose-sheet-organization` | 1.0.0 | `sirkit_schematic_propose-sheet-organization` | `withheld` |
 | `sirkit.schematic.propose-tier1-edit` | 1.1.0 | `sirkit_schematic_propose-tier1-edit` | `withheld` |
 | `sirkit.selection.control` | 1.0.0 | `sirkit_selection_control` | `view_session` |
 | `sirkit.selection.inspect` | 1.1.0 | `sirkit_selection_inspect` | `view_state_read` |
 | `sirkit.stackup.propose` | 1.0.0 | `sirkit_stackup_propose` | `withheld` |
-| `sirkit.view.canvas-navigation` | 1.1.0 | `sirkit_view_canvas-navigation` | `view_session` |
+| `sirkit.view.canvas-navigation` | 1.2.0 | `sirkit_view_canvas-navigation` | `view_session` |
 | `sirkit.view.layers` | 1.0.0 | `sirkit_view_layers` | `view_session` |
 | `sirkit.view.measure` | 1.0.0 | `sirkit_view_measure` | `view_session` |
 | `sirkit.view.pcb3d` | 1.0.0 | `sirkit_view_pcb3d` | `view_session` |
@@ -121,6 +122,6 @@ detail, so a directive-shaped id is never echoed back.
 - Rules: `length`, `characters`, `secret-shape`, `marker`, `directive-phrase`, `reserved-name`, `schema-bounds`, `unreadable`, `annotation-field`.
 - Bounds: `idMaxChars` 128, `titleMaxChars` 120, `descriptionMaxChars` 1000, `schemaTextMaxChars` 500, `schemaMaxStrings` 512, `schemaMaxDepth` 64, `schemaMaxNodes` 4096.
 - Characters: U+0020 to U+007E, plus `U+2013`, `U+2014`, `U+2018`, `U+2019`, `U+201C`, `U+201D`, `U+2026`, `U+00B0`, `U+00B1`, `U+00B5`, `U+00D7`, `U+2192`, `U+2212`, `U+2260`, `U+2264`, `U+2265`. Everything else — line breaks, tabs, format and bidirectional characters, no-break space, other scripts, astral characters and lone surrogates — is refused.
-- Measured today over the 63 registry descriptors, with the gate's OWN collector: longest title 56, longest description 990, longest schema text 264, most judged schema strings on one descriptor 319.
+- Measured today over the 64 registry descriptors, with the gate's OWN collector: longest title 56, longest description 990, longest schema text 264, most judged schema strings on one descriptor 319.
 - A descriptor carrying its own `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` or `annotations` key is invalid (OD-100): MCP annotations stay derived from Sirkit's classification alone.
 - Stated limit: `TOOL_REGISTRY_INVALID` still echoes the refused descriptor's `id@version` — the refused id included — its `owningCommandId` and its view command ids, as it did before C3. That message is a build-time refusal on the server, never model-bound text; the MCP renderer's own refusal carries neither the id nor the text.

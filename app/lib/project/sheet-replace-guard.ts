@@ -1,17 +1,22 @@
 /**
  * [PR-J3, 2026-10-22] Runbook section J increment 3 (OD-255 item 6, OD-257 item 3): the pure AI replace-result guard.
  *
- * Until sheet-aware generation lands (J5-2), every AI replace-style result - a generated schematic (Build), an edited one
- * (/api/schematic/edit -> edit-build) and a tidied one (/api/schematic/layout-critic) - is ONE flat page: it carries no `sheets` and
- * no `sheetId`. Adopting such a result over a multi-sheet document would silently flatten the project (every child sheet, port and
- * sheet pin gone; the parts pasted back onto the overview). This module decides, purely, whether that is about to happen and words
- * the refusal; the page calls it (in place, app/page.tsx) at:
+ * An AI replace-style result that is ONE flat page - an edited schematic (/api/schematic/edit -> edit-build), a tidied one
+ * (/api/schematic/layout-critic), or a generated design the planner did not split into blocks - carries no `sheets` and no `sheetId`.
+ * Adopting such a result over a multi-sheet document would silently flatten the project (every child sheet, port and sheet pin gone;
+ * the parts pasted back onto the overview). This module decides, purely, whether that is about to happen and words the refusal; the
+ * page calls it (in place, app/page.tsx) at:
  *
- *  - the Build composer's start, BEFORE a generation task is started (no task, no spend; OD-257 item 3): `multiSheetReplaceRefusal(base)`;
- *  - the edit path and Tidy, BEFORE their provider-bound requests (the same function: both pipelines produce a flat result);
+ *  - the edit path and Tidy, BEFORE their provider-bound requests: `multiSheetReplaceRefusal(base)` (both pipelines produce a flat result);
  *  - the offer of a generated result (chat-started tasks reach the project through the offer) and the FINAL apply boundary, where
  *    the incoming state is known: `flatReplacementRefusal(base, incoming)` - null when the incoming state carries its own sheets
- *    (a J5-2 sheet-aware result passes through to the existing review).
+ *    (a sheet-aware result passes through to the existing review).
+ *
+ * [PR-J5, 2026-10-23] OD-259 item 2 (revising OD-257 item 3): a planned generation result now lays out as sheets (lib/build-sheet-layout.ts)
+ * and replaces a multi-sheet project as one undoable transaction (OD-255 item 9), so the Build composer no longer REFUSES at its start
+ * on a multi-sheet base: `multiSheetReplaceAdvisory(base)` is the activity step it shows instead (what the result will replace; that a
+ * one-page result is refused at review). The refusal stays for a FLAT result at the offer and the apply, and its tail now says what to
+ * do (the generation is sheet-aware: ask for the design as subsystem blocks, or start a new project).
  *
  * The message names the sheet count and the sheet names (bounded, so a project with many or long names still reads in one toast) and
  * ends with the page's "Nothing was changed." wording. Pure: no I/O, no randomness, no React, no page import.
@@ -25,7 +30,8 @@ export const SHEET_REPLACE_GUARD_MAX_NAMES = 4;
 export const SHEET_REPLACE_GUARD_MAX_NAME_LENGTH = 16;
 /** The upper bound of a message, whatever the sheet count and names (a page toast; a test proves it for 512 long-named sheets). */
 export const SHEET_REPLACE_GUARD_MAX_MESSAGE_LENGTH = 240;
-export const SHEET_REPLACE_GUARD_TAIL = "Sheet-aware generation is not available yet. Nothing was changed." as const;
+/** [PR-J5, 2026-10-23] pin move: was "Sheet-aware generation is not available yet. Nothing was changed." - it is available now (OD-259). */
+export const SHEET_REPLACE_GUARD_TAIL = "Ask for the design as subsystem blocks, or start a new project. Nothing was changed." as const;
 
 type SheetsOf = Pick<SchematicState, "sheets">;
 
@@ -62,4 +68,23 @@ export function multiSheetReplaceRefusal(base: SheetsOf): string | null {
 export function flatReplacementRefusal(base: SheetsOf, incoming: SheetsOf): string | null {
   if (incoming.sheets !== undefined) return null;
   return multiSheetReplaceRefusal(base);
+}
+
+/**
+ * [PR-J5, 2026-10-23] OD-259 item 2: the Build composer's ADVISORY on a multi-sheet base (it no longer refuses there): what a generated
+ * multi-sheet design replaces, and that a one-page design is refused at review. Null for a single-sheet base. Bounded like the refusal.
+ */
+export function multiSheetReplaceAdvisory(base: SheetsOf): string | null {
+  const sheets = base.sheets?.sheets ?? [];
+  if (base.sheets === undefined || sheets.length === 0) return null;
+  const count = sheets.length;
+  return `This project has ${count} schematic sheet${count === 1 ? "" : "s"} (${sheetNamesForMessage(base)}): a generated multi-sheet design replaces all of them after your review (one undoable step); a one-page design is refused at review.`;
+}
+
+/** [PR-J5, 2026-10-23] The flat-result refusal with WHY the result stayed one page (the derivation's "Kept on one page" findings), bounded. */
+export function flatReplacementRefusalWithFindings(refusal: string, findings: readonly string[]): string {
+  const kept = findings.filter((finding) => finding.startsWith("Kept on one page:"));
+  if (kept.length === 0) return refusal;
+  const shown = kept.slice(0, 2).map((finding) => finding.slice("Kept on one page:".length).trim());
+  return `${refusal} Why it is one page: ${shown.join(" ")}${kept.length > 2 ? ` (and ${kept.length - 2} more finding${kept.length - 2 === 1 ? "" : "s"})` : ""}`;
 }

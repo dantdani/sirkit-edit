@@ -3643,3 +3643,25 @@ Under the existing OD-217 heading (`:2599`), append:
   approval under the cumulative US$5 allowance.
 - **The owner may choose otherwise:** each item independently (merge instead of replace, keeping the composer refusal, routed
   overview wires, requiring every component assigned, a reviewed PAGE_LINES move, editing the live planner prompt, a live run).
+
+## OD-260 — section K defaults: the work log on the existing activity entry, recovery proofs, the reusable library view, real 3D assets as VRML through the existing viewer (product reliability K, 2026-10-23)
+
+- **Question:** the section K map (`scratchpad` K map; the K ledger under `artifacts/product-reliability-simple-ui/work-log-and-assets/`)
+  names ten choices (OD-K-1 … OD-K-10) the owner has not made. The owner's instruction ("complete everything; you are the chief SWE")
+  asks the lead to proceed. Which defaults apply?
+- **Default applied:** (1) 3D format scope: VRML 2.0 (`.wrl`) rendered with three's bundled VRMLLoader (no new dependency); STEP is
+  stored as metadata and labelled unsupported in the viewer. (2) 3D fixture bytes: original MIT-licensed VRML box models authored
+  offline; no fetch of KiCad's packages3D until the owner pins it (extends OD-M2-5). (3) Model bytes reach the browser through ONE new
+  canonical wrapped GET read route (the route census moves 177 -> 178 with a dated ratchet note) unless an existing asset read route
+  can carry them; the lead records which. (4) A generation block's missing role keeps waiting for a library action and Retry (OD-253
+  item 9); K1 only links to the Build Library search. (5) Spend accounting stays per task (OD-252 item 1); "Start again" is a new
+  task with a fresh unit; the remaining allowance is shown in the work log. (6) Acquisition events join the conversation's activity
+  entry collapsed under "Show details". (7) VRML / STEP text is stored in the append-only durable store under the KiCad CC-BY-SA
+  indefinite retention with a 2 MiB per-model ceiling; PDFs stay refused until OD-M2-7's deletable blob table. (8) `app/page.tsx`
+  keeps its line count; K edits it in place with logic in components and hooks. (9) K's evidence lives under
+  `work-log-and-assets/` and records what L / M already satisfied with the proving suites instead of redoing it. (10) Every K claim
+  is fixture- or fake-labelled at US$0; live acquisition proof waits on OD-M2-3/5/12/13 and live generation proof on the owner's
+  OpenAI quota (LR-3's 2.66 USD reservation stays held for its resume).
+- **The owner may choose otherwise:** each item independently (a STEP converter dependency, a bounded fetch of real KiCad 3D
+  models, an existing route instead of a new read route, a requirement-only acquisition target, a project-level cumulative
+  allowance, separate panels, a different retention or ceiling).

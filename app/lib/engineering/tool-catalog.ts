@@ -146,13 +146,13 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   // ── Schematic inspection ──────────────────────────────────────────────────
   {
     ...readDefaults,
-    toolId: "sirkit.schematic.inspect", version: "1.1.0",
+    toolId: "sirkit.schematic.inspect", version: "1.2.0",
     agentExposed: true, // B09 — statically exposed; per-run availability requires the canonical-state resource
     owningCommandId: "schematic.review-advisory",
     title: "Inspect schematic state",
-    description: "Read the current schematic: component list (display refs, types, values, positions), wire/net-label counts, and the schematic digest.",
+    description: "Read the current schematic: component list (display refs, types, values, positions), wire/net-label counts, and the schematic digest. A multi-sheet project adds its sheet tree (id, name, parent, path, component count, ports with their bound state). Example input: {} for the whole project; {\"sheetId\":\"sheet-imu\"} for ONE sheet's components, local labels, ports and child blocks (bounded); {\"sheetId\":\"sheet-imu\",\"neighbours\":true} also fetches the other sheets' ports the connectivity authority joins to its ports. An unknown sheetId answers the tree and a diagnostic, never a guess.",
     category: "schematic", operationClass: "read",
-    inputSchema: obj(), outputSchema: OUT_REPORT,
+    inputSchema: obj({ sheetId: { type: "string", description: "Optional: one sheet's id (the tree lists them; \"root\" is the overview). Omitted: the whole project." }, neighbours: { type: "boolean", description: "Optional, with sheetId: fetch the other sheets' ports joined to this sheet's ports (an explicit neighbour read)." } }), outputSchema: OUT_REPORT, // [PR-J5, 2026-10-23] 1.2.0: sheetId / neighbours (runbook J.6.7, OD-259)
     requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
     requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
     binding: { status: "bound-read", module: "app/lib/engineering/schematic-read.ts", symbol: "inspectSchematicState", notes: "B09/B09.3: the ONLY invocation path is the registered B05/B05.1 read binding consuming the verified canonical-state resource (whose envelope carries the authoritative schematic snapshot, B07.3); without a complete validated canonical project resource the tool is withheld — no snapshot bypass exists." },
@@ -161,7 +161,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     validationStrategy: "structural schematic-shape validation (fails closed on malformed snapshots)",
     verificationStrategy: "deterministic sorted projection + schematic digest",
     sourceEvidence: ["app/lib/engineering/schematic-read.ts", "app/lib/engineering/schematic-model.ts"],
-    versionNotes: "1.1.0 (B09): bound to the reusable pure accessor and agent-exposed; output carries the schematic digest. B09.3: canonical-state binding is the only path (the B09.2 boardless gateway bypass was removed).",
+    versionNotes: "1.2.0 (PR-J5, 2026-10-23; runbook J.6.7, OD-259): sheet-aware - a multi-sheet project's read adds the bounded sheet tree beside the unchanged whole-project lists; sheetId answers ONE sheet's components, labels, ports and child blocks; neighbours fetches the joined ports through the project connectivity authority; a single-sheet document read without options is byte-identical to 1.1.0. 1.1.0 (B09): bound to the reusable pure accessor and agent-exposed; output carries the schematic digest. B09.3: canonical-state binding is the only path (the B09.2 boardless gateway bypass was removed).",
   },
   {
     ...readDefaults,
@@ -880,23 +880,24 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   },
   {
     ...viewSession,
-    toolId: "sirkit.view.canvas-navigation", version: "1.1.0",
+    toolId: "sirkit.view.canvas-navigation", version: "1.2.0",
     owningCommandId: "view.canvas-navigation",
     title: "Navigate a canvas or open an editor tab",
-    description: "Fit the board/page, zoom by a bounded factor or to a scale, pan to or focus a semantic target (component by refdes/id, object, net, world point, or the user's current selection) on the PCB or schematic canvas; open a workspace editor tab. Relative commands refuse a stale view revision; selection-relative targets refuse a stale or empty selection.",
+    description: "Fit the board/page, zoom by a bounded factor or to a scale, pan to or focus a semantic target (component by refdes/id, object, net, world point, or the user's current selection) on the PCB or schematic canvas; open a workspace editor tab; open a schematic SHEET by id, unique display name or path (action open-sheet with sheet; a name two sheets share is refused with the candidates). Relative commands refuse a stale view revision; selection-relative targets refuse a stale or empty selection.",
     inputSchema: obj({
       editor: { type: "string", enum: ["pcb", "schematic", "workspace"] },
-      action: { type: "string", enum: ["fit", "fit-selection", "zoom", "zoom-to", "pan-to", "focus", "open-editor"] },
+      action: { type: "string", enum: ["fit", "fit-selection", "zoom", "zoom-to", "pan-to", "focus", "open-editor", "open-sheet"] },
       target: TARGET,
       factor: { type: "number", description: "zoom: relative factor 0.25–4 (the bus refuses others)" },
       scale: { type: "number", description: "zoom-to: pcb px/mm or schematic zoom" },
       tab: { type: "string", enum: VIEW_TOOL_ENUMS.workspaceTabs, description: "open-editor" },
+      sheet: { type: "string", description: "open-sheet (schematic only): the sheet's id, its unique display name or its path (sirkit.schematic.inspect lists them)" }, // [PR-J5, 2026-10-23]
     }, ["editor", "action"]), outputSchema: OUT_VIEW_COMMAND,
     requiredProjectState: [],
     binding: { status: "bound-view-session", module: "app/lib/view-session/pcb.ts", symbol: "pcbCommands" },
-    viewCommands: ["pcb.fit-board", "pcb.fit-selection", "pcb.zoom", "pcb.zoom-to", "pcb.pan-to", "pcb.focus", "schematic.fit-page", "schematic.zoom", "schematic.zoom-to", "schematic.pan-to", "schematic.focus", "workspace.open-editor"],
+    viewCommands: ["pcb.fit-board", "pcb.fit-selection", "pcb.zoom", "pcb.zoom-to", "pcb.pan-to", "pcb.focus", "schematic.fit-page", "schematic.zoom", "schematic.zoom-to", "schematic.pan-to", "schematic.focus", "workspace.open-editor", "schematic.open-sheet"], // [PR-J5, 2026-10-23] + schematic.open-sheet (runbook J.6.5 / J.6.6: navigation stays a view command)
     sourceEvidence: ["app/lib/view-session/pcb.ts", "app/lib/view-session/schematic.ts", "app/lib/view-session/workspace.ts", "app/lib/agent/view-context.ts"],
-    versionNotes: "1.1.0 (B17-F): bound to the view-session bus (was an unbound schema declaration).",
+    versionNotes: "1.2.0 (PR-J5, 2026-10-23; runbook J.6.5, OD-259): + open-sheet - the schematic.open-sheet bus command opens a sheet by id, unique name or path through the editor's Sheets navigator; an ambiguous name is refused with the candidates. 1.1.0 (B17-F): bound to the view-session bus (was an unbound schema declaration).",
   },
   {
     ...viewSession,
@@ -1057,7 +1058,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     timeoutMs: 5_000,
     sourceEvidence: ["app/lib/pcb/dimensions/commands.ts", "app/lib/pcb/dimensions/geometry.ts", "app/components/pcb/hooks/useDimensionTool.ts", "app/components/pcb/inspectors/DimensionInspector.tsx", "app/lib/engineering/operations.ts", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
     versionNotes: "1.2.0 (B18-C I7): bound and agent-exposed as a reviewed granted execution (confirmation-only: no explicit grammar); re-tiered reversible per the runbook's PCB Tier 1 list (OD-13); deterministic add ids; an update never moves the measured points. 1.1.0 (B09.1): reconciled with B08 truth — implemented and active, no tool adapter.",
-  }, ...COMPUTATION_TOOL_DESCRIPTORS, boardPageInspectDescriptor(), generateProposalDescriptor(), pcbSyncPreflightDescriptor(), catalogInspectDescriptor(), componentReviewRequestDescriptor(), missingFactsDescriptor(), draftRequestDescriptor(), moduleContractsDescriptor(), stackupProposalDescriptor(), instanceInspectDescriptor(), candidateSearchDescriptor(), componentResolutionDescriptor(), cadAcquisitionStartDescriptor(), cadAcquisitionStatusDescriptor(), /* [PR-M, 2026-10-18] M2: the schematic-scoped CAD acquisition start and status, declared at the END too */ generationTaskInspectDescriptor(), generationTaskControlDescriptor(), /* [PR-L, 2026-10-18] the durable generation task's inspection and control request (runbook L.5), declared at the END too */ /* [PR-M, 2026-10-17] the schematic-instance inspection, the candidate search and the component resolution proposal, declared at the END too */ /* [PR-F fE, 2026-10-17] the stackup / via-policy proposal, declared at the END too */ /* [PR-F fD, 2026-10-17] the module contract proposal, declared at the END too */ /* [PR-F fB, 2026-10-17] the missing-facts read and the part draft request, declared at the END too */ // [B22-B] the five named computations (OD-139), from computation-tool-descriptors.ts; [B24-D2, 2026-10-09] the bounded paged board read (OD-213), its declaration at the END of this file; [PR-D, 2026-10-16] the Build-mode generation proposal (OD-243), its declaration at the END too; [PR-D d2, 2026-10-16] the Schematic to PCB preflight read, the catalog part inspection and the (unavailable) component review request, declared at the END too
+  }, ...COMPUTATION_TOOL_DESCRIPTORS, boardPageInspectDescriptor(), generateProposalDescriptor(), pcbSyncPreflightDescriptor(), catalogInspectDescriptor(), componentReviewRequestDescriptor(), missingFactsDescriptor(), draftRequestDescriptor(), moduleContractsDescriptor(), stackupProposalDescriptor(), instanceInspectDescriptor(), candidateSearchDescriptor(), componentResolutionDescriptor(), cadAcquisitionStartDescriptor(), cadAcquisitionStatusDescriptor(), /* [PR-M, 2026-10-18] M2: the schematic-scoped CAD acquisition start and status, declared at the END too */ generationTaskInspectDescriptor(), generationTaskControlDescriptor(), sheetOrganizationProposalDescriptor(), /* [PR-J5, 2026-10-23] the organise proposal (runbook J.6, OD-259 item 4), declared at the END too */ /* [PR-L, 2026-10-18] the durable generation task's inspection and control request (runbook L.5), declared at the END too */ /* [PR-M, 2026-10-17] the schematic-instance inspection, the candidate search and the component resolution proposal, declared at the END too */ /* [PR-F fE, 2026-10-17] the stackup / via-policy proposal, declared at the END too */ /* [PR-F fD, 2026-10-17] the module contract proposal, declared at the END too */ /* [PR-F fB, 2026-10-17] the missing-facts read and the part draft request, declared at the END too */ // [B22-B] the five named computations (OD-139), from computation-tool-descriptors.ts; [B24-D2, 2026-10-09] the bounded paged board read (OD-213), its declaration at the END of this file; [PR-D, 2026-10-16] the Build-mode generation proposal (OD-243), its declaration at the END too; [PR-D d2, 2026-10-16] the Schematic to PCB preflight read, the catalog part inspection and the (unavailable) component review request, declared at the END too
 ] satisfies readonly ToolDescriptor[]);
 
 let cached: ToolRegistry | null = null;
@@ -1676,5 +1677,40 @@ function cadAcquisitionStatusDescriptor(): ToolDescriptor {
     verificationStrategy: "a pure read of the durable task head in the trusted scope; never the stored bytes; the view's stages each carry their own evidence (M.4)",
     sourceEvidence: ["app/lib/component-resolution/task/service.ts", "app/lib/component-resolution/task/contracts.ts", "app/lib/agent/cad-acquisition-reads.ts", "app/api/chat/cad-acquisition-runtime.ts"],
     versionNotes: "1.0.0 (PR-M M2, 2026-10-18): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts.",
+  };
+}
+
+/**
+ * [PR-J5, 2026-10-23] Runbook section J increment 5 (J.6 items 1, 4, 6 and 8; J.3 item 4; OD-259 item 4): the agent's ORGANISE
+ * proposal, declared at the END too (a function declaration is hoisted), so no line of this catalog moves. A Tier 2 SEALED proposal
+ * the human reviews on the page and applies through schematic.move-to-sheet as ONE transaction; the server plans it with J4's one
+ * organise planner over the catalog pins and proves it equivalent before sealing. Never applied by the agent; root-only in 1.0.0.
+ */
+function sheetOrganizationProposalDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.schematic.propose-sheet-organization", version: "1.0.0",
+    agentExposed: true, // [PR-J5] sealed organisation proposal ONLY; applying it is the human's reviewed schematic.move-to-sheet and never provider-callable
+    owningCommandId: "schematic.sheet-organize-propose",
+    title: "Propose organising the schematic into subsystem sheets",
+    description: "Seal ONE proposal that organises the overview's catalog parts into named subsystem sheets: groups of reference designators, one new child sheet each (parts not named stay on the overview). The server resolves every member by name (unknown or duplicate members are refused by name), plans the organisation as a chain of equivalence-proven moves, carries every net the groups cut through an explicit port (named after the net; SIG<n> for an unnamed net, or the name given in interfaceNames), proves the pin-to-net partition and every component identity unchanged, and seals the sheets, members, interfaces, unassigned parts, parts to check and the operations digest. Example input: {\"groups\":[{\"name\":\"Power\",\"members\":[\"J1\",\"U1\",\"C1\"]},{\"name\":\"IMU\",\"members\":[\"U3\",\"R11\",\"R12\"]}]}. Receiving it changes NOTHING; the user reviews and approves it (one undoable transaction). An ambiguous or non-equivalent split is refused with the planner's reason.",
+    category: "schematic", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({
+      groups: { type: "array", description: "1-8 groups, one new sheet each: a name (1-80 characters, no \"/\") and the reference designators it holds (each named once; parts not named stay on the overview).", items: obj({ name: { type: "string", description: "The new sheet's name." }, members: { type: "array", items: { type: "string" }, description: "Reference designators (R7, U2) of catalog parts on the overview." } }, ["name", "members"]) },
+      interfaceNames: { type: "array", description: "Optional names for the ports of UNNAMED crossing nets, as a previous proposal reported them (SIG1, SIG2 ...): [{\"port\":\"SIG1\",\"name\":\"MOTOR_SENSE\"}]. A name no net, label or port of the project uses yet.", items: obj({ port: { type: "string", description: "The SIG<n> port a proposal reported." }, name: { type: "string", description: "Its new name (1-64 letters, digits, _ + - .)." } }, ["port", "name"]) },
+    }, ["groups"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present", "catalog-available"], requiredAuthority: ["local-working-copy"], // catalog-available: the pins the planner proves over come from the server catalog (context.ts claims the state exactly with the fact), so without the catalog this proposal is withheld at discovery
+    // the loop's B09.1 gate holds for every schematic proposal (a canonical head mark), so discovery requires the revision and the open lineage too
+    requiresExpectedRevision: true, requiresLineage: true,
+    binding: { status: "bound-proposal", module: "app/lib/schematic/sheet-organization.ts", symbol: "planOrganizeIntoSheets", notes: "PR-J5: the ONE organise planner (J4's planOrganizeIntoSheets: sequential planMoveToSheet steps to new child sheets, re-applied once as one batch, the partition digest and every component identity proven unchanged) over the catalog pins read through the chat route's injected catalog port; compileSheetOrganizationProposal / sealSheetOrganizationProposal (app/lib/engineering/sheet-organization-proposal.ts) resolve the members and seal sirkit.sheet-organization-proposal.v1; SheetOrganizationProposalService (app/lib/agent/sheet-organization-proposals.ts) is the gateway's service. The page's Approve re-plans the sealed groups through the same planner and applies through schematic.move-to-sheet only when the operations and partition digests equal the sealed ones. Nothing applied here." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 10_000,
+    validationStrategy: "closed argument surface (groups of { name, members }; interfaceNames of { port, name }; authority-shaped keys such as sheetId, ports, operations, scope or headMark refused by name); a verified schematic, its head mark and the server's catalog fact are required; discovery, role and capability rechecked per call; unknown, duplicate, Theory and off-sheet members refused by name; all-or-nothing over the groups (any refused step refuses the whole proposal)",
+    verificationStrategy: "the sealed artifact's identity digest, operations digest and partition digest are re-verified at the page (verifySealedSheetOrganizationProposal: scope, lineage, head, expiry, base digest); Approve re-plans on the canonical base inside the serialized queue (replanSheetOrganization) and applies only when the re-planned operations digest and partition digest equal the sealed ones",
+    sourceEvidence: ["app/lib/schematic/sheet-organization.ts", "app/lib/schematic/sheet-operations.ts", "app/lib/engineering/sheet-organization-proposal.ts", "app/lib/agent/sheet-organization-proposals.ts", "app/lib/agent/gateway.ts", "app/lib/agent/loop.ts"],
+    versionNotes: "1.0.0 (PR-J5, 2026-10-23): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (it seals against the editor's browser-only SchematicState and head mark, as OD-82's proposals, and needs the chat route's catalog port).",
   };
 }

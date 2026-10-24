@@ -52,4 +52,5 @@ export const MCP_WITHHELD_TOOL_IDS: readonly string[] = Object.freeze([
   "sirkit.generation.task-control",               // PR-L (2026-10-18, runbook L.5): a proposal (a confirm chip only the page shows), and MCP exposure stays read-only (B4, OD-82)
   "sirkit.parts.acquisition-start",               // PR-M M2 (2026-10-18): it starts a durable task from the editor's browser-only SchematicState (as OD-244's reads) and MCP exposure stays read-only (B4, OD-82)
   "sirkit.parts.acquisition-status",              // PR-M M2 (2026-10-18): a choice - the MCP server binds no component-resolution task port and a task's live state was never reviewed for MCP clients (as the generation task-inspect)
+  "sirkit.schematic.propose-sheet-organization",  // PR-J5 (2026-10-23): a proposal, and MCP exposure stays read-only (B4, OD-82); it seals against the editor's browser-only SchematicState and head mark (as OD-82's proposals) and proves its plan over the chat route's catalog port, which the MCP server does not bind
 ].sort());

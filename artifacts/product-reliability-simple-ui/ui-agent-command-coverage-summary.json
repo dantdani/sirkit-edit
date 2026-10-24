@@ -11,19 +11,19 @@
     "legacy",
     "missing"
   ],
-  "rows": 1022,
+  "rows": 1027,
   "byKind": {
-    "action": 113,
-    "control": 846,
-    "tool": 63
+    "action": 114,
+    "control": 849,
+    "tool": 64
   },
   "byDisposition": {
     "callable-now": 54,
-    "proposal-only": 271,
+    "proposal-only": 278,
     "grant-required": 68,
-    "human-admin-only": 99,
+    "human-admin-only": 95,
     "view-session-only": 92,
-    "intentionally-ui-only": 373,
+    "intentionally-ui-only": 375,
     "unavailable": 11,
     "legacy": 0,
     "missing": 54
@@ -31,9 +31,9 @@
   "byKindAndDisposition": {
     "action": {
       "callable-now": 6,
-      "proposal-only": 44,
+      "proposal-only": 46,
       "grant-required": 7,
-      "human-admin-only": 19,
+      "human-admin-only": 18,
       "view-session-only": 6,
       "intentionally-ui-only": 10,
       "unavailable": 7,
@@ -42,18 +42,18 @@
     },
     "control": {
       "callable-now": 21,
-      "proposal-only": 215,
+      "proposal-only": 219,
       "grant-required": 55,
-      "human-admin-only": 76,
+      "human-admin-only": 73,
       "view-session-only": 80,
-      "intentionally-ui-only": 363,
+      "intentionally-ui-only": 365,
       "unavailable": 0,
       "legacy": 0,
       "missing": 36
     },
     "tool": {
       "callable-now": 27,
-      "proposal-only": 12,
+      "proposal-only": 13,
       "grant-required": 6,
       "human-admin-only": 4,
       "view-session-only": 6,
@@ -71,23 +71,23 @@
   },
   "rowsWithoutTest": {
     "action": 40,
-    "control": 470,
+    "control": 472,
     "tool": 0
   },
   "actions": {
-    "records": 113,
-    "rows": 113
+    "records": 114,
+    "rows": 114
   },
   "controls": {
-    "sites": 715,
-    "rows": 846,
-    "surfaces": 73,
+    "sites": 718,
+    "rows": 849,
+    "surfaces": 74,
     "recordsReached": 85
   },
   "tools": {
-    "descriptors": 63,
-    "rows": 63,
-    "agentExposed": 51,
+    "descriptors": 64,
+    "rows": 64,
+    "agentExposed": 52,
     "grantedExecutions": 6
   }
 }

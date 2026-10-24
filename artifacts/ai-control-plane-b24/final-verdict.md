@@ -101,12 +101,12 @@ Counts, from `current-system-map.md` (generated; each pinned count equals its pi
 | canonical-wrappers | 174 |
 | approved-factories | 3 |
 | raw-handlers | 0 |
-| action-records | 113 |
-| registry-tools | 63 |
-| agent-exposed-tools | 51 |
+| action-records | 114 |
+| registry-tools | 64 |
+| agent-exposed-tools | 52 |
 | mcp-exposed-tools | 9 |
 | granted-tier-1-tools | 6 |
-| agent-exposed-proposal-tools | 12 |
+| agent-exposed-proposal-tools | 13 |
 | agent-exposed-tier-3-tools | 0 |
 | sql-migrations | 32 |
 
@@ -125,6 +125,8 @@ closeout's final SHA.
 [PR-M, 2026-10-18] Count lines moved with the regenerated map (runbook section M, M2's acquisition): route-methods 175 -> 177 and canonical-wrappers 172 -> 174 (GET and POST /api/parts/acquisitions, two canonical wrappers); action-records 110 -> 111 (parts.cad-acquisition); registry-tools 59 -> 63, agent-exposed-tools 47 -> 51 and agent-exposed-proposal-tools 10 -> 12 - runbook L.5's two descriptors (the durable generation task's inspection and its control request, a proposal) as the tree holds them, and M2's two (the CAD acquisition start, a proposal, and its status read; both agent-exposed, withheld from MCP); mcp-exposed-tools stays 9; the verdict's status lines stand.
 
 [PR-J, 2026-10-22] Count lines moved with the regenerated map (runbook section J increment 1, OD-255): action-records 111 -> 113 (schematic.sheet-structure and schematic.move-to-sheet, the canonical schematic sheet commands; both partial until the Sheets navigator binds them).
+
+[PR-J5, 2026-10-23] Count lines moved with the regenerated map (runbook section J increment 5, J.6 / OD-259 item 4): action-records 113 -> 114 (schematic.sheet-organize-propose, the agent's sealed organise proposal, placed before the two-record tail), registry-tools 63 -> 64, agent-exposed-tools 51 -> 52 and agent-exposed-proposal-tools 12 -> 13 - the organise proposal descriptor sirkit.schematic.propose-sheet-organization (a Tier 2 sealed proposal the human applies through schematic.move-to-sheet; withheld from MCP, so mcp-exposed-tools stays 9); the verdict's status lines stand.
 
 [PR-F, 2026-10-17] Count lines moved with the regenerated map (product reliability F): action-records 107 -> 108 (parts.draft-request, the sealed draft request own propose record), registry-tools 52 -> 56, agent-exposed-tools
 40 -> 44, agent-exposed-proposal-tools 6 -> 9 - PR-F's four descriptors: the missing-facts read and the part draft request (missing parts,

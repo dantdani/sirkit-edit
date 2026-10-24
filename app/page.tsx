@@ -29,13 +29,13 @@ import { schDisplayRef, type SchComponent, type Wire, type Point, type SchCompon
 import { useSchematicViewSession } from "@/app/components/schematic/hooks/useSchematicViewSession"; // [B17-D]
 import { describeExportRefusal, filenameFromDisposition } from "@/app/lib/project/io-outcome"; // [B17-E]; [PR-J4, 2026-10-23] + the export's own file name (a project with sheets downloads a zip)
 import { ProjectOperationTimeline } from "@/app/lib/project/operation-timeline"; // [B17-E]
-import { engineeringDigest } from "@/app/lib/engineering/stable"; import { useSchematicSheetLens } from "@/app/components/schematic/hooks/useSchematicSheetLens"; import { SheetNavigator } from "@/app/components/schematic/SheetNavigator"; import { ScopedNetLabelGlyph } from "@/app/components/schematic/ScopedNetLabelGlyph"; import { flatReplacementRefusal, multiSheetReplaceRefusal } from "@/app/lib/project/sheet-replace-guard"; import type { SheetCamera } from "@/app/lib/project/sheet-navigation-store"; // [PR-J3, 2026-10-22] the Sheets editor increment (runbook J.3, OD-255 item 7, OD-257): the sheet lens, the navigator, the scoped label glyph and the AI replace-result guard
+import { engineeringDigest } from "@/app/lib/engineering/stable"; import { useSchematicSheetLens } from "@/app/components/schematic/hooks/useSchematicSheetLens"; import { SheetNavigator } from "@/app/components/schematic/SheetNavigator"; import { ScopedNetLabelGlyph } from "@/app/components/schematic/ScopedNetLabelGlyph"; import { flatReplacementRefusal, flatReplacementRefusalWithFindings, multiSheetReplaceAdvisory, multiSheetReplaceRefusal } from "@/app/lib/project/sheet-replace-guard"; import type { SheetCamera } from "@/app/lib/project/sheet-navigation-store"; // [PR-J3, 2026-10-22] the Sheets editor increment (runbook J.3, OD-255 item 7, OD-257): the sheet lens, the navigator, the scoped label glyph and the AI replace-result guard
 import { useWorkspaceViewSession } from "@/app/components/workspace/useWorkspaceViewSession"; // [B17-D]
 import { WORKSPACE_TABS } from "@/app/lib/view-session/workspace"; // [B17-D]
 import { PIN_NAMES, normalizeComponentRole } from "@/lib/schematic-types";
 import { pageSizePx, titleBlockPx, PAGE_MARGIN_PX } from "@/lib/page-sizes";
 import { generateSchematic } from "@/lib/apply-netlist";
-import { autoLayoutBuildValidated, type AdoptedAtomicIdentity } from "@/lib/build-auto-layout";
+import { autoLayoutBuildValidated, type AdoptedAtomicIdentity } from "@/lib/build-auto-layout"; import { layoutGeneratedSheets, type GeneratedSheets } from "@/lib/build-sheet-layout"; // [PR-J5, 2026-10-23] a planned result laid out as real sheets (OD-255 item 9; OD-259 items 1, 3, 5)
 import { kicadPlacementCommand } from "@/lib/kicad-placement"; // [B19-E E5 review]
 import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist";
 import { buildReviewInput } from "@/lib/netlist-review";
@@ -71,7 +71,7 @@ import { checkpointBelongsToProject, checkpointStore, type ProjectCheckpoint } f
 // B06: canonical schematic semantic mutations — the migrated handlers issue
 // shared domain commands through the trusted schematic editor session.
 import { SchematicEditorSession } from "@/app/lib/engineering/schematic-session";
-import { describeSchematicProposal } from "@/app/lib/workflow/prompt-to-gerber/review-summary"; // [B16.1C §F]
+import { describeSchematicProposal, replacedSheetsLine } from "@/app/lib/workflow/prompt-to-gerber/review-summary"; // [B16.1C §F]; [PR-J5, 2026-10-23] + the replaced-sheets sentence (OD-259 item 1)
 import type { SchematicCanonicalMark } from "@/app/lib/engineering/schematic-projection";
 import { compileTier1Proposal, planSchematicDelete, planSchematicReplacement } from "@/app/lib/engineering/schematic-plans";
 import { sealTier1Proposal, TIER1_PROPOSAL_SCHEMA, type SealedTier1Proposal } from "@/app/lib/engineering/schematic-proposals";
@@ -105,7 +105,7 @@ import { type SealedReplacementProposal } from "@/app/lib/engineering/replacemen
 import { approveAndApplyReplacement } from "@/app/lib/project/replacement-approval-controller.internal";
 import { receiveReplacementProposalEvent } from "@/app/lib/project/replacement-proposal-events";
 import { receivePcbProposalReadyEvent } from "@/app/lib/project/pcb-proposal-events";
-import { GENERATION_TASK_CONTROL_CARD_ID_PREFIX, generationTaskAttachDecision, generationTaskControlCardLines, generationTaskControlCurrency, receiveGenerationTaskControlEvent, receiveGenerationTaskEvent, type ReceivedGenerationTask, type ReceivedGenerationTaskControl } from "@/app/lib/project/generation-proposal-events"; import { GENERATION_START_TOOL_ID, STOP_ANSWER_SEMANTICS } from "@/app/lib/agent/generation-task-tools"; // [PR-D] the agent's Build-mode generation: the SAFE receivers; [PR-L, 2026-10-18] runbook L.5: a durable task reference (followed with the same status card and review intake as a Build start) and a sealed control request (a confirm chip)
+import { GENERATION_TASK_CONTROL_CARD_ID_PREFIX, generatedSheetsProposalNotes, generationTaskAttachDecision, generationTaskControlCardLines, generationTaskControlCurrency, receiveGenerationTaskControlEvent, receiveGenerationTaskEvent, type ReceivedGenerationTask, type ReceivedGenerationTaskControl } from "@/app/lib/project/generation-proposal-events"; import { receiveSheetOrganizationEvent, replanSheetOrganization, sheetOrganizationAlreadyApplied, sheetOrganizationApplyLabel, sheetOrganizationCurrency, sheetOrganizationLines, sheetOrganizationReplanBase, sheetOrganizationReview, type ReceivedSheetOrganization } from "@/app/lib/project/sheet-organization-events"; import { SheetOrganizationReviewCard } from "@/app/components/schematic/SheetOrganizationReviewCard"; /* [PR-J5, 2026-10-23] the assistant's sealed organise proposal: its SAFE receiver, currency, review card and the tool's own re-plan (OD-259 items 4, 5) */ import { GENERATION_START_TOOL_ID, STOP_ANSWER_SEMANTICS } from "@/app/lib/agent/generation-task-tools"; // [PR-D] the agent's Build-mode generation: the SAFE receivers; [PR-L, 2026-10-18] runbook L.5: a durable task reference (followed with the same status card and review intake as a Build start) and a sealed control request (a confirm chip)
 import { DRAFT_REQUEST_CARD_ID_PREFIX, DRAFT_REQUEST_OPEN_LABEL, draftRequestCardLines, draftRequestCurrency, draftRequestPublicationPrefill, receiveDraftRequestEvent, type ReceivedDraftRequest } from "@/app/lib/project/draft-request-events"; // [PR-G, 2026-10-17] the agent's part draft request (OD-248): the SAFE receiver, the currency check, the review-task card and the publication prefill
 import { MODULE_CONTRACT_NOTE_ID_PREFIX, moduleContractCurrency, moduleContractNoteLines, receiveModuleContractsEvent } from "@/app/lib/project/module-contract-events"; // [PR-G, 2026-10-17] the agent's module contract set (OD-249): the SAFE receiver, the currency check and the engineering-note card
 import { receiveStackupCandidateEvent, stackupCandidateChatLine, verifyStackupCandidateAgainstBoard } from "@/app/lib/project/stackup-candidate-events"; // [PR-G, 2026-10-17] the agent's stackup recommendation (OD-249): the SAFE receiver and the live-board check
@@ -2697,7 +2697,7 @@ export default function Home() {
   const [replacementReceipt, setReplacementReceipt] = useState<ReplacementMutationReceipt | null>(null);
   // [PR-M, 2026-10-18] the ONE pending sealed component-resolution batch (received + currency-checked; display grants nothing), its apply
   // busy state and its real receipt; the run log it came from receives the committed / preflight lines
-  const [pendingResolution, setPendingResolution] = useState<{ received: ReceivedComponentResolution; logId: string; boardImpact: ResolutionBoardImpactState } | null>(null); // [PR-L6, 2026-10-19] + the batch's PCB impact (dropped with the batch)
+  const [pendingResolution, setPendingResolution] = useState<{ received: ReceivedComponentResolution; logId: string; boardImpact: ResolutionBoardImpactState } | null>(null); /* [PR-L6, 2026-10-19] + the batch's PCB impact (dropped with the batch) */ const [pendingOrganization, setPendingOrganization] = useState<{ received: ReceivedSheetOrganization; logId: string } | null>(null); const [organizationApplyBusy, setOrganizationApplyBusy] = useState(false); // [PR-J5, 2026-10-23] the ONE pending sealed organise proposal (OD-259 items 4-5): nothing mutates until its Approve
   const [resolutionApplyBusy, setResolutionApplyBusy] = useState(false);
   const [resolutionReceipt, setResolutionReceipt] = useState<ResolutionReceiptView | null>(null);
   // [B15.3] the ONE pending sealed bounded PCB edit proposal — narrowed by
@@ -3118,7 +3118,7 @@ export default function Home() {
    * advanced (fetches aborted, timers canceled) before these run.
    */
   const resetTransientProjectState = useCallback((record: SavedProject) => {
-    setPendingReplace(null);            // no stale replacement dialog crosses projects
+    setPendingReplace(null); setPendingOrganization(null); // no stale replacement dialog crosses projects; [PR-J5, 2026-10-23] nor a stale organise proposal
     setPcbFacts(null); setPreparePcbRequested(false); setLastGenerationFailure(null); setSyncRequestToken(0); // [PR-C] journey facts are per project
     setPendingTier1(null);              // no stale sealed proposal
     setPendingTier1RunId(null);         // B12: clear pending approval origin
@@ -4015,7 +4015,7 @@ export default function Home() {
     finishActivityLog(pendingResolution.logId, resolutionLines.discarded()); // nothing is applied, journaled or audited: discard records nothing
     setPendingResolution(null);
     showToast(resolutionLines.discarded());
-  }, [resolutionApplyBusy, pendingResolution]);
+  }, [resolutionApplyBusy, pendingResolution]); const applyOrganizationProposal = useCallback(async () => { const pending = pendingOrganization; if (!pending || organizationApplyBusy) return; const proposal = pending.received.proposal; const currency = sheetOrganizationCurrency(proposal, liveSheetForSealedArtifacts()); if (!currency.ok) { setPendingOrganization(null); failActivityLog(pending.logId, sheetOrganizationLines.refused(currency.detail)); showToast(sheetOrganizationLines.refused(currency.detail)); return; } setOrganizationApplyBusy(true); try { const outcome = await sheetLens.controller.applyOrganizeProposal({ label: sheetOrganizationApplyLabel(proposal), expectedBaseDigest: schematicStateDigest(gestureCoordinatorRef.current!.authoritativeState()), expectedHeadMark: proposal.scope.headMark, replan: (canonical) => { const again = replanSheetOrganization(proposal, sheetOrganizationReplanBase(fromCanonicalSchematic(canonical), liveStateRef.current.pageSize), getCachedPart); return again.ok ? { ok: true, operations: again.operations } : { ok: false, detail: again.detail }; } }); setPendingOrganization(null); if (outcome.ok) { finishActivityLog(pending.logId, sheetOrganizationLines.applied(proposal)); showToast(sheetOrganizationLines.applied(proposal)); } else { failActivityLog(pending.logId, sheetOrganizationLines.refused(outcome.message)); showToast(outcome.message); } } finally { setOrganizationApplyBusy(false); } }, [pendingOrganization, organizationApplyBusy, sheetLens.controller]); const discardOrganizationProposal = useCallback(() => { if (organizationApplyBusy || !pendingOrganization) return; finishActivityLog(pendingOrganization.logId, sheetOrganizationLines.discarded()); setPendingOrganization(null); showToast(sheetOrganizationLines.discarded()); }, [organizationApplyBusy, pendingOrganization]); // [PR-J5, 2026-10-23] OD-259 items 4-5: Approve re-checks the sealed proposal's currency against the live editor, then applies its groups through the Sheets controller's ONE organise transaction (schematic.move-to-sheet; the tool's own re-plan on the canonical base with the chat run's sheet-size recipe; refused unless the sealed digests result; one undo step); Discard records nothing
 
   // ── B06.2: explicit schematic-history recovery choices ─────────────────────
   // While a recovery is pending the session is `conflicted` and every
@@ -4866,7 +4866,7 @@ export default function Home() {
             appendActivityStep(logId, resolutionLines.awaitingReview(resolution.proposal), "done");
             return;
           }
-          case "execution_grant_ready": {
+          case "sheet_organization_ready": { const organise = receiveSheetOrganizationEvent(event); if (!organise) { appendActivityStep(logId, sheetOrganizationLines.dropped(), "error"); return; } const organiseVerdict = sheetOrganizationCurrency(organise.proposal, liveSheetForSealedArtifacts()); if (!organiseVerdict.ok) { appendActivityStep(logId, sheetOrganizationLines.notOffered(organiseVerdict.detail), "error"); return; } setPendingOrganization({ received: organise, logId }); appendActivityStep(logId, sheetOrganizationLines.awaitingReview(organise.proposal), "done"); return; } /* [PR-J5, 2026-10-23] OD-259 item 5 (one existing line): the assistant's sealed organise proposal - the SAFE receiver (integrity), the currency check against the LIVE editor (scope, expiry, head, base digest), then the review card; receiving it mutates nothing (only the human's Approve applies, through the Sheets controller's one transaction) */ case "execution_grant_ready": {
             // [B18-B] a server-minted execution grant — the SAFE receiver re-parses it and checks its coherence; the PCB
             // editor (the composition root) runs the granted-execution ritual: preview grants wait for the human's Confirm,
             // explicit grants execute once and settle back to the server. Receiving it changes nothing.
@@ -5263,10 +5263,10 @@ export default function Home() {
     if (!entryGate.allowed) {
       setScopedGenError(projectScopeRegistryRef.current!.capture(), entryGate.reason);
       return;
-    } const sheetRefusal = multiSheetReplaceRefusal(gestureCoordinatorRef.current!.authoritativeState()); if (sheetRefusal !== null) { setScopedGenError(projectScopeRegistryRef.current!.capture(), sheetRefusal, 12000); return; } // [PR-J3, 2026-10-22] OD-257 item 3: the composer refuses at the START on a multi-sheet project (no task, no spend; chat-started tasks are refused at the offer; the final guard in applySchematic stays)
+    } const sheetAdvisory = multiSheetReplaceAdvisory(gestureCoordinatorRef.current!.authoritativeState()); // [PR-J5, 2026-10-23] OD-259 item 2 (revising OD-257 item 3): the composer no longer REFUSES at the START on a multi-sheet project - a planned result lays out as sheets and replaces them as one undoable transaction (OD-255 item 9); the advisory step below says so; a FLAT result stays refused at the offer and at the final apply
     const pin = captureLifecycleInvocationContext();
     const scope = pin.scope;
-    const logId = startActivityLog("Generating schematic", "Preparing request", prompt);
+    const logId = startActivityLog("Generating schematic", "Preparing request", prompt); if (sheetAdvisory !== null) appendActivityStep(logId, sheetAdvisory, "done"); // [PR-J5, 2026-10-23] the multi-sheet advisory (OD-259 item 2)
     setLastDesignPrompt(prompt); // remembered for the SchGen cross-verify second opinion
     setPendingSuggestions(null); // any prior suggestions are now stale
     setSuggestionsMinimized(false);
@@ -5350,7 +5350,7 @@ export default function Home() {
   // server's structured status as notes (a partial merge, an electrical check skipped or not run), every referenced catalog part
   // loaded, the layout and its drawing validation (autoLayoutBuildValidated), then the ONE offer below. A durable design task's
   // validated result arrives here once per (task, result digest).
-  async function offerBuildResult(data: { netlist: BuildLogicalNetlist; explanation: string; status: "complete" | "partial"; omittedBlocks: string[]; electricalCheck: ElectricalCheckStatus }, run: { logId: string; scope: ProjectAsyncScope; pin: ReturnType<typeof captureLifecycleInvocationContext>; prompt: string; task?: { taskId: string; resultDigest: string }; note?: string }): Promise<boolean> {
+  async function offerBuildResult(data: { netlist: BuildLogicalNetlist; explanation: string; status: "complete" | "partial"; omittedBlocks: string[]; electricalCheck: ElectricalCheckStatus; sheets?: GeneratedSheets }, run: { logId: string; scope: ProjectAsyncScope; pin: ReturnType<typeof captureLifecycleInvocationContext>; prompt: string; task?: { taskId: string; resultDigest: string }; note?: string }): Promise<boolean> {
     const { logId, scope } = run;
     const proposalNotes: string[] = []; // [PR-C] what the approver must read beside the proposal (partial merge, checks)
     try {
@@ -5374,7 +5374,7 @@ export default function Home() {
       );
       appendActivityStep(logId, "Laying out and validating schematic");
       const built = autoLayoutBuildValidated(netlist, parts);
-      const state = built.state;
+      const laid = data.sheets?.sheets ? layoutGeneratedSheets(netlist, data.sheets.sheets, parts, { seed: run.task?.resultDigest ?? run.pin.baseDigest }) : null; const state = laid?.kind === "sheets" ? laid.state : built.state; const validation = laid?.kind === "sheets" ? laid.validation : built.validation; // [PR-J5, 2026-10-23] OD-255 item 9 / OD-259 items 3, 5: a planned result lays out as real sheets AFTER the flat layout above (its proof keeps it flat with a finding; structural ids from the task's result digest, never a random draw); the sheeted drawing's validation is its blocks' merged
       const explanation = data.explanation;
 
       if ((state.kicadComponents?.length ?? 0) === 0) {
@@ -5386,14 +5386,14 @@ export default function Home() {
 
       // Electrical validation: surface (don't silently ship) a schematic that
       // is electrically wrong by netlist after reroute attempts.
-      if (!built.validation.ok) {
-        const v = built.validation.violations;
+      if (!validation.ok) { // [PR-J5, 2026-10-23] the sheeted layout's validation when a sheet set was laid out, else the flat one
+        const v = validation.violations;
         const note = `Drawing check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`;
         setScopedGenError(scope, note, 12000);
         appendActivityStep(logId, `Drawing check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
         proposalNotes.push(note); // [PR-C] the approver reads it in the dialog, not only in a 12 s banner
       }
-      if (run.note) proposalNotes.push(run.note); // [PR-L, 2026-10-18] who proposed it (a chat-started task), last, as the v1 intake did
+      for (const line of generatedSheetsProposalNotes(data.sheets, laid)) { proposalNotes.push(line); appendActivityStep(logId, line, "done"); } if (run.note) proposalNotes.push(run.note); // [PR-L, 2026-10-18] who proposed it (a chat-started task), last, as the v1 intake did; [PR-J5, 2026-10-23] the sheet set's findings and the layout's sentence (or why it stayed one page) travel with the proposal and are steps of the entry
       return offerSchematicProposal({ state, explanation, prompt: run.prompt, logId, pin: run.pin, scope, proposalNotes, ...(run.task ? { task: run.task } : {}) });
     } catch (err) {
       if (isAbortError(err) || !scope.isCurrent()) { failActivityLog(logId, "Canceled — the project changed"); return false; }
@@ -5421,7 +5421,7 @@ export default function Home() {
     }
     const flatRefusal = flatReplacementRefusal(gestureCoordinatorRef.current!.authoritativeState(), state); if (resultIssues.length > 0 || flatRefusal !== null) { // [PR-J3, 2026-10-22] OD-257 item 3: a flat result over a multi-sheet project is refused at the offer like an invalid one (chat-started tasks arrive here)
       failActivityLog(logId, flatRefusal !== null ? "Generated schematic would replace the project's sheets — nothing applied" : "Generated schematic failed validation — nothing applied");
-      setScopedGenError(scope, flatRefusal ?? `The generated schematic failed validation (${resultIssues[0]}). Nothing was changed.`, flatRefusal !== null ? 12000 : undefined);
+      setScopedGenError(scope, flatRefusal !== null ? flatReplacementRefusalWithFindings(flatRefusal, input.proposalNotes) : `The generated schematic failed validation (${resultIssues[0]}). Nothing was changed.`, flatRefusal !== null ? 12000 : undefined); // [PR-J5, 2026-10-23] + WHY the result stayed one page (the derivation's findings)
       return false;
     }
     const authoritativeDigestNow = schematicStateDigest(gestureCoordinatorRef.current!.authoritativeState());
@@ -5516,7 +5516,7 @@ export default function Home() {
     const movedTo = generationLiveBaseDigest(view.base.recipe);
     if (movedTo !== view.base.schematicDigest) { await reportGenerationBaseMoved(entry, movedTo, view.base.recipe); return; } // the sheet moved while the result was fetched
     const offerPin = captureLifecycleInvocationContext(); // the exact-base pin the approval re-checks, taken now: the content is the task's base (checked above)
-    const offered = await offerBuildResult({ netlist: fetched.result.netlist, explanation: fetched.result.explanation, status: fetched.result.status, omittedBlocks: fetched.result.omittedBlocks, electricalCheck: fetched.result.electricalCheck as ElectricalCheckStatus }, { logId: entry.logId, scope: offerPin.scope, pin: offerPin, prompt: fetched.task.prompt ?? entry.prompt, task: { taskId: view.taskId, resultDigest: result.resultDigest }, ...(view.origin === "chat" ? { note: `Proposed by the assistant (${view.provider}) for your request; approving replaces the sheet it was generated against. Nothing has been changed yet.` } : {}) }); // [PR-L, 2026-10-18] a chat-started task says who proposed it, as the v1 intake did
+    const offered = await offerBuildResult({ netlist: fetched.result.netlist, explanation: fetched.result.explanation, status: fetched.result.status, omittedBlocks: fetched.result.omittedBlocks, electricalCheck: fetched.result.electricalCheck as ElectricalCheckStatus, sheets: fetched.result.sheets }, { logId: entry.logId, scope: offerPin.scope, pin: offerPin, prompt: fetched.task.prompt ?? entry.prompt, task: { taskId: view.taskId, resultDigest: result.resultDigest }, ...(view.origin === "chat" ? { note: `Proposed by the assistant (${view.provider}) for your request; approving replaces the sheet it was generated against. Nothing has been changed yet.` } : {}) }); // [PR-L, 2026-10-18] a chat-started task says who proposed it, as the v1 intake did
     if (!offered) entry.offered.delete(key);
   }
 
@@ -7172,7 +7172,7 @@ export default function Home() {
             </DialogHeader>
             {/* [B16.1C §F] the approval names exactly what will change. */}
             <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-400" data-testid="schematic-proposal-summary">
-              {(pendingProposalSummary?.details ?? []).map((line) => <li key={line}>{line}</li>)}
+              {(pendingProposalSummary?.details ?? []).map((line) => <li key={line}>{line}</li>)}{pendingReplace && replacedSheetsLine(authoritativeSchematic) !== null && <li key="replaced-sheets" data-testid="schematic-proposal-replaced-sheets">{replacedSheetsLine(authoritativeSchematic)}</li>} {/* [PR-J5, 2026-10-23] OD-259 item 1: the sheets the apply replaces, from the live document (in scope here; the memo above runs before the authoritative state is declared) */}
             </ul>
             {pendingReplace?.explanation && <p className="max-h-32 overflow-auto whitespace-pre-wrap text-xs text-zinc-500">{pendingReplace.explanation}</p>}
             {pendingReplace?.validationNote && <p className="text-xs text-amber-300" data-testid="schematic-proposal-validation">{pendingReplace.validationNote}</p>}
@@ -7215,7 +7215,7 @@ export default function Home() {
           onApply={() => void applyReplacementProposal()}
           onCancel={cancelReplacementProposal}
         />
-        <ComponentResolutionReviewDialog review={pendingResolution ? componentResolutionReview(pendingResolution.received.proposal) : null} boardImpact={pendingResolution ? componentResolutionBoardImpactView(pendingResolution.boardImpact) : null} busy={resolutionApplyBusy} onApprove={() => void applyResolutionProposal()} onDiscard={discardResolutionProposal} /> {/* [PR-M, 2026-10-18] */}
+        <SheetOrganizationReviewCard review={pendingOrganization ? sheetOrganizationReview(pendingOrganization.received.proposal, { currency: sheetOrganizationCurrency(pendingOrganization.received.proposal, liveSheetForSealedArtifacts()), alreadyApplied: sheetOrganizationAlreadyApplied(pendingOrganization.received.proposal, authoritativeSchematic) }) : null} busy={organizationApplyBusy} onApprove={() => void applyOrganizationProposal()} onDiscard={discardOrganizationProposal} /> {/* [PR-J5, 2026-10-23] */} <ComponentResolutionReviewDialog review={pendingResolution ? componentResolutionReview(pendingResolution.received.proposal) : null} boardImpact={pendingResolution ? componentResolutionBoardImpactView(pendingResolution.boardImpact) : null} busy={resolutionApplyBusy} onApprove={() => void applyResolutionProposal()} onDiscard={discardResolutionProposal} /> {/* [PR-M, 2026-10-18] */}
         {resolutionReceipt && <ComponentResolutionReceiptNotice receipt={resolutionReceipt} onDismiss={() => setResolutionReceipt(null)} />}
         {replacementReceipt && (
           <div className="fixed bottom-28 right-4 z-50 max-w-xs rounded border border-teal-800/60 bg-zinc-900/95 px-3 py-2 text-[11px] text-teal-300 shadow-sm">

@@ -89,7 +89,10 @@ describe("[PR-J3] 2. the sheet lens wiring", () => {
     // the lens is used for nothing else. [PR-J4, 2026-10-23] pin move: + activeSheetId, read by the Tidy guard / request body (the sheet to
     // tidy, OD-258 item 5) and by the simulate body (the probe sheet, OD-258 item 1) - both iff the project has sheets
     const uses = new Set([...page.matchAll(/sheetLens\.(\w+)/g)].map((match) => match[1]));
-    expect([...uses].sort()).toEqual(["activation", "activeSheetId", "components", "editorProps", "graph", "kicadComponents", "legacy", "navigatorProps", "netLabels", "wires"]);
+    // [PR-J5, 2026-10-23] pin move: + controller - the assistant's sealed organise proposal is applied through the Sheets controller's ONE
+    // organise transaction (applyOrganizeProposal; OD-259 items 4-5), the same code path as the navigator's Organize into sheets
+    expect([...uses].sort()).toEqual(["activation", "activeSheetId", "components", "controller", "editorProps", "graph", "kicadComponents", "legacy", "navigatorProps", "netLabels", "wires"]);
+    expect(count(page, "sheetLens.controller")).toBe(2); // the apply and its useCallback dependency
     expect(count(page, "sheetLens.activeSheetId")).toBe(2); // the tidy sheet (one read, carried into the request body), the probe sheet
   });
 
@@ -107,7 +110,8 @@ describe("[PR-J3] 2. the sheet lens wiring", () => {
     expect(count(page, "<NetLabelGlyph")).toBe(3); // the label map's plain branch, the pending label ghost and the palette preview, as before
     // the Go-to submit sequence control-registry.ts pins (view.schematic-goto) is byte-identical
     expect(page).toContain('onSubmit={(e) => { e.preventDefault(); const ref = schematicGoTo.trim(); if (ref) void goToSchematicComponent(ref); }}');
-    for (const name of ["useSchematicSheetLens", "SheetNavigator", "ScopedNetLabelGlyph", "flatReplacementRefusal, multiSheetReplaceRefusal", "type { SheetCamera }"]) expect(page, name).toContain(`import ${name.startsWith("type") ? name : `{ ${name} }`} from`);
+    // [PR-J5, 2026-10-23] pin move: the guard import also carries the advisory and the refusal-with-findings (OD-259 item 2)
+    for (const name of ["useSchematicSheetLens", "SheetNavigator", "ScopedNetLabelGlyph", "flatReplacementRefusal, flatReplacementRefusalWithFindings, multiSheetReplaceAdvisory, multiSheetReplaceRefusal", "type { SheetCamera }"]) expect(page, name).toContain(`import ${name.startsWith("type") ? name : `{ ${name} }`} from`);
   });
 });
 
@@ -141,16 +145,19 @@ describe("[PR-J3] 3. the whole-project consumers read the whole state regardless
   });
 });
 
-describe("[PR-J3] 4. the AI replace-result guard sits at the Build start, the edit request, Tidy, the offer and the final apply", () => {
+describe("[PR-J3] 4. the AI replace-result guard sits at the edit request, Tidy, the offer and the final apply; the Build start advises", () => {
   it("call sites and their order", () => {
-    expect(count(page, "multiSheetReplaceRefusal(")).toBe(2); // [PR-J4, 2026-10-23] pin move: was 3 - Tidy's flat-replacement refusal became the per-sheet guard below (OD-258 item 5)
+    expect(count(page, "multiSheetReplaceRefusal(")).toBe(1); // [PR-J4, 2026-10-23] pin move: was 3 - Tidy's flat-replacement refusal became the per-sheet guard below (OD-258 item 5); [PR-J5, 2026-10-23] pin move: was 2 - the Build start's refusal became the advisory below (OD-259 item 2)
     expect(count(page, "flatReplacementRefusal(")).toBe(2);
     const at = (literal: string): number => { const index = page.indexOf(literal); expect(index, literal).toBeGreaterThan(0); expect(page.indexOf(literal, index + 1), `${literal} once`).toBe(-1); return index; };
-    // Build: refused before the activity log and before any task start (no task, no spend)
-    const buildGuard = at("const sheetRefusal = multiSheetReplaceRefusal(gestureCoordinatorRef.current!.authoritativeState()); if (sheetRefusal !== null) { setScopedGenError(projectScopeRegistryRef.current!.capture(), sheetRefusal, 12000); return; }");
+    // [PR-J5, 2026-10-23] pin move (OD-259 item 2, revising OD-257 item 3): the Build start no longer refuses a multi-sheet base - a planned
+    // result lays out as sheets and replaces them as one undoable transaction (OD-255 item 9) - it ADVISES, as a step of the entry, before
+    // any task start; the flat-result refusal stays at the offer and the final apply below
+    const buildGuard = at("const sheetAdvisory = multiSheetReplaceAdvisory(gestureCoordinatorRef.current!.authoritativeState());");
     expect(buildGuard).toBeGreaterThan(page.indexOf("  async function handleGenerateSchematic(prompt: string) {"));
-    expect(buildGuard).toBeLessThan(at('const logId = startActivityLog("Generating schematic", "Preparing request", prompt);'));
+    expect(buildGuard).toBeLessThan(at('const logId = startActivityLog("Generating schematic", "Preparing request", prompt); if (sheetAdvisory !== null) appendActivityStep(logId, sheetAdvisory, "done");'));
     expect(buildGuard).toBeLessThan(at("const started = await startGenerationTask({ scope, clientRequestId: newGenerationClientRequestId(), prompt, provider: aiBrainRef.current,"));
+    expect(count(page, "multiSheetReplaceAdvisory(")).toBe(1);
     // edit: before /api/schematic/edit
     const editGuard = at("const editRefusal = multiSheetReplaceRefusal(snapshot); if (editRefusal !== null) { setScopedGenError(scope, editRefusal, 12000); return; }");
     expect(editGuard).toBeLessThan(at('const res = await fetch("/api/schematic/edit", {'));

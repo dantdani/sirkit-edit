@@ -245,6 +245,7 @@ export function viewCommandFor(toolId: string, args: Record<string, unknown>): {
         "zoom-to": { commandId: `${prefix}.zoom-to`, payload: prefix === "pcb" ? { pxPerMm: args.scale } : { zoom: args.scale } },
         "pan-to": { commandId: `${prefix}.pan-to`, payload: { target: target(args) } },
         focus: { commandId: `${prefix}.focus`, payload: { target: target(args) } },
+        "open-sheet": prefix === "schematic" ? { commandId: "schematic.open-sheet", payload: { sheet: args.sheet } } : null, // [PR-J5, 2026-10-23] a schematic sheet by id, unique name or path (runbook J.6.5)
       };
       const hit = map[action];
       return hit ? { editor, ...hit } : null;

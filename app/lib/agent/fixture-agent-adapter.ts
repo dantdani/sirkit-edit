@@ -418,7 +418,7 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
   }
 
   async start(input: Parameters<ProviderAgentAdapter["start"]>[0]): Promise<AgentStep> {
-    const roleStep = await scriptedRoleStart(this, input); if (roleStep) return roleStep; this.planned = planFixtureInstruction(input.userMessage); const resolutionStep = scriptedResolutionStart(this, input); if (resolutionStep) return resolutionStep; const generationStep = scriptedGenerationTaskStart(this, input); if (generationStep) return generationStep; /* [PR-L, 2026-10-18] the durable generation task's scripts (appended below), in place on this line */ // [B21 F] a specialist run or the follow-up turn answers from the per-role script (D21-40), appended below; [PR-M, 2026-10-18] the resolution script (appended below), in place on this line
+    const roleStep = await scriptedRoleStart(this, input); if (roleStep) return roleStep; this.planned = planFixtureInstruction(input.userMessage); const resolutionStep = scriptedResolutionStart(this, input); if (resolutionStep) return resolutionStep; const generationStep = scriptedGenerationTaskStart(this, input); if (generationStep) return generationStep; const organizeStep = scriptedOrganizeStart(this, input); if (organizeStep) return organizeStep; /* [PR-J5, 2026-10-23] the organise proposal's script (appended below), in place on this line */ /* [PR-L, 2026-10-18] the durable generation task's scripts (appended below), in place on this line */ // [B21 F] a specialist run or the follow-up turn answers from the per-role script (D21-40), appended below; [PR-M, 2026-10-18] the resolution script (appended below), in place on this line
     if (this.planned.kind === "reply") return this.step({ text: this.planned.text });
     if (this.planned.kind === "select-then") {
       this.awaitingSelection = true;
@@ -459,7 +459,7 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
   }
 
   async continueWith(input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): Promise<AgentStep> {
-    const roleStep = scriptedRoleContinue(this, input); if (roleStep) return roleStep; const planned = this.planned; const resolutionNext = scriptedResolutionContinue(this, input); if (resolutionNext) return resolutionNext; const generationNext = await scriptedGenerationTaskContinue(this, input); if (generationNext) return generationNext; /* [PR-L, 2026-10-18] the durable generation task's scripts, in place on this line */ // [B21 F] a specialist run continues on its per-role script; [PR-M, 2026-10-18] a resolution run continues on its script (appended below)
+    const roleStep = scriptedRoleContinue(this, input); if (roleStep) return roleStep; const planned = this.planned; const resolutionNext = scriptedResolutionContinue(this, input); if (resolutionNext) return resolutionNext; const generationNext = await scriptedGenerationTaskContinue(this, input); if (generationNext) return generationNext; const organizeNext = scriptedOrganizeContinue(this, input); if (organizeNext) return organizeNext; /* [PR-J5, 2026-10-23] the organise script's continue, in place on this line */ /* [PR-L, 2026-10-18] the durable generation task's scripts, in place on this line */ // [B21 F] a specialist run continues on its per-role script; [PR-M, 2026-10-18] a resolution run continues on its script (appended below)
     const outputText = input.results[0]?.outputText;
     if (this.awaitingBoard && planned.kind === "board-then") {
       this.awaitingBoard = false;
@@ -941,4 +941,87 @@ async function scriptedGenerationTaskContinue(adapter: FixtureAgentAdapter, inpu
   return roleStep(adapter, { text: status === "control_requested"
     ? "(fixture agent) the control request is on a chip for you to confirm - nothing has happened to the design yet."
     : `(fixture agent) the control request answered ${status}. Nothing was changed.` });
+}
+
+// ─── [PR-J5, 2026-10-23] The organise turn (runbook J.6 items 1, 4 and 6; OD-259 item 4) ─────────────────────────────────────────
+// Appended on purpose (as PR-L and PR-M were): constants read only when a run starts and hoisted function declarations, so no line
+// cited above moves - the two in-place hooks sit on the start and continue lines after their existing statements. Still never a
+// model: one whole sentence becomes the calls a model would make, through the REAL loop, gateway, injected catalog port and seal -
+//   "Organize this schematic into subsystem sheets." (also "this sheet" / "this design" / "this circuit") ->
+//     sirkit.schematic.inspect {} (the whole-project read: which catalog parts the overview holds), then
+//     sirkit.schematic.propose-sheet-organization with the fixture four-motor drone's DEFAULT grouping - the groups J4's planner proposes
+//     for the flat drone without hints (app/lib/schematic/sheet-organization.ts proposeSheetGroups; j5-organize-proposal-tool pins the
+//     two equal) - when the inspection shows every part of that grouping; any other schematic is answered in words (nothing is called).
+// The sealed proposal rides its own event to the page's review card; only the human applies it (one schematic.move-to-sheet transaction).
+
+const ORGANIZE_SHEETS = /^(?:please\s+)?organi[sz]e\s+this\s+(?:schematic|sheet|design|circuit)\s+into\s+(?:subsystem\s+)?sheets$/i;
+
+/** The J4 planner's default grouping of the fixture drone (its proposal without hints; names from the hubs' values). */
+export const FIXTURE_DRONE_ORGANIZE_GROUPS: ReadonlyArray<{ name: string; members: readonly string[] }> = Object.freeze([
+  { name: "MOTOR x4 (J2-J5)", members: Object.freeze(["C1", "C3", "D1", "D2", "D3", "D4", "J1", "J2", "J3", "J4", "J5", "Q1", "Q2", "Q3", "Q4", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8"]) },
+  { name: "MIC5504-3.3YM5 (U1)", members: Object.freeze(["C2", "C4", "C5", "C6", "C8", "C9", "C10", "U1"]) },
+  { name: "ATmega328P-AU (U2)", members: Object.freeze(["C7", "D5", "J6", "J7", "R9", "R10", "U2"]) },
+  { name: "LSM6DS3TR-C (U3)", members: Object.freeze(["R11", "R12", "U3"]) },
+]);
+
+interface OrganizeRun { stage: "inspect" | "propose"; seq: number }
+const ORGANIZE_RUNS = new WeakMap<FixtureAgentAdapter, OrganizeRun>();
+
+/** [PR-J5] Whether a whole instruction is the organise sentence (exported for the harness's unit proofs). */
+export function planFixtureOrganize(message: string): boolean {
+  return ORGANIZE_SHEETS.test(message.replace(/\s+/g, " ").trim().replace(/[.!]+$/, "").trim());
+}
+
+function organizeCall(adapter: FixtureAgentAdapter, run: OrganizeRun, tools: readonly ProviderToolDeclaration[], toolId: string, args: Record<string, unknown>): AgentStep {
+  const declaration = tools.find((tool) => tool.toolId === toolId);
+  if (!declaration) { ORGANIZE_RUNS.delete(adapter); return roleStep(adapter, { text: `(fixture agent) ${toolId} is not available to this run; nothing was done.` }); }
+  run.seq += 1;
+  return roleStep(adapter, { toolCalls: [{ callId: `fx-organize-${run.seq}`, providerName: declaration.providerName, argumentsText: JSON.stringify(args) }] });
+}
+
+/** [PR-J5] The start hook: the organise sentence reads the schematic first; anything else is null (the scripts above answer). */
+function scriptedOrganizeStart(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["start"]>[0]): AgentStep | null {
+  ORGANIZE_RUNS.delete(adapter);
+  if (!planFixtureOrganize(input.userMessage)) return null;
+  const run: OrganizeRun = { stage: "inspect", seq: 0 };
+  ORGANIZE_RUNS.set(adapter, run);
+  return organizeCall(adapter, run, input.tools, "sirkit.schematic.inspect", {});
+}
+
+/** [PR-J5] What the scripted agent reads out of the sealed organisation's result (the same fields a model would report). */
+export function organizeProposalFacts(outputText: string | undefined): { status: string; sheets: Array<{ name: string; members: number }>; interfaces: string[]; unassigned: string[]; checks: number; blockers: string[] } {
+  try {
+    const parsed = JSON.parse(outputText ?? "") as { status?: unknown; sheets?: Array<{ name?: unknown; members?: unknown[] }>; interfaces?: Array<{ port?: unknown }>; unassigned?: unknown[]; checkThese?: unknown[]; blockers?: Array<{ detail?: unknown }> };
+    return {
+      status: typeof parsed.status === "string" ? parsed.status : "an unparsed result",
+      sheets: Array.isArray(parsed.sheets) ? parsed.sheets.map((sheet) => ({ name: typeof sheet.name === "string" ? sheet.name : "?", members: Array.isArray(sheet.members) ? sheet.members.length : 0 })) : [],
+      interfaces: Array.isArray(parsed.interfaces) ? parsed.interfaces.map((item) => (typeof item.port === "string" ? item.port : "?")) : [],
+      unassigned: Array.isArray(parsed.unassigned) ? parsed.unassigned.filter((ref): ref is string => typeof ref === "string") : [],
+      checks: Array.isArray(parsed.checkThese) ? parsed.checkThese.length : 0,
+      blockers: Array.isArray(parsed.blockers) ? parsed.blockers.map((blocker) => (typeof blocker.detail === "string" ? blocker.detail : "")).filter((detail) => detail.length > 0) : [],
+    };
+  } catch {
+    return { status: "an unparsed result", sheets: [], interfaces: [], unassigned: [], checks: 0, blockers: [] };
+  }
+}
+
+/** [PR-J5] The continue hook: after the read, the proposal (when the overview is the fixture drone); after the proposal, the reply. */
+function scriptedOrganizeContinue(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): AgentStep | null {
+  const run = ORGANIZE_RUNS.get(adapter);
+  if (!run) return null;
+  const outputText = input.results[0]?.outputText;
+  if (run.stage === "inspect") {
+    const refs = new Set(schematicComponentFacts(outputText).map((component) => component.displayRef.toUpperCase()));
+    const missing = FIXTURE_DRONE_ORGANIZE_GROUPS.flatMap((group) => group.members).filter((ref) => !refs.has(ref));
+    if (refs.size === 0 || missing.length > 0) {
+      ORGANIZE_RUNS.delete(adapter);
+      return roleStep(adapter, { text: `(fixture agent) the schematic read answered ${statusOf(outputText)}; this schematic is not the fixture four-motor drone (${refs.size === 0 ? "no parts were read" : `${missing.slice(0, 6).join(", ")} ${missing.length === 1 ? "is" : "are"} not on it`}), so no organise script applies. Nothing was changed.` });
+    }
+    run.stage = "propose";
+    return organizeCall(adapter, run, input.tools, "sirkit.schematic.propose-sheet-organization", { groups: FIXTURE_DRONE_ORGANIZE_GROUPS.map((group) => ({ name: group.name, members: [...group.members] })) });
+  }
+  ORGANIZE_RUNS.delete(adapter);
+  const facts = organizeProposalFacts(outputText);
+  if (facts.status !== "proposal_sealed") return roleStep(adapter, { text: `(fixture agent) the organisation was refused (${facts.status})${facts.blockers.length > 0 ? `: ${facts.blockers[0]}` : ""}. Nothing was changed.` });
+  return roleStep(adapter, { text: `(fixture agent) the organisation is sealed for your review: ${facts.sheets.length} subsystem sheet(s) - ${facts.sheets.map((sheet) => `${sheet.name} (${sheet.members} part${sheet.members === 1 ? "" : "s"})`).join(", ")}; ${facts.interfaces.length} interface port(s)${facts.interfaces.length > 0 ? ` (${[...new Set(facts.interfaces)].join(", ")})` : ""}; ${facts.unassigned.length === 0 ? "every part is assigned" : `${facts.unassigned.join(", ")} stay on the overview`}${facts.checks > 0 ? `; ${facts.checks} placement(s) to check` : ""}. Nothing has been changed: approve it on the review card to create the sheets as one undoable step.` });
 }

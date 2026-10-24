@@ -41,7 +41,7 @@ import { compareCodePoints } from "@/app/lib/stable-compare";
 import { ROOT_SHEET_ID, normalizeComponentRole, type KicadComponentInstance, type SchematicState } from "@/lib/schematic-types";
 import { resolveProjectConnectivity, type ConnectivityDiagnostic, type PartPinsLookup, type ProjectNet } from "./project-connectivity";
 import { attachedSelection, freeBlockSlot, type PartPinsSource } from "./sheet-lens";
-import { planMoveToSheet, type MoveCrossing, type MoveEntityRef, type MoveRefusalCode } from "./sheet-operations";
+import { PORT_NAME_PATTERN, planMoveToSheet, type MoveCrossing, type MoveEntityRef, type MoveRefusalCode } from "./sheet-operations"; // [PR-J5, 2026-10-23] + PORT_NAME_PATTERN (interfaceNames)
 import { assertWholeProject, sheetOf, sheetsOf } from "./sheets";
 
 /** The part lookup the planner needs: pins (connectivity) and the catalog category (regulators are hubs). The parts cache
@@ -365,13 +365,20 @@ function groupEntities(state: SchematicState, refs: readonly string[], getPart: 
  * Plan organising `groups` into new child sheets of `sourceSheetId` as ONE schematic.move-to-sheet transaction (see the module header).
  * Pure and deterministic: the same input yields the same operations, ids included.
  */
-export function planOrganizeIntoSheets(state: SchematicState, groups: readonly OrganizeGroupInput[], getPart: OrganizePartSource, options: { sourceSheetId?: string; rootName?: string; operationIdPrefix?: string } = {}): OrganizePlan {
+export function planOrganizeIntoSheets(state: SchematicState, groups: readonly OrganizeGroupInput[], getPart: OrganizePartSource, options: { sourceSheetId?: string; rootName?: string; operationIdPrefix?: string; portNames?: Readonly<Record<string, string>> } = {}): OrganizePlan {
   assertWholeProject(state, "organize-sheets");
   const sourceSheetId = options.sourceSheetId ?? ROOT_SHEET_ID;
   const prefix = options.operationIdPrefix ?? "organize";
   const refuse = (code: OrganizeRefusalCode, message: string, step: { name: string; refs: string[] } | null = null, diagnostics: ConnectivityDiagnostic[] = []): OrganizePlan => ({ ok: false, code, message, step, diagnostics });
   const problem = validateOrganizeGroups(state, groups, sourceSheetId);
   if (problem !== null) return refuse("ORGANIZE_GROUPS_INVALID", `${problem} Nothing was changed.`);
+  // [PR-J5, 2026-10-23] OD-259 item 4: the caller's names for unnamed crossings, keyed by the SIG<n> the chain mints (the organise
+  // proposal reports them); each key must name a port the chain actually mints, each value is validated by planMoveToSheet
+  const portNames = options.portNames ?? {};
+  for (const [key, value] of Object.entries(portNames)) {
+    if (!/^SIG\d{1,4}$/.test(key)) return refuse("ORGANIZE_GROUPS_INVALID", `interfaceNames keys name the SIG<n> ports of unnamed crossing nets ("${key.slice(0, 40)}" is not one). Nothing was changed.`);
+    if (typeof value !== "string" || !PORT_NAME_PATTERN.test(value)) return refuse("ORGANIZE_GROUPS_INVALID", `The interface name for ${key} must be 1-64 letters, digits, "_", "+", "-" or ".". Nothing was changed.`);
+  }
   const lookup = lookupOf(getPart);
   const pinsSource: PartPinsSource = (partId) => getPart(partId) ?? null;
   const before = resolveProjectConnectivity(state, lookup);
@@ -385,7 +392,7 @@ export function planOrganizeIntoSheets(state: SchematicState, groups: readonly O
     const entities = groupEntities(current, group.refs, pinsSource);
     if (typeof entities === "string") return refuse("ORGANIZE_GROUPS_INVALID", `${entities} Nothing was changed.`, { name: group.name, refs: [...group.refs] });
     const sheetId = organizeSheetId(group.refs);
-    const plan = planMoveToSheet(current, { entities, target: { newSheet: { id: sheetId, name: group.name.trim(), block: freeBlockSlot(current, sourceSheetId) } }, rootName: options.rootName ?? "Overview", operationIdPrefix: `${prefix}:${index}` }, lookup);
+    const plan = planMoveToSheet(current, { entities, target: { newSheet: { id: sheetId, name: group.name.trim(), block: freeBlockSlot(current, sourceSheetId) } }, rootName: options.rootName ?? "Overview", operationIdPrefix: `${prefix}:${index}`, ...(options.portNames ? { portNames: options.portNames } : {}) }, lookup); // [PR-J5, 2026-10-23] + portNames
     // any refused step refuses the whole plan: an ambiguous or non-equivalent split never changes the design (J.3 item 4)
     if (!plan.ok) return refuse(plan.code, `Group "${group.name}" (${group.refs.join(", ")}): ${plan.message}`, { name: group.name, refs: [...group.refs] }, plan.diagnostics);
     operations.push(...plan.operations);
@@ -393,6 +400,10 @@ export function planOrganizeIntoSheets(state: SchematicState, groups: readonly O
     steps.push({ group: { name: group.name.trim(), refs: [...group.refs] }, sheetId, moved: plan.preview.moved, crossings: plan.preview.crossings, renamedNets: plan.preview.renamedNets });
     current = plan.after;
   }
+  // [PR-J5, 2026-10-23] a supplied interface name that no step consumed names a port the plan does not mint: refused, nothing changed
+  const consumed = new Set(steps.flatMap((step) => step.crossings.flatMap((crossing) => (crossing.renamedFrom !== undefined ? [crossing.renamedFrom] : []))));
+  const unconsumed = Object.keys(portNames).filter((key) => !consumed.has(key)).sort(compareCodePoints);
+  if (unconsumed.length > 0) return refuse("ORGANIZE_GROUPS_INVALID", `interfaceNames names ${unconsumed.join(", ")}, but the organisation mints no such port (its unnamed crossings are ${[...new Set(steps.flatMap((step) => step.crossings.filter((crossing) => crossing.netName === null).map((crossing) => crossing.renamedFrom ?? crossing.port.name)))].sort(compareCodePoints).join(", ") || "none"}). Nothing was changed.`);
 
   // the whole chain as ONE batch through the executor's own code: its result is the chain's, and the partition is the original's
   let batched: SchematicState;

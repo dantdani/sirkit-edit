@@ -4,8 +4,9 @@
  * same stored conversation and gets the same answer):
  *
  *  - the planner call (`toolChoice` submit_plan): a request whose features select a planned recipe (the drone) gets `submit_plan` with
- *    its blocks, shared nets, rationale and the disclosed `assumptions` and `coverage` (optional plan fields); any other request - and a
- *    block-split prompt ("Block: ...") - gets no plan, so it is designed as one circuit;
+ *    its blocks, shared nets, rationale and the disclosed `assumptions` and `coverage` (optional plan fields) - and, [PR-J5, 2026-10-23]
+ *    OD-259 item 6, each block's typed `interfaces` (a fixture-only plan field the live prompt does not ask for); any other request -
+ *    and a block-split prompt ("Block: ...") - gets no plan, so it is designed as one circuit;
  *  - a design turn: the design is the block's recipe (a "Block: <name>" message, its motor count read from the PWMn shared nets) or the
  *    single-design recipe the request selects. The engine rebuilds its OWN earlier tool calls (ids `fixture-<design>-t<turn>-search-
  *    <role>-<alternative>`) and the tool results it was given, then: every unsearched role's first query in ONE turn; for each role the
@@ -216,7 +217,8 @@ export function planTurn(prompt: string): ScriptedTurn {
   const recipe = selectRecipe(request);
   if (recipe === null || recipe.kind !== "planned") return textTurn("");
   const { plan } = recipe;
-  return { text: "", toolCalls: [{ id: "fixture-plan", name: "submit_plan", input: { blocks: plan.blocks.map((block) => ({ name: block.name, brief: block.brief, sharedNets: [...block.sharedNets] })), rationale: plan.rationale, assumptions: [...plan.assumptions], coverage: [...plan.coverage] } }], stopReason: "tool_use" };
+  // [PR-J5, 2026-10-23] OD-259 item 6: a block's typed interfaces ride in the plan as a fixture-only field (copied, never shared by reference)
+  return { text: "", toolCalls: [{ id: "fixture-plan", name: "submit_plan", input: { blocks: plan.blocks.map((block) => ({ name: block.name, brief: block.brief, sharedNets: [...block.sharedNets], ...(block.interfaces ? { interfaces: block.interfaces.map((entry) => ({ ...entry })) } : {}) })), rationale: plan.rationale, assumptions: [...plan.assumptions], coverage: [...plan.coverage] } }], stopReason: "tool_use" };
 }
 
 /** The design a build conversation works on: a planned drone block, or the request's single-design recipe; or the text it declines with. */

@@ -36,6 +36,7 @@ import type { ViewSessionBridge } from "@/app/lib/agent/view-session-bridge";
 import { applySchematicOperationsToCanonical } from "@/app/lib/engineering/operations";
 import type { ProjectAsyncScope } from "@/app/lib/engineering/project-async-scope";
 import { fromCanonicalSchematic, schematicStateDigest, toCanonicalSchematic, type CanonicalSchematic } from "@/app/lib/engineering/schematic-model";
+import type { SchematicCanonicalMark } from "@/app/lib/engineering/schematic-projection"; // [PR-J5, 2026-10-23] the sealed head mark an organise proposal pins its transaction to
 import type { EngineeringOperation } from "@/app/lib/engineering/types";
 import { randomGenerationUuid } from "@/app/lib/project/generation-task-client";
 import { emptySheetView, pruneSheetView, readSheetView, resolveStoredActiveSheet, withActiveSheet, withSheetCamera, writeSheetView, type SheetCamera, type SheetViewRecord, type StorageLike } from "@/app/lib/project/sheet-navigation-store";
@@ -66,12 +67,13 @@ import { createSheetOperation, planMoveToSheet, planRailLabelNormalisation, rena
 import { sheetOf, sheetsOf } from "@/app/lib/schematic/sheets";
 import { ROOT_SHEET_ID, type SchematicState, type SheetPortDirection } from "@/lib/schematic-types";
 
-/** app/page.tsx `runSchematicCommand`: the project-scoped FIFO canonical command runner. */
+/** app/page.tsx `runSchematicCommand`: the project-scoped FIFO canonical command runner.
+ *  [PR-J5, 2026-10-23] + `expectedHeadMark` (the page's runner already takes it: B09.1's sealed-proposal head-mark precondition). */
 export type RunSchematicCommand = (
   label: string,
   commandId: string,
   buildOperations: (schematic: CanonicalSchematic) => EngineeringOperation[],
-  options?: { expectedBaseDigest?: string; scope?: ProjectAsyncScope },
+  options?: { expectedBaseDigest?: string; expectedHeadMark?: SchematicCanonicalMark; scope?: ProjectAsyncScope },
 ) => Promise<{ ok: boolean; state?: SchematicState }>;
 
 export interface SheetControllerInputs {
@@ -159,6 +161,8 @@ export interface SheetNavigatorApi {
   // [PR-J4, 2026-10-23] Organize into sheets and the rail-named label normalisation (OD-258 items 3, 4)
   planOrganize(input: { sourceSheetId?: string }): PlannedOrganize;
   applyOrganize(planned: PlannedOrganize): Promise<SheetCommandOutcome>;
+  /** [PR-J5, 2026-10-23] the assistant's sealed organise proposal through the SAME transaction (the page's review card calls it). */
+  applyOrganizeProposal(input: { label: string; expectedBaseDigest: string; expectedHeadMark: SchematicCanonicalMark; replan: (canonical: CanonicalSchematic) => { ok: true; operations: EngineeringOperation[] } | { ok: false; detail: string } }): Promise<SheetCommandOutcome>;
   planNormalise(): PlannedNormalisation;
   applyNormalise(planned: PlannedNormalisation): Promise<SheetCommandOutcome>;
   /** Why this single-sheet design cannot take a first sheet as it is (the connection rules would change its circuit), or null. */
@@ -653,26 +657,43 @@ export class SheetNavigationController {
    *  inside the serialized queue, refused unless the previewed partition digest results (nothing is applied otherwise). */
   readonly applyOrganize = async (planned: PlannedOrganize): Promise<SheetCommandOutcome> => {
     if (!planned.ok) return this.refuse(planned.message);
-    const token = this.token();
-    const scope = this.inputs.captureScope?.() ?? null;
     const getPart = this.inputs.getPart;
     const label = `Organized ${planned.plan.preview.componentCount} part${planned.plan.preview.componentCount === 1 ? "" : "s"} into ${planned.groups.length} sheets`;
     const operationIdPrefix = this.operationPrefix("organize"); // stamped once, here, never during a render
+    return this.runOrganize(label, (canonical) => {
+      const again = planOrganizeIntoSheets(fromCanonicalSchematic(canonical), planned.groups, getPart, { sourceSheetId: planned.sourceSheetId, rootName: "Overview", operationIdPrefix });
+      if (!again.ok) return { ok: false, detail: again.message };
+      if (again.preview.partitionDigest !== planned.plan.preview.partitionDigest) return { ok: false, detail: "The design changed since this organisation was previewed: the connections it would produce differ from the preview. Review it again. Nothing was changed." };
+      return { ok: true, operations: again.operations };
+    }, { expectedBaseDigest: planned.baseDigest });
+  };
+
+  /**
+   * [PR-J5, 2026-10-23] The assistant's SEALED organise proposal (sirkit.sheet-organization-proposal.v1, OD-259 items 4-5), applied through
+   * the SAME transaction as the navigator's Organize into sheets above - `runOrganize`: ONE schematic.move-to-sheet command, re-planned on
+   * the canonical base inside the serialized queue by the caller's `replan` (the proposal module's own re-plan, which refuses unless the
+   * operations digest and the partition digest equal the sealed ones), pinned to the base digest the page verified and the sealed head mark.
+   * Nothing is applied on any refusal; the notice names why.
+   */
+  readonly applyOrganizeProposal = async (input: { label: string; expectedBaseDigest: string; expectedHeadMark: SchematicCanonicalMark; replan: (canonical: CanonicalSchematic) => { ok: true; operations: EngineeringOperation[] } | { ok: false; detail: string } }): Promise<SheetCommandOutcome> =>
+    this.runOrganize(input.label, input.replan, { expectedBaseDigest: input.expectedBaseDigest, expectedHeadMark: input.expectedHeadMark });
+
+  /** The one organise transaction (the navigator's Organize and the assistant's proposal alike): `schematic.move-to-sheet`, the operations
+   *  built INSIDE the serialized queue by `build` over the canonical base, the B07.4 scope, a refusal as the notice. */
+  private async runOrganize(label: string, build: (canonical: CanonicalSchematic) => { ok: true; operations: EngineeringOperation[] } | { ok: false; detail: string }, pins: { expectedBaseDigest: string; expectedHeadMark?: SchematicCanonicalMark }): Promise<SheetCommandOutcome> {
+    const token = this.token();
+    const scope = this.inputs.captureScope?.() ?? null;
     let refusal: string | null = null;
     const result = await this.inputs.runSchematicCommand(label, "schematic.move-to-sheet", (canonical) => {
-      const again = planOrganizeIntoSheets(fromCanonicalSchematic(canonical), planned.groups, getPart, { sourceSheetId: planned.sourceSheetId, rootName: "Overview", operationIdPrefix });
-      if (!again.ok) { refusal = again.message; throw new Error(again.message); }
-      if (again.preview.partitionDigest !== planned.plan.preview.partitionDigest) {
-        refusal = "The design changed since this organisation was previewed: the connections it would produce differ from the preview. Review it again. Nothing was changed.";
-        throw new Error(refusal);
-      }
-      return again.operations;
-    }, { expectedBaseDigest: planned.baseDigest, ...(scope ? { scope } : {}) });
+      const built = build(canonical);
+      if (!built.ok) { refusal = built.detail; throw new Error(built.detail); }
+      return built.operations;
+    }, { expectedBaseDigest: pins.expectedBaseDigest, ...(pins.expectedHeadMark !== undefined ? { expectedHeadMark: pins.expectedHeadMark } : {}), ...(scope ? { scope } : {}) });
     if (result.ok) return { ok: true };
     const message = refusal ?? `"${label}" was not applied. Nothing was changed.`;
     if (this.isCurrent(token)) this.setNotice(message);
     return { ok: false, message };
-  };
+  }
 
   // ── [PR-J4, 2026-10-23] the rail-named label normalisation (schematic.sheet-structure; OD-258 item 3) ───────────────────
 
@@ -739,6 +760,7 @@ export class SheetNavigationController {
     followDestination: this.followDestination,
     planOrganize: this.planOrganize,
     applyOrganize: this.applyOrganize,
+    applyOrganizeProposal: this.applyOrganizeProposal, // [PR-J5, 2026-10-23]
     planNormalise: this.planNormalise,
     applyNormalise: this.applyNormalise,
     ruleChange: this.ruleChange,

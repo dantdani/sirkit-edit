@@ -36,7 +36,7 @@ import type { FabPreset } from "../pcb/fab/types";
 import type { PcbNetlist } from "../pcb/netlist-bridge";
 import { pcbRevisionId } from "../pcb/revision";
 import { inspectComponentAuthority, type ComponentAuthorityRecord, type ComponentCatalogCandidate } from "./component-authority";
-import { inspectSchematicState } from "./schematic-read";
+import { inspectSchematicState, readSchematicInspectOptions } from "./schematic-read"; // [PR-J5, 2026-10-23] + the sheet-aware read's options (sheetId, neighbours)
 import { computeProjectRevision } from "./revision";
 import type { ReadAuthorityResourceEnvelope, ReadResourceKind } from "./resource-envelopes";
 import { canonicalJsonValue, engineeringDigest } from "./stable";
@@ -144,7 +144,7 @@ export const ACTIVATED_READ_BINDINGS: readonly ActivatedReadBinding[] = Object.f
     // B09 — the canonical-state envelope carries the authoritative schematic
     // snapshot as opaque JSON (B07.3); the pure accessor projects it
     // deterministically and fails closed on malformed shapes.
-    invoke: (_args, resources) => ({ report: toPlainJson(inspectSchematicState(resources.canonicalState.schematic) as unknown as Record<string, unknown>) }),
+    invoke: (args, resources) => ({ report: toPlainJson(inspectSchematicState(resources.canonicalState.schematic, readSchematicInspectOptions(args)) as unknown as Record<string, unknown>) }), // [PR-J5, 2026-10-23] the validated args reach the read (sheetId, neighbours); without them the output is 1.1.0's
   },
   {
     bindingId: "read.pcb-revision", bindingVersion: "1.1.0", kind: "read",
