@@ -21,7 +21,8 @@ import { J4_FLAT_PROJECT_FILE, J4_FLAT_PROJECT_ID, J4_FLAT_PROJECT_NAME, flatDro
 import type { SchematicState } from "../lib/schematic-types";
 import { actAs, expectHydrated, installDeterministicBrowser, reloadAs } from "./fixture-journey";
 
-test.describe.configure({ mode: "serial" });
+// the two cases are independent fresh browsers (own uuid namespaces, own projects): a failure of the first must not hide the second
+test.describe.configure({ mode: "default" });
 test.setTimeout(600_000);
 
 const DIMMER_REQUEST = "Design a 5 V LED dimmer: a 555 timer PWM with a 10k potentiometer setting the brightness, switching the LED through an N-channel MOSFET.";

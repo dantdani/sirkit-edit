@@ -16,7 +16,9 @@
  *
  * Consumed by the fixture agent adapter's organise turn (builder A): after `sirkit.schematic.inspect` it reads the reference designators
  * the inspection returned and takes `fixtureSheetOrganizationFor(refs)` - the matching design's groups, or null (no proposal is invented
- * for a schematic it does not know). Nothing here applies anything: the proposal is sealed by the tool and applied only by the user's
+ * for a schematic it does not know); a run with no schematic read (no PCB board yet, so no canonical-state resource) tries
+ * `fixtureSheetOrganizationCandidates()` in order through the tool, which refuses every proposal naming a part the schematic does not
+ * hold; `fixtureSheetOrganizationArgs` spells one as the tool's input. Nothing here applies anything: the proposal is sealed by the tool and applied only by the user's
  * Approve (J.6.6 "structural changes remain properly reviewed canonical mutations").
  */
 
@@ -94,11 +96,28 @@ const sameSet = (a: readonly string[], b: readonly string[]): boolean => { const
  * the motor count whose parts these are, or null when the parts are not a fixture design's (the scripted agent then proposes nothing).
  */
 export function fixtureSheetOrganizationFor(refs: readonly string[]): FixtureSheetOrganization | null {
-  if (sameSet(refs, LED_DIMMER_SHEET_GROUPS.flatMap((group) => group.refs))) return { key: "led-dimmer", motors: null, groups: LED_DIMMER_SHEET_GROUPS, rationale: LED_DIMMER_SHEET_RATIONALE, crossings: LED_DIMMER_CROSSINGS };
-  for (let motors = 1; motors <= DRONE_SHEET_GROUPS_MAX_MOTORS; motors += 1) {
-    const groups = droneSheetGroups(motors)!;
+  return fixtureSheetOrganizationCandidates().find((organization) => sameSet(refs, organization.groups.flatMap((group) => group.refs))) ?? null;
+}
+
+/**
+ * [PR-J5, 2026-10-23] Every fixture organisation, in the order a scripted agent tries them when the run has NO schematic read (a
+ * schematic-only page: `sirkit.schematic.inspect` needs the canonical-state resource, which the chat context claims only with a PCB
+ * board): the dimmer, then the drone from four motors down. The organise tool resolves every member by name and refuses a proposal
+ * naming a part the schematic does not hold, so the first proposal the tool SEALS is the design's own - no other order is unambiguous
+ * (a drone's groups for k motors name only parts a drone with more motors also holds; the descending order refuses the larger ones
+ * first). With a read, `fixtureSheetOrganizationFor(refs)` picks the organisation directly.
+ */
+export function fixtureSheetOrganizationCandidates(): FixtureSheetOrganization[] {
+  const drones = Array.from({ length: DRONE_SHEET_GROUPS_MAX_MOTORS }, (_, index) => DRONE_SHEET_GROUPS_MAX_MOTORS - index).map((motors): FixtureSheetOrganization => ({
     // the drone's crossings are all NAMED nets (PWMn, I2C_SDA, I2C_SCL, IMU_INT1): the planner's ports take those names, nothing to suggest
-    if (sameSet(refs, groups.flatMap((group) => group.refs))) return { key: "drone", motors, groups, rationale: droneSheetRationale(motors), crossings: [] };
-  }
-  return null;
+    key: "drone", motors, groups: droneSheetGroups(motors)!, rationale: droneSheetRationale(motors), crossings: [],
+  }));
+  return [{ key: "led-dimmer", motors: null, groups: LED_DIMMER_SHEET_GROUPS, rationale: LED_DIMMER_SHEET_RATIONALE, crossings: LED_DIMMER_CROSSINGS }, ...drones];
+}
+
+/** [PR-J5, 2026-10-23] The organise tool's arguments for one organisation (`sirkit.schematic.propose-sheet-organization`'s closed input:
+ *  groups of { name, members }; fresh arrays, never the frozen data). No `interfaceNames`: the optional crossing names (OD-259 item 4)
+ *  key the SIG<n> port a FIRST proposal reported, which the agent learns only from that proposal's result. */
+export function fixtureSheetOrganizationArgs(organization: FixtureSheetOrganization): { groups: Array<{ name: string; members: string[] }> } {
+  return { groups: organization.groups.map((group) => ({ name: group.name, members: [...group.refs] })) };
 }

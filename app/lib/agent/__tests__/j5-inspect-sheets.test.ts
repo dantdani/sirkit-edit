@@ -8,6 +8,11 @@
  *  3. the largest sheet set a result may hold (8 sheets, 16 ports each, 128-character nets, 20 findings) is shortened to fit the bound -
  *     findings, per-sheet rails and ports, then trailing interfaces (counted) - and marked `truncated`, every sheet still named.
  * The real gateway and inspection service over a fake task port (no store, no provider, no database, no network).
+ *
+ * [PR-J5, 2026-10-23] extended (runbook J.6.7, OD-259): 4. `sirkit.schematic.inspect` 1.2.0 through the SAME real gateway and its
+ * registered B05 read binding - the validated arguments reach the read (tool-bindings-readonly.ts passes them to
+ * inspectSchematicState): `{}` answers the 1.1.0 bytes over the multi-sheet J3 drone (no sheet key), `{ sheetId }` one sheet's bounded
+ * summary with the tree, `{ sheetId, neighbours: true }` the joined ports; an unknown key, a non-string sheetId and a 1.1.0 call refuse.
  */
 import { describe, expect, it } from "vitest";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
@@ -18,6 +23,8 @@ import type { AgentRunContext, GatewayInvocationOutcome } from "../contracts";
 import type { SchematicGenerationPort } from "../generation-proposals";
 import { GENERATION_TASK_INSPECT_MAX_CHARS, GENERATION_TASK_INSPECT_TOOL_ID } from "../generation-task-tools";
 import { GENERATION_SHEETS_SCHEMA, readGeneratedSheets, type GeneratedSheets } from "../../schematic/generated-sheets";
+import { inspectSchematicState } from "../../engineering/schematic-read"; // [PR-J5, 2026-10-23] case 4
+import { multiSheetDroneFixtureState } from "../../schematic/__tests__/_j3-fixtures";
 
 const registry = sirkitToolRegistry();
 const T0 = Date.parse("2026-10-22T09:00:00.000Z");
@@ -123,3 +130,40 @@ describe("[PR-J J5-1] the task inspection's sheet summary", () => {
     expect(summary.interfaces.length + (summary.interfacesOmitted ?? 0)).toBe(64); // what was left out is counted, never silently cut
   });
 });
+
+describe("[PR-J5] 4. sirkit.schematic.inspect 1.2.0 through the real gateway: the bound read receives the validated arguments", () => {
+  const SHEETED = multiSheetDroneFixtureState();
+  const MARK = { lineageId: "lin1-0123456789abcdef", headSequence: 2, canonicalStateDigest: "eng1-0123456789abcdef" };
+  const read = async (args: Record<string, unknown>, version = "1.2.0"): Promise<GatewayInvocationOutcome> => {
+    const assembly = assembleAgentRunContext({ tenantId: "local", projectId: "proj-j5-inspect", branchId: "main", schematic: SHEETED, board: createEmptyBoard(), schematicHeadMark: MARK });
+    if (!assembly.ok) throw new Error(assembly.reason);
+    return createAgentToolGateway(registry).invoke({ runId: "run-j5-inspect", provider: "openai", toolId: "sirkit.schematic.inspect", version, args, context: assembly.context, timeoutMs: 3_000 });
+  };
+  const report = (outcome: GatewayInvocationOutcome): Record<string, unknown> => {
+    if (outcome.kind !== "read" || !outcome.ok) throw new Error(`expected read, got ${JSON.stringify(outcome).slice(0, 300)}`);
+    return outcome.output.report as Record<string, unknown>;
+  };
+
+  it("{} is the 1.1.0 whole-project read; sheetId is one sheet's summary beside the tree; neighbours fetches the joined ports", async () => {
+    const whole = report(await read({}));
+    expect(whole).toEqual(JSON.parse(JSON.stringify(inspectSchematicState(SHEETED))));
+    expect(whole).not.toHaveProperty("sheets");
+    expect(whole).not.toHaveProperty("sheet");
+    expect((whole.components as unknown[]).length).toBe(41);
+    const imu = report(await read({ sheetId: "sheet-imu" }));
+    expect((imu.components as Array<{ displayRef: string }>).map((item) => item.displayRef).sort()).toEqual(["C10", "C9", "R11", "R12", "U3"]);
+    expect(imu.sheet).toMatchObject({ id: "sheet-imu", name: "IMU" });
+    expect(imu.sheet).not.toHaveProperty("neighbours");
+    expect((imu.sheets as { tree: unknown[] }).tree).toHaveLength(4);
+    const withNeighbours = report(await read({ sheetId: "sheet-imu", neighbours: true }));
+    expect(withNeighbours).toEqual(JSON.parse(JSON.stringify(inspectSchematicState(SHEETED, { sheetId: "sheet-imu", neighbours: true }))));
+    expect(((withNeighbours.sheet as { neighbours: Array<{ port: string }> }).neighbours).map((entry) => entry.port)).toEqual(["I2C_SCL", "I2C_SDA", "IMU_INT1"]);
+  });
+
+  it("the closed input refuses an unknown key and a non-string sheetId; the retired 1.1.0 version is not registered", async () => {
+    expect(await read({ sheetId: "sheet-imu", sheet: "IMU" })).toMatchObject({ kind: "refused", ok: false });
+    expect(await read({ sheetId: 7 })).toMatchObject({ kind: "refused", ok: false });
+    expect(await read({}, "1.1.0")).toMatchObject({ kind: "refused", status: "not_registered" });
+  });
+});
+

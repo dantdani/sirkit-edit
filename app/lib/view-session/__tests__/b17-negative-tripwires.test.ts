@@ -76,7 +76,7 @@ const PAYLOADS: Record<string, unknown[]> = {
   "schematic.fit-page": [null], "schematic.zoom": [{ factor: 1.5 }], "schematic.zoom-to": [{ zoom: 2 }],
   "schematic.pan-to": [{ target: { kind: "component", ref: "R1" } }], "schematic.focus": [{ target: { kind: "component", ref: "U1" } }, { target: { kind: "net", name: "GND" } }],
   "schematic.select": [{ target: { kind: "component", ref: "R1" } }], "schematic.clear-selection": [null], "schematic.highlight-net": [{ name: "GND" }], "schematic.clear-highlight": [null],
-  "schematic.reveal-finding": [{ findingId: "erc:1" }], "schematic.read-state": [null],
+  "schematic.reveal-finding": [{ findingId: "erc:1" }], "schematic.read-state": [null], "schematic.open-sheet": [{ sheet: "root" }, { sheet: "Power" }], // [PR-J5, 2026-10-23] + the open-sheet view command (runbook J.6.5): a sheet by id and by name; with these sources (no navigator wired) it answers VS_UNAVAILABLE and changes nothing
   "workspace.open-editor": [{ editor: "pcb" }, { editor: "schematic" }], "workspace.read-state": [null],
 };
 

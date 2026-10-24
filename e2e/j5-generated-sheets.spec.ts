@@ -193,11 +193,16 @@ test("the owner's four-motor sentence becomes an overview and four real sheets: 
   const mcuRefs = resultSheets.sheets!.children.find((entry) => entry.name === mcu.name)!.components;
   expect(await drawnRefs(page, known)).toEqual([...mcuRefs].sort());
   expect(await drawnRefs(page, known)).not.toContain("Q1");
-  await page.getByTestId("schematic-canvas").locator('[data-testid^="scoped-label-"][data-scope="hierarchical"]', { hasText: /^PWM1$/ }).first().click();
+  // the sheet's PWM1 port is drawn as a hierarchical label (the signal's glyph on this sheet); Follow lists every cross-sheet signal of
+  // the active sheet whatever is selected, so no canvas click precedes it (the generated label sits at U2's pin end, inside the symbol's
+  // hit area, where a click selects U2)
+  await expect(page.getByTestId("schematic-canvas").locator('[data-testid^="scoped-label-"][data-scope="hierarchical"]', { hasText: /^PWM1$/ }).first()).toBeVisible();
   await page.getByTestId(T.follow).click();
   const destinations = page.locator('[data-testid^="sheets-follow-destination-"]');
   await expect(destinations.first()).toBeVisible();
-  const motorsDestination = destinations.filter({ hasText: new RegExp(motors.name) }).first();
+  // PWM1's own row on the motor stages: the MCU sheet lists every signal it carries (PWM1-4, I2C_SDA, I2C_SCL, IMU_INT1), and each
+  // destination row names the sheet and the label it lands on
+  const motorsDestination = destinations.filter({ hasText: motors.name }).filter({ hasText: /PWM1(?!\d)/ }).first();
   await expect(motorsDestination).toBeVisible();
   await motorsDestination.click();
   await expect(page.getByTestId(T.breadcrumb)).toContainText(motors.name);

@@ -7,7 +7,10 @@
  *     `renamedFrom: "SIG1"`, the partition is unchanged and two plans are byte-identical (no crypto.randomUUID);
  *  3. refusals, nothing changed: a key the plan does not mint (ORGANIZE_GROUPS_INVALID naming it), an invalid name, a name a label of the
  *     project already uses (SHEET_MOVE_REFUSED naming it), a key that is not a SIG<n>.
- * Pure / in-memory over two catalog resistors of the fixture catalog joined by one wire.
+ *  4. across the steps of one organisation the SIG<n> numbering is the un-renamed plan's: renaming step 1's SIG1 leaves step 2's
+ *     crossing SIG2 (it is not minted SIG1 again and refused as a taken name), and SIG1 / SIG2 can be renamed together (the keys a
+ *     proposal reported stay valid; `reservedPortNames` carries the renamed defaults to the later steps).
+ * Pure / in-memory over catalog resistors of the fixture catalog joined by wires.
  */
 import { describe, expect, it, vi } from "vitest";
 import { kicadPinWorldPos } from "@/app/lib/geometry";
@@ -80,5 +83,23 @@ describe("[PR-J5] interface names for unnamed crossings", () => {
     const notSig = planOrganizeIntoSheets(state, GROUP_A, getPart, { portNames: { LINK: "SIG1" } });
     expect(notSig).toMatchObject({ ok: false, code: "ORGANIZE_GROUPS_INVALID" });
     expect(JSON.stringify(state)).toBe(digest);
+  });
+
+  it("4. across steps the SIG<n> numbering is the un-renamed plan's: a renamed SIG1 stays taken, SIG2 keeps its number, both rename together", () => {
+    const part = parts.get(PART)!;
+    const resistor = (n: number, y: number): KicadComponentInstance => ({ id: `k-r${n}`, partId: PART, x: 400, y, rotation: 0, refDes: `R${n}`, value: "1k" });
+    const r1 = resistor(1, 200), r2 = resistor(2, 600), r3 = resistor(3, 1000);
+    const link = (a: KicadComponentInstance, b: KicadComponentInstance, id: string) => { const from = kicadPinWorldPos(a, part.pins[1]!); const to = kicadPinWorldPos(b, part.pins[0]!); return { id, vertices: [{ x: from.x, y: from.y }, { x: to.x, y: to.y }] }; };
+    const chain: SchematicState = { components: [], wires: [link(r1, r2, "w-a"), link(r2, r3, "w-b")], kicadComponents: [r1, r2, r3], netLabels: [], pageSize: "A4" };
+    const groups: OrganizeGroupInput[] = [{ name: "Stage A", refs: ["R1"] }, { name: "Stage C", refs: ["R3"] }];
+    const names = (plan: ReturnType<typeof planOrganizeIntoSheets>) => (plan.ok ? plan.preview.steps.map((step) => step.crossings.map((crossing) => [crossing.port.name, crossing.renamedFrom ?? null])) : `${plan.code}: ${plan.message}`);
+    expect(names(planOrganizeIntoSheets(chain, groups, getPart))).toEqual([[["SIG1", null]], [["SIG2", null]]]);
+    expect(names(planOrganizeIntoSheets(chain, groups, getPart, { portNames: { SIG1: "LINK_A" } }))).toEqual([[["LINK_A", "SIG1"]], [["SIG2", null]]]);
+    expect(names(planOrganizeIntoSheets(chain, groups, getPart, { portNames: { SIG2: "LINK_C" } }))).toEqual([[["SIG1", null]], [["LINK_C", "SIG2"]]]);
+    const both = planOrganizeIntoSheets(chain, groups, getPart, { portNames: { SIG1: "LINK_A", SIG2: "LINK_C" } });
+    expect(names(both)).toEqual([[["LINK_A", "SIG1"]], [["LINK_C", "SIG2"]]]);
+    if (!both.ok) throw new Error(both.message);
+    expect(resolveProjectConnectivity(both.after, getPart).partitionDigest).toBe(resolveProjectConnectivity(chain, getPart).partitionDigest);
+    expect(both.after.netLabels!.some((label) => /^SIG\d+$/.test(label.name))).toBe(false);
   });
 });

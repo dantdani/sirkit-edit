@@ -2,10 +2,10 @@
  * [PR-J5, 2026-10-23] Runbook J.6.7 (OD-259): the sheet-aware schematic read, `inspectSchematicState` 1.2.0
  * (app/lib/engineering/schematic-read.ts), pure over the frozen fixtures.
  *
- *  1. byte identity: a single-sheet document read without options is 1.1.0's output - the blinker's and the flat drone's JSON digests
- *     were computed at 5993dd68 BEFORE this change; the J3 multi-sheet fixture's 1.1.0 keys are unchanged beside the added tree;
- *  2. the tree: the J3 fixture's four sheets with their paths, component counts and ports (bound where the hierarchical label and the
- *     sheet pin both exist);
+ *  1. byte identity: a read without options is 1.1.0's output for EVERY document - the blinker's, the flat drone's and the J3 multi-sheet
+ *     drone's JSON digests were computed at 5993dd68 BEFORE this change (scratchpad j/inspect-digests.ts) and no key is added;
+ *  2. the tree (a read with `sheetId`; `root` is how a model finds it): the J3 fixture's four sheets with their paths, component counts
+ *     and ports (bound where the hierarchical label and the sheet pin both exist);
  *  3. one sheet: `sheetId: "sheet-imu"` answers exactly U3, R11, R12, C9, C10, the sheet's labels, ports and counts; the whole-project
  *     counts stay; an unknown sheet is a diagnostic over the tree, never a guess; `root` on a single-sheet document is the page;
  *  4. neighbours: over the fully organised drone the IMU sheet's I2C_SCL port joins the MCU sheet's I2C_SCL port through the
@@ -37,12 +37,17 @@ describe("[PR-J5] 1. byte identity of the whole-project read", () => {
     expect(sha(inspectSchematicState(droneFixtureState(), readSchematicInspectOptions({ sheetId: "   ", neighbours: "yes" })))).toBe(PINNED_1_1_0.drone);
   });
 
-  it("a multi-sheet document keeps every 1.1.0 key byte-identical and adds the bounded tree", () => {
-    const report = inspectSchematicState(multiSheetDroneFixtureState());
-    const { sheets, ...rest } = report;
-    expect(sha(rest)).toBe(PINNED_1_1_0.j3);
-    expect(report.components).toHaveLength(41);
-    expect(sheets!.note).toContain("sheetId");
+  it("a multi-sheet document read without options is 1.1.0's bytes too (no tree, no sheet key); the tree comes with sheetId root", () => {
+    const whole = inspectSchematicState(multiSheetDroneFixtureState());
+    expect(sha(whole)).toBe(PINNED_1_1_0.j3);
+    expect(Object.keys(whole)).toEqual(["valid", "schematicDigest", "counts", "components", "netLabels", "diagnostics"]);
+    expect(whole.components).toHaveLength(41);
+    expect(sha(inspectSchematicState(multiSheetDroneFixtureState(), readSchematicInspectOptions({ neighbours: true })))).toBe(PINNED_1_1_0.j3);
+    const report = inspectSchematicState(multiSheetDroneFixtureState(), { sheetId: "root" });
+    const sheets = report.sheets;
+    expect(report.sheet).toMatchObject({ id: "root", name: "Overview", path: "", parentId: null });
+    expect(report.sheet!.childBlocks.map((block) => block.sheetId)).toEqual(J3_SHEETS.map((sheet) => sheet.id));
+    expect(report.components).toHaveLength(11);
     expect(sheets!.tree.map((sheet) => [sheet.id, sheet.name, sheet.parentId, sheet.path, sheet.componentCount])).toEqual([
       ["root", "Overview", null, "", 11],
       ...J3_SHEETS.map((sheet) => [sheet.id, sheet.name, "root", sheet.name, sheet.refs.length]),

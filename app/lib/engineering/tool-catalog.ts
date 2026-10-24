@@ -150,7 +150,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     agentExposed: true, // B09 — statically exposed; per-run availability requires the canonical-state resource
     owningCommandId: "schematic.review-advisory",
     title: "Inspect schematic state",
-    description: "Read the current schematic: component list (display refs, types, values, positions), wire/net-label counts, and the schematic digest. A multi-sheet project adds its sheet tree (id, name, parent, path, component count, ports with their bound state). Example input: {} for the whole project; {\"sheetId\":\"sheet-imu\"} for ONE sheet's components, local labels, ports and child blocks (bounded); {\"sheetId\":\"sheet-imu\",\"neighbours\":true} also fetches the other sheets' ports the connectivity authority joins to its ports. An unknown sheetId answers the tree and a diagnostic, never a guess.",
+    description: "Read the current schematic: component list (display refs, types, values, positions), wire/net-label counts, and the schematic digest. Example input: {} for the whole project (every sheet's parts in one list, as before); {\"sheetId\":\"root\"} for the overview with the sheet tree (each sheet's id, name, parent, path, component count and ports with their bound state); {\"sheetId\":\"sheet-imu\"} for ONE sheet's components, local labels, ports and child blocks (bounded); {\"sheetId\":\"sheet-imu\",\"neighbours\":true} also fetches the other sheets' ports the connectivity authority joins to its ports. An unknown sheetId answers the tree and a diagnostic, never a guess.",
     category: "schematic", operationClass: "read",
     inputSchema: obj({ sheetId: { type: "string", description: "Optional: one sheet's id (the tree lists them; \"root\" is the overview). Omitted: the whole project." }, neighbours: { type: "boolean", description: "Optional, with sheetId: fetch the other sheets' ports joined to this sheet's ports (an explicit neighbour read)." } }), outputSchema: OUT_REPORT, // [PR-J5, 2026-10-23] 1.2.0: sheetId / neighbours (runbook J.6.7, OD-259)
     requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
@@ -161,7 +161,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     validationStrategy: "structural schematic-shape validation (fails closed on malformed snapshots)",
     verificationStrategy: "deterministic sorted projection + schematic digest",
     sourceEvidence: ["app/lib/engineering/schematic-read.ts", "app/lib/engineering/schematic-model.ts"],
-    versionNotes: "1.2.0 (PR-J5, 2026-10-23; runbook J.6.7, OD-259): sheet-aware - a multi-sheet project's read adds the bounded sheet tree beside the unchanged whole-project lists; sheetId answers ONE sheet's components, labels, ports and child blocks; neighbours fetches the joined ports through the project connectivity authority; a single-sheet document read without options is byte-identical to 1.1.0. 1.1.0 (B09): bound to the reusable pure accessor and agent-exposed; output carries the schematic digest. B09.3: canonical-state binding is the only path (the B09.2 boardless gateway bypass was removed).",
+    versionNotes: "1.2.0 (PR-J5, 2026-10-23; runbook J.6.7, OD-259): sheet-aware on request - sheetId answers ONE sheet's components, labels, ports and child blocks beside the sheet tree (sheetId root: the overview and the tree); neighbours fetches the joined ports through the project connectivity authority; a read without options is byte-identical to 1.1.0 for every document, multi-sheet included. 1.1.0 (B09): bound to the reusable pure accessor and agent-exposed; output carries the schematic digest. B09.3: canonical-state binding is the only path (the B09.2 boardless gateway bypass was removed).",
   },
   {
     ...readDefaults,
@@ -890,8 +890,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
       target: TARGET,
       factor: { type: "number", description: "zoom: relative factor 0.25–4 (the bus refuses others)" },
       scale: { type: "number", description: "zoom-to: pcb px/mm or schematic zoom" },
-      tab: { type: "string", enum: VIEW_TOOL_ENUMS.workspaceTabs, description: "open-editor" },
-      sheet: { type: "string", description: "open-sheet (schematic only): the sheet's id, its unique display name or its path (sirkit.schematic.inspect lists them)" }, // [PR-J5, 2026-10-23]
+      tab: { type: "string", enum: VIEW_TOOL_ENUMS.workspaceTabs, description: "open-editor" }, sheet: { type: "string", description: "open-sheet (schematic only): the sheet's id, its unique display name or its path (sirkit.schematic.inspect lists them)" }, // [PR-J5, 2026-10-23] + sheet, in place on this line (no catalog line moves)
     }, ["editor", "action"]), outputSchema: OUT_VIEW_COMMAND,
     requiredProjectState: [],
     binding: { status: "bound-view-session", module: "app/lib/view-session/pcb.ts", symbol: "pcbCommands" },

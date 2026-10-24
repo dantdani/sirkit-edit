@@ -12,7 +12,12 @@
  *     is proposal-blocked naming it, a bad interface name refused; nothing sealed;
  *  3. interface names: a SIG<n> port is renamed through `interfaceNames` and the artifact carries the rename; an unminted port blocks;
  *  4. a run without the catalog fact never offers the tool (withheld, fail closed) and the gateway refuses it; a foreign scope refuses
- *     the sealed artifact at verification.
+ *     the sealed artifact at verification;
+ *  5. seal only with a proven-equivalent plan: a split the multi-sheet (strict) connection rule would read as a different circuit - a
+ *     typed plain `GND` label beside a ground rail, one net on the flat page, two under the strict rule - is proposal-blocked with the
+ *     planner's own SHEET_MOVE_NOT_EQUIVALENT sentence naming the offending label; nothing is sealed and the schematic is unchanged;
+ *  6. a schematic-only run (no PCB editor published a board, so the board-backed whole-project read is withheld) still gets the
+ *     organisation: the script proposes directly and the server resolves every member by name.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resolveCatalogInspectionPort } from "@/app/api/chat/catalog-inspection-runtime";
@@ -43,11 +48,11 @@ const registry = sirkitToolRegistry();
 const parts = fixtureParts();
 const getPart = (partId: string) => parts.get(partId) ?? null;
 
-async function contextFor(state: SchematicState, catalog = true): Promise<{ context: AgentRunContext; editor: SchematicEditorSession }> {
+async function contextFor(state: SchematicState, catalog = true, board = true): Promise<{ context: AgentRunContext; editor: SchematicEditorSession }> {
   const editor = new SchematicEditorSession({ ...SCOPE }, { store: new InMemoryAtomicProjectStore() });
   await editor.openForProject(structuredClone(state), null);
   // a board beside the schematic: the scripted turn's first call is sirkit.schematic.inspect, a B05 canonical-state read (the page's chat run carries the board too)
-  const assembly = assembleAgentRunContext({ ...SCOPE, schematic: state, board: createEmptyBoard(), schematicHeadMark: editor.headMark(), ...(catalog ? { catalogInspectionAvailable: true } : {}), verifiedActor: ACTOR });
+  const assembly = assembleAgentRunContext({ ...SCOPE, schematic: state, ...(board ? { board: createEmptyBoard() } : {}), schematicHeadMark: editor.headMark(), ...(catalog ? { catalogInspectionAvailable: true } : {}), verifiedActor: ACTOR });
   if (!assembly.ok) throw new Error(assembly.reason);
   return { context: assembly.context, editor };
 }
@@ -185,5 +190,49 @@ describe("[PR-J5] the organise proposal tool", { timeout: 60_000 }, () => {
     expect(warnings[0]).toContain("catalog");
     const outcome = await createAgentToolGateway(registry, {}).invoke({ runId: "run-j5-nocat", provider: "anthropic", callId: "c-1", toolId: SHEET_ORGANIZATION_TOOL_ID, version: "1.0.0", args: { groups: [{ name: "A", members: ["R1"] }] }, context, timeoutMs: 10_000 });
     expect(outcome).toMatchObject({ kind: "refused", status: "authority_unavailable" });
+  });
+
+  it("5. a non-equivalent split is never sealed: the planner's SHEET_MOVE_NOT_EQUIVALENT names the typed GND label; nothing changed", async () => {
+    const part = parts.get("b16-1c-part-r")!;
+    const base = twoResistors();
+    const r1 = base.kicadComponents![0]!, r2 = base.kicadComponents![1]!;
+    const pin = (instance: KicadComponentInstance, index: number) => { const point = kicadPinWorldPos(instance, part.pins[index]!); return { x: point.x, y: point.y }; };
+    const state: SchematicState = { ...base, netLabels: [
+      { id: "l-typed-gnd", position: pin(r1, 0), name: "GND", kind: "label", orientation: 0 },
+      { id: "l-rail-gnd", position: pin(r2, 1), name: "GND", kind: "ground", orientation: 0 },
+    ] };
+    const digest = schematicStateDigest(state);
+    const { context } = await contextFor(state);
+    const outcome = await propose(context, { groups: [{ name: "Stage A", members: ["R1"] }] });
+    expect(outcome).toMatchObject({ kind: "proposal-blocked", ok: false, toolId: SHEET_ORGANIZATION_TOOL_ID, blockers: [{ code: "plan-refused" }] });
+    const detail = (outcome as { blockers: Array<{ detail: string }> }).blockers[0]!.detail;
+    expect(detail).toContain("SHEET_MOVE_NOT_EQUIVALENT");
+    expect(detail).toContain('"GND"');
+    expect(detail).toContain("R1.1");
+    expect(detail).toContain("Nothing was changed");
+    expect(outcome).not.toHaveProperty("proposal");
+    expect(schematicStateDigest(state)).toBe(digest);
+  });
+
+  it("6. a schematic-only run: the board read is withheld, the script proposes directly; ONE sealed proposal, nothing changed", async () => {
+    const state = droneFixtureState();
+    const digest = schematicStateDigest(state);
+    const { context } = await contextFor(state, true, false);
+    const offered = buildRunToolset(registry, context, () => undefined).declarations.map((declaration) => declaration.toolId);
+    expect(offered).not.toContain("sirkit.schematic.inspect");
+    expect(offered).toContain(SHEET_ORGANIZATION_TOOL_ID);
+    const events: AgentRunEvent[] = [];
+    const result = await runAgentLoop(
+      { runId: "run-j5-organize-boardless", provider: "anthropic", history: [], userMessage: "Organize this schematic into subsystem sheets", budget: DEFAULT_AGENT_BUDGET },
+      { adapter: new FixtureAgentAdapter("anthropic"), registry, context, system: AGENT_SYSTEM_PROMPT, gateway: gateway(), emit: (event) => events.push(event) },
+    );
+    expect(result.status).toBe("completed");
+    expect(events.filter((event) => event.type === "tool_started").map((event) => (event as { toolId: string }).toolId)).toEqual([SHEET_ORGANIZATION_TOOL_ID]);
+    const ready = events.filter((event) => event.type === "sheet_organization_ready");
+    expect(ready).toHaveLength(1);
+    const proposal = (ready[0] as { proposal: SealedSheetOrganizationProposal }).proposal;
+    expect(proposal.groups.map((group) => group.name)).toEqual(FIXTURE_DRONE_ORGANIZE_GROUPS.map((group) => group.name));
+    expect(result.finalText).toContain("Nothing has been changed");
+    expect(schematicStateDigest(state)).toBe(digest);
   });
 });

@@ -458,6 +458,9 @@ app/components/schematic/SheetNavigator.tsx|key|div|sheets-tree|onTreeKeyDown,ap
 app/components/schematic/SheetNavigator.tsx|submit|form|(none)|submitNew,app/components/schematic/SheetNavigator.tsx,submit,form,no,exempt:form-submit,Create sheet
 app/components/schematic/SheetNavigator.tsx|submit|form|(none)|submitPort,app/components/schematic/SheetNavigator.tsx,submit,form,no,exempt:form-submit,Add port
 app/components/schematic/SheetNavigator.tsx|submit|form|(none)|submitRename,app/components/schematic/SheetNavigator.tsx,submit,form,no,exempt:form-submit,Rename
+app/components/schematic/SheetOrganizationReviewCard.tsx|click|Button|sheet-organization-approve|onApprove,app/components/schematic/SheetOrganizationReviewCard.tsx,click,Button,no,named:text,Applying… Approve — organize into * sheet*
+app/components/schematic/SheetOrganizationReviewCard.tsx|click|Button|sheet-organization-discard|onDiscard,app/components/schematic/SheetOrganizationReviewCard.tsx,click,Button,no,named:text,Discard — change nothing
+app/components/schematic/SheetOrganizationReviewCard.tsx|dialog|Dialog|(none)|onDiscard,app/components/schematic/SheetOrganizationReviewCard.tsx,dialog,Dialog,no,exempt:dialog-titled,Organize * part s into * 0 sheet s — review before applying
 app/components/spice/SpiceStudio.tsx|change|input|(none)|mutate,app/components/spice/SpiceStudio.tsx,change,input,no,named:label-wrap,Enable statistical study
 "app/components/spice/SpiceStudio.tsx|change|input|(none)|mutate,?.find,draft.cornerSets.find",app/components/spice/SpiceStudio.tsx,change,input,no,unnamed,none
 "app/components/spice/SpiceStudio.tsx|change|input|(none)|mutate,draft.measurements.find",app/components/spice/SpiceStudio.tsx,change,input,no,unnamed,none

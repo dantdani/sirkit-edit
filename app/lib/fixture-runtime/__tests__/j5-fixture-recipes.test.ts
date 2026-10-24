@@ -18,7 +18,9 @@
  *     `attachedSelection` still refuses them (OPEN ISSUE J5-C-1, pinned below until it follows wire chains); the drone groups are the
  *     plan's blocks (the names) with the merge's final reference designators for 1..4 motors, and plan through the organise planner over
  *     the flat drone to the J4 hinted proposal's sheets with the partition kept; `fixtureSheetOrganizationFor` recognises each design by
- *     its parts and nothing else; the organise sentence routes to the assistant.
+ *     its parts and nothing else, and a run with no schematic read (no PCB board) that tries `fixtureSheetOrganizationCandidates()` in
+ *     order meets each design's own organisation first (`fixtureSheetOrganizationArgs` spells it as the tool's closed input); the
+ *     organise sentence routes to the assistant.
  * Pure / in-memory: the committed catalog, the scripted provider, the planners; no network, no database, no clock, no model.
  */
 import { createHash } from "node:crypto";
@@ -28,7 +30,7 @@ import type { EngineeringOperation } from "@/app/lib/engineering/types";
 import { BLINKER_ACCEPTANCE_PROMPT, BLINKER_NETLIST, BLINKER_PART_IDS, FIXTURE_RESOLUTION_PART_IDS, GENERATION_FIXTURE_PART_IDS, fixtureRuntimeCatalog } from "@/app/lib/fixture-runtime/blinker/catalog";
 import { designSubmission, planTurn, scriptedGenerationTurn, type ReturnedPart } from "@/app/lib/fixture-runtime/generation-policy";
 import { DRONE_BLOCK_NAMES, DRONE_MAX_MOTORS, PLAN_INTERFACES_PER_BLOCK, PLAN_INTERFACE_DIRECTIONS, PLAN_INTERFACE_KINDS, droneBlockDesign, dronePlan, interfaceDirectionAgrees, selectRecipe, type DesignSpec, type PlanInterfaceSpec, type RequestRecipe } from "@/app/lib/fixture-runtime/generation-recipes";
-import { DRONE_SHEET_GROUPS, DRONE_SHEET_NAMES, LED_DIMMER_CROSSINGS, LED_DIMMER_SHEET_GROUPS, ORGANIZE_SHEETS_SENTENCE, droneSheetGroups, fixtureSheetOrganizationFor } from "@/app/lib/fixture-runtime/sheet-organization-groups";
+import { DRONE_SHEET_GROUPS, DRONE_SHEET_NAMES, LED_DIMMER_CROSSINGS, LED_DIMMER_SHEET_GROUPS, ORGANIZE_SHEETS_SENTENCE, droneSheetGroups, fixtureSheetOrganizationArgs, fixtureSheetOrganizationCandidates, fixtureSheetOrganizationFor, type FixtureSheetOrganization } from "@/app/lib/fixture-runtime/sheet-organization-groups";
 import { kicadPinWorldPos, pointKey } from "@/app/lib/geometry";
 import { mergeBuildNetlists } from "@/app/lib/merge-netlists";
 import { routeComposerMessage } from "@/app/lib/project/composer-routing";
@@ -379,6 +381,26 @@ describe("[PR-J5 C] 3. the organise groups the scripted agent proposes (sheet-or
       expect(found!.rationale).toContain(`PWM${motors}`);
       expect(found!.rationale).not.toContain(`PWM${motors + 1}`);
     }
+    // [PR-J5, 2026-10-23] a run with NO schematic read (no PCB board, so no canonical-state resource) tries the candidates in order and the
+    // tool refuses every proposal naming a part the schematic does not hold: the FIRST candidate whose every member the design holds must
+    // be the design's own organisation, for each fixture design - and no candidate fits the blinker (nothing is proposed for it)
+    const candidates = fixtureSheetOrganizationCandidates();
+    expect(candidates.map((organization) => `${organization.key}:${organization.motors ?? "-"}`)).toEqual(["led-dimmer:-", "drone:4", "drone:3", "drone:2", "drone:1"]);
+    const firstFitting = (refs: readonly string[]): FixtureSheetOrganization | null => candidates.find((organization) => organization.groups.every((group) => group.refs.every((ref) => refs.includes(ref)))) ?? null;
+    expect(firstFitting(dimmerRefs)).toEqual(dimmerFound);
+    for (const motors of MOTOR_COUNTS) {
+      const designRefs = droneSheetSet(motors).merged.netlist.components.map((component) => component.refDes);
+      expect(firstFitting(designRefs), `drone(${motors})`).toEqual(fixtureSheetOrganizationFor(designRefs));
+      expect(firstFitting(designRefs)!.motors, `drone(${motors})`).toBe(motors);
+    }
+    expect(firstFitting(BLINKER_NETLIST.components.map((component) => component.refDes))).toBeNull();
+    // the tool's closed input: { groups: [{ name, members }] } only, in the organisation's order, as fresh arrays (never the frozen data)
+    const args = fixtureSheetOrganizationArgs(dimmerFound!);
+    expect(Object.keys(args)).toEqual(["groups"]);
+    expect(args.groups).toEqual(LED_DIMMER_SHEET_GROUPS.map((group) => ({ name: group.name, members: [...group.refs] })));
+    expect(args.groups.every((group) => Object.keys(group).join(",") === "name,members")).toBe(true);
+    args.groups[0]!.members.push("MUTATED");
+    expect(LED_DIMMER_SHEET_GROUPS[0]!.refs).not.toContain("MUTATED");
     expect(fixtureSheetOrganizationFor(dimmerRefs.slice(1))).toBeNull();
     expect(fixtureSheetOrganizationFor([...dimmerRefs, "R9"])).toBeNull();
     expect(fixtureSheetOrganizationFor(BLINKER_NETLIST.components.map((component) => component.refDes))).toBeNull();

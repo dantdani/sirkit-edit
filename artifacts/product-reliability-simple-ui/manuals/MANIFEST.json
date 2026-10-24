@@ -1,6 +1,6 @@
 {
   "schema": "sirkit.tool-manuals-manifest.v1",
-  "registryDigest": "eng1-d52f7ce216027497",
+  "registryDigest": "eng1-4981031f19d7f7d2",
   "count": 64,
   "manuals": [
     {
@@ -241,7 +241,7 @@
     {
       "toolId": "sirkit.schematic.inspect",
       "version": "1.2.0",
-      "sha256": "9813b29b4bc90f874956adfbaf90b8d8fd11d12700e123f12c0842cecf828ed2"
+      "sha256": "4e4603e5b3e26b45f4b8996db8f5499c95f6e9813cb31a1dd94fee375b6eb51c"
     },
     {
       "toolId": "sirkit.schematic.instance-inspect",
@@ -296,7 +296,7 @@
     {
       "toolId": "sirkit.view.canvas-navigation",
       "version": "1.2.0",
-      "sha256": "d3f65c292f30a4ed37884f8e790d1454949c2f18ee35dec5e203f3ce34ed84e5"
+      "sha256": "38e80b13c2378ef51147c37389bd246f26a463677b87c8b2f86f1fa396240e2c"
     },
     {
       "toolId": "sirkit.view.layers",

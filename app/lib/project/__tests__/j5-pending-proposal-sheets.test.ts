@@ -37,7 +37,7 @@ describe("[PR-J5] a sheeted proposal in the pending-proposal store", () => {
     expect(schematicStateDigest(flat)).not.toBe(schematicStateDigest(sheeted));
     // the page compares the stored base digest with the LIVE content digest (sheets included, OD-257 item 4) before it re-offers
     const page = readFileSync("app/page.tsx", "utf8").replaceAll("\r\n", "\n");
-    expect(page).toMatch(/stored\.baseDigest !== proposalContentDigest\(|proposalContentDigest\([^)]*\) !== stored\.baseDigest/);
+    expect(page).toContain("if (proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()) !== stored.baseDigest) { clearPendingProposal(projectId);");
     expect(page).toContain("const proposalContentDigest = useCallback((state: SchematicState): string => schematicStateDigest({ components: state.components ?? [], wires: state.wires ?? [], kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [], ...(state.sheets !== undefined ? { sheets: state.sheets } : {}) }), []);");
   });
 });

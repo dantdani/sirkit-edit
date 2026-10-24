@@ -22,6 +22,12 @@
  * the layout is NOT offered: `{ kind: "flat", finding }` and the page keeps today's one-page path with the finding beside the proposal
  * (the conservative rule of generated-sheets.ts).
  *
+ * The drawing check the page shows is the WHOLE sheeted drawing validated against the flat netlist (`validateSchematicNetlist`, which
+ * reads the project connectivity: a pin labelled with an interface reaches the other sheets through its port), not the blocks' own
+ * checks merged - alone, a block reports every interface pin as floating (its one label has no partner on that sheet). The label
+ * anchoring is the blocks' own (the converted labels keep their positions; the overview's labels sit on their sheet pins, whose
+ * placement on the block edge the hierarchy check proves).
+ *
  * Ids: structural ids (sheets, ports, hierarchical labels, sheet pins, overview labels) derive from the caller's `seed` (the task's
  * result digest) - no random draw; the per-block layouts mint their component / wire / label ids as `autoLayoutBuild` always has.
  * Component authority is untouched: each block adopts `publishedAtomicIdentity` through the existing layout (J.5: hierarchical
@@ -49,7 +55,7 @@ import {
   type SheetPort,
   type SheetPortDirection,
 } from "./schematic-types";
-import type { NetlistValidation } from "./validate-netlist";
+import { validateSchematicNetlist, type NetlistValidation } from "./validate-netlist";
 
 export type { GeneratedSheets, GeneratedSheetSet } from "@/app/lib/schematic/generated-sheets";
 
@@ -69,7 +75,7 @@ export type GeneratedSheetLayout =
   | {
     kind: "sheets";
     state: SchematicState;
-    /** the per-block drawing validations merged (ok when every block validated) */
+    /** the whole sheeted drawing checked against the flat netlist (the blocks' own label-anchoring findings included) */
     validation: NetlistValidation;
     findings: string[];
     sheets: GeneratedSheetLayoutSheet[];
@@ -314,10 +320,13 @@ export function layoutGeneratedSheets(netlist: BuildLogicalNetlist, set: Generat
     if (drawnPins(nets[0]!).join(",") !== expected) return flat(`interface ${entry.net} does not reach exactly the design's pins.`);
     interfaces.push(entry.net);
   }
+  // the drawing check: the whole sheeted drawing against the flat netlist, with the blocks' own label anchoring (see the header)
+  const whole = validateSchematicNetlist(netlist, state, parts as Map<string, CachedPart>);
+  const violations = [...whole.violations.filter((item) => item.kind !== "unanchored-label"), ...validations.flatMap((item) => item.violations.filter((violation) => violation.kind === "unanchored-label"))];
   return {
     kind: "sheets",
     state,
-    validation: { ok: validations.every((item) => item.ok), violations: validations.flatMap((item) => item.violations) },
+    validation: { ok: violations.length === 0, violations },
     findings: [],
     sheets: laidSheets,
     interfaces,

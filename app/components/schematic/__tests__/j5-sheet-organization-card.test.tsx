@@ -89,7 +89,10 @@ describe("[PR-J5] the sheet-organisation review card", () => {
 
   it("4. every control has an accessible name; a null review renders no card", () => {
     render(<SheetOrganizationReviewCard review={REVIEW} busy={false} onApprove={() => {}} onDiscard={() => {}} />);
-    for (const button of screen.getAllByRole("button")) expect((button.textContent ?? "").trim().length > 0 || (button.getAttribute("aria-label") ?? "").length > 0, button.outerHTML).toBe(true);
+    // the dialog's own focus guards (base-ui's inert sentinels, role="button" spans) are not controls
+    const controls = screen.getAllByRole("button").filter((element) => !element.hasAttribute("data-base-ui-focus-guard"));
+    expect(controls.length).toBeGreaterThanOrEqual(2);
+    for (const button of controls) expect((button.textContent ?? "").trim().length > 0 || (button.getAttribute("aria-label") ?? "").length > 0, button.outerHTML).toBe(true);
     cleanup();
     render(<SheetOrganizationReviewCard review={null} busy={false} onApprove={() => {}} onDiscard={() => {}} />);
     expect(screen.queryByTestId("sheet-organization-review")).toBeNull();

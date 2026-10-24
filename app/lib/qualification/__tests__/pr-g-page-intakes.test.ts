@@ -194,7 +194,7 @@ describe("[PR-G page intakes 5] the shared recipe, the inventories and the answe
     expect(count(generationIntake, 'recipe === "chat-sheet" ? schematicStateDigest({ ...live, pageSize: live.pageSize ?? liveStateRef.current.pageSize }) : proposalContentDigest(live)')).toBe(1);
     expect(count(liveSheet, "const live = gestureCoordinatorRef.current!.authoritativeState();")).toBe(1);
     expect(count(generationIntake, "const live = gestureCoordinatorRef.current!.authoritativeState();")).toBe(1);
-    expect(count(page, "liveSheetForSealedArtifacts()")).toBe(4); // the declaration and the two sheet-artifact cases; [PR-M, 2026-10-18] reviewed pin move 3 -> 4: + the component resolution's intake (the same recipe)
+    expect(count(page, "liveSheetForSealedArtifacts()")).toBe(7); // the declaration and the two sheet-artifact cases; [PR-M, 2026-10-18] reviewed pin move 3 -> 4: + the component resolution's intake (the same recipe); [PR-J5, 2026-10-23] reviewed pin move 4 -> 7: + the assistant's organise proposal - its intake case, its Approve's re-check and the review card's live Approve gate (the same recipe; OD-259 items 4-5)
   });
 
   it("every new control is classified in the committed B17 inventory under a PR-G rule and named in the B24 census", () => {

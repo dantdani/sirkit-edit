@@ -133,7 +133,7 @@ const HEX64 = "3f1c9a7e0d2b48c6e5a1f0b9d7c3e2a4f6b8d0c2e4a6f8b0d2c4e6a8f0b2d4c6"
 export const MANUAL_EXAMPLES: Readonly<Record<string, readonly Example[]>> = Object.freeze({
   "sirkit.project.canonical-revision-inspect": [{}],
   "sirkit.pcb.revision-inspect": [{}],
-  "sirkit.schematic.inspect": [{}],
+  "sirkit.schematic.inspect": [{}, { sheetId: "root" }, { sheetId: "sheet-imu", neighbours: true }], // [PR-J5, 2026-10-23] 1.2.0: the whole project, the overview with the sheet tree, one sheet with its joined neighbours
   "sirkit.schematic.propose-tier1-edit": [{ ops: [{ op: "set-value", target: "R1", value: "10k" }, { op: "rename", target: "R2", refDes: "R5" }] }],
   "sirkit.schematic.propose-component-replacement": [{ componentId: "kc-7f3a2b" }],
   "sirkit.pcb.propose-bounded-edit": [{ intent: "Move R3 clear of the mounting hole", operations: [{ kind: "move_footprint", footprintId: "fp-r3", to: { x: 6000000, y: 5000000 } }] }],
@@ -166,7 +166,7 @@ export const MANUAL_EXAMPLES: Readonly<Record<string, readonly Example[]>> = Obj
   "sirkit.view.read-state": [{ editor: "pcb" }],
   "sirkit.project.history-inspect": [{ limit: 10 }],
   "sirkit.view.pcb3d": [{ action: "camera-preset", preset: "iso" }],
-  "sirkit.view.canvas-navigation": [{ editor: "pcb", action: "focus", target: { kind: "component", ref: "U1" } }],
+  "sirkit.view.canvas-navigation": [{ editor: "pcb", action: "focus", target: { kind: "component", ref: "U1" } }, { editor: "schematic", action: "open-sheet", sheet: "IMU" }], // [PR-J5, 2026-10-23] 1.2.0: + open-sheet
   "sirkit.selection.control": [{ editor: "pcb", action: "select", target: { kind: "component", ref: "R3" } }],
   "sirkit.view.layers": [{ action: "set-visible", layer: "copperBottom", visible: true }],
   "sirkit.view.reveal-finding": [{ editor: "pcb", findingId: "drc:clearance-12" }],

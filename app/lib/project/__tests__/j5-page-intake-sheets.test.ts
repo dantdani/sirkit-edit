@@ -36,7 +36,10 @@ const PAGE_LINES = 9156;
 const composer = between("  async function handleGenerateSchematic(", "  async function offerBuildResult(");
 const intake = between("  async function offerBuildResult(", "  // ─── [PR-L, 2026-10-17] the project's durable generation task");
 const taskFollow = between("  function attachGenerationTask(", "  /** The sheet moved since the task's base");
-const organiseCase = between('          case "sheet_organization_ready": {', '          case "execution_grant_ready": {');
+// the organise case shares the existing line of the execution-grant case (OD-259 item 5): it ends where that case starts on the same line
+// the organise case shares an existing line (OD-259 item 5): the line that closes the component resolution's case, so every case that
+// starts a line keeps its place (the PR-G / B21 case-order pins read line-initial cases)
+const organiseCase = between('          } case "sheet_organization_ready": {', '\n          case "execution_grant_ready": {');
 
 describe("[PR-J5] 1. app/page.tsx keeps its line count and is LF", () => {
   it("9156 lines, no CR, a trailing newline", () => {
@@ -55,7 +58,7 @@ describe("[PR-J5] 2. the result intake lays a planned result out as sheets after
     expect(intake).toContain('const state = laid?.kind === "sheets" ? laid.state : built.state; const validation = laid?.kind === "sheets" ? laid.validation : built.validation;');
     expect(intake).toContain("if (!validation.ok) {");
     expect(intake).toContain("const v = validation.violations;");
-    expect(intake).not.toContain("built.validation"); // the flat validation is read only through `validation`
+    expect(count(intake, "built.validation")).toBe(1); // the flat validation is read only through `validation` (its one selection above)
     expect(count(intake, "layoutGeneratedSheets(")).toBe(1);
     expect(count(page, "layoutGeneratedSheets(")).toBe(1);
     expect(intake).toContain("omittedBlocks: string[]; electricalCheck: ElectricalCheckStatus; sheets?: GeneratedSheets }, run: {");
@@ -70,6 +73,12 @@ describe("[PR-J5] 2. the result intake lays a planned result out as sheets after
     expect(page).toContain('import { layoutGeneratedSheets, type GeneratedSheets } from "@/lib/build-sheet-layout";');
     expect(page).toContain('data-testid="schematic-proposal-replaced-sheets"');
     expect(count(page, "replacedSheetsLine(authoritativeSchematic)")).toBe(2); // the condition and the line, in the one dialog
+    // the dialog stays inside a 1366 x 768 viewport with a generated multi-sheet design's lines (the browser run of the drone found
+    // Approve below the fold before): the summary list and the notes are bounded, scrollable regions; no stray text node inside the list
+    expect(page).toContain('<ul className="max-h-[35vh] list-disc space-y-1 overflow-y-auto pl-5 text-sm text-zinc-400" data-testid="schematic-proposal-summary">{/*');
+    expect(page).toContain('<p className="max-h-24 overflow-auto text-xs text-amber-300" data-testid="schematic-proposal-validation">');
+    expect(page).toContain('<p className="max-h-32 overflow-auto whitespace-pre-wrap text-xs text-zinc-500">{pendingReplace.explanation}</p>');
+    expect(page).not.toContain("</li>} {/* [PR-J5");
   });
 });
 
@@ -106,6 +115,8 @@ describe("[PR-J5] 4. the organise receiver and its Approve", () => {
     expect(organiseCase).toContain("appendActivityStep(logId, sheetOrganizationLines.dropped(), \"error\"); return;");
     expect(organiseCase).not.toMatch(/applySchematic\(|setPendingReplace\(|runSchematicCommand\(|applyOrganize|planOrganizeIntoSheets|replanSheetOrganization\(/);
     expect(organiseCase.split("\n").length).toBe(1); // one existing line (OD-259 item 5)
+    expect(page).toContain(`            appendActivityStep(logId, resolutionLines.awaitingReview(resolution.proposal), "done");\n            return;\n          } case "sheet_organization_ready": {`);
+    expect([...page.matchAll(/^\s*case "sheet_organization_ready":/gm)]).toHaveLength(0); // never line-initial: the case-order pins stay byte-identical
   });
 
   it("Approve re-checks currency and applies through the Sheets controller's one transaction with the tool's re-plan; Discard records nothing; the card renders once; a project switch drops it", () => {

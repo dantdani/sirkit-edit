@@ -92,7 +92,9 @@ describe("[PR-J5] 3. the review card's view", () => {
     expect(review.sourceSheetName).toBe("Overview");
     expect(review.groups.map((group) => [group.name, group.members.length])).toEqual(J4_DRONE_HINTED_PROPOSAL.map((group) => [group.name, group.refs.length]));
     expect(review.groups.every((group) => group.sheetId.startsWith("sheet-org-"))).toBe(true);
-    expect(review.interfaces.map((entry) => entry.portName).sort()).toEqual([...new Set(proposal.interfaces.map((entry) => entry.portName))].sort());
+    // one line per port the organisation creates (a crossing net is a port on each sheet it joins), in the sealed order
+    expect(review.interfaces.map((entry) => `${entry.childSheetName}:${entry.portName}`)).toEqual(proposal.interfaces.map((entry) => `${entry.childSheetName}:${entry.portName}`));
+    expect([...new Set(review.interfaces.map((entry) => entry.portName))].sort()).toEqual(["I2C_SCL", "I2C_SDA", "IMU_INT1", "PWM1", "PWM2", "PWM3", "PWM4"]);
     expect(review.interfaces.every((entry) => entry.line.includes(`a port of "${entry.childSheetName}"`))).toBe(true);
     expect(review.unassigned).toEqual([]);
     expect(review.equivalence).toEqual({ partitionDigest: proposal.equivalence.partitionDigest, componentCount: 41, operationCount: proposal.operationCount });

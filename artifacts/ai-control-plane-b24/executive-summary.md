@@ -57,8 +57,8 @@ NOT READY (`eslint .` exits 1, none of its 33 errors introduced by B24), CI read
 | mcp-exposed-tools | 9 |
 | agent-only-tools | 43 |
 | agent-exposed-tier-3-tools | 0 |
-| control-sites | 715 |
-| control-surfaces | 73 |
+| control-sites | 718 |
+| control-surfaces | 74 |
 | sql-migrations | 32 |
 | generators | 32 |
 
@@ -102,7 +102,9 @@ header; the sync control's accessible name now states that it synchronises the w
 113 -> 114 (schematic.sheet-organize-propose, the agent's sealed organise proposal, placed before the two-record tail), registry-tools
 63 -> 64, agent-exposed-tools 51 -> 52 and agent-only-tools 42 -> 43 - the organise proposal descriptor
 sirkit.schematic.propose-sheet-organization (a Tier 2 sealed proposal the human applies through schematic.move-to-sheet; withheld from
-MCP, so mcp-exposed-tools stays 9); control-sites and control-surfaces unchanged (the page's review card is increment J5-B's).
+MCP, so mcp-exposed-tools stays 9); control-sites 715 -> 718 and control-surfaces 73 -> 74 with the B17-A inventory as J5-B left it
+(the organise proposal's review card, app/components/schematic/SheetOrganizationReviewCard.tsx: its Approve, Discard and close, one
+new surface); the lead regenerates the map once at integration.
 
 ## 4. Earlier verdicts
 

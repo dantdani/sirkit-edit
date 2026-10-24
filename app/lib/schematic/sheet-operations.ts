@@ -87,7 +87,7 @@ export interface MoveToSheetInput {
   /** [PR-J5, 2026-10-23] OD-259 item 4: names for the ports of UNNAMED cut nets, keyed by the `SIG<n>` name this planner would mint for
    *  them (the name the organise proposal reported). A supplied name must be a plain port name (letters, digits, `_`, `+`, `-`, `.`; at
    *  most 64 characters) that no net, label or port of the project already uses, else the move is refused. Absent: today's `SIG<n>`. */
-  portNames?: Readonly<Record<string, string>>;
+  portNames?: Readonly<Record<string, string>>; /** [PR-J5, 2026-10-23] `SIG<n>` names an earlier step of the same organisation minted and renamed through `portNames`: they stay taken, so this step numbers its unnamed nets as it would had no rename happened (the reported names stay the keys). Absent: today's numbering. */ reservedPortNames?: readonly string[];
 }
 
 export interface MoveCrossing {
@@ -286,7 +286,7 @@ export function planMoveToSheet(state: SchematicState, input: MoveToSheetInput, 
   const projectNames = new Set<string>([
     ...before.nets.flatMap((net) => (net.name === null ? [] : [netLabelNameKey(net.name.split("/").pop()!)])),
     ...(state.netLabels ?? []).map((label) => netLabelNameKey(label.name)),
-    ...sheets.flatMap((sheet) => (sheet.ports ?? []).map((port) => netLabelNameKey(port.name))),
+    ...sheets.flatMap((sheet) => (sheet.ports ?? []).map((port) => netLabelNameKey(port.name))), ...(input.reservedPortNames ?? []).map((name) => netLabelNameKey(name)), // [PR-J5, 2026-10-23] + an earlier step's renamed SIG<n> stays taken (in place: no line moves)
   ]);
   const nextSignalName = (): string => { let name = `SIG${(unnamed += 1)}`; while (projectNames.has(netLabelNameKey(name))) name = `SIG${(unnamed += 1)}`; projectNames.add(netLabelNameKey(name)); return name; };
   const crossings: MoveCrossing[] = [];

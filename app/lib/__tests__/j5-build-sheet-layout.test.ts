@@ -8,10 +8,12 @@
  *     partition), the ports as the set declares them, every port's labels inside its block turned into ONE hierarchical label each,
  *     exactly one sheet pin per port on its block's edge with a plain local label named after the interface at the same point, no
  *     hierarchy diagnostic at all, the project connectivity ok and multi-sheet, every bound interface's pins exactly the flat drawing's
- *     label group, the pin-to-net partition (every catalog pin) identical to the flat drawing's, every block drawing validated;
+ *     label group, the pin-to-net partition (every catalog pin) identical to the flat drawing's, the whole sheeted drawing validated
+ *     against the flat netlist (a block alone reports its interface pins floating; the sheeted drawing does not);
  *  2. the barometer partial: the omitted block is an empty sheet with its declared ports, its block and pins on the overview - unanchored
  *     warnings only, never an error, never dropped;
- *  3. a tampered set (a wired part moved across blocks) keeps the flat page with a finding; a set with no designed sheet too;
+ *  3. a tampered set (a label-joined part moved across blocks; a wire crossing two blocks; sheets that do not hold the parts) keeps
+ *     the flat page with a finding; a set with no designed sheet too;
  *  4. rails by exact name: AGND and GND on two sheets are two rails, their interface one net;
  *  5. determinism: two runs give the same tree, ports, pins and structural ids; the module draws no crypto.randomUUID of its own (the
  *     per-block layouts draw exactly what they draw alone);
@@ -22,55 +24,25 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mergeBuildNetlists } from "@/app/lib/merge-netlists";
-import { BLINKER_PART_IDS, FIXTURE_RESOLUTION_PART_IDS, GENERATION_FIXTURE_PART_IDS, fixtureRuntimeCatalog } from "@/app/lib/fixture-runtime/blinker/catalog";
-import { DRONE_BLOCK_NAMES, droneBlockDesign, dronePlan, type DesignSpec } from "@/app/lib/fixture-runtime/generation-recipes";
-import { designSubmission, type ReturnedPart } from "@/app/lib/fixture-runtime/generation-policy";
-import { deriveGeneratedSheets, type GeneratedSheetSet, type GeneratedSheetsPlannedBlock, type PinTypedPart } from "@/app/lib/schematic/generated-sheets";
+import { BLINKER_PART_IDS } from "@/app/lib/fixture-runtime/blinker/catalog";
+import { DRONE_BLOCK_NAMES } from "@/app/lib/fixture-runtime/generation-recipes";
+import { deriveGeneratedSheets, type GeneratedSheetSet, type GeneratedSheetsPlannedBlock } from "@/app/lib/schematic/generated-sheets";
 import { resolveProjectConnectivity, type ProjectConnectivity } from "@/app/lib/schematic/project-connectivity";
 import { sheetOf, validateSheetHierarchy } from "@/app/lib/schematic/sheets";
 import { ROOT_SHEET_ID, netLabelNameKey, type BuildLogicalNetlist, type SchematicState } from "@/lib/schematic-types";
-import { autoLayoutBuildValidated } from "../build-auto-layout";
-import { blockNetlistOf, generatedSheetId, generatedSheetSeedKey, layoutGeneratedSheets, sheetPortDirectionOf, type GeneratedSheetLayout } from "../build-sheet-layout";
+import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
+import { blockNetlistOf, generatedSheetId, generatedSheetSeedKey, layoutGeneratedSheets, sheetPortDirectionOf, type GeneratedSheetLayout } from "@/lib/build-sheet-layout";
+import { J5_FIXTURE_CATALOG, J5_PIN_TYPED_PARTS, generatedDrone, j5FixtureLookup } from "./_j5-generated-drone";
 
 afterEach(() => vi.restoreAllMocks());
 
-// ─── the fixture drone as the provider submits it (the j5-generated-sheets recipe) ─────────────────────────────────────────────
+// ─── the fixture drone as the provider submits it (the j5-generated-sheets recipe; app/lib/__tests__/_j5-generated-drone.ts) ─────────
 
-const ROLE_PART: Readonly<Record<string, string>> = {
-  header2: BLINKER_PART_IDS.header, capacitor: BLINKER_PART_IDS.capacitor, resistor: BLINKER_PART_IDS.resistor, led: BLINKER_PART_IDS.led,
-  ldo: GENERATION_FIXTURE_PART_IDS.ldo, nmos: GENERATION_FIXTURE_PART_IDS.nmos, schottky: GENERATION_FIXTURE_PART_IDS.schottky, mcu: GENERATION_FIXTURE_PART_IDS.mcu,
-  imu: GENERATION_FIXTURE_PART_IDS.imu, "header-isp": GENERATION_FIXTURE_PART_IDS.header2x03, "header-uart": GENERATION_FIXTURE_PART_IDS.header1x04,
-  timer: BLINKER_PART_IDS.timer, potentiometer: GENERATION_FIXTURE_PART_IDS.potentiometer, "signal-diode": FIXTURE_RESOLUTION_PART_IDS.eligibleDiode,
-};
-const catalog = fixtureRuntimeCatalog().cachedParts;
-function returned(partId: string): ReturnedPart {
-  const part = catalog.get(partId);
-  if (!part) throw new Error(`fixture part ${partId} missing`);
-  return { partId, mainCategory: part.mainCategory, pins: part.pins.map((pin) => ({ number: pin.number, name: pin.name, type: pin.type ?? "" })), verified: true, orderableValues: null, text: part.name, name: part.name };
-}
-function submitted(design: DesignSpec): BuildLogicalNetlist {
-  const filled = new Map(design.roles.map((role) => {
-    const part = returned(ROLE_PART[role.key]!);
-    const values = new Map(design.components.filter((component) => component.role === role.key).map((component) => [component.ref, component.values === "part-name" ? part.name : component.values[0]!] as const));
-    return [role.key, { part, values }] as const;
-  }));
-  return designSubmission(design, filled) as unknown as BuildLogicalNetlist;
-}
-const PARTS: PinTypedPart[] = [...new Set(Object.values(ROLE_PART))].map((partId) => ({ partId, pins: returned(partId).pins }));
-
-/** The drone's planned blocks, its merged netlist and the derived sheet set (non-null for the drone). */
-function drone(motors: number, barometer: boolean, omit: readonly string[] = []): { netlist: BuildLogicalNetlist; set: GeneratedSheetSet; findings: string[] } {
-  const plan = dronePlan(motors, barometer);
-  const planned: GeneratedSheetsPlannedBlock[] = plan.blocks.map((block, index) => ({ blockId: `b${index + 1}`, name: block.name, sharedNets: block.sharedNets, status: omit.includes(block.name) ? "omitted" : "designed" }));
-  const designedBlocks = plan.blocks.filter((block) => !omit.includes(block.name)).map((block) => ({ name: block.name, netlist: submitted(droneBlockDesign(block.name, block.sharedNets)!) }));
-  const merged = mergeBuildNetlists(designedBlocks);
-  const ids = planned.filter((block) => block.status === "designed").map((block) => block.blockId);
-  const doc = deriveGeneratedSheets({ planned, designed: merged.blocks.map((block, index) => ({ blockId: ids[index]!, name: block.name, netlist: block.netlist })), flat: merged.netlist, parts: PARTS });
-  if (!doc.sheets) throw new Error(`the drone derived no sheet set: ${doc.findings.join(" | ")}`);
-  return { netlist: merged.netlist, set: doc.sheets, findings: doc.findings };
-}
+const catalog = J5_FIXTURE_CATALOG;
+const PARTS = J5_PIN_TYPED_PARTS;
+const drone = generatedDrone;
 const SEED = "eng1-0123456789abcdef0123456789abcdef";
-const lookup = (partId: string) => { const part = catalog.get(partId); return part ? { pins: part.pins } : null; };
+const lookup = j5FixtureLookup;
 const laidOut = (layout: GeneratedSheetLayout): Extract<GeneratedSheetLayout, { kind: "sheets" }> => { if (layout.kind !== "sheets") throw new Error(`kept flat: ${layout.finding}`); return layout; };
 /** every catalog pin of a connectivity result as "REF#pad", grouped per net with two or more pins, canonical */
 function pinGroups(state: SchematicState, conn: ProjectConnectivity): string[] {
@@ -175,10 +147,17 @@ describe("[PR-J5] 1. the four-motor drone lays out as System overview + 4 sheets
     expect(conn.nets.find((net) => net.name === "GND")!.sheetIds.length).toBe(4);
   });
 
-  it("every block drawing validated (the merged validation is ok) and the layout reports no finding", () => {
+  it("the sheeted drawing validates against the flat netlist (no floating interface pin) and the layout reports no finding", () => {
     expect(layout.validation.ok).toBe(true);
     expect(layout.validation.violations).toEqual([]);
     expect(layout.findings).toEqual([]);
+    // why the check is the whole drawing's: alone, a block's drawing reports each interface pin as floating (its one label has no
+    // partner on that sheet) - through its port the pin reaches the other sheets, so the sheeted drawing has no such finding
+    const mcu = set.children[2]!;
+    const alone = autoLayoutBuildValidated(blockNetlistOf(netlist, mcu), catalog).validation;
+    expect(alone.ok).toBe(false);
+    expect(alone.violations.length).toBeGreaterThan(0);
+    expect(alone.violations.every((item) => item.kind === "floating-pin")).toBe(true);
   });
 });
 
@@ -203,14 +182,27 @@ describe("[PR-J5] 2. the barometer partial: the omitted block is a visible incom
 });
 
 describe("[PR-J5] 3. the conservative rule: a tampered or empty set keeps the flat page with a finding", () => {
-  it("a wired part moved across blocks (a connection crossing without an interface)", () => {
+  it("a label-joined part moved across blocks: its local nets would split, so the drawing proof keeps the flat page", () => {
     const { netlist, set } = drone(4, false);
     const motors = set.children[1]!, mcu = set.children[2]!;
     const q1 = motors.components.find((ref) => ref.startsWith("Q"))!;
     const tampered: GeneratedSheetSet = { ...set, children: set.children.map((child) => (child === motors ? { ...child, components: child.components.filter((ref) => ref !== q1) } : child === mcu ? { ...child, components: [...child.components, q1] } : child)) };
     const layout = layoutGeneratedSheets(netlist, tampered, catalog, { seed: SEED });
     expect(layout.kind).toBe("flat");
-    if (layout.kind === "flat") expect(layout.finding).toMatch(/^Kept on one page: \d+ connection\(s\) cross sheets without a declared interface\.$/);
+    if (layout.kind === "flat") expect(layout.finding).toMatch(/^Kept on one page: the sheeted drawing connects pins differently from the design \(\d+ net group\(s\) differ\)\.$/);
+  });
+
+  it("a wire between two blocks (a connection crossing without an interface) keeps the flat page", () => {
+    const R = BLINKER_PART_IDS.resistor;
+    const a: BuildLogicalNetlist = { components: [{ refDes: "R1", partId: R, value: "1k", role: "passive" }], connections: [{ kind: "label", pin: "R1.1", labelName: "SIG" }, { kind: "label", pin: "R1.2", labelName: "GND", labelKind: "ground" }], explanation: "" };
+    const b: BuildLogicalNetlist = { components: [{ refDes: "R1", partId: R, value: "2k", role: "passive" }], connections: [{ kind: "label", pin: "R1.1", labelName: "SIG" }, { kind: "label", pin: "R1.2", labelName: "GND", labelKind: "ground" }], explanation: "" };
+    const merged = mergeBuildNetlists([{ name: "A", netlist: a }, { name: "B", netlist: b }]);
+    const planned: GeneratedSheetsPlannedBlock[] = [{ blockId: "b1", name: "A", sharedNets: ["SIG"], status: "designed" }, { blockId: "b2", name: "B", sharedNets: ["SIG"], status: "designed" }];
+    const doc = deriveGeneratedSheets({ planned, designed: merged.blocks.map((block, index) => ({ blockId: `b${index + 1}`, name: block.name, netlist: block.netlist })), flat: merged.netlist, parts: PARTS });
+    expect(doc.sheets).not.toBeNull();
+    const crossing: BuildLogicalNetlist = { ...merged.netlist, connections: [...merged.netlist.connections, { from: "R1.1", to: "R2.1" }] };
+    expect(layoutGeneratedSheets(crossing, doc.sheets!, catalog, { seed: SEED })).toEqual({ kind: "flat", kept: "flat", finding: "Kept on one page: 1 connection(s) cross sheets without a declared interface." });
+    expect(laidOut(layoutGeneratedSheets(merged.netlist, doc.sheets!, catalog, { seed: SEED })).interfaces).toEqual(["SIG"]);
   });
 
   it("a set whose sheets do not hold the design's parts, and a set with no designed sheet", () => {

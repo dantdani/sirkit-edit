@@ -50,7 +50,7 @@ describe("B09.3 §A — lineage is part of context integrity (R1)", () => {
     const issues = verifyAgentContextIntegrity(diverged);
     expect(issues.some((issue) => issue.includes("lineage"))).toBe(true);
     const gateway = createAgentToolGateway(sirkitToolRegistry());
-    for (const [toolId, version] of [["sirkit.project.canonical-revision-inspect", "1.0.0"], ["sirkit.schematic.inspect", "1.1.0"], [PROPOSAL_ID, AGENT_PROPOSAL_TOOL_VERSION]] as const) {
+    for (const [toolId, version] of [["sirkit.project.canonical-revision-inspect", "1.0.0"], ["sirkit.schematic.inspect", "1.2.0"], [PROPOSAL_ID, AGENT_PROPOSAL_TOOL_VERSION]] as const) { // [PR-J5, 2026-10-23] pin move: sirkit.schematic.inspect 1.1.0 -> 1.2.0 (the optional sheetId / neighbours; a read without options is 1.1.0's bytes)
       const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId, version, args: toolId === PROPOSAL_ID ? { ops: [{ op: "set-value", target: "r1", value: "1k" }] } : {}, context: diverged, timeoutMs: 3000 });
       expect(outcome, toolId).toMatchObject({ kind: "refused", status: "context_integrity" });
     }
@@ -127,7 +127,7 @@ describe("B09.3 §B — the registered resource path is the ONLY read path (R3)"
   it("R3: boardless schematic inspection refuses through the gateway with structured authority_unavailable", async () => {
     const assembly = assemble({ board: undefined });
     const gateway = createAgentToolGateway(sirkitToolRegistry());
-    const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.schematic.inspect", version: "1.1.0", args: {}, context: assembly.context, timeoutMs: 3000 });
+    const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.schematic.inspect", version: "1.2.0", args: {}, context: assembly.context, timeoutMs: 3000 }); // [PR-J5, 2026-10-23] pin move: sirkit.schematic.inspect 1.1.0 -> 1.2.0 (the optional sheetId / neighbours; a read without options is 1.1.0's bytes)
     expect(outcome).toMatchObject({ kind: "refused", ok: false, status: "authority_unavailable" });
   });
 
@@ -153,7 +153,7 @@ describe("B09.3 §B — the registered resource path is the ONLY read path (R3)"
   it("a complete valid canonical context serves schematic inspection through the REGISTERED ReadToolInvocationService path", async () => {
     const assembly = assemble();
     const gateway = createAgentToolGateway(sirkitToolRegistry());
-    const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.schematic.inspect", version: "1.1.0", args: {}, context: assembly.context, timeoutMs: 3000 });
+    const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.schematic.inspect", version: "1.2.0", args: {}, context: assembly.context, timeoutMs: 3000 }); // [PR-J5, 2026-10-23] pin move: sirkit.schematic.inspect 1.1.0 -> 1.2.0 (the optional sheetId / neighbours; a read without options is 1.1.0's bytes)
     if (outcome.kind !== "read" || !outcome.ok) throw new Error(`expected read, got ${JSON.stringify(outcome).slice(0, 200)}`);
     expect(outcome.verification).not.toContain("snapshot");
     expect(outcome.sourceRevisionDigest).toBe(assembly.context.canonicalRevisionDigest);

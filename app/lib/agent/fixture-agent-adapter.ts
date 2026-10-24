@@ -951,7 +951,9 @@ async function scriptedGenerationTaskContinue(adapter: FixtureAgentAdapter, inpu
 //     sirkit.schematic.inspect {} (the whole-project read: which catalog parts the overview holds), then
 //     sirkit.schematic.propose-sheet-organization with the fixture four-motor drone's DEFAULT grouping - the groups J4's planner proposes
 //     for the flat drone without hints (app/lib/schematic/sheet-organization.ts proposeSheetGroups; j5-organize-proposal-tool pins the
-//     two equal) - when the inspection shows every part of that grouping; any other schematic is answered in words (nothing is called).
+//     two equal) - when the inspection shows every part of that grouping; any other schematic is answered in words (nothing is called);
+//     a run without that board-backed read (a schematic-only page: no PCB editor published a board) proposes directly, and the server
+//     resolves every member by name, refusing the ones the schematic does not hold.
 // The sealed proposal rides its own event to the page's review card; only the human applies it (one schematic.move-to-sheet transaction).
 
 const ORGANIZE_SHEETS = /^(?:please\s+)?organi[sz]e\s+this\s+(?:schematic|sheet|design|circuit)\s+into\s+(?:subsystem\s+)?sheets$/i;
@@ -985,7 +987,16 @@ function scriptedOrganizeStart(adapter: FixtureAgentAdapter, input: Parameters<P
   if (!planFixtureOrganize(input.userMessage)) return null;
   const run: OrganizeRun = { stage: "inspect", seq: 0 };
   ORGANIZE_RUNS.set(adapter, run);
+  // the whole-project read is a canonical-state read (it needs the PCB editor's board); a run without it - a schematic-only page -
+  // goes straight to the proposal, whose server resolves every member by name and refuses an unknown one (nothing is guessed)
+  if (!input.tools.some((tool) => tool.toolId === "sirkit.schematic.inspect")) { run.stage = "propose"; return organizeCall(adapter, run, input.tools, SHEET_ORGANIZATION_TOOL_ID_FOR_SCRIPT, organizeArgs()); }
   return organizeCall(adapter, run, input.tools, "sirkit.schematic.inspect", {});
+}
+
+/** [PR-J5] The tool id the script proposes with (spelt here: the adapter imports no proposal module) and its arguments. */
+const SHEET_ORGANIZATION_TOOL_ID_FOR_SCRIPT = "sirkit.schematic.propose-sheet-organization";
+function organizeArgs(): Record<string, unknown> {
+  return { groups: FIXTURE_DRONE_ORGANIZE_GROUPS.map((group) => ({ name: group.name, members: [...group.members] })) };
 }
 
 /** [PR-J5] What the scripted agent reads out of the sealed organisation's result (the same fields a model would report). */
@@ -1018,7 +1029,7 @@ function scriptedOrganizeContinue(adapter: FixtureAgentAdapter, input: Parameter
       return roleStep(adapter, { text: `(fixture agent) the schematic read answered ${statusOf(outputText)}; this schematic is not the fixture four-motor drone (${refs.size === 0 ? "no parts were read" : `${missing.slice(0, 6).join(", ")} ${missing.length === 1 ? "is" : "are"} not on it`}), so no organise script applies. Nothing was changed.` });
     }
     run.stage = "propose";
-    return organizeCall(adapter, run, input.tools, "sirkit.schematic.propose-sheet-organization", { groups: FIXTURE_DRONE_ORGANIZE_GROUPS.map((group) => ({ name: group.name, members: [...group.members] })) });
+    return organizeCall(adapter, run, input.tools, SHEET_ORGANIZATION_TOOL_ID_FOR_SCRIPT, organizeArgs());
   }
   ORGANIZE_RUNS.delete(adapter);
   const facts = organizeProposalFacts(outputText);

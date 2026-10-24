@@ -29,12 +29,12 @@
  * `editorProps` below), and a single-sheet document never writes the presentation store (the controller gates the write).
  */
 
-import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { ViewSessionBridge } from "@/app/lib/agent/view-session-bridge";
 import type { ProjectAsyncScope } from "@/app/lib/engineering/project-async-scope";
 import type { SheetCamera, StorageLike } from "@/app/lib/project/sheet-navigation-store";
 import { projectSheet, scopedGraph, type PartPinsSource, type SchematicGraphApi } from "@/app/lib/schematic/sheet-lens";
-import { sheetsOf } from "@/app/lib/schematic/sheets";
+import { sheetPathName, sheetsOf } from "@/app/lib/schematic/sheets";
 import { ROOT_SHEET_ID, type KicadComponentInstance, type NetLabel, type SchComponent, type SchematicState, type Wire } from "@/lib/schematic-types";
 import { SheetBlocksLayer } from "../SheetBlocksLayer";
 import type { SheetNavigatorProps } from "../SheetNavigator";
@@ -75,6 +75,11 @@ export interface SheetLensEditorProps {
   sheetLayer: ReactNode;
   /** Go to found no such component on the active sheet: true when the part's sheet was opened (select + focus replay there). */
   onLocateElsewhere: (ref: string) => boolean;
+  /** [PR-J5, 2026-10-23] Runbook J.6.5: the sheets the agent's `schematic.open-sheet` view command resolves (id, display name, path; the
+   *  document's order), undefined for a single-sheet document (the command then answers unavailable), and its open action (false when
+   *  the document has no such sheet). Navigation stays a view command: the controller switches the canvas as the navigator does. */
+  viewSheets: ReadonlyArray<{ id: string; name: string; path: string }> | undefined;
+  openViewSheet: (sheetId: string) => boolean;
 }
 
 export interface SchematicSheetLens {
@@ -115,6 +120,14 @@ export function useSchematicSheetLens(input: UseSchematicSheetLensInput): Schema
   const graph = useMemo(() => (legacy ? rawGraph : scopedGraph(rawGraph, () => controller.authoritative(), () => controller.activeSheetId())), [legacy, rawGraph, controller]);
 
   const sheetLayer: ReactNode = legacy ? null : <SheetBlocksLayer state={authoritative} activeSheetId={activeSheetId} openSheet={controller.openSheet} />;
+  // [PR-J5, 2026-10-23] the open-sheet view command's sheets and its open action (runbook J.6.5), from the authoritative tree
+  const viewSheets = useMemo(() => (sheets === undefined ? undefined : sheets.sheets.map((sheet) => ({ id: sheet.id, name: sheet.name, path: sheetPathName({ sheets }, sheet.id) }))), [sheets]);
+  const openViewSheet = useCallback((sheetId: string): boolean => {
+    const tree = controller.authoritative().sheets;
+    if (tree === undefined || !tree.sheets.some((sheet) => sheet.id === sheetId)) return false;
+    controller.openSheet(sheetId);
+    return true;
+  }, [controller]);
   const editorProps: SheetLensEditorProps = {
     // [PR-J3 integration, 2026-10-23] review J3N-1: the camera comes from the controller's LIVE record (onCameraChange updates it
     // synchronously; a switch and a project load read the same record), not from the snapshot emitted at the last switch, so the editor
@@ -124,6 +137,8 @@ export function useSchematicSheetLens(input: UseSchematicSheetLensInput): Schema
     onCameraChange: controller.onCameraChange,
     sheetLayer,
     onLocateElsewhere: controller.locateElsewhere,
+    viewSheets,
+    openViewSheet,
   };
   const navigatorProps: SheetNavigatorProps = { state: authoritative, activeSheetId, activation: snapshot.activation, notice: snapshot.notice, controller: controller.api };
   return {

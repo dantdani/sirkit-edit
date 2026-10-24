@@ -77,7 +77,7 @@ describe("[PR-J5] describeSchematicProposal for a sheeted proposal", () => {
     expect(summary.details[summary.details.length - 1]).toBe("Every existing sheet (Overview, Power, IMU) is replaced by the apply (one undoable transaction).");
     expect(summary.sheets!.replacedSheets).toEqual(["Overview", "Power", "IMU"]);
     expect(replacedSheetsLine(current)).toBe("Every existing sheet (Overview, Power, IMU) is replaced by the apply (one undoable transaction).");
-    expect(replacedSheetsLine(empty())).toBeNull();
+    expect(replacedSheetsLine({ ...empty(), sheets: undefined })).toBeNull();
     expect(replacedSheetsLine({ sheets: undefined })).toBeNull();
     // a populated single-sheet document: the generic removal sentence, as before
     expect(describeSchematicProposal(sheeted(), { ...empty(), kicadComponents: [part("old", "R9", "1k")] }).details.at(-1)).toBe("Every existing component, wire and label on this sheet is removed by the apply (one undoable transaction).");

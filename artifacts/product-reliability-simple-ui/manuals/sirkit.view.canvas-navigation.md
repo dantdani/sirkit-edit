@@ -132,7 +132,7 @@ Input schema (the registry's wire schema; the runtime bounds beyond it are the h
   ]
 }
 ```
-Valid example (each validated at generation time against the input schema by `assertSafeJsonValue` and `validateAgainstSchema`, app/lib/engineering/tool-io-validation.ts; the render refuses an example that does not validate):
+Valid examples (each validated at generation time against the input schema by `assertSafeJsonValue` and `validateAgainstSchema`, app/lib/engineering/tool-io-validation.ts; the render refuses an example that does not validate):
 ```json
 {
   "editor": "pcb",
@@ -141,6 +141,14 @@ Valid example (each validated at generation time against the input schema by `as
     "kind": "component",
     "ref": "U1"
   }
+}
+```
+(curated example)
+```json
+{
+  "editor": "schematic",
+  "action": "open-sheet",
+  "sheet": "IMU"
 }
 ```
 (curated example)

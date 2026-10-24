@@ -60,7 +60,7 @@ describe("B09.2 §A — no synthetic canonical authority (R1/R2)", () => {
   it("[superseded by B09.3] boardless schematic inspection REFUSES (the snapshot bypass was removed); a complete valid board restores the full canonical path", async () => {
     const gateway = createAgentToolGateway(sirkitToolRegistry());
     const schematicOnly = contextOf({ board: undefined });
-    const boardless = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.schematic.inspect", version: "1.1.0", args: {}, context: schematicOnly.context, timeoutMs: 3000 });
+    const boardless = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.schematic.inspect", version: "1.2.0", args: {}, context: schematicOnly.context, timeoutMs: 3000 }); // [PR-J5, 2026-10-23] pin move: sirkit.schematic.inspect 1.1.0 -> 1.2.0 (the optional sheetId / neighbours; a read without options is 1.1.0's bytes)
     expect(boardless).toMatchObject({ kind: "refused", ok: false, status: "authority_unavailable" });
 
     const full = contextOf({});
@@ -324,7 +324,7 @@ describe("B09.2 §E — proposal scope + capability closure (R6/R7)", () => {
       (context: typeof assembly.context) => ({ ...context, discovery: { ...context.discovery, currentRevisionDigest: "eng1-forgedforgedforged" } }),
     ];
     for (const diverge of divergences) {
-      const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.schematic.inspect", version: "1.1.0", args: {}, context: diverge(assembly.context) as never, timeoutMs: 3000 });
+      const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.schematic.inspect", version: "1.2.0", args: {}, context: diverge(assembly.context) as never, timeoutMs: 3000 }); // [PR-J5, 2026-10-23] pin move: sirkit.schematic.inspect 1.1.0 -> 1.2.0 (the optional sheetId / neighbours; a read without options is 1.1.0's bytes)
       expect(outcome).toMatchObject({ kind: "refused", status: "context_integrity" });
     }
     // Non-"main" branch works when everything is CONSISTENT.

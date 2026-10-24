@@ -9,12 +9,13 @@
  * providers, no mutation. Malformed input fails closed with a structured
  * shape instead of fabricating a schematic.
  *
- * [PR-J5, 2026-10-23] Runbook J.6.7 (OD-259): the read is SHEET-AWARE. A document without a sheet tree, read without options, yields
- * exactly the 1.1.0 bytes. A document with a sheet tree adds a bounded `sheets.tree` (each sheet's id, name, parent, path, component
- * count and ports with their bound state) beside the unchanged whole-project lists. With `sheetId` the component and label lists are
- * ONE sheet's and `sheet` summarises it (its ports, local label names, child blocks); with `neighbours` the ports of the other sheets
- * that the project connectivity authority (app/lib/schematic/project-connectivity.ts) joins to its ports are fetched explicitly -
- * never every component of every sheet in every call. An unknown sheet id is a diagnostic over the tree, never a guess.
+ * [PR-J5, 2026-10-23] Runbook J.6.7 (OD-259): the read is SHEET-AWARE on request. Read WITHOUT options it is the 1.1.0 read, byte for
+ * byte, whatever the document (a sheet tree or none): the whole-project lists and counts, no new key. With `sheetId` the component and
+ * label lists are ONE sheet's, `sheet` summarises it (its ports with their bound state, its local label names, its child blocks) and
+ * `sheets.tree` lists every sheet (id, name, parent, path, component count, ports) - `sheetId: "root"` is how a model finds the tree;
+ * with `neighbours` the ports of the other sheets that the project connectivity authority (app/lib/schematic/project-connectivity.ts)
+ * joins to the sheet's ports are fetched explicitly - never every component of every sheet in every call. An unknown sheet id is a
+ * diagnostic over the tree, never a guess.
  */
 
 import { ROOT_SHEET_ID, schDisplayRef, type SchematicState } from "@/lib/schematic-types";
@@ -60,7 +61,7 @@ export interface SchematicInspection {
   components: Array<{ family: "theory" | "kicad"; id: string; displayRef: string; type: string; value: string; x: number; y: number }>;
   netLabels: Array<{ id: string; name: string }>;
   diagnostics: string[];
-  /** [PR-J5] the sheet tree (a document with a sheet tree, or any read asked with `sheetId`). */
+  /** [PR-J5] the sheet tree (only a read asked with `sheetId`; a read without options never carries it). */
   sheets?: { tree: SchematicInspectionSheetSummary[]; note: string };
   /** [PR-J5] the asked sheet's bounded summary. */
   sheet?: {
@@ -167,9 +168,8 @@ export function inspectSchematicState(schematic: unknown, options: SchematicInsp
   const sheetId = options.sheetId;
   if (sheetId === undefined) {
     const base: SchematicInspection = { valid: true, schematicDigest: schematicStateDigest(schematic), counts, components: projectComponents(schematic, null), netLabels: projectLabels(schematic, null), diagnostics: [] };
-    // a single-sheet document without options: the 1.1.0 bytes exactly (no new key)
-    if (!sheeted) return base;
-    return { ...base, sheets: { tree: treeOf(schematic), note: "The lists above cover the whole project; ask with sheetId for one sheet's parts, labels and ports (neighbours: true adds the other sheets' ports joined to them)." } };
+    // without options: the 1.1.0 bytes exactly, a sheet tree or none (no new key; the tree is one `sheetId: "root"` read away)
+    return base;
   }
   const tree = treeOf(schematic);
   const sheet = sheetsOf(schematic).find((item) => item.id === sheetId);

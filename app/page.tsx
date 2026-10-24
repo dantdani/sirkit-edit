@@ -1220,7 +1220,7 @@ function SchematicEditor({
   pageSize,
   onDeleteComponent,
   graph,
-  viewScope,
+  viewScope, viewSheets, openViewSheet, // [PR-J5, 2026-10-23] the lens's open-sheet props (runbook J.6.5): the sheets the agent's schematic.open-sheet resolves and the navigator's open action
   viewSessionBridge, initialCamera, onCameraChange, sheetLayer, onLocateElsewhere, // [PR-J3, 2026-10-22] the sheet lens's editor props (useSchematicSheetLens editorProps)
 }: {
   tool: Tool;
@@ -1257,7 +1257,7 @@ function SchematicEditor({
     commit(label: string, finalGraph: SchematicGraphAfter): void;
   };
   /** [B17-D] the project/branch the schematic view session is scoped to. */
-  viewScope: { projectId: string; branchId: string };
+  viewScope: { projectId: string; branchId: string }; viewSheets?: ReadonlyArray<{ id: string; name: string; path: string }>; openViewSheet?: (sheetId: string) => boolean; // [PR-J5, 2026-10-23] the open-sheet view command's sheets and open action (useSchematicSheetLens editorProps)
   /** [B17-F] the page-owned view-session bridge (the schematic surface registers while mounted). */
   viewSessionBridge: ViewSessionBridge; initialCamera?: SheetCamera; onCameraChange?: (camera: SheetCamera) => void; sheetLayer?: React.ReactNode; onLocateElsewhere?: (ref: string) => boolean; // [PR-J3, 2026-10-22] J.3 items 1, 2, 5: the active sheet's stored camera (the mount fits the page when absent), its camera writes, the overview's subsystem blocks, and Go to's fallback to the part's sheet
 }) {
@@ -1311,7 +1311,7 @@ function SchematicEditor({
     projectId: viewScope.projectId,
     branchId: viewScope.branchId,
     actorId: "local",
-    sources: { components, kicadComponents, netLabels, pagePx: { width: pageSizePx(pageSize).widthPx, height: pageSizePx(pageSize).heightPx } },
+    sources: { components, kicadComponents, netLabels, pagePx: { width: pageSizePx(pageSize).widthPx, height: pageSizePx(pageSize).heightPx }, ...(viewSheets && openViewSheet ? { sheets: viewSheets, openSheet: openViewSheet } : {}) }, // [PR-J5, 2026-10-23] + the lens's sheets and open action iff the project has sheets (schematic.open-sheet, runbook J.6.5)
     selectedId,
     selectedKicadId,
     applySelection: (id, family) => {
@@ -4865,8 +4865,8 @@ export default function Home() {
             approvedMutationAudit.record({ at: Date.now(), proposalId: resolution.proposal.proposalId, originRunId: resolution.runId, event: "approval-displayed", code: null });
             appendActivityStep(logId, resolutionLines.awaitingReview(resolution.proposal), "done");
             return;
-          }
-          case "sheet_organization_ready": { const organise = receiveSheetOrganizationEvent(event); if (!organise) { appendActivityStep(logId, sheetOrganizationLines.dropped(), "error"); return; } const organiseVerdict = sheetOrganizationCurrency(organise.proposal, liveSheetForSealedArtifacts()); if (!organiseVerdict.ok) { appendActivityStep(logId, sheetOrganizationLines.notOffered(organiseVerdict.detail), "error"); return; } setPendingOrganization({ received: organise, logId }); appendActivityStep(logId, sheetOrganizationLines.awaitingReview(organise.proposal), "done"); return; } /* [PR-J5, 2026-10-23] OD-259 item 5 (one existing line): the assistant's sealed organise proposal - the SAFE receiver (integrity), the currency check against the LIVE editor (scope, expiry, head, base digest), then the review card; receiving it mutates nothing (only the human's Approve applies, through the Sheets controller's one transaction) */ case "execution_grant_ready": {
+          } case "sheet_organization_ready": { const organise = receiveSheetOrganizationEvent(event); if (!organise) { appendActivityStep(logId, sheetOrganizationLines.dropped(), "error"); return; } const organiseVerdict = sheetOrganizationCurrency(organise.proposal, liveSheetForSealedArtifacts()); if (!organiseVerdict.ok) { appendActivityStep(logId, sheetOrganizationLines.notOffered(organiseVerdict.detail), "error"); return; } setPendingOrganization({ received: organise, logId }); appendActivityStep(logId, sheetOrganizationLines.awaitingReview(organise.proposal), "done"); return; } /* [PR-J5, 2026-10-23] OD-259 item 5 (one existing line): the assistant's sealed organise proposal - the SAFE receiver (integrity), the currency check against the LIVE editor (scope, expiry, head, base digest), then the review card; receiving it mutates nothing (only the human's Approve applies, through the Sheets controller's one transaction) */
+          case "execution_grant_ready": {
             // [B18-B] a server-minted execution grant — the SAFE receiver re-parses it and checks its coherence; the PCB
             // editor (the composition root) runs the granted-execution ritual: preview grants wait for the human's Confirm,
             // explicit grants execute once and settle back to the server. Receiving it changes nothing.
@@ -7171,11 +7171,11 @@ export default function Home() {
               <DialogTitle>{pendingProposalSummary?.headline ?? "Apply the generated schematic?"}</DialogTitle>
             </DialogHeader>
             {/* [B16.1C §F] the approval names exactly what will change. */}
-            <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-400" data-testid="schematic-proposal-summary">
-              {(pendingProposalSummary?.details ?? []).map((line) => <li key={line}>{line}</li>)}{pendingReplace && replacedSheetsLine(authoritativeSchematic) !== null && <li key="replaced-sheets" data-testid="schematic-proposal-replaced-sheets">{replacedSheetsLine(authoritativeSchematic)}</li>} {/* [PR-J5, 2026-10-23] OD-259 item 1: the sheets the apply replaces, from the live document (in scope here; the memo above runs before the authoritative state is declared) */}
+            <ul className="max-h-[35vh] list-disc space-y-1 overflow-y-auto pl-5 text-sm text-zinc-400" data-testid="schematic-proposal-summary">{/* [PR-J5, 2026-10-23] bounded and scrollable: a generated multi-sheet design adds its sheet lines, and Approve must stay inside a 768 px viewport */}
+              {(pendingProposalSummary?.details ?? []).map((line) => <li key={line}>{line}</li>)}{pendingReplace && replacedSheetsLine(authoritativeSchematic) !== null && <li key="replaced-sheets" data-testid="schematic-proposal-replaced-sheets">{replacedSheetsLine(authoritativeSchematic)}</li>}{/* [PR-J5, 2026-10-23] OD-259 item 1: the sheets the apply replaces, from the live document (in scope here; the memo above runs before the authoritative state is declared) */}
             </ul>
             {pendingReplace?.explanation && <p className="max-h-32 overflow-auto whitespace-pre-wrap text-xs text-zinc-500">{pendingReplace.explanation}</p>}
-            {pendingReplace?.validationNote && <p className="text-xs text-amber-300" data-testid="schematic-proposal-validation">{pendingReplace.validationNote}</p>}
+            {pendingReplace?.validationNote && <p className="max-h-24 overflow-auto text-xs text-amber-300" data-testid="schematic-proposal-validation">{pendingReplace.validationNote}</p>} {/* [PR-J5, 2026-10-23] bounded like the explanation above (the sheet set's notes travel here) */}
             <DialogFooter>
               <Button
                 variant="ghost"
