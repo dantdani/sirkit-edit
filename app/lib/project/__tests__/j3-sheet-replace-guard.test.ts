@@ -9,6 +9,9 @@
  *  5. the message is bounded (under 240 characters for 512 sheets with 120-character names), lists at most four names, shortens long
  *     ones, and ends with the page's "Nothing was changed." wording; the fixture drone's organised document reads in full;
  *  6. purity: the inputs are not touched.
+ *  [PR-J5 integration, 2026-10-23] review B-5: case 5 also bounds a LONG root name, the Build advisory, the Theory composer's refusal
+ *  (review B-2) and the refusal with its "Why it is one page" findings - every one within 240 characters (the 84-character tail made
+ *  the 512-sheet worst case 246, the advisory 255, two long findings 889).
  * Pure: no I/O, no React, no page import.
  */
 import { describe, expect, it } from "vitest";
@@ -20,7 +23,10 @@ import {
   SHEET_REPLACE_GUARD_MAX_NAMES,
   SHEET_REPLACE_GUARD_MAX_NAME_LENGTH,
   SHEET_REPLACE_GUARD_TAIL,
+  SHEET_REPLACE_GUARD_THEORY_TAIL,
   flatReplacementRefusal,
+  flatReplacementRefusalWithFindings,
+  multiSheetReplaceAdvisory,
   multiSheetReplaceRefusal,
   sheetNamesForMessage,
 } from "../sheet-replace-guard";
@@ -84,6 +90,30 @@ describe("[PR-J3] the AI replace-result guard", () => {
     expect(organised).not.toContain("…");
     expect(organised).not.toContain(" more");
     expect(organised.length).toBeLessThanOrEqual(SHEET_REPLACE_GUARD_MAX_MESSAGE_LENGTH);
+    // [PR-J5 integration, 2026-10-23] review B-5: the worst case with a LONG root name (a renamed overview), for every message the guard words
+    const longRoot = (state: SchematicState): SchematicState => ({ ...state, sheets: { version: 1, sheets: state.sheets!.sheets.map((sheet) => (sheet.parentId === null ? { ...sheet, name: longName } : sheet)) } });
+    const worst = longRoot(many);
+    const refusal = multiSheetReplaceRefusal(worst)!;
+    expect(refusal.length).toBeLessThanOrEqual(SHEET_REPLACE_GUARD_MAX_MESSAGE_LENGTH);
+    expect(refusal.endsWith(SHEET_REPLACE_GUARD_TAIL)).toBe(true);
+    const theory = multiSheetReplaceRefusal(worst, "theory")!;
+    expect(theory.length).toBeLessThanOrEqual(SHEET_REPLACE_GUARD_MAX_MESSAGE_LENGTH);
+    expect(theory.endsWith(SHEET_REPLACE_GUARD_THEORY_TAIL)).toBe(true);
+    expect(theory).toContain("Theory mode draws one page");
+    const advisory = multiSheetReplaceAdvisory(worst)!;
+    expect(advisory.length).toBeLessThanOrEqual(SHEET_REPLACE_GUARD_MAX_MESSAGE_LENGTH);
+    expect(advisory.startsWith("This project has 512 schematic sheets (Analog front en…, Analog front en…")).toBe(true);
+    // the refusal with why it is one page: bounded in length (cut with "…"), the refusal itself never cut
+    const longFinding = `Kept on one page: ${"PWM1 is labelled in Motor driver stages, Flight controller MCU and IMU but is not a planned shared net. ".repeat(4)}`;
+    const withFindings = flatReplacementRefusalWithFindings(refusal, [longFinding, longFinding, longFinding]);
+    expect(withFindings.length).toBeLessThanOrEqual(SHEET_REPLACE_GUARD_MAX_MESSAGE_LENGTH);
+    expect(withFindings.startsWith(refusal)).toBe(true);
+    const short = multiSheetReplaceRefusal(sheeted(["Power"]))!;
+    const shortWithFindings = flatReplacementRefusalWithFindings(short, [longFinding, longFinding]);
+    expect(shortWithFindings.length).toBe(SHEET_REPLACE_GUARD_MAX_MESSAGE_LENGTH);
+    expect(shortWithFindings.startsWith(`${short} Why it is one page: PWM1 is labelled`)).toBe(true);
+    expect(shortWithFindings.endsWith("…")).toBe(true);
+    expect(flatReplacementRefusalWithFindings(short, ["Kept on one page: a."])).toBe(`${short} Why it is one page: a.`);
   });
 
   it("6. pure: neither argument is changed", () => {

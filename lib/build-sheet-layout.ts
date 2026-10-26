@@ -276,7 +276,7 @@ export function layoutGeneratedSheets(netlist: BuildLogicalNetlist, set: Generat
     const inbound = ports.filter((port) => port.direction === "input" || port.direction === "power_in").length;
     const side = Math.max(inbound, ports.length - inbound);
     const height = Math.max(DEFAULT_BLOCK_SIZE.height, Math.ceil((40 + PIN_STEP * side) / PIN_STEP) * PIN_STEP);
-    const slot = freeBlockSlot(state, ROOT_SHEET_ID, { width: DEFAULT_BLOCK_SIZE.width, height });
+    const slot = freeBlockSlot({ ...state, sheets: { version: 1, sheets: state.sheets!.sheets.filter((item) => item.parentId === null || item.block !== undefined) } }, ROOT_SHEET_ID, { width: DEFAULT_BLOCK_SIZE.width, height }); // [PR-J5 integration, 2026-10-23] review B-4: over the root and the blocks ALREADY placed only (a blockless sibling's default cell is not taken), so the blocks run left to right in plan order from the first cell
     // the placed blocks carry into the next slot search through the state's tree (never a mutation of the input list)
     state = { ...state, sheets: { version: 1, sheets: state.sheets!.sheets.map((item) => (item.id === sheet.id ? { ...item, block: slot } : item)) } };
   }

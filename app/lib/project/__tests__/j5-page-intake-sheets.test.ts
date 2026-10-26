@@ -72,7 +72,15 @@ describe("[PR-J5] 2. the result intake lays a planned result out as sheets after
     expect(intake).not.toMatch(/applySchematic\(|setPendingTier1\(|setPendingReplacement\(|setPendingPcbProposal\(|setPendingOrganization\(|<Dialog/);
     expect(page).toContain('import { layoutGeneratedSheets, type GeneratedSheets } from "@/lib/build-sheet-layout";');
     expect(page).toContain('data-testid="schematic-proposal-replaced-sheets"');
-    expect(count(page, "replacedSheetsLine(authoritativeSchematic)")).toBe(2); // the condition and the line, in the one dialog
+    expect(count(page, "replacedSheetsLine(authoritativeSchematic)")).toBe(1); // [PR-J5 integration, 2026-10-23] pin move (review B-3; was 2: the condition and a separate line): the details carry the sentence, the testid marks it
+    // [PR-J5 integration, 2026-10-23] review B-3: the summary memo reads the LIVE sheet set (it ran before authoritativeSchematic was declared,
+    // so over a multi-sheet base the headline lacked the sheet count and the details said "on this sheet" beside "every existing sheet")
+    expect(page).toContain("const pendingProposalSummary = useMemo(() => pendingReplace ? describeSchematicProposal(pendingReplace.state, { components, wires, kicadComponents, netLabels, ...(authoritativeSchematic.sheets ? { sheets: authoritativeSchematic.sheets } : {}) }) : null, [pendingReplace, components, wires, kicadComponents, netLabels, authoritativeSchematic.sheets]);");
+    expect(count(page, "const pendingProposalSummary = useMemo(")).toBe(1);
+    expect(page.indexOf("const pendingProposalSummary = useMemo(")).toBeGreaterThan(page.indexOf("const [authoritativeSchematic, setAuthoritativeSchematic] = useState<SchematicState>("));
+    expect(page).toContain(`{(pendingProposalSummary?.details ?? []).map((line) => (line === replacedSheetsLine(authoritativeSchematic) ? <li key={line} data-testid="schematic-proposal-replaced-sheets">{line}</li> : <li key={line}>{line}</li>))}`);
+    // [PR-J5 integration, 2026-10-23] review B-6: the dialog container itself is bounded and scrolls (the J3 dialogs' pattern)
+    expect(page).toContain('<DialogContent className="max-h-[90vh] overflow-y-auto" data-testid="schematic-proposal-review">');
     // the dialog stays inside a 1366 x 768 viewport with a generated multi-sheet design's lines (the browser run of the drone found
     // Approve below the fold before): the summary list and the notes are bounded, scrollable regions; no stray text node inside the list
     expect(page).toContain('<ul className="max-h-[35vh] list-disc space-y-1 overflow-y-auto pl-5 text-sm text-zinc-400" data-testid="schematic-proposal-summary">{/*');
@@ -88,11 +96,19 @@ describe("[PR-J5] 3. the Build start advises; a flat result stays refused at the
     const step = at('const logId = startActivityLog("Generating schematic", "Preparing request", prompt); if (sheetAdvisory !== null) appendActivityStep(logId, sheetAdvisory, "done");');
     expect(advisory).toBeLessThan(step);
     expect(step).toBeLessThan(at("const started = await startGenerationTask({ scope, clientRequestId: newGenerationClientRequestId(), prompt, provider: aiBrainRef.current,"));
-    expect(composer).not.toContain("multiSheetReplaceRefusal(");
+    // [PR-J5 integration, 2026-10-23] pin move (review B-2; was: the composer holds no multiSheetReplaceRefusal at all): the THEORY start still
+    // refuses (OD-257 item 3 kept: a Theory result is always one page; OD-259 item 2 revises the Build composer only) - the one call is
+    // Theory-gated, returns before the activity entry, and sits before the provider-bound generateSchematic request
+    const theory = 'const theoryRefusal = mode === "build" ? null : multiSheetReplaceRefusal(gestureCoordinatorRef.current!.authoritativeState(), "theory"); if (theoryRefusal !== null) { setScopedGenError(projectScopeRegistryRef.current!.capture(), theoryRefusal, 12000); return; }';
+    expect(count(composer, "multiSheetReplaceRefusal(")).toBe(1);
+    expect(composer).toContain(theory);
+    expect(at(theory)).toBeGreaterThan(advisory);
+    expect(at(theory)).toBeLessThan(step);
+    expect(at(theory)).toBeLessThan(at("const result = await generateSchematic(prompt, { scope, signal: scope.signal,"));
     expect(composer).not.toContain("sheetRefusal");
     expect(count(page, "multiSheetReplaceAdvisory(")).toBe(1);
-    // edit stays refused before its request; the result-less refusal is now the edit path's alone
-    expect(count(page, "multiSheetReplaceRefusal(")).toBe(1);
+    // edit stays refused before its request; [PR-J5 integration, 2026-10-23] pin move (review B-2; was 1): + the Theory start's refusal above
+    expect(count(page, "multiSheetReplaceRefusal(")).toBe(2);
     expect(page).toContain("const editRefusal = multiSheetReplaceRefusal(snapshot); if (editRefusal !== null) { setScopedGenError(scope, editRefusal, 12000); return; }");
   });
 
@@ -138,12 +154,17 @@ describe("[PR-J5] 5. the pure helpers and the inventory", () => {
     expect(multiSheetReplaceAdvisory(droneFixtureState())).toBeNull();
     expect(multiSheetReplaceAdvisory({ sheets: undefined })).toBeNull();
     const base = multiSheetDroneFixtureState();
-    expect(multiSheetReplaceAdvisory(base)).toBe("This project has 4 schematic sheets (Overview, Power, Motor drivers, IMU): a generated multi-sheet design replaces all of them after your review (one undoable step); a one-page design is refused at review.");
+    expect(multiSheetReplaceAdvisory(base)).toBe("This project has 4 schematic sheets (Overview, Power, Motor drivers, IMU): a generated multi-sheet design replaces them after review (one undoable step); a one-page design is refused."); // [PR-J5 integration, 2026-10-23] pin move (review B-5): shortened to the bound
     const refusal = flatReplacementRefusal(base, droneFixtureState())!;
     expect(refusal).toBe(multiSheetReplaceRefusal(base));
-    expect(refusal.endsWith("Ask for the design as subsystem blocks, or start a new project. Nothing was changed.")).toBe(true);
+    expect(refusal.endsWith("Ask for subsystem blocks or start a new project. Nothing was changed.")).toBe(true); // [PR-J5 integration, 2026-10-23] pin move (review B-5): the shorter tail
     expect(flatReplacementRefusalWithFindings(refusal, [])).toBe(refusal);
-    expect(flatReplacementRefusalWithFindings(refusal, ["Electrical check passed.", "Kept on one page: PWM1 is labelled in A, B but is not a planned shared net."])).toBe(`${refusal} Why it is one page: PWM1 is labelled in A, B but is not a planned shared net.`);
+    // [PR-J5 integration, 2026-10-23] pin move (review B-5; was the whole finding appended): the banner is bounded to SHEET_REPLACE_GUARD_MAX_MESSAGE_LENGTH -
+    // the "Why it is one page" tail is cut with "…" (the findings stay whole in the activity entry's steps); the refusal itself is never cut
+    const withWhy = flatReplacementRefusalWithFindings(refusal, ["Electrical check passed.", "Kept on one page: PWM1 is labelled in A, B but is not a planned shared net."]);
+    expect(withWhy.startsWith(`${refusal} Why it is one page: PWM1 is labelled in A, B`)).toBe(true);
+    expect(withWhy.length).toBeLessThanOrEqual(240);
+    expect(withWhy.endsWith("…")).toBe(true);
     expect(flatReplacementRefusalWithFindings(refusal, ["Kept on one page: a.", "Kept on one page: b.", "Kept on one page: c."])).toBe(`${refusal} Why it is one page: a. b. (and 1 more finding)`);
   });
 

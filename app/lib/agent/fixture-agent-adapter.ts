@@ -28,7 +28,7 @@
  * and the tool results.
  */
 import type { AgentStep, ProviderAgentAdapter, ProviderToolDeclaration } from "./contracts";
-import type { LLMProviderId } from "../llm/types";
+import type { LLMProviderId } from "../llm/types"; import { fixtureSheetOrganizationArgs, fixtureSheetOrganizationCandidates, fixtureSheetOrganizationFor, type FixtureSheetOrganization } from "../fixture-runtime/sheet-organization-groups"; // [PR-J5 integration, 2026-10-23] review J5R-AI-6: the organise turn proposes the design's OWN groups (a data module that imports nothing; on this existing line so no cited line moves)
 
 export const FIXTURE_AGENT_ENV = "SIRKIT_FIXTURE_AGENT";
 export const FIXTURE_AGENT_SCRIPTED = "scripted";
@@ -949,16 +949,21 @@ async function scriptedGenerationTaskContinue(adapter: FixtureAgentAdapter, inpu
 // model: one whole sentence becomes the calls a model would make, through the REAL loop, gateway, injected catalog port and seal -
 //   "Organize this schematic into subsystem sheets." (also "this sheet" / "this design" / "this circuit") ->
 //     sirkit.schematic.inspect {} (the whole-project read: which catalog parts the overview holds), then
-//     sirkit.schematic.propose-sheet-organization with the fixture four-motor drone's DEFAULT grouping - the groups J4's planner proposes
-//     for the flat drone without hints (app/lib/schematic/sheet-organization.ts proposeSheetGroups; j5-organize-proposal-tool pins the
-//     two equal) - when the inspection shows every part of that grouping; any other schematic is answered in words (nothing is called);
-//     a run without that board-backed read (a schematic-only page: no PCB editor published a board) proposes directly, and the server
-//     resolves every member by name, refusing the ones the schematic does not hold.
+//     sirkit.schematic.propose-sheet-organization with THAT design's own groups - [PR-J5 integration, 2026-10-23] review J5R-AI-6 (was:
+//     the four-motor drone's J4 default grouping for every schematic, so the LED dimmer was refused "D4 ... is not a catalog part"): the
+//     fixture data module app/lib/fixture-runtime/sheet-organization-groups.ts recognises the design by its parts
+//     (`fixtureSheetOrganizationFor`: the dimmer's three subsystems, the drone's plan blocks for 1..4 motors); any other schematic is
+//     answered in words (nothing is called); a run without that board-backed read (a schematic-only page: no PCB editor published a
+//     board) proposes the fixture organisations in order (`fixtureSheetOrganizationCandidates`) and moves on only while the tool refuses
+//     one as naming a part the schematic does not hold (`unknown-member`: not this design) - the server resolves every member by name,
+//     so the first proposal it seals is the design's own; any other refusal is reported as it is.
 // The sealed proposal rides its own event to the page's review card; only the human applies it (one schematic.move-to-sheet transaction).
 
 const ORGANIZE_SHEETS = /^(?:please\s+)?organi[sz]e\s+this\s+(?:schematic|sheet|design|circuit)\s+into\s+(?:subsystem\s+)?sheets$/i;
 
-/** The J4 planner's default grouping of the fixture drone (its proposal without hints; names from the hubs' values). */
+/** The J4 planner's default grouping of the fixture drone (its proposal without hints; names from the hubs' values). [PR-J5 integration,
+ *  2026-10-23] review J5R-AI-6: no longer what the script proposes (the design's own groups are, from sheet-organization-groups.ts); kept as
+ *  the suites' fixture of a model-supplied grouping that differs from the plan's blocks. */
 export const FIXTURE_DRONE_ORGANIZE_GROUPS: ReadonlyArray<{ name: string; members: readonly string[] }> = Object.freeze([
   { name: "MOTOR x4 (J2-J5)", members: Object.freeze(["C1", "C3", "D1", "D2", "D3", "D4", "J1", "J2", "J3", "J4", "J5", "Q1", "Q2", "Q3", "Q4", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8"]) },
   { name: "MIC5504-3.3YM5 (U1)", members: Object.freeze(["C2", "C4", "C5", "C6", "C8", "C9", "C10", "U1"]) },
@@ -966,7 +971,7 @@ export const FIXTURE_DRONE_ORGANIZE_GROUPS: ReadonlyArray<{ name: string; member
   { name: "LSM6DS3TR-C (U3)", members: Object.freeze(["R11", "R12", "U3"]) },
 ]);
 
-interface OrganizeRun { stage: "inspect" | "propose"; seq: number }
+interface OrganizeRun { stage: "inspect" | "propose"; seq: number; /** [PR-J5 integration] the organisations still to propose, the current one first */ candidates: FixtureSheetOrganization[] }
 const ORGANIZE_RUNS = new WeakMap<FixtureAgentAdapter, OrganizeRun>();
 
 /** [PR-J5] Whether a whole instruction is the organise sentence (exported for the harness's unit proofs). */
@@ -985,24 +990,24 @@ function organizeCall(adapter: FixtureAgentAdapter, run: OrganizeRun, tools: rea
 function scriptedOrganizeStart(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["start"]>[0]): AgentStep | null {
   ORGANIZE_RUNS.delete(adapter);
   if (!planFixtureOrganize(input.userMessage)) return null;
-  const run: OrganizeRun = { stage: "inspect", seq: 0 };
+  const run: OrganizeRun = { stage: "inspect", seq: 0, candidates: [] };
   ORGANIZE_RUNS.set(adapter, run);
   // the whole-project read is a canonical-state read (it needs the PCB editor's board); a run without it - a schematic-only page -
-  // goes straight to the proposal, whose server resolves every member by name and refuses an unknown one (nothing is guessed)
-  if (!input.tools.some((tool) => tool.toolId === "sirkit.schematic.inspect")) { run.stage = "propose"; return organizeCall(adapter, run, input.tools, SHEET_ORGANIZATION_TOOL_ID_FOR_SCRIPT, organizeArgs()); }
+  // proposes the fixture organisations in order, whose server resolves every member by name and refuses an unknown one (nothing is guessed)
+  if (!input.tools.some((tool) => tool.toolId === "sirkit.schematic.inspect")) { run.stage = "propose"; run.candidates = fixtureSheetOrganizationCandidates(); return organizeCall(adapter, run, input.tools, SHEET_ORGANIZATION_TOOL_ID_FOR_SCRIPT, organizeArgs(run.candidates[0]!)); }
   return organizeCall(adapter, run, input.tools, "sirkit.schematic.inspect", {});
 }
 
 /** [PR-J5] The tool id the script proposes with (spelt here: the adapter imports no proposal module) and its arguments. */
 const SHEET_ORGANIZATION_TOOL_ID_FOR_SCRIPT = "sirkit.schematic.propose-sheet-organization";
-function organizeArgs(): Record<string, unknown> {
-  return { groups: FIXTURE_DRONE_ORGANIZE_GROUPS.map((group) => ({ name: group.name, members: [...group.members] })) };
+function organizeArgs(organization: FixtureSheetOrganization): Record<string, unknown> {
+  return fixtureSheetOrganizationArgs(organization); // [PR-J5 integration, 2026-10-23] review J5R-AI-6: the design's own groups (the tool's closed input, fresh arrays)
 }
 
 /** [PR-J5] What the scripted agent reads out of the sealed organisation's result (the same fields a model would report). */
-export function organizeProposalFacts(outputText: string | undefined): { status: string; sheets: Array<{ name: string; members: number }>; interfaces: string[]; unassigned: string[]; checks: number; blockers: string[] } {
+export function organizeProposalFacts(outputText: string | undefined): { status: string; sheets: Array<{ name: string; members: number }>; interfaces: string[]; unassigned: string[]; checks: number; blockers: string[]; blockerCodes: string[] } {
   try {
-    const parsed = JSON.parse(outputText ?? "") as { status?: unknown; sheets?: Array<{ name?: unknown; members?: unknown[] }>; interfaces?: Array<{ port?: unknown }>; unassigned?: unknown[]; checkThese?: unknown[]; blockers?: Array<{ detail?: unknown }> };
+    const parsed = JSON.parse(outputText ?? "") as { status?: unknown; sheets?: Array<{ name?: unknown; members?: unknown[] }>; interfaces?: Array<{ port?: unknown }>; unassigned?: unknown[]; checkThese?: unknown[]; blockers?: Array<{ code?: unknown; detail?: unknown }> };
     return {
       status: typeof parsed.status === "string" ? parsed.status : "an unparsed result",
       sheets: Array.isArray(parsed.sheets) ? parsed.sheets.map((sheet) => ({ name: typeof sheet.name === "string" ? sheet.name : "?", members: Array.isArray(sheet.members) ? sheet.members.length : 0 })) : [],
@@ -1010,9 +1015,10 @@ export function organizeProposalFacts(outputText: string | undefined): { status:
       unassigned: Array.isArray(parsed.unassigned) ? parsed.unassigned.filter((ref): ref is string => typeof ref === "string") : [],
       checks: Array.isArray(parsed.checkThese) ? parsed.checkThese.length : 0,
       blockers: Array.isArray(parsed.blockers) ? parsed.blockers.map((blocker) => (typeof blocker.detail === "string" ? blocker.detail : "")).filter((detail) => detail.length > 0) : [],
+      blockerCodes: Array.isArray(parsed.blockers) ? parsed.blockers.map((blocker) => (typeof blocker.code === "string" ? blocker.code : "")) : [], // [PR-J5 integration, 2026-10-23] review J5R-AI-6: why a candidate was refused
     };
   } catch {
-    return { status: "an unparsed result", sheets: [], interfaces: [], unassigned: [], checks: 0, blockers: [] };
+    return { status: "an unparsed result", sheets: [], interfaces: [], unassigned: [], checks: 0, blockers: [], blockerCodes: [] };
   }
 }
 
@@ -1022,17 +1028,21 @@ function scriptedOrganizeContinue(adapter: FixtureAgentAdapter, input: Parameter
   if (!run) return null;
   const outputText = input.results[0]?.outputText;
   if (run.stage === "inspect") {
-    const refs = new Set(schematicComponentFacts(outputText).map((component) => component.displayRef.toUpperCase()));
-    const missing = FIXTURE_DRONE_ORGANIZE_GROUPS.flatMap((group) => group.members).filter((ref) => !refs.has(ref));
-    if (refs.size === 0 || missing.length > 0) {
+    const refs = schematicComponentFacts(outputText).map((component) => component.displayRef.toUpperCase());
+    const organization = refs.length > 0 ? fixtureSheetOrganizationFor(refs) : null; // [PR-J5 integration, 2026-10-23] review J5R-AI-6: the design's own groups
+    if (organization === null) {
       ORGANIZE_RUNS.delete(adapter);
-      return roleStep(adapter, { text: `(fixture agent) the schematic read answered ${statusOf(outputText)}; this schematic is not the fixture four-motor drone (${refs.size === 0 ? "no parts were read" : `${missing.slice(0, 6).join(", ")} ${missing.length === 1 ? "is" : "are"} not on it`}), so no organise script applies. Nothing was changed.` });
+      return roleStep(adapter, { text: `(fixture agent) the schematic read answered ${statusOf(outputText)}; this schematic is not one of the fixture designs (the LED dimmer, the drone with 1-4 motors; ${refs.length === 0 ? "no parts were read" : `${refs.length} part${refs.length === 1 ? " was" : "s were"} read`}), so no organise script applies. Nothing was changed.` });
     }
     run.stage = "propose";
-    return organizeCall(adapter, run, input.tools, SHEET_ORGANIZATION_TOOL_ID_FOR_SCRIPT, organizeArgs());
+    run.candidates = [organization];
+    return organizeCall(adapter, run, input.tools, SHEET_ORGANIZATION_TOOL_ID_FOR_SCRIPT, organizeArgs(organization));
   }
-  ORGANIZE_RUNS.delete(adapter);
   const facts = organizeProposalFacts(outputText);
-  if (facts.status !== "proposal_sealed") return roleStep(adapter, { text: `(fixture agent) the organisation was refused (${facts.status})${facts.blockers.length > 0 ? `: ${facts.blockers[0]}` : ""}. Nothing was changed.` });
+  // [PR-J5 integration, 2026-10-23] review J5R-AI-6: a candidate naming a part this schematic does not hold is not this design - the next one
+  // is proposed (a blocked proposal issues nothing, so the run may propose again); any other refusal is the answer
+  if (facts.status === "proposal_blocked" && facts.blockerCodes[0] === "unknown-member" && run.candidates.length > 1) { run.candidates = run.candidates.slice(1); return organizeCall(adapter, run, input.tools, SHEET_ORGANIZATION_TOOL_ID_FOR_SCRIPT, organizeArgs(run.candidates[0]!)); }
+  ORGANIZE_RUNS.delete(adapter);
+  if (facts.status !== "proposal_sealed") return roleStep(adapter, { text: `(fixture agent) the organisation was refused (${facts.status})${facts.blockers.length > 0 ? `: ${facts.blockers[0]!.replace(/\s*Nothing was changed\.?\s*$/, "").replace(/[.\s]+$/, "")}` : ""}. Nothing was changed.` }); // [PR-J5 integration, 2026-10-23] review J5R-AI-6: the blocker's own closing sentence is not repeated
   return roleStep(adapter, { text: `(fixture agent) the organisation is sealed for your review: ${facts.sheets.length} subsystem sheet(s) - ${facts.sheets.map((sheet) => `${sheet.name} (${sheet.members} part${sheet.members === 1 ? "" : "s"})`).join(", ")}; ${facts.interfaces.length} interface port(s)${facts.interfaces.length > 0 ? ` (${[...new Set(facts.interfaces)].join(", ")})` : ""}; ${facts.unassigned.length === 0 ? "every part is assigned" : `${facts.unassigned.join(", ")} stay on the overview`}${facts.checks > 0 ? `; ${facts.checks} placement(s) to check` : ""}. Nothing has been changed: approve it on the review card to create the sheets as one undoable step.` });
 }

@@ -13,10 +13,13 @@
  *  3. with IMU active: Prepare PCB through the binding review -> sync -> apply -> awaiting qualification with 41 footprints; the design
  *     checks list Sheet connections; [PR-J3 integration, 2026-10-23] J3-PAGE-1: the project file exported AFTER the sync carries the
  *     board checkpoint WITH its sheet tree and re-imports (as a copy) with every checkpoint;
- *  4. the AI refusal: the Build sentence on the multi-sheet project is refused with the guard's message; no generation task, no
- *     provider-bound request; [PR-J4, 2026-10-23] pin move (OD-258 item 5): Tidy on the overview (child blocks) sends nothing, Tidy on the
- *     IMU leaf sheet posts ONE layout-critic request carrying sheetId = sheet-imu (the fixture runtime's router answers
- *     provider_unavailable: nothing leaves the origin, nothing changes);
+ *  4. [PR-J5 integration, 2026-10-23] pin move (review B-1; OD-259 item 2 revises OD-257 item 3 - was: the Build sentence on the
+ *     multi-sheet project is refused at the start with the guard's message, no generation task, no provider-bound request): the Build
+ *     sentence ADVISES (the guard's advisory step in the activity entry), ONE durable generation task starts, its planned result is laid
+ *     out as sheets and offered in the ONE review dialog, which names every sheet it replaces (Overview, Power, Motor drivers, IMU) and
+ *     never says "on this sheet"; Cancel discards it and nothing changes; [PR-J4, 2026-10-23] pin move (OD-258 item 5): Tidy on the
+ *     overview (child blocks) sends nothing, Tidy on the IMU leaf sheet posts ONE layout-critic request carrying sheetId = sheet-imu (the
+ *     fixture runtime's router answers provider_unavailable: nothing leaves the origin, nothing changes);
  *  5. at 1280 x 720 the chip overlaps neither Go to, the status bar nor the workspace tabs;
  *  6. [PR-J4, 2026-10-23] Organize into sheets (J.3 item 4; OD-258 items 4, 7: the organise proof rides this spec): a fresh browser opens
  *     the FLAT drone (fixtures/j4-drone-flat-project.sirkit.json), the preview lists the deterministic proposal (four groups, their ports,
@@ -29,7 +32,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page, type Request } from "@playwright/test";
-import { flatReplacementRefusal } from "../app/lib/project/sheet-replace-guard";
+import { multiSheetReplaceAdvisory } from "../app/lib/project/sheet-replace-guard"; // [PR-J5 integration, 2026-10-23] review B-1: case 4 advises (was flatReplacementRefusal)
+import { replacedSheetsLine } from "../app/lib/workflow/prompt-to-gerber/review-summary";
 import { resolveProjectConnectivity } from "../app/lib/schematic/project-connectivity";
 import { fixturePartLookup } from "../app/lib/schematic/__tests__/_j1-fixtures";
 import { J3_FIXTURE_PROJECT_ID, J3_FIXTURE_PROJECT_NAME, J3_SHEETS } from "../app/lib/schematic/__tests__/_j3-fixtures";
@@ -355,27 +359,61 @@ test("3. with the IMU sheet active: Prepare PCB through the binding review, the 
   expect(restoredCheckpoints).toBe(exported.payload.checkpoints.length);
 });
 
-test("4. the AI refusal: the Build sentence on the multi-sheet project is refused with the guard's message; no generation task is started and nothing provider-bound is sent", async ({ page, context, baseURL }) => {
+test("4. [PR-J5 integration] the Build sentence on the multi-sheet project advises, starts ONE task and offers the sheeted result in the review dialog naming every replaced sheet; Cancel changes nothing; Tidy refuses the overview and posts once for the IMU sheet", async ({ page, context, baseURL }) => {
+  // [PR-J5 integration, 2026-10-23] pin move (review B-1; OD-259 item 2, revising OD-257 item 3 - was: "the AI refusal: the Build sentence
+  // on the multi-sheet project is refused with the guard's message; no generation task is started and nothing provider-bound is sent"):
+  // a planned result now lays out as sheets and replaces a multi-sheet project as one undoable transaction (OD-255 item 9), so the Build
+  // composer advises instead of refusing; the FLAT-result refusal stays at the offer and the final apply (unit-pinned: j5-page-intake-sheets,
+  // j5-sheeted-replace-transaction). This is the first browser coverage of the review dialog over a multi-sheet base (review B-3).
   const origin = baseURL!;
   const traffic = watch(page, origin);
   await openFixture(page, context, origin);
-  const expected = flatReplacementRefusal(await savedState(page), {})!; // a flat result carries no sheets
-  expect(expected).toContain("This project has 4 schematic sheets (Overview, Power, Motor drivers, IMU).");
+  const saved = await savedState(page);
+  const advisory = multiSheetReplaceAdvisory(saved)!;
+  expect(advisory).toContain("This project has 4 schematic sheets (Overview, Power, Motor drivers, IMU)");
+  const replaced = replacedSheetsLine(saved)!;
+  expect(replaced).toBe("Every existing sheet (Overview, Power, Motor drivers, IMU) is replaced by the apply (one undoable transaction).");
   const prompt = page.getByTestId("prompt-input");
   if ((await prompt.count()) === 0 || !(await prompt.isVisible())) await page.getByTestId("activity-ai chat").click();
   await expect(prompt).toBeEnabled();
   await prompt.fill(OWNER_FOUR_MOTOR_SENTENCE);
   await expect(page.getByTestId("composer-route")).toHaveAttribute("data-route", "generate");
+  const accepted = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/generation-tasks" && response.request().method() === "POST");
   await page.getByTestId("composer-submit").click();
-  await expect(page.getByText(expected, { exact: true })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("generation-task-status")).toHaveCount(0);
-  await expect(page.getByTestId("schematic-proposal-review")).toHaveCount(0);
+  expect((await accepted).status(), "the start answers 202 once the task is durably accepted").toBe(202);
+  // the advisory is a step of the entry, before the task; exactly ONE task starts
+  await expect(page.getByText(advisory, { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect.poll(() => traffic.generationStarts, { timeout: 30_000 }).toBe(1);
+  // the planned drone is laid out as sheets and offered in the ONE review dialog: the summary names every sheet it replaces, once, and its
+  // headline counts them; nothing says "on this sheet" (review B-3)
+  const review = page.getByTestId("schematic-proposal-review");
+  await expect(review).toBeVisible({ timeout: 300_000 });
+  await expect(page.getByTestId("schematic-proposal-replaced-sheets")).toHaveText(replaced);
+  await expect(page.getByTestId("schematic-proposal-replaced-sheets")).toHaveCount(1);
+  await expect(review).toContainText(", 4 sheets) with the generated 4-sheet design?");
+  await expect(review).not.toContainText("on this sheet");
+  await expect(page.getByTestId("schematic-proposal-summary")).toContainText("System overview");
+  await page.screenshot({ path: `${SCREENSHOTS}/j5-multisheet-build-review-1366x768.png` });
+  // Cancel discards it: the dialog closes, the task settles with the discard recorded, nothing is changed
+  await review.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(review).toBeHidden();
+  const selector = { "x-sirkit-tenant-id": "local", "x-sirkit-project-id": J3_FIXTURE_PROJECT_ID, "x-sirkit-branch-id": "main" };
+  const latestTask = async (): Promise<{ state?: string; review?: { outcome?: string } }> => {
+    const list = await page.request.get("/api/generation-tasks", { headers: selector });
+    expect(list.status()).toBe(200);
+    const body = (await list.json()) as { active: { taskId: string } | null; recent: Array<{ taskId: string }> };
+    const taskId = body.active?.taskId ?? body.recent[0]!.taskId;
+    const one = await page.request.get(`/api/generation-tasks/${encodeURIComponent(taskId)}?include=result`, { headers: selector });
+    expect(one.status()).toBe(200);
+    return ((await one.json()) as { task: { state?: string; review?: { outcome?: string } } }).task;
+  };
+  await expect.poll(async () => (await latestTask()).state, { timeout: 30_000 }).toBe("succeeded");
+  expect((await latestTask()).review).toMatchObject({ outcome: "discarded" });
   await page.waitForTimeout(1_000);
-  expect(traffic.generationStarts, "no generation task was started").toBe(0);
-  expect([traffic.edits, traffic.tidies, traffic.buildMulti], "nothing provider-bound was sent").toEqual([0, 0, 0]);
+  expect(traffic.generationStarts, "one generation task, no second start").toBe(1);
+  expect([traffic.edits, traffic.tidies, traffic.buildMulti], "no edit, tidy or request-lifetime build").toEqual([0, 0, 0]);
   expect(traffic.leftOrigin).toEqual([]);
   expect(await savedState(page)).toEqual(fixtureState()); // nothing was changed
-  await page.screenshot({ path: `${SCREENSHOTS}/j3-ai-refusal-1366x768.png` });
 
   // [PR-J4, 2026-10-23] pin move (OD-258 item 5; was: Tidy sends nothing on a sheeted project). Tidy on the overview, which holds the three
   // child blocks, is refused before any request; on the IMU leaf sheet it posts ONE layout-critic request carrying sheetId = sheet-imu and

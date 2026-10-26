@@ -136,7 +136,12 @@ describe("[PR-J5] a generated multi-sheet design replaces a multi-sheet project 
     expect(h.projections).toEqual([]);
     expect(schematicStateDigest(h.coordinator.authoritativeState())).toBe(schematicStateDigest(base));
     const refusal = (outcome as { refused: string }).refused;
-    expect(flatReplacementRefusalWithFindings(refusal, ["Kept on one page: PWM1 is labelled in A, B but is not a planned shared net."])).toBe(`${refusal} Why it is one page: PWM1 is labelled in A, B but is not a planned shared net.`);
+    // [PR-J5 integration, 2026-10-23] pin move (review B-5; was the whole finding appended): the banner is bounded to SHEET_REPLACE_GUARD_MAX_MESSAGE_LENGTH -
+    // the "Why it is one page" tail is cut with "…" (the findings stay whole in the activity entry's steps); the refusal itself is never cut
+    const withWhy = flatReplacementRefusalWithFindings(refusal, ["Kept on one page: PWM1 is labelled in A, B but is not a planned shared net."]);
+    expect(withWhy.startsWith(`${refusal} Why it is one page: PWM1 is labelled in A, B`)).toBe(true);
+    expect(withWhy.length).toBeLessThanOrEqual(240);
+    expect(withWhy.endsWith("…")).toBe(true);
   });
 
   it("4. over a single-sheet project the sheeted result is adopted the same way; undo restores the flat page with no tree", async () => {

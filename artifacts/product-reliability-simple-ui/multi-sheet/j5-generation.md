@@ -171,13 +171,13 @@ suite `app/lib/fixture-runtime/__tests__/j5-fixture-recipes.test.ts` needs an ex
 | C5 | `app/lib/fixture-runtime/sheet-organization-groups.ts` | 98 | — | `export function fixtureSheetOrganizationFor(refs: readonly string[]): FixtureSheetOrganization \| null {` | the groups reader |
 | C6 | `app/lib/schematic/sheet-lens.ts` | 419 | — | `export function attachedSelection(state: SchematicState, selection: SheetSelection, getPart: PartPinsSource): MoveEntityRef[] \| null {` | one-hop attachment (J5-C-1) |
 | C7 | `app/lib/schematic/sheet-operations.ts` | 309 | — | `would be split in a way ports cannot carry unambiguously` | the ambiguity refusal |
-| C8 | `app/lib/agent/fixture-agent-adapter.ts` | 962 | — | `export const FIXTURE_DRONE_ORGANIZE_GROUPS` | A's hard-coded grouping |
+| C8 | `app/lib/agent/fixture-agent-adapter.ts` | 967 | — | `export const FIXTURE_DRONE_ORGANIZE_GROUPS` | A's hard-coded grouping |
 | C9 | `app/lib/engineering/tool-catalog.ts` | 1691 | — | `toolId: "sirkit.schematic.propose-sheet-organization", version: "1.0.0",` | A's descriptor |
 | C10 | `app/components/schematic/SheetOrganizationReviewCard.tsx` | 32 | — | `data-testid="sheet-organization-review"` | B's card id |
 | C11 | `lib/build-sheet-layout.ts` | 233 | — | `const sheets: SchematicSheet[] = [{ id: ROOT_SHEET_ID, name: rootName, parentId: null }];` | B's root sheet |
 | C12 | `app/api/generation-tasks/__tests__/l7-fixture-vertical-slice.test.ts` | 156 | — | `const planCall = calls.find((call) => typeof call.request.toolChoice === "object" && call.request.toolChoice !== null)!;` | the l7 extension |
 | C13 | `app/lib/fixture-runtime/sheet-organization-groups.ts` | 110 | — | `export function fixtureSheetOrganizationCandidates(): FixtureSheetOrganization[] {` | the no-read candidate order |
 | C14 | `app/page.tsx` | 7169 | — | `<DialogContent data-testid="schematic-proposal-review">` | the review dialog with no max height (B) |
-| C15 | `app/lib/agent/fixture-agent-adapter.ts` | 992 | — | `if (!input.tools.some((tool) => tool.toolId === "sirkit.schematic.inspect"))` | A's no-read branch |
+| C15 | `app/lib/agent/fixture-agent-adapter.ts` | 997 | — | `if (!input.tools.some((tool) => tool.toolId === "sirkit.schematic.inspect"))` | A's no-read branch |
 | C16 | `app/lib/agent/context.ts` | 347 | — | `No board snapshot was supplied; the canonical project resource and board tools are unavailable for this run.` | canonical-state needs a board |
 | C17 | `app/lib/schematic/sheet-organization.ts` | 351 | — | `function groupEntities(state: SchematicState, refs: readonly string[], getPart: PartPinsSource): MoveEntityRef[] \| string {` | the one-hop group gathering (J5-C-1) |

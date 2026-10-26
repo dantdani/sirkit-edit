@@ -13,8 +13,13 @@
  *  4. Approve through the controller: ONE schematic.move-to-sheet command pinned to the base digest and the sealed head mark, whose
  *     operations are the tool's re-plan on the canonical base (the sealed operation count); a differing base refuses with the tool's
  *     sentence and applies nothing; the re-plan base carries the sheet-size fallback only when the canonical state has none;
- *  5. the sentences name the sheets, the parts and the interfaces, and never claim a change before the apply.
+ *  5. the sentences name the sheets, the parts and the interfaces, and never claim a change before the apply;
+ *  6. [PR-J5 integration, 2026-10-23] review J5R-AI-2 (B16.0.1 §F): Approve reauthorizes the LIVE membership against the sealed binding
+ *     (sheet-organization-reauthorization.ts) after the currency check and before the controller applies - a changed principal,
+ *     revision, scope or role, or an unavailable endpoint, refuses and applies nothing.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { CanonicalSchematic } from "@/app/lib/engineering/schematic-model";
 import { fromCanonicalSchematic, schematicStateDigest, toCanonicalSchematic } from "@/app/lib/engineering/schematic-model";
@@ -29,6 +34,8 @@ import {
   SHEET_ORGANIZATION_READY_EVENT, receiveSheetOrganizationEvent, replanSheetOrganization, sheetOrganizationApplyLabel, sheetOrganizationCurrency, sheetOrganizationLines,
   sheetOrganizationReplanBase, sheetOrganizationReview,
 } from "../sheet-organization-events";
+import type { MembershipReauthorization, MembershipReauthorizer } from "../membership-reauthorization";
+import { reauthorizeSheetOrganizationApply } from "../sheet-organization-reauthorization";
 
 const SCOPE = { tenantId: "local", projectId: "p-j5-organise", branchId: "main" };
 const HEAD_MARK = { lineageId: "lin1-a9e2470c11bd8833", headSequence: 7, canonicalStateDigest: "eng1-77aa66bb55cc44dd" };
@@ -182,5 +189,61 @@ describe("[PR-J5] 5. the sentences", () => {
     expect(sheetOrganizationLines.discarded()).toContain("nothing was changed and nothing was recorded");
     expect(sheetOrganizationLines.dropped()).toContain("failed the integrity checks");
     expect(sheetOrganizationLines.notOffered("it expired")).toBe("Sheet organisation not offered — it expired");
+  });
+});
+
+// ── [PR-J5 integration, 2026-10-23] review J5R-AI-2 (B16.0.1 §F): the organise Approve reauthorizes the live membership ─────────────
+describe("[PR-J5 integration] 6. Approve reauthorizes the live membership against the sealed binding (B16.0.1 §F)", () => {
+  const sealedFor = (membershipRevision: string, requiredApplyRole: "pcb_editor" | "project_admin" = "pcb_editor"): SealedSheetOrganizationProposal => {
+    const state = base();
+    const compiled = compileSheetOrganizationProposal({ state, request: { groups: J4_DRONE_HINTED_PROPOSAL.map((group) => ({ name: group.name, members: [...group.refs] })) }, getPart });
+    if (!compiled.ok) throw new Error(JSON.stringify(compiled.blockers));
+    const outcome = sealSheetOrganizationProposal({ state, compilation: compiled.compilation, scope: { ...SCOPE, headMark: HEAD_MARK }, authorization: buildAuthorizationBinding({ principalId: "u-1", membershipRevision, scope: SCOPE, requiredApplyRole }), version: "1.0.0", provenance: { provider: "fixture", runId: "run-j5", note: "", instruction: "Organize this schematic into subsystem sheets" }, now: NOW });
+    if (outcome.kind !== "sealed") throw new Error(JSON.stringify(outcome.blockers));
+    return outcome.proposal;
+  };
+  const liveAs = (overrides: Partial<Extract<MembershipReauthorization, { ok: true }>> = {}): MembershipReauthorizer => async (request) => ({ ok: true, principalId: "u-1", role: "pcb_editor", membershipRevision: "rev-1", scope: { ...request.scope }, ...overrides });
+
+  it("the matching live membership authorizes; a changed principal, revision, scope or role, an unavailable or throwing endpoint refuse - each saying nothing was changed", async () => {
+    const proposal = sealedFor("rev-1");
+    const asked: unknown[] = [];
+    expect(await reauthorizeSheetOrganizationApply(proposal, async (request) => { asked.push(request); return liveAs()(request); })).toEqual({ ok: true });
+    expect(asked).toEqual([{ scope: SCOPE, proposalId: proposal.proposalId }]); // the proposal's own scope and id; no authority is sent
+    const refusals: Array<[MembershipReauthorizer, string]> = [
+      [liveAs({ principalId: "u-2" }), "reauthorization-principal-changed"],
+      [liveAs({ membershipRevision: "rev-2" }), "reauthorization-membership-changed"],
+      [liveAs({ scope: { ...SCOPE, projectId: "p-other" } }), "reauthorization-scope-changed"],
+      [liveAs({ role: "viewer" }), "reauthorization-role-insufficient"],
+      [liveAs({ role: "reviewer" }), "reauthorization-role-insufficient"],
+      [async () => ({ ok: false, code: "http-401", detail: "The reauthorization endpoint refused the request." }), "reauthorization-membership-unavailable"],
+      [async () => { throw new Error("offline"); }, "reauthorization-unavailable"],
+    ];
+    for (const [reauthorize, code] of refusals) {
+      const outcome = await reauthorizeSheetOrganizationApply(proposal, reauthorize);
+      expect(outcome, code).toMatchObject({ ok: false, code });
+      expect((outcome as { detail: string }).detail, code).toMatch(/Nothing was changed\.$/);
+    }
+    // the sealed required apply role is load-bearing: a project_admin-only proposal refuses a live pcb_editor
+    expect(await reauthorizeSheetOrganizationApply(sealedFor("rev-1", "project_admin"), liveAs())).toMatchObject({ ok: false, code: "reauthorization-role-insufficient" });
+    expect(await reauthorizeSheetOrganizationApply(sealedFor("rev-1", "project_admin"), liveAs({ role: "project_admin" }))).toEqual({ ok: true });
+  });
+
+  it("the page's Approve asks it AFTER the currency check and BEFORE the Sheets controller applies; a refusal fails the activity entry and applies nothing", () => {
+    const page = readFileSync(join(process.cwd(), "app", "page.tsx"), "utf8");
+    const start = page.indexOf("const applyOrganizationProposal = useCallback(async () => {");
+    expect(start).toBeGreaterThan(0);
+    const body = page.slice(start, page.indexOf("const discardOrganizationProposal = useCallback(", start));
+    const currency = body.indexOf("sheetOrganizationCurrency(proposal, liveSheetForSealedArtifacts())");
+    const reauthorized = body.indexOf("await reauthorizeSheetOrganizationApply(proposal)");
+    const applied = body.indexOf("sheetLens.controller.applyOrganizeProposal(");
+    expect(currency).toBeGreaterThan(0);
+    expect(reauthorized).toBeGreaterThan(currency);
+    expect(applied).toBeGreaterThan(reauthorized);
+    expect(body.slice(reauthorized, applied)).toContain("if (!reauthorized.ok) { setPendingOrganization(null); failActivityLog(pending.logId, sheetOrganizationLines.refused(reauthorized.detail)); showToast(sheetOrganizationLines.refused(reauthorized.detail)); return; }");
+    expect(page).toContain('import { reauthorizeSheetOrganizationApply } from "@/app/lib/project/sheet-organization-reauthorization";');
+    // the helper's own boundary: the schematic apply roles and the ONE family-neutral evaluator (never a second checker)
+    const helper = readFileSync(join(process.cwd(), "app", "lib", "project", "sheet-organization-reauthorization.ts"), "utf8");
+    expect(helper).toContain("evaluateMembershipReauthorization(proposal.authorization, live, SCHEMATIC_APPLY_ROLES)");
+    expect(helper).toContain("reauthorize: MembershipReauthorizer = createMembershipReauthorizer()");
   });
 });

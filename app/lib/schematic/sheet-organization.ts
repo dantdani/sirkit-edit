@@ -26,6 +26,9 @@
  *    schematic.move-to-sheet transaction (one undo step); the whole batch is applied once more with the executor's own code and its
  *    result must equal the chain's, and the final partition digest must equal the original's. Any refused step refuses the WHOLE plan
  *    with that step's message and nothing is changed (J.3 item 4: an ambiguous or non-equivalent split never changes the design).
+ *    [PR-J5 integration, 2026-10-23] review J5R-AI-1: a group takes its parts' whole WIRE CHAINS (a page-drawn route of several
+ *    segments; a route that also reaches a part outside the group stays and ends at the new port's sheet pin), and a step that would
+ *    leave a wire end in the air or a wire island on any sheet is refused ORGANIZE_DRAWING_DEGRADED - the partition proof cannot see it.
  *
  * Ids: a new sheet's id is a content digest of its sorted reference designators (`organizeSheetId`), so the same grouping always
  * yields the same ids and operation ids - no random draw (the fixture browser's uuid sequence is untouched). Theory (ideal) parts are
@@ -36,11 +39,12 @@ import { applySchematicOperationsToCanonical } from "@/app/lib/engineering/opera
 import { fromCanonicalSchematic, schematicStateDigest, toCanonicalSchematic } from "@/app/lib/engineering/schematic-model";
 import { engineeringDigest } from "@/app/lib/engineering/stable";
 import type { EngineeringOperation } from "@/app/lib/engineering/types";
+import { kicadPinWorldPos, pinWorldPos, pointKey } from "@/app/lib/geometry"; // [PR-J5 integration, 2026-10-23] review J5R-AI-1: the wire chains and the drawing check
 import type { KicadPin } from "@/app/lib/kicad/types";
 import { compareCodePoints } from "@/app/lib/stable-compare";
-import { ROOT_SHEET_ID, normalizeComponentRole, type KicadComponentInstance, type SchematicState } from "@/lib/schematic-types";
+import { PIN_NAMES, ROOT_SHEET_ID, normalizeComponentRole, type KicadComponentInstance, type Point, type SchematicState } from "@/lib/schematic-types";
 import { resolveProjectConnectivity, type ConnectivityDiagnostic, type PartPinsLookup, type ProjectNet } from "./project-connectivity";
-import { attachedSelection, freeBlockSlot, type PartPinsSource } from "./sheet-lens";
+import { freeBlockSlot, type PartPinsSource } from "./sheet-lens"; // [PR-J5 integration, 2026-10-23] - attachedSelection: the organise planner follows wire chains (groupEntities)
 import { PORT_NAME_PATTERN, planMoveToSheet, type MoveCrossing, type MoveEntityRef, type MoveRefusalCode } from "./sheet-operations"; // [PR-J5, 2026-10-23] + PORT_NAME_PATTERN (interfaceNames)
 import { assertWholeProject, sheetOf, sheetsOf } from "./sheets";
 
@@ -67,7 +71,7 @@ export interface OrganizeGroupInput {
 /** A grouping hint: a named block of reference designators (the generation plan's blocks). Hints break ties only. */
 export interface OrganizeHint { name: string; refs: readonly string[] }
 
-export type OrganizeRefusalCode = "ORGANIZE_CONNECTIVITY_INVALID" | "ORGANIZE_NOTHING_TO_SPLIT" | "ORGANIZE_GROUPS_INVALID" | "ORGANIZE_NOT_EQUIVALENT" | "ORGANIZE_REFUSED" | MoveRefusalCode;
+export type OrganizeRefusalCode = "ORGANIZE_CONNECTIVITY_INVALID" | "ORGANIZE_NOTHING_TO_SPLIT" | "ORGANIZE_GROUPS_INVALID" | "ORGANIZE_NOT_EQUIVALENT" | "ORGANIZE_REFUSED" | "ORGANIZE_DRAWING_DEGRADED" | MoveRefusalCode; // [PR-J5 integration, 2026-10-23] + ORGANIZE_DRAWING_DEGRADED (review J5R-AI-1)
 
 export interface OrganizeProposalGroup extends OrganizeGroupInput {
   /** The hubs the group formed around (reference designators, natural order). */
@@ -347,18 +351,116 @@ export function validateOrganizeGroups(state: SchematicState, groups: readonly O
   return null;
 }
 
-/** The entities a group takes along: each part with the wires of its sheet touching its pins and the local labels at their ends. */
-function groupEntities(state: SchematicState, refs: readonly string[], getPart: PartPinsSource): MoveEntityRef[] | string {
-  const seen = new Set<string>();
-  const entities: MoveEntityRef[] = [];
+/** A port anchor (hierarchical label, sheet pin): it belongs to the sheet structure and never moves. */
+const isPortAnchor = (label: { scope?: string }): boolean => label.scope === "hierarchical" || label.scope === "sheet-pin";
+
+/**
+ * [PR-J5 integration, 2026-10-23] review J5R-AI-1 (OPEN ISSUE J5-C-1): the entities a group takes along, following WIRE CHAINS (it took
+ * one hop of wire per pin, so a route the page drew as several segments left its inner segments behind - refused as ambiguous, or, for
+ * a cut route, sealed with wire ends in the air). A chain is the wires of the source sheet joined vertex to vertex anywhere but at a pin
+ * (the route's segments and junctions); it stops at every pin. A chain whose pins all belong to the group's parts, and which touches no
+ * port anchor, moves WHOLE with the local labels on it. A chain that also reaches a part outside the group (a cut route) stays on the
+ * source sheet, and the points where it met the group's pins are the parent-side anchor points handed to the move planner: the new
+ * port's sheet pin terminates the route where the moved pin was. The local labels at the group's own pins move with the parts.
+ */
+interface GroupAttachment { entities: MoveEntityRef[]; parentAnchorPoints: Point[] }
+function groupEntities(state: SchematicState, refs: readonly string[], getPart: PartPinsSource): GroupAttachment | string {
+  const instances: KicadComponentInstance[] = [];
   for (const ref of refs) {
     const instance = (state.kicadComponents ?? []).find((item) => item.refDes === ref);
     if (!instance) return `${ref} is not in the project.`;
-    const attached = attachedSelection(state, { family: "kicad", id: instance.id }, getPart);
-    if (attached === null) return `${ref} could not be resolved.`;
-    for (const entity of attached) { const key = `${entity.family}:${entity.id}`; if (!seen.has(key)) { seen.add(key); entities.push(entity); } }
+    instances.push(instance);
   }
-  return entities;
+  const sheetId = sheetOf(instances[0]!);
+  const members = new Set(instances.map((item) => item.id));
+  // the pin sites of the sheet: point -> the components with a pin there
+  const pinOwners = new Map<string, Set<string>>();
+  const memberPins = new Map<string, Point[]>();
+  const addPin = (point: Point, owner: string): void => { const key = pointKey(point); pinOwners.set(key, new Set([...(pinOwners.get(key) ?? []), owner])); };
+  for (const instance of state.kicadComponents ?? []) {
+    if (sheetOf(instance) !== sheetId) continue;
+    const part = getPart(instance.partId);
+    if (!part) continue; // an unresolved part: the move planner refuses it by name (SHEET_MOVE_CONNECTIVITY_INVALID, review J1-OPS-4)
+    const points = part.pins.map((pin) => kicadPinWorldPos(instance, pin));
+    for (const point of points) addPin(point, instance.id);
+    if (members.has(instance.id)) memberPins.set(instance.id, points);
+  }
+  for (const component of state.components) if (sheetOf(component) === sheetId) for (const pin of PIN_NAMES[component.type] ?? []) addPin(pinWorldPos(component, pin), component.id);
+  const labels = (state.netLabels ?? []).filter((label) => sheetOf(label) === sheetId);
+  const anchorPoints = new Set(labels.filter(isPortAnchor).map((label) => pointKey(label.position)));
+  // the chains: wires of the sheet sharing a vertex that is not a pin site
+  const wires = state.wires.filter((wire) => sheetOf(wire) === sheetId && (wire.vertices?.length ?? 0) >= 2);
+  const root = wires.map((_, index) => index);
+  const find = (index: number): number => { while (root[index] !== index) { root[index] = root[root[index]!]!; index = root[index]!; } return index; };
+  const byPoint = new Map<string, number[]>();
+  wires.forEach((wire, index) => { for (const key of new Set(wire.vertices.map(pointKey))) byPoint.set(key, [...(byPoint.get(key) ?? []), index]); });
+  for (const [key, list] of byPoint) { if (pinOwners.has(key)) continue; for (const other of list.slice(1)) { const a = find(list[0]!), b = find(other); if (a !== b) root[Math.max(a, b)] = Math.min(a, b); } }
+  const chainPoints = new Map<number, Set<string>>();
+  wires.forEach((wire, index) => { const chain = find(index); const points = chainPoints.get(chain) ?? new Set<string>(); for (const vertex of wire.vertices) points.add(pointKey(vertex)); chainPoints.set(chain, points); });
+  const moves = (chain: number): boolean => [...chainPoints.get(chain)!].every((key) => !anchorPoints.has(key) && [...(pinOwners.get(key) ?? [])].every((owner) => members.has(owner)));
+
+  const seen = new Set<string>();
+  const entities: MoveEntityRef[] = [];
+  const parentAnchorPoints: Point[] = [];
+  const anchored = new Set<string>();
+  const take = (entity: MoveEntityRef): void => { const key = `${entity.family}:${entity.id}`; if (!seen.has(key)) { seen.add(key); entities.push(entity); } };
+  for (const instance of instances) {
+    take({ family: "kicad", id: instance.id });
+    const pins = memberPins.get(instance.id) ?? [];
+    const pinKeys = new Set(pins.map(pointKey));
+    const chains = new Set(wires.flatMap((wire, index) => (wire.vertices.some((vertex) => pinKeys.has(pointKey(vertex))) ? [find(index)] : [])));
+    const moved = new Set([...chains].filter(moves));
+    const reached = new Set<string>(pinKeys);
+    wires.forEach((wire, index) => { if (moved.has(find(index))) { take({ family: "wire", id: wire.id }); for (const vertex of wire.vertices) reached.add(pointKey(vertex)); } });
+    for (const label of labels) if (!isPortAnchor(label) && reached.has(pointKey(label.position))) take({ family: "label", id: label.id });
+    // a cut route stays: the moved pins it met are its parent-side anchor points (in pin order; one per point)
+    for (const pin of pins) { const key = pointKey(pin); if (anchored.has(key)) continue; if ([...chains].some((chain) => !moved.has(chain) && chainPoints.get(chain)!.has(key))) { anchored.add(key); parentAnchorPoints.push({ x: pin.x, y: pin.y }); } }
+  }
+  return { entities, parentAnchorPoints };
+}
+
+/**
+ * [PR-J5 integration, 2026-10-23] review J5R-AI-1: the DRAWING defects of every sheet - wire ends at no pin, no label (of any scope) and
+ * no other wire's vertex (dangling), and wire islands (wires joined vertex to vertex) that touch no pin and no label - by sheet id, each
+ * as `wireId@x,y` / the island's first wire id. The pin-to-net partition cannot see them (a dangling end joins nothing), so the organise
+ * planner refuses a step that grows either count on any sheet: an electrically equivalent but broken drawing is never sealed.
+ */
+export function sheetDrawingDefects(state: SchematicState, getPart: PartPinsSource): Map<string, { danglingEnds: string[]; islands: string[] }> {
+  const sites = new Set<string>();
+  const at = (sheetId: string, point: Point): string => `${sheetId}\u0000${pointKey(point)}`;
+  for (const instance of state.kicadComponents ?? []) for (const pin of getPart(instance.partId)?.pins ?? []) sites.add(at(sheetOf(instance), kicadPinWorldPos(instance, pin)));
+  for (const component of state.components) for (const pin of PIN_NAMES[component.type] ?? []) sites.add(at(sheetOf(component), pinWorldPos(component, pin)));
+  for (const label of state.netLabels ?? []) sites.add(at(sheetOf(label), label.position));
+  const wires = state.wires.filter((wire) => (wire.vertices?.length ?? 0) >= 2);
+  const vertexWires = new Map<string, Set<number>>();
+  wires.forEach((wire, index) => { for (const vertex of wire.vertices) { const key = at(sheetOf(wire), vertex); vertexWires.set(key, new Set([...(vertexWires.get(key) ?? []), index])); } });
+  const out = new Map<string, { danglingEnds: string[]; islands: string[] }>();
+  const entry = (sheetId: string) => { const found = out.get(sheetId) ?? { danglingEnds: [], islands: [] }; out.set(sheetId, found); return found; };
+  for (const sheet of sheetsOf(state)) entry(sheet.id);
+  const root = wires.map((_, index) => index);
+  const find = (index: number): number => { while (root[index] !== index) { root[index] = root[root[index]!]!; index = root[index]!; } return index; };
+  for (const list of vertexWires.values()) { const items = [...list]; for (const other of items.slice(1)) { const a = find(items[0]!), b = find(other); if (a !== b) root[Math.max(a, b)] = Math.min(a, b); } }
+  const touches = new Map<number, boolean>();
+  wires.forEach((wire, index) => {
+    const sheetId = sheetOf(wire);
+    for (const end of [wire.vertices[0]!, wire.vertices[wire.vertices.length - 1]!]) {
+      const key = at(sheetId, end);
+      if (!sites.has(key) && ![...(vertexWires.get(key) ?? [])].some((other) => other !== index)) entry(sheetId).danglingEnds.push(`${wire.id}@${end.x},${end.y}`);
+    }
+    const chain = find(index);
+    touches.set(chain, (touches.get(chain) ?? false) || wire.vertices.some((vertex) => sites.has(at(sheetId, vertex))));
+  });
+  wires.forEach((wire, index) => { if (find(index) === index && !touches.get(index)) entry(sheetOf(wire)).islands.push(wire.id); });
+  return out;
+}
+
+/** The first sheet whose drawing `after` degrades against `before` (more dangling wire ends or more wire islands), or null. */
+function degradedSheet(before: ReturnType<typeof sheetDrawingDefects>, after: ReturnType<typeof sheetDrawingDefects>): { sheetId: string; danglingEnds: string[]; islands: string[] } | null {
+  for (const [sheetId, now] of after) {
+    const was = before.get(sheetId) ?? { danglingEnds: [], islands: [] };
+    if (now.danglingEnds.length > was.danglingEnds.length || now.islands.length > was.islands.length) return { sheetId, danglingEnds: now.danglingEnds.filter((item) => !was.danglingEnds.includes(item)), islands: now.islands.filter((item) => !was.islands.includes(item)) };
+  }
+  return null;
 }
 
 /**
@@ -389,12 +491,20 @@ export function planOrganizeIntoSheets(state: SchematicState, groups: readonly O
   const inverseOperations: EngineeringOperation[] = [];
   const steps: OrganizePlanStep[] = [];
   for (const [index, group] of groups.entries()) {
-    const entities = groupEntities(current, group.refs, pinsSource);
-    if (typeof entities === "string") return refuse("ORGANIZE_GROUPS_INVALID", `${entities} Nothing was changed.`, { name: group.name, refs: [...group.refs] });
+    const attachment = groupEntities(current, group.refs, pinsSource);
+    if (typeof attachment === "string") return refuse("ORGANIZE_GROUPS_INVALID", `${attachment} Nothing was changed.`, { name: group.name, refs: [...group.refs] });
+    const { entities, parentAnchorPoints } = attachment; // [PR-J5 integration, 2026-10-23] review J5R-AI-1: whole wire chains, and the anchor points of the cut ones
     const sheetId = organizeSheetId(group.refs);
-    const renamedDefaults = steps.flatMap((step) => step.crossings.flatMap((crossing) => (crossing.renamedFrom !== undefined ? [crossing.renamedFrom] : []))); const plan = planMoveToSheet(current, { entities, target: { newSheet: { id: sheetId, name: group.name.trim(), block: freeBlockSlot(current, sourceSheetId) } }, rootName: options.rootName ?? "Overview", operationIdPrefix: `${prefix}:${index}`, ...(options.portNames ? { portNames: options.portNames } : {}), ...(renamedDefaults.length > 0 ? { reservedPortNames: renamedDefaults } : {}) }, lookup); // [PR-J5, 2026-10-23] + portNames, reservedPortNames (+ reservedPortNames: an earlier step's renamed SIG<n> stays taken, so the reported keys keep their numbers; in place)
+    const renamedDefaults = steps.flatMap((step) => step.crossings.flatMap((crossing) => (crossing.renamedFrom !== undefined ? [crossing.renamedFrom] : []))); const plan = planMoveToSheet(current, { entities, target: { newSheet: { id: sheetId, name: group.name.trim(), block: freeBlockSlot(current, sourceSheetId) } }, rootName: options.rootName ?? "Overview", operationIdPrefix: `${prefix}:${index}`, ...(options.portNames ? { portNames: options.portNames } : {}), ...(renamedDefaults.length > 0 ? { reservedPortNames: renamedDefaults } : {}), ...(parentAnchorPoints.length > 0 ? { parentAnchorPoints } : {}) }, lookup); // [PR-J5, 2026-10-23] + portNames, reservedPortNames (+ reservedPortNames: an earlier step's renamed SIG<n> stays taken, so the reported keys keep their numbers; in place)
     // any refused step refuses the whole plan: an ambiguous or non-equivalent split never changes the design (J.3 item 4)
     if (!plan.ok) return refuse(plan.code, `Group "${group.name}" (${group.refs.join(", ")}): ${plan.message}`, { name: group.name, refs: [...group.refs] }, plan.diagnostics);
+    // [PR-J5 integration, 2026-10-23] review J5R-AI-1: the partition proof cannot see a broken DRAWING (a wire end in the air joins nothing), so
+    // a step that leaves more dangling wire ends or wire islands on any sheet is refused: an equivalent but degraded drawing is never sealed
+    const degraded = degradedSheet(sheetDrawingDefects(current, pinsSource), sheetDrawingDefects(plan.after, pinsSource));
+    if (degraded !== null) {
+      const sheetName = sheetsOf(plan.after).find((sheet) => sheet.id === degraded.sheetId)?.name ?? degraded.sheetId;
+      return refuse("ORGANIZE_DRAWING_DEGRADED", `Group "${group.name}" (${group.refs.join(", ")}): the move would leave ${degraded.danglingEnds.length} wire end(s) unconnected${degraded.islands.length > 0 ? ` and ${degraded.islands.length} wire piece(s) touching no pin or label` : ""} on sheet "${sheetName}" (a wire route of the group meets several of its pins and a part outside it, so no single port can end it); put that route's parts in one group, or move them by hand. Nothing was changed.`, { name: group.name, refs: [...group.refs] });
+    }
     operations.push(...plan.operations);
     inverseOperations.unshift(...plan.inverseOperations);
     steps.push({ group: { name: group.name.trim(), refs: [...group.refs] }, sheetId, moved: plan.preview.moved, crossings: plan.preview.crossings, renamedNets: plan.preview.renamedNets });

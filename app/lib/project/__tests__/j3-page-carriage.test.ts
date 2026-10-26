@@ -147,7 +147,8 @@ describe("[PR-J3] 3. the whole-project consumers read the whole state regardless
 
 describe("[PR-J3] 4. the AI replace-result guard sits at the edit request, Tidy, the offer and the final apply; the Build start advises", () => {
   it("call sites and their order", () => {
-    expect(count(page, "multiSheetReplaceRefusal(")).toBe(1); // [PR-J4, 2026-10-23] pin move: was 3 - Tidy's flat-replacement refusal became the per-sheet guard below (OD-258 item 5); [PR-J5, 2026-10-23] pin move: was 2 - the Build start's refusal became the advisory below (OD-259 item 2)
+    expect(count(page, "multiSheetReplaceRefusal(")).toBe(2); // [PR-J4, 2026-10-23] pin move: was 3 - Tidy's flat-replacement refusal became the per-sheet guard below (OD-258 item 5); [PR-J5, 2026-10-23] pin move: was 2 - the Build start's refusal became the advisory below (OD-259 item 2); [PR-J5 integration, 2026-10-23] pin move (review B-2): was 1 - + the THEORY start's refusal (OD-257 item 3 kept for Theory: its result is always one page), before its provider-bound request
+    expect(page.indexOf('const theoryRefusal = mode === "build" ? null : multiSheetReplaceRefusal(gestureCoordinatorRef.current!.authoritativeState(), "theory");')).toBeLessThan(page.indexOf("const result = await generateSchematic(prompt, { scope, signal: scope.signal,"));
     expect(count(page, "flatReplacementRefusal(")).toBe(2);
     const at = (literal: string): number => { const index = page.indexOf(literal); expect(index, literal).toBeGreaterThan(0); expect(page.indexOf(literal, index + 1), `${literal} once`).toBe(-1); return index; };
     // [PR-J5, 2026-10-23] pin move (OD-259 item 2, revising OD-257 item 3): the Build start no longer refuses a multi-sheet base - a planned

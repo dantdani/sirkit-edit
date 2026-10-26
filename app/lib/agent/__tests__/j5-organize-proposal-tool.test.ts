@@ -18,6 +18,12 @@
  *     planner's own SHEET_MOVE_NOT_EQUIVALENT sentence naming the offending label; nothing is sealed and the schematic is unchanged;
  *  6. a schematic-only run (no PCB editor published a board, so the board-backed whole-project read is withheld) still gets the
  *     organisation: the script proposes directly and the server resolves every member by name.
+ *  [PR-J5 integration, 2026-10-23] review J5R-AI-6 (pin moves in 1 and 6, dated below): the script proposes the design's OWN groups
+ *  (app/lib/fixture-runtime/sheet-organization-groups.ts) - the drone's plan blocks, no longer J4's default grouping - and
+ *  7. the page-laid-out LED dimmer (wire-drawn, the e2e/j5-organize-proposal.spec.ts case 1 design) is answered with ITS three groups,
+ *     sealed, with and without the board-backed read; without a read the candidates are proposed in order and only an `unknown-member`
+ *     refusal moves on; a schematic no fixture design fits is answered in words (with a read) or with the last refusal, its closing
+ *     sentence said once.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resolveCatalogInspectionPort } from "@/app/api/chat/catalog-inspection-runtime";
@@ -33,6 +39,12 @@ import { replanSheetOrganization, SHEET_ORGANIZATION_LIMITS, SHEET_ORGANIZATION_
 import { sirkitToolRegistry } from "@/app/lib/engineering/tool-catalog";
 import { AGENT_SYSTEM_PROMPT } from "@/app/lib/prompts";
 import { proposeSheetGroups } from "@/app/lib/schematic/sheet-organization";
+import { BLINKER_PART_IDS, FIXTURE_RESOLUTION_PART_IDS, GENERATION_FIXTURE_PART_IDS } from "@/app/lib/fixture-runtime/blinker/catalog";
+import { designSubmission, type ReturnedPart } from "@/app/lib/fixture-runtime/generation-policy";
+import { selectRecipe } from "@/app/lib/fixture-runtime/generation-recipes";
+import { DRONE_SHEET_GROUPS, LED_DIMMER_SHEET_GROUPS } from "@/app/lib/fixture-runtime/sheet-organization-groups";
+import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
+import type { BuildLogicalNetlist } from "@/lib/schematic-types";
 import { droneFixtureState, fixtureParts } from "@/app/lib/schematic/__tests__/_j1-fixtures";
 import type { KicadComponentInstance, SchematicState } from "@/lib/schematic-types";
 import { assembleAgentRunContext } from "../context";
@@ -60,6 +72,27 @@ const gateway = () => createAgentToolGateway(registry, { catalogInspection: reso
 async function propose(context: AgentRunContext, args: Record<string, unknown>): Promise<GatewayInvocationOutcome> {
   return gateway().invoke({ runId: "run-j5-organize", provider: "anthropic", callId: "c-1", toolId: SHEET_ORGANIZATION_TOOL_ID, version: "1.0.0", args, context, timeoutMs: 10_000 });
 }
+
+/** [PR-J5 integration, 2026-10-23] review J5R-AI-6: the LED dimmer as the page lays it out (offerBuildResult's autoLayoutBuildValidated over
+ *  the fixture provider's submission; the j5-fixture-recipes pageLayout): a flat, wire-drawn page of 14 catalog parts. */
+function dimmerPage(): SchematicState {
+  const recipe = selectRecipe("Design a 5 V LED dimmer: a 555 timer PWM with a 10k potentiometer setting the brightness, switching the LED through an N-channel MOSFET.");
+  if (!recipe || recipe.kind !== "single") throw new Error("no dimmer recipe");
+  const rolePart: Readonly<Record<string, string>> = { capacitor: BLINKER_PART_IDS.capacitor, resistor: BLINKER_PART_IDS.resistor, led: BLINKER_PART_IDS.led, header2: BLINKER_PART_IDS.header, timer: BLINKER_PART_IDS.timer, nmos: GENERATION_FIXTURE_PART_IDS.nmos, potentiometer: GENERATION_FIXTURE_PART_IDS.potentiometer, "signal-diode": FIXTURE_RESOLUTION_PART_IDS.eligibleDiode };
+  const returned = (partId: string): ReturnedPart => { const part = parts.get(partId)!; return { partId, mainCategory: part.mainCategory, pins: part.pins.map((pin) => ({ number: pin.number, name: pin.name, type: pin.type ?? "" })), verified: true, orderableValues: null, text: part.name, name: part.name }; };
+  const filled = new Map(recipe.design.roles.map((role) => {
+    const part = returned(rolePart[role.key]!);
+    const values = new Map(recipe.design.components.filter((component) => component.role === role.key).map((component) => [component.ref, component.values === "part-name" ? part.name : component.values[0]!] as const));
+    return [role.key, { part, values }] as const;
+  }));
+  const netlist = designSubmission(recipe.design, filled) as unknown as BuildLogicalNetlist;
+  const used = new Map([...new Set(netlist.components.map((component) => component.partId))].map((partId) => [partId, parts.get(partId)!] as const));
+  const built = autoLayoutBuildValidated(netlist, used);
+  if (!built.validation.ok) throw new Error("the dimmer layout is invalid");
+  return built.state;
+}
+const groupsOf = (proposal: SealedSheetOrganizationProposal) => proposal.groups.map((group) => ({ name: group.name, members: group.members.map((member) => member.refDes) }));
+const asGroups = (groups: ReadonlyArray<{ name: string; refs: readonly string[] }>) => groups.map((group) => ({ name: group.name, members: [...group.refs] }));
 
 /** Two catalog resistors joined by one unnamed wire (the SIG<n> case). */
 function twoResistors(): SchematicState {
@@ -109,10 +142,12 @@ describe("[PR-J5] the organise proposal tool", { timeout: 60_000 }, () => {
     expect(verifySealedSheetOrganizationProposalIntegrity(JSON.parse(JSON.stringify(proposal)))).toEqual({ ok: true });
     expect(verifySealedSheetOrganizationProposal(proposal, { currentSchematicDigest: digestBefore, now: Date.now(), expectedScope: { ...SCOPE, headMark: editor.headMark()! } })).toEqual({ ok: true });
     expect(verifySealedSheetOrganizationProposal(proposal, { currentSchematicDigest: digestBefore, now: Date.now(), expectedScope: { ...SCOPE, projectId: "proj-other", headMark: editor.headMark()! } })).toMatchObject({ ok: false, code: "foreign-scope" });
-    // the groups are the J4 planner's default grouping of the flat drone, and the adapter's script is that grouping
+    // [PR-J5 integration, 2026-10-23] pin move (review J5R-AI-6; was: the groups are the J4 planner's default grouping of the flat drone,
+    // the adapter's FIXTURE_DRONE_ORGANIZE_GROUPS): the script proposes the design's OWN groups - the drone's plan blocks
+    // (sheet-organization-groups.ts DRONE_SHEET_GROUPS); FIXTURE_DRONE_ORGANIZE_GROUPS stays J4's default grouping (the suites' fixture)
     const own = proposeSheetGroups(state, getPart);
     if (!own.ok) throw new Error(own.message);
-    expect(proposal.groups.map((group) => ({ name: group.name, members: group.members.map((member) => member.refDes) }))).toEqual(own.groups.map((group) => ({ name: group.name, members: [...group.refs] })));
+    expect(groupsOf(proposal)).toEqual(asGroups(DRONE_SHEET_GROUPS));
     expect(FIXTURE_DRONE_ORGANIZE_GROUPS.map((group) => ({ name: group.name, members: [...group.members] }))).toEqual(own.groups.map((group) => ({ name: group.name, members: [...group.refs] })));
     expect(proposal.unassigned).toEqual([]);
     expect([...new Set(proposal.interfaces.map((item) => item.portName))].sort()).toEqual(["I2C_SCL", "I2C_SDA", "IMU_INT1", "PWM1", "PWM2", "PWM3", "PWM4"]);
@@ -131,7 +166,7 @@ describe("[PR-J5] the organise proposal tool", { timeout: 60_000 }, () => {
     expect(replan.operations).toHaveLength(proposal.operationCount);
     const applied = fromCanonicalSchematic(applySchematicOperationsToCanonical(toCanonicalSchematic(state), replan.operations).schematic);
     expect(schematicStateDigest(applied)).toBe(schematicStateDigest(replan.after));
-    expect(applied.sheets!.sheets.map((sheet) => sheet.name)).toEqual(["Overview", ...FIXTURE_DRONE_ORGANIZE_GROUPS.map((group) => group.name)]);
+    expect(applied.sheets!.sheets.map((sheet) => sheet.name)).toEqual(["Overview", ...DRONE_SHEET_GROUPS.map((group) => group.name)]); // [PR-J5 integration, 2026-10-23] pin move (J5R-AI-6): the plan blocks' sheets
   });
 
   it("2. the closed input surface refuses by name and seals nothing", async () => {
@@ -227,12 +262,61 @@ describe("[PR-J5] the organise proposal tool", { timeout: 60_000 }, () => {
       { adapter: new FixtureAgentAdapter("anthropic"), registry, context, system: AGENT_SYSTEM_PROMPT, gateway: gateway(), emit: (event) => events.push(event) },
     );
     expect(result.status).toBe("completed");
-    expect(events.filter((event) => event.type === "tool_started").map((event) => (event as { toolId: string }).toolId)).toEqual([SHEET_ORGANIZATION_TOOL_ID]);
+    // [PR-J5 integration, 2026-10-23] pin move (review J5R-AI-6; was: ONE call proposing J4's default grouping): without a read the script
+    // proposes the fixture organisations in order - the dimmer's is refused as naming parts the drone does not hold (RV1, ...), the
+    // four-motor drone's plan blocks are sealed
+    expect(events.filter((event) => event.type === "tool_started").map((event) => (event as { toolId: string }).toolId)).toEqual([SHEET_ORGANIZATION_TOOL_ID, SHEET_ORGANIZATION_TOOL_ID]);
+    expect(events.filter((event) => event.type === "tool_finished").map((event) => (event as { status: string }).status)).toEqual(["proposal_blocked", "proposal_sealed"]);
     const ready = events.filter((event) => event.type === "sheet_organization_ready");
     expect(ready).toHaveLength(1);
     const proposal = (ready[0] as { proposal: SealedSheetOrganizationProposal }).proposal;
-    expect(proposal.groups.map((group) => group.name)).toEqual(FIXTURE_DRONE_ORGANIZE_GROUPS.map((group) => group.name));
+    expect(groupsOf(proposal)).toEqual(asGroups(DRONE_SHEET_GROUPS));
     expect(result.finalText).toContain("Nothing has been changed");
     expect(schematicStateDigest(state)).toBe(digest);
+  });
+
+  it("7. [PR-J5 integration] the page-laid-out LED dimmer gets ITS three groups, sealed, with and without the read; an unknown design is answered in words or with the last refusal, said once", async () => {
+    const dimmer = dimmerPage();
+    const digest = schematicStateDigest(dimmer);
+    const turn = async (state: SchematicState, board: boolean) => {
+      const { context } = await contextFor(state, true, board);
+      const events: AgentRunEvent[] = [];
+      const result = await runAgentLoop(
+        { runId: `run-j5-organize-${board ? "read" : "boardless"}`, provider: "anthropic", history: [], userMessage: "Organize this schematic into subsystem sheets.", budget: DEFAULT_AGENT_BUDGET },
+        { adapter: new FixtureAgentAdapter("anthropic"), registry, context, system: AGENT_SYSTEM_PROMPT, gateway: gateway(), emit: (event) => events.push(event) },
+      );
+      expect(result.status).toBe("completed");
+      return { events, result, started: events.filter((event) => event.type === "tool_started").map((event) => (event as { toolId: string }).toolId), ready: events.filter((event) => event.type === "sheet_organization_ready").map((event) => (event as { proposal: SealedSheetOrganizationProposal }).proposal) };
+    };
+    // with the board-backed read: inspect, then the dimmer's own groups (red before J5R-AI-6: the drone grouping, refused "D4 ... is not a catalog part")
+    const read = await turn(dimmer, true);
+    expect(read.started).toEqual(["sirkit.schematic.inspect", SHEET_ORGANIZATION_TOOL_ID]);
+    expect(read.ready).toHaveLength(1);
+    expect(groupsOf(read.ready[0]!)).toEqual(asGroups(LED_DIMMER_SHEET_GROUPS));
+    expect(read.ready[0]!.unassigned).toEqual([]);
+    expect(read.ready[0]!.interfaces).toHaveLength(2); // the one crossing (U1 OUT -> R2) as a port on each sheet it joins
+    expect(read.result.finalText).toContain("3 subsystem sheet(s)");
+    const replan = replanSheetOrganization(read.ready[0]!, dimmer, getPart);
+    if (!replan.ok) throw new Error(replan.detail);
+    expect(replan.operations).toHaveLength(read.ready[0]!.operationCount);
+    // without it (the page's own case: a flat page with no board): the dimmer is the first candidate and is sealed at once
+    const boardless = await turn(dimmer, false);
+    expect(boardless.started).toEqual([SHEET_ORGANIZATION_TOOL_ID]);
+    expect(boardless.ready).toHaveLength(1);
+    expect(groupsOf(boardless.ready[0]!)).toEqual(asGroups(LED_DIMMER_SHEET_GROUPS));
+    expect(schematicStateDigest(dimmer)).toBe(digest);
+    // a schematic no fixture design fits: with the read, answered in words (nothing proposed)
+    const unknownRead = await turn(twoResistors(), true);
+    expect(unknownRead.started).toEqual(["sirkit.schematic.inspect"]);
+    expect(unknownRead.ready).toEqual([]);
+    expect(unknownRead.result.finalText).toContain("not one of the fixture designs");
+    // without it: every candidate is proposed and refused as naming parts it does not hold; the reply carries the last refusal ONCE
+    const unknownBoardless = await turn(twoResistors(), false);
+    expect(unknownBoardless.started).toEqual(Array.from({ length: 5 }, () => SHEET_ORGANIZATION_TOOL_ID));
+    expect(unknownBoardless.ready).toEqual([]);
+    expect(unknownBoardless.result.finalText).toContain("the organisation was refused (proposal_blocked)");
+    expect(unknownBoardless.result.finalText).toContain("is not a catalog part of this schematic");
+    expect(unknownBoardless.result.finalText.match(/Nothing was changed/g)).toHaveLength(1);
+    expect(unknownBoardless.result.finalText).not.toContain("..");
   });
 });

@@ -29,6 +29,7 @@ import { DRONE_BLOCK_NAMES } from "@/app/lib/fixture-runtime/generation-recipes"
 import { deriveGeneratedSheets, type GeneratedSheetSet, type GeneratedSheetsPlannedBlock } from "@/app/lib/schematic/generated-sheets";
 import { resolveProjectConnectivity, type ProjectConnectivity } from "@/app/lib/schematic/project-connectivity";
 import { sheetOf, validateSheetHierarchy } from "@/app/lib/schematic/sheets";
+import { DEFAULT_BLOCK_SIZE } from "@/app/lib/schematic/sheet-lens";
 import { ROOT_SHEET_ID, netLabelNameKey, type BuildLogicalNetlist, type SchematicState } from "@/lib/schematic-types";
 import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
 import { blockNetlistOf, generatedSheetId, generatedSheetSeedKey, layoutGeneratedSheets, sheetPortDirectionOf, type GeneratedSheetLayout } from "@/lib/build-sheet-layout";
@@ -123,6 +124,11 @@ describe("[PR-J5] 1. the four-motor drone lays out as System overview + 4 sheets
     // the blocks do not overlap one another
     const blocks = children.map((sheet) => sheet.block!);
     for (const a of blocks) for (const b of blocks) if (a !== b) expect(a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height).toBe(false);
+    // [PR-J5 integration, 2026-10-23] review B-4: one block per child IN PLAN ORDER, left to right from the first cell (was: right to left,
+    // the first cell empty - each slot search counted the unplaced siblings' default cells)
+    expect(blocks[0]).toMatchObject({ x: 100, y: 100 });
+    for (let index = 1; index < blocks.length; index += 1) expect(blocks[index]!.x, children[index]!.name).toBeGreaterThan(blocks[index - 1]!.x);
+    expect(blocks.map((block) => block.x)).toEqual(blocks.map((_, index) => 100 + index * (DEFAULT_BLOCK_SIZE.width + 60)));
   });
 
   it("no hierarchy diagnostic; the connectivity is ok and multi-sheet; 7 interfaces; the partition equals the flat drawing's", () => {

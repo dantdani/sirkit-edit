@@ -203,7 +203,7 @@ export function schematicCommands(probe: () => SchematicViewProbe): ViewCommandD
     define<null>({ commandId: "schematic.read-state", editor: "schematic", title: "Read the current schematic view state", staleness: "rebase", validate: () => ({ ok: true, value: null }),
       apply: (_p, { state }) => ({ ok: true, state }) }),
     // [PR-J5, 2026-10-23] runbook J.6.5 / J.6.6: navigation stays a view command. The sheet is named by id, by its unique display name or
-    // by its path; a name two sheets share is refused with the candidates (never a guessed target); the editor's navigator opens it.
+    // by its path; a name two sheets share is refused with the candidates (never a guessed target) unless it is one sheet's exact path; the editor's navigator opens it.
     define<{ sheet: string }>({ commandId: "schematic.open-sheet", editor: "schematic", title: "Open a schematic sheet by id, unique name or path (the navigator switches the canvas)", staleness: "rebase",
       validate: (p) => (isObject(p) && typeof p.sheet === "string" && p.sheet.trim().length > 0 && p.sheet.length <= 200 ? { ok: true, value: { sheet: p.sheet.trim() } } : { ok: false, message: "sheet is required: a sheet id, its display name or its path" }),
       apply: ({ sheet }, { state }) => {
@@ -212,7 +212,7 @@ export function schematicCommands(probe: () => SchematicViewProbe): ViewCommandD
         if (!sheets) return unavailable("this editor lists no sheets (a single-sheet project, or the Sheets navigator is not wired to the view bus)");
         const byId = sheets.find((entry) => entry.id === sheet);
         const key = sheet.toUpperCase();
-        const matches = byId ? [byId] : sheets.filter((entry) => entry.name.trim().toUpperCase() === key || entry.path.trim().toUpperCase() === key);
+        const byPath = sheets.filter((entry) => entry.path.trim().length > 0 && entry.path.trim().toUpperCase() === key); const matches = byId ? [byId] : byPath.length === 1 ? byPath : sheets.filter((entry) => entry.name.trim().toUpperCase() === key); // [PR-J5 integration, 2026-10-23] review J5R-AI-4: tiers - the id, then an exact path (paths are unique: sibling names are), then a unique name; a top-level sheet whose name a nested one shares opens by its path
         if (matches.length === 0) return unavailable(`no sheet is named ${sheet}; the sheets are ${sheets.map((entry) => `${entry.name} [${entry.id}]`).join(", ")}`);
         if (matches.length > 1) return unavailable(`${sheet} names ${matches.length} sheets (${matches.map((entry) => `${entry.path || entry.name} [${entry.id}]`).join(", ")}): open one by its id or its path`);
         if (!p.openSheet(matches[0]!.id)) return unavailable(`sheet ${matches[0]!.id} could not be opened`);

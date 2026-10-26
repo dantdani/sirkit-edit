@@ -6,6 +6,9 @@
  *     with the sheet's id; the view state is untouched (navigation is view state the editor's navigator owns);
  *  2. a name two sheets share is refused with the candidates (never a guessed target); an unknown sheet lists the sheets; an editor
  *     without a navigator is unavailable; a navigator that cannot open is unavailable; a bad payload is VS_PAYLOAD_INVALID;
+ *     [PR-J5 integration, 2026-10-23] review J5R-AI-4: the resolution is tiered - the id, then an exact path (unique), then a unique
+ *     name - so a top-level sheet whose name a nested sheet shares opens by its path (it was refused, and the refusal's advice "open one
+ *     by its id or its path" named the very string just refused); a name only nested sheets share is still refused, and its advice works;
  *  3. an agent actor may issue it (a view command, never engineering state);
  *  4. view-context maps action open-sheet onto the command for the schematic editor only; the descriptor lists the bus command and
  *     the action; the registry validates the descriptor.
@@ -50,10 +53,23 @@ describe("[PR-J5] schematic.open-sheet", () => {
   it("2. refusals: a shared name lists the candidates, an unknown sheet lists the sheets, no navigator and a failed open are unavailable, a bad payload is invalid", async () => {
     const openSheet = vi.fn(() => true);
     const b = bus(sources(openSheet));
-    const shared = await b.dispatch(env("schematic.open-sheet", { sheet: "Stage" }, 0, "o-1"));
+    // [PR-J5 integration, 2026-10-23] pin move (review J5R-AI-4; was: {sheet: "Stage"} refused "Stage names 2 sheets ... open one by its id or
+    // its path" although "Stage" IS sheet-stage-a's path): the exact-path tier opens the top-level sheet; the nested one by its own path
+    const topLevel = await b.dispatch(env("schematic.open-sheet", { sheet: "Stage" }, 0, "o-0"));
+    expect(topLevel).toMatchObject({ status: "settled" });
+    expect(openSheet.mock.calls).toEqual([["sheet-stage-a"]]);
+    openSheet.mockClear();
+    // a name ONLY nested sheets share is refused with the candidates, and the advice works: each opens by its path
+    const nested = bus({ ...sources(openSheet), sheets: [{ id: "root", name: "Overview", path: "" }, { id: "sheet-power", name: "Power", path: "Power" }, { id: "sheet-motors", name: "Motors", path: "Motors" }, { id: "sheet-power-stage", name: "Stage", path: "Power/Stage" }, { id: "sheet-motor-stage", name: "Stage", path: "Motors/Stage" }] });
+    const shared = await nested.dispatch(env("schematic.open-sheet", { sheet: "Stage" }, 0, "o-1"));
     expect(shared).toMatchObject({ status: "refused", refusal: { code: "VS_UNAVAILABLE" } });
     expect((shared as { refusal: { message: string } }).refusal.message).toContain("Stage names 2 sheets");
-    expect((shared as { refusal: { message: string } }).refusal.message).toContain("Power/Stage [sheet-stage-b]");
+    expect((shared as { refusal: { message: string } }).refusal.message).toContain("Power/Stage [sheet-power-stage]");
+    expect((shared as { refusal: { message: string } }).refusal.message).toContain("Motors/Stage [sheet-motor-stage]");
+    expect(openSheet).not.toHaveBeenCalled();
+    expect(await nested.dispatch(env("schematic.open-sheet", { sheet: "motors/stage" }, 0, "o-1b"))).toMatchObject({ status: "settled" });
+    expect(openSheet.mock.calls).toEqual([["sheet-motor-stage"]]);
+    openSheet.mockClear();
     const unknown = await b.dispatch(env("schematic.open-sheet", { sheet: "Radio" }, 0, "o-2"));
     expect(unknown).toMatchObject({ status: "refused", refusal: { code: "VS_UNAVAILABLE" } });
     expect((unknown as { refusal: { message: string } }).refusal.message).toContain("Power [sheet-power]");
