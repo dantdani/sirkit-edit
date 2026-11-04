@@ -12,6 +12,7 @@ J.7 authorizes no new spend.
 | plan_ready message when the planner proposes more than 8 blocks on both attempts (`app/lib/generation-task/worker/slices.ts:249`, text in `planLimitMessage` at the file's end) | "The plan could not be read; designing the request as one circuit." (false: the plan was read and was too big) | "The planner proposed more than 8 subsystem blocks (a design task holds at most 8), so the whole request is designed as one circuit. To design subsystems as separate blocks, ask for at most 8 or group related ones." (8 = `GENERATION_TASK_BOUNDS.blocks`) | text only; the one-block fallback was already kept and still designs the WHOLE request (`designPrompt`), so nothing is dropped; other fallbacks keep their text |
 | task card status sentence while blocks design (`app/lib/project/generation-task-client.ts:420`, `generationQueueClause` at the file's end; rendered by `GenerationTaskStatus.tsx`, no page change) | `Running: designing "A", "B", "C".` | `Running: designing "A", "B", "C"; 5 more block(s) queued for a free worker slot.` A queued block whose latest milestone is the provider's wait is counted as `... waiting for the model provider` instead | byte-identical when nothing is queued; pure client text from the snapshot and milestones already sent |
 | the durable worker's slot count (`app/lib/generation-task/contracts.ts:135`) | `BUILD_BUDGET.concurrencyCap` (the deprecated synchronous route's pool) | `3`, its own documented constant | same value; the deprecated route's pool can no longer silently move the durable queue (the J.7 suite moves that pool to 5 and the worker stays at 3) |
+| J7-2 (2026-11-04): a claim, or a pre-call input admission, refused ONLY by live siblings' held reservations (store `waitForAllowance`, `admitCall` -> `GENERATION_INPUT_ALLOWANCE_CONTENDED`, slices `endAllowanceWait`) | the block parked `allowance_exhausted` and asked for "Continue with another allowance" | re-queued under a fresh slice id (pending `wait: {reason: "allowance", requeues}`), woken at once by a sibling's real end; the card says `N more block(s) waiting for a running block to release its reserved allowance` (snapshot block `waiting`) | nothing is reserved while it waits, so committed never exceeds the unit; authority is revalidated before every contention check; a genuine exhaustion (own need does not fit, or no live holder) parks exactly as before |
 
 Not changed, and why (each is a real resource, spend or authority bound, not a product ceiling on subsystems or sheets):
 
@@ -55,13 +56,27 @@ reader's block list agree.
 
 ## Remaining bounds and open items
 
-- **J7-2, allowance contention (open).** A block slice reserves 6 calls x 8,192 tokens at its claim, and the claim check counts the held
-  reservations of running siblings. With the default unit the eight-block run peaks at 34 of 60 calls, so it never parks; an operator unit
-  below the concurrent peak but above the sequential need (for example 30 calls for this run) would park a queued block with
-  `allowance_exhausted` and ask for "Continue with another allowance". The fix (re-queue under a fresh slice id with a backoff when only
-  live siblings' held reservations fill the unit; the same for the pre-call input admission; a per-block signal so the card does not call
-  that wait "a free worker slot") touches the store, the slice runner, the waiting vocabulary and the L6 input-concurrency pin, so it was
-  not small enough for this increment.
+- **J7-2, allowance contention (DONE, 2026-11-04; fixture proof, `j7-allowance-contention`, 7 cases, each shown red with the fix
+  reverted).** When only live siblings' held reservations (or their in-flight input bounds) refuse a claim or a pre-call admission, the
+  block re-queues (row above) instead of parking. Measured, eight blocks, three slots:
+
+  | run | saved / omitted | peak committed | re-queues | calls |
+  |---|---|---|---|---|
+  | unit 30 calls, tick by tick (the default unit peaks at 31 on this run; sequential need 28) | 8 / 0, never `allowance_exhausted` | 28 of 30 | 1 | 25 |
+  | unit 30 calls, the worker's own loop | 8 / 0, never `allowance_exhausted` | 28 of 30 | 3 | 25 |
+  | unit 20 calls (below the sequential need) | 5 saved, 3 parked `allowance_exhausted`, each only once its own need (spent + uncertain + 6) exceeded 20 | 19 of 20 | 4 | 16; one extension finishes it at 25 |
+  | three-block drone, input limit 55,760 (every call order fits one at a time) | 3 / 0 | 55,362 input | 3 (admission) | 12 |
+
+  Every slice was claimed at most once, every outbox event leased at most once, no turn asked twice; a demotion during a wait stops the next
+  claim (`authority_revoked`, the waiter never ran), a cancel during a wait settles `cancelled`. The L6 input-concurrency pin is unchanged
+  (a dated note there records the new path). Remaining bounds: waits 5 s doubling to 60 s, at most 12 consecutive re-queues with no
+  sibling end (their 555 s outlast the 465 s a live sibling can hold without ending), then `allowance_exhausted`; a LAPSED sibling's
+  reservation still counts as committed spend, so a waiter beside a crashed slice parks rather than waits. Cited line numbers re-checked
+  2026-11-04: none moved (every edit before a cited line is in place; new code is appended).
+- **J7-9, a sibling's end beside a provider wait (open, found 2026-11-04).** Pre-existing, not J7-2: when a block ends (e.g. saved) while
+  the only other pending slice is a block delayed by a provider wait, the end commit derives `waiting-for-provider` without a waiting
+  reason and is refused (`GENERATION_TASK_TRANSITION_REFUSED`), so the finished slice is released and redone (its reservation charged
+  uncertain). Reproduced offline (drone, 3 slots, one `rate_limit`); allowance waiters never reach it (a real end wakes them).
 - **J7-3** blocks kept as sheets (increment J5, builder D). **J7-4** more than 8 blocks: shrink the head first, then move every bound case 7
   pins. **J7-5** the orchestration cap (OD-107). **J7-6** an editor-chosen workload size (owner cost decision). **J7-7** a workload view in
   the task card from the snapshot. **J7-8** more than 3 slots only after measuring the pool, the catalog slots and the provider's rate.

@@ -13,6 +13,12 @@
  *     revision settled + uncertain + in-flight input stays within the limit, the provider's reported input stays within it, a refused
  *     block parks `allowance_exhausted` with no call sent for it, and nothing becomes `platform_failure`.
  *
+ * [PR-J, 2026-11-04] J7-2 (allowance contention), no assertion moved: a first call refused ONLY because a live sibling's in-flight bound fills
+ * the limit is now GENERATION_INPUT_ALLOWANCE_CONTENDED - nothing sent, the block re-queued (j7-allowance-contention case 5) - instead of an
+ * immediate park. Measured here: two blocks re-queue that way, the third runs two turns and parks once its own next bound does not fit, and
+ * the two woken blocks then park the same way (their own first bound does not fit beside the settled input) - still `allowance_exhausted`,
+ * 0 turns and no call sent for them, and the limit holds on every revision.
+ *
  * The scripted provider reports 40 % of each request's bound (offline); the in-memory durable repository; a simulated clock.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

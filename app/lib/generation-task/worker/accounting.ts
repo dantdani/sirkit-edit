@@ -123,7 +123,7 @@ export function waitingReasonOf(reason: LLMProviderFailureReason, admission: boo
 export function providerBlockerOf(reason: LLMProviderFailureReason, providerCode?: string): GenerationBlockerCode {
   // [PR-L6, 2026-10-19] OD-253 item 6: a call the input admission refused was never sent - the task waits for another allowance; a
   // broken input estimate (a reported input above its bound) or an admission that could not be recorded stops the slice for a person
-  if (providerCode === INPUT_ALLOWANCE_EXHAUSTED_CODE) return "allowance_exhausted";
+  if (providerCode === INPUT_ALLOWANCE_EXHAUSTED_CODE || providerCode === INPUT_ALLOWANCE_CONTENDED_CODE) return "allowance_exhausted"; // [PR-J, 2026-11-04] J7-2: a contended admission that reaches a blocker at all (never on a block slice: it is re-queued) is the allowance's
   if (providerCode === INPUT_BOUND_EXCEEDED_CODE || providerCode === INPUT_ADMISSION_UNRECORDED_CODE) return "platform_failure";
   switch (reason) {
     case "missing_credentials": case "authentication": return "provider_credentials";
@@ -163,7 +163,7 @@ export const INPUT_ALLOWANCE_EXHAUSTED_CODE = "sirkit_input_allowance_exhausted"
 export const INPUT_BOUND_EXCEEDED_CODE = "sirkit_input_bound_exceeded";
 /** The call's input bound could not be recorded durably before it was sent (fenced, cancelled or the store did not answer): not sent. */
 export const INPUT_ADMISSION_UNRECORDED_CODE = "sirkit_input_admission_unrecorded";
-export const isInputAdmissionRefusal = (error: unknown): boolean => error instanceof LLMProviderError && (error.providerCode === INPUT_ALLOWANCE_EXHAUSTED_CODE || error.providerCode === INPUT_BOUND_EXCEEDED_CODE || error.providerCode === INPUT_ADMISSION_UNRECORDED_CODE);
+export const isInputAdmissionRefusal = (error: unknown): boolean => error instanceof LLMProviderError && (error.providerCode === INPUT_ALLOWANCE_EXHAUSTED_CODE || error.providerCode === INPUT_BOUND_EXCEEDED_CODE || error.providerCode === INPUT_ADMISSION_UNRECORDED_CODE || error.providerCode === INPUT_ALLOWANCE_CONTENDED_CODE); // [PR-J, 2026-11-04] J7-2
 
 /** The framing a provider adds around what the request carries, in tokens (INFERRED, and self-checked: a reported input above its bound
  *  stops the slice). Byte-level BPE gives tokens <= UTF-8 bytes for the text itself. [PR-L6 spend, 2026-10-19] the shared module's numbers. */
@@ -255,7 +255,7 @@ export class MeteredLlmPort implements BuildLlmPort {
     if (id === null) refuse(INPUT_ALLOWANCE_EXHAUSTED_CODE);
     if (this.beforeSend) {
       try { await this.beforeSend(bound); }
-      catch (error) { this.input.withdraw(id!); refuse(error instanceof InputAllowanceExhaustedError ? INPUT_ALLOWANCE_EXHAUSTED_CODE : INPUT_ADMISSION_UNRECORDED_CODE); } // [PR-L6 integration, 2026-10-19] F2: the task-level limit (store.admitCall) is the allowance, not a recording failure
+      catch (error) { this.input.withdraw(id!); refuse(error instanceof InputAllowanceExhaustedError ? INPUT_ALLOWANCE_EXHAUSTED_CODE : error instanceof InputAllowanceContendedError ? INPUT_ALLOWANCE_CONTENDED_CODE : INPUT_ADMISSION_UNRECORDED_CODE); } // [PR-L6 integration, 2026-10-19] F2: the task-level limit (store.admitCall) is the allowance, not a recording failure; [PR-J, 2026-11-04] J7-2: CONTENDED - only live siblings' in-flight input stood in the way
     }
     return id!;
   }
@@ -551,4 +551,14 @@ export class FactsCatalogPort implements BuildCatalogPort {
  *  `allowance_exhausted` with its last checkpoint kept - never `platform_failure`. */
 export class InputAllowanceExhaustedError extends Error {
   constructor() { super(INPUT_ALLOWANCE_EXHAUSTED_CODE); this.name = "InputAllowanceExhaustedError"; }
+}
+
+// [PR-J, 2026-11-04] Runbook J.7, increment J7-2 (allowance contention): appended after the last line, so no cited line moves.
+/** The code an input admission carries when the durable pre-call record refused the call ONLY because live sibling slices' in-flight input
+ *  bounds fill the task's input limit (`store.admitCall` -> GENERATION_INPUT_ALLOWANCE_CONTENDED): the call was NEVER sent, and the block slice
+ *  re-queues its block (the store's bounded allowance wait) instead of parking it `allowance_exhausted`. */
+export const INPUT_ALLOWANCE_CONTENDED_CODE = "sirkit_input_allowance_contended";
+/** `beforeSend` throws this for GENERATION_INPUT_ALLOWANCE_CONTENDED (the call is not sent). */
+export class InputAllowanceContendedError extends Error {
+  constructor() { super(INPUT_ALLOWANCE_CONTENDED_CODE); this.name = "InputAllowanceContendedError"; }
 }

@@ -208,3 +208,10 @@ export function canonicalBytes(value: unknown): number {
   return new TextEncoder().encode(durableWorkflowJson(value)).length;
 }
 export const isoOf = (ms: number): string => new Date(ms).toISOString();
+
+// [PR-J, 2026-11-04] Runbook J.7, increment J7-2 (allowance contention): appended after the last line, so no cited line moves.
+/** Why a QUEUED slice waits that is not the provider's word (`GENERATION_WAITING_REASONS` stays the provider's and the meters'): `allowance`
+ *  - the block fits the task's allowance on its own (spent + uncertain + its own need), but live sibling slices hold reservations that
+ *  fill it; it is re-queued (bounded) until one of them ends, never parked as `allowance_exhausted`. */
+export const GENERATION_QUEUE_WAIT_REASONS = Object.freeze(["allowance"] as const);
+export type GenerationQueueWaitReason = (typeof GENERATION_QUEUE_WAIT_REASONS)[number];

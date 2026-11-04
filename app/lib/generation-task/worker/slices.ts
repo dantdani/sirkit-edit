@@ -31,14 +31,14 @@ import { BUILD_BUDGET } from "../../schematic/build-result";
 import { sanitizeTraceText } from "../../agent/redaction";
 import { normalizePartFacts, type BuildLoopCheckpoint, type GenerationPartFacts } from "../checkpoint";
 import {
-  GENERATION_SLICE_POLICY, GENERATION_TASK_BOUNDS, buildGenerationTaskResult, generationBlockTurnsPerSlice, generationInputRemaining,
+  GENERATION_SLICE_POLICY, GENERATION_TASK_BOUNDS, buildGenerationTaskResult, generationBlockTurnsPerSlice, generationInputRemainingBesideHeld, // [PR-J, 2026-11-04] J7-2: was generationInputRemaining
   type GenerationBlockState, type GenerationMissingRole, type GenerationTaskHead, type GenerationTaskUsage,
 } from "../contracts";
 import { generationTaskEvent, type GenerationTaskEventDraft } from "../events";
 import type { GenerationBlockPatch, GenerationSliceEnd, GenerationSliceLease, GenerationTaskStore } from "../store";
 import { GENERATION_STRATEGIES, GenerationTaskContractError, cleanLine, isoOf, type GenerationBlockId, type GenerationStrategyId, type GenerationTaskState } from "../vocabulary";
 import {
-  FactsCatalogPort, INPUT_BOUND_EXCEEDED_CODE, InputAllowanceExhaustedError, MeteredLlmPort, SliceInputAllowance, SliceMeter, catalogEpochOf, consecutiveProviderWaits, isAdmissionPause, providerBlockerOf, providerWait, taskEmbeddingCache, zeroSpend,
+  FactsCatalogPort, INPUT_ALLOWANCE_CONTENDED_CODE, INPUT_BOUND_EXCEEDED_CODE, InputAllowanceContendedError, InputAllowanceExhaustedError, MeteredLlmPort, SliceInputAllowance, SliceMeter, catalogEpochOf, consecutiveProviderWaits, isAdmissionPause, providerBlockerOf, providerWait, taskEmbeddingCache, zeroSpend,
   type GenerationLlmAdmission, type MeteredLlmPortOptions, type SliceSpend,
 } from "./accounting";
 import { blockLearning, historyClosed, historyWithSlice, judgeSliceProgress, nextStrategyOf, quotedQuery, strategyAtClaim, strategySeedText, type BlockLearning } from "./progress";
@@ -90,7 +90,7 @@ export interface SliceContext {
   random: () => number;
   log: (line: string) => void;
 }
-export type GenerationSliceOutcomeKind = "planned" | "saved" | "yielded" | "strategy_changed" | "waiting_provider" | "blocked" | "result" | "cancelled" | "released" | "fenced";
+export type GenerationSliceOutcomeKind = "planned" | "saved" | "yielded" | "strategy_changed" | "waiting_provider" | "waiting_allowance" | "blocked" | "result" | "cancelled" | "released" | "fenced"; // [PR-J, 2026-11-04] J7-2: waiting_allowance
 export interface GenerationSliceReport {
   sliceId: string;
   taskId: string;
@@ -195,14 +195,14 @@ export async function runGenerationSlice(ctx: SliceContext): Promise<GenerationS
  *  is everything this attempt has charged that no commit carries yet - the new call's bound, and the input of earlier calls of the slice
  *  (a seed or correction call) reported since the last commit - so a process that dies inside the call leaves all of it charged. */
 function inputMetering(ctx: SliceContext): { input: SliceInputAllowance | null; options: MeteredLlmPortOptions; committed: (usage: Partial<GenerationTaskUsage>) => void } {
-  const remaining = generationInputRemaining(ctx.task);
+  const remaining = generationInputRemainingBesideHeld(ctx.task, ctx.lease); // [PR-J, 2026-11-04] J7-2: siblings' in-flight bounds are the durable admission's to judge (store.admitCall counts every one), never a reason to park this slice
   if (remaining === null) return { input: null, options: {}, committed: () => undefined };
   const input = new SliceInputAllowance(remaining);
   let seq = 0, committedInput = 0;
   const beforeSend = async (): Promise<void> => {
     const uncommitted = Math.max(0, input.reported + input.unreportedBound() - committedInput);
     const recorded = await ctx.store.admitCall(ctx.lease, (seq += 1), uncommitted);
-    if (!recorded.ok) throw recorded.code === "GENERATION_INPUT_ALLOWANCE_EXHAUSTED" ? new InputAllowanceExhaustedError() : new Error(recorded.code); // [PR-L6 integration, 2026-10-19] F2: the task's input limit refused the call (never sent)
+    if (!recorded.ok) throw recorded.code === "GENERATION_INPUT_ALLOWANCE_EXHAUSTED" ? new InputAllowanceExhaustedError() : recorded.code === "GENERATION_INPUT_ALLOWANCE_CONTENDED" ? new InputAllowanceContendedError() : new Error(recorded.code); // [PR-L6 integration, 2026-10-19] F2: the task's input limit refused the call (never sent)
   };
   return { input, options: { input, beforeSend }, committed: (usage) => { committedInput += (usage.inputTokens ?? 0) + (usage.uncertainInputTokens ?? 0); } };
 }
@@ -506,7 +506,7 @@ async function endProviderFailure(
   ctx: SliceContext, error: LLMProviderError, usage: Partial<GenerationTaskUsage>, catalog: FactsCatalogPort, state: GenerationBlockState,
   extra: { withFacts: (payload: GenerationSliceEnd) => GenerationSliceEnd; turnsUsed: number; history: GenerationBlockState["strategyHistory"] } | null,
 ): Promise<GenerationSliceReport> {
-  const blocker = providerBlockerOf(error.reason, error.providerCode); // [PR-L6, 2026-10-19] an input-admission refusal: the call was never sent
+  if (error.providerCode === INPUT_ALLOWANCE_CONTENDED_CODE) return endAllowanceWait(ctx, usage, catalog, state, extra); const blocker = providerBlockerOf(error.reason, error.providerCode); // [PR-L6, 2026-10-19] an input-admission refusal: the call was never sent; [PR-J, 2026-11-04] J7-2: only live siblings' input in the way - re-queued, never parked
   ctx.log(`block slice ${ctx.lease.sliceId}: the provider refused (${error.reason}${error.providerCode?.startsWith("sirkit_input_") ? `, ${error.providerCode}` : ""}); block "${cleanLine(state.name, 80)}" waits (${blocker})`);
   const payload: GenerationSliceEnd = { block: { status: "blocked", blocker, ...(extra ? { turnsUsed: extra.turnsUsed, strategyHistory: extra.history } : {}) } };
   if (extra) return end(ctx, extra.withFacts(payload), "blocked", `the provider refused (${error.reason}): ${blocker}`);
@@ -692,4 +692,24 @@ async function mergeSaved(ctx: SliceContext, savedBlocks: NonNullable<Generation
 function planLimitMessage(): string {
   const limit = GENERATION_TASK_BOUNDS.blocks;
   return `The planner proposed more than ${limit} subsystem blocks (a design task holds at most ${limit}), so the whole request is designed as one circuit. To design subsystems as separate blocks, ask for at most ${limit} or group related ones.`;
+}
+
+// ─── [PR-J, 2026-11-04] Runbook J.7, increment J7-2: allowance contention at the pre-call input admission ────────────────────────────
+// Appended after the last line (a function declaration is hoisted), so no cited line moves.
+/** The durable pre-call admission refused the block's next call ONLY because live sibling slices' in-flight input fills the task's input
+ *  limit (GENERATION_INPUT_ALLOWANCE_CONTENDED; nothing was sent). The block is not out of allowance: its committed turns are kept and it
+ *  is queued again through the store's bounded allowance wait (`schedule[].wait`), never parked `allowance_exhausted` here. The store parks
+ *  it past the wait bound, and the next admission parks it when its own need does not fit. */
+async function endAllowanceWait(
+  ctx: SliceContext, usage: Partial<GenerationTaskUsage>, catalog: FactsCatalogPort, state: GenerationBlockState,
+  extra: { withFacts: (payload: GenerationSliceEnd) => GenerationSliceEnd; turnsUsed: number; history: GenerationBlockState["strategyHistory"] } | null,
+): Promise<GenerationSliceReport> {
+  const blockId = ctx.lease.blockId!, turns = extra ? Math.max(0, extra.turnsUsed - state.turnsUsed) : 0;
+  ctx.log(`block slice ${ctx.lease.sliceId}: the next call of block "${cleanLine(state.name, 80)}" did not fit the input allowance live sibling slices hold (${INPUT_ALLOWANCE_CONTENDED_CODE}); nothing was sent, the block is re-queued`);
+  const yielded = generationTaskEvent("slice_yielded", { at: isoOf(ctx.clock()), phase: "designing", blockId, message: `Block "${state.name}": its next model call did not fit the input allowance while other blocks held theirs; nothing was sent.`, data: { sliceKind: "block", turns } });
+  const payload: GenerationSliceEnd = { block: { status: "queued", ...(extra ? { turnsUsed: extra.turnsUsed, strategyHistory: extra.history } : {}) }, schedule: [{ kind: "block", blockId, wait: "allowance" }], milestones: [yielded] };
+  const detail = `the next call waits for input allowance live siblings hold (${turns} turn(s) this slice); re-queued`;
+  if (extra) return end(ctx, extra.withFacts(payload), "waiting_allowance", detail);
+  const factsDelta = catalog.takeDelta();
+  return end(ctx, { ...payload, usage, ...(factsDelta ? { facts: factsDelta } : {}) }, "waiting_allowance", detail);
 }

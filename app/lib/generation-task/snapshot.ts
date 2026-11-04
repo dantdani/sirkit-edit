@@ -17,7 +17,7 @@
  */
 import { GENERATION_SLICE_POLICY, GENERATION_TASK_BOUNDS, generationAllowanceLimits, generationCommitted, type GenerationTaskHead } from "./contracts";
 import type { GenerationTaskActivity } from "./events";
-import { isTerminalGenerationTaskState, isoOf, type GenerationBlockId, type GenerationBlockStatus, type GenerationBlockerCode, type GenerationFailureReason, type GenerationStrategyId, type GenerationTaskOrigin, type GenerationTaskPhase, type GenerationTaskState } from "./vocabulary";
+import { isTerminalGenerationTaskState, isoOf, type GenerationQueueWaitReason, type GenerationBlockId, type GenerationBlockStatus, type GenerationBlockerCode, type GenerationFailureReason, type GenerationStrategyId, type GenerationTaskOrigin, type GenerationTaskPhase, type GenerationTaskState } from "./vocabulary";
 
 export const GENERATION_TASK_SNAPSHOT_SCHEMA = "sirkit.generation-task-snapshot.v1" as const;
 
@@ -48,7 +48,7 @@ export interface GenerationTaskSnapshotBlock {
   turnsUsed: number;
   blocker: GenerationBlockerCode | null;
   /** [PR-L6, 2026-10-19] only when the block waits for parts its searches could not find (L.6 part 2, item 8): the roles, bounded lines */
-  missing?: Array<{ role: string; query: string; category: string | null }>;
+  missing?: Array<{ role: string; query: string; category: string | null }>; /** [PR-J, 2026-11-04] J7-2: only while the block is queued again because live siblings' reservations fill the allowance (`allowance`); on this line so no cited line moves */ waiting?: GenerationQueueWaitReason;
 }
 
 export interface GenerationTaskSnapshot {
@@ -145,7 +145,7 @@ export function buildGenerationTaskSnapshot(head: GenerationTaskHead, input: { n
       planner: head.plan.planner.state, rationale: head.plan.rationale, assumptions: [...head.plan.assumptions], ...(head.plan.coverage?.length ? { coverage: [...head.plan.coverage] } : {}),
       blocks: head.plan.blocks.map((planned) => {
         const block = head.blocks[planned.blockId]!;
-        return { blockId: block.blockId, name: block.name, status: block.status, strategy: block.strategy, turnsUsed: block.turnsUsed, blocker: block.blocker, ...(block.missing?.length ? { missing: block.missing.map((entry) => ({ ...entry })) } : {}) };
+        return { blockId: block.blockId, name: block.name, status: block.status, strategy: block.strategy, turnsUsed: block.turnsUsed, blocker: block.blocker, ...(block.missing?.length ? { missing: block.missing.map((entry) => ({ ...entry })) } : {}), ...queueWaitOf(head, block.blockId) }; // [PR-J, 2026-11-04] J7-2
       }),
     }
     : null;
@@ -203,4 +203,12 @@ export function generationScopedClaimOwner(workerId: string, scope: { tenantId: 
 function claimOwnerServes(owner: string | null | undefined, scope: { tenantId: string; projectId: string; branchId: string }): boolean {
   const at = typeof owner === "string" ? owner.lastIndexOf(GENERATION_SCOPED_OWNER_MARK) : -1;
   return at < 0 || owner!.slice(at + GENERATION_SCOPED_OWNER_MARK.length) === generationWorkerScopeTag(scope);
+}
+
+// [PR-J, 2026-11-04] Runbook J.7, increment J7-2 (allowance contention), appended after the last line (a function declaration is hoisted):
+// the per-block signal of a block queued again because live siblings' held reservations fill the task's allowance - read from the head's
+// own pending entry (an unowned slice of the block carrying `wait`), so the card never calls that wait "a free worker slot".
+function queueWaitOf(head: GenerationTaskHead, block: GenerationBlockId): { waiting?: GenerationQueueWaitReason } {
+  const entry = Object.values(head.pending).find((pending) => pending.blockId === block && pending.owner === null && pending.wait !== undefined);
+  return entry?.wait ? { waiting: entry.wait.reason } : {};
 }

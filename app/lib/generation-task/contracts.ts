@@ -38,12 +38,12 @@ import { electricalCheckJudge, netlistJudge, normalizeElectricalCheck, normalize
 import { generationTaskMilestonesIssue, type GenerationTaskEvent } from "./events";
 import {
   CLIENT_REQUEST_ID, ENGINEERING_DIGEST, GENERATION_BASE_RECIPES, GENERATION_BLOCKER_CODES, GENERATION_BLOCK_STATUSES, GENERATION_CATALOG_PROFILES, GENERATION_CONTROL_ACTIONS, GENERATION_FAILURE_REASONS,
-  GENERATION_REVIEW_OUTCOMES, GENERATION_SLICE_KINDS, GENERATION_STRATEGIES, GENERATION_STRATEGY_OUTCOMES, GENERATION_TASK_ORIGINS, GENERATION_TASK_PHASES, GENERATION_TASK_STATES, GENERATION_WAITING_REASONS, LEASE_TOKEN,
+  GENERATION_REVIEW_OUTCOMES, GENERATION_SLICE_KINDS, GENERATION_STRATEGIES, GENERATION_STRATEGY_OUTCOMES, GENERATION_TASK_ORIGINS, GENERATION_TASK_PHASES, GENERATION_TASK_STATES, GENERATION_WAITING_REASONS, GENERATION_QUEUE_WAIT_REASONS, LEASE_TOKEN,
   GenerationTaskContractError, arrayOf, blockId, bool, canonicalBytes, cleanLine, cleanModelText, count, durableDigest, identifier, isPlainRecord, isTerminalGenerationTaskState, isoInstant, line, modelText, nullable,
   oneOf, pattern, recordId, recordOf, shape, sliceId, taskId,
   type GenerationBaseRecipe, type GenerationBlockId, type GenerationBlockStatus, type GenerationBlockerCode, type GenerationCatalogProfile, type GenerationControlAction, type GenerationFailureReason,
   type GenerationReviewOutcome, type GenerationSliceKind, type GenerationStrategyId, type GenerationStrategyOutcome, type GenerationTaskOrigin, type GenerationTaskPhase, type GenerationTaskState,
-  type GenerationWaitingReason, type Issue, type Judge,
+  type GenerationWaitingReason, type GenerationQueueWaitReason, type Issue, type Judge,
 } from "./vocabulary";
 
 // ─── Identities ──────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -199,7 +199,7 @@ export interface GenerationBlockState {
   missing?: GenerationMissingRole[];
 }
 export interface GenerationSliceOwner { attempt: number; fence: number; workerId: string; leaseToken: string; claimedAt: string }
-export interface GenerationPendingSlice { kind: GenerationSliceKind; blockId: GenerationBlockId | null; notBefore: string; state: "queued" | "running"; owner: GenerationSliceOwner | null }
+export interface GenerationPendingSlice { kind: GenerationSliceKind; blockId: GenerationBlockId | null; notBefore: string; state: "queued" | "running"; owner: GenerationSliceOwner | null; /** [PR-J, 2026-11-04] J7-2: OPTIONAL - re-queued because live siblings' reservations filled the allowance (`GenerationPendingWait`) */ wait?: GenerationPendingWait }
 export const GENERATION_USAGE_KEYS = Object.freeze(["slices", "attempts", "modelCalls", "inputTokens", "outputTokens", "catalogSearches", "cacheHits", "embeddingCalls", "rerankCalls", "rerankSkipped", "uncertainModelCalls", "uncertainOutputTokens"] as const);
 /** [PR-L6, 2026-10-19] Usage keys a head carries only once they are non-zero (persisted heads without them stay valid): the input bound of
  *  calls whose completion is unknown (OD-253 item 6). */
@@ -278,7 +278,7 @@ const blockStateShape = shape({
   artifactRef: nullable(artifactRefShape), turnsUsed: count(), stagnantSlices: count(1_000), lastProgressKey: nullable(durableDigest), blocker: nullable(oneOf(GENERATION_BLOCKER_CODES)),
 }, { missing: arrayOf(missingRoleShape, GENERATION_TASK_BOUNDS.missingRoles, 1) });
 const ownerShape = shape({ attempt: count(1_000_000, 1), fence: count(Number.MAX_SAFE_INTEGER, 1), workerId: identifier(200), leaseToken: pattern(LEASE_TOKEN, "a lease token"), claimedAt: isoInstant });
-const pendingShape = shape({ kind: oneOf(GENERATION_SLICE_KINDS), blockId: nullable(blockId), notBefore: isoInstant, state: oneOf(["queued", "running"]), owner: nullable(ownerShape) });
+const pendingShape = shape({ kind: oneOf(GENERATION_SLICE_KINDS), blockId: nullable(blockId), notBefore: isoInstant, state: oneOf(["queued", "running"]), owner: nullable(ownerShape) }, { wait: pendingWaitJudge }); // [PR-J, 2026-11-04] J7-2: `wait` optional (every persisted head stays valid); the judge is a hoisted declaration at the file's end
 const usageShape = shape(Object.fromEntries(GENERATION_USAGE_KEYS.map((key) => [key, count()])), Object.fromEntries(GENERATION_OPTIONAL_USAGE_KEYS.map((key) => [key, count()])));
 const reservationShape = shape({ sliceId, attempt: count(1_000_000, 1), modelCalls: count(), outputTokens: count(), state: oneOf(["held", "uncertain"]), at: isoInstant }, { inputTokens: count() });
 const unit = GENERATION_TASK_ALLOWANCE_UNIT;
@@ -795,4 +795,64 @@ function normalizeGeneratedSheets(doc: GeneratedSheets): GeneratedSheets {
     },
   };
   return generationSheetsJudge(normalized, "result.sheets") === null ? normalized : onePageSheets(findings, SHEETS_NOT_RECORDED);
+}
+
+// ─── [PR-J, 2026-11-04] Runbook J.7, increment J7-2: allowance contention (multi-sheet/workload-limits.md) ──────────────────────────────
+// Appended after the last line (function declarations are hoisted; `pendingShape` above reads `pendingWaitJudge` at module load), so no
+// cited line moves. A block slice reserves its worst case (6 calls x 8 192 output tokens) at its claim, and the claim counts every
+// reservation a running sibling holds. When ONLY live siblings' held reservations stop a claim - or the pre-call input admission - (spent +
+// uncertain + every other reservation + the slice's own need fit the allowance), the block is not out of allowance: it is RE-QUEUED under a
+// fresh slice id after a bounded deterministic wait, and the real end of a sibling (its reservation settled) wakes it at once. Nothing is
+// reserved while a block waits, so committed spend (spent + held + uncertain) never exceeds the allowance; a block that sees no sibling end
+// through `maxRequeues` consecutive re-queues, or whose own need does not fit, parks `allowance_exhausted` exactly as before.
+
+/** The re-queue waits: 5 s doubling to 60 s. After `maxRequeues` consecutive re-queues with no sibling end (a sibling's end resets the count)
+ *  the block parks `allowance_exhausted`. The waits' sum (5 + 10 + 20 + 40 + 8 x 60 = 555 s) exceeds the longest a live sibling slice holds
+ *  its reservation without ending (blockWindowMs 300 s + one call's perCallMs 120 s + one lease 45 s = 465 s): a waiter that reaches the
+ *  bound had siblings that were not ending. New values; no existing limit value changed. */
+export const GENERATION_ALLOWANCE_WAIT = Object.freeze({ baseMs: 5_000, capMs: 60_000, maxRequeues: 12 });
+/** Why a queued slice waits and how many consecutive re-queues (1..maxRequeues) it has had since a sibling last ended. */
+export interface GenerationPendingWait { reason: GenerationQueueWaitReason; requeues: number }
+/** The deterministic wait before re-queue number `requeues` (1-based). */
+export function generationAllowanceWaitMs(requeues: number): number {
+  const exponent = Math.max(0, Math.min(16, Math.floor(requeues) - 1));
+  return Math.min(GENERATION_ALLOWANCE_WAIT.capMs, GENERATION_ALLOWANCE_WAIT.baseMs * 2 ** exponent);
+}
+/** The reservations live siblings hold, as `sliceId#attempt`: every pending slice other than `except` whose owner still holds its lease
+ *  (`live`, the store's lease check). A lapsed owner's reservation is never among them: it stays committed spend. */
+export function generationLiveHolders(head: Pick<GenerationTaskHead, "pending">, live: ReadonlySet<string>, except: string): Set<string> {
+  const holders = new Set<string>();
+  for (const [id, entry] of Object.entries(head.pending)) if (id !== except && entry.owner && live.has(id)) holders.add(`${id}#${entry.owner.attempt}`);
+  return holders;
+}
+const heldBy = (entry: GenerationReservation, holders: ReadonlySet<string>): boolean => entry.state === "held" && holders.has(`${entry.sliceId}#${entry.attempt}`);
+/** Whether ONLY live siblings' held reservations refuse `reservation`: the allowance refuses it (`allowance_exhausted`) and it fits once
+ *  those held reservations are left out. False for a genuine exhaustion (nothing live holds, or the need does not fit without them) and for
+ *  every other refusal (the wall-clock window, the catalog-search count). */
+export function generationAllowanceContended(head: GenerationTaskHead, reservation: { modelCalls: number; outputTokens: number }, nowMs: number, holders: ReadonlySet<string>): boolean {
+  if (generationAllowanceRefusal(head, reservation, nowMs) !== "allowance_exhausted") return false;
+  const reservations = head.reservations.filter((entry) => !heldBy(entry, holders));
+  return reservations.length < head.reservations.length && generationAllowanceRefusal({ ...head, reservations }, reservation, nowMs) === null;
+}
+/** The pre-call input admission's twin (`store.admitCall`, the slice's own bound already on its reservation): the task's input limit is
+ *  passed, but it holds once the in-flight input bounds of live siblings' held reservations are left out. */
+export function generationInputContended(head: Pick<GenerationTaskHead, "usage" | "reservations" | "allowance">, holders: ReadonlySet<string>): boolean {
+  const limit = generationAllowanceLimits(head.allowance).inputTokens;
+  if (limit === undefined) return false;
+  const committed = generationCommitted(head).inputTokens;
+  const siblings = head.reservations.reduce((sum, entry) => sum + (heldBy(entry, holders) ? entry.inputTokens ?? 0 : 0), 0);
+  return committed > limit && siblings > 0 && committed - siblings <= limit;
+}
+/** A slice's OWN input budget (its `SliceInputAllowance`): the task's remaining input with the in-flight bounds of OTHER held reservations
+ *  left out - the durable admission (`store.admitCall`) counts every one of them before each call is sent, so a slice budget that also
+ *  counted them would park a call that only waits for a sibling. Null when the task has no input dimension. */
+export function generationInputRemainingBesideHeld(head: Pick<GenerationTaskHead, "usage" | "reservations" | "allowance">, own: { sliceId: string; attempt: number }): number | null {
+  const limit = generationAllowanceLimits(head.allowance).inputTokens;
+  if (limit === undefined) return null;
+  const reservations = head.reservations.filter((entry) => entry.state !== "held" || (entry.sliceId === own.sliceId && entry.attempt === own.attempt));
+  return Math.max(0, limit - generationCommitted({ usage: head.usage, reservations }).inputTokens);
+}
+/** A pending slice's `wait`: the closed reason and a re-queue count within the bound. */
+function pendingWaitJudge(value: unknown, path: string): Issue {
+  return shape({ reason: oneOf(GENERATION_QUEUE_WAIT_REASONS), requeues: count(GENERATION_ALLOWANCE_WAIT.maxRequeues, 1) })(value, path);
 }

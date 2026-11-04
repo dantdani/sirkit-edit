@@ -44,7 +44,7 @@ export interface GenerationTaskSnapshotView {
   serverNow: string;
   liveness: { state: GenerationTaskClientLiveness; since: string | null; retryAt: string | null };
   /** [PR-L6, 2026-10-19] `coverage` (the planner's requested functions) and a block's `missing` roles (it waits for those parts) only when present */
-  plan: { planner: string; rationale: string; assumptions: string[]; coverage?: string[]; blocks: Array<{ blockId: string; name: string; status: string; strategy: string; turnsUsed: number; blocker: string | null; missing?: Array<{ role: string; query: string; category: string | null }> }> } | null;
+  plan: { planner: string; rationale: string; assumptions: string[]; coverage?: string[]; blocks: Array<{ blockId: string; name: string; status: string; strategy: string; turnsUsed: number; blocker: string | null; missing?: Array<{ role: string; query: string; category: string | null }>; /** [PR-J, 2026-11-04] J7-2: queued again while running blocks hold the allowance it needs */ waiting?: "allowance" }> } | null;
   blocker: { code: string; message: string; resolution: string; blockId: string | null } | null;
   failure: { reason: string; at: string } | null;
   usage: { slices: number; attempts: number; modelCalls: number; uncertainModelCalls: number; inputTokens: number; outputTokens: number; catalogSearches: number; cacheHits: number };
@@ -102,7 +102,7 @@ export function readGenerationTaskSnapshot(value: unknown): GenerationTaskSnapsh
         planner: str(plan.planner, 40) ? plan.planner : "", rationale: str(plan.rationale, 1_000) ? plan.rationale : "",
         assumptions: Array.isArray(plan.assumptions) ? plan.assumptions.filter((entry): entry is string => str(entry, 400)).slice(0, 8) : [],
         ...(Array.isArray(plan.coverage) && plan.coverage.some((entry) => str(entry, 400)) ? { coverage: plan.coverage.filter((entry): entry is string => str(entry, 400)).slice(0, 8) } : {}), // [PR-L6, 2026-10-19]
-        blocks: plan.blocks.filter(isRecord).slice(0, 8).map((block) => ({ blockId: str(block.blockId, 8) ? block.blockId : "", name: str(block.name, 200) ? block.name : "", status: str(block.status, 40) ? block.status : "", strategy: str(block.strategy, 40) ? block.strategy : "", turnsUsed: num(block.turnsUsed) ? block.turnsUsed : 0, blocker: strOrNull(block.blocker), ...missingRolesOf(block.missing) })),
+        blocks: plan.blocks.filter(isRecord).slice(0, 8).map((block) => ({ blockId: str(block.blockId, 8) ? block.blockId : "", name: str(block.name, 200) ? block.name : "", status: str(block.status, 40) ? block.status : "", strategy: str(block.strategy, 40) ? block.strategy : "", turnsUsed: num(block.turnsUsed) ? block.turnsUsed : 0, blocker: strOrNull(block.blocker), ...missingRolesOf(block.missing), ...(block.waiting === "allowance" ? { waiting: "allowance" as const } : {}) })), // [PR-J, 2026-11-04] J7-2: any other value is dropped
       }
       : null,
     blocker: isRecord(value.blocker) && str(value.blocker.code, 40) && str(value.blocker.message, 600) && str(value.blocker.resolution, 600) ? { code: value.blocker.code, message: value.blocker.message, resolution: value.blocker.resolution, blockId: strOrNull(value.blocker.blockId) } : null,
@@ -453,13 +453,17 @@ export const generationTaskRestartable = (view: Pick<GenerationTaskView, "state"
 // the durable queue - never dropped. While some blocks design, the status sentence says how many still wait and for what: a queued block
 // whose latest milestone is the model provider's wait waits for the provider; every other queued block waits for a free worker slot.
 // Nothing queued: the empty clause (the sentence is byte-identical to the one before).
+// [PR-J, 2026-11-04] J7-2: a queued block the snapshot marks `waiting: "allowance"` (re-queued because the running blocks' reservations fill
+// the task's allowance; it starts when one of them ends) is said to wait for exactly that, never for "a free worker slot" - the mark is the
+// head's own pending entry, so it holds across a reconnect that missed milestones. Without the mark the sentence is unchanged.
 function generationQueueClause(view: Pick<GenerationTaskView, "plan" | "milestones">): string {
   const queued = (view.plan?.blocks ?? []).filter((block) => block.status === "queued");
   if (!queued.length) return "";
   const latest = new Map<string, string>();
   for (const event of view.milestones) if (event.blockId) latest.set(event.blockId, event.type);
-  const provider = queued.filter((block) => latest.get(block.blockId) === "waiting_provider").length, slot = queued.length - provider;
-  return `${slot ? `; ${slot} more block(s) queued for a free worker slot` : ""}${provider ? `; ${provider} more block(s) waiting for the model provider` : ""}`;
+  const allowance = queued.filter((block) => block.waiting === "allowance").length;
+  const provider = queued.filter((block) => block.waiting !== "allowance" && latest.get(block.blockId) === "waiting_provider").length, slot = queued.length - allowance - provider;
+  return `${slot ? `; ${slot} more block(s) queued for a free worker slot` : ""}${allowance ? `; ${allowance} more block(s) waiting for a running block to release its reserved allowance` : ""}${provider ? `; ${provider} more block(s) waiting for the model provider` : ""}`;
 }
 
 // [PR-J, 2026-10-22] Runbook J.6.3, increment J5-1, appended after the last line (a function declaration is hoisted): the result's optional
