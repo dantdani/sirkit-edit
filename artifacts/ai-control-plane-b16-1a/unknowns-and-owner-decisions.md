@@ -41,6 +41,6 @@
 
 ## Honest limitations restated
 
-Access revocation cannot erase clones or downloads Shantanu (or anyone) made
+Access revocation cannot erase clones or downloads the former collaborator (or anyone) made
 while access existed; historical commits remain visible to any reader of the
 private repository.

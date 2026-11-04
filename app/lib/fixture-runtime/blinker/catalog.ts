@@ -8,9 +8,9 @@
  * built here from committed KiCad sources, with NO database, network, or
  * provider access:
  *
- *  - the symbols and footprints are the official KiCad library files copied
- *    verbatim into `./kicad/` (CC-BY-SA-4.0 with the KiCad libraries
- *    exception — see data/kicad-symbols/LICENSE.md), parsed through the SAME
+ *  - the symbols and footprints are official KiCad library files copied into
+ *    `./kicad/` (CC-BY-SA-4.0 with the KiCad libraries exception; verbatim except
+ *    Timer_NE555, composed from two — see ./kicad/LICENSES.md), parsed through the SAME
  *    production parsers the atomic catalog uses (`parseSymbolAssets`,
  *    `parseFootprintAsset`);
  *  - the pin-to-pad mapping certificates are produced by the production

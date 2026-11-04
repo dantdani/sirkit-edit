@@ -2,6 +2,7 @@
   "name": "sirkit",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "dev": "next dev",
     "dev:fixture": "node scripts/dev-fixture.mjs",

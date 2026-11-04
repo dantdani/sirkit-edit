@@ -1,0 +1,75 @@
+name: Bug report
+description: Something in Sirkit does not work as expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please **never paste `.env` contents, API keys, tokens, cookies or passwords** here.
+        Security problems go through private vulnerability reporting (see SECURITY.md), not a public issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The exact steps, commands or prompt. A reproduction under `pnpm run dev:fixture` helps most.
+      placeholder: |
+        1. pnpm run dev:fixture
+        2. Open http://localhost:3100
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      description: Which runtime were you using?
+      options:
+        - Fixture runtime (pnpm run dev:fixture, no keys)
+        - Live mode (pnpm dev with my own database and keys)
+        - Tests only (vitest, Playwright or another script)
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: The commit you ran (git rev-parse --short HEAD).
+    validations:
+      required: false
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: e.g. Windows 11, macOS 15, Ubuntu 24.04
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Node and pnpm versions
+      description: Output of node --version and pnpm --version.
+      placeholder: e.g. v24.x, 11.2.2
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Relevant output only. Remove any key, token, cookie, URL with credentials or personal data first.
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I removed every secret (keys, tokens, cookies, passwords, `.env` values) from this report.
+          required: true
