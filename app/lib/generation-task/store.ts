@@ -36,7 +36,7 @@ import { assertBuildLoopCheckpoint, buildLoopCheckpointIssue, type BuildLoopChec
 import {
   GENERATION_BLOCKER_TEXT, GENERATION_SLICE_CONTRACT, GENERATION_SLICE_EVENT, GENERATION_SLICE_POLICY, GENERATION_SLICE_TOPIC, GENERATION_TASK_AGGREGATES, GENERATION_TASK_ALLOWANCE_UNIT, GENERATION_TASK_BOUNDS,
   GENERATION_TASK_INDEX_KEY, GENERATION_TASK_SCHEMA, GENERATION_TASK_SCOPE_SUFFIX, GENERATION_TASK_START_SCOPE_SUFFIX, GENERATION_USAGE_KEYS, GENERATION_OPTIONAL_USAGE_KEYS,
-  applyGenerationFactsDelta, assertGenerationTaskHead, deriveGenerationTaskState, emptyGenerationTaskIndex, generationActivityAggregateKey, generationAllowanceLimits, generationAllowanceRefusal, generationBlockAggregateKey, generationCommitted, GENERATION_ALLOWANCE_WAIT, generationAllowanceContended, generationAllowanceWaitMs, generationInputContended, generationLiveHolders, // [PR-J, 2026-11-04] J7-2
+  applyGenerationFactsDelta, assertGenerationTaskHead, deriveGenerationTaskState, emptyGenerationTaskIndex, generationActivityAggregateKey, generationAllowanceLimits, generationAllowanceRefusal, generationBlockAggregateKey, generationCommitted, GENERATION_ALLOWANCE_WAIT, generationAllowanceContended, generationAllowanceWaitMs, generationInputContended, generationLiveHolders, generationWorkerSettledState, // [PR-J, 2026-11-04] J7-2; J7-9
   generationBlockTurnsPerSlice, generationIndexWith, generationPlanDigest, generationRequestDigest, generationReservationFor, generationSliceId, generationTaskFactsIssue, generationTaskHeadIssue,
   generationTaskId, generationTaskIndexIssue, generationTaskResultIssue, generationTaskTransitionIssue, hasGenerationOwner, isGenerationEditorRole, nextGenerationWork,
   type GenerationAllowanceUnit, type GenerationBlockState, type GenerationControlStamp, type GenerationFactsDelta, type GenerationMissingRole, type GenerationPendingSlice, type GenerationPendingWait, type GenerationReservation, type GenerationTaskFacts,
@@ -461,14 +461,14 @@ export class GenerationTaskStore {
     };
   }
   /** Schedule slices onto `next` (fresh ids) and answer their effects. */
-  private schedule(next: GenerationTaskHead, work: ReadonlyArray<{ kind: GenerationSliceKind; blockId: GenerationBlockId | null; notBefore?: string; wait?: GenerationPendingWait }>, nowIso: string): { outbox: DurableOutboxEffect[]; scheduled: string[] } {
+  private schedule(next: GenerationTaskHead, work: ReadonlyArray<{ kind: GenerationSliceKind; blockId: GenerationBlockId | null; notBefore?: string; wait?: GenerationPendingWait; providerWait?: GenerationWaitingReason }>, nowIso: string): { outbox: DurableOutboxEffect[]; scheduled: string[] } {
     const outbox: DurableOutboxEffect[] = [], scheduled: string[] = [];
     next.updatedAt = nowIso;
     for (const entry of work) {
       const id = generationSliceId(next.taskId, next.nextSliceSeq);
       next.nextSliceSeq += 1;
       const notBefore = entry.notBefore && Date.parse(entry.notBefore) > Date.parse(nowIso) ? isoOf(Date.parse(entry.notBefore)) : nowIso;
-      next.pending[id] = { kind: entry.kind, blockId: entry.blockId, notBefore, state: "queued", owner: null, ...(entry.wait ? { wait: { ...entry.wait } } : {}) }; // [PR-J, 2026-11-04] J7-2
+      next.pending[id] = { kind: entry.kind, blockId: entry.blockId, notBefore, state: "queued", owner: null, ...(entry.wait ? { wait: { ...entry.wait } } : {}), ...(entry.providerWait && notBefore !== nowIso ? { providerWait: entry.providerWait } : {}) }; // [PR-J, 2026-11-04] J7-2; J7-9: a slice the provider delays carries the provider's reason
       if (entry.kind === "block" && entry.blockId) { const block = next.blocks[entry.blockId]; if (block && (block.status === "blocked" || block.status === "needs-revalidation")) { block.status = "queued"; block.blocker = null; delete block.missing; } } // [PR-L6, 2026-10-19] a re-queued block no longer waits for its roles (the S3 re-search reads them from its conversation)
       outbox.push(this.sliceEffect(next, id, entry.kind, entry.blockId, notBefore));
       scheduled.push(id);
@@ -742,14 +742,14 @@ export class GenerationTaskStore {
         if (!verdict.ok) { if ("failure" in verdict) failure = verdict.failure; else blockerCode = verdict.blocker; }
       }
       const reservation = generationReservationFor(entry.kind, this.turns);
-      if (!blockerCode && !failure) { blockerCode = generationAllowanceRefusal(head, reservation, nowMs); if (blockerCode === "allowance_exhausted" && entry.owner === null) { const waited = await this.waitForAllowance(event, workerId, head, slice, entry, reservation, nowMs); if (waited === "retry") continue; if (waited) return waited; } } // [PR-J, 2026-11-04] J7-2: ONLY live siblings' held reservations refuse it - re-queued (bounded), never parked; revalidated above first
+      if (!blockerCode && !failure) { blockerCode = generationAllowanceRefusal(head, reservation, nowMs); if (blockerCode === "allowance_exhausted") { const waited = await this.waitForAllowance(event, workerId, head, slice, entry, reservation, nowMs); if (waited === "retry") continue; if (waited) return waited; } } // [PR-J, 2026-11-04] J7-2: ONLY live siblings' held reservations refuse it - re-queued (bounded), never parked; revalidated above first. [J7-2 review C2, 2026-11-04] a lapsed attempt's own takeover too (was `entry.owner === null` only)
       if (failure || blockerCode) {
         const outcome = await this.commitHead({
           scope: event.scope, taskId: id, key: `${slice}:a${attempt}:refuse`, actor: "worker",
-          mutate: (current) => {
+          mutate: async (current) => {
             const next = clone(current), refused = next.pending[slice];
             if (!refused) return { next: current, noop: true };
-            next.updatedAt = now;
+            next.updatedAt = now; if (!failure && blockerCode === "allowance_exhausted" && (await this.allowanceMoved(event.scope, current, slice, reservation, nowMs))) return refuse("GENERATION_TASK_CONTENDED", "the allowance no longer refuses the claim, or only live siblings hold it: the claim is judged again"); // [J7-2 review R2, 2026-11-04] judged again on the head this commit lands on
             if (failure) {
               for (const [key, pendingEntry] of Object.entries(next.pending)) { if (pendingEntry.owner) markUncertain(next, key, pendingEntry.owner.attempt); delete next.pending[key]; }
               next.failure = { reason: failure, at: now }; next.blocker = null; next.phase = null; next.state = "failed";
@@ -760,14 +760,14 @@ export class GenerationTaskStore {
             delete next.pending[slice];
             if (refused.blockId) { const block = next.blocks[refused.blockId]; if (block && block.status !== "saved") { block.status = "blocked"; block.blocker = blockerCode; } }
             settleBlocker(next, refused.kind === "block" ? undefined : blockerCode!); const woken = this.wakeAllowanceWaiters(next, now, false); // [PR-J, 2026-11-04] J7-2: no owner left - nothing holds what a waiter waits for
-            const state = deriveGenerationTaskState(next, nowMs);
+            const { state, waitingReason } = generationWorkerSettledState(current, next, nowMs); // [J7-2 review C1, 2026-11-04] never a state the claimer has no rule to (queued <-> waiting-for-provider: kept); was deriveGenerationTaskState
             if (!state) return refuse("GENERATION_SLICE_END_INVALID", "a refused slice left nothing to do");
-            if (state === "waiting-for-resource" && current.state !== "waiting-for-resource") this.milestones(next, [generationTaskEvent("waiting_resource", { at: now, blockId: next.blocker?.blockId ?? null, message: next.blocker!.message, data: { code: next.blocker!.code } })]);
+            if (state === "waiting-for-resource" && current.state !== "waiting-for-resource") this.milestones(next, [generationTaskEvent("waiting_resource", { at: now, blockId: next.blocker?.blockId ?? null, message: next.blocker!.message, data: { code: next.blocker!.code } })]); if (state === "waiting-for-provider" && current.state !== "waiting-for-provider") this.milestones(next, [generationTaskEvent("waiting_provider", { at: now, message: "The model provider asked to wait; the design continues automatically.", data: { reason: waitingReason ?? "overloaded", retryAt: Object.values(next.pending).map((entry) => entry.notBefore).sort()[0]! } })]);
             next.state = state;
-            return { next, ...woken };
+            return { next, ...woken, ...(waitingReason ? { attest: { waitingReason } } : {}) };
           },
         });
-        await this.finish(event, workerId, {});
+        if (!outcome.ok && outcome.code !== "GENERATION_TASK_NOT_FOUND" && outcome.code !== "GENERATION_TASK_INVALID_PERSISTED_STATE") continue; await this.finish(event, workerId, {}); // [J7-2 review C1, 2026-11-04] a refusal the head did not take is judged again (its event kept: the slice stays pending), never completed beside a pending slice
         return { outcome: failure ? "failed" : "blocked", eventId: event.eventId, taskId: id, code: failure ?? blockerCode ?? (outcome.ok ? undefined : outcome.code) };
       }
       const claimed = await this.commitHead({
@@ -778,7 +778,7 @@ export class GenerationTaskStore {
           if (pendingEntry.owner) markUncertain(next, slice, pendingEntry.owner.attempt); // the lapsed owner's attempt: completion unknown
           if (generationAllowanceRefusal(next, reservation, nowMs)) return refuse("GENERATION_TASK_CONTENDED", "a sibling claim used the allowance first"); // repeat steps 2-4
           next.fenceCounter += 1;
-          next.pending[slice] = { ...pendingEntry, state: "running", owner: { attempt, fence: next.fenceCounter, workerId, leaseToken, claimedAt: now } } satisfies GenerationPendingSlice;
+          const { providerWait: delayedBy, ...claimedEntry } = pendingEntry; void delayedBy; next.pending[slice] = { ...claimedEntry, state: "running", owner: { attempt, fence: next.fenceCounter, workerId, leaseToken, claimedAt: now } } satisfies GenerationPendingSlice; // [PR-J J7-9, 2026-11-04] the provider's wait ends at the claim
           if (reservation.modelCalls > 0 || reservation.outputTokens > 0) next.reservations.push({ sliceId: slice, attempt, ...reservation, state: "held", at: now } satisfies GenerationReservation);
           foldReservations(next);
           next.usage.attempts += 1;
@@ -888,16 +888,16 @@ export class GenerationTaskStore {
    *  the reservation uncertain, and every admission after it counts it). A fenced or cancelled slice writes nothing and must not send. */
   async admitCall(lease: GenerationSliceLease, seq: number, bound: number): Promise<GenerationCommitOutcome> {
     if (!Number.isSafeInteger(bound) || bound < 0) return refuse("GENERATION_SLICE_END_INVALID", "admit: an input bound is a nonnegative integer");
-    return this.commitHead({
+    for (let round = 0; ; round += 1) { let moved = false; const outcome = await this.commitHead({ // [J7-2 review R2, 2026-11-04] an EXHAUSTED verdict holds only on a head that did not move while liveness was read; else judged again
       scope: lease.scope, taskId: lease.taskId, key: `${lease.sliceId}:a${lease.attempt}:admit:${seq}`, actor: "worker", fence: lease,
       mutate: async (current) => {
         const next = clone(current);
         if (!next.reservations.some((entry) => entry.sliceId === lease.sliceId && entry.attempt === lease.attempt && entry.state === "held")) return refuse("GENERATION_SLICE_END_INVALID", "admit: the attempt holds no reservation");
         setInFlightInput(next, lease.sliceId, lease.attempt, bound);
-        const limit = generationAllowanceLimits(next.allowance).inputTokens; if (limit !== undefined && generationCommitted(next).inputTokens > limit) return (await this.inputContended(lease, next)) ? refuse("GENERATION_INPUT_ALLOWANCE_CONTENDED", "admit: only live siblings' in-flight input bounds fill the task's input limit; not sent (the block is re-queued)") : refuse("GENERATION_INPUT_ALLOWANCE_EXHAUSTED", "admit: settled + uncertain + every in-flight input bound would exceed the task's input limit; not sent"); // [PR-L6 integration, 2026-10-19] F2: the TASK's input, shared by every slice and worker (the fenced head commit serializes them); [PR-J, 2026-11-04] J7-2: CONTENDED when only live siblings' bounds stop it
+        const limit = generationAllowanceLimits(next.allowance).inputTokens; if (limit !== undefined && generationCommitted(next).inputTokens > limit) return (await this.inputContended(lease, next)) ? refuse("GENERATION_INPUT_ALLOWANCE_CONTENDED", "admit: only live siblings' in-flight input bounds fill the task's input limit; not sent (the block is re-queued)") : round < GENERATION_SLICE_POLICY.rebaseRetries && (moved = await this.headMoved(lease.scope, current)) ? refuse("GENERATION_TASK_CONTENDED", "admit: the head moved while liveness was read") : refuse("GENERATION_INPUT_ALLOWANCE_EXHAUSTED", "admit: settled + uncertain + every in-flight input bound would exceed the task's input limit; not sent"); // [PR-L6 integration, 2026-10-19] F2: the TASK's input, shared by every slice and worker (the fenced head commit serializes them); [PR-J, 2026-11-04] J7-2: CONTENDED when only live siblings' bounds stop it
         next.updatedAt = this.nowIso(); return { next };
       },
-    });
+    }); if (!moved) return outcome; }
   }
 
   /** The slice's end: its checkpoint and result first (by reference), then ONE fenced head commit that removes its pending entry,
@@ -942,18 +942,18 @@ export class GenerationTaskStore {
           next.phase = "review";
         }
         const extraOperations = end.facts ? [await this.factsOperation(lease.scope, current, next, end.facts)] : [];
-        const work = this.allowanceWaitWork(current, next, lease, end.schedule === "next-work" ? nextGenerationWork(next) : end.schedule ?? [], now); if ("ok" in work) return work; // [PR-J, 2026-11-04] J7-2: an allowance wait becomes the store's bounded re-queue (or a park at the bound)
+        const work = this.allowanceWaitWork(current, next, lease, end.schedule === "next-work" ? nextGenerationWork(next) : end.schedule ?? [], now, end.waitingReason); if ("ok" in work) return work; // [PR-J, 2026-11-04] J7-2: an allowance wait becomes the store's bounded re-queue (or a park at the bound); J7-9: a delayed slice carries the end's waiting reason
         const scheduledWork = next.control.pause || next.control.cancel ? { outbox: [], scheduled: [] } : this.withWoken(next, this.schedule(next, work, now), now, !work.some((entry) => entry.wait)); // [PR-J, 2026-11-04] J7-2: a real end wakes the allowance waiters
         settleBlocker(next, end.blocker);
-        const state = deriveGenerationTaskState(next, nowMs);
+        const { state, waitingReason } = generationWorkerSettledState(current, next, nowMs, end.waitingReason); // [PR-J J7-9, 2026-11-04] an end beside a sibling's provider wait attests the sibling's reason (was deriveGenerationTaskState: refused without one)
         if (!state) return refuse("GENERATION_SLICE_END_INVALID", "an end must schedule work, deliver a result or name a blocker");
         const drafts: GenerationTaskEventDraft[] = [];
         if (state === "waiting-for-resource" && current.state !== "waiting-for-resource") drafts.push(generationTaskEvent("waiting_resource", { at: now, blockId: next.blocker?.blockId ?? null, message: next.blocker!.message, data: { code: next.blocker!.code } }));
-        if (state === "waiting-for-provider" && current.state !== "waiting-for-provider") { const retryAt = Object.values(next.pending).map((entry) => entry.notBefore).sort()[0]!; drafts.push(generationTaskEvent("waiting_provider", { at: now, message: "The model provider asked to wait; the design continues automatically.", data: { reason: end.waitingReason ?? "overloaded", retryAt } })); }
+        if (state === "waiting-for-provider" && current.state !== "waiting-for-provider") { const retryAt = Object.values(next.pending).map((entry) => entry.notBefore).sort()[0]!; drafts.push(generationTaskEvent("waiting_provider", { at: now, message: "The model provider asked to wait; the design continues automatically.", data: { reason: waitingReason ?? "overloaded", retryAt } })); }
         if (state === "paused" && current.state !== "paused") drafts.push(generationTaskEvent("paused", { at: now, phase: next.phase, message: "The design is paused; saved work is kept." }));
         if (drafts.length) this.milestones(next, drafts);
         next.state = state;
-        return { next, outbox: scheduledWork.outbox, scheduled: scheduledWork.scheduled, extraOperations, attest: { scheduled: scheduledWork.scheduled, ...(end.waitingReason ? { waitingReason: end.waitingReason } : {}), resultVerified: Boolean(end.result && resultRef) } };
+        return { next, outbox: scheduledWork.outbox, scheduled: scheduledWork.scheduled, extraOperations, attest: { scheduled: scheduledWork.scheduled, ...(waitingReason ? { waitingReason } : {}), resultVerified: Boolean(end.result && resultRef) } };
       },
     });
     if (outcome.ok) await this.finish({ scope: lease.scope, eventId: lease.eventId, leaseToken: lease.leaseToken } as DurableOutboxEvent, lease.workerId, {});
@@ -1045,21 +1045,30 @@ export class GenerationTaskStore {
    *  while it waits - and its event completes; a sibling's real end wakes it at once (`withWoken`). The caller revalidated authority and
    *  the provider first, and the re-queue commit judges the contention again on the head it lands on. Null: a genuine exhaustion, or the
    *  bound of consecutive re-queues with no sibling end - the caller parks it `allowance_exhausted` exactly as before. "retry": the head
-   *  moved (the claim is judged again from the top: membership, cancel, allowance). */
+   *  moved (the claim is judged again from the top: membership, cancel, allowance).
+   *  [J7-2 review C2, 2026-11-04] A slice whose earlier attempt LAPSED (re-delivered: its pending entry still names that owner) waits the same
+   *  way: the lapsed attempt's reservation is marked uncertain in the re-queue commit (its completion is unknown: it stays charged, exactly
+   *  as the claim would), and only live siblings' held reservations are left out. An owner at this event's attempt or later is not lapsed.
+   *  [J7-2 review R2, 2026-11-04] The re-queue commit reads liveness AFTER the head it lands on (the compare-and-set then proves that head
+   *  current), and takes the count from that head's entry. */
   private async waitForAllowance(event: DurableOutboxEvent, workerId: string, head: GenerationTaskHead, slice: string, entry: GenerationPendingSlice, reservation: { modelCalls: number; outputTokens: number }, nowMs: number): Promise<GenerationClaimOutcome | "retry" | null> {
     const live = await this.liveOwners(event.scope, head, nowMs);
     if (!generationAllowanceContended(head, reservation, nowMs, generationLiveHolders(head, live, slice))) return null;
-    const requeues = (entry.wait?.requeues ?? 0) + 1;
-    if (requeues > GENERATION_ALLOWANCE_WAIT.maxRequeues) return null;
-    const now = isoOf(nowMs), notBefore = isoOf(nowMs + generationAllowanceWaitMs(requeues));
+    if ((entry.wait?.requeues ?? 0) + 1 > GENERATION_ALLOWANCE_WAIT.maxRequeues) return null;
+    const now = isoOf(nowMs);
     const outcome = await this.commitHead({
       scope: event.scope, taskId: head.taskId, key: `${slice}:a${event.attempts}:wait`, actor: "worker",
-      mutate: (current) => {
+      mutate: async (current) => {
         const next = clone(current), waiting = next.pending[slice];
-        if (!waiting || waiting.owner || current.control.cancel || current.control.pause || current.failure) return refuse("GENERATION_TASK_CONTENDED", "the slice or the task moved on: the claim is judged again");
-        if (!generationAllowanceContended(next, reservation, nowMs, generationLiveHolders(next, live, slice))) return refuse("GENERATION_TASK_CONTENDED", "the held reservations changed: the claim is judged again");
+        if (!waiting || (waiting.owner !== null && waiting.owner.attempt >= event.attempts) || current.control.cancel || current.control.pause || current.failure) return refuse("GENERATION_TASK_CONTENDED", "the slice or the task moved on: the claim is judged again");
+        const requeues = (waiting.wait?.requeues ?? 0) + 1;
+        if (requeues > GENERATION_ALLOWANCE_WAIT.maxRequeues) return refuse("GENERATION_TASK_CONTENDED", "the wait bound is reached: the claim is judged again");
+        if (waiting.owner) markUncertain(next, slice, waiting.owner.attempt); // the lapsed attempt: completion unknown, charged at worst case
+        const fresh = await this.liveOwners(event.scope, current, nowMs);
+        if (!generationAllowanceContended(next, reservation, nowMs, generationLiveHolders(next, fresh, slice))) return refuse("GENERATION_TASK_CONTENDED", "the held reservations changed: the claim is judged again");
         delete next.pending[slice];
-        return { next, ...this.schedule(next, [{ kind: waiting.kind, blockId: waiting.blockId, notBefore, wait: { reason: "allowance", requeues } }], now) };
+        const block = waiting.blockId ? next.blocks[waiting.blockId] : undefined; if (block?.status === "designing") block.status = "queued"; // a lapsed (or released) attempt's claim left it designing: it waits queued
+        return { next, ...this.schedule(next, [{ kind: waiting.kind, blockId: waiting.blockId, notBefore: isoOf(nowMs + generationAllowanceWaitMs(requeues)), wait: { reason: "allowance", requeues } }], now) };
       },
     });
     if (!outcome.ok) return outcome.code === "GENERATION_TASK_CONTENDED" ? "retry" : null;
@@ -1085,11 +1094,12 @@ export class GenerationTaskStore {
 
   /** An end's allowance wait (the pre-call input admission found only live siblings' in-flight input in the way, `GENERATION_INPUT_ALLOWANCE_
    *  CONTENDED`): the slice's own block again under a fresh id, after the bounded wait - at once when no owner remains - with its consecutive
-   *  count; past the bound the block parks `allowance_exhausted` instead. Every other entry passes unchanged. */
-  private allowanceWaitWork(current: GenerationTaskHead, next: GenerationTaskHead, lease: GenerationSliceLease, work: ReadonlyArray<{ kind: GenerationSliceKind; blockId: GenerationBlockId | null; notBefore?: string; wait?: GenerationQueueWaitReason }>, nowIso: string): Array<{ kind: GenerationSliceKind; blockId: GenerationBlockId | null; notBefore?: string; wait?: GenerationPendingWait }> | Refusal {
-    const out: Array<{ kind: GenerationSliceKind; blockId: GenerationBlockId | null; notBefore?: string; wait?: GenerationPendingWait }> = [];
+   *  count; past the bound the block parks `allowance_exhausted` instead. Every other entry passes unchanged - [PR-J J7-9, 2026-11-04] a
+   *  delayed one with the end's waiting reason (`providerWait`: the store writes it only when the slice is in fact delayed). */
+  private allowanceWaitWork(current: GenerationTaskHead, next: GenerationTaskHead, lease: GenerationSliceLease, work: ReadonlyArray<{ kind: GenerationSliceKind; blockId: GenerationBlockId | null; notBefore?: string; wait?: GenerationQueueWaitReason }>, nowIso: string, waitingReason?: GenerationWaitingReason): Array<{ kind: GenerationSliceKind; blockId: GenerationBlockId | null; notBefore?: string; wait?: GenerationPendingWait; providerWait?: GenerationWaitingReason }> | Refusal {
+    const out: Array<{ kind: GenerationSliceKind; blockId: GenerationBlockId | null; notBefore?: string; wait?: GenerationPendingWait; providerWait?: GenerationWaitingReason }> = [];
     for (const entry of work) {
-      if (entry.wait === undefined) { out.push({ kind: entry.kind, blockId: entry.blockId, ...(entry.notBefore !== undefined ? { notBefore: entry.notBefore } : {}) }); continue; }
+      if (entry.wait === undefined) { out.push({ kind: entry.kind, blockId: entry.blockId, ...(entry.notBefore !== undefined ? { notBefore: entry.notBefore, ...(waitingReason ? { providerWait: waitingReason } : {}) } : {}) }); continue; }
       if (entry.wait !== "allowance" || lease.kind !== "block" || entry.kind !== "block" || entry.blockId === null || entry.blockId !== lease.blockId) return refuse("GENERATION_SLICE_END_INVALID", "an allowance wait re-queues the slice's own block only");
       const requeues = (current.pending[lease.sliceId]?.wait?.requeues ?? 0) + 1;
       if (requeues > GENERATION_ALLOWANCE_WAIT.maxRequeues) { const block = next.blocks[entry.blockId]; if (block && block.status !== "saved") { block.status = "blocked"; block.blocker = "allowance_exhausted"; } continue; }
@@ -1102,5 +1112,23 @@ export class GenerationTaskStore {
   private async inputContended(lease: GenerationSliceLease, next: GenerationTaskHead): Promise<boolean> {
     const live = await this.liveOwners(lease.scope, next, this.clock());
     return generationInputContended(next, generationLiveHolders(next, live, lease.sliceId));
+  }
+
+  // ── [J7-2 review R2, 2026-11-04] Liveness is read AFTER a head, so a sibling that fully ended in between (its end committed, its event
+  //    completed) reads as a LAPSED holder of a reservation the head still shows - and a block that waits only for it would park. ──
+
+  /** The claim refusal's own judgement on the head its commit lands on (the commit's compare-and-set proves that head current; liveness is
+   *  read after it): true when the allowance no longer refuses the claim, or - below the wait bound - only live siblings' held reservations
+   *  refuse it. The claim is then judged again from the top (a fit claims, a contention re-queues) instead of parking. */
+  private async allowanceMoved(scope: DurableWorkflowScope, current: GenerationTaskHead, slice: string, reservation: { modelCalls: number; outputTokens: number }, nowMs: number): Promise<boolean> {
+    if (generationAllowanceRefusal(current, reservation, nowMs) !== "allowance_exhausted") return true;
+    if ((current.pending[slice]?.wait?.requeues ?? 0) >= GENERATION_ALLOWANCE_WAIT.maxRequeues) return false; // at the bound it parks, as before
+    const live = await this.liveOwners(scope, current, nowMs);
+    return generationAllowanceContended(current, reservation, nowMs, generationLiveHolders(current, live, slice));
+  }
+  /** Whether the head moved since `judged` was read (an admission refusal commits nothing, so no compare-and-set proves its head current). */
+  private async headMoved(scope: DurableWorkflowScope, judged: GenerationTaskHead): Promise<boolean> {
+    const read = await this.readHead(scope, judged.taskId);
+    return read.kind !== "ok" || durableWorkflowDigest(read.head) !== durableWorkflowDigest(judged);
   }
 }

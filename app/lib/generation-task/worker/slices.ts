@@ -463,7 +463,7 @@ async function runDesignSlice(ctx: SliceContext): Promise<GenerationSliceReport>
     }
     case "provider_failed":
       logInputViolation(ctx, metering.input, outcome.providerCode); // [PR-L6, 2026-10-19]
-      return endProviderFailure(ctx, new LLMProviderError(outcome.provider, outcome.reason, undefined, outcome.providerCode), usage, catalog, state, { withFacts, turnsUsed, history: outcome.turns > 0 ? historyWithSlice(history, strategy) : history });
+      return endProviderFailure(ctx, new LLMProviderError(outcome.provider, outcome.reason, undefined, outcome.providerCode), usage, catalog, state, { withFacts, turnsUsed, history: outcome.turns > 0 ? historyWithSlice(history, strategy) : history, ...(outcome.turns === 0 && strategy !== "S1-baseline" && checkpoint === null ? { seeded: { checkpoint: outcome.checkpoint, strategy, restartedFrom: claim.restartedFrom } } : {}) }); // [J7-2 review R1, 2026-11-04] a conversation seeded THIS slice that ran no turn: its first checkpoint, for an allowance wait to keep
     case "refused": {
       if (outcome.code === "loop_failed") {
         ctx.log(`block slice ${lease.sliceId}: the build loop failed (${cleanLine(outcome.error, 200)}); released for another attempt`);
@@ -504,7 +504,7 @@ async function endSeedProviderError(ctx: SliceContext, error: LLMProviderError, 
 /** A provider refusal no retry can fix: the block waits for the named resource; finished blocks are untouched. */
 async function endProviderFailure(
   ctx: SliceContext, error: LLMProviderError, usage: Partial<GenerationTaskUsage>, catalog: FactsCatalogPort, state: GenerationBlockState,
-  extra: { withFacts: (payload: GenerationSliceEnd) => GenerationSliceEnd; turnsUsed: number; history: GenerationBlockState["strategyHistory"] } | null,
+  extra: { withFacts: (payload: GenerationSliceEnd) => GenerationSliceEnd; turnsUsed: number; history: GenerationBlockState["strategyHistory"]; seeded?: SeededConversation } | null,
 ): Promise<GenerationSliceReport> {
   if (error.providerCode === INPUT_ALLOWANCE_CONTENDED_CODE) return endAllowanceWait(ctx, usage, catalog, state, extra); const blocker = providerBlockerOf(error.reason, error.providerCode); // [PR-L6, 2026-10-19] an input-admission refusal: the call was never sent; [PR-J, 2026-11-04] J7-2: only live siblings' input in the way - re-queued, never parked
   ctx.log(`block slice ${ctx.lease.sliceId}: the provider refused (${error.reason}${error.providerCode?.startsWith("sirkit_input_") ? `, ${error.providerCode}` : ""}); block "${cleanLine(state.name, 80)}" waits (${blocker})`);
@@ -699,17 +699,26 @@ function planLimitMessage(): string {
 /** The durable pre-call admission refused the block's next call ONLY because live sibling slices' in-flight input fills the task's input
  *  limit (GENERATION_INPUT_ALLOWANCE_CONTENDED; nothing was sent). The block is not out of allowance: its committed turns are kept and it
  *  is queued again through the store's bounded allowance wait (`schedule[].wait`), never parked `allowance_exhausted` here. The store parks
- *  it past the wait bound, and the next admission parks it when its own need does not fit. */
+ *  it past the wait bound, and the next admission parks it when its own need does not fit.
+ *  [J7-2 review R1, 2026-11-04] A conversation this slice SEEDED (S2-S5: S5's planner call, S3's cache-bypassed catalog re-search) that
+ *  ran no turn is KEPT: its first checkpoint (the seed as its first message, 0 turns, under this slice's identity) rides this end, and a
+ *  strategy a retry restarted is recorded as begun (its history entry, the strategy, a fresh progress count - what the restarted claim
+ *  used). The next claim then resumes that conversation instead of seeding, and paying for the seed, again on every re-queue. */
 async function endAllowanceWait(
   ctx: SliceContext, usage: Partial<GenerationTaskUsage>, catalog: FactsCatalogPort, state: GenerationBlockState,
-  extra: { withFacts: (payload: GenerationSliceEnd) => GenerationSliceEnd; turnsUsed: number; history: GenerationBlockState["strategyHistory"] } | null,
+  extra: { withFacts: (payload: GenerationSliceEnd) => GenerationSliceEnd; turnsUsed: number; history: GenerationBlockState["strategyHistory"]; seeded?: SeededConversation } | null,
 ): Promise<GenerationSliceReport> {
   const blockId = ctx.lease.blockId!, turns = extra ? Math.max(0, extra.turnsUsed - state.turnsUsed) : 0;
   ctx.log(`block slice ${ctx.lease.sliceId}: the next call of block "${cleanLine(state.name, 80)}" did not fit the input allowance live sibling slices hold (${INPUT_ALLOWANCE_CONTENDED_CODE}); nothing was sent, the block is re-queued`);
   const yielded = generationTaskEvent("slice_yielded", { at: isoOf(ctx.clock()), phase: "designing", blockId, message: `Block "${state.name}": its next model call did not fit the input allowance while other blocks held theirs; nothing was sent.`, data: { sliceKind: "block", turns } });
-  const payload: GenerationSliceEnd = { block: { status: "queued", ...(extra ? { turnsUsed: extra.turnsUsed, strategyHistory: extra.history } : {}) }, schedule: [{ kind: "block", blockId, wait: "allowance" }], milestones: [yielded] };
+  const seeded = extra?.seeded ?? null;
+  const kept: GenerationBlockPatch = seeded ? { strategy: seeded.strategy, ...(seeded.restartedFrom ? { stagnantSlices: 0, lastProgressKey: null } : {}) } : {};
+  const payload: GenerationSliceEnd = { block: { status: "queued", ...(extra ? { turnsUsed: extra.turnsUsed, strategyHistory: seeded?.restartedFrom ? historyWithSlice(extra.history, seeded.strategy) : extra.history } : {}), ...kept }, ...(seeded ? { checkpoint: seeded.checkpoint } : {}), schedule: [{ kind: "block", blockId, wait: "allowance" }], milestones: [yielded] };
   const detail = `the next call waits for input allowance live siblings hold (${turns} turn(s) this slice); re-queued`;
   if (extra) return end(ctx, extra.withFacts(payload), "waiting_allowance", detail);
   const factsDelta = catalog.takeDelta();
   return end(ctx, { ...payload, usage, ...(factsDelta ? { facts: factsDelta } : {}) }, "waiting_allowance", detail);
 }
+/** [J7-2 review R1, 2026-11-04] A conversation this slice seeded and could not start: its first checkpoint (this slice's identity, 0 turns),
+ *  the strategy it runs and the rung a retry restarted it from (null when the strategy was the block's own). */
+interface SeededConversation { checkpoint: BuildLoopCheckpoint; strategy: GenerationStrategyId; restartedFrom: GenerationStrategyId | null }

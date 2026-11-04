@@ -13,6 +13,8 @@ J.7 authorizes no new spend.
 | task card status sentence while blocks design (`app/lib/project/generation-task-client.ts:420`, `generationQueueClause` at the file's end; rendered by `GenerationTaskStatus.tsx`, no page change) | `Running: designing "A", "B", "C".` | `Running: designing "A", "B", "C"; 5 more block(s) queued for a free worker slot.` A queued block whose latest milestone is the provider's wait is counted as `... waiting for the model provider` instead | byte-identical when nothing is queued; pure client text from the snapshot and milestones already sent |
 | the durable worker's slot count (`app/lib/generation-task/contracts.ts:135`) | `BUILD_BUDGET.concurrencyCap` (the deprecated synchronous route's pool) | `3`, its own documented constant | same value; the deprecated route's pool can no longer silently move the durable queue (the J.7 suite moves that pool to 5 and the worker stays at 3) |
 | J7-2 (2026-11-04): a claim, or a pre-call input admission, refused ONLY by live siblings' held reservations (store `waitForAllowance`, `admitCall` -> `GENERATION_INPUT_ALLOWANCE_CONTENDED`, slices `endAllowanceWait`) | the block parked `allowance_exhausted` and asked for "Continue with another allowance" | re-queued under a fresh slice id (pending `wait: {reason: "allowance", requeues}`), woken at once by a sibling's real end; the card says `N more block(s) waiting for a running block to release its reserved allowance` (snapshot block `waiting`) | nothing is reserved while it waits, so committed never exceeds the unit; authority is revalidated before every contention check; a genuine exhaustion (own need does not fit, or no live holder) parks exactly as before |
+| J7-2 review (2026-11-04): seven confirmed findings (C1, C2, C3, R1, R2, T1, T2; "J7-2 review" below) | a claimer's park beside a provider-delayed slice could be refused and orphan its slice (wedged `queued`); a lapsed slice's own re-delivery parked; a contended seeded strategy paid its seed on every re-queue; a sibling ending while liveness was read could park a block; a released waiter read "waiting for a running block's allowance" | the claimer never asks for a state it has no rule to, and a refusal the head did not take keeps its event; a lapsed slice re-queues like an unowned one; the seeded conversation is kept; the allowance is judged again on the head the commit lands on; the card marks a waiter only while its delay runs | no limit value, transition rule or bound moved; each fix has a case in `j7-allowance-review` that is red with the fix edited back |
+| J7-9 (2026-11-04): an end that leaves only a sibling's provider-delayed slice pending (store `endSlice`, contracts `generationWorkerSettledState`; pending `providerWait`) | the end's commit was refused (`wait-provider` needs a reason; the reason was the sibling's, recorded nowhere); the saved block was released and redone, its reservation charged uncertain, and repeated refusals became `platform_failure` | the delayed slice carries the provider's reason (`providerWait`, set by the end that scheduled it, dropped at its claim) and the end attests it: the task waits for the provider with that reason | the transition table is unchanged (`j7-provider-wait-sibling-end` case 2 still sees a reason-less move refused); a sibling's reason is borrowed only when EVERY delayed slice carries one, so an end that delays its own next slice without a reason is still refused (`l2` scenario G), and a head persisted before `providerWait` keeps the earlier refusal |
 
 Not changed, and why (each is a real resource, spend or authority bound, not a product ceiling on subsystems or sheets):
 
@@ -72,11 +74,49 @@ reader's block list agree.
   (a dated note there records the new path). Remaining bounds: waits 5 s doubling to 60 s, at most 12 consecutive re-queues with no
   sibling end (their 555 s outlast the 465 s a live sibling can hold without ending), then `allowance_exhausted`; a LAPSED sibling's
   reservation still counts as committed spend, so a waiter beside a crashed slice parks rather than waits. Cited line numbers re-checked
-  2026-11-04: none moved (every edit before a cited line is in place; new code is appended).
-- **J7-9, a sibling's end beside a provider wait (open, found 2026-11-04).** Pre-existing, not J7-2: when a block ends (e.g. saved) while
-  the only other pending slice is a block delayed by a provider wait, the end commit derives `waiting-for-provider` without a waiting
-  reason and is refused (`GENERATION_TASK_TRANSITION_REFUSED`), so the finished slice is released and redone (its reservation charged
-  uncertain). Reproduced offline (drone, 3 slots, one `rate_limit`); allowance waiters never reach it (a real end wakes them).
+  2026-11-04: none moved (every edit before a cited line is in place; new code is appended). [J7-2 review, 2026-11-04] The crashed
+  slice ITSELF, re-delivered while only live siblings hold, now re-queues too (C2 below); a waiter beside it still counts its lapsed
+  reservation as committed spend.
+- **J7-2 review (DONE, 2026-11-04; fixture proof, `j7-allowance-review`, 12 cases over the production store - R1 over the production
+  worker and slice runner - each red with its fix edited back, the files restored byte for byte).** The seven confirmed findings:
+  - **C1 (MEDIUM).** A woken waiter whose re-claim is a genuine exhaustion beside a sibling's provider-delayed slice: the claimer's park
+    derived `waiting-for-provider` from `queued` (no rule), so the commit was refused, yet the event was completed - the slice stayed
+    pending with no outbox event and the task wedged in `queued`. Now a worker commit keeps `queued` / `waiting-for-provider` between
+    themselves (`generationWorkerSettledState`: the head invariant judges them alike, and the snapshot's liveness reads the delay - the
+    card says "Waiting for the model provider"), so the park commits; and a refusal the head did not take is judged again with its event
+    kept (at most `claimRetries` rounds, then the lease lapses and the event is re-delivered), never completed beside a pending slice.
+    Measured: C1's trace (unit 13: two re-queues, the third claim parks) ends `waiting-for-resource` with nothing pending; with the fix
+    edited back the third claim never settles. C1b: a refusal commit that lost 9 compare-and-sets in a row lands on the next round.
+  - **C2 (LOW).** A slice whose earlier attempt lapsed, re-delivered while only live siblings' reservations fill the allowance, re-queues
+    instead of parking: the re-queue commit marks the lapsed attempt's reservation uncertain (still charged: unit 20, 1 spent + 6 lapsed +
+    6 + 6 held = 19) and puts the block back to `queued` (its old claim had left it `designing`); the lapsed attempt's late end is fenced.
+  - **R1 (MEDIUM; needs an operator input limit).** A block on a seeded strategy whose first core call is contended now keeps the seeded
+    conversation: its first checkpoint (0 turns, the seed as its first message) rides the allowance-wait end, and a strategy a retry
+    restarted is recorded as begun (history entry, strategy, a fresh progress count). Measured over two contended re-queues: S5's planner
+    seed paid once (was once per re-queue: 2 by the second); a restarted S2 said "Retrying block" once (was once per re-queue).
+  - **R2 (LOW).** Liveness read after a head could take a sibling that had fully ended in between for a lapsed holder and park the block.
+    The claim's park is now judged again on the head its commit lands on (liveness read after that head; the compare-and-set proves it
+    current), and an admission's EXHAUSTED holds only on a head that did not move while liveness was read (else judged again, at most
+    `rebaseRetries` times). Measured: a sibling ending inside the window - the claim runs (was parked), the admission admits (was EXHAUSTED).
+  - **C3 (LOW, display).** The card marks a block waiting for a running block's allowance only while its re-queue delay runs; a waiter
+    claimed and handed back for takeover (`releaseSlice`, due now) keeps its count by design but reads as a queued block.
+  - **T1, T2 (LOW, tests).** The bound is reached at the claim and at the admission: counts 1..12, waits 5, 10, 20, 40 s and 8 x 60 s, the
+    13th parks `allowance_exhausted`; beside a live sibling, a claim whose own need does not fit (the catalog-search dimension) parks and
+    an admission at 1 100 of 1 000 without the sibling's bound is EXHAUSTED, at 950 CONTENDED. Each mutation the review named turns a case red.
+  No limit value, transition rule, bound or cited line moved (every edit before a cited line is in place; new code is appended).
+- **J7-9, a sibling's end beside a provider wait (DONE, 2026-11-04; fixture proof, `j7-provider-wait-sibling-end`, 2 cases, case 1 red
+  with the fix edited back).** Pre-existing, not J7-2: when a block ends (e.g. saved) while the only other pending slice is a block delayed
+  by a provider wait, the end commit derived `waiting-for-provider` without a waiting reason and was refused (`GENERATION_TASK_TRANSITION_
+  REFUSED`): the reason was the sibling's and was recorded nowhere. Root cause fixed, the rule unchanged: the delayed slice carries the
+  provider's reason (`providerWait`, written only when the slice is in fact delayed, dropped at its claim) and such an end attests it
+  (`generationWorkerSettledState`) - only when every delayed slice carries one, so a reason-less delay is still refused (`l2` scenario G
+  unchanged; a head persisted before `providerWait` keeps the earlier refusal until its sibling is due). Measured (drone, 3 slots, one `rate_limit` with Retry-After 30 s on Power's first call): with the fix
+  edited back the last running block's save was refused on all 5 attempts (each released and redone, its reservation uncertain) and ended
+  `platform_failure` beside 2 saved blocks; with the fix 3 of 3 blocks are saved once each, 6 slices are each claimed once, 6 outbox
+  events each leased once, 13 model calls (the drone's 12 and the rate-limited one), the task waits for the provider (`rate_limit`) from
+  head revision 14 of 22, nothing is charged uncertain, and the result is reached. [J7-2 review, 2026-11-04] The earlier note "allowance waiters never
+  reach it (a real end wakes them)" was wrong in its reason: a woken waiter genuinely exhausted at its re-claim reached the claimer's twin
+  of this refusal (C1 above).
 - **J7-3** blocks kept as sheets (increment J5, builder D). **J7-4** more than 8 blocks: shrink the head first, then move every bound case 7
   pins. **J7-5** the orchestration cap (OD-107). **J7-6** an editor-chosen workload size (owner cost decision). **J7-7** a workload view in
   the task card from the snapshot. **J7-8** more than 3 slots only after measuring the pool, the catalog slots and the provider's rate.

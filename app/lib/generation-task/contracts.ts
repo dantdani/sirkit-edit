@@ -199,7 +199,7 @@ export interface GenerationBlockState {
   missing?: GenerationMissingRole[];
 }
 export interface GenerationSliceOwner { attempt: number; fence: number; workerId: string; leaseToken: string; claimedAt: string }
-export interface GenerationPendingSlice { kind: GenerationSliceKind; blockId: GenerationBlockId | null; notBefore: string; state: "queued" | "running"; owner: GenerationSliceOwner | null; /** [PR-J, 2026-11-04] J7-2: OPTIONAL - re-queued because live siblings' reservations filled the allowance (`GenerationPendingWait`) */ wait?: GenerationPendingWait }
+export interface GenerationPendingSlice { kind: GenerationSliceKind; blockId: GenerationBlockId | null; notBefore: string; state: "queued" | "running"; owner: GenerationSliceOwner | null; /** [PR-J, 2026-11-04] J7-2: OPTIONAL - re-queued because live siblings' reservations filled the allowance (`GenerationPendingWait`) */ wait?: GenerationPendingWait; /** [PR-J J7-9, 2026-11-04] OPTIONAL - the provider's reason this queued slice is delayed (set by the end that scheduled it with a waiting reason; dropped at its claim) */ providerWait?: GenerationWaitingReason }
 export const GENERATION_USAGE_KEYS = Object.freeze(["slices", "attempts", "modelCalls", "inputTokens", "outputTokens", "catalogSearches", "cacheHits", "embeddingCalls", "rerankCalls", "rerankSkipped", "uncertainModelCalls", "uncertainOutputTokens"] as const);
 /** [PR-L6, 2026-10-19] Usage keys a head carries only once they are non-zero (persisted heads without them stay valid): the input bound of
  *  calls whose completion is unknown (OD-253 item 6). */
@@ -278,7 +278,7 @@ const blockStateShape = shape({
   artifactRef: nullable(artifactRefShape), turnsUsed: count(), stagnantSlices: count(1_000), lastProgressKey: nullable(durableDigest), blocker: nullable(oneOf(GENERATION_BLOCKER_CODES)),
 }, { missing: arrayOf(missingRoleShape, GENERATION_TASK_BOUNDS.missingRoles, 1) });
 const ownerShape = shape({ attempt: count(1_000_000, 1), fence: count(Number.MAX_SAFE_INTEGER, 1), workerId: identifier(200), leaseToken: pattern(LEASE_TOKEN, "a lease token"), claimedAt: isoInstant });
-const pendingShape = shape({ kind: oneOf(GENERATION_SLICE_KINDS), blockId: nullable(blockId), notBefore: isoInstant, state: oneOf(["queued", "running"]), owner: nullable(ownerShape) }, { wait: pendingWaitJudge }); // [PR-J, 2026-11-04] J7-2: `wait` optional (every persisted head stays valid); the judge is a hoisted declaration at the file's end
+const pendingShape = shape({ kind: oneOf(GENERATION_SLICE_KINDS), blockId: nullable(blockId), notBefore: isoInstant, state: oneOf(["queued", "running"]), owner: nullable(ownerShape) }, { wait: pendingWaitJudge, providerWait: oneOf(GENERATION_WAITING_REASONS) }); // [PR-J, 2026-11-04] J7-2: `wait` optional (every persisted head stays valid); the judge is a hoisted declaration at the file's end; [PR-J J7-9, 2026-11-04] `providerWait` optional too
 const usageShape = shape(Object.fromEntries(GENERATION_USAGE_KEYS.map((key) => [key, count()])), Object.fromEntries(GENERATION_OPTIONAL_USAGE_KEYS.map((key) => [key, count()])));
 const reservationShape = shape({ sliceId, attempt: count(1_000_000, 1), modelCalls: count(), outputTokens: count(), state: oneOf(["held", "uncertain"]), at: isoInstant }, { inputTokens: count() });
 const unit = GENERATION_TASK_ALLOWANCE_UNIT;
@@ -855,4 +855,41 @@ export function generationInputRemainingBesideHeld(head: Pick<GenerationTaskHead
 /** A pending slice's `wait`: the closed reason and a re-queue count within the bound. */
 function pendingWaitJudge(value: unknown, path: string): Issue {
   return shape({ reason: oneOf(GENERATION_QUEUE_WAIT_REASONS), requeues: count(GENERATION_ALLOWANCE_WAIT.maxRequeues, 1) })(value, path);
+}
+
+// ─── [PR-J J7-9, 2026-11-04] The state a worker commit records, and a sibling's provider wait (multi-sheet/workload-limits.md J7-9) ──────────
+// Appended after the last line (function declarations are hoisted), so no cited line moves. `deriveGenerationTaskState` answers the state of
+// the head as of `nowMs`; the transition table (unchanged) says which of those a WORKER commit may move to from the state it lands on. Two
+// gaps made a correct commit refused (GENERATION_TASK_TRANSITION_REFUSED): (1) an end that leaves only a sibling's provider-delayed slice
+// pending derives `waiting-for-provider`, which `wait-provider` allows only with a waiting reason - the reason was the sibling's, recorded
+// nowhere; (2) a claimer's refusal (the slice parked at its claim) may derive `waiting-for-provider` from `queued`, or `queued` from
+// `waiting-for-provider`, and no rule moves between those. A refused end was released and redone (its reservation charged uncertain); a
+// refused claim commit left the slice pending with its event completed (no outbox event: the task wedged).
+
+/** The provider's reason the unowned delayed slice due first was scheduled with (`providerWait`) - null unless EVERY unowned delayed slice
+ *  carries one: a slice delayed without the provider's reason (an end that delays its own next slice without one, or a head persisted
+ *  before `providerWait`) keeps the transition table's refusal, never borrowing a sibling's reason. */
+export function generationDelayedProviderReason(head: Pick<GenerationTaskHead, "pending">, nowMs: number): GenerationWaitingReason | null {
+  const delayed = Object.entries(head.pending).filter(([, entry]) => entry.owner === null && Date.parse(entry.notBefore) > nowMs);
+  if (!delayed.length || delayed.some(([, entry]) => entry.providerWait === undefined)) return null;
+  delayed.sort(([a, x], [b, y]) => Date.parse(x.notBefore) - Date.parse(y.notBefore) || compareCodePoints(a, b));
+  return delayed[0]![1].providerWait!;
+}
+
+/** The state a worker commit records for `next` (landing on `current`), and the waiting reason it attests:
+ *  - `queued` and `waiting-for-provider` both mean "pending, unowned slices" (the head invariant judges them alike; the snapshot's liveness
+ *    reads which slices are due at read time). Between the two, a commit keeps the state it lands on: the claimer has no rule between them,
+ *    and the difference is only the clock (a `waiting-for-provider` head is due without any commit once its delay passes).
+ *  - From `running`, `waiting-for-provider` carries the end's own reason, else the reason of the sibling's delayed slice due first
+ *    (`generationDelayedProviderReason`: only when every delayed slice carries the provider's reason). With neither, no reason is attested
+ *    and the transition table refuses the commit exactly as before (a delay needs its provider reason; nothing is loosened).
+ *  Every other derived state is recorded as derived. */
+export function generationWorkerSettledState(current: Pick<GenerationTaskHead, "state">, next: GenerationTaskHead, nowMs: number, waitingReason?: GenerationWaitingReason): { state: GenerationTaskState | null; waitingReason?: GenerationWaitingReason } {
+  const state = deriveGenerationTaskState(next, nowMs);
+  const own = waitingReason ? { waitingReason } : {};
+  const unowned = (value: GenerationTaskState | null): boolean => value === "queued" || value === "waiting-for-provider";
+  if (unowned(state) && unowned(current.state)) return { state: current.state, ...own };
+  if (state !== "waiting-for-provider" || waitingReason) return { state, ...own };
+  const borrowed = generationDelayedProviderReason(next, nowMs);
+  return borrowed ? { state, waitingReason: borrowed } : { state };
 }

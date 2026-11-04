@@ -145,7 +145,7 @@ export function buildGenerationTaskSnapshot(head: GenerationTaskHead, input: { n
       planner: head.plan.planner.state, rationale: head.plan.rationale, assumptions: [...head.plan.assumptions], ...(head.plan.coverage?.length ? { coverage: [...head.plan.coverage] } : {}),
       blocks: head.plan.blocks.map((planned) => {
         const block = head.blocks[planned.blockId]!;
-        return { blockId: block.blockId, name: block.name, status: block.status, strategy: block.strategy, turnsUsed: block.turnsUsed, blocker: block.blocker, ...(block.missing?.length ? { missing: block.missing.map((entry) => ({ ...entry })) } : {}), ...queueWaitOf(head, block.blockId) }; // [PR-J, 2026-11-04] J7-2
+        return { blockId: block.blockId, name: block.name, status: block.status, strategy: block.strategy, turnsUsed: block.turnsUsed, blocker: block.blocker, ...(block.missing?.length ? { missing: block.missing.map((entry) => ({ ...entry })) } : {}), ...queueWaitOf(head, block.blockId, input.nowMs) }; // [PR-J, 2026-11-04] J7-2; [J7-2 review C3, 2026-11-04] read at the snapshot's clock
       }),
     }
     : null;
@@ -208,7 +208,10 @@ function claimOwnerServes(owner: string | null | undefined, scope: { tenantId: s
 // [PR-J, 2026-11-04] Runbook J.7, increment J7-2 (allowance contention), appended after the last line (a function declaration is hoisted):
 // the per-block signal of a block queued again because live siblings' held reservations fill the task's allowance - read from the head's
 // own pending entry (an unowned slice of the block carrying `wait`), so the card never calls that wait "a free worker slot".
-function queueWaitOf(head: GenerationTaskHead, block: GenerationBlockId): { waiting?: GenerationQueueWaitReason } {
-  const entry = Object.values(head.pending).find((pending) => pending.blockId === block && pending.owner === null && pending.wait !== undefined);
+// [J7-2 review C3, 2026-11-04] Only while that re-queue's delay runs (`notBefore` later than the snapshot's clock): an entry carries its
+// consecutive count through a claim by design, so a claimed waiter handed back for takeover (`releaseSlice`: due now, owner cleared) still
+// holds `wait` - it waits for a worker slot, not for a running block's allowance. A due waiter is a queued block like any other.
+function queueWaitOf(head: GenerationTaskHead, block: GenerationBlockId, nowMs: number): { waiting?: GenerationQueueWaitReason } {
+  const entry = Object.values(head.pending).find((pending) => pending.blockId === block && pending.owner === null && pending.wait !== undefined && Date.parse(pending.notBefore) > nowMs);
   return entry?.wait ? { waiting: entry.wait.reason } : {};
 }
