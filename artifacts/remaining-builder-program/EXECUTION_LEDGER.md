@@ -5794,3 +5794,35 @@ validation.md §C, workflow-contract.md, fault-register.md, live-spend.json).
   `C:\Users\robsa\sirkit` untouched.
 - **Next:** increment 7's CI admission (OD-254) and integration; PR #16's head fast-forwarded and its CI read; LR-3's task resumed once
   the owner restores the quota; then runbook section J, then K (neither started).
+
+### Product-reliability assignment, section J — CI admission of the J suites (PR-J7, 2026-11-04)
+
+- **Scope:** on `codex/astra-foundation` after `89009036` (J7-2 review and J7-9), as WIP `2f00d4b3` (cut off by a session end,
+  unverified) and its completion: every J vitest suite runs in a CI job of `.github/workflows/deterministic-manufacturing.yml`
+  (OD-261). The 54 no job selected are exact-path prompt-to-gerber entries (`:382-435`), excluded again (`:496-549`) and run by
+  agent-boundary-suites (`:871-924`); the four J4/J5 suites keep prompt-to-gerber's directory filters and `J4_SET_ASIDE` /
+  `J5_SET_ASIDE` are retired; the three J browser specs already ran in page-browser-e2e. The split re-measured once (local, four
+  workers): 643 files, 6,944 tests, 0 failures, 54 skipped, 1,287.16 s, the moved set 43.3 %
+  (`artifacts/ai-control-plane-b24/evidence/d0-ptg-timing.xml`, `ci-split.md` section 11.13).
+- **Fixes:** PR #16's agent-boundary-suites was red at `24beea1e` on `b22-closeout-statements` 1 and 3 (the J7 suite headers named
+  the fixture clock and denied a network in one sentence); the three J7 headers and the page's own quotation of them are reworded
+  in place, no allow-list entry. `j1-project-connectivity`'s PC-2 bound is a classified CI row (a complexity-proof). The two
+  tree-walking cases that outran the 5 s default under a four-worker full run (`b16-1b-auth-composition` "exactly 177 route methods",
+  `b20-b4-withhold-proposals` 8) walk once at module load; no timeout raised; each still fails on a planted raw route file or stale
+  phrase (re-shown in the completion run, probes removed).
+- **Records:** OD-261 (departs from OD-254's default by the alternative it lists); pin moves with dated "[PR-J7, 2026-11-04]" notes in
+  `b24-d0-ci-split`, `b24-d4-browser-split`, `b24-a1-environment-profile`, `b24-d1-threshold-census` and the page citations;
+  `threshold-classification.ts` +1; `threshold-census.csv` and `generator-inventory.md` regenerated; `multi-sheet/progress.md` J5,
+  J6, J7 rows.
+- **Gates (completion run, each alone, keys unset, `--maxWorkers=4`):** the 35 CI-split / admission / page pin suites first: 2 failed
+  (`b22-closeout-statements` 2 and 3 on `ci-split.md:1087`'s quotation of the old header), reworded in place; then the final
+  selection (those 35; the b24-c1 suites, b24-b1-score-separation, b24-b3-scenario-map, b24-d1-latency, b16-1b, b20-b4, b20-d2 x2,
+  b21-closeout; b20-a2-negotiation, a reader of `OWNER_DECISIONS.md`): 47 files, 517 passed, 11 skipped, 0 failed; the 58 J
+  suites 475 passed; agent-boundary-suites' whole selection (114 entries) 233 files,
+  2,671 passed, 18 skipped, 0 failed, `Duration 304.82s`; tsc 0; eslint 0 on the ten touched TypeScript files; the four B24
+  generators zero drift; scan-secrets tree and `--history 89009036..HEAD` exit 0; the workflow parses (js-yaml; eight jobs, limits
+  unchanged); `app/page.tsx` 9,156 lines; no CR in any changed file.
+- **Expected CI (INFERRED until the lead's run):** prompt-to-gerber unchanged (411 files), about 18 min 07 s to 18 min 27 s of 25;
+  agent-boundary-suites about 6 min 55 s to 8 min 29 s of 20 on `24beea1e`'s runner, at worst about 14 min 25 s on the slowest run
+  since 2026-10-06; the other six jobs unchanged.
+- **Next:** the lead's CI run and its eight headroom lines; the J browser evidence and the J verdict; then section K.

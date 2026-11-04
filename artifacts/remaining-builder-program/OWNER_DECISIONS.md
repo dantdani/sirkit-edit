@@ -3665,3 +3665,47 @@ Under the existing OD-217 heading (`:2599`), append:
 - **The owner may choose otherwise:** each item independently (a STEP converter dependency, a bounded fetch of real KiCad 3D
   models, an existing route instead of a new read route, a requirement-only acquisition target, a project-level cumulative
   allowance, separate panels, a different retention or ceiling).
+
+## OD-261 — CI for section J: the 54 J suites no job selected admitted and all moved to agent-boundary-suites, the J set-asides retired, the split re-measured (PR-J7, 2026-11-04)
+
+- **Question:** At `89009036`, 54 of section J's 58 vitest suites (`j1-` … `j7-`, the J7 queue and allowance suites under
+  `app/lib/generation-task/__tests__` among them) ran in no job of `.github/workflows/deterministic-manufacturing.yml`
+  (`_ci-admission.ts` `jobsOf`: `[]` for 50; only `benchmark-core` and `benchmark-nightly` for the four under
+  `app/lib/engineering/__tests__`); the other four rode prompt-to-gerber's directory filters but were set aside from the split's
+  measurement (`J4_SET_ASIDE`, `J5_SET_ASIDE` in `b24-d0-ci-split`) until "the J CI step's one re-measurement" (OD-254, OD-259). The
+  three J browser specs already run in page-browser-e2e (its skip list leaves them in). OD-254's default puts admitted suites in
+  prompt-to-gerber and moves only the heaviest by weight; at `24beea1e` (run 41824471402) prompt-to-gerber's own headroom step read
+  "elapsed 18 min 22 s of 25 min, headroom 6 min 38 s", and CI spends about 2.4 s a file there (996 s of vitest for 411 files), so 54
+  more files could take it inside OD-30's five minutes. The same run's agent-boundary-suites was red: `b22-closeout-statements` 1 and 3
+  read J7-2's suite header, which named the fixture clock and denied a paid call, a database and a network in one sentence, as the
+  runner's own no-network guarantee. How are the J suites admitted?
+- **Default applied (departs from OD-254's default, by the alternative it lists):** OD-250's mechanism, as for its 19. (1) The 54
+  suites are exact-path positional entries of prompt-to-gerber after its last positional line (`deterministic-manufacturing.yml:382-435`,
+  byte-sorted), each excluded again before its `--reporter` line (`:496-549`) and listed in agent-boundary-suites after its last line
+  (`:871-924`): no item in both jobs, the union is the positional selection, none starts PGlite, no `timeout-minutes` changed, no job
+  added; prompt-to-gerber keeps its 411 files. (2) `J4_SET_ASIDE` and `J5_SET_ASIDE` are retired in place (`b24-d0-ci-split.test.ts:75`):
+  the four suites stay in prompt-to-gerber by their directory filters and are measured. (3) Re-measured once at this tree (local, four
+  workers, the owner's rule; the earlier records used two; `b24-d0-ci-split` set aside): 643 files, 6,944 tests, 0 failures, 54
+  skipped, 1,287.16 s of testcase time, `Duration 517.03s`, exit 0 (`artifacts/ai-control-plane-b24/evidence/d0-ptg-timing.xml`);
+  the 54 J suites hold 23.18 s of it and the four J4/J5 suites 1.85 s; the moved set is 114 items, 233 files, 557.90 s, 43.3 %, above
+  OD-30's 40 % line. (4) The three J7 suite headers (`j7-allowance-contention:25`, `j7-allowance-review:23`,
+  `j7-provider-wait-sibling-end:17`) now end their sentence at the clock, before "No paid call, no database, no network." - a
+  functional fix of the red job, no allow-list entry. (5) The PC-2 bound of `j1-project-connectivity` became a CI row: a
+  complexity-proof in `threshold-classification.ts` (61.9 ms against the union's 7.8 ms here, 7.9x; the pre-fix derivation at
+  `91dd2c3c^` 651.6 ms, 83.5x, on the same workload; the bound 25x + 20 ms). (6) Two tree-walking cases that outran vitest's 5 s
+  default in a four-worker full run walk once at module load (no timeout raised, the same assertions, each still red on a planted
+  route file or stale phrase): `b16-1b-auth-composition` "exactly 177 route methods" (1.05 s -> 0.03 s alone) and
+  `b20-b4-withhold-proposals` 8 (0.69 s -> 0.005 s). Pins moved with dated `[PR-J7, 2026-11-04]` notes: `b24-d0-ci-split`,
+  `b24-d4-browser-split`, `b24-a1-environment-profile` 16 (A1's insertion table gained PR-J7's three rows; the row readers admit
+  `PR-J7`), `b24-d1-threshold-census` 1, the page citations (B21's C39, C49, C55, C93, C94; B23's C64 and its prose; B24's
+  accessibility C52, C53, C70 and observability C50; `ci-split.md` C2, C8-C14, C24, D4-C1..C7, D4-C21) and `performance-and-reliability.md`'s
+  two now-notes; `threshold-census.csv` and `generator-inventory.md` regenerated (the ci column of the J rows; every B24 generator
+  re-run with zero drift). Expected CI, **INFERRED** until the lead's run after the push (`ci-split.md` section 11.13): prompt-to-gerber
+  unchanged, about 18 min 07 s to 18 min 27 s of 25 (headroom about 6 min 33 s to 6 min 53 s); agent-boundary-suites +17 s to +111 s,
+  about 6 min 55 s to 8 min 29 s of 20 on `24beea1e`'s runner, about 11 min 43 s on `7d8ef423`'s and about 14 min 25 s on the slowest
+  run read since 2026-10-06 (headroom at least 5 min 35 s); database-delivery, the three browser jobs, production-smoke and
+  secret-scan unchanged. OD-30 is judged on each job's `scripts/ci-job-headroom.ts` line.
+- **The owner may choose otherwise:** OD-254's default as written (the 54 in prompt-to-gerber, moving only the heaviest by weight;
+  about 19 to 20.5 min of 25 on the runners seen, inside OD-30's five minutes at the upper end); a J job of its own; or the four
+  set-aside suites moved too. The merge gate of `ci-split.md` section 9 applies: the 54 suites now fail only in
+  agent-boundary-suites, so a required-status-check list on `main` must name it.
