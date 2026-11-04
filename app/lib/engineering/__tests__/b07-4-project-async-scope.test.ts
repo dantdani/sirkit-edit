@@ -336,7 +336,12 @@ describe("B07.4 §5 — page wiring (SUPPLEMENT to the behavioral tests above)",
   it("T17+T18+T19+T24: errors, busy flags, retries, and aborts are request/project-scoped in every async handler", () => {
     // Scoped error writer exists and unscoped patterns are gone.
     expect(source).toContain("const setScopedGenError = useCallback((scope: ProjectAsyncScope");
-    expect(source.match(/setTimeout\(\(\) => setGenError\(null\)/g) ?? []).toHaveLength(2); // both inside scoped helpers
+    // [PR-J5 integration CI, 2026-11-04] pin move (was: exactly 2 `setTimeout(() => setGenError(null)` clears, both inside scoped helpers):
+    // the same two scoped clears are now NUMBERED - each clears only its own show, so an earlier message's timer can never erase a later
+    // one (CI erased the J3 case 4 Theory refusal this way); an unguarded clear is refused outright.
+    expect(source.match(/setTimeout\(\(\) => setGenError\(null\)/g) ?? []).toHaveLength(0);
+    expect(source.match(/setTimeout\(\(\) => \{ if \(genErrorShowRef\.current === show\) setGenError\(null\); \}/g) ?? []).toHaveLength(2); // both inside scoped helpers
+    expect(source.match(/const show = \+\+genErrorShowRef\.current; setGenError\(/g) ?? []).toHaveLength(2);
     // Request-owned busy clears.
     for (const guard of [
       "if (activeGenerationRef.current === scope.requestId)",

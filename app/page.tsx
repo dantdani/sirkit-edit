@@ -2647,7 +2647,7 @@ export default function Home() {
   // session generation, and exact base digest all still match.
   const [pendingSuggestions, setPendingSuggestions] = useState<ScopedSuggestionBatch | null>(null);
   const [suggestionsMinimized, setSuggestionsMinimized] = useState(false);
-  const [genError, setGenError]         = useState<string | null>(null);
+  const [genError, setGenError]         = useState<string | null>(null); const genErrorShowRef = useRef(0); // [PR-J5 integration CI, 2026-11-04] numbered shows: a transient error's timer clears only ITS OWN show, never a later message (the same race the toast fix e1830cfc closed; CI saw the Theory refusal erased by an earlier timer)
   // [B16.1C §F] the ONE pending generated-schematic proposal (also the first
   // generation onto an empty sheet). Nothing is applied until the human
   // approves it in the review dialog, which states exactly what will change.
@@ -5232,8 +5232,8 @@ export default function Home() {
       const detail = "detail" in outcome ? outcome.detail : "The project changed while the result was being prepared.";
       const errorScope = opts?.pin?.scope ?? projectScopeRegistryRef.current!.capture();
       errorScope.ifCurrent(() => {
-        setGenError(detail);
-        errorScope.setTimeout(() => setGenError(null), 8000);
+        const show = ++genErrorShowRef.current; setGenError(detail);
+        errorScope.setTimeout(() => { if (genErrorShowRef.current === show) setGenError(null); }, 8000);
       });
     }
     return false;
@@ -5243,8 +5243,8 @@ export default function Home() {
    *  while the owning scope is current; never appears in another project. */
   const setScopedGenError = useCallback((scope: ProjectAsyncScope, message: string, ms = 6000) => {
     scope.ifCurrent(() => {
-      setGenError(message);
-      scope.setTimeout(() => setGenError(null), ms);
+      const show = ++genErrorShowRef.current; setGenError(message);
+      scope.setTimeout(() => { if (genErrorShowRef.current === show) setGenError(null); }, ms);
     });
   }, []);
 
