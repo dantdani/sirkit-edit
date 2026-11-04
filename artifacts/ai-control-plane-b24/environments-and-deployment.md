@@ -412,6 +412,9 @@ handover text the lead pastes into the nine task files is in section 13.
 | [PR-L7, 2026-10-20] | database-delivery | `:495` | 13 |
 | [PR-L7, 2026-10-20] | agent-boundary-suites | `:761` | 2 |
 | [PR-L7, 2026-10-20] | page-browser-e2e-agent | `:809` | 35 |
+| [PR-J7, 2026-11-04] | prompt-to-gerber | `:382` | 54 |
+| [PR-J7, 2026-11-04] | prompt-to-gerber | `:496` | 54 |
+| [PR-J7, 2026-11-04] | agent-boundary-suites | `:871` | 54 |
 
 ## 11. Gates
 
@@ -443,12 +446,10 @@ handover text the lead pastes into the nine task files is in section 13.
 | a content scan of every changed or new file (control bytes, CRLF, PEM markers, provider key shapes; the staged-content scan is the lead's) | none found |
 
 Found in the run and fixed before the final gates (each was this increment's own slip, caught by an existing gate):
-- `b23-a-provider-admission` case 8 listed the new B24 files until its one reviewed move (D6) landed;
-- `b23-closeout-statements` case 7 refused `b24-a1-configuration` for spelling B23's deferred retirement (`DC-05R`) in a list of names production must not use; the name was dropped from the list (the closeout's own case pins it);
+- `b23-a-provider-admission` case 8 listed the new B24 files until its one reviewed move (D6) landed; `b23-closeout-statements` case 7 refused `b24-a1-configuration` for spelling B23's deferred retirement (`DC-05R`) in a list of names production must not use; the name was dropped from the list (the closeout's own case pins it);
 - `b23-d-physical-evidence-contract` case 8 refused the flag inventory for spelling the evidence module's path in an exclusion's sites; the exclusion now cites no site and says why. No other gate failed; no case timed out and no `Timeout calling onTaskUpdate` was seen.
 
 ### The review round's gates (2026-10-06, the final tree)
-
 The table above is A1's own run. After the review fixes every gate ran again through the lock script, one at a time, with no `.next/` present, every process stopped after. **CONFIRMED**:
 
 | gate | result |
@@ -469,7 +470,6 @@ The table above is A1's own run. After the review fixes every gate ran again thr
 | a byte scan of every file the review round changed (control bytes, CR, PEM markers, provider key shapes) | none found |
 
 No gate failed, no case timed out and no `Timeout calling onTaskUpdate` was seen. The slowest new case is `b24-a1-flags` 4 (about 1.2 s here; it declares a 30 s timeout).
-
 ### The check round's gates (2026-10-06, the final tree)
 The check round changed only `b24-a1-environment-profile` and this page. Each gate ran through the lock script, one at a time, with no `.next/` present and every process stopped after. **CONFIRMED**:
 

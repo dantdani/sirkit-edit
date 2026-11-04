@@ -20,7 +20,7 @@
  *  R1  a block on a seeded strategy (S5's planner call; a retry's restarted S2) whose first core call is contended keeps its seeded
  *      conversation: the next claim resumes it - the seed is not paid again, the restart milestone not said again.
  *
- * Fixture proof only: the in-memory durable repository, a simulated clock and (R1) a scripted provider - no paid call, no database, no network.
+ * Fixture proof only: the in-memory durable repository, a simulated clock and (R1) a scripted provider. No paid call, no database, no network.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

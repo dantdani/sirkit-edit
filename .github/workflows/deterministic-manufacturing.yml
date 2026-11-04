@@ -379,6 +379,60 @@ jobs:
           app/lib/schematic/__tests__/l6-shared-net-obligations.test.ts
           app/lib/workflow/__tests__/m4-board-rebind.test.ts
           app/lib/workflow/__tests__/m4-journey-board-behind.test.ts
+          app/api/export/kicad/__tests__/j2-sheets-export-refusal.test.ts
+          app/api/export/kicad/__tests__/j4-kicad-hierarchy-route.test.ts
+          app/api/schematic/__tests__/j2-tidy-sheets-refusal.test.ts
+          app/api/schematic/__tests__/j4-tidy-sheet.test.ts
+          app/api/simulate/__tests__/j2-simulate-sheets-refusal.test.ts
+          app/components/bom/__tests__/j4-bom-sheet-column.test.tsx
+          app/components/pcb/__tests__/j4-missing-parts-sheet.test.tsx
+          app/components/schematic/__tests__/j3-sheet-lens-hook.test.tsx
+          app/components/schematic/__tests__/j3-sheet-lens-strict-mode.test.tsx
+          app/components/schematic/__tests__/j3-sheet-navigator-layout.test.tsx
+          app/components/schematic/__tests__/j3-sheet-navigator.test.tsx
+          app/components/schematic/__tests__/j4-organize-dialog.test.tsx
+          app/components/schematic/__tests__/j5-open-sheet-wiring.test.tsx
+          app/components/schematic/__tests__/j5-sheet-organization-card.test.tsx
+          app/lib/__tests__/j4-kicad-hierarchy-export.test.ts
+          app/lib/__tests__/j4-spice-sheets.test.ts
+          app/lib/__tests__/j5-build-sheet-layout.test.ts
+          app/lib/agent/__tests__/j5-inspect-sheets.test.ts
+          app/lib/agent/__tests__/j5-organize-proposal-tool.test.ts
+          app/lib/bom/__tests__/j4-bom-sheets.test.ts
+          app/lib/engineering/__tests__/j1-sheet-operations.test.ts
+          app/lib/engineering/__tests__/j3-coordinator-sheets.test.ts
+          app/lib/engineering/__tests__/j5-inspect-sheet-aware.test.ts
+          app/lib/engineering/__tests__/j5-sheet-organization-proposal.test.ts
+          app/lib/generation-task/__tests__/j5-result-sheets-contract.test.ts
+          app/lib/generation-task/__tests__/j7-allowance-contention.test.ts
+          app/lib/generation-task/__tests__/j7-allowance-review.test.ts
+          app/lib/generation-task/__tests__/j7-provider-wait-sibling-end.test.ts
+          app/lib/generation-task/__tests__/j7-queue-beyond-slots.test.ts
+          app/lib/project/__tests__/j1-sheets-persistence.test.tsx
+          app/lib/project/__tests__/j3-board-checkpoint-sheets.test.ts
+          app/lib/project/__tests__/j3-canonical-adoption-sheets.test.ts
+          app/lib/project/__tests__/j3-history-step-sheets.test.ts
+          app/lib/project/__tests__/j3-page-carriage.test.ts
+          app/lib/project/__tests__/j3-sheet-navigation-store.test.ts
+          app/lib/project/__tests__/j3-sheet-replace-guard.test.ts
+          app/lib/project/__tests__/j5-page-intake-sheets.test.ts
+          app/lib/project/__tests__/j5-pending-proposal-sheets.test.ts
+          app/lib/project/__tests__/j5-result-sheets-client.test.ts
+          app/lib/project/__tests__/j5-sheet-organization-events.test.ts
+          app/lib/project/__tests__/j5-sheeted-replace-transaction.test.ts
+          app/lib/schematic/__tests__/j1-connectivity-caller-ratchet.test.ts
+          app/lib/schematic/__tests__/j1-project-connectivity.test.ts
+          app/lib/schematic/__tests__/j2-consumers-golden.test.ts
+          app/lib/schematic/__tests__/j2-project-consumers.test.ts
+          app/lib/schematic/__tests__/j3-fixture-readability.test.ts
+          app/lib/schematic/__tests__/j3-sheet-lens.test.ts
+          app/lib/schematic/__tests__/j4-flat-drone-fixture.test.ts
+          app/lib/schematic/__tests__/j4-organize-sheets.test.ts
+          app/lib/schematic/__tests__/j4-rail-label-normalisation.test.ts
+          app/lib/schematic/__tests__/j4-sheet-tidy.test.ts
+          app/lib/schematic/__tests__/j5-generated-sheets.test.ts
+          app/lib/schematic/__tests__/j5-organize-port-names.test.ts
+          app/lib/spice/__tests__/j4-ir-sheets.test.ts
           --exclude 'app/lib/project/__tests__/b18-b-import-gates.test.ts'
           --exclude 'app/lib/distributors/__tests__/b19-distributor-egress.test.ts'
           --exclude 'app/lib/mcp/**'
@@ -439,6 +493,60 @@ jobs:
           --exclude 'app/lib/project/__tests__/pr-g-artifact-receivers.test.ts'
           --exclude 'app/api/generation-tasks/__tests__/l7-fixture-vertical-slice.test.ts'
           --exclude 'app/lib/component-resolution/__tests__/m1-boundaries.test.ts'
+          --exclude 'app/api/export/kicad/__tests__/j2-sheets-export-refusal.test.ts'
+          --exclude 'app/api/export/kicad/__tests__/j4-kicad-hierarchy-route.test.ts'
+          --exclude 'app/api/schematic/__tests__/j2-tidy-sheets-refusal.test.ts'
+          --exclude 'app/api/schematic/__tests__/j4-tidy-sheet.test.ts'
+          --exclude 'app/api/simulate/__tests__/j2-simulate-sheets-refusal.test.ts'
+          --exclude 'app/components/bom/__tests__/j4-bom-sheet-column.test.tsx'
+          --exclude 'app/components/pcb/__tests__/j4-missing-parts-sheet.test.tsx'
+          --exclude 'app/components/schematic/__tests__/j3-sheet-lens-hook.test.tsx'
+          --exclude 'app/components/schematic/__tests__/j3-sheet-lens-strict-mode.test.tsx'
+          --exclude 'app/components/schematic/__tests__/j3-sheet-navigator-layout.test.tsx'
+          --exclude 'app/components/schematic/__tests__/j3-sheet-navigator.test.tsx'
+          --exclude 'app/components/schematic/__tests__/j4-organize-dialog.test.tsx'
+          --exclude 'app/components/schematic/__tests__/j5-open-sheet-wiring.test.tsx'
+          --exclude 'app/components/schematic/__tests__/j5-sheet-organization-card.test.tsx'
+          --exclude 'app/lib/__tests__/j4-kicad-hierarchy-export.test.ts'
+          --exclude 'app/lib/__tests__/j4-spice-sheets.test.ts'
+          --exclude 'app/lib/__tests__/j5-build-sheet-layout.test.ts'
+          --exclude 'app/lib/agent/__tests__/j5-inspect-sheets.test.ts'
+          --exclude 'app/lib/agent/__tests__/j5-organize-proposal-tool.test.ts'
+          --exclude 'app/lib/bom/__tests__/j4-bom-sheets.test.ts'
+          --exclude 'app/lib/engineering/__tests__/j1-sheet-operations.test.ts'
+          --exclude 'app/lib/engineering/__tests__/j3-coordinator-sheets.test.ts'
+          --exclude 'app/lib/engineering/__tests__/j5-inspect-sheet-aware.test.ts'
+          --exclude 'app/lib/engineering/__tests__/j5-sheet-organization-proposal.test.ts'
+          --exclude 'app/lib/generation-task/__tests__/j5-result-sheets-contract.test.ts'
+          --exclude 'app/lib/generation-task/__tests__/j7-allowance-contention.test.ts'
+          --exclude 'app/lib/generation-task/__tests__/j7-allowance-review.test.ts'
+          --exclude 'app/lib/generation-task/__tests__/j7-provider-wait-sibling-end.test.ts'
+          --exclude 'app/lib/generation-task/__tests__/j7-queue-beyond-slots.test.ts'
+          --exclude 'app/lib/project/__tests__/j1-sheets-persistence.test.tsx'
+          --exclude 'app/lib/project/__tests__/j3-board-checkpoint-sheets.test.ts'
+          --exclude 'app/lib/project/__tests__/j3-canonical-adoption-sheets.test.ts'
+          --exclude 'app/lib/project/__tests__/j3-history-step-sheets.test.ts'
+          --exclude 'app/lib/project/__tests__/j3-page-carriage.test.ts'
+          --exclude 'app/lib/project/__tests__/j3-sheet-navigation-store.test.ts'
+          --exclude 'app/lib/project/__tests__/j3-sheet-replace-guard.test.ts'
+          --exclude 'app/lib/project/__tests__/j5-page-intake-sheets.test.ts'
+          --exclude 'app/lib/project/__tests__/j5-pending-proposal-sheets.test.ts'
+          --exclude 'app/lib/project/__tests__/j5-result-sheets-client.test.ts'
+          --exclude 'app/lib/project/__tests__/j5-sheet-organization-events.test.ts'
+          --exclude 'app/lib/project/__tests__/j5-sheeted-replace-transaction.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j1-connectivity-caller-ratchet.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j1-project-connectivity.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j2-consumers-golden.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j2-project-consumers.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j3-fixture-readability.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j3-sheet-lens.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j4-flat-drone-fixture.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j4-organize-sheets.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j4-rail-label-normalisation.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j4-sheet-tidy.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j5-generated-sheets.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j5-organize-port-names.test.ts'
+          --exclude 'app/lib/spice/__tests__/j4-ir-sheets.test.ts'
           --reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml
       - name: Upload evidence and diagnostics
         if: always()
@@ -760,6 +868,60 @@ jobs:
           app/lib/project/__tests__/pr-g-artifact-receivers.test.ts
           app/api/generation-tasks/__tests__/l7-fixture-vertical-slice.test.ts
           app/lib/component-resolution/__tests__/m1-boundaries.test.ts
+          app/api/export/kicad/__tests__/j2-sheets-export-refusal.test.ts
+          app/api/export/kicad/__tests__/j4-kicad-hierarchy-route.test.ts
+          app/api/schematic/__tests__/j2-tidy-sheets-refusal.test.ts
+          app/api/schematic/__tests__/j4-tidy-sheet.test.ts
+          app/api/simulate/__tests__/j2-simulate-sheets-refusal.test.ts
+          app/components/bom/__tests__/j4-bom-sheet-column.test.tsx
+          app/components/pcb/__tests__/j4-missing-parts-sheet.test.tsx
+          app/components/schematic/__tests__/j3-sheet-lens-hook.test.tsx
+          app/components/schematic/__tests__/j3-sheet-lens-strict-mode.test.tsx
+          app/components/schematic/__tests__/j3-sheet-navigator-layout.test.tsx
+          app/components/schematic/__tests__/j3-sheet-navigator.test.tsx
+          app/components/schematic/__tests__/j4-organize-dialog.test.tsx
+          app/components/schematic/__tests__/j5-open-sheet-wiring.test.tsx
+          app/components/schematic/__tests__/j5-sheet-organization-card.test.tsx
+          app/lib/__tests__/j4-kicad-hierarchy-export.test.ts
+          app/lib/__tests__/j4-spice-sheets.test.ts
+          app/lib/__tests__/j5-build-sheet-layout.test.ts
+          app/lib/agent/__tests__/j5-inspect-sheets.test.ts
+          app/lib/agent/__tests__/j5-organize-proposal-tool.test.ts
+          app/lib/bom/__tests__/j4-bom-sheets.test.ts
+          app/lib/engineering/__tests__/j1-sheet-operations.test.ts
+          app/lib/engineering/__tests__/j3-coordinator-sheets.test.ts
+          app/lib/engineering/__tests__/j5-inspect-sheet-aware.test.ts
+          app/lib/engineering/__tests__/j5-sheet-organization-proposal.test.ts
+          app/lib/generation-task/__tests__/j5-result-sheets-contract.test.ts
+          app/lib/generation-task/__tests__/j7-allowance-contention.test.ts
+          app/lib/generation-task/__tests__/j7-allowance-review.test.ts
+          app/lib/generation-task/__tests__/j7-provider-wait-sibling-end.test.ts
+          app/lib/generation-task/__tests__/j7-queue-beyond-slots.test.ts
+          app/lib/project/__tests__/j1-sheets-persistence.test.tsx
+          app/lib/project/__tests__/j3-board-checkpoint-sheets.test.ts
+          app/lib/project/__tests__/j3-canonical-adoption-sheets.test.ts
+          app/lib/project/__tests__/j3-history-step-sheets.test.ts
+          app/lib/project/__tests__/j3-page-carriage.test.ts
+          app/lib/project/__tests__/j3-sheet-navigation-store.test.ts
+          app/lib/project/__tests__/j3-sheet-replace-guard.test.ts
+          app/lib/project/__tests__/j5-page-intake-sheets.test.ts
+          app/lib/project/__tests__/j5-pending-proposal-sheets.test.ts
+          app/lib/project/__tests__/j5-result-sheets-client.test.ts
+          app/lib/project/__tests__/j5-sheet-organization-events.test.ts
+          app/lib/project/__tests__/j5-sheeted-replace-transaction.test.ts
+          app/lib/schematic/__tests__/j1-connectivity-caller-ratchet.test.ts
+          app/lib/schematic/__tests__/j1-project-connectivity.test.ts
+          app/lib/schematic/__tests__/j2-consumers-golden.test.ts
+          app/lib/schematic/__tests__/j2-project-consumers.test.ts
+          app/lib/schematic/__tests__/j3-fixture-readability.test.ts
+          app/lib/schematic/__tests__/j3-sheet-lens.test.ts
+          app/lib/schematic/__tests__/j4-flat-drone-fixture.test.ts
+          app/lib/schematic/__tests__/j4-organize-sheets.test.ts
+          app/lib/schematic/__tests__/j4-rail-label-normalisation.test.ts
+          app/lib/schematic/__tests__/j4-sheet-tidy.test.ts
+          app/lib/schematic/__tests__/j5-generated-sheets.test.ts
+          app/lib/schematic/__tests__/j5-organize-port-names.test.ts
+          app/lib/spice/__tests__/j4-ir-sheets.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-agent-boundary-suites.xml
       - name: Upload diagnostics
         if: always()

@@ -275,24 +275,10 @@ describe("[B20 B4] no proposal over MCP: the withholding move, listed means serv
   });
 
   it("8. no stale claim that MCP lists or serves a proposal: each one outside the lead's files carries a [B20 B4] correction beside it, or is registry or route-policy text (and its generated artifact) named in the page's stale-text list with its follow-up increment; the reads page quotes B1's header as it now reads", () => {
-    // [B20 B4 review] coverage-2 and regressions-4: the stale-text list named one of the four such texts
-    const STALE = /B4 inert proposals|inert-proposal subset|B4 \(proposals\)/g;
-    const LEAD_FILES = new Set(["artifacts/ai-control-plane-b20/README.md", "artifacts/ai-control-plane-b20/discovery.md", "artifacts/ai-control-plane-b20/mcp-client-boundary.md", "artifacts/ai-control-plane-b20/mcp-reference-notes.md"]);
-    const walk = (dir: string): string[] => readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((entry) => {
-      const path = `${dir}/${entry.name}`;
-      if (entry.isDirectory()) return entry.name === "__tests__" || entry.name === "node_modules" ? [] : walk(path);
-      return /\.(tsx?|md|csv|json)$/.test(entry.name) ? [path] : [];
-    });
-    const texts = [...walk("app"), ...walk("artifacts")].filter((path) => path !== PAGE && !LEAD_FILES.has(path) && !path.startsWith("artifacts/remaining-builder-program/"));
-    const corrected: string[] = [];
-    const listed: string[] = [];
-    for (const path of texts) {
-      const text = read(path);
-      for (const match of text.matchAll(STALE)) {
-        if (text.slice(match.index, match.index + 240).includes("[B20 B4]")) corrected.push(path);
-        else listed.push(path);
-      }
-    }
+    // [PR-J7, 2026-11-04] reviewed move: the walk of app/ and artifacts/ and the scan of every text run once at module load (STALE_TEXT_SCAN,
+    // after the describe block): inside this case they outran vitest's 5 s default in a four-worker full run (about 0.7-1.2 s alone). No
+    // timeout raised; the same files are walked, the same phrases scanned and the same two lists asserted
+    const { corrected, listed } = STALE_TEXT_SCAN;
     const page = read(PAGE);
     const staleList = /^- \*\*Stale text left for the lead:\*\*([\s\S]*?)(?=^- \*\*|^## )/m.exec(page)?.[1] ?? "";
     // [B20 closeout, 2026-09-24] D20-30: the four listed texts (route-policy.ts, action-registry.ts and their two generated
@@ -311,3 +297,28 @@ describe("[B20 B4] no proposal over MCP: the withholding move, listed means serv
     for (const clause of quoted?.slice(1) ?? []) expect.soft(exposureHeader).toContain(clause);
   });
 });
+
+/** [PR-J7, 2026-11-04] Case 8's scan, run once at module load (no case's time) and unchanged: every `.ts(x)`, `.md`, `.csv` and `.json`
+ *  file under app/ and artifacts/ (no `__tests__` or `node_modules` folder) but the page, the lead's files and the program's records, each
+ *  stale MCP-proposal phrase in it sorted into corrected (a [B20 B4] correction within 240 characters after it) or listed. */
+const STALE_TEXT_SCAN: { readonly corrected: string[]; readonly listed: string[] } = (() => {
+  // [B20 B4 review] coverage-2 and regressions-4: the stale-text list named one of the four such texts
+  const STALE = /B4 inert proposals|inert-proposal subset|B4 \(proposals\)/g;
+  const LEAD_FILES = new Set(["artifacts/ai-control-plane-b20/README.md", "artifacts/ai-control-plane-b20/discovery.md", "artifacts/ai-control-plane-b20/mcp-client-boundary.md", "artifacts/ai-control-plane-b20/mcp-reference-notes.md"]);
+  const walk = (dir: string): string[] => readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((entry) => {
+    const path = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) return entry.name === "__tests__" || entry.name === "node_modules" ? [] : walk(path);
+    return /\.(tsx?|md|csv|json)$/.test(entry.name) ? [path] : [];
+  });
+  const texts = [...walk("app"), ...walk("artifacts")].filter((path) => path !== PAGE && !LEAD_FILES.has(path) && !path.startsWith("artifacts/remaining-builder-program/"));
+  const corrected: string[] = [];
+  const listed: string[] = [];
+  for (const path of texts) {
+    const text = read(path);
+    for (const match of text.matchAll(STALE)) {
+      if (text.slice(match.index, match.index + 240).includes("[B20 B4]")) corrected.push(path);
+      else listed.push(path);
+    }
+  }
+  return { corrected, listed };
+})();

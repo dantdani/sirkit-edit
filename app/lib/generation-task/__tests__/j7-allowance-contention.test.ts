@@ -22,7 +22,7 @@
  *     committed input stays within the limit on every revision and the design completes;
  *  6. the wait bound is derived from the slice policy, and no limit value moved.
  *
- * Fixture proof only: the scripted provider, the in-memory durable repository and a simulated clock - no paid call, no database, no network.
+ * Fixture proof only: the scripted provider, the in-memory durable repository and a simulated clock. No paid call, no database, no network.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

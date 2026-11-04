@@ -1223,7 +1223,7 @@ Each row resolves on the line it names (`b24-c3-recorded-limits` 11): the anchor
 | C47 | `scripts/retention-purge.ts` | 75 | `if (selectsTraceRead(argv)) {` |
 | C48 | `scripts/retention-purge.ts` | 65 | `repositoryFor: () => new PostgresDurableWorkflowRepository()` |
 | C49 | `scripts/retention-purge.ts` | 88 | `if (ENTRY_MODULE) void main(process.argv.slice(2), process.env)` |
-| C50 | `.github/workflows/deterministic-manufacturing.yml` | 493 | `app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts` |
+| C50 | `.github/workflows/deterministic-manufacturing.yml` | 601 | `app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts` |
 | C51 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 54 | `const CHAPTERS = ["b19-", "b20-", "b21-", "b22-", "b23-", "b24-"] as const;` |
 | C52 | `app/lib/durable-workflow/types.ts` | 50 | `export interface DurableWorkflowRepository {` |
 | C53 | `app/lib/durable-workflow/types.ts` | 55 | `getReplay<TResult extends object = object>(` |
@@ -1388,4 +1388,4 @@ dependency; no UI control; every live step BLOCKED-LIVE-QUALIFICATION (LB-14, LB
   lead's `git stash`, never the builder's) and add their counts to the note.
 - **Never run** `scripts/retention-purge.ts --read` against any database (OD-191, OD-211, LB-14).
 
-[B24-D1, 2026-10-09] C50 re-pinned `:380` -> `:383` in place: B24-D1's OD-30 steps at `:32` and `:344-345`; `b24-c3-recorded-limits` resolves it. [PR-G, 2026-10-17] C50 re-pinned `:383` -> `:422` in place: PR-G's 39 prompt-to-gerber lines at `:294-312`, `:316` and `:352-370` (OD-250). [PR-L7, 2026-10-20] C50 re-pinned `:422` -> `:493` in place: PR-L7's 71 prompt-to-gerber lines at `:313-381` and `:440-441` (OD-254).
+[B24-D1, 2026-10-09] C50 re-pinned `:380` -> `:383` in place: B24-D1's OD-30 steps at `:32` and `:344-345`; `b24-c3-recorded-limits` resolves it. [PR-G, 2026-10-17] C50 re-pinned `:383` -> `:422` in place: PR-G's 39 prompt-to-gerber lines at `:294-312`, `:316` and `:352-370` (OD-250). [PR-L7, 2026-10-20] C50 re-pinned `:422` -> `:493` in place: PR-L7's 71 prompt-to-gerber lines at `:313-381` and `:440-441` (OD-254). [PR-J7, 2026-11-04] C50 re-pinned `:493` -> `:601` in place: PR-J7's 108 prompt-to-gerber lines at `:382-435` and `:496-549` (OD-261).

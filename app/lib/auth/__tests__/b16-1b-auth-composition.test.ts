@@ -241,12 +241,12 @@ describe("B16.1B §G — no unrestricted signup surface", () => {
 describe("B16.1B §G — exact invariants", () => {
   it("exactly 177 route methods: 174 canonical wrappers, 3 approved factories, 0 raw handlers ([PR-M, 2026-10-18] + GET/POST /api/parts/acquisitions; [PR-M, 2026-10-18] + POST /api/component-resolution-authority; [PR-L, 2026-10-17] + the six generation-task methods; [B24-A1, 2026-10-06] + GET /api/health, GET /api/ready; [B23-B1, 2026-10-03] + POST /api/pcb/provider-exchange; B18-A: + GET/POST /api/agent/autonomy; B19-E E2: + POST /api/parts/external-search; B19-E E4: + GET/POST /api/components/atomic/publication; B19-E E5: + POST /api/components/revision-status; B20-B2: + POST /api/mcp, POST /api/mcp/token, GET /.well-known/oauth-protected-resource/api/mcp); exactly the intentional agent-exposed tools", () => {
     let total = 0, canonical = 0, factories = 0, raw = 0;
-    // [B20 B2] the census walks app/api AND app/.well-known through the one route-tree helper (OD-66)
-    for (const file of listRouteFiles(ROOT)) {
-      const src = readFileSync(file, "utf8");
-      for (const method of exportedHttpMethods(src, file)) {
+    // [B20 B2] the census walks app/api AND app/.well-known through the one route-tree helper (OD-66). [PR-J7, 2026-11-04] reviewed move: the
+    // walk and each method's classification run once at module load (ROUTE_METHOD_FORMS, after the describe blocks): inside this case they
+    // outran vitest's 5 s default in a four-worker full run (about 1-3.5 s alone). No timeout raised; the same files, methods and forms count
+    for (const [, forms] of ROUTE_METHOD_FORMS) {
+      for (const form of forms) {
         total += 1;
-        const form = classifyRouteMethodForm(src, method, file, ROOT).form;
         if (form === "canonical-wrapper") canonical += 1;
         else if (form === "factory") factories += 1;
         else raw += 1;
@@ -260,4 +260,12 @@ describe("B16.1B §G — exact invariants", () => {
     for (const d of exposed) expect(d.toolId).not.toMatch(/^sirkit\.auth\.|sign-?in|sign-?out|callback|session/i);
     void relative;
   });
+});
+
+/** [PR-J7, 2026-11-04] The census of "exactly 177 route methods", walked once at module load (no case's time): every route file the
+ *  one route-tree helper lists (app/api and app/.well-known, OD-66), read, and the form of each HTTP method it exports - the walk the
+ *  case ran in its body, unchanged. Declared after the describe blocks, so no case line moves. */
+const ROUTE_METHOD_FORMS: ReadonlyArray<readonly [string, readonly string[]]> = listRouteFiles(ROOT).map((file) => {
+  const src = readFileSync(file, "utf8");
+  return [file, exportedHttpMethods(src, file).map((method) => classifyRouteMethodForm(src, method, file, ROOT).form)] as const;
 });

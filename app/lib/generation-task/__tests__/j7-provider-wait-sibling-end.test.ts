@@ -14,7 +14,7 @@
  *     charged uncertain, the task waits for the provider with the sibling's reason and reaches its result;
  *  2. the transition rule is unchanged: `waiting-for-provider` is still refused to a worker end that attests no reason.
  *
- * Fixture proof only: the scripted provider, the in-memory durable repository and a simulated clock - no paid call, no database, no network.
+ * Fixture proof only: the scripted provider, the in-memory durable repository and a simulated clock. No paid call, no database, no network.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
