@@ -257,3 +257,36 @@ The ledger is `progress.md`; the increment list is returned to the lead. In summ
 - **K5:** VRML import / inspection / storage.
 - **K6:** VRML render / reuse in the existing viewer + the model read route.
 - **K7:** the full journey, failure paths, CI, the verdict.
+
+## 9. K1 corrections (2026-11-04)
+
+K1 verified every behaviour this map claims for its reproduction list against the code at `22db67c9` before pinning it
+(`app/lib/qualification/__tests__/k1-early-stop-reproductions.test.ts`; the case table is in `progress.md`, "K1 record"). All nine are
+real; none was dropped. What K1 corrects or adds, CONFIRMED by the suite unless marked:
+
+1. **Line numbers.** `component-resolution/task/contracts.ts`: `maxAttemptsPerSlice` is `:33` (section 2.1 says `:34`), the review
+   re-check policy `:34-36` (says `:35-38`), `maxEvents` `:37` (says `:36`, also in section 1.1 and gap 1.3-3), `maxAttempts` `:38`
+   (says `:39`). `acquisition/cad-egress.ts`: the clamp's comment and constant are `:60-61` (says `:59-60`). The other lines K1 cites
+   hold as written.
+2. **The 3-claim stop, precisely.** A slice is claimed three times (each claim's lease lapses with nothing committed: a worker that
+   died or threw); the FOURTH claim (`attempt - 1 >= 3`) is refused before the membership re-check and parks the whole task with
+   `source_unavailable` while `attempts` is empty - no source was asked, so the code's message ("No admitted CAD source can serve
+   this part") is false as well as final (K1 1).
+3. **The one pass, in the fixture runtime.** The pass is ONE admitted source (`fixture-kicad`); `kicad-bundled` is a recorded skip
+   (`fixture_runtime`) and `kicad-gitlab` a blocked skip. A missing symbol costs exactly one request and nothing records a strategy
+   (K1 2).
+4. **The identical-call guard's sentence is false for a live task.** K1 3 claims the task's slice between the second and third
+   status reads: the stored state moves `queued` -> `running`, and the third read is still refused with "its result has not changed".
+5. **The activity line of a chat start.** `resolutionProgressLine` has no entry for either acquisition tool (`RESOLUTION_PROGRESS`,
+   `project/component-resolution-events.ts:38-42`, names three other tools), so the entry shows the generic running line and then
+   "<title> — done"; no event of the run carries the task id (K1 5).
+6. **The 3D toggle.** The viewer's layer toggle labels the unlabelled boxes "Parts" (`components/pcb/PcbPreview3D.tsx:43`): the
+   placeholders are presented as the parts themselves (K1 8).
+7. **The mechanical profile.** `evaluateApproval` reads the model's `inspectionState` alone (`atomic/validation.ts:140-145`): with
+   `inspected: false` the bundle has the blocker "3D model <id> is not safely resolved", with `true` it has none - the boolean is the
+   only difference between the two assets (K1 7).
+8. **Which increment shows the remaining allowance.** Section 8 above lists "the allowance line" under K4; `progress.md` puts "the
+   remaining-allowance line" in K2. K1 follows the ledger (K1 6 names K2); RECORDED for the lead to confirm.
+9. **CI.** K1's suite is admitted to prompt-to-gerber by its existing `app/lib/qualification/__tests__` directory filter (OD-254's
+   default); it is set aside from `b24-d0-ci-split`'s measurement until K7's one re-measurement, as the J4/J5 suites were (section 7's
+   "CI admission" row stays K7's).
