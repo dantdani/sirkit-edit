@@ -14,7 +14,7 @@
  *     three groups cover its 14 parts exactly once with U1 OUT -> R2 as the ONE boundary crossing; over the page's own layout of the
  *     dimmer the groups are valid and the ORGANISE planner, following their wire CHAINS, plans them as ONE transaction (every operation
  *     kind inside the executor's move-to-sheet binding), the crossing a port on both sheets, the pin-to-net partition, the 14 identities
- *     and the published footprint set unchanged and no wire end left in the air on any sheet ([PR-J5 integration, 2026-10-23] review
+ *     and the published footprint set unchanged and no wire end left in the air on any sheet ([PR-J5 integration, 2026-10-26] review
  *     J5R-AI-1: OPEN ISSUE J5-C-1 fixed - the sealed proposal re-plans and applies the same; a group that cuts a route ends it at its sheet
  *     pin; a route a single port cannot end is refused ORGANIZE_DRAWING_DEGRADED, never sealed); the drone groups are the
  *     plan's blocks (the names) with the merge's final reference designators for 1..4 motors, and plan through the organise planner over
@@ -40,7 +40,7 @@ import { mergeBuildNetlists } from "@/app/lib/merge-netlists";
 import { routeComposerMessage } from "@/app/lib/project/composer-routing";
 import { deriveGeneratedSheets, type GeneratedSheetsPlannedBlock, type PinTypedPart } from "@/app/lib/schematic/generated-sheets";
 import { resolveProjectConnectivity } from "@/app/lib/schematic/project-connectivity";
-import { organizePlanPorts, planOrganizeIntoSheets, sheetDrawingDefects, validateOrganizeGroups } from "@/app/lib/schematic/sheet-organization";
+import { organizePlanPorts, organizeSheetId, planOrganizeIntoSheets, sheetDrawingDefects, validateOrganizeGroups } from "@/app/lib/schematic/sheet-organization";
 import { sheetOf, validateSheetHierarchy } from "@/app/lib/schematic/sheets";
 import { J4_DRONE_HINTED_PROPOSAL, flatDroneProjectState } from "@/app/lib/schematic/__tests__/_j4-organize-fixtures";
 import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
@@ -99,7 +99,7 @@ function pageLayout(design: DesignSpec): SchematicState {
   expect(built.validation.ok, JSON.stringify(built.validation.violations.slice(0, 3))).toBe(true);
   return built.state;
 }
-/** [PR-J5 integration, 2026-10-23] review J5R-AI-1: the test-only `chainAttached` helper is gone - the organise planner itself follows wire
+/** [PR-J5 integration, 2026-10-26] review J5R-AI-1: the test-only `chainAttached` helper is gone - the organise planner itself follows wire
  *  chains now (sheet-organization.ts groupEntities), and the helper followed them THROUGH parts outside the group (a cut route moved whole,
  *  its far end left in the air on the new sheet). The proofs below run the real planner and check every sheet's drawing. */
 const drawingDefectCount = (state: SchematicState): { danglingEnds: number; islands: number } => {
@@ -265,7 +265,7 @@ describe("[PR-J5 C] 3. the organise groups the scripted agent proposes (sheet-or
   });
 
   it("over the page's own layout of the dimmer (a wire-drawn page: multi-segment routes) the groups are valid; the ORGANISE planner follows the wire chains and plans them as ONE transaction (binding kinds only), the crossing a port on both sheets, partition / identities / footprints unchanged, no wire end left in the air on any sheet", () => {
-    // [PR-J5 integration, 2026-10-23] pin move (review J5R-AI-1, OPEN ISSUE J5-C-1 fixed; was: the proof moved each group through
+    // [PR-J5 integration, 2026-10-26] pin move (review J5R-AI-1, OPEN ISSUE J5-C-1 fixed; was: the proof moved each group through
     // planMoveToSheet with the test's own chainAttached helper, while planOrganizeIntoSheets refused SHEET_MOVE_AMBIGUOUS - pinned below)
     expect(flatDimmer.kicadComponents).toHaveLength(14);
     expect(flatDimmer.sheets).toBeUndefined();
@@ -308,26 +308,26 @@ describe("[PR-J5 C] 3. the organise groups the scripted agent proposes (sheet-or
   });
 
   it("J5-C-1 fixed (review J5R-AI-1): the organise PROPOSAL over the wire-drawn dimmer seals, re-plans and applies equivalently with a clean drawing; a group whose boundary cuts a route ([C2]; [C2] then [U1]) ends that route at its sheet pin; a route meeting several of a group's pins AND an outside part is refused ORGANIZE_DRAWING_DEGRADED, never sealed", () => {
-    // [PR-J5 integration, 2026-10-23] pin move (was: "OPEN ISSUE J5-C-1 (pinned until fixed)": planOrganizeIntoSheets refused the dimmer
+    // [PR-J5 integration, 2026-10-26] pin move (was: "OPEN ISSUE J5-C-1 (pinned until fixed)": planOrganizeIntoSheets refused the dimmer
     // SHEET_MOVE_AMBIGUOUS because the one-hop attachedSelection left a route's inner segments on the overview; the review then showed a
     // CUT route was sealed with wire ends in the air - [C2] over this layout - since the partition proof cannot see a broken drawing)
     const scope = { tenantId: "local", projectId: "proj-j5c", branchId: "main" };
     const digest = schematicStateDigest(flatDimmer);
     const sealed = (groups: ReadonlyArray<{ name: string; refs: readonly string[] }>) => {
       const compiled = compileSheetOrganizationProposal({ state: flatDimmer, request: { groups: groups.map((group) => ({ name: group.name, members: [...group.refs] })) }, getPart });
-      if (!compiled.ok) return { blocked: compiled.blockers } as const;
+      if (!compiled.ok) return { kind: "blocked" as const, blocked: compiled.blockers };
       const out = sealSheetOrganizationProposal({ state: flatDimmer, compilation: compiled.compilation, scope: { ...scope, headMark: { lineageId: "lin1-0123456789abcdef", headSequence: 1, canonicalStateDigest: digest } }, authorization: buildAuthorizationBinding({ principalId: "u-1", membershipRevision: "r-1", scope }), version: "1.0.0", provenance: { provider: "fixture", runId: "run-j5c", note: "", instruction: "" }, now: 1_000 });
-      if (out.kind !== "sealed") return { blocked: out.blockers } as const;
+      if (out.kind !== "sealed") return { kind: "blocked" as const, blocked: out.blockers };
       const replan = replanSheetOrganization(out.proposal, flatDimmer, getPart);
       if (!replan.ok) throw new Error(replan.detail);
       const applied = fromCanonicalSchematic(applySchematicOperationsToCanonical(toCanonicalSchematic(flatDimmer), replan.operations).schematic);
       expect(schematicStateDigest(applied)).toBe(schematicStateDigest(replan.after));
       expect(resolveProjectConnectivity(applied, getPart).partitionDigest).toBe(resolveProjectConnectivity(flatDimmer, getPart).partitionDigest);
       expect(identityOf(applied)).toEqual(identityOf(flatDimmer));
-      return { proposal: out.proposal, applied } as const;
+      return { kind: "sealed" as const, proposal: out.proposal, applied };
     };
     const dimmer = sealed(LED_DIMMER_SHEET_GROUPS);
-    if (!("applied" in dimmer)) throw new Error(JSON.stringify(dimmer.blocked));
+    if (dimmer.kind !== "sealed") throw new Error(JSON.stringify(dimmer.blocked));
     expect(dimmer.proposal.groups.map((group) => group.name)).toEqual(LED_DIMMER_SHEET_GROUPS.map((group) => group.name));
     expect(drawingDefectCount(dimmer.applied)).toEqual({ danglingEnds: 0, islands: 0 });
     // the reviewer's failing inputs: a group that CUTS a page-drawn route (C2.1 -> U1.5, several segments): the route stays whole on the
@@ -338,7 +338,7 @@ describe("[PR-J5 C] 3. the organise groups the scripted agent proposes (sheet-or
     for (const groups of [[{ name: "Decoupling", refs: ["C2"] }], [{ name: "Decoupling", refs: ["C2"] }, { name: "Timer", refs: ["U1"] }]]) {
       const label = groups.map((group) => group.refs.join(",")).join(" | ");
       const outcome = sealed(groups);
-      if (!("applied" in outcome)) throw new Error(`${label}: ${JSON.stringify(outcome.blocked)}`);
+      if (outcome.kind !== "sealed") throw new Error(`${label}: ${JSON.stringify(outcome.blocked)}`);
       expect(drawingDefectCount(outcome.applied), label).toEqual({ danglingEnds: 0, islands: 0 });
       expect(outcome.applied.wires.filter((wire) => sheetOf(wire) === "root"), `${label}: the cut routes stay whole on the overview`).toHaveLength(flatDimmer.wires.length);
       const pin = (outcome.applied.netLabels ?? []).find((item) => (item as { scope?: string }).scope === "sheet-pin" && sheetOf(item) === "root" && item.position.x === c2Pin1.x && item.position.y === c2Pin1.y);
@@ -346,7 +346,7 @@ describe("[PR-J5 C] 3. the organise groups the scripted agent proposes (sheet-or
     }
     // a route that meets two of a group's pins and an outside part (R1.2 and RV1.2 with U1.7) cannot end at ONE sheet pin: refused, nothing sealed
     const split = sealed([{ name: "Pot", refs: ["R1", "RV1"] }]);
-    if (!("blocked" in split)) throw new Error("the R1 + RV1 split was sealed");
+    if (split.kind !== "blocked") throw new Error("the R1 + RV1 split was sealed");
     expect(split.blocked[0]!.code).toBe("plan-refused");
     expect(split.blocked[0]!.detail).toContain("ORGANIZE_DRAWING_DEGRADED");
     expect(split.blocked[0]!.detail).toContain("Nothing was changed.");
@@ -363,6 +363,14 @@ describe("[PR-J5 C] 3. the organise groups the scripted agent proposes (sheet-or
     expect(planned + [...codes.values()].reduce((sum, count) => sum + count, 0)).toBe(105);
     expect([...codes.keys()]).toEqual(["ORGANIZE_DRAWING_DEGRADED"]);
     expect(planned).toBeGreaterThan(90);
+    // [PR-J5 integration, 2026-10-26] only a NEW defect refuses: a stub the drawing already had (C2.1 to an empty grid point) moves with C2 and
+    // keeps its dangling end - the same wire end, now on the new sheet - and the organisation still plans (a per-sheet count refused it)
+    const stubbed: SchematicState = { ...flatDimmer, wires: [...flatDimmer.wires, { id: "j5c-stub", vertices: [{ x: c2Pin1.x, y: c2Pin1.y }, { x: c2Pin1.x - 40, y: c2Pin1.y }] } as SchematicState["wires"][number]] };
+    expect(drawingDefectCount(stubbed)).toEqual({ danglingEnds: 1, islands: 0 });
+    const withStub = planOrganizeIntoSheets(stubbed, LED_DIMMER_SHEET_GROUPS, getPart);
+    if (!withStub.ok) throw new Error(`${withStub.code}: ${withStub.message}`);
+    expect(drawingDefectCount(withStub.after)).toEqual({ danglingEnds: 1, islands: 0 });
+    expect(sheetOf(withStub.after.wires.find((wire) => wire.id === "j5c-stub")!)).toBe(organizeSheetId(LED_DIMMER_SHEET_GROUPS[0]!.refs));
   });
 
   it("the drone groups are the plan's blocks: the names equal DRONE_BLOCK_NAMES, the refs equal the merge's final reference designators for 1..4 motors; outside 1..4 null", () => {

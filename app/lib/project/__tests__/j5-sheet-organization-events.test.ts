@@ -14,7 +14,7 @@
  *     operations are the tool's re-plan on the canonical base (the sealed operation count); a differing base refuses with the tool's
  *     sentence and applies nothing; the re-plan base carries the sheet-size fallback only when the canonical state has none;
  *  5. the sentences name the sheets, the parts and the interfaces, and never claim a change before the apply;
- *  6. [PR-J5 integration, 2026-10-23] review J5R-AI-2 (B16.0.1 §F): Approve reauthorizes the LIVE membership against the sealed binding
+ *  6. [PR-J5 integration, 2026-10-26] review J5R-AI-2 (B16.0.1 §F): Approve reauthorizes the LIVE membership against the sealed binding
  *     (sheet-organization-reauthorization.ts) after the currency check and before the controller applies - a changed principal,
  *     revision, scope or role, or an unavailable endpoint, refuses and applies nothing.
  */
@@ -192,7 +192,7 @@ describe("[PR-J5] 5. the sentences", () => {
   });
 });
 
-// ── [PR-J5 integration, 2026-10-23] review J5R-AI-2 (B16.0.1 §F): the organise Approve reauthorizes the live membership ─────────────
+// ── [PR-J5 integration, 2026-10-26] review J5R-AI-2 (B16.0.1 §F): the organise Approve reauthorizes the live membership ─────────────
 describe("[PR-J5 integration] 6. Approve reauthorizes the live membership against the sealed binding (B16.0.1 §F)", () => {
   const sealedFor = (membershipRevision: string, requiredApplyRole: "pcb_editor" | "project_admin" = "pcb_editor"): SealedSheetOrganizationProposal => {
     const state = base();

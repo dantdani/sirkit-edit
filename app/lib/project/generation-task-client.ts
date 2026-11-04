@@ -66,7 +66,7 @@ export interface GenerationTaskResultView {
   netlist: BuildLogicalNetlist;
   explanation: string;
   electricalCheck: { state: string; [key: string]: unknown };
-  resultDigest: string; /** [PR-J, 2026-10-22] J5-1 (OD-255 item 9): a planned result's sheet set (or why it stays one page), read defensively; absent when the result has none or it is malformed. [PR-J5 integration, 2026-10-23] review B-7: the page lays it out as real sheets (lib/build-sheet-layout.ts) before the review. */ sheets?: GeneratedSheets;
+  resultDigest: string; /** [PR-J, 2026-10-22] J5-1 (OD-255 item 9): a planned result's sheet set (or why it stays one page), read defensively; absent when the result has none or it is malformed. [PR-J5 integration, 2026-10-26] review B-7: the page lays it out as real sheets (lib/build-sheet-layout.ts) before the review. */ sheets?: GeneratedSheets;
 }
 export interface GenerationTaskFailure { ok: false; status: number; code: string; message: string; retryable: boolean; activeTask?: GenerationTaskSnapshotView | null }
 

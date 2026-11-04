@@ -9,7 +9,7 @@
  *  5. the message is bounded (under 240 characters for 512 sheets with 120-character names), lists at most four names, shortens long
  *     ones, and ends with the page's "Nothing was changed." wording; the fixture drone's organised document reads in full;
  *  6. purity: the inputs are not touched.
- *  [PR-J5 integration, 2026-10-23] review B-5: case 5 also bounds a LONG root name, the Build advisory, the Theory composer's refusal
+ *  [PR-J5 integration, 2026-10-26] review B-5: case 5 also bounds a LONG root name, the Build advisory, the Theory composer's refusal
  *  (review B-2) and the refusal with its "Why it is one page" findings - every one within 240 characters (the 84-character tail made
  *  the 512-sheet worst case 246, the advisory 255, two long findings 889).
  * Pure: no I/O, no React, no page import.
@@ -90,7 +90,7 @@ describe("[PR-J3] the AI replace-result guard", () => {
     expect(organised).not.toContain("…");
     expect(organised).not.toContain(" more");
     expect(organised.length).toBeLessThanOrEqual(SHEET_REPLACE_GUARD_MAX_MESSAGE_LENGTH);
-    // [PR-J5 integration, 2026-10-23] review B-5: the worst case with a LONG root name (a renamed overview), for every message the guard words
+    // [PR-J5 integration, 2026-10-26] review B-5: the worst case with a LONG root name (a renamed overview), for every message the guard words
     const longRoot = (state: SchematicState): SchematicState => ({ ...state, sheets: { version: 1, sheets: state.sheets!.sheets.map((sheet) => (sheet.parentId === null ? { ...sheet, name: longName } : sheet)) } });
     const worst = longRoot(many);
     const refusal = multiSheetReplaceRefusal(worst)!;

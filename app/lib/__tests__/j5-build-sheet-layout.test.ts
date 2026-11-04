@@ -124,7 +124,7 @@ describe("[PR-J5] 1. the four-motor drone lays out as System overview + 4 sheets
     // the blocks do not overlap one another
     const blocks = children.map((sheet) => sheet.block!);
     for (const a of blocks) for (const b of blocks) if (a !== b) expect(a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height).toBe(false);
-    // [PR-J5 integration, 2026-10-23] review B-4: one block per child IN PLAN ORDER, left to right from the first cell (was: right to left,
+    // [PR-J5 integration, 2026-10-26] review B-4: one block per child IN PLAN ORDER, left to right from the first cell (was: right to left,
     // the first cell empty - each slot search counted the unplaced siblings' default cells)
     expect(blocks[0]).toMatchObject({ x: 100, y: 100 });
     for (let index = 1; index < blocks.length; index += 1) expect(blocks[index]!.x, children[index]!.name).toBeGreaterThan(blocks[index - 1]!.x);

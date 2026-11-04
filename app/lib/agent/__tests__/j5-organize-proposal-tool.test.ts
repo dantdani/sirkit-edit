@@ -18,7 +18,7 @@
  *     planner's own SHEET_MOVE_NOT_EQUIVALENT sentence naming the offending label; nothing is sealed and the schematic is unchanged;
  *  6. a schematic-only run (no PCB editor published a board, so the board-backed whole-project read is withheld) still gets the
  *     organisation: the script proposes directly and the server resolves every member by name.
- *  [PR-J5 integration, 2026-10-23] review J5R-AI-6 (pin moves in 1 and 6, dated below): the script proposes the design's OWN groups
+ *  [PR-J5 integration, 2026-10-26] review J5R-AI-6 (pin moves in 1 and 6, dated below): the script proposes the design's OWN groups
  *  (app/lib/fixture-runtime/sheet-organization-groups.ts) - the drone's plan blocks, no longer J4's default grouping - and
  *  7. the page-laid-out LED dimmer (wire-drawn, the e2e/j5-organize-proposal.spec.ts case 1 design) is answered with ITS three groups,
  *     sealed, with and without the board-backed read; without a read the candidates are proposed in order and only an `unknown-member`
@@ -73,7 +73,7 @@ async function propose(context: AgentRunContext, args: Record<string, unknown>):
   return gateway().invoke({ runId: "run-j5-organize", provider: "anthropic", callId: "c-1", toolId: SHEET_ORGANIZATION_TOOL_ID, version: "1.0.0", args, context, timeoutMs: 10_000 });
 }
 
-/** [PR-J5 integration, 2026-10-23] review J5R-AI-6: the LED dimmer as the page lays it out (offerBuildResult's autoLayoutBuildValidated over
+/** [PR-J5 integration, 2026-10-26] review J5R-AI-6: the LED dimmer as the page lays it out (offerBuildResult's autoLayoutBuildValidated over
  *  the fixture provider's submission; the j5-fixture-recipes pageLayout): a flat, wire-drawn page of 14 catalog parts. */
 function dimmerPage(): SchematicState {
   const recipe = selectRecipe("Design a 5 V LED dimmer: a 555 timer PWM with a 10k potentiometer setting the brightness, switching the LED through an N-channel MOSFET.");
@@ -142,7 +142,7 @@ describe("[PR-J5] the organise proposal tool", { timeout: 60_000 }, () => {
     expect(verifySealedSheetOrganizationProposalIntegrity(JSON.parse(JSON.stringify(proposal)))).toEqual({ ok: true });
     expect(verifySealedSheetOrganizationProposal(proposal, { currentSchematicDigest: digestBefore, now: Date.now(), expectedScope: { ...SCOPE, headMark: editor.headMark()! } })).toEqual({ ok: true });
     expect(verifySealedSheetOrganizationProposal(proposal, { currentSchematicDigest: digestBefore, now: Date.now(), expectedScope: { ...SCOPE, projectId: "proj-other", headMark: editor.headMark()! } })).toMatchObject({ ok: false, code: "foreign-scope" });
-    // [PR-J5 integration, 2026-10-23] pin move (review J5R-AI-6; was: the groups are the J4 planner's default grouping of the flat drone,
+    // [PR-J5 integration, 2026-10-26] pin move (review J5R-AI-6; was: the groups are the J4 planner's default grouping of the flat drone,
     // the adapter's FIXTURE_DRONE_ORGANIZE_GROUPS): the script proposes the design's OWN groups - the drone's plan blocks
     // (sheet-organization-groups.ts DRONE_SHEET_GROUPS); FIXTURE_DRONE_ORGANIZE_GROUPS stays J4's default grouping (the suites' fixture)
     const own = proposeSheetGroups(state, getPart);
@@ -166,7 +166,7 @@ describe("[PR-J5] the organise proposal tool", { timeout: 60_000 }, () => {
     expect(replan.operations).toHaveLength(proposal.operationCount);
     const applied = fromCanonicalSchematic(applySchematicOperationsToCanonical(toCanonicalSchematic(state), replan.operations).schematic);
     expect(schematicStateDigest(applied)).toBe(schematicStateDigest(replan.after));
-    expect(applied.sheets!.sheets.map((sheet) => sheet.name)).toEqual(["Overview", ...DRONE_SHEET_GROUPS.map((group) => group.name)]); // [PR-J5 integration, 2026-10-23] pin move (J5R-AI-6): the plan blocks' sheets
+    expect(applied.sheets!.sheets.map((sheet) => sheet.name)).toEqual(["Overview", ...DRONE_SHEET_GROUPS.map((group) => group.name)]); // [PR-J5 integration, 2026-10-26] pin move (J5R-AI-6): the plan blocks' sheets
   });
 
   it("2. the closed input surface refuses by name and seals nothing", async () => {
@@ -262,7 +262,7 @@ describe("[PR-J5] the organise proposal tool", { timeout: 60_000 }, () => {
       { adapter: new FixtureAgentAdapter("anthropic"), registry, context, system: AGENT_SYSTEM_PROMPT, gateway: gateway(), emit: (event) => events.push(event) },
     );
     expect(result.status).toBe("completed");
-    // [PR-J5 integration, 2026-10-23] pin move (review J5R-AI-6; was: ONE call proposing J4's default grouping): without a read the script
+    // [PR-J5 integration, 2026-10-26] pin move (review J5R-AI-6; was: ONE call proposing J4's default grouping): without a read the script
     // proposes the fixture organisations in order - the dimmer's is refused as naming parts the drone does not hold (RV1, ...), the
     // four-motor drone's plan blocks are sealed
     expect(events.filter((event) => event.type === "tool_started").map((event) => (event as { toolId: string }).toolId)).toEqual([SHEET_ORGANIZATION_TOOL_ID, SHEET_ORGANIZATION_TOOL_ID]);

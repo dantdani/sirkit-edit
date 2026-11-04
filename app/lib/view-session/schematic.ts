@@ -212,7 +212,7 @@ export function schematicCommands(probe: () => SchematicViewProbe): ViewCommandD
         if (!sheets) return unavailable("this editor lists no sheets (a single-sheet project, or the Sheets navigator is not wired to the view bus)");
         const byId = sheets.find((entry) => entry.id === sheet);
         const key = sheet.toUpperCase();
-        const byPath = sheets.filter((entry) => entry.path.trim().length > 0 && entry.path.trim().toUpperCase() === key); const matches = byId ? [byId] : byPath.length === 1 ? byPath : sheets.filter((entry) => entry.name.trim().toUpperCase() === key); // [PR-J5 integration, 2026-10-23] review J5R-AI-4: tiers - the id, then an exact path (paths are unique: sibling names are), then a unique name; a top-level sheet whose name a nested one shares opens by its path
+        const byPath = sheets.filter((entry) => entry.path.trim().length > 0 && entry.path.trim().toUpperCase() === key); const matches = byId ? [byId] : byPath.length === 1 ? byPath : sheets.filter((entry) => entry.name.trim().toUpperCase() === key); // [PR-J5 integration, 2026-10-26] review J5R-AI-4: tiers - the id, then an exact path (paths are unique: sibling names are), then a unique name; a top-level sheet whose name a nested one shares opens by its path
         if (matches.length === 0) return unavailable(`no sheet is named ${sheet}; the sheets are ${sheets.map((entry) => `${entry.name} [${entry.id}]`).join(", ")}`);
         if (matches.length > 1) return unavailable(`${sheet} names ${matches.length} sheets (${matches.map((entry) => `${entry.path || entry.name} [${entry.id}]`).join(", ")}): open one by its id or its path`);
         if (!p.openSheet(matches[0]!.id)) return unavailable(`sheet ${matches[0]!.id} could not be opened`);

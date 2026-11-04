@@ -1,5 +1,5 @@
 /**
- * [PR-J5 integration, 2026-10-23] Review J5R-AI-2 (B16.0.1 §F, runbook J.6.6): the organise proposal's Approve reauthorizes the LIVE
+ * [PR-J5 integration, 2026-10-26] Review J5R-AI-2 (B16.0.1 §F, runbook J.6.6): the organise proposal's Approve reauthorizes the LIVE
  * project membership against the proposal's sealed authorization binding before anything is applied - the same family-neutral
  * boundary every other human-approved sealed-proposal apply uses (tier-1 through approved-agent-mutations.ts, B14 and PR-M through
  * their approval controllers): `createMembershipReauthorizer` (the ONE narrow same-origin endpoint, read-only, no authority sent) and

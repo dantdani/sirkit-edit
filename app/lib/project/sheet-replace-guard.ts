@@ -17,7 +17,7 @@
  * on a multi-sheet base: `multiSheetReplaceAdvisory(base)` is the activity step it shows instead (what the result will replace; that a
  * one-page result is refused at review). The refusal stays for a FLAT result at the offer and the apply, and its tail now says what to
  * do (the generation is sheet-aware: ask for the design as subsystem blocks, or start a new project).
- * [PR-J5 integration, 2026-10-23] review B-2: the THEORY composer still refuses at its start, before its provider-bound request
+ * [PR-J5 integration, 2026-10-26] review B-2: the THEORY composer still refuses at its start, before its provider-bound request
  * (`multiSheetReplaceRefusal(base, "theory")`: no request, no spend) - a Theory result is always one page, so OD-257 item 3 holds there.
  *
  * The message names the sheet count and the sheet names (bounded, so a project with many or long names still reads in one toast) and
@@ -33,10 +33,10 @@ export const SHEET_REPLACE_GUARD_MAX_NAME_LENGTH = 16;
 /** The upper bound of a message, whatever the sheet count and names (a page toast; a test proves it for 512 long-named sheets). */
 export const SHEET_REPLACE_GUARD_MAX_MESSAGE_LENGTH = 240;
 /** [PR-J5, 2026-10-23] pin move: was "Sheet-aware generation is not available yet. Nothing was changed." - it is available now (OD-259).
- *  [PR-J5 integration, 2026-10-23] review B-5 pin move: was "Ask for the design as subsystem blocks, or start a new project. Nothing was
+ *  [PR-J5 integration, 2026-10-26] review B-5 pin move: was "Ask for the design as subsystem blocks, or start a new project. Nothing was
  *  changed." (84 characters: the 512-sheet worst case reached 246, over the bound); now 69, the worst case 231. */
 export const SHEET_REPLACE_GUARD_TAIL = "Ask for subsystem blocks or start a new project. Nothing was changed." as const;
-/** [PR-J5 integration, 2026-10-23] review B-2: the Theory composer's tail - a Theory result is always one page (OD-257 item 3 is kept for
+/** [PR-J5 integration, 2026-10-26] review B-2: the Theory composer's tail - a Theory result is always one page (OD-257 item 3 is kept for
  *  Theory; OD-259 item 2 revises the Build composer only), so the refusal says what does work. The worst case is 238 characters. */
 export const SHEET_REPLACE_GUARD_THEORY_TAIL = "Theory mode draws one page; use Build or a new project. Nothing was changed." as const;
 
@@ -64,7 +64,7 @@ export function multiSheetReplaceRefusal(base: SheetsOf, composer: "default" | "
   const sheets = base.sheets?.sheets ?? [];
   if (base.sheets === undefined || sheets.length === 0) return null;
   const count = sheets.length;
-  return `This project has ${count} schematic sheet${count === 1 ? "" : "s"} (${sheetNamesForMessage(base)}). A flat AI result would replace them. ${composer === "theory" ? SHEET_REPLACE_GUARD_THEORY_TAIL : SHEET_REPLACE_GUARD_TAIL}`; // [PR-J5 integration, 2026-10-23] review B-2: + the Theory composer's tail
+  return `This project has ${count} schematic sheet${count === 1 ? "" : "s"} (${sheetNamesForMessage(base)}). A flat AI result would replace them. ${composer === "theory" ? SHEET_REPLACE_GUARD_THEORY_TAIL : SHEET_REPLACE_GUARD_TAIL}`; // [PR-J5 integration, 2026-10-26] review B-2: + the Theory composer's tail
 }
 
 /**
@@ -80,7 +80,7 @@ export function flatReplacementRefusal(base: SheetsOf, incoming: SheetsOf): stri
 /**
  * [PR-J5, 2026-10-23] OD-259 item 2: the Build composer's ADVISORY on a multi-sheet base (it no longer refuses there): what a generated
  * multi-sheet design replaces, and that a one-page design is refused at review. Null for a single-sheet base. Bounded like the refusal
- * ([PR-J5 integration, 2026-10-23] review B-5 pin move: was "...: a generated multi-sheet design replaces all of them after your review
+ * ([PR-J5 integration, 2026-10-26] review B-5 pin move: was "...: a generated multi-sheet design replaces all of them after your review
  * (one undoable step); a one-page design is refused at review." - 255 characters at worst; now 233).
  */
 export function multiSheetReplaceAdvisory(base: SheetsOf): string | null {
@@ -91,7 +91,7 @@ export function multiSheetReplaceAdvisory(base: SheetsOf): string | null {
 }
 
 /** [PR-J5, 2026-10-23] The flat-result refusal with WHY the result stayed one page (the derivation's "Kept on one page" findings), bounded.
- *  [PR-J5 integration, 2026-10-23] review B-5: bounded in LENGTH too (it capped the count of findings only - two long findings made an
+ *  [PR-J5 integration, 2026-10-26] review B-5: bounded in LENGTH too (it capped the count of findings only - two long findings made an
  *  889-character banner): the "Why it is one page" tail is cut with "…" so the whole message stays within
  *  SHEET_REPLACE_GUARD_MAX_MESSAGE_LENGTH; the refusal itself is never cut (it ends "Nothing was changed."). */
 export function flatReplacementRefusalWithFindings(refusal: string, findings: readonly string[]): string {

@@ -26,7 +26,7 @@
  *    schematic.move-to-sheet transaction (one undo step); the whole batch is applied once more with the executor's own code and its
  *    result must equal the chain's, and the final partition digest must equal the original's. Any refused step refuses the WHOLE plan
  *    with that step's message and nothing is changed (J.3 item 4: an ambiguous or non-equivalent split never changes the design).
- *    [PR-J5 integration, 2026-10-23] review J5R-AI-1: a group takes its parts' whole WIRE CHAINS (a page-drawn route of several
+ *    [PR-J5 integration, 2026-10-26] review J5R-AI-1: a group takes its parts' whole WIRE CHAINS (a page-drawn route of several
  *    segments; a route that also reaches a part outside the group stays and ends at the new port's sheet pin), and a step that would
  *    leave a wire end in the air or a wire island on any sheet is refused ORGANIZE_DRAWING_DEGRADED - the partition proof cannot see it.
  *
@@ -39,12 +39,12 @@ import { applySchematicOperationsToCanonical } from "@/app/lib/engineering/opera
 import { fromCanonicalSchematic, schematicStateDigest, toCanonicalSchematic } from "@/app/lib/engineering/schematic-model";
 import { engineeringDigest } from "@/app/lib/engineering/stable";
 import type { EngineeringOperation } from "@/app/lib/engineering/types";
-import { kicadPinWorldPos, pinWorldPos, pointKey } from "@/app/lib/geometry"; // [PR-J5 integration, 2026-10-23] review J5R-AI-1: the wire chains and the drawing check
+import { kicadPinWorldPos, pinWorldPos, pointKey } from "@/app/lib/geometry"; // [PR-J5 integration, 2026-10-26] review J5R-AI-1: the wire chains and the drawing check
 import type { KicadPin } from "@/app/lib/kicad/types";
 import { compareCodePoints } from "@/app/lib/stable-compare";
 import { PIN_NAMES, ROOT_SHEET_ID, normalizeComponentRole, type KicadComponentInstance, type Point, type SchematicState } from "@/lib/schematic-types";
 import { resolveProjectConnectivity, type ConnectivityDiagnostic, type PartPinsLookup, type ProjectNet } from "./project-connectivity";
-import { freeBlockSlot, type PartPinsSource } from "./sheet-lens"; // [PR-J5 integration, 2026-10-23] - attachedSelection: the organise planner follows wire chains (groupEntities)
+import { freeBlockSlot, type PartPinsSource } from "./sheet-lens"; // [PR-J5 integration, 2026-10-26] - attachedSelection: the organise planner follows wire chains (groupEntities)
 import { PORT_NAME_PATTERN, planMoveToSheet, type MoveCrossing, type MoveEntityRef, type MoveRefusalCode } from "./sheet-operations"; // [PR-J5, 2026-10-23] + PORT_NAME_PATTERN (interfaceNames)
 import { assertWholeProject, sheetOf, sheetsOf } from "./sheets";
 
@@ -71,7 +71,7 @@ export interface OrganizeGroupInput {
 /** A grouping hint: a named block of reference designators (the generation plan's blocks). Hints break ties only. */
 export interface OrganizeHint { name: string; refs: readonly string[] }
 
-export type OrganizeRefusalCode = "ORGANIZE_CONNECTIVITY_INVALID" | "ORGANIZE_NOTHING_TO_SPLIT" | "ORGANIZE_GROUPS_INVALID" | "ORGANIZE_NOT_EQUIVALENT" | "ORGANIZE_REFUSED" | "ORGANIZE_DRAWING_DEGRADED" | MoveRefusalCode; // [PR-J5 integration, 2026-10-23] + ORGANIZE_DRAWING_DEGRADED (review J5R-AI-1)
+export type OrganizeRefusalCode = "ORGANIZE_CONNECTIVITY_INVALID" | "ORGANIZE_NOTHING_TO_SPLIT" | "ORGANIZE_GROUPS_INVALID" | "ORGANIZE_NOT_EQUIVALENT" | "ORGANIZE_REFUSED" | "ORGANIZE_DRAWING_DEGRADED" | MoveRefusalCode; // [PR-J5 integration, 2026-10-26] + ORGANIZE_DRAWING_DEGRADED (review J5R-AI-1)
 
 export interface OrganizeProposalGroup extends OrganizeGroupInput {
   /** The hubs the group formed around (reference designators, natural order). */
@@ -355,7 +355,7 @@ export function validateOrganizeGroups(state: SchematicState, groups: readonly O
 const isPortAnchor = (label: { scope?: string }): boolean => label.scope === "hierarchical" || label.scope === "sheet-pin";
 
 /**
- * [PR-J5 integration, 2026-10-23] review J5R-AI-1 (OPEN ISSUE J5-C-1): the entities a group takes along, following WIRE CHAINS (it took
+ * [PR-J5 integration, 2026-10-26] review J5R-AI-1 (OPEN ISSUE J5-C-1): the entities a group takes along, following WIRE CHAINS (it took
  * one hop of wire per pin, so a route the page drew as several segments left its inner segments behind - refused as ambiguous, or, for
  * a cut route, sealed with wire ends in the air). A chain is the wires of the source sheet joined vertex to vertex anywhere but at a pin
  * (the route's segments and junctions); it stops at every pin. A chain whose pins all belong to the group's parts, and which touches no
@@ -420,10 +420,12 @@ function groupEntities(state: SchematicState, refs: readonly string[], getPart: 
 }
 
 /**
- * [PR-J5 integration, 2026-10-23] review J5R-AI-1: the DRAWING defects of every sheet - wire ends at no pin, no label (of any scope) and
+ * [PR-J5 integration, 2026-10-26] review J5R-AI-1: the DRAWING defects of every sheet - wire ends at no pin, no label (of any scope) and
  * no other wire's vertex (dangling), and wire islands (wires joined vertex to vertex) that touch no pin and no label - by sheet id, each
- * as `wireId@x,y` / the island's first wire id. The pin-to-net partition cannot see them (a dangling end joins nothing), so the organise
- * planner refuses a step that grows either count on any sheet: an electrically equivalent but broken drawing is never sealed.
+ * as `wireId@x,y` / the island's wire ids (sorted, `+`-joined). The pin-to-net partition cannot see them (a dangling end joins nothing),
+ * so the organise planner refuses a step that leaves a NEW one on any sheet: an electrically equivalent but broken drawing is never
+ * sealed. [PR-J5 integration, 2026-10-26] a defect the drawing already had (the same wire end, the same island) is not new when the
+ * move carries it to another sheet - the move keeps wire ids and points - so it never masks the re-plan's own refusal (j4-organize-dialog 2).
  */
 export function sheetDrawingDefects(state: SchematicState, getPart: PartPinsSource): Map<string, { danglingEnds: string[]; islands: string[] }> {
   const sites = new Set<string>();
@@ -450,15 +452,21 @@ export function sheetDrawingDefects(state: SchematicState, getPart: PartPinsSour
     const chain = find(index);
     touches.set(chain, (touches.get(chain) ?? false) || wire.vertices.some((vertex) => sites.has(at(sheetId, vertex))));
   });
-  wires.forEach((wire, index) => { if (find(index) === index && !touches.get(index)) entry(sheetOf(wire)).islands.push(wire.id); });
+  const islandWires = new Map<number, string[]>();
+  wires.forEach((wire, index) => { const chain = find(index); if (!touches.get(chain)) islandWires.set(chain, [...(islandWires.get(chain) ?? []), wire.id]); });
+  for (const [chain, ids] of islandWires) entry(sheetOf(wires[chain]!)).islands.push([...ids].sort(compareCodePoints).join("+"));
   return out;
 }
 
-/** The first sheet whose drawing `after` degrades against `before` (more dangling wire ends or more wire islands), or null. */
+/** The first sheet of `after` holding a drawing defect `before` did not have anywhere (a dangling wire end or a wire island, by key), with
+ *  the new ones, or null. [PR-J5 integration, 2026-10-26] by key across the whole document (was: a per-sheet count, so a defect the base
+ *  already had, carried to the new sheet by the move, refused a sound organisation). */
 function degradedSheet(before: ReturnType<typeof sheetDrawingDefects>, after: ReturnType<typeof sheetDrawingDefects>): { sheetId: string; danglingEnds: string[]; islands: string[] } | null {
+  const had = new Set([...before.values()].flatMap((entry) => [...entry.danglingEnds.map((key) => `end:${key}`), ...entry.islands.map((key) => `island:${key}`)]));
   for (const [sheetId, now] of after) {
-    const was = before.get(sheetId) ?? { danglingEnds: [], islands: [] };
-    if (now.danglingEnds.length > was.danglingEnds.length || now.islands.length > was.islands.length) return { sheetId, danglingEnds: now.danglingEnds.filter((item) => !was.danglingEnds.includes(item)), islands: now.islands.filter((item) => !was.islands.includes(item)) };
+    const danglingEnds = now.danglingEnds.filter((key) => !had.has(`end:${key}`));
+    const islands = now.islands.filter((key) => !had.has(`island:${key}`));
+    if (danglingEnds.length > 0 || islands.length > 0) return { sheetId, danglingEnds, islands };
   }
   return null;
 }
@@ -493,12 +501,12 @@ export function planOrganizeIntoSheets(state: SchematicState, groups: readonly O
   for (const [index, group] of groups.entries()) {
     const attachment = groupEntities(current, group.refs, pinsSource);
     if (typeof attachment === "string") return refuse("ORGANIZE_GROUPS_INVALID", `${attachment} Nothing was changed.`, { name: group.name, refs: [...group.refs] });
-    const { entities, parentAnchorPoints } = attachment; // [PR-J5 integration, 2026-10-23] review J5R-AI-1: whole wire chains, and the anchor points of the cut ones
+    const { entities, parentAnchorPoints } = attachment; // [PR-J5 integration, 2026-10-26] review J5R-AI-1: whole wire chains, and the anchor points of the cut ones
     const sheetId = organizeSheetId(group.refs);
     const renamedDefaults = steps.flatMap((step) => step.crossings.flatMap((crossing) => (crossing.renamedFrom !== undefined ? [crossing.renamedFrom] : []))); const plan = planMoveToSheet(current, { entities, target: { newSheet: { id: sheetId, name: group.name.trim(), block: freeBlockSlot(current, sourceSheetId) } }, rootName: options.rootName ?? "Overview", operationIdPrefix: `${prefix}:${index}`, ...(options.portNames ? { portNames: options.portNames } : {}), ...(renamedDefaults.length > 0 ? { reservedPortNames: renamedDefaults } : {}), ...(parentAnchorPoints.length > 0 ? { parentAnchorPoints } : {}) }, lookup); // [PR-J5, 2026-10-23] + portNames, reservedPortNames (+ reservedPortNames: an earlier step's renamed SIG<n> stays taken, so the reported keys keep their numbers; in place)
     // any refused step refuses the whole plan: an ambiguous or non-equivalent split never changes the design (J.3 item 4)
     if (!plan.ok) return refuse(plan.code, `Group "${group.name}" (${group.refs.join(", ")}): ${plan.message}`, { name: group.name, refs: [...group.refs] }, plan.diagnostics);
-    // [PR-J5 integration, 2026-10-23] review J5R-AI-1: the partition proof cannot see a broken DRAWING (a wire end in the air joins nothing), so
+    // [PR-J5 integration, 2026-10-26] review J5R-AI-1: the partition proof cannot see a broken DRAWING (a wire end in the air joins nothing), so
     // a step that leaves more dangling wire ends or wire islands on any sheet is refused: an equivalent but degraded drawing is never sealed
     const degraded = degradedSheet(sheetDrawingDefects(current, pinsSource), sheetDrawingDefects(plan.after, pinsSource));
     if (degraded !== null) {

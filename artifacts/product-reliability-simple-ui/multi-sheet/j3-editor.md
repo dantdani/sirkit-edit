@@ -13,7 +13,7 @@ awaits another builder's increment. Nothing below is claimed beyond its label.
 
 | piece | files | state |
 |---|---|---|
-| Pure AI replace-result guard (OD-255 item 6, OD-257 item 3) | `app/lib/project/sheet-replace-guard.ts`; `app/lib/project/__tests__/j3-sheet-replace-guard.test.ts` | unit: DONE (C). Page call sites (Build start, offer, edit, Tidy, final apply): DONE (A, in place; `j3-page-carriage` case 4 pins the five sites and their order) |
+| Pure AI replace-result guard (OD-255 item 6, OD-257 item 3) | `app/lib/project/sheet-replace-guard.ts`; `app/lib/project/__tests__/j3-sheet-replace-guard.test.ts` | unit: DONE (C). Page call sites (Build start, offer, edit, Tidy, final apply): DONE (A, in place; `j3-page-carriage` case 4 pins the five sites and their order). [PR-J5 integration, 2026-10-26] since J5 (OD-259 item 2) the Build start ADVISES instead (`multiSheetReplaceAdvisory`); the THEORY start still refuses (review B-2: a Theory result is always one page; `multiSheetReplaceRefusal(base, "theory")`), so `j3-page-carriage` case 4 counts two result-less refusals (Theory start, edit) |
 | Multi-sheet fixture: the four-motor drone organised into Power / Motor drivers / IMU (three planner moves, deterministic ids) | `app/lib/schematic/__tests__/_j3-fixtures.ts`; `fixtures/j3-drone-sheets-state.json`; `fixtures/j3-drone-sheets-project.sirkit.json`; `app/lib/schematic/__tests__/j3-fixture-readability.test.ts` | unit: DONE (C) |
 | Browser spec (J.9 fresh-browser item) | `e2e/j3-multi-sheet.spec.ts` | GREEN against A + B (section 3: every case passed under the fixture runtime; three spec steps re-pointed by A, each noted in the spec) |
 | Sheets navigator, lens hook, blocks layer, scoped glyphs, control rules, registry flip, regenerated inventories | `app/components/schematic/**`, `app/lib/schematic/sheet-lens.ts`, `app/lib/engineering/{control,action}-registry.ts`, `artifacts/ai-control-plane-*` | DONE (B; two layout fixes by A: the navigator's column takes no pointer events, every dialog scrolls inside 90vh - `j3-sheet-navigator-layout`; one StrictMode fix by A: the controller is revived on remount - `j3-sheet-lens-strict-mode`) |
@@ -50,8 +50,15 @@ Screenshots (1366 x 768 unless named otherwise) in `screenshots/`, written by th
 | `j3-overview-four-blocks-1366x768.png` | the overview after the move (four blocks) | fixture (run 4) |
 | `j3-follow-signal-imu-1366x768.png` | Follow I2C_SCL landing on IMU with the highlight | fixture (run 4) |
 | `j3-pcb-awaiting-qualification-1366x768.png` | the complete PCB sync applied with IMU active (41 footprints) | fixture (run 5) |
-| `j3-ai-refusal-1366x768.png` | the Build sentence refused with the guard's message | fixture (run 5) |
+| `j3-ai-refusal-1366x768.png` | the Build sentence refused with the guard's message | fixture (run 5); [PR-J5 integration, 2026-10-26] SUPERSEDED - no spec writes it any more (case 4 now proves the J5 advisory and the sheeted review: `j5-multisheet-build-review-1366x768.png`, J5 evidence); the committed PNG is the J3 record |
 | `j3-chip-layout-1280x720.png` | the chip clear of Go to, the status bar and the workspace tabs at 1280 x 720 | fixture (run 6) |
+
+[PR-J5 integration, 2026-10-26] case 4 re-pointed (review B-1; OD-259 item 2 revises OD-257 item 3): the Build sentence on this
+multi-sheet project now shows the guard's ADVISORY step, starts ONE durable task, and offers the planned drone laid out as sheets in
+the ONE review dialog, whose summary names every replaced sheet once ("Every existing sheet (Overview, Power, Motor drivers, IMU) is
+replaced by the apply") and never "on this sheet" (review B-3); Cancel records the discard and changes nothing; the J4 Tidy steps
+follow unchanged; then the THEORY composer is refused at its start with no POST /api/schematic (review B-2). Its screenshot is
+`j5-multisheet-build-review-1366x768.png` (J5 evidence, written by this spec); the browser result is recorded in `j5-generation.md`.
 
 Which spec assertions awaited which increment (recorded by C before A and B landed; all now hold):
 
@@ -72,7 +79,8 @@ Which spec assertions awaited which increment (recorded by C before A and B land
   OD-255 item 8).
 - Deleting a populated sheet is two previewed transactions (move its contents to the parent, then delete; OD-257 item 2).
 - A port created for an unnamed crossing net is named `SIG<n>`; it is renamed afterwards through the port's Rename action.
-- The AI replace-result refusal is a refusal, not sheet-aware generation (J5-2): a generated, edited or tidied result over a
+- [PR-J5 integration, 2026-10-26] superseded for Build by J5 (OD-259 item 2: a planned result replaces every sheet as one undoable
+  transaction after review; a FLAT result is still refused at the offer and the apply; Theory still refuses at its start). As written for J3: the AI replace-result refusal is a refusal, not sheet-aware generation (J5-2): a generated, edited or tidied result over a
   multi-sheet project is never applied and never silently flattened.
 - Fixture proof only: no live-model proof is produced or claimed for J3 (OD-257 item 9; US$0 spent).
 

@@ -4,6 +4,8 @@
  * two fixture designs a flat page may hold: the 555 PWM LED dimmer (14 parts) and the drone with one to four motors (the final reference
  * designators of the merged planned result; 41 parts for four motors). Pure data and two pure readers. This module imports NOTHING, so
  * the chat closure that carries the scripted agent gains no module when the adapter imports it (the b19-d / b24-c1 closure pins).
+ * [PR-J5 integration, 2026-10-26] the adapter imports it now (review J5R-AI-6): the chat closure gains exactly this one module and
+ * nothing behind it; no closure pin enumerates the adapter's closure, and b24-c1 / b19-d stay green unmoved.
  *
  * The shape is the organise planner's closed input (`OrganizeGroupInput { name, refs }`, app/lib/schematic/sheet-organization.ts), spelt
  * structurally here so that module is not imported. The drone's groups are the generation plan's own blocks: one sheet per block, named

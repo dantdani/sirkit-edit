@@ -11,7 +11,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { ACCEPTED_LIVE_ROLES_FOR_REQUIRED_APPLY_ROLE, acceptedLiveRolesFor, evaluateMembershipReauthorization, type MembershipReauthorization } from "../membership-reauthorization";
 import { evaluatePcbApplyReauthorization } from "../pcb-apply-reauthorization";
-import { reauthorizeSheetOrganizationApply } from "../sheet-organization-reauthorization"; // [PR-J5 integration, 2026-10-23] review J5R-AI-2
+import { reauthorizeSheetOrganizationApply } from "../sheet-organization-reauthorization"; // [PR-J5 integration, 2026-10-26] review J5R-AI-2
 import { buildAuthorizationBinding, isWellFormedAuthorizationBinding, SCHEMATIC_APPLY_ROLES } from "@/app/lib/engineering/proposal-authorization";
 import { PCB_APPLY_ROLES, type SealedPcbEditProposal } from "@/app/lib/pcb/proposal/sealed-pcb-edit-proposal";
 import type { ProjectRole } from "@/app/lib/engineering/types";
@@ -162,7 +162,7 @@ describe("B16.0.2 §F — all three proposal families", () => {
     expect(admin.value).toBe("4k7");
   });
 
-  // [PR-J5 integration, 2026-10-23] review J5R-AI-2: the J5 organise proposal family (sirkit.schematic.propose-sheet-organization) is a
+  // [PR-J5 integration, 2026-10-26] review J5R-AI-2: the J5 organise proposal family (sirkit.schematic.propose-sheet-organization) is a
   // human-approved sealed-proposal apply flow too - its Approve (app/page.tsx applyOrganizationProposal) reauthorizes through the SAME
   // family-neutral evaluator with the schematic apply roles (app/lib/project/sheet-organization-reauthorization.ts; the page wiring is
   // pinned by app/lib/project/__tests__/j5-sheet-organization-events.test.ts section 6)

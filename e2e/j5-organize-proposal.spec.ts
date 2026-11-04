@@ -25,6 +25,8 @@ import { actAs, expectHydrated, installDeterministicBrowser, reloadAs } from "./
 test.describe.configure({ mode: "default" });
 test.setTimeout(600_000);
 
+/** [PR-J5 integration, 2026-10-26] the requests the dimmer's Build approval itself sends (the automatic Tidy, then Review). */
+const BUILD_POST_APPLY = ["/api/schematic/layout-critic", "/api/schematic/review"];
 const DIMMER_REQUEST = "Design a 5 V LED dimmer: a 555 timer PWM with a 10k potentiometer setting the brightness, switching the LED through an N-channel MOSFET.";
 const SCREENSHOTS = "artifacts/product-reliability-simple-ui/multi-sheet/screenshots";
 /** This spec's own hex uuid namespace (the deterministic browser; no other spec shares it). */
@@ -35,16 +37,20 @@ const T = {
   card: "sheet-organization-review", approve: "sheet-organization-approve", discard: "sheet-organization-discard",
 } as const;
 
-interface Traffic { starts: Array<{ projectId: string }>; chats: string[]; edits: number; buildMulti: number; qualify: number; leftOrigin: string[] }
+/** [PR-J5 integration, 2026-10-26] `postApply` (new): the automatic Tidy and Review the page runs after an APPROVED AI generation (page.tsx
+ *  onAdopted -> the auto pipeline; the fixture provider answers 503) - counted apart from `edits`, which was: edit + edit-build + layout-critic,
+ *  so the dimmer's own Build approval read as an "edit" of the organisation; the organise flow must add to neither. */
+interface Traffic { starts: Array<{ projectId: string }>; chats: string[]; edits: number; postApply: string[]; buildMulti: number; qualify: number; leftOrigin: string[] }
 function watch(page: Page, origin: string): Traffic {
-  const traffic: Traffic = { starts: [], chats: [], edits: 0, buildMulti: 0, qualify: 0, leftOrigin: [] };
+  const traffic: Traffic = { starts: [], chats: [], edits: 0, postApply: [], buildMulti: 0, qualify: 0, leftOrigin: [] };
   const host = new URL(origin).hostname;
   page.on("request", (request: Request) => {
     const url = new URL(request.url());
     if (url.hostname !== host && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") traffic.leftOrigin.push(request.url());
     if (request.method() !== "POST") return;
     if (url.pathname === "/api/schematic/build-multi") traffic.buildMulti += 1;
-    if (url.pathname === "/api/schematic/edit" || url.pathname === "/api/schematic/edit-build" || url.pathname === "/api/schematic/layout-critic") traffic.edits += 1;
+    if (url.pathname === "/api/schematic/edit" || url.pathname === "/api/schematic/edit-build") traffic.edits += 1;
+    if (url.pathname === "/api/schematic/layout-critic" || url.pathname === "/api/schematic/review") traffic.postApply.push(url.pathname);
     if (url.pathname === "/api/pcb/qualify") traffic.qualify += 1;
     if (url.pathname === "/api/chat") { try { traffic.chats.push(String((request.postDataJSON() as { messages?: Array<{ content?: string }> }).messages?.at(-1)?.content ?? "")); } catch { /* not JSON */ } }
     if (url.pathname === "/api/generation-tasks") traffic.starts.push({ projectId: request.headers()["x-sirkit-project-id"] ?? "" });
@@ -107,6 +113,10 @@ async function buildFlatDimmer(page: Page, context: BrowserContext, origin: stri
   await expect(page.getByTestId("schematic-proposal-review")).toBeHidden();
   await expect(page.getByTestId("journey-stage-schematic_applied")).toHaveAttribute("data-status", "succeeded", { timeout: 60_000 });
   await expect.poll(async () => (await savedState(page, projectId))?.kicadComponents?.length ?? 0, { timeout: 30_000 }).toBe(14);
+  // [PR-J5 integration, 2026-10-26] the approved generation's automatic Tidy, then Review (refused 503 by the fixture provider: nothing changes)
+  // run 1.2 s after the adoption; the flat state is read once they are done
+  await expect.poll(() => traffic.postApply.length, { timeout: 30_000 }).toBe(2);
+  expect(traffic.postApply).toEqual(BUILD_POST_APPLY);
   const flat = await settledState(page, projectId);
   expect(flat.sheets).toBeUndefined();
   expect(flat.kicadComponents).toHaveLength(14);
@@ -132,7 +142,7 @@ test("the LED dimmer flat; 'Organize this schematic into subsystem sheets' yield
   //    lists the groups, their members and the crossing; NOTHING is applied before Approve (J.6.6, J.9 :383)
   await askAssistant(page, ORGANIZE_SHEETS_SENTENCE);
   const card = page.getByTestId(T.card);
-  await expect(card).toBeVisible({ timeout: 90_000 }); // [awaits J5-A: the adapter's organise turn answering the DIMMER from sheet-organization-groups.ts fixtureSheetOrganizationFor, and the planner following wire chains (j5-fixture-recipes OPEN ISSUE J5-C-1)]
+  await expect(card).toBeVisible({ timeout: 90_000 }); // [PR-J5 integration, 2026-10-26] (was: awaits J5-A) the adapter's organise turn proposes the DIMMER's own groups (no board yet, so no read: sheet-organization-groups.ts candidates in order, review J5R-AI-6) and the planner follows the page's wire chains (J5-C-1 fixed, review J5R-AI-1)
   const rows = card.getByTestId("sheet-organization-group");
   await expect(rows).toHaveCount(LED_DIMMER_SHEET_GROUPS.length);
   expect(await rows.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-name")))).toEqual(LED_DIMMER_SHEET_GROUPS.map((group) => group.name));
@@ -143,6 +153,7 @@ test("the LED dimmer flat; 'Organize this schematic into subsystem sheets' yield
   expect(traffic.chats).toEqual([ORGANIZE_SHEETS_SENTENCE]);
   expect(await savedState(page, projectId), "the proposal changed nothing").toEqual(flat);
   expect(traffic.edits, "no provider-bound schematic edit").toBe(0);
+  expect(traffic.postApply, "the proposal triggers no automatic Tidy or Review").toEqual(BUILD_POST_APPLY);
   await page.screenshot({ path: `${SCREENSHOTS}/j5-organize-proposal-1366x768.png` });
 
   // 2. Approve: ONE schematic.move-to-sheet transaction - the overview and the three sheets, every instance on its group's sheet with its
@@ -187,6 +198,7 @@ test("the LED dimmer flat; 'Organize this schematic into subsystem sheets' yield
   await page.waitForTimeout(1_000);
   expect(await savedState(page, projectId), "Discard changed nothing").toEqual(flat);
   expect(traffic.edits).toBe(0);
+  expect(traffic.postApply, "neither the organisation's Approve, its Undo nor the Discard runs the automatic Tidy or Review").toEqual(BUILD_POST_APPLY);
   expect(traffic.chats).toEqual([ORGANIZE_SHEETS_SENTENCE, ORGANIZE_SHEETS_SENTENCE]);
 
   // 5. Redo re-organises; a reload keeps the organised project
@@ -228,14 +240,16 @@ test("the LED dimmer flat; 'Organize this schematic into subsystem sheets' yield
 
   // 7. one start, no request-lifetime route, no qualification, nothing left the origin
   expect(traffic.starts).toHaveLength(1);
+  expect(traffic.edits).toBe(0);
+  expect(traffic.postApply).toEqual(BUILD_POST_APPLY);
   expect(traffic.buildMulti).toBe(0);
   expect(traffic.qualify).toBe(0);
   expect(traffic.leftOrigin).toEqual([]);
 });
 
 test("the committed FLAT drone (41 parts, label-joined): the same sentence proposes the generation plan's four blocks as sheets; Approve is ONE transaction (Overview + 4, 41 instances, partition kept); Undo restores the flat page", async ({ page, context, baseURL }) => {
-  // The drone's connections are labels, so this case does not depend on the wire-chain attachment the dimmer needs (OPEN ISSUE J5-C-1,
-  // j5-fixture-recipes): it is the organise proposal tool's path A and B can prove first.
+  // The drone's connections are labels, so this case does not depend on the wire-chain attachment the dimmer needs ([PR-J5 integration,
+  // 2026-10-26] J5-C-1 is fixed - review J5R-AI-1; case 1 proves the wire-drawn page): it is the organise proposal tool's label-joined path.
   const origin = baseURL!;
   const traffic = watch(page, origin);
   await page.setViewportSize({ width: 1366, height: 768 });
@@ -256,9 +270,9 @@ test("the committed FLAT drone (41 parts, label-joined): the same sentence propo
   await askAssistant(page, ORGANIZE_SHEETS_SENTENCE);
   const card = page.getByTestId(T.card);
   await expect(card).toBeVisible({ timeout: 90_000 }); // [awaits J5-A and J5-B]
-  // the groups the fixture model proposes: the generation plan's blocks (sheet-organization-groups.ts DRONE_SHEET_GROUPS) or J4's default
-  // proposal (the adapter's own FIXTURE_DRONE_ORGANIZE_GROUPS) - the lead's choice; either way every row names parts of this drone, the
-  // card lists the seven crossing interfaces, and Approve creates exactly the sheets the card showed
+  // the groups the fixture model proposes: the generation plan's blocks (sheet-organization-groups.ts DRONE_SHEET_GROUPS) - [PR-J5
+  // integration, 2026-10-26] the lead's choice (review J5R-AI-6; was: those or J4's default proposal, FIXTURE_DRONE_ORGANIZE_GROUPS); every
+  // row names parts of this drone, the card lists the seven crossing interfaces, and Approve creates exactly the sheets the card showed
   const rows = card.getByTestId("sheet-organization-group");
   const proposed = (await rows.evaluateAll((nodes) => nodes.map((node) => ({ name: node.getAttribute("data-name") ?? "", refs: (node.getAttribute("data-refs") ?? "").split(" ").filter(Boolean).sort() })))) as Array<{ name: string; refs: string[] }>;
   expect(proposed.length).toBeGreaterThanOrEqual(2);
@@ -266,7 +280,8 @@ test("the committed FLAT drone (41 parts, label-joined): the same sentence propo
   const allRefs = new Set(refsOf(flat));
   const seen = new Set<string>();
   for (const group of proposed) { expect(group.name.length).toBeGreaterThan(0); for (const ref of group.refs) { expect(allRefs.has(ref), `${ref} is a part of the drone`).toBe(true); expect(seen.has(ref), `${ref} is in one group only`).toBe(false); seen.add(ref); } }
-  if (proposed.map((group) => group.name).join("|") === DRONE_SHEET_GROUPS.map((group) => group.name).join("|")) expect(proposed.map((group) => group.refs)).toEqual(DRONE_SHEET_GROUPS.map((group) => [...group.refs].sort()));
+  expect(proposed.map((group) => group.name), "the plan's blocks (J5R-AI-6)").toEqual(DRONE_SHEET_GROUPS.map((group) => group.name)); // [PR-J5 integration, 2026-10-26]
+  expect(proposed.map((group) => group.refs)).toEqual(DRONE_SHEET_GROUPS.map((group) => [...group.refs].sort()));
   for (const net of ["PWM1", "PWM2", "PWM3", "PWM4", "I2C_SDA", "I2C_SCL", "IMU_INT1"]) await expect(card).toContainText(net);
   expect(await savedState(page, J4_FLAT_PROJECT_ID), "the proposal changed nothing").toEqual(flat);
   await page.screenshot({ path: `${SCREENSHOTS}/j5-organize-drone-proposal-1366x768.png` });
@@ -291,6 +306,7 @@ test("the committed FLAT drone (41 parts, label-joined): the same sentence propo
   await expect.poll(async () => (await savedState(page, J4_FLAT_PROJECT_ID)).sheets === undefined, { timeout: 30_000 }).toBe(true);
   expect(await settledState(page, J4_FLAT_PROJECT_ID)).toEqual(flat);
   expect(traffic.edits).toBe(0);
+  expect(traffic.postApply, "no automatic Tidy or Review (no generation was approved)").toEqual([]);
   expect(traffic.starts).toHaveLength(0);
   expect(traffic.buildMulti).toBe(0);
   expect(traffic.leftOrigin).toEqual([]);

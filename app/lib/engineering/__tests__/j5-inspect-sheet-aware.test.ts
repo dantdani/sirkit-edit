@@ -14,6 +14,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { inspectSchematicState, readSchematicInspectOptions } from "../schematic-read";
+import { ACTION_COVERAGE_REGISTRY } from "../action-registry"; // [PR-J5 integration, 2026-10-26] review J5R-AI-5
 import { organizeSheetId, planOrganizeIntoSheets } from "@/app/lib/schematic/sheet-organization";
 import { blinkerFixtureState, droneFixtureState, fixtureParts } from "@/app/lib/schematic/__tests__/_j1-fixtures";
 import { J3_SHEETS, multiSheetDroneFixtureState } from "@/app/lib/schematic/__tests__/_j3-fixtures";
@@ -54,6 +55,15 @@ describe("[PR-J5] 1. byte identity of the whole-project read", () => {
     ]);
     expect(sheets!.tree.find((sheet) => sheet.id === "sheet-motors")!.ports).toEqual(["PWM1", "PWM2", "PWM3", "PWM4"].map((name) => ({ name, direction: "passive", bound: true })));
     expect(sheets!.tree.find((sheet) => sheet.id === "sheet-power")!.ports).toEqual([]);
+  });
+
+  it("[PR-J5 integration, 2026-10-26] review J5R-AI-5: the owning action record states this shipped contract (it described the WIP: a multi-sheet option-free read adding the tree)", () => {
+    const notes = ACTION_COVERAGE_REGISTRY.find((record) => record.id === "schematic.review-advisory")!.notes ?? "";
+    expect(notes).toContain("sirkit.schematic.inspect 1.2.0");
+    expect(notes).toContain("a read without options is byte-identical to 1.1.0 for every document, multi-sheet included");
+    expect(notes).toContain("sheetId answers ONE sheet's parts, labels, ports and child blocks beside the bounded sheet tree");
+    expect(notes).not.toContain("a multi-sheet project's read adds the bounded sheet tree");
+    expect(notes).not.toContain("a single-sheet read without options is byte-identical");
   });
 });
 

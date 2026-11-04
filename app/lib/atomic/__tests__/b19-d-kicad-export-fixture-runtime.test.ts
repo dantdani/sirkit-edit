@@ -6,7 +6,7 @@
  */
 import { afterAll, describe, expect, it, vi } from "vitest";
 
-// [PR-J5 integration, 2026-10-23] the cold import of the export route (and the catalog) moved from the test body to module top level: inside
+// [PR-J5 integration, 2026-10-26] the cold import of the export route (and the catalog) moved from the test body to module top level: inside
 // the body it paid the whole route graph's load against the 5 s default and timed out under load (5.0-5.4 s measured in J5). Collection
 // has no timeout, so the case times only the export itself; the timeout is NOT raised (the repository's cold-import rule). The environment
 // is stubbed BEFORE the import, as the beforeAll did before the body's import.

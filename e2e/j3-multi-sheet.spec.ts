@@ -13,13 +13,15 @@
  *  3. with IMU active: Prepare PCB through the binding review -> sync -> apply -> awaiting qualification with 41 footprints; the design
  *     checks list Sheet connections; [PR-J3 integration, 2026-10-23] J3-PAGE-1: the project file exported AFTER the sync carries the
  *     board checkpoint WITH its sheet tree and re-imports (as a copy) with every checkpoint;
- *  4. [PR-J5 integration, 2026-10-23] pin move (review B-1; OD-259 item 2 revises OD-257 item 3 - was: the Build sentence on the
+ *  4. [PR-J5 integration, 2026-10-26] pin move (review B-1; OD-259 item 2 revises OD-257 item 3 - was: the Build sentence on the
  *     multi-sheet project is refused at the start with the guard's message, no generation task, no provider-bound request): the Build
  *     sentence ADVISES (the guard's advisory step in the activity entry), ONE durable generation task starts, its planned result is laid
  *     out as sheets and offered in the ONE review dialog, which names every sheet it replaces (Overview, Power, Motor drivers, IMU) and
  *     never says "on this sheet"; Cancel discards it and nothing changes; [PR-J4, 2026-10-23] pin move (OD-258 item 5): Tidy on the
  *     overview (child blocks) sends nothing, Tidy on the IMU leaf sheet posts ONE layout-critic request carrying sheetId = sheet-imu (the
- *     fixture runtime's router answers provider_unavailable: nothing leaves the origin, nothing changes);
+ *     fixture runtime's router answers provider_unavailable: nothing leaves the origin, nothing changes); [PR-J5 integration, 2026-10-26]
+ *     review B-2: in THEORY mode the composer still refuses at its start (OD-257 item 3 kept for Theory, whose result is always one
+ *     page) with the guard's Theory wording, and no POST /api/schematic is sent;
  *  5. at 1280 x 720 the chip overlaps neither Go to, the status bar nor the workspace tabs;
  *  6. [PR-J4, 2026-10-23] Organize into sheets (J.3 item 4; OD-258 items 4, 7: the organise proof rides this spec): a fresh browser opens
  *     the FLAT drone (fixtures/j4-drone-flat-project.sirkit.json), the preview lists the deterministic proposal (four groups, their ports,
@@ -32,7 +34,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page, type Request } from "@playwright/test";
-import { multiSheetReplaceAdvisory } from "../app/lib/project/sheet-replace-guard"; // [PR-J5 integration, 2026-10-23] review B-1: case 4 advises (was flatReplacementRefusal)
+import { multiSheetReplaceAdvisory, multiSheetReplaceRefusal } from "../app/lib/project/sheet-replace-guard"; // [PR-J5 integration, 2026-10-26] review B-1: case 4 advises (was flatReplacementRefusal); review B-2: + the Theory start's refusal
 import { replacedSheetsLine } from "../app/lib/workflow/prompt-to-gerber/review-summary";
 import { resolveProjectConnectivity } from "../app/lib/schematic/project-connectivity";
 import { fixturePartLookup } from "../app/lib/schematic/__tests__/_j1-fixtures";
@@ -58,9 +60,9 @@ const T = {
   follow: "sheets-follow", destination: (n: number) => `sheets-follow-destination-${n}`, notice: "sheets-notice",
 } as const;
 
-interface Traffic { generationStarts: number; edits: number; tidies: number; buildMulti: number; leftOrigin: string[] }
+interface Traffic { generationStarts: number; edits: number; tidies: number; buildMulti: number; theory: number; leftOrigin: string[] } // [PR-J5 integration, 2026-10-26] + theory (POST /api/schematic, review B-2)
 function watch(page: Page, origin: string): Traffic {
-  const traffic: Traffic = { generationStarts: 0, edits: 0, tidies: 0, buildMulti: 0, leftOrigin: [] };
+  const traffic: Traffic = { generationStarts: 0, edits: 0, tidies: 0, buildMulti: 0, theory: 0, leftOrigin: [] };
   const host = new URL(origin).hostname;
   page.on("request", (request: Request) => {
     const url = new URL(request.url());
@@ -70,6 +72,7 @@ function watch(page: Page, origin: string): Traffic {
     if (url.pathname === "/api/schematic/edit" || url.pathname === "/api/schematic/edit-build") traffic.edits += 1;
     if (url.pathname === "/api/schematic/layout-critic") traffic.tidies += 1;
     if (url.pathname === "/api/schematic/build-multi") traffic.buildMulti += 1;
+    if (url.pathname === "/api/schematic") traffic.theory += 1;
   });
   return traffic;
 }
@@ -359,8 +362,8 @@ test("3. with the IMU sheet active: Prepare PCB through the binding review, the 
   expect(restoredCheckpoints).toBe(exported.payload.checkpoints.length);
 });
 
-test("4. [PR-J5 integration] the Build sentence on the multi-sheet project advises, starts ONE task and offers the sheeted result in the review dialog naming every replaced sheet; Cancel changes nothing; Tidy refuses the overview and posts once for the IMU sheet", async ({ page, context, baseURL }) => {
-  // [PR-J5 integration, 2026-10-23] pin move (review B-1; OD-259 item 2, revising OD-257 item 3 - was: "the AI refusal: the Build sentence
+test("4. [PR-J5 integration] the Build sentence on the multi-sheet project advises, starts ONE task and offers the sheeted result in the review dialog naming every replaced sheet; Cancel changes nothing; Tidy refuses the overview and posts once for the IMU sheet; the Theory start still refuses", async ({ page, context, baseURL }) => {
+  // [PR-J5 integration, 2026-10-26] pin move (review B-1; OD-259 item 2, revising OD-257 item 3 - was: "the AI refusal: the Build sentence
   // on the multi-sheet project is refused with the guard's message; no generation task is started and nothing provider-bound is sent"):
   // a planned result now lays out as sheets and replaces a multi-sheet project as one undoable transaction (OD-255 item 9), so the Build
   // composer advises instead of refusing; the FLAT-result refusal stays at the offer and the final apply (unit-pinned: j5-page-intake-sheets,
@@ -432,6 +435,25 @@ test("4. [PR-J5 integration] the Build sentence on the multi-sheet project advis
   expect(sent.state.kicadComponents).toHaveLength(41);
   await page.waitForTimeout(1_000);
   expect(traffic.tidies, "the IMU sheet: one request").toBe(1);
+  expect(traffic.leftOrigin).toEqual([]);
+  expect(await savedState(page)).toEqual(fixtureState()); // nothing was changed
+
+  // [PR-J5 integration, 2026-10-26] review B-2: the THEORY composer keeps OD-257 item 3 (OD-259 item 2 revises the Build composer only): a
+  // Theory result is always one page, so its start refuses on the multi-sheet project before the provider-bound request - the guard's
+  // Theory wording, no POST /api/schematic, no task, nothing changed
+  const theoryRefusal = multiSheetReplaceRefusal(saved, "theory")!;
+  expect(theoryRefusal).toContain("Theory mode draws one page");
+  await page.getByRole("button", { name: "Theory", exact: true }).click();
+  const theoryPrompt = page.getByTestId("prompt-input");
+  if ((await theoryPrompt.count()) === 0 || !(await theoryPrompt.isVisible())) await page.getByTestId("activity-ai chat").click();
+  await expect(theoryPrompt).toBeEnabled();
+  await theoryPrompt.fill("Design an RC low-pass filter with a 1 kHz cutoff.");
+  await expect(page.getByTestId("composer-route")).toHaveAttribute("data-route", "generate");
+  await page.getByTestId("composer-submit").click();
+  await expect(page.getByText(theoryRefusal, { exact: true })).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(1_000);
+  expect(traffic.theory, "no provider-bound Theory request").toBe(0);
+  expect(traffic.generationStarts, "no second task").toBe(1);
   expect(traffic.leftOrigin).toEqual([]);
   expect(await savedState(page)).toEqual(fixtureState()); // nothing was changed
 });
