@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest an improvement or a new capability for Sirkit.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Please never paste `.env` contents, API keys, tokens, cookies or passwords here.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What should Sirkit do? Include the area (schematic, PCB, SPICE, BOM, chat, agents, tooling) if you know it.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches or workarounds you have tried.
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, sketches or examples. Only share third-party material you are allowed to share.
+    validations:
+      required: false

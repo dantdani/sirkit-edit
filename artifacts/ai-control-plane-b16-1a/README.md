@@ -1,8 +1,8 @@
 # B16.1A — Private integration and benchmark-CI closure
 
 Stage scope: securely preserve/integrate the completed B01–B16.0 work into the
-private `dantdani/sirkit-edit` repository, remove Shantanu's current access
-without altering his historical authorship, and repair the benchmark-quality
+private `dantdani/sirkit-edit` repository, remove a former collaborator's current access
+without altering their historical authorship, and repair the benchmark-quality
 workflow that failed on every run #1–#24.
 
 Worked ONLY in `C:\Users\robsa\Desktop\sirkit-edit`; the protected original

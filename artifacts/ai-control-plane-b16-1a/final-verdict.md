@@ -4,7 +4,7 @@
 
 | stop condition | status |
 |---|---|
-| repository public with Shantanu expected not to read | NOT triggered — repository is **private** |
+| repository public with the former collaborator expected not to read | NOT triggered — repository is **private** |
 | effective access not verifiably removed | NOT triggered — `permission: "none"`, re-verified before every push |
 | author email not GitHub-verifiable | NOT triggered — `dandidesta82@gmail.com` attributes to `dantdani` via the commits API |
 | protected-branch / owner decisions blocking integration | NOT triggered — no protection rule exists (recorded as an owner recommendation) |
@@ -15,8 +15,8 @@
 
 | condition | status |
 |---|---|
-| historical authorship preserved | **MET** — ShantanuKT's 24 commits untouched, full credit |
-| Shantanu's current access removed and verified | **MET** — `none` via effective-permission API, ×3 checks |
+| historical authorship preserved | **MET** — the former collaborator's 24 commits untouched, full credit |
+| the former collaborator's current access removed and verified | **MET** — `none` via effective-permission API, ×3 checks |
 | truthful commits under the verified identity | **MET** — `Dandi Desta <dandidesta82@gmail.com>`, no AI attribution/trailers |
 | no fabricated dates | **MET** — real timestamps only |
 | benchmark-quality passes locally | **MET** — every workflow command green locally |
