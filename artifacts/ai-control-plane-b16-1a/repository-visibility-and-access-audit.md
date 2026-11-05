@@ -34,5 +34,5 @@ membership, and base-permission vectors do not exist.
 
 - Revocation cannot erase clones or files previously downloaded; copies
   outside GitHub are beyond its control.
-- Historical commits (including ShantanuKT's) remain visible to anyone with
+- Historical commits (including the former collaborator's) remain visible to anyone with
   repository read access, by design.

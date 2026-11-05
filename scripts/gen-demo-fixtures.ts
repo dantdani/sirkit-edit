@@ -25,6 +25,12 @@ function escapeTemplate(source: string): string {
 let out = `// GENERATED — do not edit. Regenerate with: pnpm tsx scripts/gen-demo-fixtures.ts
 // Embedded copies of Stage 1's .kicad_mod test fixtures for the offline demo
 // board (PCB Stage 3). Source of truth: app/lib/pcb/__tests__/fixtures/.
+//
+// Licence: the embedded footprints are official KiCad library data
+// (https://gitlab.com/kicad/libraries), CC-BY-SA-4.0 with the KiCad libraries
+// exception, and are not covered by Sirkit's MIT licence. See
+// LICENSES/CC-BY-SA-4.0.txt, LICENSES/KiCad-Libraries-LICENSE.md and
+// THIRD_PARTY_NOTICES.md.
 
 export interface DemoFixture {
   libName: string;

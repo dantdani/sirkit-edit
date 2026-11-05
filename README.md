@@ -73,18 +73,40 @@ headless CI usage.
 
 ## Getting started
 
-### 1. Prerequisites
-- Node + [pnpm](https://pnpm.io/)
-- A Postgres database with the `pgvector` extension (e.g. Supabase)
-- For one-click PCB autorouting, run `npm run setup:freerouting` once. This
-  installs Sirkit's pinned local engine and private Java runtime; no Freerouting
-  API key is required.
+### Quick start: no keys, no database (fixture runtime)
 
-### 2. Environment
-Create `.env.local`:
+Local development needs no AI, database, Supabase or distributor credentials.
+With Node 24 and [pnpm](https://pnpm.io/) 11.2.2 (the versions CI pins):
 
 ```bash
-# Required
+pnpm install --frozen-lockfile
+pnpm run dev:fixture
+```
+
+Open [http://localhost:3100](http://localhost:3100). `pnpm run dev:fixture`
+(`scripts/dev-fixture.mjs`) starts `next dev` under the env-gated fixture
+runtime: in-memory stores, the committed blinker catalog, a recorded provider
+design, a recorded router replay and the local-development identity, with an
+empty `DATABASE_URL`. It is honoured only in a non-production runtime with
+local-development auth (see `app/lib/fixture-runtime/mode.ts`). The browser
+suites (`pnpm e2e`) run against the same runtime. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the checks to run before a pull request.
+
+The steps below set up the full app with a real database and live AI brains.
+
+### 1. Prerequisites
+- Node 24 + [pnpm](https://pnpm.io/) 11.2.2
+- A Postgres database with the `pgvector` extension (e.g. Supabase)
+- For one-click PCB autorouting, run `pnpm run setup:freerouting` once (a
+  PowerShell script). This installs Sirkit's pinned local engine and private
+  Java runtime; no Freerouting API key is required.
+
+### 2. Environment
+Copy `.env.example` to `.env.local` (gitignored; never commit it) and fill in
+what you use. None of this is needed for the fixture quick start above.
+
+```bash
+# Full app: database and AI brains
 DATABASE_URL=postgres://...            # Postgres + pgvector
 ANTHROPIC_API_KEY=sk-ant-...           # optional Anthropic reasoning brain
 OPENAI_API_KEY=sk-...                  # OpenAI brain + fixed retrieval embeddings
@@ -104,9 +126,14 @@ SCHGEN_ENDPOINT_TOKEN=hf_...
 
 ### 3. Database
 ```bash
-pnpm drizzle-kit push       # sync schema
+pnpm run db:migrate          # apply the SQL migrations in drizzle/ (the only supported path)
+pnpm run db:migrate:status   # report applied / pending / drift, change nothing
 # then ingest the KiCad symbol catalog (see scripts/)
 ```
+Do not use `drizzle-kit push` or `pnpm run db:push` (which refuses on purpose):
+`schema.ts` lacks constraints that exist only in the SQL migrations. Catalog
+ingestion (`pnpm run ingest:kicad`) computes embeddings with the OpenAI API, so
+it needs `OPENAI_API_KEY` and uses API credit.
 
 ### 4. Run
 ```bash
@@ -133,6 +160,9 @@ Deterministic core (netlist validation, extractor, merge, layout guards, footpri
 pnpm test:netlist
 ```
 
+None of the default suites needs a key or a database. The full list of checks
+to run before a pull request is in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ---
 
 ## Project structure
@@ -154,6 +184,25 @@ pnpm test:netlist
 
 ---
 
-## Licensing note
+## Licence
 
-Sirkit uses KiCad symbol/footprint libraries (CC-BY-SA 4.0 **with the library exception**), which exempts generated designs from share-alike — so the schematics you create are yours. Attribution for the bundled library data is the only obligation.
+Sirkit's own code is released under the [MIT License](LICENSE). Some files in
+this repository come from third parties and keep their own licences; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Sirkit uses the KiCad symbol/footprint libraries (CC-BY-SA 4.0 **with the KiCad
+libraries exception**). The exception exempts designs and generated files that
+use library data from share-alike, so the schematics and boards you create are
+yours. It does not cover the library files themselves: the KiCad `.kicad_sym`
+and `.kicad_mod` files committed in this repository (and the footprints
+embedded in `app/lib/pcb/demo/fixtures.ts`) are redistributed library data and
+stay under CC-BY-SA 4.0, with attribution and the licence documents kept
+([`LICENSES/CC-BY-SA-4.0.txt`](LICENSES/CC-BY-SA-4.0.txt),
+[`LICENSES/KiCad-Libraries-LICENSE.md`](LICENSES/KiCad-Libraries-LICENSE.md)).
+They are not covered by the MIT License.
+
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[Code of Conduct](CODE_OF_CONDUCT.md) first. Report security issues privately as
+described in [SECURITY.md](SECURITY.md), never in a public issue.
