@@ -116,4 +116,8 @@ constraints the router path cannot carry (differential coupling, skew, impedance
 - **Permanent-test gaps** listed in `verification-matrix.md`.
 - **Owner-appended runbook sections J and K** (multi-sheet schematics and workload limits; work log, recovery controller, part
   acquisition and real 3D models): [PR-L7, 2026-10-20] still not started; both follow the current assignment. Multi-sheet identity
-  for M.5 item 7 waits on J.
+  for M.5 item 7 waits on J. [PR-J7, 2026-11-05] superseded for J: section J is built, verdict PARTIAL (`multi-sheet/final-verdict.md`,
+  which lists its remaining items once): no live-model multi-sheet run (needs the owner's OpenAI quota and spend approval, OD-259 item
+  7), the sheet-scoped AI edit J5-6, bus ports and split units (refused), the workload items J7-4 … J7-8, the three export refusal codes,
+  the label-tool kind, the planner's sheet-pin placement, the one-request simulation window, and the imported overview's camera found
+  by J7's screenshot review. M.5 item 7 was not re-assessed. Section K: `work-log-and-assets/progress.md`.

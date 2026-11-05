@@ -184,3 +184,12 @@ all 110 of this assignment's suites. The five fixture browser specs pass on this
 Exact next step: admit the 19 CI-orphaned suites through the prompt-to-gerber / agent-boundary mechanism and re-measure the CI-split
 evidence at that tree (OD-30's 40 % line); then H — the PR on codex/astra-foundation
 (never merged by the builder), its CI, `final-verdict.md`; then I.
+
+## [PR-J7, 2026-11-05] Section J — multi-sheet schematics and workload limits (2026-10-22 … 2026-11-05): PARTIAL
+
+J1-J7 landed on `codex/astra-foundation` (`99a68df8` … `22db67c9`; `multi-sheet/changed-files.md`): one sheet document and one project
+connectivity authority; the Sheets navigator, move to sheet, Organize into sheets and the assistant's sealed organise proposal; generated
+results as sheets; ERC, BOM, SPICE, the hierarchical KiCad export and the PCB sync over the whole project; the queue proof for more blocks
+than worker slots; every J suite in CI (OD-261). Verified: every J.9 bullet mapped to its permanent proof (`multi-sheet/validation.md`,
+unit and fixture browser only, no live-model proof, US$0); the five J browser specs 11/11 in one fresh run on 2026-11-05; PR #16's CI
+green at `2b8a4f51`. Verdict, limitations and owner decisions: `multi-sheet/final-verdict.md`; ledger: `multi-sheet/progress.md`.

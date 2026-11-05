@@ -21,6 +21,14 @@ real product outcome, as section I requires. It does not claim the application o
 - **Spend:** known 1.3628 USD of 5.00 (LR-1 0.19, LR-2 0.0028, LR-3 1.17); LR-3's 2.66 USD remainder held for its resume.
 - **New blockers and open items:** `remaining-blockers.md` (the owner's OpenAI quota first).
 
+## [PR-J7, 2026-11-05] Section J, multi-sheet schematics and workload limits: PARTIAL
+
+One project now holds real connected subsystem sheets in one document with one connectivity authority; the user navigates and edits
+them, moves and organises circuitry between them as previewed undoable transactions, and ERC, BOM, SPICE, the hierarchical KiCad export
+and the PCB sync read the whole project whatever sheet is open. Proven by permanent tests and the fixture browser only (US$0); PARTIAL for
+no live-model proof, the deferred sheet-scoped AI edit (J5-6), refused bus ports and split units, and the open workload items J7-4 …
+J7-8 (`multi-sheet/final-verdict.md`, `multi-sheet/validation.md`).
+
 ## The owner's product outcome: PARTIAL
 
 - **What a normal user can do now.** In the real page with the owner's keys: describe a circuit, review the generated proposal (its
@@ -72,6 +80,8 @@ live distributor, live CAD source, publication, quote, order, fabrication or phy
 ~~The concurrent agent's correction must be committed and combined with this branch before merging.~~ [PR-L7, 2026-10-20] superseded:
 integrated in `84a2f72c` (OD-251). The pull request targets `main` from `codex/product-reliability-g`; the lead fast-forwards that head
 to `codex/astra-foundation` after increment 7 and does not merge it. The owner's appended runbook sections J and K have not started.
+[PR-J7, 2026-11-05] superseded for J: section J is built and verified to its PARTIAL verdict (the section above); section K follows in
+`work-log-and-assets/progress.md`.
 
 ## Pull request and CI
 
