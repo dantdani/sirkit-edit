@@ -1,0 +1,232 @@
+{
+  "components": [],
+  "kicadComponents": [
+    {
+      "id": "kc-u1",
+      "partId": "b16-1c-part-ne555d",
+      "x": 400,
+      "y": 300,
+      "rotation": 0,
+      "refDes": "U1",
+      "value": "NE555D",
+      "atomicPartRevisionId": "atomic_7d6e4accfa2d91705e24da2ef5a46724e6ebaf8453aa85fd1415de15ad0e78da",
+      "symbolAssetVersionId": "symbolv_c1e1c29563fc7559ae4d110c40b6de98d80b98e32d499d85c1d7df4804d89b6c",
+      "footprintAssetVersionId": "footprintv_1427431314d9755c85e26cc0a6f5aa86083c9c173d6ff716e00aec2af97c72dc",
+      "mappingCertificateId": "map_4df236ff05c950644e9d261331704a9583101e1f2fb42245f9d0e9a1996bb8e7"
+    },
+    {
+      "id": "kc-r1",
+      "partId": "b16-1c-part-r",
+      "x": 200,
+      "y": 160,
+      "rotation": 0,
+      "refDes": "R1",
+      "value": "10k",
+      "atomicPartRevisionId": "atomic_39f34356ac49aaf5942f05bbb4a2d396dfad878fb33e1d45cb3209efcafc962f",
+      "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
+      "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
+      "mappingCertificateId": "map_59f66086395063c60395ae0a5b69ef8bce8e163b8467fe8455cfd3e96e06b60d"
+    },
+    {
+      "id": "kc-c1",
+      "partId": "b16-1c-part-c",
+      "x": 600,
+      "y": 480,
+      "rotation": 0,
+      "refDes": "C1",
+      "value": "10nF",
+      "atomicPartRevisionId": "atomic_948e666999b221cf30946679cafd526083cdeaa265e75469867c28ae6b17f65d",
+      "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
+      "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
+      "mappingCertificateId": "map_e1d0f88eb70843abb5e25e5530603a2d665098243038ebef89a6d337e90b335c"
+    },
+    {
+      "id": "kc-d1",
+      "partId": "pr-m-part-1n4148",
+      "x": 200,
+      "y": 300,
+      "rotation": 0,
+      "refDes": "D1",
+      "value": "1N4148"
+    },
+    {
+      "id": "kc-d2",
+      "partId": "pr-m-part-1n4148",
+      "x": 200,
+      "y": 420,
+      "rotation": 0,
+      "refDes": "D2",
+      "value": "1N4148"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w-d1k-c1",
+      "vertices": [
+        {
+          "x": 170,
+          "y": 300
+        },
+        {
+          "x": 170,
+          "y": 240
+        },
+        {
+          "x": 700,
+          "y": 240
+        },
+        {
+          "x": 700,
+          "y": 450
+        },
+        {
+          "x": 600,
+          "y": 450
+        }
+      ]
+    }
+  ],
+  "netLabels": [
+    {
+      "id": "nl-1",
+      "position": {
+        "x": 420,
+        "y": 220
+      },
+      "name": "VCC",
+      "kind": "power",
+      "orientation": 0
+    },
+    {
+      "id": "nl-2",
+      "position": {
+        "x": 320,
+        "y": 260
+      },
+      "name": "VCC",
+      "kind": "power",
+      "orientation": 0
+    },
+    {
+      "id": "nl-3",
+      "position": {
+        "x": 400,
+        "y": 380
+      },
+      "name": "GND",
+      "kind": "ground",
+      "orientation": 0
+    },
+    {
+      "id": "nl-4",
+      "position": {
+        "x": 320,
+        "y": 280
+      },
+      "name": "RA",
+      "kind": "label",
+      "orientation": 0
+    },
+    {
+      "id": "nl-5",
+      "position": {
+        "x": 320,
+        "y": 320
+      },
+      "name": "TIMING",
+      "kind": "label",
+      "orientation": 0
+    },
+    {
+      "id": "nl-6",
+      "position": {
+        "x": 320,
+        "y": 340
+      },
+      "name": "TIMING",
+      "kind": "label",
+      "orientation": 0
+    },
+    {
+      "id": "nl-7",
+      "position": {
+        "x": 480,
+        "y": 300
+      },
+      "name": "PWM",
+      "kind": "label",
+      "orientation": 0
+    },
+    {
+      "id": "nl-8",
+      "position": {
+        "x": 200,
+        "y": 130
+      },
+      "name": "VCC",
+      "kind": "power",
+      "orientation": 0
+    },
+    {
+      "id": "nl-9",
+      "position": {
+        "x": 200,
+        "y": 190
+      },
+      "name": "RA",
+      "kind": "label",
+      "orientation": 0
+    },
+    {
+      "id": "nl-10",
+      "position": {
+        "x": 230,
+        "y": 300
+      },
+      "name": "RA",
+      "kind": "label",
+      "orientation": 0
+    },
+    {
+      "id": "nl-11",
+      "position": {
+        "x": 170,
+        "y": 300
+      },
+      "name": "TIMING",
+      "kind": "label",
+      "orientation": 0
+    },
+    {
+      "id": "nl-12",
+      "position": {
+        "x": 230,
+        "y": 420
+      },
+      "name": "TIMING",
+      "kind": "label",
+      "orientation": 0
+    },
+    {
+      "id": "nl-13",
+      "position": {
+        "x": 170,
+        "y": 420
+      },
+      "name": "RB",
+      "kind": "label",
+      "orientation": 0
+    },
+    {
+      "id": "nl-14",
+      "position": {
+        "x": 600,
+        "y": 510
+      },
+      "name": "GND",
+      "kind": "ground",
+      "orientation": 0
+    }
+  ],
+  "pageSize": "A4"
+}

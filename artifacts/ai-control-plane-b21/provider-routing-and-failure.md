@@ -90,11 +90,16 @@ family rule of its provider classifies it. The rules are the SAME objects the pr
 (C12-C16; before E1 they were inline literals in `openai-config.ts`, `openai-provider.ts` and `anthropic-provider.ts` - moved, never
 copied: no literal of a rule is left elsewhere):
 
-- OpenAI: `OPENAI_REASONING_MODEL_FAMILY` = `/^gpt-5\.6(?:-|$)/` (reasoning effort and profiles) and `OPENAI_NO_TEMPERATURE_MODEL_FAMILY`
-  = `/^(?:gpt-5|o\d)/` (temperature never sent).
+- OpenAI: `OPENAI_REASONING_MODEL_FAMILY` = `/^gpt-5\.6(?:-|$)|^gpt-6-astra$/` (reasoning effort and profiles) and `OPENAI_NO_TEMPERATURE_MODEL_FAMILY`
+  = `/^(?:gpt-5|o\d)|^gpt-6-astra$/` (temperature never sent). [PR-F, 2026-10-17] Reviewed pin move: both rules gained the ONE documented GPT-6
+  id, anchored exactly (they were `/^gpt-5\.6(?:-|$)/` and `/^(?:gpt-5|o\d)/`); `gpt-6-astra` carries a profile whose admission is pinned to
+  the server env, so it is qualified for a role only as the configured model or when the role map names it (`serverEnvAdmission`,
+  appended to provider-policy.ts; `app/lib/llm/__tests__/pr-f-astra-profile.test.ts`), never by the rule alone; a sibling id
+  (`gpt-6-luna`) stays outside and is the refused example the suites below now use.
 - Anthropic: `ANTHROPIC_TEMPERATURE_MODEL_FAMILY` = `/^claude-3-|^claude-(?:sonnet|opus)-4-[0-5]/` (temperature sent).
 
-A model outside them - `gpt-6-astra` and `claude-opus-5-5`, the models the dated pages now recommend (§1.2 of the discovery), `gpt-5.2`,
+A model outside them - `gpt-6-astra` ([PR-F, 2026-10-17] since PR-F inside the OpenAI rules under a server-env-admitted profile; the refused
+example of policy case 3, breaker case 6 and the E2 run-events suite is now `gpt-6-luna`) and `claude-opus-5-5`, the models the dated pages now recommend (§1.2 of the discovery), `gpt-5.2`,
 `o3`, `claude-sonnet-5` - is refused `model_unqualified` for the role, visibly ("... refused for <role> until it is qualified live
 (LB-9)"), and its task is escalated with no call; the default `claude-opus-4-7` is outside the Anthropic rule and qualified only as the
 configured model. **CONFIRMED** (policy case 3; breaker case 6 through the scheduler).
@@ -693,14 +698,14 @@ checks it; for every other file the line is as of the base. C61-C72 and the re-a
 | C52 | `app/api/chat/route.ts` | 14 | — | `No silent cross-provider fallback exists;` | the coordinator never switches provider (stands) |
 | C53 | `app/lib/ai-preferences.ts` | 193 | — | `export const PROVIDER_FAILURES_WITHOUT_RETRY = Object.freeze(` | the failures without Retry: the ONE list, beside the owned dispatch |
 | C54 | `app/lib/agent/run-consumer.ts` | 42 | — | `retry: input.startNewRun, ownership: input.ownership, ...(providerRetryOffered(input.reason) ? {} : { retryOffered: false as const })` | the chat settlement: the new-run closure kept, the Retry withheld |
-| C55 | `app/page.tsx` | 6859 | — | `disabled={!lastAiRetryRef.current || !aiProviderFailure.retryOffered}` | the card's existing Retry reads the withheld flag |
+| C55 | `app/page.tsx` | 7520 | — | `disabled={!lastAiRetryRef.current || !aiProviderFailure.retryOffered}` | the card's existing Retry reads the withheld flag |
 | C56 | `app/lib/agent/adapters.ts` | 122 | — | `tool_choice: tools.length > 0 ? "auto" : undefined,` | OpenAI: `auto` |
 | C57 | `app/lib/agent/adapters.ts` | 224 | — | `tool_choice: tools.length > 0 ? { type: "auto", disable_parallel_tool_use: true } : undefined,` | Anthropic: `auto`, never `any` / `tool` |
 | C58 | `app/lib/mcp/__tests__/b20-a5-provider-request-shape.test.ts` | 52 | — | `const OPENAI_PARAM_KEYS = ` | the pinned request key sets, untouched |
 | C59 | `app/api/chat/__tests__/b19-d-external-text-injection-route.test.ts` | 128 | — | `admission-control\.ts$` | the closure gate's reviewed exemption of the meters |
 | C60 | `.github/workflows/deterministic-manufacturing.yml` | 150 | — | `app/api/chat/__tests__/b21-e1-chat-provider.test.ts` | the route suite's one explicit CI entry [B24-D1, 2026-10-09] re-pinned +1: B24-D1's prompt-to-gerber start step at `:32` (OD-30) |
 | C61 | `app/lib/ai-preferences.ts` | 176 | — | `typeof data.reason === "string" && providerRetryWithheld(` | the shared card's JSON 503 path withholds Retry the same way |
-| C62 | `app/page.tsx` | 6875 | — | `startNewRun: lastAiRetryRef.current,` | the Switch hands the kept closure to performProviderSwitch (it re-sends on the other provider) |
+| C62 | `app/page.tsx` | 7536 | — | `startNewRun: lastAiRetryRef.current,` | the Switch hands the kept closure to performProviderSwitch (it re-sends on the other provider) |
 | C63 | `app/lib/agent/orchestration/provider-policy.ts` | 61 | — | `const duplicate = duplicateKeyOf(raw);` | a key named twice refuses the whole map |
 | C64 | `app/lib/agent/orchestration/scheduler.ts` | 550 | — | `{ runId, provider: route?.provider ?? coordinator.provider, history: [],` | the run carries the provider it runs on: its seals name it |
 | C65 | `app/lib/acquisition/admission-control.ts` | 400 | — | `const trial = state.openUntil !== 0 && state.openUntil <= now;` | an admitted call's ticket: its generation, whether it is the trial |

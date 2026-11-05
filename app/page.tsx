@@ -25,17 +25,17 @@ import { GRID, snap, pointEquals, pointKey, closestPointOnSegment, distance, pin
 import { findConnectedGroup, splitWiresAtPoint, consolidateWires, type KicadPinSite } from "./lib/connectivity";
 import { classifyNets, type NetRole } from "./lib/nets";
 import { rangeAwareTickFormatter } from "./lib/format";
-import { schDisplayRef, type SchComponent, type Wire, type Point, type SchComponentType, type SchematicState, type KicadComponentInstance, type BuildLogicalNetlist, type NetLabel, type NetLabelKind, type Rotation, type SchematicEditOp, type PageSize } from "@/lib/schematic-types";
+import { schDisplayRef, type SchComponent, type Wire, type Point, type SchComponentType, type SchematicState, type KicadComponentInstance, type BuildLogicalNetlist, type NetLabel, type NetLabelKind, type Rotation, type SchematicEditOp, type PageSize, type SchematicSheetSet } from "@/lib/schematic-types";
 import { useSchematicViewSession } from "@/app/components/schematic/hooks/useSchematicViewSession"; // [B17-D]
-import { describeExportRefusal } from "@/app/lib/project/io-outcome"; // [B17-E]
+import { describeExportRefusal, filenameFromDisposition } from "@/app/lib/project/io-outcome"; // [B17-E]; [PR-J4, 2026-10-23] + the export's own file name (a project with sheets downloads a zip)
 import { ProjectOperationTimeline } from "@/app/lib/project/operation-timeline"; // [B17-E]
-import { engineeringDigest } from "@/app/lib/engineering/stable";
+import { engineeringDigest } from "@/app/lib/engineering/stable"; import { useSchematicSheetLens } from "@/app/components/schematic/hooks/useSchematicSheetLens"; import { SheetNavigator } from "@/app/components/schematic/SheetNavigator"; import { ScopedNetLabelGlyph } from "@/app/components/schematic/ScopedNetLabelGlyph"; import { flatReplacementRefusal, flatReplacementRefusalWithFindings, multiSheetReplaceAdvisory, multiSheetReplaceRefusal } from "@/app/lib/project/sheet-replace-guard"; import type { SheetCamera } from "@/app/lib/project/sheet-navigation-store"; // [PR-J3, 2026-10-22] the Sheets editor increment (runbook J.3, OD-255 item 7, OD-257): the sheet lens, the navigator, the scoped label glyph and the AI replace-result guard
 import { useWorkspaceViewSession } from "@/app/components/workspace/useWorkspaceViewSession"; // [B17-D]
 import { WORKSPACE_TABS } from "@/app/lib/view-session/workspace"; // [B17-D]
 import { PIN_NAMES, normalizeComponentRole } from "@/lib/schematic-types";
 import { pageSizePx, titleBlockPx, PAGE_MARGIN_PX } from "@/lib/page-sizes";
 import { generateSchematic } from "@/lib/apply-netlist";
-import { autoLayoutBuildValidated, type AdoptedAtomicIdentity } from "@/lib/build-auto-layout";
+import { autoLayoutBuildValidated, type AdoptedAtomicIdentity } from "@/lib/build-auto-layout"; import { layoutGeneratedSheets, type GeneratedSheets } from "@/lib/build-sheet-layout"; // [PR-J5, 2026-10-23] a planned result laid out as real sheets (OD-255 item 9; OD-259 items 1, 3, 5)
 import { kicadPlacementCommand } from "@/lib/kicad-placement"; // [B19-E E5 review]
 import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist";
 import { buildReviewInput } from "@/lib/netlist-review";
@@ -50,7 +50,7 @@ import {
   throwAiResponseError,
   type AiRequestOwnership,
 } from "@/app/lib/ai-preferences";
-import type { LLMProviderId } from "@/app/lib/llm/types";
+import type { LLMProviderId } from "@/app/lib/llm/types"; import { PostApplyInputRefusalError, throwPostApplyInputRefusal } from "@/app/lib/llm/post-apply-refusal"; // [PR-L6 spend, 2026-10-19] SPEND-3: the post-apply input admission's typed refusal (Tidy, Review), on this line so no line moves
 import { performProviderSwitch, settleAgentRunFailure } from "@/app/lib/agent/run-consumer";
 import { EditorContextBridge } from "@/app/lib/agent/editor-context-bridge"; // B10
 import { ViewSessionBridge } from "@/app/lib/agent/view-session-bridge"; // [B17-F]
@@ -59,24 +59,33 @@ import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-
 import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
 import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
 import { layoutCandidateChatLine } from "@/app/lib/agent/layout-report"; // [B18-E E17]
-import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, chatResumeFor, chatResumeKeptAfter, chatResumeOfferLine, initialChatResumeObservation, initialRunView, markGrantLineDropped, observeChatResume, orchestrationRunLogLine, resumableChatRun, restoredChatResume, projectRunView, recoveryDisplayAction, replacementChatLines, reduceRunView, refusedLineLabel, restoredEntryGrants, restoredEntryLog, restoredEntryRecovery, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry, type ResumableChatRun } from "@/app/lib/project/chat-run-view"; // [B18-D I6]; [B24-D2B] the recovery result for a live or restored entry
+import { EXECUTION_ENTRY_ID_PREFIX, answerFooter, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, chatResumeFor, chatResumeKeptAfter, chatResumeOfferLine, initialChatResumeObservation, initialRunView, markGrantLineDropped, observeChatResume, orchestrationRunLogLine, resumableChatRun, restoredChatResume, projectRunView, recoveryDisplayAction, replacementChatLines, reduceRunView, refusedLineLabel, restoredEntryGrants, restoredEntryLog, restoredEntryRecovery, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry, type ResumableChatRun } from "@/app/lib/project/chat-run-view"; // [B18-D I6]; [B24-D2B] the recovery result for a live or restored entry
 import { ExecutionEntryActions } from "@/app/components/chat/ExecutionEntryActions"; // [B18-D I8]
 import { AutonomyModeControl } from "@/app/components/chat/AutonomyModeControl"; // [B18-D I11]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
 import { listProjects, saveProjectFields, renameProject, deleteProject, type SavedProject, type StoredChatMessage } from "@/lib/persistence";
 import { bootstrapCurrentProject, createProjectRecord, loadProjectRecord, markProjectCurrent, type ProjectBootstrap } from "@/app/lib/project/current";
 import { createAutosaver, settleAutosaveForTransition, type Autosaver, type SaveStatus } from "@/app/lib/project/autosave";
-import { SchematicHistory, type SchematicHistoryView } from "@/app/lib/project/schematic-history";
+import { SchematicHistory, type SchematicHistoryView } from "@/app/lib/project/schematic-history"; import { historyStepState } from "@/app/lib/project/history-step-state"; // [PR-L6, 2026-10-19] an undo / redo target keeps the authoritative sheet size (in place: no line moves)
 import { checkpointBelongsToProject, checkpointStore, type ProjectCheckpoint } from "@/app/lib/project/checkpoints";
 // B06: canonical schematic semantic mutations — the migrated handlers issue
 // shared domain commands through the trusted schematic editor session.
 import { SchematicEditorSession } from "@/app/lib/engineering/schematic-session";
-import { describeSchematicProposal } from "@/app/lib/workflow/prompt-to-gerber/review-summary"; // [B16.1C §F]
+import { describeSchematicProposal, replacedSheetsLine } from "@/app/lib/workflow/prompt-to-gerber/review-summary"; // [B16.1C §F]; [PR-J5, 2026-10-23] + the replaced-sheets sentence (OD-259 item 1)
 import type { SchematicCanonicalMark } from "@/app/lib/engineering/schematic-projection";
 import { compileTier1Proposal, planSchematicDelete, planSchematicReplacement } from "@/app/lib/engineering/schematic-plans";
 import { sealTier1Proposal, TIER1_PROPOSAL_SCHEMA, type SealedTier1Proposal } from "@/app/lib/engineering/schematic-proposals";
 import { loadSessionIdentity, sessionAuthorizationBindingFrom, SESSION_IDENTITY_UNAVAILABLE_MESSAGE } from "@/app/lib/project/session-identity";
 import { projectSelectorHeaders } from "@/app/lib/project/project-selector";
+import { completenessNote, electricalCheckNote, type ElectricalCheckStatus } from "@/app/lib/schematic/build-result"; // [PR-C] [PR-L, 2026-10-17] the Build result now arrives from a durable generation task (generation-task-client), not a build-multi response
+import { controlGenerationTask, fetchActiveGenerationTask, fetchGenerationTask, generationTaskBusy, generationTaskRestartable, generationTaskStatusText, generationActivityLineId, newGenerationClientActionId, randomGenerationUuid, newGenerationClientRequestId, reduceGenerationTaskView, startGenerationTask, subscribeGenerationTask, type GenerationTaskClientAction, type GenerationTaskSnapshotView, type GenerationTaskUpdate, type GenerationTaskView } from "@/app/lib/project/generation-task-client"; import { WorkLog } from "@/app/components/chat/WorkLog"; import { useChatWorkLog } from "@/app/components/chat/hooks/useChatWorkLog"; import { workOfStored, type WorkLogState } from "@/app/lib/project/work-log"; /* [K2, 2026-11-04] runbook K.2 (OD-260 items 6, 8): the Work log on the activity entry - component, hook and the stored log's reader (in place: no line moves) */ // [PR-L, 2026-10-17] runbook L.4: the durable design task (start or attach, progress, control, result)
+import { GenerationTaskStatus } from "@/app/components/chat/GenerationTaskStatus"; // [PR-L, 2026-10-17] the task's live status card in its activity entry
+import { clearPendingProposal, loadPendingProposal, savePendingProposal } from "@/app/lib/project/pending-proposal-store"; // [PR-C]
+import { computeDesignChecks, type DesignCheck } from "@/app/lib/schematic/design-checks"; // [PR-E]
+import { deriveJourney, type JourneyActionId, type JourneyGenerationFailure, type JourneyPcbFacts } from "@/app/lib/workflow/journey"; // [PR-C] the shared stage model
+import { listUnresolvedInstances } from "@/app/lib/pcb-sync/unresolved-instances"; // [PR-F fA] the sidebar's Missing parts count: the SAME listing a Schematic → PCB run refuses at
+import { missingPartsWords } from "@/app/lib/parts/missing-facts"; // [PR-F fA]
+import { JourneyStrip } from "@/app/components/workflow/JourneyStrip"; // [PR-C]
 
 /**
  * [B16-C.5] Every authenticated AI request names the ACTIVE project as a
@@ -85,23 +94,26 @@ import { projectSelectorHeaders } from "@/app/lib/project/project-selector";
  * with `AUTH_PROJECT_SELECTOR_REQUIRED` (400) — the page-level browser proof
  * found the Build-mode generation, edit, review, tidy and second-opinion
  * fetches sending none. A selector is never authority: the server still loads
- * the caller's live membership for that scope.
+ * the caller's live membership for that scope. [PR-C] The helper is the shared
+ * `app/lib/project/ai-request.ts`, which the Theory client uses too.
  */
-function aiRequestHeaders(scope: { projectId: string | null; branchId: string }): Record<string, string> {
-  return {
-    "Content-Type": "application/json",
-    ...projectSelectorHeaders(scope.projectId ? { tenantId: "local", projectId: scope.projectId, branchId: scope.branchId } : null),
-  };
-}
-import { createMembershipReauthorizer } from "@/app/lib/project/membership-reauthorization";
+import { aiRequestHeaders } from "@/app/lib/project/ai-request";
+import { createMembershipReauthorizer } from "@/app/lib/project/membership-reauthorization"; import { reauthorizeSheetOrganizationApply } from "@/app/lib/project/sheet-organization-reauthorization"; // [PR-J5 integration, 2026-10-26] review J5R-AI-2: the organise Approve reauthorizes the live membership (B16.0.1 §F)
 import { applyApprovedTier1Proposal, approvedMutationAudit, type ApprovedMutationReceipt } from "@/app/lib/engineering/approved-agent-mutations";
 import { type ReplacementMutationReceipt } from "@/app/lib/engineering/approved-replacement-mutations";
 import { type SealedReplacementProposal } from "@/app/lib/engineering/replacement-proposals";
 import { approveAndApplyReplacement } from "@/app/lib/project/replacement-approval-controller.internal";
 import { receiveReplacementProposalEvent } from "@/app/lib/project/replacement-proposal-events";
 import { receivePcbProposalReadyEvent } from "@/app/lib/project/pcb-proposal-events";
+import { GENERATION_TASK_CONTROL_CARD_ID_PREFIX, generatedSheetsProposalNotes, generationTaskAttachDecision, generationTaskControlCardLines, generationTaskControlCurrency, receiveGenerationTaskControlEvent, receiveGenerationTaskEvent, type ReceivedGenerationTask, type ReceivedGenerationTaskControl } from "@/app/lib/project/generation-proposal-events"; import { receiveSheetOrganizationEvent, replanSheetOrganization, sheetOrganizationAlreadyApplied, sheetOrganizationApplyLabel, sheetOrganizationCurrency, sheetOrganizationLines, sheetOrganizationReplanBase, sheetOrganizationReview, type ReceivedSheetOrganization } from "@/app/lib/project/sheet-organization-events"; import { SheetOrganizationReviewCard } from "@/app/components/schematic/SheetOrganizationReviewCard"; /* [PR-J5, 2026-10-23] the assistant's sealed organise proposal: its SAFE receiver, currency, review card and the tool's own re-plan (OD-259 items 4, 5) */ import { GENERATION_START_TOOL_ID, STOP_ANSWER_SEMANTICS } from "@/app/lib/agent/generation-task-tools"; // [PR-D] the agent's Build-mode generation: the SAFE receivers; [PR-L, 2026-10-18] runbook L.5: a durable task reference (followed with the same status card and review intake as a Build start) and a sealed control request (a confirm chip)
+import { DRAFT_REQUEST_CARD_ID_PREFIX, DRAFT_REQUEST_OPEN_LABEL, draftRequestCardLines, draftRequestCurrency, draftRequestPublicationPrefill, receiveDraftRequestEvent, type ReceivedDraftRequest } from "@/app/lib/project/draft-request-events"; // [PR-G, 2026-10-17] the agent's part draft request (OD-248): the SAFE receiver, the currency check, the review-task card and the publication prefill
+import { MODULE_CONTRACT_NOTE_ID_PREFIX, moduleContractCurrency, moduleContractNoteLines, receiveModuleContractsEvent } from "@/app/lib/project/module-contract-events"; // [PR-G, 2026-10-17] the agent's module contract set (OD-249): the SAFE receiver, the currency check and the engineering-note card
+import { receiveStackupCandidateEvent, stackupCandidateChatLine, verifyStackupCandidateAgainstBoard } from "@/app/lib/project/stackup-candidate-events"; // [PR-G, 2026-10-17] the agent's stackup recommendation (OD-249): the SAFE receiver and the live-board check
+import type { StackupCandidate } from "@/app/lib/pcb/candidates/stackup-candidate"; // [PR-G, 2026-10-17]
+import { AtomicPublicationReviewSection } from "@/app/components/parts/AtomicPublicationReviewPanel"; // [PR-G, 2026-10-17] the EXISTING publication request (the Build Library's and the Missing parts list's), opened prefilled from a sealed draft request
 import { type SealedPcbEditProposal } from "@/app/lib/pcb/proposal/sealed-pcb-edit-proposal";
 import { ReplacementReviewDialog } from "@/app/components/schematic/ReplacementReviewDialog";
+import { ComponentResolutionReceiptNotice, ComponentResolutionReviewDialog } from "@/app/components/schematic/ComponentResolutionReviewDialog"; import { approveAndApplyResolution } from "@/app/lib/project/resolution-approval-controller.internal"; import { componentResolutionBoardImpactView, componentResolutionCurrency, componentResolutionReview, findReplacementSentence, receiveComponentResolutionEvent, resolutionAftermathLines, resolutionLines, resolutionProgressLine, type ReceivedComponentResolution, type ResolutionReceiptView } from "@/app/lib/project/component-resolution-events"; import { loadResolutionBoardBasis } from "@/app/lib/project/resolution-board-basis"; import { assessResolutionBoardImpact, resolutionBoardImpactItems, type ResolutionBoardImpactState, type ResolutionReceiptBoardImpact } from "@/app/lib/component-resolution/board-impact"; /* [PR-L6, 2026-10-19] M.4 / M.5-7: the batch's PCB impact against the durable board (in place: no line moves) */ import { buildPcbSyncPreflightReport } from "@/app/lib/pcb-sync/preflight-read"; import { noteResolutionApplied } from "@/app/lib/project/cad-acquisition-client"; // [PR-M, 2026-10-18] M2: + the acquisition task's applied-receipt record (in place: no line moves); [PR-M, 2026-10-18] the component resolution (runbook M.2.5-M.2.6): the review dialog and its receipt, the trusted apply controller, the SAFE receiver with the run log's sentences, and the Prepare PCB preflight read the aftermath reports
 import { fromCanonicalSchematic, schematicStateDigest, validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
 import { schematicMarkPatch } from "@/app/lib/engineering/schematic-projection";
 import { diffSchematicGraphOps, nextTheoryDisplayRef, type SchematicGraphAfter } from "@/app/lib/engineering/schematic-graph";
@@ -129,20 +141,23 @@ type SchematicSnapshot = {
   components: SchComponent[];
   wires: Wire[];
   kicadComponents: KicadComponentInstance[];
-  netLabels: NetLabel[];
+  netLabels: NetLabel[]; sheets?: SchematicSheetSet; // [PR-J3, 2026-10-22] the sheet tree is model state, undoable with the four arrays (PR-L6 class: a step target that dropped it would rebase the lineage)
 };
 type LeftPanel = "projects" | "library" | null;
 // [B19-D I5e row 32] `advisory`: another model's output (build explanation, review, second opinion) — shown, never resent as the assistant's words
-type ChatMessage = { id: string; role: "user" | "assistant"; content: string; advisory?: boolean };
+// [PR-G, 2026-10-17] `footer`: the answer's model label ("answered by <provider> · <model>" from the run's own events, with the fallback disclosure) — shown under the bubble, never part of the content the next run's history carries
+type ChatMessage = { id: string; role: "user" | "assistant"; content: string; advisory?: boolean; footer?: string };
 type ActivityLogEntry = { id: string; text: string; status: "running" | "done" | "error" };
 type ActivityLogMessage = {
   id: string;
   role: "log";
   title: string;
   status: "running" | "done" | "error";
-  entries: ActivityLogEntry[];
+  entries: ActivityLogEntry[]; work?: WorkLogState; // [K2, 2026-11-04] the entry's typed Work log (OD-260 item 6), collapsed under "Show details"
 };
 type Message = ChatMessage | ActivityLogMessage;
+/** [PR-L, 2026-10-17] the durable design task the page follows (runbook L.4): bound to the project generation that attached it. */
+interface AttachedGenerationTask { taskId: string; logId: string; prompt: string; scope: ProjectAsyncScope; view: GenerationTaskView | null; unsubscribe: () => void; offered: Set<string>; settled: boolean }
 type AiProviderFailureState = { provider: LLMProviderId; retryOffered: boolean }; // [B21 E1 fix] false: the Retry is withheld (quota, an open breaker), the Switch still re-sends
 type AiRuntimeProviderInfo = {
   model: string;
@@ -1202,11 +1217,11 @@ function SchematicEditor({
   placementExactIdentity,
   netLabels,
   pendingNetLabel, setPendingNetLabel,
-  pageSize, setPageSize,
+  pageSize,
   onDeleteComponent,
   graph,
-  viewScope,
-  viewSessionBridge,
+  viewScope, viewSheets, openViewSheet, // [PR-J5, 2026-10-23] the lens's open-sheet props (runbook J.6.5): the sheets the agent's schematic.open-sheet resolves and the navigator's open action
+  viewSessionBridge, initialCamera, onCameraChange, sheetLayer, onLocateElsewhere, // [PR-J3, 2026-10-22] the sheet lens's editor props (useSchematicSheetLens editorProps)
 }: {
   tool: Tool;
   setTool: (t: Tool) => void;
@@ -1227,7 +1242,6 @@ function SchematicEditor({
   pendingNetLabel: PendingNetLabel | null;
   setPendingNetLabel: (p: PendingNetLabel | null) => void;
   pageSize: PageSize;
-  setPageSize: (p: PageSize) => void;
   /** B06: canonical deletion — the editor never filters state directly. */
   onDeleteComponent: (family: "theory" | "kicad", componentId: string) => void;
   /** B07/B07.1: canonical graph commands + the gesture transaction contract.
@@ -1243,13 +1257,13 @@ function SchematicEditor({
     commit(label: string, finalGraph: SchematicGraphAfter): void;
   };
   /** [B17-D] the project/branch the schematic view session is scoped to. */
-  viewScope: { projectId: string; branchId: string };
+  viewScope: { projectId: string; branchId: string }; viewSheets?: ReadonlyArray<{ id: string; name: string; path: string }>; openViewSheet?: (sheetId: string) => boolean; // [PR-J5, 2026-10-23] the open-sheet view command's sheets and open action (useSchematicSheetLens editorProps)
   /** [B17-F] the page-owned view-session bridge (the schematic surface registers while mounted). */
-  viewSessionBridge: ViewSessionBridge;
+  viewSessionBridge: ViewSessionBridge; initialCamera?: SheetCamera; onCameraChange?: (camera: SheetCamera) => void; sheetLayer?: React.ReactNode; onLocateElsewhere?: (ref: string) => boolean; // [PR-J3, 2026-10-22] J.3 items 1, 2, 5: the active sheet's stored camera (the mount fits the page when absent), its camera writes, the overview's subsystem blocks, and Go to's fallback to the part's sheet
 }) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [pan, setPan]     = useState<Point>({ x: 100, y: 80 });
-  const [zoom, setZoom]   = useState(1);
+  const svgRef = useRef<SVGSVGElement>(null); const fittedForRef = useRef<PageSize | null>(initialCamera !== undefined ? pageSize : null); // [PR-J3, 2026-10-22] a stored sheet camera replaces the mount-time fit (J.3 item 5); the fit still runs when the page size changes (StrictMode-safe: the ref survives the dev double effect)
+  const [pan, setPan]     = useState<Point>(initialCamera?.pan ?? { x: 100, y: 80 });
+  const [zoom, setZoom]   = useState(initialCamera?.zoom ?? 1);
   const [cursor, setCursor] = useState<Point>({ x: -9999, y: -9999 });
   const [inCanvas, setInCanvas] = useState(false);
   const [deleteHoveredId, setDeleteHoveredId] = useState<string | null>(null);
@@ -1263,8 +1277,8 @@ function SchematicEditor({
 
   const panRef  = useRef(pan);
   const zoomRef = useRef(zoom);
-  panRef.current  = pan;
-  zoomRef.current = zoom;
+  useLayoutEffect(() => { panRef.current = pan; }, [pan]);
+  useLayoutEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
   // Reset pan/zoom so the whole sheet (plus a small frame) fills the viewport.
   const fitToPage = useCallback(() => {
@@ -1286,8 +1300,8 @@ function SchematicEditor({
   // Frame the sheet on mount and whenever the sheet size changes (a manual pick,
   // or the size auto-layout chose for a freshly generated circuit).
   useEffect(() => {
-    fitToPage();
-  }, [fitToPage]);
+    if (fittedForRef.current === pageSize) return; fittedForRef.current = pageSize; fitToPage();
+  }, [fitToPage, pageSize]); useEffect(() => { onCameraChange?.({ pan, zoom }); }, [pan, zoom, onCameraChange]); // [PR-J3, 2026-10-22] the per-sheet camera (J.3 item 5): every pan / zoom reaches the presentation store through the lens (debounced there)
 
   // ── [B17-D] the schematic view session ──────────────────────────────────────
   // Fit, zoom, pan/focus, select and net highlight are `schematic.*` view commands on ONE bus per editor
@@ -1297,7 +1311,7 @@ function SchematicEditor({
     projectId: viewScope.projectId,
     branchId: viewScope.branchId,
     actorId: "local",
-    sources: { components, kicadComponents, netLabels, pagePx: { width: pageSizePx(pageSize).widthPx, height: pageSizePx(pageSize).heightPx } },
+    sources: { components, kicadComponents, netLabels, pagePx: { width: pageSizePx(pageSize).widthPx, height: pageSizePx(pageSize).heightPx }, ...(viewSheets && openViewSheet ? { sheets: viewSheets, openSheet: openViewSheet } : {}) }, // [PR-J5, 2026-10-23] + the lens's sheets and open action iff the project has sheets (schematic.open-sheet, runbook J.6.5)
     selectedId,
     selectedKicadId,
     applySelection: (id, family) => {
@@ -1316,7 +1330,7 @@ function SchematicEditor({
   /** Toolbar "Go to": select the component and frame it; a refusal is shown, never guessed around. */
   const goToSchematicComponent = async (ref: string): Promise<void> => {
     const selected = await schematicView.select({ kind: "component", ref });
-    if (!selected.ok) { setSchematicViewNotice(`${selected.code} — ${selected.message}`); return; }
+    if (!selected.ok) { if (onLocateElsewhere?.(ref)) { setSchematicViewNotice(null); return; } setSchematicViewNotice(`${selected.code} — ${selected.message}`); return; } // [PR-J3, 2026-10-22] J.3 item 2: a part on another sheet opens that sheet; the lens replays the select and focus there
     const focused = await schematicView.focus({ kind: "component", ref });
     setSchematicViewNotice(focused.ok ? null : `${focused.code} — ${focused.message}`);
   };
@@ -1328,13 +1342,13 @@ function SchematicEditor({
   });
 
   const componentsRef = useRef(components);
-  componentsRef.current = components;
+  useLayoutEffect(() => { componentsRef.current = components; }, [components]);
   const wiresRef = useRef(wires);
-  wiresRef.current = wires;
+  useLayoutEffect(() => { wiresRef.current = wires; }, [wires]);
   const kicadComponentsRef = useRef(kicadComponents);
-  kicadComponentsRef.current = kicadComponents;
+  useLayoutEffect(() => { kicadComponentsRef.current = kicadComponents; }, [kicadComponents]);
   const netLabelsRef = useRef(netLabels);
-  netLabelsRef.current = netLabels;
+  useLayoutEffect(() => { netLabelsRef.current = netLabels; }, [netLabels]);
 
   // Re-render when async KiCad part data arrives in the cache. `partVersion`
   // bumps on each load so derived data keyed on the cache recomputes.
@@ -1354,7 +1368,7 @@ function SchematicEditor({
   });
   const kicadPinPoints: Point[] = kicadPinSites.flatMap((s) => s.pins);
   const kicadPinSitesRef = useRef(kicadPinSites);
-  kicadPinSitesRef.current = kicadPinSites;
+  useLayoutEffect(() => { kicadPinSitesRef.current = kicadPinSites; }, [kicadPinSites]);
 
   // Net classification for diagram-style rendering (colored power rails, net
   // labels). Recomputed when topology changes or a KiCad part loads.
@@ -1957,22 +1971,9 @@ function SchematicEditor({
 
   return (
     <div className="absolute inset-0 bg-zinc-950">
-      {/* Page-size + fit-to-page controls (top-right) */}
-      <div className="absolute top-3 right-3 z-10 flex items-center gap-1 bg-zinc-900/90 border border-zinc-800 rounded-md p-1 backdrop-blur-sm shadow-lg">
-        <select
-          value={pageSize}
-          onChange={(e) => setPageSize(e.target.value as PageSize)}
-          title="Sheet size — also sets the KiCad export page"
-          className="h-7 text-xs bg-zinc-800 text-zinc-200 border border-zinc-700 rounded px-1.5 outline-none focus:border-zinc-500 cursor-pointer"
-        >
-          <option value="A5">A5</option>
-          <option value="A4">A4</option>
-          <option value="A3">A3</option>
-          <option value="A2">A2</option>
-          <option value="A1">A1</option>
-          <option value="USLetter">US Letter</option>
-          <option value="USLegal">US Legal</option>
-        </select>
+      {/* Fit-to-page + go-to controls (top-right). [PR-E] the sheet-size select moved to Workspace settings: here it overlapped the
+          schematic toolbar's rail buttons at 1280–1366 px. */}
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-1 bg-zinc-900/90 border border-zinc-800 rounded-md p-1 shadow-sm">
         <button
           title="Fit page to view"
           onClick={() => schematicView.fitPage()}
@@ -1996,7 +1997,7 @@ function SchematicEditor({
       </div>
 
       {/* Floating toolbar */}
-      <div className="absolute top-3 left-3 z-10 flex gap-1 bg-zinc-900/90 border border-zinc-800 rounded-md p-1 backdrop-blur-sm shadow-lg">
+      <div className="absolute top-3 left-3 z-10 flex gap-1 bg-zinc-900/90 border border-zinc-800 rounded-md p-1 shadow-sm">
         <button
           title="Select"
           onClick={() => { setTool("select"); setWireDraftStart(null); }}
@@ -2243,8 +2244,8 @@ function SchematicEditor({
               ))}
             </g>
           )}
-          {netLabels.map((label) => (
-            <NetLabelGlyph
+          {sheetLayer /* [PR-J3, 2026-10-22] the overview's subsystem blocks (J.3 item 1), before the label map */}{netLabels.map((label) => (
+            label.scope !== undefined ? <ScopedNetLabelGlyph key={label.id} label={label} role={nets.roleAt(label.position)} zoom={zoom} deleteHovered={tool === "delete" && deleteHoveredId === label.id} pointerEvents={tool === "select" || tool === "delete" ? "auto" : "none"} onMouseDown={(e) => onLabelMouseDown(e, label)} onMouseEnter={() => { if (tool === "delete") setDeleteHoveredId(label.id); }} onMouseLeave={() => setDeleteHoveredId((prev) => prev === label.id ? null : prev)} /> : <NetLabelGlyph // [PR-J3, 2026-10-22] J.3 item 3 / J.4: a scoped label (hierarchical, sheet pin, global) draws its own glyph; the same label drag
               key={label.id}
               label={label}
               role={nets.roleAt(label.position)}
@@ -2378,7 +2379,7 @@ function SchematicEditor({
               else if (e.key === "Escape") { e.preventDefault(); setLabelDraft(null); }
             }}
             onBlur={() => setLabelDraft(null)}
-            className="h-6 w-28 bg-zinc-900 border border-teal-600 rounded px-1.5 font-mono text-[11px] uppercase text-zinc-100 placeholder:text-zinc-600 outline-none shadow-lg"
+            className="h-6 w-28 bg-zinc-900 border border-teal-600 rounded px-1.5 font-mono text-[11px] uppercase text-zinc-100 placeholder:text-zinc-600 outline-none shadow-sm"
           />
         </div>
       )}
@@ -2428,7 +2429,7 @@ function PropertiesPanel({
   onReferenceChange: (v: string) => void;
 }) {
   return (
-    <div className="absolute top-14 right-4 w-52 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 backdrop-blur-sm shadow-lg">
+    <div className="absolute top-14 right-4 w-52 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 shadow-sm">
       <div className="text-xs uppercase text-zinc-500 mb-0.5 tracking-wide">
         {SCH_TYPE_LABEL[comp.type]}
       </div>
@@ -2491,15 +2492,15 @@ function KicadPropertiesPanel({
   onReplace: () => void;
 }) {
   const [part, setPart] = useState<CachedPart | null>(() => getCachedPart(instance.partId));
-  useEffect(() => {
-    setPart(getCachedPart(instance.partId));
-    const unsub = subscribeToPart(instance.partId, () => setPart(getCachedPart(instance.partId)));
-    void ensurePartLoaded(instance.partId).then(setPart).catch(() => {});
-    return unsub;
+  const [partFor, setPartFor] = useState(instance.partId); if (partFor !== instance.partId) { setPartFor(instance.partId); setPart(getCachedPart(instance.partId)); }
+  useLayoutEffect(() => { const partId = instance.partId; let active = true;
+    const unsub = subscribeToPart(partId, () => { if (active) setPart(getCachedPart(partId)); });
+    void ensurePartLoaded(partId).then((loaded) => { if (active) setPart(loaded); }).catch(() => {});
+    return () => { active = false; unsub(); };
   }, [instance.partId]);
 
   return (
-    <div className="absolute top-14 right-4 w-60 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 backdrop-blur-sm shadow-lg">
+    <div className="absolute top-14 right-4 w-60 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 shadow-sm">
       <div className="text-xs uppercase text-zinc-500 mb-2 tracking-wide truncate">
         {part?.name ?? "KiCad part"}
       </div>
@@ -2614,12 +2615,19 @@ export default function Home() {
   // request's finally block may clear it (a stale completion can never
   // clear a newer request's busy state). The project-transition reset
   // clears all of them explicitly.
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false); const [designTaskBusy, setDesignTaskBusy] = useState(false); // [PR-L, 2026-10-18] runbook L.5: a followed durable design task that is still working is its OWN busy state (it blocks a second generation or an edit, never the chat: a later turn inspects and controls the same task)
   const [isEditing, setIsEditing]       = useState(false);
   const [isReviewing, setIsReviewing]   = useState(false);
   const [isTidying, setIsTidying]       = useState(false);
   const [isSecondOpinion, setIsSecondOpinion] = useState(false);
   const activeGenerationRef = useRef<string | null>(null);
+  // [PR-L, 2026-10-17] the project's followed durable design task: its live view (the status card) and the entry that owns it
+  const [generationTask, setGenerationTask] = useState<{ logId: string; view: GenerationTaskView } | null>(null);
+  const [generationTaskControlBusy, setGenerationTaskControlBusy] = useState(false);
+  const generationTaskRef = useRef<AttachedGenerationTask | null>(null);
+  const generationTaskUpdateRef = useRef<(entry: AttachedGenerationTask, update: GenerationTaskUpdate) => void>(() => {});
+  /** [PR-L, 2026-10-17] reattaches the opened project's active design task once its session is ready (bound below, after the helpers). */
+  const reattachGenerationTaskRef = useRef<(projectId: string) => void>(() => {});
   const activeEditRef = useRef<string | null>(null);
   const activeReviewRef = useRef<string | null>(null);
   const activeTidyRef = useRef<string | null>(null);
@@ -2639,7 +2647,7 @@ export default function Home() {
   // session generation, and exact base digest all still match.
   const [pendingSuggestions, setPendingSuggestions] = useState<ScopedSuggestionBatch | null>(null);
   const [suggestionsMinimized, setSuggestionsMinimized] = useState(false);
-  const [genError, setGenError]         = useState<string | null>(null);
+  const [genError, setGenError]         = useState<string | null>(null); const genErrorShowRef = useRef(0); // [PR-J5 integration CI, 2026-11-04] numbered shows: a transient error's timer clears only ITS OWN show, never a later message (the same race the toast fix e1830cfc closed; CI saw the Theory refusal erased by an earlier timer)
   // [B16.1C §F] the ONE pending generated-schematic proposal (also the first
   // generation onto an empty sheet). Nothing is applied until the human
   // approves it in the review dialog, which states exactly what will change.
@@ -2656,10 +2664,20 @@ export default function Home() {
     skipAutoRun?: boolean;
     /** [B16-A F11] a validation note the dialog shows alongside the proposal (never blocks the human's decision). */
     validationNote?: string | null;
+    /** [PR-L, 2026-10-17] the durable design task whose validated result this is: its review is recorded on it (record-review). */
+    task?: { taskId: string; resultDigest: string };
   } | null>(null);
+  // [PR-C] The journey's facts the page owns: the PCB editor reports its own (display only), the last generation failure,
+  // whether the user asked for the PCB in the same request, and the "Prepare PCB" request token the editor consumes.
+  const [pcbFacts, setPcbFacts] = useState<JourneyPcbFacts | null>(null);
+  const [preparePcbRequested, setPreparePcbRequested] = useState(false);
+  const [lastGenerationFailure, setLastGenerationFailure] = useState<JourneyGenerationFailure | null>(null);
+  const [syncRequestToken, setSyncRequestToken] = useState(0);
+  const [missingPartsRequestToken, setMissingPartsRequestToken] = useState(0); // [PR-F fA] the PCB tab's Missing parts list, from the sidebar line or the journey
+  const [settingsOpen, setSettingsOpen] = useState(false); // [PR-E] the scoped workspace settings dialog
   // [B16.1C §F] what the pending proposal will change, against the LIVE
   // canonical schematic at review time (recomputed when either changes).
-  const pendingProposalSummary = useMemo(() => pendingReplace ? describeSchematicProposal(pendingReplace.state, { components, wires, kicadComponents, netLabels }) : null, [pendingReplace, components, wires, kicadComponents, netLabels]);
+  // [PR-J5 integration, 2026-10-26] review B-3: the summary memo moved below authoritativeSchematic - it needs the live SHEET SET too (the headline counts the replaced sheets; the details name them once)
 
   // B06.1: the ONE pending sealed tier-1 proposal. Provider output only ever
   // lands here; nothing mutates until the explicit human apply.
@@ -2677,6 +2695,11 @@ export default function Home() {
   const [pendingReplacementRunId, setPendingReplacementRunId] = useState<string | null>(null);
   const [replacementApplyBusy, setReplacementApplyBusy] = useState(false);
   const [replacementReceipt, setReplacementReceipt] = useState<ReplacementMutationReceipt | null>(null);
+  // [PR-M, 2026-10-18] the ONE pending sealed component-resolution batch (received + currency-checked; display grants nothing), its apply
+  // busy state and its real receipt; the run log it came from receives the committed / preflight lines
+  const [pendingResolution, setPendingResolution] = useState<{ received: ReceivedComponentResolution; logId: string; boardImpact: ResolutionBoardImpactState } | null>(null); /* [PR-L6, 2026-10-19] + the batch's PCB impact (dropped with the batch) */ const [pendingOrganization, setPendingOrganization] = useState<{ received: ReceivedSheetOrganization; logId: string } | null>(null); const [organizationApplyBusy, setOrganizationApplyBusy] = useState(false); // [PR-J5, 2026-10-23] the ONE pending sealed organise proposal (OD-259 items 4-5): nothing mutates until its Approve
+  const [resolutionApplyBusy, setResolutionApplyBusy] = useState(false);
+  const [resolutionReceipt, setResolutionReceipt] = useState<ResolutionReceiptView | null>(null);
   // [B15.3] the ONE pending sealed bounded PCB edit proposal — narrowed by
   // the SAFE discriminator only; display grants nothing. Apply authority
   // lives inside PcbEditor (the PCB composition root), never here.
@@ -2684,6 +2707,16 @@ export default function Home() {
   // [B17-F] the ONE pending agent layout candidate (placement / routing) narrowed by the SAFE receiver; the PCB
   // editor registers it in its own candidate store after re-verifying it. Display grants nothing.
   const [pendingLayoutCandidate, setPendingLayoutCandidate] = useState<{ candidate: LayoutCandidate; originRunId: string | null } | null>(null);
+  // [PR-G, 2026-10-17] the ONE pending agent stackup recommendation (OD-249) narrowed by the SAFE receiver and checked against the live
+  // board's revision; the PCB editor re-verifies it and shows it as a preview the human accepts (its own Stackup path) or discards.
+  const [pendingStackupCandidate, setPendingStackupCandidate] = useState<{ candidate: StackupCandidate; originRunId: string | null } | null>(null);
+  // [PR-G, 2026-10-17] the LIVE sealed draft requests (OD-248) by proposal id: a review-task card's "Open the publication request" is
+  // offered only while this page holds the sealed artifact (a card restored after a reload is a static record, as execution entries are);
+  // `draftRequestOpen` is the one the existing publication request is open for. Display and prefill only: nothing is submitted here.
+  const liveDraftRequestsRef = useRef<Map<string, ReceivedDraftRequest>>(new Map());
+  const [liveDraftRequests, setLiveDraftRequests] = useState<ReadonlyMap<string, ReceivedDraftRequest>>(() => new Map());
+  const liveGenerationControlsRef = useRef<Map<string, ReceivedGenerationTaskControl>>(new Map()); const [liveGenerationControls, setLiveGenerationControls] = useState<ReadonlyMap<string, ReceivedGenerationTaskControl>>(() => new Map()); // [PR-L, 2026-10-18] the design control chips this page holds (a restored card is a static record)
+  const [draftRequestOpen, setDraftRequestOpen] = useState<ReceivedDraftRequest | null>(null);
   // [B18-B] the ONE pending server-minted execution grant narrowed by the SAFE receiver; the PCB editor runs the
   // granted-execution ritual (preview grants wait for the human's Confirm; explicit grants execute once). Display grants nothing.
   const [pendingExecutionGrant, setPendingExecutionGrant] = useState<{ grant: ReceivedExecutionGrant["grant"]; decision: ReceivedExecutionGrant["decision"]; note: string | null; originRunId: string | null } | null>(null);
@@ -2796,7 +2829,7 @@ export default function Home() {
   const applyingHistoryRef = useRef(false);
   // Latch the PCB editor mounted the first time it is opened (see the render
   // site: it is hidden, not unmounted, on tab switches).
-  useEffect(() => { if (view === "pcb") setPcbMounted(true); }, [view]);
+  useEffect(() => { if (view === "pcb" || view === "3d") setPcbMounted(true); }, [view]); // [PR-E] the 3D tab shows the editor's own preview, so it mounts the editor too
   const schHistoryRef = useRef<SchematicHistory<SchematicSnapshot> | null>(null);
   // ── [B17-E] the project operation timeline: it REFERENCES the two authoritative histories (schematic snapshots,
   // canonical PCB history) and orders their operations; a project-level undo identifies the latest ELIGIBLE
@@ -2848,6 +2881,8 @@ export default function Home() {
   // hydrated setStates batch together), so the first allowed write is always
   // the hydrated one.
   const pendingHydrationForRef = useRef<string | null>(null);
+  /** [PR-C] restores a persisted proposal once the opened session is ready (bound below, after the helpers it needs exist). */
+  const restorePendingProposalRef = useRef<(projectId: string) => void>(() => {});
   useEffect(() => {
     if (project && pendingHydrationForRef.current === project.id) pendingHydrationForRef.current = null;
   }, [project, components, wires, kicadComponents, netLabels, messages, view]);
@@ -2878,7 +2913,7 @@ export default function Home() {
   // rendering-level consumers (PCB editor, SPICE studio, BOM). Updated ONLY
   // inside the two authoritative appliers below (gate-enforced), so a
   // gesture preview can never reach those consumers.
-  const [authoritativeSchematic, setAuthoritativeSchematic] = useState<SchematicState>({ components: [], wires: [], kicadComponents: [], netLabels: [] });
+  const [authoritativeSchematic, setAuthoritativeSchematic] = useState<SchematicState>({ components: [], wires: [], kicadComponents: [], netLabels: [] }); const pendingProposalSummary = useMemo(() => pendingReplace ? describeSchematicProposal(pendingReplace.state, { components, wires, kicadComponents, netLabels, ...(authoritativeSchematic.sheets ? { sheets: authoritativeSchematic.sheets } : {}) }) : null, [pendingReplace, components, wires, kicadComponents, netLabels, authoritativeSchematic.sheets]); // [PR-J5 integration, 2026-10-26] review B-3 (moved from above, in place): the page's arrays as before plus the live sheet set
 
   /** Non-authoritative gesture preview frame (never recorded or persisted). */
   const applyGesturePreviewFrame = useCallback((frame: SchematicGraphAfter) => {
@@ -2913,7 +2948,7 @@ export default function Home() {
         setAuthoritativeSchematic(authoritative);
         gestureCoordinatorRef.current?.notifyAuthoritativeProjection(authoritative);
       },
-      snapshot: (authoritative) => ({ components: authoritative.components, wires: authoritative.wires, kicadComponents: authoritative.kicadComponents!, netLabels: authoritative.netLabels! }),
+      snapshot: (authoritative) => ({ components: authoritative.components, wires: authoritative.wires, kicadComponents: authoritative.kicadComponents!, netLabels: authoritative.netLabels!, ...(authoritative.sheets !== undefined ? { sheets: authoritative.sheets } : {}) }), // [PR-J3, 2026-10-22] the sheet tree is in the undo snapshot
       historyRecorded: () => publishSchematicHistory("commit"),
       // The design-state watcher's existing applying-history guard: it
       // clears the flag, schedules autosave, and records NOTHING for this
@@ -2928,7 +2963,7 @@ export default function Home() {
    *  adoption, gesture rollback) — applied without recording history. */
   const applyLifecycleSchematicProjection = useCallback((state: SchematicState) => {
     applyingHistoryRef.current = true;
-    const authoritative: SchematicState = { components: state.components ?? [], wires: state.wires ?? [], kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [], ...(state.pageSize ? { pageSize: state.pageSize } : {}) };
+    const authoritative: SchematicState = { components: state.components ?? [], wires: state.wires ?? [], kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [], ...(state.pageSize ? { pageSize: state.pageSize } : {}), ...(state.sheets !== undefined ? { sheets: state.sheets } : {}) }; // [PR-J3, 2026-10-22] + the sheet tree iff present (hydration, undo / redo, rollback, recovery, checkpoint restore all carry it)
     setComponents(authoritative.components);
     setWires(authoritative.wires);
     setKicadComponents(authoritative.kicadComponents!);
@@ -2948,18 +2983,37 @@ export default function Home() {
     }
   }, [authoritativeSchematic, pendingSuggestions]);
 
+  // [PR-C] A pinned proposal awaiting approval is kept per project across a reload (browser state, never canonical);
+  // approving or discarding it (pendingReplace → null) clears the record. Proposals without a pin are not persisted.
+  // [PR-C] the persisted proposal's base is the schematic's CONTENT digest (components, wires, catalog instances, labels):
+  // the canonical digest also covers the sheet size, which a fresh project gains on its first save, so a reload would
+  // read every first proposal as stale. The approval itself still checks the full digest through the pin captured at restore.
+  const proposalContentDigest = useCallback((state: SchematicState): string => schematicStateDigest({ components: state.components ?? [], wires: state.wires ?? [], kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [], ...(state.sheets !== undefined ? { sheets: state.sheets } : {}) }), []); // [PR-J3, 2026-10-22] OD-257 item 4: + the sheet tree iff present (a proposal made before the project was organised reads stale after a reload and is discarded)
+  const persistedProposalRef = useRef<{ projectId: string } | null>(null); // the record this mount wrote, so only ITS retirement clears it (a fresh mount must not clear before the restore)
+  useEffect(() => {
+    if (pendingReplace?.pin && project) {
+      savePendingProposal({ projectId: project.id, baseDigest: proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()), state: pendingReplace.state, explanation: pendingReplace.explanation, prompt: pendingReplace.prompt, validationNote: pendingReplace.validationNote ?? null, task: pendingReplace.task ?? null }); // [PR-L, 2026-10-17] + the durable task the result belongs to
+      persistedProposalRef.current = { projectId: project.id };
+    } else if (!pendingReplace && persistedProposalRef.current) {
+      clearPendingProposal(persistedProposalRef.current.projectId); // approved, discarded or retired by a project switch: its own project's record goes
+      persistedProposalRef.current = null;
+    }
+  }, [project, pendingReplace, proposalContentDigest]);
+  // [PR-C] ...and offered again after the reload: the restore effect sits after the gate and pin helpers it reads
+  // (`restoredProposalForRef`, below `captureAiRequestOwnership`).
+
   /** User prompts + user-visible responses only — no secrets, no hidden reasoning. */
   function toStoredChat(all: Message[]): StoredChatMessage[] {
     return all.slice(-200).map((message) => message.role === "log"
-      ? { id: message.id, role: "log" as const, title: message.title, status: message.status, entries: message.entries.map((entry) => ({ id: entry.id, text: entry.text, status: entry.status })) }
-      : { id: message.id, role: message.role, content: message.content, ...(message.advisory ? { advisory: true } : {}) });
+      ? { id: message.id, role: "log" as const, title: message.title, status: message.status, entries: message.entries.map((entry) => ({ id: entry.id, text: entry.text, status: entry.status })), ...(message.work ? { work: message.work } : {}) } /* [K2, 2026-11-04] the Work log is kept with its entry (bounded, already cleaned) */
+      : { id: message.id, role: message.role, content: message.content, ...(message.advisory ? { advisory: true } : {}), ...(message.footer ? { footer: message.footer } : {}) }); // [PR-G, 2026-10-17] the answer's model label is kept with the answer
   }
 
   /** Reload during a pending operation must show a truthful interrupted state. */
   function fromStoredChat(stored: StoredChatMessage[]): Message[] {
     return stored.map((message) => message.role === "log"
       ? {
-          id: message.id, role: "log" as const, title: message.title,
+          id: message.id, role: "log" as const, title: message.title, ...workOfStored(message.work), // [K2, 2026-11-04] the stored Work log recovered (nothing replayed; a turn cut by the reload says so)
           status: message.status === "running" ? ("error" as const) : message.status,
           // [B18-E E1] a committed AI-change entry's undo hint is replaced by one that stays true after a reload
           entries: restoredEntryLog(message).entries.map((entry) => entry.status === "running" ? { ...entry, status: "error" as const, text: `${entry.text} (interrupted by reload)` } : entry),
@@ -2997,7 +3051,7 @@ export default function Home() {
     // that this state never adopted). Unopened → untouched.
     const session = schematicSessionRef.current;
     const ok = saveProjectFields(meta.id, {
-      state: { components: authoritative.components, wires: authoritative.wires, kicadComponents: authoritative.kicadComponents ?? [], netLabels: authoritative.netLabels ?? [], pageSize: authoritative.pageSize ?? live.pageSize },
+      state: { components: authoritative.components, wires: authoritative.wires, kicadComponents: authoritative.kicadComponents ?? [], netLabels: authoritative.netLabels ?? [], pageSize: authoritative.pageSize ?? live.pageSize, ...(authoritative.sheets !== undefined ? { sheets: authoritative.sheets } : {}) }, // [PR-J3, 2026-10-22] + the sheet tree iff present (every autosave would otherwise drop it)
       chat: toStoredChat(live.messages),
       designPrompt: live.lastDesignPrompt,
       workflowView: live.view,
@@ -3050,7 +3104,7 @@ export default function Home() {
     setSelectedId(null); setSelectedKicadId(null); setWireDraftStart(null);
     schHistoryRef.current = new SchematicHistory<SchematicSnapshot>({
       components: adopted.components, wires: adopted.wires,
-      kicadComponents: adopted.kicadComponents ?? [], netLabels: adopted.netLabels ?? [],
+      kicadComponents: adopted.kicadComponents ?? [], netLabels: adopted.netLabels ?? [], ...(adopted.sheets !== undefined ? { sheets: adopted.sheets } : {}), // [PR-J3, 2026-10-22]
     }, { label });
     publishSchematicHistory("restore", label);
     session.confirmAdoption(adopted);
@@ -3064,12 +3118,14 @@ export default function Home() {
    * advanced (fetches aborted, timers canceled) before these run.
    */
   const resetTransientProjectState = useCallback((record: SavedProject) => {
-    setPendingReplace(null);            // no stale replacement dialog crosses projects
+    setPendingReplace(null); setPendingOrganization(null); // no stale replacement dialog crosses projects; [PR-J5, 2026-10-23] nor a stale organise proposal
+    setPcbFacts(null); setPreparePcbRequested(false); setLastGenerationFailure(null); setSyncRequestToken(0); // [PR-C] journey facts are per project
     setPendingTier1(null);              // no stale sealed proposal
     setPendingTier1RunId(null);         // B12: clear pending approval origin
     setTier1ApplyBusy(false);           // B12: no in-flight apply crosses projects
     setTier1Receipt(null);              // B12: a receipt belongs to its project
     setPendingPcbProposal(null);        // B15.3: no stale PCB proposal crosses projects
+    setPendingLayoutCandidate(null); setPendingStackupCandidate(null); liveDraftRequestsRef.current.clear(); setLiveDraftRequests(new Map()); liveGenerationControlsRef.current.clear(); setLiveGenerationControls(new Map()); setDraftRequestOpen(null); setPendingResolution(null); setResolutionReceipt(null); // [PR-G, 2026-10-17] no sealed candidate, draft request or open publication request crosses projects; [PR-M, 2026-10-18] nor a resolution batch or its receipt
     setPendingExecutionGrant(null);     // B18-C review: a pending execution grant never crosses projects (it idles out server-side)
     executionEntriesRef.current.clear(); // [B18-D review] no execution entry crosses projects: a late editor callback for the
     setExecutionEntries(new Map());      // previous project's grant finds nothing to write into the new project's chat
@@ -3101,7 +3157,7 @@ export default function Home() {
     setGenError(null);                  // provider errors never cross projects
     setAiProviderFailure(null);
     lastAiRetryRef.current = null; resumableChatRunRef.current = null; // retries (and, [B21 E3], a resume) never replay across projects
-    setIsGenerating(false); activeGenerationRef.current = null;
+    setIsGenerating(false); setDesignTaskBusy(false); activeGenerationRef.current = null; generationTaskRef.current?.unsubscribe(); generationTaskRef.current = null; setGenerationTask(null); setGenerationTaskControlBusy(false); // [PR-L, 2026-10-17] a followed design task never crosses projects (it keeps running; reopening its project reattaches)
     setIsEditing(false); activeEditRef.current = null;
     setIsReviewing(false); activeReviewRef.current = null;
     setIsTidying(false); activeTidyRef.current = null;
@@ -3180,12 +3236,12 @@ export default function Home() {
         storedView: viewCandidate === "schematic" || viewCandidate === "pcb" || viewCandidate === "3d" || viewCandidate === "bom" || viewCandidate === "sim" ? viewCandidate : null,
         history: new SchematicHistory<SchematicSnapshot>({
           components: state.components ?? [], wires: state.wires ?? [],
-          kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [],
+          kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [], ...(state.sheets !== undefined ? { sheets: state.sheets } : {}), // [PR-J3, 2026-10-22]
         }, { label: "Opened project" }),
         // B06: a fresh canonical schematic session per hydrated project — no
         // phantom history entries, no lineage carry-over across projects.
         session: new SchematicEditorSession({ tenantId: "local", projectId: record.id, branchId: "main" }),
-        projectionForOpen: { components: state.components ?? [], wires: state.wires ?? [], kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [], pageSize: state.pageSize },
+        projectionForOpen: { components: state.components ?? [], wires: state.wires ?? [], kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [], pageSize: state.pageSize, ...(state.sheets !== undefined ? { sheets: state.sheets } : {}) }, // [PR-J3, 2026-10-22] + the sheet tree iff present: the session compares this projection's canonical digest with the stored head mark (without it a multi-sheet record would open into recovery)
       };
     } catch (error) {
       return { ok: false, detail: `activation prepare failed: ${error instanceof Error ? error.message : String(error)}` };
@@ -3256,7 +3312,9 @@ export default function Home() {
         case "fresh":
         case "resumed":
         case "rebased-local-newer":
-          break; // session ready; nothing to surface
+          restorePendingProposalRef.current(record.id); // [PR-C] the session is ready: a persisted proposal is offered again against the same base
+          reattachGenerationTaskRef.current(record.id); // [PR-L, 2026-10-17] and the project's active design task is followed again (never another project's)
+          break; // session ready; nothing else to surface
         case "recovered-canonical":
           // B06.2: preserve the superseded projection BEFORE adopting, then
           // adopt the canonical state and prove adoption to the session.
@@ -3381,7 +3439,7 @@ export default function Home() {
     // gesture commits canonically (which flows through here after preview
     // ownership clears at pointer-up).
     if (gestureCoordinatorRef.current?.previewActive) return;
-    const snap: SchematicSnapshot = { components, wires, kicadComponents, netLabels };
+    const snap: SchematicSnapshot = { components, wires, kicadComponents, netLabels, ...(schHistoryRef.current.present.sheets !== undefined ? { sheets: schHistoryRef.current.present.sheets } : {}) }; // [PR-J3, 2026-10-22] the React arrays never hold the sheet tree: carried from the recorded present (every tree change is a canonical adoption, recorded with its own snapshot)
     if (applyingHistoryRef.current) {
       applyingHistoryRef.current = false;
       autosaverRef.current?.schedule();
@@ -3417,7 +3475,7 @@ export default function Home() {
   const applySchematicSnapshot = useCallback((snap: SchematicSnapshot) => {
     // B07.1: undo/redo replacement also orphans pending gesture completions
     // (the epoch bump inside the lifecycle applier).
-    applyLifecycleSchematicProjection({ components: snap.components, wires: snap.wires, kicadComponents: snap.kicadComponents, netLabels: snap.netLabels });
+    applyLifecycleSchematicProjection(historyStepState(snap, gestureCoordinatorRef.current?.authoritativeState())); // [PR-L6, 2026-10-19] the sheet size is not in the undo history: the projection keeps the authoritative one
     setSelectedId(null); setSelectedKicadId(null); setWireDraftStart(null);
   }, [applyLifecycleSchematicProjection]);
 
@@ -3436,7 +3494,7 @@ export default function Home() {
         const history = schHistoryRef.current;
         if (!history) return null;
         const snap = direction === "undo" ? history.peekUndo() : history.peekRedo();
-        return snap ? { components: snap.components, wires: snap.wires, kicadComponents: snap.kicadComponents, netLabels: snap.netLabels } : null;
+        return snap ? historyStepState(snap, gestureCoordinatorRef.current?.authoritativeState()) : null; // [PR-L6, 2026-10-19] + the authoritative sheet size: the target then matches the canonical transaction it undoes (replayed, never a lineage rebase onto a sheet without a size)
       },
       reconcile: (target) => session
         ? session.reconcileHistoryStep(direction, target)
@@ -3716,18 +3774,18 @@ export default function Home() {
     }
     return { ok: outcome.ok };
   }, [runSchematicCommand]);
-
+  const captureSheetScope = useCallback(() => projectScopeRegistryRef.current?.capture() ?? null, []); const clearSheetSelection = useCallback(() => { setWireDraftStart(null); setSelectedId(null); setSelectedKicadId(null); setSimResult(null); setSimError(null); }, []); // [PR-J3, 2026-10-22] the sheet lens's optional inputs: sheet commands carry the B07.4 project scope; a sheet switch clears the wire draft and the selection (as a recovery adoption does); [PR-J4 integration, 2026-10-23] review J4R-OUT-2: + the simulation result taken on the previous sheet (its bare probe keys are THAT sheet's points, so the Theory probe panel would resolve the new sheet's pins through them); the panes keep their project-wide signals and the next run refills them
   /** The single graph-mutation authority handed to the canvas (stable).
    *  B07.1: the gesture lifecycle delegates to the race-safe coordinator —
    *  `begin` reports ownership (false while another gesture is active or a
    *  commit is in flight), `preview` renders frames only for the owner. */
-  const schematicGraphApi = useMemo(() => ({
+  const rawSchematicGraphApi = useMemo(() => ({
     run: (label: string, commandId: string, buildAfter: (state: SchematicState) => SchematicGraphAfter | null) => { void graphCommand(label, commandId, buildAfter); },
     begin: () => gestureCoordinator.begin(),
     preview: (frame: SchematicGraphAfter) => gestureCoordinator.preview(frame),
     cancel: () => gestureCoordinator.cancel(),
     commit: (label: string, finalGraph: SchematicGraphAfter) => { void gestureCoordinator.commit(label, finalGraph); },
-  }), [graphCommand, gestureCoordinator]);
+  }), [graphCommand, gestureCoordinator]); const sheetLens = useSchematicSheetLens({ authoritative: authoritativeSchematic, graph: rawSchematicGraphApi, runSchematicCommand, projectId: project?.id ?? null, getPart: getCachedPart, components, wires, kicadComponents, netLabels, viewSessionBridge: viewSessionBridgeRef.current, selectedId, selectedKicadId, captureScope: captureSheetScope, onSheetSwitch: clearSheetSelection }); const schematicGraphApi = sheetLens.graph; // [PR-J3, 2026-10-22] the sheet lens (runbook J.3; OD-255 item 7): the canvas edits the ACTIVE sheet through this wrapper (merged back onto the whole project by id); a single-sheet document gets the raw object back
 
   // ── B06.1: sealed tier-1 proposal apply/cancel ─────────────────────────────
   // Apply re-verifies the sealed proposal (identity digest, operations
@@ -3888,6 +3946,76 @@ export default function Home() {
     // [B18-E E15] and the chat is told the decision, so the run log does not keep saying a proposal awaits review.
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", content: replacementChatLines.discarded() }]);
   }, [replacementApplyBusy, pendingReplacement, pendingReplacementRunId]);
+
+  // ── [PR-M, 2026-10-18] the reviewed component resolution (runbook M.2.5-M.2.6): the batch's explicit Approve ─────────────────────
+  // The B14 discipline: scope captured before any async work, the interlock from the transition coordinator, the journal scoped to the
+  // CAPTURED project. The trusted controller reauthorizes the live membership, mints the one-shot intent, builds the production
+  // fresh-facts channel and calls the approved-resolution service (live base and head, fresh candidate authority, the byte-exact
+  // recompile, ONE canonical transaction, the real receipt). Every outcome is written to the run log the batch came from; a committed
+  // one is followed by the recomputed Prepare PCB preflight and design checks on the new revision (resolutionAftermath).
+  async function applyResolutionProposal(): Promise<void> {
+    const pending = pendingResolution;
+    if (!pending || resolutionApplyBusy) return;
+    const scope = projectScopeRegistryRef.current!.capture();
+    const applySession = schematicSessionRef.current;
+    const applyInterlock = projectTransitionRef.current!.currentInterlock();
+    const currentProjectId = scope.projectId ?? projectRef.current?.id ?? null;
+    if (!applySession || !currentProjectId || !applyInterlock) {
+      setPendingResolution(null);
+      const line = resolutionLines.refused("the schematic session is not ready to verify the batch's scope. Nothing was changed.");
+      failActivityLog(pending.logId, line);
+      showToast(line);
+      return;
+    }
+    setResolutionApplyBusy(true);
+    try {
+      const outcome = await approveAndApplyResolution({
+        proposal: pending.received.proposal,
+        session: applySession,
+        gateway: gestureCoordinatorRef.current!,
+        interlock: applyInterlock,
+        journal: new ApprovedMutationJournal(approvedJournalStoreRef.current!, { tenantId: "local", projectId: currentProjectId, branchId: scope.branchId }),
+        stillCurrent: () => scope.isCurrent(),
+        currentProjectId,
+        currentBranchId: scope.branchId,
+        originRunId: pending.received.runId, boardImpact: pending.boardImpact, readBoardBasis: () => loadResolutionBoardBasis({ tenantId: "local", projectId: currentProjectId, branchId: scope.branchId }), // [PR-L6, 2026-10-19] the reviewed PCB impact, re-read at Approve
+      });
+      scope.ifCurrent(() => {
+        if (outcome.ok) {
+          setPendingResolution(null);
+          setResolutionReceipt(outcome.receipt);
+          setSelectedId(null);
+          setSelectedKicadId(null);
+          finishActivityLog(pending.logId, resolutionLines.committed(outcome.receipt, outcome.status === "already-applied"));
+          void resolutionAftermath(pending.logId, scope, outcome.receipt.boardImpact); void noteResolutionApplied({ tenantId: "local", projectId: currentProjectId, branchId: scope.branchId }, outcome.receipt, currentSchematicState()); // [PR-M, 2026-10-18] M2: a batch that applies an acquisition task's offered replacement records its receipt and the server's preflight on that task (best effort; in place)
+        } else {
+          // a stale base, a withdrawn candidate, a revoked membership: the batch can never apply now; another apply in flight or a
+          // gesture owning the editor keeps it for another try
+          if (outcome.code !== "already-in-flight" && outcome.code !== "editor-busy" && outcome.code !== "board-impact-changed" && outcome.code !== "board-impact-unavailable") setPendingResolution(null); else if (outcome.code === "board-impact-changed" || outcome.code === "board-impact-unavailable") { setPendingResolution((prev) => (prev ? { ...prev, boardImpact: { state: "loading" } } : prev)); void refreshResolutionBoardImpact(pending.received.proposal.proposalId); } // [PR-L6, 2026-10-19] the board moved (or could not be re-read): the batch stays, its impact is read again
+          failActivityLog(pending.logId, resolutionLines.refused(outcome.message));
+          showToast(outcome.message);
+        }
+      });
+    } finally {
+      scope.ifCurrent(() => setResolutionApplyBusy(false));
+    }
+  }
+  /** [PR-M, 2026-10-18] After a committed batch: the Prepare PCB preflight (the editor's own pure checks) and the design checks, recomputed
+   *  on the NEW authoritative revision with its parts loaded, written to the batch's run log; nothing is run on the server here. */
+  async function resolutionAftermath(logId: string, scope: ProjectAsyncScope, boardImpact?: ResolutionReceiptBoardImpact): Promise<void> {
+    const state = currentSchematicState();
+    await Promise.allSettled([...new Set((state.kicadComponents ?? []).map((instance) => instance.partId))].map((id) => ensurePartLoaded(id)));
+    if (!scope.isCurrent()) return;
+    const parts = new Map<string, CachedPart>();
+    for (const instance of state.kicadComponents ?? []) { const part = getCachedPart(instance.partId); if (part) parts.set(instance.partId, part); }
+    for (const line of resolutionAftermathLines(buildPcbSyncPreflightReport(state), computeDesignChecks(state, parts, schematicStateDigest(state), "build").checks, boardImpact)) finishActivityLog(logId, line);
+  } /** [PR-L6, 2026-10-19] runbook M.4 / M.5-7 (OD-253 item 8): assess the open batch against the project's DURABLE board (the existing board read; no crypto.randomUUID draw); an unreadable board leaves Approve disabled (fail closed) */ async function refreshResolutionBoardImpact(proposalId: string): Promise<void> { const scope = projectScopeRegistryRef.current!.capture(); const projectId = scope.projectId ?? projectRef.current?.id ?? null; const basis = projectId ? await loadResolutionBoardBasis({ tenantId: "local", projectId, branchId: scope.branchId }) : { state: "unavailable" as const, code: "NO_PROJECT_SCOPE", detail: "no project is open" }; scope.ifCurrent(() => setPendingResolution((prev) => { if (!prev || prev.received.proposal.proposalId !== proposalId) return prev; let boardImpact: ResolutionBoardImpactState; try { boardImpact = basis.state === "unavailable" ? { state: "unavailable", detail: `${basis.code}: ${basis.detail}` } : { state: "assessed", impact: assessResolutionBoardImpact({ items: resolutionBoardImpactItems(prev.received.proposal), basis }) }; } catch { boardImpact = { state: "unavailable", detail: "the impact could not be computed" }; } return { ...prev, boardImpact }; })); }
+  const discardResolutionProposal = useCallback(() => {
+    if (resolutionApplyBusy || !pendingResolution) return;
+    finishActivityLog(pendingResolution.logId, resolutionLines.discarded()); // nothing is applied, journaled or audited: discard records nothing
+    setPendingResolution(null);
+    showToast(resolutionLines.discarded());
+  }, [resolutionApplyBusy, pendingResolution]); const applyOrganizationProposal = useCallback(async () => { const pending = pendingOrganization; if (!pending || organizationApplyBusy) return; const proposal = pending.received.proposal; const currency = sheetOrganizationCurrency(proposal, liveSheetForSealedArtifacts()); if (!currency.ok) { setPendingOrganization(null); failActivityLog(pending.logId, sheetOrganizationLines.refused(currency.detail)); showToast(sheetOrganizationLines.refused(currency.detail)); return; } setOrganizationApplyBusy(true); try { const reauthorized = await reauthorizeSheetOrganizationApply(proposal); if (!reauthorized.ok) { setPendingOrganization(null); failActivityLog(pending.logId, sheetOrganizationLines.refused(reauthorized.detail)); showToast(sheetOrganizationLines.refused(reauthorized.detail)); return; } /* [PR-J5 integration, 2026-10-26] review J5R-AI-2 (B16.0.1 §F): the live membership must still match the sealed binding - principal, scope, role, revision - or nothing is applied */ const outcome = await sheetLens.controller.applyOrganizeProposal({ label: sheetOrganizationApplyLabel(proposal), expectedBaseDigest: schematicStateDigest(gestureCoordinatorRef.current!.authoritativeState()), expectedHeadMark: proposal.scope.headMark, replan: (canonical) => { const again = replanSheetOrganization(proposal, sheetOrganizationReplanBase(fromCanonicalSchematic(canonical), liveStateRef.current.pageSize), getCachedPart); return again.ok ? { ok: true, operations: again.operations } : { ok: false, detail: again.detail }; } }); setPendingOrganization(null); if (outcome.ok) { finishActivityLog(pending.logId, sheetOrganizationLines.applied(proposal)); showToast(sheetOrganizationLines.applied(proposal)); } else { failActivityLog(pending.logId, sheetOrganizationLines.refused(outcome.message)); showToast(outcome.message); } } finally { setOrganizationApplyBusy(false); } }, [pendingOrganization, organizationApplyBusy, sheetLens.controller]); const discardOrganizationProposal = useCallback(() => { if (organizationApplyBusy || !pendingOrganization) return; finishActivityLog(pendingOrganization.logId, sheetOrganizationLines.discarded()); setPendingOrganization(null); showToast(sheetOrganizationLines.discarded()); }, [organizationApplyBusy, pendingOrganization]); // [PR-J5, 2026-10-23] OD-259 items 4-5: Approve re-checks the sealed proposal's currency against the live editor, then applies its groups through the Sheets controller's ONE organise transaction (schematic.move-to-sheet; the tool's own re-plan on the canonical base with the chat run's sheet-size recipe; refused unless the sealed digests result; one undo step); Discard records nothing
 
   // ── B06.2: explicit schematic-history recovery choices ─────────────────────
   // While a recovery is pending the session is `conflicted` and every
@@ -4064,7 +4192,7 @@ export default function Home() {
       wires: checkpoint.schematic.wires ?? [],
       kicadComponents: checkpoint.schematic.kicadComponents ?? [],
       netLabels: checkpoint.schematic.netLabels ?? [],
-      ...(checkpoint.schematic.pageSize ? { pageSize: checkpoint.schematic.pageSize } : { ...(liveStateRef.current.pageSize ? { pageSize: liveStateRef.current.pageSize } : {}) }),
+      ...(checkpoint.schematic.pageSize ? { pageSize: checkpoint.schematic.pageSize } : { ...(liveStateRef.current.pageSize ? { pageSize: liveStateRef.current.pageSize } : {}) }), ...(checkpoint.schematic.sheets !== undefined ? { sheets: checkpoint.schematic.sheets } : {}), // [PR-J3, 2026-10-22] a checkpoint restores its sheet tree
     };
     const session = schematicSessionRef.current;
     const restoredForProject = meta.id;
@@ -4327,7 +4455,7 @@ export default function Home() {
     return id;
   }
 
-  function appendActivityStep(logId: string, text: string, status: ActivityLogEntry["status"] = "running") {
+  function appendActivityStep(logId: string, text: string, status: ActivityLogEntry["status"] = "running", lineId?: string) { // [PR-L, 2026-10-17] + lineId: a design task's own lines (generationActivityLineId) draw no crypto.randomUUID, so they never shift the editor's id sequence
     setMessages((prev) =>
       prev.map((message) => {
         if (message.role !== "log" || message.id !== logId) return message;
@@ -4338,14 +4466,14 @@ export default function Home() {
             ...message.entries.map((entry) =>
               entry.status === "running" ? { ...entry, status: "done" as const } : entry,
             ),
-            { id: crypto.randomUUID(), text, status },
+            { id: lineId ?? crypto.randomUUID(), text, status },
           ],
         };
       }),
     );
   }
 
-  function finishActivityLog(logId: string, text?: string) {
+  function finishActivityLog(logId: string, text?: string, lineId?: string) { // [PR-L, 2026-10-17] + lineId, as appendActivityStep
     setMessages((prev) =>
       prev.map((message) => {
         if (message.role !== "log" || message.id !== logId) return message;
@@ -4355,13 +4483,13 @@ export default function Home() {
         return {
           ...message,
           status: "done",
-          entries: text ? [...entries, { id: crypto.randomUUID(), text, status: "done" as const }] : entries,
+          entries: text ? [...entries, { id: lineId ?? crypto.randomUUID(), text, status: "done" as const }] : entries,
         };
       }),
     );
   }
 
-  function failActivityLog(logId: string, text: string) {
+  function failActivityLog(logId: string, text: string, lineId?: string) { // [PR-L, 2026-10-17] + lineId, as appendActivityStep
     setMessages((prev) =>
       prev.map((message) => {
         if (message.role !== "log" || message.id !== logId) return message;
@@ -4371,7 +4499,7 @@ export default function Home() {
         return {
           ...message,
           status: "error",
-          entries: [...entries, { id: crypto.randomUUID(), text, status: "error" as const }],
+          entries: [...entries, { id: lineId ?? crypto.randomUUID(), text, status: "error" as const }],
         };
       }),
     );
@@ -4400,6 +4528,26 @@ export default function Home() {
       return at >= 0 ? [...prev.slice(0, at), message, ...prev.slice(at)] : [...prev, message];
     });
   }, []);
+  // [PR-G, 2026-10-17] A REVIEW CARD in the run log for a sealed agent artifact that is not an execution (a draft request's review task,
+  // a module-contract engineering note): one log message of text rows, inserted just before the run's answer as an execution entry is,
+  // replaced in place when the same artifact arrives again. Text only: a card's one control (the draft request's "Open the publication
+  // request") and the note's collapse are rendered by MessageBubble from the card's id prefix. Saved with the chat like every log.
+  const upsertReviewCard = useCallback((id: string, title: string, lines: readonly string[], insertBeforeId?: string) => {
+    const message: ActivityLogMessage = { id, role: "log", title, status: "done", entries: lines.map((text, index) => ({ id: `${id}:${index}`, text, status: "done" as const })) };
+    setMessages((prev) => {
+      if (prev.some((existing) => existing.id === message.id)) return prev.map((existing) => (existing.id === message.id ? message : existing));
+      const at = insertBeforeId ? prev.findIndex((existing) => existing.id === insertBeforeId) : -1;
+      return at >= 0 ? [...prev.slice(0, at), message, ...prev.slice(at)] : [...prev, message];
+    });
+  }, []);
+  // [PR-G, 2026-10-17] the card's one action: open the EXISTING publication request (AtomicPublicationReviewSection) prefilled from the
+  // sealed request this page still holds; nothing is requested until the person presses its own "Request evidence review".
+  function openDraftRequestPublication(proposalId: string): void {
+    const held = liveDraftRequestsRef.current.get(proposalId);
+    if (!held) { showToast("This draft request is no longer held by this page (a reload or a project switch): ask the assistant for it again."); return; }
+    if (!(held.proposal.expiresAt > Date.now())) { showToast("This draft request expired; ask the assistant for it again. Nothing was changed."); return; }
+    setDraftRequestOpen(held);
+  }
 
   // [B18-D I9] Stop (chat-execution-ux.md §8 I9): send() registers its run here; Stop cancels the response reader and
   // carries nothing — the route aborts the run, and the loop retires its still-issued explicit grants. An AI change the
@@ -4536,12 +4684,12 @@ export default function Home() {
       let runFailure: { reason: string; message: string } | null = null;
       // [B18-D I6] the page half of Rule 2: every event folds into the run view; the answer bubble shows ONLY the final text
       // (labelled while a change the run started is unresolved); interim text is released as notes when the run ends.
-      let runView = initialRunView();
+      let runView = initialRunView(); let generationStartAsked = false; let generationTaskSeen = false; // [PR-L, 2026-10-18] the run asked to start a design / received its reference
       const boardForRefs = chatEditorContext?.board ?? null;
       const refOf = (objectId: string): string | null => boardForRefs?.footprints.find((footprint) => footprint.id === objectId)?.ref ?? null;
       const applyAgentEvent = (event: Record<string, unknown>): void => {
         if (!scope.isCurrent()) return;
-        runView = reduceRunView(runView, event); resumeObservation = observeChatResume(resumeObservation, event); // [B21 E3]
+        runView = reduceRunView(runView, event); resumeObservation = observeChatResume(resumeObservation, event); chatWorkLog.foldRunEvent(logId, scope, event); // [B21 E3]; [K2, 2026-11-04] every event also folds into this entry's Work log (typed rows; an acquisition_task_ready starts following the task)
         switch (event.type) {
           case "text_delta": {
             const answer = projectRunView(runView).answer;
@@ -4549,8 +4697,8 @@ export default function Home() {
             return;
           }
           case "tool_started": {
-            const tag = typeof event.tier === "number" ? `T${event.tier} · ` : "";
-            appendActivityStep(logId, `Running Sirkit tool: ${tag}${typeof event.title === "string" ? event.title : "tool"}`);
+            const tag = typeof event.tier === "number" ? `T${event.tier} · ` : ""; if (event.toolId === GENERATION_START_TOOL_ID) generationStartAsked = true; // [PR-L, 2026-10-18]
+            appendActivityStep(logId, resolutionProgressLine(event) ?? `Running Sirkit tool: ${tag}${typeof event.title === "string" ? event.title : "tool"}`); // [PR-M, 2026-10-18] a resolution step's public progress line (inspecting, searching, checking mappings)
             return;
           }
           case "tool_finished": {
@@ -4608,6 +4756,32 @@ export default function Home() {
             }
             return;
           }
+          case "generation_task_ready": {
+            // [PR-L, 2026-10-18] runbook L.5: the assistant started or attached the project's DURABLE design task
+            // (sirkit.schematic.generate-proposal@2.0.0). The SAFE receiver reads a task REFERENCE only - never a design and never authority:
+            // followChatGenerationTask re-reads the task through this page's own authorized route and follows it with the SAME status card
+            // and the SAME review intake as a Build start (offerBuildResult -> the review dialog), once per (task, result digest).
+            const started = receiveGenerationTaskEvent(event);
+            if (!started) { appendActivityStep(logId, "A design task reference the assistant issued was dropped by this page: it was malformed. This page follows nothing for it and nothing was changed.", "error"); return; }
+            generationTaskSeen = true;
+            appendActivityStep(logId, started.task.disposition === "attached-active" ? (started.task.state === "awaiting-review" ? "The assistant found this project's previous design finished and waiting for your review (nothing new was started): approve or discard it in the review dialog before asking for a new design" : "The assistant attached to the design already running for this project (nothing new was started); following it below") : `Design task ${started.task.disposition === "started" ? "started" : "attached"} from the chat; a generation worker runs it in saved steps - this answer ending (or Stop answer) does not stop it`, "done"); // [PR-L/M integration, 2026-10-18] L5-2: an attached FINISHED design (awaiting-review) is not called running: its result waits in the review dialog
+            void followChatGenerationTask(started, { scope });
+            return;
+          }
+          case "generation_task_control_ready": {
+            // [PR-L, 2026-10-18] runbook L.5 (OD-252 item 6): a SEALED control request becomes a confirm chip; only the human's click sends
+            // it to the task's control route, under the human's authorization. Receiving it changes nothing.
+            const control = receiveGenerationTaskControlEvent(event);
+            if (!control) { appendActivityStep(logId, "A design control request the assistant issued was dropped by this page: it failed the integrity checks. Nothing was sent and nothing was changed.", "error"); return; }
+            const controlVerdict = generationTaskControlCurrency(control.request, { projectId: scope.projectId ?? null, branchId: scope.branchId ?? "main", now: Date.now() });
+            if (!controlVerdict.ok) { appendActivityStep(logId, `Design control request not offered - ${controlVerdict.detail}`, "error"); return; }
+            liveGenerationControlsRef.current.set(control.request.requestId, control);
+            setLiveGenerationControls(new Map(liveGenerationControlsRef.current));
+            const controlCard = generationTaskControlCardLines(control.request);
+            upsertReviewCard(`${GENERATION_TASK_CONTROL_CARD_ID_PREFIX}${control.request.requestId}`, controlCard.title, controlCard.lines, assistantId);
+            appendActivityStep(logId, `The assistant asks: ${control.request.label} - confirm or dismiss it on the card below; nothing happens to the design until you confirm`, "done");
+            return;
+          }
           case "view_command_ready": {
             // [B17-F] a server-VALIDATED view command for the user's own view bus. The bridge re-checks the
             // request shape, expiry, the live surface and the session id; the bus applies its stale-revision
@@ -4633,6 +4807,65 @@ export default function Home() {
             }
             return;
           }
+          case "stackup_candidate_ready": {
+            // [PR-G, 2026-10-17] the agent's stackup / via-policy recommendation (sirkit.stackup.propose, OD-249) — beside the layout
+            // candidate: the SAFE receiver re-parses the artifact (schema, producer, digest intact); it is checked against the LIVE board's
+            // revision (the editor-context bridge's exact working copy) and its expiry; a current one is handed to the PCB editor, which
+            // re-verifies it and shows it as a PREVIEW the human accepts (the editor's EXISTING Stackup path) or discards. Nothing is written.
+            const stackup = receiveStackupCandidateEvent(event);
+            if (!stackup) { appendActivityStep(logId, "A stackup recommendation the assistant issued was dropped by this page: it failed the integrity checks. Nothing was changed and nothing is offered.", "error"); return; }
+            const liveBoard = editorContextBridgeRef.current!.capture({ tenantId: "local", projectId: scope.projectId ?? projectRef.current?.id ?? "local", branchId: scope.branchId ?? "main" });
+            const stackupVerdict = verifyStackupCandidateAgainstBoard(stackup.candidate, liveBoard?.pcbRevisionId ?? null, Date.now());
+            if (!stackupVerdict.ok) { appendActivityStep(logId, `Stackup recommendation not offered — ${stackupVerdict.detail}`, "error"); return; }
+            setPendingStackupCandidate({ candidate: stackup.candidate, originRunId: stackup.runId });
+            appendActivityStep(logId, stackupCandidateChatLine(stackup.candidate), "done");
+            return;
+          }
+          case "draft_request_ready": {
+            // [PR-G, 2026-10-17] the agent's part draft request (sirkit.parts.draft-request, OD-248): the SAFE receiver verifies the sealed
+            // artifact; the currency check runs against the LIVE editor (scope, head, expiry, the base digest as `send` posted it); a
+            // current one becomes a REVIEW TASK card in the run log — the part, the documented facts with their sources, the missing
+            // facts, the PCB-assignment blockers — with ONE action that opens the EXISTING publication request prefilled from the sealed
+            // spec. Receiving it mutates nothing, binds nothing, publishes nothing and submits nothing; a person does, in the review.
+            const draft = receiveDraftRequestEvent(event);
+            if (!draft) { appendActivityStep(logId, "A part draft request the assistant issued was dropped by this page: it failed the integrity checks. Nothing was changed and no review task is offered.", "error"); return; }
+            const draftVerdict = draftRequestCurrency(draft.proposal, liveSheetForSealedArtifacts());
+            if (!draftVerdict.ok) { appendActivityStep(logId, `Draft request not offered — ${draftVerdict.detail}`, "error"); return; }
+            liveDraftRequestsRef.current.set(draft.proposal.proposalId, draft);
+            setLiveDraftRequests(new Map(liveDraftRequestsRef.current));
+            const card = draftRequestCardLines(draft.proposal);
+            upsertReviewCard(`${DRAFT_REQUEST_CARD_ID_PREFIX}${draft.proposal.proposalId}`, card.title, card.lines, assistantId);
+            appendActivityStep(logId, `Review task: an UNVERIFIED draft request for ${draft.proposal.instance.refDes} (${draft.proposal.draftRequest.exactMpn}) — its card below lists the documented facts with their sources and the missing facts; "${DRAFT_REQUEST_OPEN_LABEL}" there prefills the Build Library's evidence review. Nothing is published, bound or assignable until a person submits it, a reviewer approves and an administrator publishes.`, "done");
+            return;
+          }
+          case "module_contracts_ready": {
+            // [PR-G, 2026-10-17] the agent's module contract set (sirkit.module.propose-contracts, OD-249): the SAFE receiver verifies the
+            // sealed artifact; the currency check runs against the LIVE editor as for the draft request; a current one becomes a
+            // collapsible ENGINEERING NOTE card in the run log (modules, owned components, ports, cross-module constraints, unresolved
+            // part-authority gaps, the validator's result as data). There is NO apply: nothing changes the sheet or a board; the human
+            // accepts by continuing or asks for a revision. No notes store exists in this project, so the card is the note (saved with the chat).
+            const contracts = receiveModuleContractsEvent(event);
+            if (!contracts) { appendActivityStep(logId, "A module contract set the assistant issued was dropped by this page: it failed the integrity checks. Nothing was changed and no note is offered.", "error"); return; }
+            const noteVerdict = moduleContractCurrency(contracts.proposal, liveSheetForSealedArtifacts());
+            if (!noteVerdict.ok) { appendActivityStep(logId, `Module contracts not offered — ${noteVerdict.detail}`, "error"); return; }
+            const note = moduleContractNoteLines(contracts.proposal);
+            upsertReviewCard(`${MODULE_CONTRACT_NOTE_ID_PREFIX}${contracts.proposal.proposalId}`, note.title, [note.summary, ...note.details], assistantId);
+            appendActivityStep(logId, `Engineering note: module contracts for ${contracts.proposal.contractSet.modules.length} module${contracts.proposal.contractSet.modules.length === 1 ? "" : "s"} — read the collapsible note below (this card is the note; it is kept with the project's chat history). Validated for structure only; no electrical check ran; nothing is applied to the sheet or a board.`, "done");
+            return;
+          }
+          case "component_resolution_ready": {
+            // [PR-M, 2026-10-18] the agent's component resolution batch (sirkit.schematic.propose-component-resolution): the SAFE receiver
+            // verifies the sealed batch, the currency check runs against the LIVE editor (scope, expiry, head, the base digest as `send`
+            // posted it), and a current one opens the review dialog. Receiving it mutates nothing; only the human's Approve applies it.
+            const resolution = receiveComponentResolutionEvent(event);
+            if (!resolution) { appendActivityStep(logId, resolutionLines.dropped(), "error"); return; }
+            const resolutionVerdict = componentResolutionCurrency(resolution.proposal, liveSheetForSealedArtifacts());
+            if (!resolutionVerdict.ok) { appendActivityStep(logId, resolutionLines.notOffered(resolutionVerdict.detail), "error"); return; }
+            setPendingResolution({ received: resolution, logId, boardImpact: { state: "loading" } }); void refreshResolutionBoardImpact(resolution.proposal.proposalId); // [PR-L6, 2026-10-19] the PCB impact is read before Approve is enabled
+            approvedMutationAudit.record({ at: Date.now(), proposalId: resolution.proposal.proposalId, originRunId: resolution.runId, event: "approval-displayed", code: null });
+            appendActivityStep(logId, resolutionLines.awaitingReview(resolution.proposal), "done");
+            return;
+          } case "sheet_organization_ready": { const organise = receiveSheetOrganizationEvent(event); if (!organise) { appendActivityStep(logId, sheetOrganizationLines.dropped(), "error"); return; } const organiseVerdict = sheetOrganizationCurrency(organise.proposal, liveSheetForSealedArtifacts()); if (!organiseVerdict.ok) { appendActivityStep(logId, sheetOrganizationLines.notOffered(organiseVerdict.detail), "error"); return; } setPendingOrganization({ received: organise, logId }); appendActivityStep(logId, sheetOrganizationLines.awaitingReview(organise.proposal), "done"); return; } /* [PR-J5, 2026-10-23] OD-259 item 5 (one existing line): the assistant's sealed organise proposal - the SAFE receiver (integrity), the currency check against the LIVE editor (scope, expiry, head, base digest), then the review card; receiving it mutates nothing (only the human's Approve applies, through the Sheets controller's one transaction) */
           case "execution_grant_ready": {
             // [B18-B] a server-minted execution grant — the SAFE receiver re-parses it and checks its coherence; the PCB
             // editor (the composition root) runs the granted-execution ritual: preview grants wait for the human's Confirm,
@@ -4736,18 +4969,19 @@ export default function Home() {
       }
       // [B18-D I6] the run's interim notes are released only now, after the run ended — never in the answer.
       if (scope.isCurrent()) {
-        const projected = projectRunView(runView);
+        const projected = projectRunView(runView); const footer = answerFooter(runView, { provider: runProvider, model: aiRuntime?.providers[runProvider]?.model ?? null }); // [PR-G, 2026-10-17] the model label: the run's own provider and model, with the disclosure when they differ from the configured source
         for (const note of [...(projected.status ? [projected.status] : []), ...projected.notes]) appendActivityStep(logId, note, "done"); // [B21 E2] the orchestrated run's ONE status line (OD-127), then the notes
-        if (projected.answer) setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: projected.answer } : m))); const resumable = resumableChatRun(resumeObservation, { terminal: runView.terminal, runId: streamRunId, text, provider: runProvider, projectId: projectScopeRegistryRef.current?.current.projectId ?? "local", branchId: projectScopeRegistryRef.current?.current.branchId ?? "local" }); resumableChatRunRef.current = resumable; if (resumable) appendActivityStep(logId, chatResumeOfferLine(resumable.runId, resumable.provider), "done"); // [B21 E3] the resume offer, a run-log line (OD-127: no control)
+        if (projected.answer) setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: projected.answer, ...(footer ? { footer } : {}) } : m))); /* [PR-G, 2026-10-17] + the model label under the answer, from the run's own events */ const resumable = resumableChatRun(resumeObservation, { terminal: runView.terminal, runId: streamRunId, text, provider: runProvider, projectId: projectScopeRegistryRef.current?.current.projectId ?? "local", branchId: projectScopeRegistryRef.current?.current.branchId ?? "local" }); resumableChatRunRef.current = resumable; if (resumable) appendActivityStep(logId, chatResumeOfferLine(resumable.runId, resumable.provider), "done"); // [B21 E3] the resume offer, a run-log line (OD-127: no control)
       }
       // [B18-D I9, review] a run stopped before it ended says so (a Stop pressed after the run had already ended claims nothing).
       // An AI change already sent to the editor is reported in its entry either way — made, or not made: a grant not yet consumed
       // is retired run_cancelled, so "it still finishes" would not be true.
       if (stoppedEarly && scope.isCurrent()) {
         const stopped = "Stopped. An AI change already sent to your editor is reported in its entry: made, or not made.";
-        appendActivityStep(logId, "Stopped by you — the assistant's run was cancelled.", "done");
+        appendActivityStep(logId, `Stopped by you — the assistant's answer (Stop answer) was cancelled. ${STOP_ANSWER_SEMANTICS}`, "done"); // [PR-L, 2026-10-18] runbook L.5: Stop answer vs Stop design
         setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: m.content ? `${m.content}\n\n${stopped}` : stopped } : m)));
       }
+      if (generationStartAsked && !generationTaskSeen && scope.isCurrent() && scope.projectId) reattachGenerationTaskRef.current(scope.projectId); // [PR-L, 2026-10-18] the turn ended before the task reference arrived (a stop, a deadline): a start that landed is the project's active task - follow it, never start another
       if (runFailure !== null && scope.isCurrent()) {
         const failure = runFailure as { reason: string; message: string };
         failActivityLog(logId, failure.message);
@@ -4802,7 +5036,7 @@ export default function Home() {
           };
         });
       });
-      if (activeChatRunRef.current === chatRun) activeChatRunRef.current = null; // [B18-D I9]
+      if (activeChatRunRef.current === chatRun) activeChatRunRef.current = null; chatWorkLog.endRun(logId, scope, chatRun.stopped ? "stopped" : "ended"); // [B18-D I9]; [K2, 2026-11-04] a turn that ended without its run's terminal event says how in its Work log (Stop answer, or a dropped stream / failed request); a log that has its ending is unchanged
       // Only THIS request may clear the busy flag it set.
       if (activeChatRef.current === scope.requestId) {
         activeChatRef.current = null;
@@ -4816,7 +5050,7 @@ export default function Home() {
   // generation's fetches and canceling its timers); handlers capture scopes
   // at invocation and check them after every await.
   const projectScopeRegistryRef = useRef<ProjectAsyncScopeRegistry | null>(null);
-  if (projectScopeRegistryRef.current === null) projectScopeRegistryRef.current = new ProjectAsyncScopeRegistry();
+  if (projectScopeRegistryRef.current === null) projectScopeRegistryRef.current = new ProjectAsyncScopeRegistry(); const chatWorkLog = useChatWorkLog({ messages, setMessages, captureScope: () => projectScopeRegistryRef.current?.capture() ?? null }); // [K2, 2026-11-04] the Work log glue (logic in the hook; OD-260 item 8)
   // [B16-C.5] mount re-arms (StrictMode runs this cleanup once and mounts again), unmount disposes.
   useEffect(() => { projectScopeRegistryRef.current?.resume(); return () => projectScopeRegistryRef.current?.dispose(); }, []);
 
@@ -4859,6 +5093,42 @@ export default function Home() {
     return { isCurrent: () => scope.isCurrent() };
   }, []);
 
+  // [PR-C] A persisted proposal is offered again after a reload ONLY while the authoritative schematic still has the
+  // digest it was produced against (the same exact-base rule the approval enforces); a stale record is discarded. The
+  // session's open outcome calls this once the project is ready (installProject above), never earlier: the install's
+  // transient reset would otherwise wipe a proposal restored too soon.
+  useLayoutEffect(() => {
+    restorePendingProposalRef.current = (projectId: string) => {
+      if (projectRef.current?.id !== projectId) return; // superseded by a later open
+      const stored = loadPendingProposal(projectId);
+      if (!stored) return;
+      if (proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()) !== stored.baseDigest) { clearPendingProposal(projectId); showToast("A schematic proposal from before the reload was discarded: the schematic changed since it was made."); return; }
+      const pin = captureLifecycleInvocationContext();
+      setPendingReplace({ state: stored.state, explanation: stored.explanation, prompt: stored.prompt, promptAlreadyLogged: true, pin, validationNote: [stored.validationNote, "Restored after a reload: the schematic is unchanged since this proposal was made. Approve or discard it."].filter(Boolean).join("\n"), ...(stored.task ? { task: stored.task } : {}) }); // [PR-L, 2026-10-17] + its durable task
+    };
+  }, [captureLifecycleInvocationContext, proposalContentDigest]);
+
+  // [PR-L, 2026-10-17] Runbook L.4: once an opened project's session is ready, its ACTIVE design task (the store's, for exactly this
+  // project's scope) is followed again in a new activity entry - a reload or a project switch reattaches, it never starts the model
+  // again and never attaches another project's task. The update hook is rebound every render, so a late subscription callback runs the
+  // current render's code.
+  useLayoutEffect(() => {
+    generationTaskUpdateRef.current = applyGenerationTaskUpdate;
+    reattachGenerationTaskRef.current = (projectId: string) => {
+      if (projectRef.current?.id !== projectId) return; // superseded by a later open
+      const scope = projectScopeRegistryRef.current!.capture();
+      const requestScope = { projectId, branchId: scope.branchId };
+      void fetchActiveGenerationTask(requestScope, { signal: scope.signal }).then(async (answer) => {
+        if (!scope.isCurrent() || projectRef.current?.id !== projectId || !answer.ok || !answer.active) return;
+        if (generationTaskRef.current?.taskId === answer.active.taskId) return; // already followed
+        const detail = await fetchGenerationTask(requestScope, answer.active.taskId, { signal: scope.signal });
+        if (!scope.isCurrent() || generationTaskRef.current?.taskId === answer.active.taskId) return;
+        const logId = startActivityLog("Generating schematic", "Reattached to this project's design task: it kept running without this page, and nothing was started again");
+        attachGenerationTask(detail.ok ? detail.task : answer.active, { logId, prompt: detail.ok ? (detail.task.prompt ?? "") : "", scope });
+      });
+    };
+  });
+
   /**
    * B07.3 — TRANSACTIONAL machine-schematic application through the
    * lifecycle gateway: validate → canonical adoption (quarantine-first, on
@@ -4887,8 +5157,8 @@ export default function Home() {
     const appliedState: SchematicState = {
       components: state.components, wires: state.wires,
       kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [],
-      ...(state.pageSize ? { pageSize: state.pageSize } : { ...(liveStateRef.current.pageSize ? { pageSize: liveStateRef.current.pageSize } : {}) }),
-    };
+      ...(state.pageSize ? { pageSize: state.pageSize } : { ...(liveStateRef.current.pageSize ? { pageSize: liveStateRef.current.pageSize } : {}) }), ...(state.sheets !== undefined ? { sheets: state.sheets } : {}), // [PR-J3, 2026-10-22] a sheet-aware result (J5-2) keeps its tree
+    }; const flatRefusal = flatReplacementRefusal(gestureCoordinator.authoritativeState(), appliedState); if (flatRefusal !== null) { showToast(flatRefusal); return false; } // [PR-J3, 2026-10-22] OD-257 item 3, the FINAL guard: a flat result never replaces a multi-sheet document (the review dialog's Approve reports not applied)
     const applyForProject = opts?.pin ? opts.pin.projectId : (projectRef.current?.id ?? null);
     const outcome = await gestureCoordinator.adoptLifecycle({
       state: appliedState,
@@ -4962,8 +5232,8 @@ export default function Home() {
       const detail = "detail" in outcome ? outcome.detail : "The project changed while the result was being prepared.";
       const errorScope = opts?.pin?.scope ?? projectScopeRegistryRef.current!.capture();
       errorScope.ifCurrent(() => {
-        setGenError(detail);
-        errorScope.setTimeout(() => setGenError(null), 8000);
+        const show = ++genErrorShowRef.current; setGenError(detail);
+        errorScope.setTimeout(() => { if (genErrorShowRef.current === show) setGenError(null); }, 8000);
       });
     }
     return false;
@@ -4973,8 +5243,8 @@ export default function Home() {
    *  while the owning scope is current; never appears in another project. */
   const setScopedGenError = useCallback((scope: ProjectAsyncScope, message: string, ms = 6000) => {
     scope.ifCurrent(() => {
-      setGenError(message);
-      scope.setTimeout(() => setGenError(null), ms);
+      const show = ++genErrorShowRef.current; setGenError(message);
+      scope.setTimeout(() => { if (genErrorShowRef.current === show) setGenError(null); }, ms);
     });
   }, []);
 
@@ -4993,10 +5263,10 @@ export default function Home() {
     if (!entryGate.allowed) {
       setScopedGenError(projectScopeRegistryRef.current!.capture(), entryGate.reason);
       return;
-    }
+    } const sheetAdvisory = multiSheetReplaceAdvisory(gestureCoordinatorRef.current!.authoritativeState()); const theoryRefusal = mode === "build" ? null : multiSheetReplaceRefusal(gestureCoordinatorRef.current!.authoritativeState(), "theory"); if (theoryRefusal !== null) { setScopedGenError(projectScopeRegistryRef.current!.capture(), theoryRefusal, 12000); return; } /* [PR-J5 integration, 2026-10-26] review B-2: OD-257 item 3 kept for THEORY (OD-259 item 2 revises the Build composer only) - a Theory result is always one page, so the start refuses before its provider-bound request: no request, no spend */ // [PR-J5, 2026-10-23] OD-259 item 2 (revising OD-257 item 3): the composer no longer REFUSES at the START on a multi-sheet project - a planned result lays out as sheets and replaces them as one undoable transaction (OD-255 item 9); the advisory step below says so; a FLAT result stays refused at the offer and at the final apply
     const pin = captureLifecycleInvocationContext();
     const scope = pin.scope;
-    const logId = startActivityLog("Generating schematic", "Preparing request", prompt);
+    const logId = startActivityLog("Generating schematic", "Preparing request", prompt); if (sheetAdvisory !== null) appendActivityStep(logId, sheetAdvisory, "done"); // [PR-J5, 2026-10-23] the multi-sheet advisory (OD-259 item 2)
     setLastDesignPrompt(prompt); // remembered for the SchGen cross-verify second opinion
     setPendingSuggestions(null); // any prior suggestions are now stale
     setSuggestionsMinimized(false);
@@ -5006,102 +5276,56 @@ export default function Home() {
     setIsGenerating(true);
     setGenError(null);
     setAiProviderFailure(null);
+    setLastGenerationFailure(null); // [PR-C]
     lastAiRetryRef.current = () => void handleGenerateSchematic(prompt);
     try {
-      let state: SchematicState;
-      let explanation: string;
-
       if (mode === "build") {
-        appendActivityStep(logId, "Generating build netlist");
-        const res = await fetch("/api/schematic/build-multi", {
-          method: "POST",
-          headers: aiRequestHeaders(scope),
-          body: JSON.stringify({ prompt, provider: aiBrainRef.current }),
-          signal: scope.signal,
-        });
-        if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => scope.isCurrent() });
-        const data = (await res.json()) as
-          | { ok: true; netlist: BuildLogicalNetlist; explanation: string }
-          | { ok: false; error: string };
-        if (!data.ok) throw new Error(data.error || "Generation failed");
-
-        // Load every referenced part before laying out (positions come from pins).
-        const netlist = data.netlist;
-        const partIds = [...new Set(netlist.components.map((c) => c.partId))];
-        const parts = new Map<string, CachedPart>();
-        appendActivityStep(logId, `Loading ${partIds.length} catalog part${partIds.length === 1 ? "" : "s"}`);
-        await Promise.all(
-          partIds.map(async (id) => {
-            parts.set(id, await ensurePartLoaded(id));
-          }),
-        );
-        appendActivityStep(logId, "Laying out and validating schematic");
-        const built = autoLayoutBuildValidated(netlist, parts);
-        state = built.state;
-        explanation = data.explanation;
-
-        if ((state.kicadComponents?.length ?? 0) === 0) {
-          failActivityLog(logId, "No parts produced");
-          setScopedGenError(scope, "No parts produced — try a more specific prompt.");
+        // [PR-L, 2026-10-17] runbook L.4, increment 4: a Build design is a DURABLE generation task, not one request that must finish
+        // inside a deadline (the page called POST /api/schematic/build-multi and awaited it here). The start is answered the moment it
+        // is durably accepted; a generation worker designs it in finite slices that checkpoint and continue; this page follows the
+        // task's real public progress in this activity entry (attachGenerationTask) and offers its validated result through the SAME
+        // intake as before (offerBuildResult -> the review dialog), once. Closing or reloading the page never stops it; Stop design does.
+        appendActivityStep(logId, "Starting a durable design task");
+        // the task's base is the sheet's CONTENT digest (the pending-proposal recipe: a fresh project's first save adds its sheet size, which is not
+        // design content and must not make a result stale across a reload); the exact-base apply still checks the full pin when it is offered
+        const started = await startGenerationTask({ scope, clientRequestId: newGenerationClientRequestId(), prompt, provider: aiBrainRef.current, base: { schematicDigest: proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()), recipe: "build-pin", headMark: schematicSessionRef.current?.headMark() ?? undefined }, signal: scope.signal });
+        if (!scope.isCurrent()) { failActivityLog(logId, "Canceled — the project changed"); return; }
+        if (!started.ok && started.code === "GENERATION_TASK_ACTIVE" && started.activeTask) {
+          // one design at a time per project: the running one is followed (and offered when ready) instead of a second start
+          appendActivityStep(logId, "A design is already running for this project; following it instead of starting another", "done", generationActivityLineId());
+          activeGenerationRef.current = generationTaskOwner(started.activeTask.taskId); setIsGenerating(false); // [PR-L, 2026-10-18] the task's own busy state takes over (designTaskBusy, from its updates)
+          attachGenerationTask(started.activeTask, { logId, prompt, scope });
           return;
         }
-
-        // Electrical validation: surface (don't silently ship) a schematic that
-        // is electrically wrong by netlist after reroute attempts.
-        if (!built.validation.ok) {
-          const v = built.validation.violations;
-          setScopedGenError(scope, `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`, 12000);
-          appendActivityStep(logId, `Electrical check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
-        }
-      } else {
-        appendActivityStep(logId, "Synthesizing theory schematic");
-        const result = await generateSchematic(prompt, lastAiRetryRef.current ?? undefined, { isCurrent: () => scope.isCurrent() });
-        state = result.state;
-        explanation = result.netlist.explanation;
-        if (state.components.length === 0) {
-          failActivityLog(logId, "No components produced");
-          setScopedGenError(scope, "No components produced — try a more specific prompt.");
-          return;
-        }
-
-        // Surface (don't silently ship) an electrically-invalid theory schematic.
-        if (!result.validation.ok) {
-          const v = result.validation.violations;
-          appendActivityStep(logId, `Electrical check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
-          setScopedGenError(scope, `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`, 12000);
-        }
-      }
-
-      // B07.4 (failure B) — the replacement dialog may only open while the
-      // ORIGINATING project/session generation is still active, the
-      // authoritative base still equals the invocation pin, and the result
-      // validates. A stale response marks only its own activity log (id-
-      // keyed, so it is a no-op after a switch) and touches NOTHING else in
-      // the now-active project.
-      const resultIssues = validateSchematicStateIntegrity(state);
-      if (!scope.isCurrent()) {
-        failActivityLog(logId, "Result discarded — the project changed while generating");
+        if (!started.ok) throw new Error(started.code === "GENERATION_TASK_STORE_UNAVAILABLE" || started.code === "GENERATION_PROVIDER_UNAVAILABLE" ? started.message : `The design was not started: ${started.message}`);
+        appendActivityStep(logId, started.attached ? "Attached to the design already accepted for this request (the same task; nothing was started twice)" : "Design accepted; a generation worker runs it in saved steps — leaving or reloading this page does not stop it", "done", generationActivityLineId());
+        if (started.durability === "process-memory") appendActivityStep(logId, "Fixture runtime: the design task lives in this dev server's memory and is lost if the server restarts", "done", generationActivityLineId());
+        activeGenerationRef.current = generationTaskOwner(started.task.taskId); setIsGenerating(false); // the task owns the busy state now: the finally below leaves it; [PR-L, 2026-10-18] as designTaskBusy, from its updates, so the chat stays usable
+        attachGenerationTask(started.task, { logId, prompt, scope });
         return;
       }
-      if (resultIssues.length > 0) {
-        failActivityLog(logId, "Generated schematic failed validation — nothing applied");
-        setScopedGenError(scope, `The generated schematic failed validation (${resultIssues[0]}). Nothing was changed.`);
+      const proposalNotes: string[] = []; // [PR-C] what the approver must read beside the proposal (partial merge, checks)
+      appendActivityStep(logId, "Synthesizing theory schematic");
+      // [PR-C] the same request preparation as Build mode: the project selector the wrapper requires and the lifecycle signal
+      const result = await generateSchematic(prompt, { scope, signal: scope.signal, retry: lastAiRetryRef.current ?? undefined, ownership: { isCurrent: () => scope.isCurrent() } });
+      const state: SchematicState = result.state;
+      const explanation = result.netlist.explanation;
+      if (state.components.length === 0) {
+        failActivityLog(logId, "No components produced");
+        setScopedGenError(scope, "No components produced — try a more specific prompt.");
         return;
       }
-      const authoritativeDigestNow = schematicStateDigest(gestureCoordinatorRef.current!.authoritativeState());
-      if (authoritativeDigestNow !== pin.baseDigest) {
-        failActivityLog(logId, "Result is stale — the schematic changed while generating. Nothing was applied.");
-        setScopedGenError(scope, "The schematic changed while generating — the result is stale and was not applied.");
-        return;
+
+      // Surface (don't silently ship) an electrically-invalid theory schematic.
+      if (!result.validation.ok) {
+        const v = result.validation.violations;
+        const note = `Drawing check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`;
+        appendActivityStep(logId, `Drawing check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
+        setScopedGenError(scope, note, 12000);
+        proposalNotes.push(note); // [PR-C]
       }
-      // [B16.1C §F] EVERY generated schematic is a proposal that waits for the
-      // human's explicit approval in the review dialog — including the first
-      // generation onto an empty sheet, which used to apply itself. The
-      // dialog states what will change (parts, wires, labels, what is
-      // replaced); the pin travels with the pending proposal so confirming
-      // later still rejects as stale if the schematic or project moved on.
-      finishActivityLog(logId, components.length > 0 || wires.length > 0 || kicadComponents.length > 0 || netLabels.length > 0 ? "Generated replacement; waiting for confirmation" : "Generated schematic proposal; waiting for approval");
-      setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin });
+      proposalNotes.push("Electrical check not run: Theory mode has no server-side electrical check. Not checked is not a pass."); // [PR-C]
+      offerSchematicProposal({ state, explanation, prompt, logId, pin, scope, proposalNotes });
     } catch (err) {
       if (isAbortError(err) || !scope.isCurrent()) {
         // Cancellation (project switch/unmount) — not a provider failure;
@@ -5112,6 +5336,7 @@ export default function Home() {
       const msg = err instanceof Error ? err.message : "Generation failed";
       failActivityLog(logId, msg);
       setScopedGenError(scope, msg);
+      setLastGenerationFailure({ code: err instanceof AiProviderUnavailableError ? "provider_unavailable" : "generation_failed", message: msg, retryable: true }); // [PR-C] the journey shows the failed stage, not only a 6 s banner
     } finally {
       // Only THIS request may clear the busy flag it set.
       if (activeGenerationRef.current === scope.requestId) {
@@ -5119,6 +5344,307 @@ export default function Home() {
         setIsGenerating(false);
       }
     }
+  }
+
+  // [PR-L, 2026-10-17] The Build result's intake, extracted from handleGenerateSchematic (it ran after the build-multi fetch): the
+  // server's structured status as notes (a partial merge, an electrical check skipped or not run), every referenced catalog part
+  // loaded, the layout and its drawing validation (autoLayoutBuildValidated), then the ONE offer below. A durable design task's
+  // validated result arrives here once per (task, result digest).
+  async function offerBuildResult(data: { netlist: BuildLogicalNetlist; explanation: string; status: "complete" | "partial"; omittedBlocks: string[]; electricalCheck: ElectricalCheckStatus; sheets?: GeneratedSheets }, run: { logId: string; scope: ProjectAsyncScope; pin: ReturnType<typeof captureLifecycleInvocationContext>; prompt: string; task?: { taskId: string; resultDigest: string }; note?: string }): Promise<boolean> {
+    const { logId, scope } = run;
+    const proposalNotes: string[] = []; // [PR-C] what the approver must read beside the proposal (partial merge, checks)
+    try {
+      // [PR-C] the server's structured status: a partial merge and an electrical check that was skipped or not run are
+      // shown as steps now and travel with the proposal (the dialog's validation note), never only as prose.
+      const partialNote = completenessNote({ status: data.status ?? "complete", omittedBlocks: data.omittedBlocks ?? [] });
+      const serverCheckNote = electricalCheckNote(data.electricalCheck ?? { state: "not_run", reason: "the server reported no electrical check" });
+      if (partialNote) appendActivityStep(logId, partialNote, "done");
+      if (serverCheckNote) appendActivityStep(logId, serverCheckNote, "done");
+      proposalNotes.push(...[partialNote, serverCheckNote].filter((note): note is string => note !== null));
+
+      // Load every referenced part before laying out (positions come from pins).
+      const netlist = data.netlist;
+      const partIds = [...new Set(netlist.components.map((c) => c.partId))];
+      const parts = new Map<string, CachedPart>();
+      appendActivityStep(logId, `Loading ${partIds.length} catalog part${partIds.length === 1 ? "" : "s"}`);
+      await Promise.all(
+        partIds.map(async (id) => {
+          parts.set(id, await ensurePartLoaded(id));
+        }),
+      );
+      appendActivityStep(logId, "Laying out and validating schematic");
+      const built = autoLayoutBuildValidated(netlist, parts);
+      const laid = data.sheets?.sheets ? layoutGeneratedSheets(netlist, data.sheets.sheets, parts, { seed: run.task?.resultDigest ?? run.pin.baseDigest }) : null; const state = laid?.kind === "sheets" ? laid.state : built.state; const validation = laid?.kind === "sheets" ? laid.validation : built.validation; // [PR-J5, 2026-10-23] OD-255 item 9 / OD-259 items 3, 5: a planned result lays out as real sheets AFTER the flat layout above (its proof keeps it flat with a finding; structural ids from the task's result digest, never a random draw); the sheeted drawing's validation is the WHOLE drawing against the flat netlist plus the blocks' own label anchoring (lib/build-sheet-layout.ts) [PR-J5 integration, 2026-10-26] review B-7
+      const explanation = data.explanation;
+
+      if ((state.kicadComponents?.length ?? 0) === 0) {
+        failActivityLog(logId, "No parts produced");
+        setScopedGenError(scope, "No parts produced — try a more specific prompt.");
+        if (scope.isCurrent()) setLastGenerationFailure({ code: "no_parts", message: "No parts produced — the model submitted no catalog parts.", retryable: true }); // [PR-C]
+        return false;
+      }
+
+      // Electrical validation: surface (don't silently ship) a schematic that
+      // is electrically wrong by netlist after reroute attempts.
+      if (!validation.ok) { // [PR-J5, 2026-10-23] the sheeted layout's validation when a sheet set was laid out, else the flat one
+        const v = validation.violations;
+        const note = `Drawing check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`;
+        setScopedGenError(scope, note, 12000);
+        appendActivityStep(logId, `Drawing check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
+        proposalNotes.push(note); // [PR-C] the approver reads it in the dialog, not only in a 12 s banner
+      }
+      for (const line of generatedSheetsProposalNotes(data.sheets, laid)) { proposalNotes.push(line); appendActivityStep(logId, line, "done"); } if (run.note) proposalNotes.push(run.note); // [PR-L, 2026-10-18] who proposed it (a chat-started task), last, as the v1 intake did; [PR-J5, 2026-10-23] the sheet set's findings and the layout's sentence (or why it stayed one page) travel with the proposal and are steps of the entry
+      return offerSchematicProposal({ state, explanation, prompt: run.prompt, logId, pin: run.pin, scope, proposalNotes, ...(run.task ? { task: run.task } : {}) });
+    } catch (err) {
+      if (isAbortError(err) || !scope.isCurrent()) { failActivityLog(logId, "Canceled — the project changed"); return false; }
+      const msg = err instanceof Error ? err.message : "The generated schematic could not be prepared";
+      failActivityLog(logId, msg);
+      setScopedGenError(scope, msg);
+      return false;
+    }
+  }
+
+  // [PR-L, 2026-10-17] The ONE offer of a generated schematic (Build result or Theory), moved unchanged from the tail of
+  // handleGenerateSchematic so the durable task's result takes exactly the same guards and dialog.
+  function offerSchematicProposal(input: { state: SchematicState; explanation: string; prompt: string; logId: string; pin: ReturnType<typeof captureLifecycleInvocationContext>; scope: ProjectAsyncScope; proposalNotes: readonly string[]; task?: { taskId: string; resultDigest: string } }): boolean {
+    const { state, explanation, prompt, logId, pin, scope } = input;
+    // B07.4 (failure B) — the replacement dialog may only open while the
+    // ORIGINATING project/session generation is still active, the
+    // authoritative base still equals the invocation pin, and the result
+    // validates. A stale response marks only its own activity log (id-
+    // keyed, so it is a no-op after a switch) and touches NOTHING else in
+    // the now-active project.
+    const resultIssues = validateSchematicStateIntegrity(state);
+    if (!scope.isCurrent()) {
+      failActivityLog(logId, "Result discarded — the project changed while generating");
+      return false;
+    }
+    const flatRefusal = flatReplacementRefusal(gestureCoordinatorRef.current!.authoritativeState(), state); if (resultIssues.length > 0 || flatRefusal !== null) { // [PR-J3, 2026-10-22] OD-257 item 3: a flat result over a multi-sheet project is refused at the offer like an invalid one (chat-started tasks arrive here)
+      failActivityLog(logId, flatRefusal !== null ? "Generated schematic would replace the project's sheets — nothing applied" : "Generated schematic failed validation — nothing applied");
+      setScopedGenError(scope, flatRefusal !== null ? flatReplacementRefusalWithFindings(flatRefusal, input.proposalNotes) : `The generated schematic failed validation (${resultIssues[0]}). Nothing was changed.`, flatRefusal !== null ? 12000 : undefined); // [PR-J5, 2026-10-23] + WHY the result stayed one page (the derivation's findings)
+      return false;
+    }
+    const authoritativeDigestNow = schematicStateDigest(gestureCoordinatorRef.current!.authoritativeState());
+    if (authoritativeDigestNow !== pin.baseDigest) {
+      failActivityLog(logId, "Result is stale — the schematic changed while generating. Nothing was applied.");
+      setScopedGenError(scope, "The schematic changed while generating — the result is stale and was not applied.");
+      return false;
+    }
+    // [B16.1C §F] EVERY generated schematic is a proposal that waits for the
+    // human's explicit approval in the review dialog — including the first
+    // generation onto an empty sheet, which used to apply itself. The
+    // dialog states what will change (parts, wires, labels, what is
+    // replaced); the pin travels with the pending proposal so confirming
+    // later still rejects as stale if the schematic or project moved on.
+    finishActivityLog(logId, components.length > 0 || wires.length > 0 || kicadComponents.length > 0 || netLabels.length > 0 ? "Generated replacement; waiting for confirmation" : "Generated schematic proposal; waiting for approval");
+    const validationNote = input.proposalNotes.length > 0 ? input.proposalNotes.join("\n") : null;
+    setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin, validationNote });
+    if (input.task) { const task = input.task; setPendingReplace((current) => (current && current.state === state ? { ...current, task } : current)); } // [PR-L, 2026-10-17] the durable task this result belongs to (its review is reported to it)
+    // [PR-C] persisted NOW, in the same task as the offer (a reload a moment later still finds it; the effect below keeps it current)
+    if (pin.projectId) savePendingProposal({ projectId: pin.projectId, baseDigest: proposalContentDigest(gestureCoordinatorRef.current!.authoritativeState()), state, explanation, prompt, validationNote });
+    return true;
+  }
+
+  // ─── [PR-L, 2026-10-17] the project's durable generation task (runbook L.4, increment 4) ─────────────────────────────────
+  // ONE task followed per page (one active task per project and branch is the store's rule); bound to the project generation that
+  // attached it: a project switch aborts the scope (the subscription stops, the design keeps running) and resets the state; reopening
+  // the project reattaches to ITS active task (reattachGenerationTaskRef, after the session opens), never another project's.
+
+  /** The busy-state owner token of a followed task (activeGenerationRef: a start request's id, then its task's). */
+  function generationTaskOwner(taskId: string): string { return `generation-task:${taskId}`; }
+
+  /** Follow a design task in its activity entry: its milestones as entries, its live status card, its busy state, its result offer. */
+  function attachGenerationTask(task: GenerationTaskSnapshotView, run: { logId: string; prompt: string; scope: ProjectAsyncScope }): void {
+    generationTaskRef.current?.unsubscribe();
+    const entry: AttachedGenerationTask = { taskId: task.taskId, logId: run.logId, prompt: run.prompt, scope: run.scope, view: null, unsubscribe: () => {}, offered: new Set(), settled: false };
+    generationTaskRef.current = entry;
+    const onUpdate = (update: GenerationTaskUpdate): void => generationTaskUpdateRef.current(entry, update);
+    onUpdate({ task, events: [], gap: false });
+    if (entry.settled || task.state === "awaiting-review") return;
+    entry.unsubscribe = subscribeGenerationTask({
+      scope: { projectId: run.scope.projectId, branchId: run.scope.branchId }, taskId: task.taskId, after: 0, onUpdate,
+      onError: (failure) => { if (run.scope.isCurrent() && generationTaskRef.current === entry) appendActivityStep(run.logId, `Progress is not reachable right now (${failure.code}); still following the design`, "done", generationActivityLineId()); },
+    });
+    run.scope.signal.addEventListener("abort", () => entry.unsubscribe(), { once: true }); // a project switch only stops observing: the design keeps running
+  }
+
+  /** One update of the followed task (bound through generationTaskUpdateRef, so a late callback runs the current render's code). */
+  function applyGenerationTaskUpdate(entry: AttachedGenerationTask, update: GenerationTaskUpdate): void {
+    if (!entry.scope.isCurrent() || generationTaskRef.current !== entry || entry.settled) return;
+    const { view, added } = reduceGenerationTaskView(entry.view, update);
+    entry.view = view;
+    for (const event of added) appendActivityStep(entry.logId, event.message, event.type === "failed" ? "error" : "done", generationActivityLineId()); chatWorkLog.foldGeneration(entry.logId, entry.scope, view, added, update.gap); // [K2, 2026-11-04] the milestones and the remaining allowance join the entry's Work log
+    setGenerationTask({ logId: entry.logId, view });
+    const owner = generationTaskOwner(view.taskId);
+    if (generationTaskBusy(view)) {
+      if (activeGenerationRef.current === null) activeGenerationRef.current = owner;
+      if (activeGenerationRef.current === owner) setDesignTaskBusy(true); // [PR-L, 2026-10-18] its own busy state (was isGenerating)
+    } else if (activeGenerationRef.current === owner) {
+      activeGenerationRef.current = null;
+      setDesignTaskBusy(false);
+    }
+    if (view.state === "awaiting-review" && view.result) { void offerGenerationTaskResult(entry, view); return; }
+    if (!view.terminal) return;
+    entry.settled = true;
+    entry.unsubscribe();
+    if (view.state === "failed") { failActivityLog(entry.logId, generationTaskStatusText(view), generationActivityLineId()); setLastGenerationFailure({ code: "generation_failed", message: generationTaskStatusText(view), retryable: true }); }
+    else if (view.state === "stale") failActivityLog(entry.logId, generationTaskStatusText(view), generationActivityLineId());
+    else finishActivityLog(entry.logId, generationTaskStatusText(view), generationActivityLineId());
+  }
+
+  /** The validated result of an `awaiting-review` task, offered ONCE per (task, result digest) through the composer's own intake; never
+   *  over a newer sheet (a moved base is reported: the task becomes stale and nothing is offered). Nothing is applied here. */
+  async function offerGenerationTaskResult(entry: AttachedGenerationTask, view: GenerationTaskView): Promise<void> {
+    const result = view.result!;
+    const key = `${view.taskId}:${result.resultDigest}`;
+    if (entry.offered.has(key)) return;
+    entry.offered.add(key);
+    entry.unsubscribe(); // nothing moves until the review, which this page reports (record-review)
+    const projectId = entry.scope.projectId;
+    const stored = projectId ? loadPendingProposal(projectId) : null;
+    if (stored?.task && stored.task.taskId === view.taskId && stored.task.resultDigest === result.resultDigest) { appendActivityStep(entry.logId, "This design's result is already waiting in the review dialog", "done", generationActivityLineId()); return; }
+    const liveDigest = generationLiveBaseDigest(view.base.recipe); // [PR-L, 2026-10-18] the task's base recipe: build-pin (the sheet's content) or chat-sheet (the sheet as the chat run posted it)
+    if (liveDigest !== view.base.schematicDigest) { await reportGenerationBaseMoved(entry, liveDigest, view.base.recipe); return; }
+    appendActivityStep(entry.logId, "Design ready: fetching its validated result", "running", generationActivityLineId());
+    const fetched = await fetchGenerationTask({ projectId, branchId: entry.scope.branchId }, view.taskId, { includeResult: true, signal: entry.scope.signal });
+    if (!entry.scope.isCurrent() || generationTaskRef.current !== entry) return;
+    if (!fetched.ok || !fetched.result || fetched.result.resultDigest !== result.resultDigest) {
+      entry.offered.delete(key);
+      failActivityLog(entry.logId, `The design's result could not be read (${fetched.ok ? "it did not match the task" : fetched.code}); nothing was offered. Reload to try again.`, generationActivityLineId());
+      return;
+    }
+    const movedTo = generationLiveBaseDigest(view.base.recipe);
+    if (movedTo !== view.base.schematicDigest) { await reportGenerationBaseMoved(entry, movedTo, view.base.recipe); return; } // the sheet moved while the result was fetched
+    const offerPin = captureLifecycleInvocationContext(); // the exact-base pin the approval re-checks, taken now: the content is the task's base (checked above)
+    const offered = await offerBuildResult({ netlist: fetched.result.netlist, explanation: fetched.result.explanation, status: fetched.result.status, omittedBlocks: fetched.result.omittedBlocks, electricalCheck: fetched.result.electricalCheck as ElectricalCheckStatus, sheets: fetched.result.sheets }, { logId: entry.logId, scope: offerPin.scope, pin: offerPin, prompt: fetched.task.prompt ?? entry.prompt, task: { taskId: view.taskId, resultDigest: result.resultDigest }, ...(view.origin === "chat" ? { note: `Proposed by the assistant (${view.provider}) for your request; approving replaces the sheet it was generated against. Nothing has been changed yet.` } : {}) }); // [PR-L, 2026-10-18] a chat-started task says who proposed it, as the v1 intake did
+    if (!offered) entry.offered.delete(key);
+  }
+
+  /** The sheet moved since the task's base: the result is never laid over it. The task is told (report-base -> stale). */
+  async function reportGenerationBaseMoved(entry: AttachedGenerationTask, liveDigest: string, recipe: string): Promise<void> {
+    const answer = await controlGenerationTask({ projectId: entry.scope.projectId, branchId: entry.scope.branchId }, entry.taskId, { action: "report-base", clientActionId: newGenerationClientActionId(), liveBase: { schematicDigest: liveDigest, recipe: recipe === "chat-sheet" ? "chat-sheet" : "build-pin" } }); // [PR-L, 2026-10-18] the task's recipe
+    if (!entry.scope.isCurrent() || generationTaskRef.current !== entry) return;
+    if (answer.ok) { const { view } = reduceGenerationTaskView(entry.view, { task: answer.task, events: [], gap: false }); entry.view = view; setGenerationTask({ logId: entry.logId, view }); chatWorkLog.foldGenerationReview(entry.logId, entry.scope, view); } // [K2 review, 2026-11-04] events-K2-EV-3: the stale milestone the report recorded joins the Work log too
+    entry.settled = true;
+    failActivityLog(entry.logId, "The sheet changed while this design ran, so its result was not offered (it would replace a newer sheet). Start again to design against the current sheet.", generationActivityLineId());
+  }
+
+  /** A control action the task's card offers (the store judges it); the snapshot it answers is shown at once. */
+  async function runGenerationTaskAction(action: GenerationTaskClientAction, blockId?: string): Promise<void> {
+    const entry = generationTaskRef.current;
+    if (!entry || !entry.scope.isCurrent() || generationTaskControlBusy) return;
+    setGenerationTaskControlBusy(true);
+    const answer = await controlGenerationTask({ projectId: entry.scope.projectId, branchId: entry.scope.branchId }, entry.taskId, { action, clientActionId: newGenerationClientActionId(), ...(blockId ? { blockId } : {}) }, { signal: entry.scope.signal });
+    setGenerationTaskControlBusy(false);
+    if (!entry.scope.isCurrent() || generationTaskRef.current !== entry) return;
+    if (!answer.ok) { appendActivityStep(entry.logId, `That action was not accepted: ${answer.message}`, "error", generationActivityLineId()); return; }
+    if (entry.settled) return;
+    generationTaskUpdateRef.current(entry, { task: answer.task, events: [], gap: false });
+  }
+
+  /** "Start again": a NEW design (a new request id) from the same request, once the followed task can do nothing more. */
+  function startGenerationAgain(): void {
+    const entry = generationTaskRef.current;
+    if (!entry?.view || !generationTaskRestartable(entry.view) || !entry.prompt.trim()) return;
+    void handleGenerateSchematic(entry.prompt);
+  }
+
+  /** The review of a durable task's result (the dialog's approve, cancel or close): recorded on the task, which then settles. An approval
+   *  the editor could not apply reports the live base instead: the store marks the task stale only when the sheet's content moved from
+   *  the task's base (otherwise nothing changes, and reopening the project offers the result again). */
+  function reportGenerationReview(task: { taskId: string; resultDigest: string } | undefined, outcome: "applied" | "discarded" | "not-applied"): void {
+    if (!task) return;
+    const projectId = projectRef.current?.id ?? null;
+    const entry = generationTaskRef.current;
+    const followed = entry && entry.taskId === task.taskId && entry.view ? (entry.view.base.recipe === "chat-sheet" ? "chat-sheet" as const : "build-pin" as const) : null; const liveDigests = outcome === "not-applied" ? { "build-pin": generationLiveBaseDigest("build-pin"), "chat-sheet": generationLiveBaseDigest("chat-sheet") } : null; // [PR-L/M integration, 2026-10-18] L5-3: the live sheet under BOTH recipes, read at the review's moment; the TASK's recipe picks one below
+    void (async () => { const recipe = liveDigests === null ? null : followed ?? await (async () => { const detail = await fetchGenerationTask({ projectId, branchId: "main" }, task.taskId); return detail.ok && (detail.task.base.recipe === "chat-sheet" || detail.task.base.recipe === "build-pin") ? detail.task.base.recipe : null; })(); if (liveDigests !== null && recipe === null) return; // a task this page does not follow (a result restored before, or without, the reattach) is re-read for ITS recipe; unreadable, nothing is reported (a guessed recipe is refused by the store; the next attach reports the base under the task's own recipe)
+      const request = outcome !== "not-applied"
+        ? { action: "record-review" as const, clientActionId: newGenerationClientActionId(), review: { outcome, resultDigest: task.resultDigest, ...(outcome === "applied" ? { headMark: schematicSessionRef.current?.headMark() ?? undefined } : {}) } }
+        : liveDigests !== null && recipe !== null ? { action: "report-base" as const, clientActionId: newGenerationClientActionId(), liveBase: { schematicDigest: liveDigests[recipe], recipe } } : null;
+      if (request === null) return; const answer = await controlGenerationTask({ projectId, branchId: "main" }, task.taskId, request);
+      if (!answer.ok) { if (entry && entry.taskId === task.taskId && generationTaskRef.current === entry) appendActivityStep(entry.logId, `The design task did not record this review: ${answer.message}`, "error", generationActivityLineId()); return; } // [PR-L/M integration, 2026-10-18] L5-3: a refused report is said in the task's entry, never dropped silently
+      if (!entry || entry.taskId !== task.taskId || generationTaskRef.current !== entry) return;
+      const { view } = reduceGenerationTaskView(entry.view, { task: answer.task, events: [], gap: false });
+      entry.view = view; entry.settled = true; setGenerationTask({ logId: entry.logId, view }); chatWorkLog.foldGenerationReview(entry.logId, entry.scope, view); // [K2 review, 2026-11-04] events-K2-EV-3: the review the task recorded (applied / discarded, or the moved base) reaches the entry's Work log - the page stopped following the task when it offered the result
+    })();
+  }
+
+  // [PR-D] The agent's Build-mode generation enters the SAME review boundary as the composer's Generate. [PR-L, 2026-10-18] Runbook L.5:
+  // the assistant starts or attaches the project's DURABLE design task (generation_task_ready), and this page follows THAT task exactly as
+  // it follows a Build start: the same status card (attachGenerationTask), the same once-per-(task, result digest) offer
+  // (offerGenerationTaskResult -> offerBuildResult -> the review dialog), the same exact-base pin and pending-proposal record. The v1 intake
+  // of a design sealed inside the chat run (v1's own intake function) is removed with that path. The reference is a pointer only: the task
+  // is re-read through this page's own authorized GET /api/generation-tasks/[id] in the project's scope.
+  async function followChatGenerationTask(received: ReceivedGenerationTask, run: { scope: ProjectAsyncScope }): Promise<void> {
+    const { task } = received;
+    const { scope } = run;
+    const decision = generationTaskAttachDecision(task, { projectId: scope.projectId ?? null, branchId: scope.branchId ?? "main", followedTaskId: generationTaskRef.current?.taskId ?? null, pendingTask: scope.projectId ? (loadPendingProposal(scope.projectId)?.task ?? null) : null });
+    if (decision.kind !== "attach") return; // a foreign reference, a task already followed (its card shows it) or a result already in the dialog
+    const detail = await fetchGenerationTask({ projectId: scope.projectId, branchId: scope.branchId }, task.taskId, { signal: scope.signal });
+    if (!scope.isCurrent() || generationTaskRef.current?.taskId === task.taskId) return;
+    const logId = startGenerationTaskLog(task.disposition === "attached-active" ? "Generating schematic (already running)" : "Generating schematic (started from the chat)");
+    if (!detail.ok) { failActivityLog(logId, `The design task could not be read (${detail.code}); it keeps running server-side. Reopen the project to follow it.`, generationActivityLineId()); return; }
+    if (task.durability === "process-memory") appendActivityStep(logId, "Fixture runtime: the design task lives in this dev server's memory and is lost if the server restarts", "done", generationActivityLineId());
+    attachGenerationTask(detail.task, { logId, prompt: detail.task.prompt ?? "", scope });
+  }
+
+  /** [PR-L, 2026-10-18] An activity entry for a design task this page did not start itself, with ids that draw no random UUID (the editor's id sequence is unchanged). */
+  function startGenerationTaskLog(title: string): string {
+    const id = `generation-task-log-${randomGenerationUuid()}`; // [PR-L/M integration, 2026-10-18] L5-1: the entry's MESSAGE id is unique across page loads (chat messages, ids included, are saved and restored with the project; the page-local line counter restarts at every load, so a new task's entry took a restored entry's id) - crypto.getRandomValues, never a draw from the editor's own UUID sequence (that sequence is unchanged); the counter names the entry's lines only
+    setMessages((prev) => [...prev, { id, role: "log", title, status: "running", entries: [{ id: generationActivityLineId(), text: "Following the project's design task: it runs in a generation worker, and leaving or reloading this page does not stop it", status: "running" }] }]);
+    return id;
+  }
+
+  /** [PR-L, 2026-10-18] The live sheet's digest under a design task's base recipe: `build-pin` is the sheet's content (the composer's pin);
+   *  `chat-sheet` is the sheet as the chat run posts it (the authoritative state with the page's sheet-size fallback, which the server
+   *  digested as-is) - the SAME recipe as liveSheetForSealedArtifacts below. */
+  function generationLiveBaseDigest(recipe: string): string {
+    const live = gestureCoordinatorRef.current!.authoritativeState();
+    return recipe === "chat-sheet" ? schematicStateDigest({ ...live, pageSize: live.pageSize ?? liveStateRef.current.pageSize }) : proposalContentDigest(live);
+  }
+
+  /** [PR-L, 2026-10-18] The confirm chip: the human's click sends the sealed request's action to the task's control route (the human's
+   *  authorization, CSRF and the store's judgement), once; Dismiss sends nothing. The card records what happened. */
+  async function confirmGenerationControl(requestId: string): Promise<void> {
+    const held = liveGenerationControlsRef.current.get(requestId);
+    if (!held) return;
+    liveGenerationControlsRef.current.delete(requestId);
+    setLiveGenerationControls(new Map(liveGenerationControlsRef.current));
+    const cardId = `${GENERATION_TASK_CONTROL_CARD_ID_PREFIX}${requestId}`;
+    const card = generationTaskControlCardLines(held.request);
+    const scope = projectScopeRegistryRef.current!.capture();
+    const verdict = generationTaskControlCurrency(held.request, { projectId: scope.projectId ?? null, branchId: scope.branchId ?? "main", now: Date.now() });
+    if (!verdict.ok) { upsertReviewCard(cardId, card.title, [...card.lines, `Not sent - ${verdict.detail}`]); return; }
+    const answer = await controlGenerationTask({ projectId: scope.projectId, branchId: scope.branchId }, held.request.taskId, { action: held.request.action, clientActionId: newGenerationClientActionId(), ...(held.request.blockId ? { blockId: held.request.blockId } : {}) }, { signal: scope.signal });
+    if (!scope.isCurrent()) return;
+    if (!answer.ok) { upsertReviewCard(cardId, card.title, [...card.lines, `Not accepted by the server: ${answer.message}`]); return; }
+    const { view } = reduceGenerationTaskView(null, { task: answer.task, events: [], gap: false });
+    upsertReviewCard(cardId, card.title, [...card.lines, `Confirmed: ${held.request.label}. ${generationTaskStatusText(view)}`]);
+    const entry = generationTaskRef.current;
+    if (entry && entry.taskId === held.request.taskId) { if (!entry.settled) generationTaskUpdateRef.current(entry, { task: answer.task, events: [], gap: false }); return; }
+    attachGenerationTask(answer.task, { logId: startGenerationTaskLog("Generating schematic"), prompt: "", scope }); // the task this page did not follow yet is followed now
+  }
+  function dismissGenerationControl(requestId: string): void {
+    const held = liveGenerationControlsRef.current.get(requestId);
+    if (!held) return;
+    liveGenerationControlsRef.current.delete(requestId);
+    setLiveGenerationControls(new Map(liveGenerationControlsRef.current));
+    const card = generationTaskControlCardLines(held.request);
+    upsertReviewCard(`${GENERATION_TASK_CONTROL_CARD_ID_PREFIX}${requestId}`, card.title, [...card.lines, "Dismissed: nothing was sent and the design is unchanged."]);
+  }
+
+  // [PR-G, 2026-10-17] The LIVE editor as the sheet-artifact currency checks read it (draft request, module contracts): the page's scope
+  // as the chat run posted it, the session's live head mark and the digest of the authoritative sheet with the page's sheet-size fallback
+  // (what `send` posted and the server digested as-is). [PR-L, 2026-10-18] The same recipe as generationLiveBaseDigest's `chat-sheet`
+  // above (the removed v1 intake held the third copy); the two must stay byte-identical (pr-g-page-intakes pins it).
+  function liveSheetForSealedArtifacts(): { scope: { tenantId: string; projectId: string; branchId: string }; headMark: SchematicCanonicalMark | null; baseDigest: string; now: number } {
+    const live = gestureCoordinatorRef.current!.authoritativeState();
+    return {
+      scope: { tenantId: "local", projectId: projectScopeRegistryRef.current?.current.projectId ?? "local", branchId: projectScopeRegistryRef.current?.current.branchId ?? "local" },
+      headMark: schematicSessionRef.current?.headMark() ?? null,
+      baseDigest: schematicStateDigest({ ...live, pageSize: live.pageSize ?? liveStateRef.current.pageSize }),
+      now: Date.now(),
+    };
   }
 
   // Tier-1 text editing: attribute-only edits (set value / rename / delete)
@@ -5140,7 +5666,7 @@ export default function Home() {
     const scope = pin.scope;
     const snapshot = currentSchematicState();
     const hasSchematic = snapshot.components.length > 0 || (snapshot.kicadComponents ?? []).length > 0;
-    if (!hasSchematic) return;
+    if (!hasSchematic) return; const editRefusal = multiSheetReplaceRefusal(snapshot); if (editRefusal !== null) { setScopedGenError(scope, editRefusal, 12000); return; } // [PR-J3, 2026-10-22] OD-257 item 3: an AI edit is a flat replacement until J5-2; refused before /api/schematic/edit (no request, no spend)
 
     const logId = startActivityLog("Editing schematic", "Interpreting edit request", opts?.displayPrompt ?? prompt);
     const isApplyingSuggestions = isGuardedSupportApplyInstruction(prompt);
@@ -5428,7 +5954,7 @@ export default function Home() {
         body: JSON.stringify({ ...reviewInput, provider: aiBrainRef.current }),
         signal: reviewScope.signal,
       });
-      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => reviewScope.isCurrent() });
+      if (!res.ok) { await throwPostApplyInputRefusal(res); await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => reviewScope.isCurrent() }); } // [PR-L6 spend, 2026-10-19] SPEND-3: the input admission's 413 is its own typed refusal (no provider card, no Retry); every other failure as before
       const data = (await res.json()) as
         | { ok: true; findings: { severity: string; category?: string; title: string; detail: string; refs: string[] }[]; summary: string; dropped: number }
         | { ok: false; error: string };
@@ -5479,7 +6005,7 @@ export default function Home() {
       ]);
     } catch (err) {
       if (isAbortError(err) || !reviewScope.isCurrent()) return; // cancellation, not a failure
-      if (!auto) {
+      if (err instanceof PostApplyInputRefusalError) { lastAiRetryRef.current = null; const notice = err.autoNotice; if (auto) appendChatFor(reviewPin.projectId, (prev) => [...prev, { id: `post-apply-notice:${reviewScope.requestId}:${Date.now()}`, role: "assistant", content: notice, advisory: true }]); } if (!auto) { // [PR-L6 spend, 2026-10-19] SPEND-3: a refused review is never retried (no Retry is left to replay it); the automatic pass says it was skipped, a manual one shows the route's sentence below
         const msg = err instanceof Error ? err.message : "Review failed";
         setScopedGenError(reviewScope, msg);
       }
@@ -5575,7 +6101,7 @@ export default function Home() {
     const tidyPin = captureLifecycleInvocationContext();
     const tidyScope = tidyPin.scope;
     const tidySnapshot = currentSchematicState();
-    if ((tidySnapshot.kicadComponents ?? []).length === 0) {
+    const tidySheetId = tidySnapshot.sheets === undefined ? null : sheetLens.activeSheetId; const tidyRefusal = tidySnapshot.sheets === undefined ? null : !tidySnapshot.sheets.sheets.some((sheet) => sheet.id === tidySheetId) ? "Tidy re-lays out the open sheet, but no sheet is open. Nothing was sent and nothing changed." : tidySnapshot.sheets.sheets.some((sheet) => sheet.parentId === tidySheetId) ? "Tidy re-lays out a subsystem sheet without child blocks; this sheet holds blocks, so open one of its subsystem sheets to tidy it. Nothing was sent and nothing changed." : tidySnapshot.components.some((component) => (component.sheetId ?? "root") === tidySheetId) ? `This sheet holds ${tidySnapshot.components.filter((component) => (component.sheetId ?? "root") === tidySheetId).length} Theory symbol(s); Tidy re-lays out catalog parts only in this increment - move or remove them first. Nothing was sent and nothing changed.` : !(tidySnapshot.kicadComponents ?? []).some((inst) => (inst.sheetId ?? "root") === tidySheetId) ? "This sheet has no catalog parts to tidy. Nothing was sent and nothing changed." : null; if (tidyRefusal !== null) { if (!auto) setScopedGenError(tidyScope, tidyRefusal, 12000); return; } if ((tidySnapshot.kicadComponents ?? []).length === 0) { // [PR-J4, 2026-10-23] OD-258 item 5 (was [PR-J3, 2026-10-22] OD-257 item 3's flat-replacement refusal of every project with sheets): Tidy re-lays out the ACTIVE leaf sheet of a project with sheets - refused before the capture and the layout-critic request only when no sheet is open, the open sheet holds child blocks or it has no catalog parts; the route merges the re-laid sheet back onto the whole project; [PR-J4 integration, 2026-10-23] review C-TIDY-4: + refused when the open sheet holds a Theory symbol (the route's SHEETS_TIDY_THEORY_PENDING, mirrored here so no request is sent)
       if (!auto) setScopedGenError(tidyScope, "Tidy is available for Build-mode schematics with catalog parts.", 5000);
       return;
     }
@@ -5595,12 +6121,12 @@ export default function Home() {
         headers: aiRequestHeaders(tidyScope),
         body: JSON.stringify({
           provider: aiBrainRef.current,
-          state: { ...tidySnapshot, pageSize: tidySnapshot.pageSize ?? pageSize },
+          state: { ...tidySnapshot, pageSize: tidySnapshot.pageSize ?? pageSize }, ...(tidySheetId !== null ? { sheetId: tidySheetId } : {}), // [PR-J4, 2026-10-23] the sheet to tidy, iff the project has sheets (a single-sheet request body is byte-identical)
           image,
         }),
         signal: tidyScope.signal,
       });
-      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => tidyScope.isCurrent() });
+      if (!res.ok) { await throwPostApplyInputRefusal(res); await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => tidyScope.isCurrent() }); } // [PR-L6 spend, 2026-10-19] SPEND-3: the input admission's 413 is its own typed refusal (no provider card, no Retry); every other failure as before
       const data = (await res.json()) as
         | {
             ok: true;
@@ -5662,7 +6188,7 @@ export default function Home() {
       }
     } catch (err) {
       if (isAbortError(err) || !tidyScope.isCurrent()) return; // cancellation, not a failure
-      if (!auto) {
+      if (err instanceof PostApplyInputRefusalError) { lastAiRetryRef.current = null; const notice = err.autoNotice; if (auto) appendChatFor(tidyPin.projectId, (prev) => [...prev, { id: `post-apply-notice:${tidyScope.requestId}:${Date.now()}`, role: "assistant", content: notice, advisory: true }]); } if (!auto) { // [PR-L6 spend, 2026-10-19] SPEND-3: a refused tidy is never retried (no Retry is left to replay it); the automatic pass says it was skipped, a manual one shows the route's sentence below
         const msg = err instanceof Error ? err.message : "Layout critic failed";
         setScopedGenError(tidyScope, msg);
       }
@@ -5806,7 +6332,7 @@ export default function Home() {
   // and autoLayoutBuildValidated checks them. We never graft SchGen's netlist raw.
   async function handleApplySuggestions() {
     const batch = pendingSuggestions;
-    if (!batch || batch.items.length === 0 || isEditing || isGenerating) return;
+    if (!batch || batch.items.length === 0 || isEditing || isGenerating || designTaskBusy) return;
     // B07.4 (failure A) — a suggestion batch is applicable ONLY while its
     // exact project/session generation AND authoritative base digest still
     // match. Anything else is refused truthfully BEFORE any request is
@@ -5838,8 +6364,11 @@ export default function Home() {
     if (!text || loading || isGenerating || isEditing) return;
     const hasSchematic = components.length > 0 || kicadComponents.length > 0;
     // [B18-D I1] the shown route, or the user's override — routing only; the server loop or the proposal review decides.
-    const action = composerRouteOverride ?? routeComposerMessage(text, hasSchematic).route;
+    const routing = routeComposerMessage(text, hasSchematic);
+    const action = composerRouteOverride ?? routing.route;
+    if (designTaskBusy && action !== "ask") return; // [PR-L, 2026-10-18] while a design task works, the composer still asks the assistant (inspect, control); a second generation or an edit waits
     setComposerRouteOverride(null);
+    if (action === "generate") setPreparePcbRequested(routing.hints.includes("prepare-pcb")); // [PR-C] the intent travels across the approvals; nothing is automatic
     if (action !== "ask") setInput("");
     if (action === "generate") void handleGenerateSchematic(text);
     else if (action === "edit") void handleEditSchematic(text);
@@ -5851,16 +6380,85 @@ export default function Home() {
   const composerRouting = routeComposerMessage(composerText, hasSchematicForComposer);
   const composerAction = composerRouteOverride ?? composerRouting.route;
   const overrideComposerRoute = (): void => setComposerRouteOverride((current) => (current ? null : "ask"));
-  const composerBusy = loading || isGenerating || isEditing;
+  const composerBusy = loading || isGenerating || isEditing || (designTaskBusy && composerAction !== "ask"); // [PR-L, 2026-10-18] a working design task blocks only the generate / edit routes
   const composerDisabled = !composerText || composerBusy;
-  const showComposerButton = composerAction !== "ask" || isGenerating || isEditing;
-  const composerLabel = isGenerating
+  // [PR-C] every route has a visible, labelled submission (the ask route had Enter only); Enter still submits
+  const showComposerButton = Boolean(composerText) || isGenerating || isEditing;
+  const composerLabel = isGenerating || (designTaskBusy && composerAction !== "ask")
     ? "Generating..."
     : isEditing
       ? "Editing..."
       : composerAction === "generate"
         ? "Generate"
-        : "Edit";
+        : composerAction === "edit"
+          ? "Edit"
+          : "Send";
+
+  // [PR-E] The Build sidebar's design checks are computed from the authoritative schematic and the catalog parts in the
+  // cache (never decorative); a part loading later re-runs them; the result names the digest it was computed on.
+  const [partsLoadedTick, setPartsLoadedTick] = useState(0);
+  useEffect(() => {
+    const ids = [...new Set((authoritativeSchematic.kicadComponents ?? []).map((instance) => instance.partId))];
+    const unsubscribes = ids.map((id) => subscribeToPart(id, () => setPartsLoadedTick((tick) => tick + 1)));
+    for (const id of ids) if (!getCachedPart(id)) void ensurePartLoaded(id).catch(() => {});
+    return () => { for (const unsubscribe of unsubscribes) unsubscribe(); };
+  }, [authoritativeSchematic]);
+  const designChecks = useMemo(() => {
+    void partsLoadedTick;
+    const parts = new Map<string, CachedPart>();
+    for (const instance of authoritativeSchematic.kicadComponents ?? []) { const part = getCachedPart(instance.partId); if (part) parts.set(instance.partId, part); }
+    return computeDesignChecks(authoritativeSchematic, parts, schematicStateDigest(authoritativeSchematic), mode);
+  }, [authoritativeSchematic, partsLoadedTick, mode]);
+  // [PR-F fA] the missing parts beside the design checks: the instances a Schematic → PCB run would refuse at (the same pure
+  // listing, from the authoritative schematic alone), as a count the line opens in the PCB tab's list; never a pass by itself.
+  const missingPartsCount = useMemo(() => listUnresolvedInstances(authoritativeSchematic).length, [authoritativeSchematic]);
+  const focusLater = (selector: string): void => { window.setTimeout(() => document.querySelector<HTMLElement>(selector)?.focus(), 50); };
+  const openMissingParts = (): void => { workspaceView.open("pcb"); setMissingPartsRequestToken((token) => token + 1); focusLater('[data-testid="sync-blockers"]'); };
+  // [PR-E] the computed design checks, shown beneath BOTH library panels (before this, the block sat in the Theory-only branch
+  // and Build mode — the default — never showed it; fault F-07)
+  const designChecksFooter = (
+    <div className="p-3 border-t border-zinc-800 bg-zinc-900/40 shrink-0">
+      <div className="text-xs text-zinc-500 mb-2">Design checks <span className="text-zinc-600">(current schematic)</span></div>
+      <div className="space-y-1.5 text-xs" data-testid="design-checks" data-digest={designChecks.digest}>
+        {designChecks.checks.map((check) => <CheckRow key={check.id} check={check} />)}
+        <CheckRow check={{ id: "bom", label: "BOM: not finalized (BOM tab)", state: "not_run", count: 0, findings: [], reason: "informational" }} muted />
+      </div>
+      {/* [PR-F fA] the Missing parts line: the count of instances the PCB preparation would refuse at, and the way to the PCB tab's
+          list (checklist + next actions per row); with none missing the line says so and opens nothing. */}
+      <button type="button" onClick={openMissingParts} disabled={missingPartsCount === 0} data-testid="missing-parts-open" data-count={missingPartsCount} title={missingPartsCount === 0 ? "every physical instance carries a published exact revision and its installed symbol asset" : `open the PCB tab's Missing parts list (${missingPartsWords(missingPartsCount)})`} className={`mt-2 flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-xs ${missingPartsCount === 0 ? "text-zinc-500" : "text-amber-300 hover:bg-zinc-800"} disabled:cursor-default`}>
+        {missingPartsCount === 0 ? <Check className="size-3.5 text-emerald-400" aria-hidden="true" /> : <AlertTriangle className="size-3.5 text-amber-400" aria-hidden="true" />}
+        <span className="min-w-0">{missingPartsCount === 0 ? "Missing parts: none" : `Missing parts (${missingPartsCount})`}</span>
+        {missingPartsCount > 0 && <span className="ml-auto shrink-0 text-[10px] text-zinc-500">PCB tab →</span>}
+      </button>
+    </div>
+  );
+
+  // [PR-C] The journey: the ten stages with a status each and ONE next permitted action, derived from facts the page and
+  // the PCB editor hold. Labels are not authority: every action here opens or focuses an existing human control.
+  const journey = deriveJourney({
+    hasSchematic: hasSchematicForComposer,
+    generating: isGenerating || designTaskBusy,
+    proposalPending: pendingReplace !== null,
+    proposalPartial: Boolean(pendingReplace?.validationNote?.includes("Partial result")),
+    proposalValidationNote: pendingReplace?.validationNote ?? null,
+    lastGenerationFailure,
+    mode,
+    preparePcbRequested,
+    pcb: pcbFacts,
+  });
+  const handleJourneyAction = (actionId: JourneyActionId): void => {
+    switch (actionId) {
+      case "describe_circuit": setChatOpen(true); focusLater('[data-testid="prompt-input"]'); return;
+      case "review_proposal": focusLater('[data-testid="schematic-proposal-approve"]'); return;
+      case "prepare_pcb": workspaceView.open("pcb"); setSyncRequestToken((token) => token + 1); return; // the editor runs the same preparation the button runs; applying stays a click
+      case "review_bindings": workspaceView.open("pcb"); focusLater('[data-testid="review-request-all"]'); return;
+      case "apply_pcb_plan": workspaceView.open("pcb"); focusLater('[data-testid^="apply-sync-plan"]'); return; // focus only: the human clicks Apply
+      case "qualify_route": workspaceView.open("pcb"); focusLater('[data-testid="p2g-qualify"]'); return;
+      case "request_release": workspaceView.open("pcb"); focusLater('[data-testid="p2g-request-release"]'); return;
+      case "fix_blockers": openMissingParts(); return; // [PR-F fA] the Missing parts list (the refusal rows with their checklists) is shown even when a run has not refused yet
+      case "open_pcb": workspaceView.open("pcb"); return;
+    }
+  };
 
   /** B07.5 (failure E) — simulation runs are OWNED requests: scope +
    *  request id + captured session generation + authoritative base digest
@@ -5893,7 +6491,7 @@ export default function Home() {
           // [B16.0.2 §A] ngspice execution is authenticated + project-scoped:
           // the active project identity travels as a SELECTOR only.
           headers: { "Content-Type": "application/json", ...projectSelectorHeaders(scope.projectId ? { tenantId: "local", projectId: scope.projectId, branchId: scope.branchId } : null) },
-          body: JSON.stringify({ state: { components: authoritative.components, wires: authoritative.wires, netLabels: authoritative.netLabels ?? [] }, analysis: analysisConfig }),
+          body: JSON.stringify({ state: { components: authoritative.components, wires: authoritative.wires, netLabels: authoritative.netLabels ?? [], ...(authoritative.sheets !== undefined ? { sheets: authoritative.sheets } : {}) }, analysis: analysisConfig, ...(authoritative.sheets !== undefined ? { probeSheetId: sheetLens.activeSheetId } : {}) }), // [PR-J3, 2026-10-22] + the sheet tree iff present; [PR-J4, 2026-10-23] + the active sheet as the probe sheet iff present (OD-258 item 1: the deck is built on the project connectivity and this sheet's points take the bare probe keys the panel reads); a single-sheet body is byte-identical
           signal,
         });
         const data = await res.json() as SimResult & { ok?: boolean; error?: string; details?: string };
@@ -5952,7 +6550,7 @@ export default function Home() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "sirkit-export.kicad_sch";
+      a.download = filenameFromDisposition(res.headers.get("Content-Disposition"), "sirkit-export.kicad_sch"); // [PR-J4, 2026-10-23] OD-258 item 2: a project with sheets downloads the route's zip (root and child sheet files) under the name the response carries; a single-sheet export keeps sirkit-export.kicad_sch
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -6047,7 +6645,7 @@ export default function Home() {
       {/* ── Header ── */}
       <header className="h-12 border-b border-zinc-800 flex items-center px-3 gap-3 shrink-0">
         <div className="flex items-center gap-2 pr-3 border-r border-zinc-800 h-12 -my-px">
-          <div className="size-6 rounded bg-gradient-to-br from-teal-400 to-cyan-700" />
+          <div className="size-6 rounded bg-teal-600" />
           <span className="font-medium text-zinc-100">sirkit</span>
           <Badge variant="secondary" className="text-[10px] h-5 px-1.5 ml-1">preview</Badge>
         </div>
@@ -6163,11 +6761,16 @@ export default function Home() {
           >
             <MessageSquare className="size-3.5" />
           </Button>
-          <Button size="sm" variant="ghost" className="text-zinc-300">
+          <Button size="sm" variant="ghost" className="text-zinc-300" title="Workspace settings" aria-label="Workspace settings" data-testid="workspace-settings" onClick={() => setSettingsOpen(true)}>
             <Settings className="size-3.5" />
           </Button>
         </div>
       </header>
+
+      {/* [PR-C] the primary task, always visible: ten stages, one next action (opens or focuses the existing control) */}
+      <div className="border-b border-zinc-800 bg-zinc-950 px-3 py-1" data-testid="journey-bar">
+        <JourneyStrip view={journey} onAction={handleJourneyAction} compact />
+      </div>
 
       {/* ── Body ── */}
       <div className="flex-1 flex min-h-0">
@@ -6228,7 +6831,10 @@ export default function Home() {
                 </ScrollArea>
               </>
             ) : mode === "build" ? (
-              <BuildLibraryPanel onSelectForPlacement={startKicadPlacement} projectScope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} />
+              <>
+                <BuildLibraryPanel onSelectForPlacement={startKicadPlacement} projectScope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} />
+                {designChecksFooter}
+              </>
             ) : (
               <>
                 <div className="p-3 border-b border-zinc-800">
@@ -6269,14 +6875,7 @@ export default function Home() {
                     </div>
                   )}
                 </ScrollArea>
-                <div className="p-3 border-t border-zinc-800 bg-zinc-900/40">
-                  <div className="text-xs text-zinc-500 mb-2">Design checks</div>
-                  <div className="space-y-1.5 text-xs">
-                    <CheckRow ok label="No floating nets" />
-                    <CheckRow ok label="Supply rails connected" />
-                    <CheckRow label="BOM not finalized" />
-                  </div>
-                </div>
+                {designChecksFooter}
               </>
             )}
           </aside>
@@ -6309,32 +6908,40 @@ export default function Home() {
             <div className="flex-1 min-h-0 relative">
               {view === "schematic" ? (
                 <>
-                  <SchematicEditor
+                  <SchematicEditor key={sheetLens.legacy ? undefined : sheetLens.activation} // [PR-J3, 2026-10-22] a sheet switch is a fresh mount (SR-3: a fresh view bus, the bridge re-registers); a single-sheet document is never remounted
                     tool={tool} setTool={setTool}
-                    components={components}
-                    wires={wires}
+                    components={sheetLens.components}
+                    wires={sheetLens.wires}
                     selectedId={selectedId} setSelectedId={setSelectedId}
                     wireDraftStart={wireDraftStart} setWireDraftStart={setWireDraftStart}
                     placementRotation={placementRotation}
-                    kicadComponents={kicadComponents}
+                    kicadComponents={sheetLens.kicadComponents}
                     selectedKicadId={selectedKicadId} setSelectedKicadId={setSelectedKicadId}
                     placementPartId={placementPartId}
                     placementExactIdentity={placementExactIdentity}
-                    netLabels={netLabels}
+                    netLabels={sheetLens.netLabels}
                     pendingNetLabel={pendingNetLabel} setPendingNetLabel={setPendingNetLabel}
-                    pageSize={pageSize} setPageSize={changeSheetSize}
+                    pageSize={pageSize}
                     onDeleteComponent={(family, componentId) => void deleteComponentCanonical(family, componentId)}
                     graph={schematicGraphApi}
                     viewScope={{ projectId: project?.id ?? "local", branchId: "main" }}
-                    viewSessionBridge={viewSessionBridgeRef.current!} // [B17-F]
-                  />
-                  {/* Empty state overlay */}
+                    viewSessionBridge={viewSessionBridgeRef.current!} {...sheetLens.editorProps} // [B17-F]; [PR-J3, 2026-10-22] + the lens's initialCamera / onCameraChange / sheetLayer / onLocateElsewhere
+                  /><SheetNavigator {...sheetLens.navigatorProps} />{/* [PR-J3, 2026-10-22] the Sheets chip and tree (OD-255 item 7): a sibling of the editor, positioned bottom-right by itself */}
+                  {/* Empty state: the circuit-entry action is right here ([PR-E]); the canvas keeps its pointer behaviour around it */}
                   {components.length === 0 && wires.length === 0 && kicadComponents.length === 0 && netLabels.length === 0 && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none select-none">
-                      <Sparkles className="size-8 text-zinc-700" />
+                      <Cable className="size-8 text-zinc-700" />
                       <p className="text-zinc-400 text-sm">Empty schematic</p>
+                      <button
+                        type="button"
+                        data-testid="empty-sheet-describe-circuit"
+                        onClick={() => handleJourneyAction("describe_circuit")}
+                        className="pointer-events-auto rounded border border-teal-700 bg-teal-600/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-500"
+                      >
+                        Describe a circuit
+                      </button>
                       <p className="text-zinc-500 text-xs text-center max-w-xs">
-                        Describe a circuit above, or pick a tool from the toolbar to place components manually.
+                        The assistant drafts a schematic you review before it is applied — or place parts yourself from the {mode === "build" ? "Build" : "Theory"} Library and the toolbar.
                       </p>
                     </div>
                   )}
@@ -6381,9 +6988,9 @@ export default function Home() {
                   projectScope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} // [B16.0.2 §B] the ACTIVE project identity (selector only)
                   legacyPanel={(
                     <SimView
-                      components={components}
-                      wires={wires}
-                      netLabels={netLabels}
+                      components={sheetLens.components}
+                      wires={sheetLens.wires}
+                      netLabels={sheetLens.netLabels}
                       simResult={simResult}
                       simLoading={simLoading}
                       simError={simError}
@@ -6411,10 +7018,6 @@ export default function Home() {
                   // [B19-E E5] a withdrawn revision's successor is reviewed and rebound in the PCB component review (a reviewer's act)
                   onReviewSuccessor={(row) => { workspaceView.open("pcb"); showToast(`Review the successor for ${row.refDesList.join(", ")} in the Component review panel: preview the diff, then a reviewer rebinds.`); }}
                 />
-              ) : view !== "pcb" ? (
-                <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm select-none">
-                  {view === "3d"        && "3D view"}
-                </div>
               ) : null}
               {/* R06: the PCB editor stays MOUNTED once opened — unmounting on
                   tab switch destroyed the board state and its undo history.
@@ -6428,12 +7031,18 @@ export default function Home() {
                   identity (tab switches within a project keep the mount, so
                   board state and undo history still survive tab changes). */}
               {(pcbMounted || view === "pcb") && (
-                <div className={view === "pcb" ? "absolute inset-0" : "hidden"}>
+                <div className={view === "pcb" || view === "3d" ? "absolute inset-0" : "hidden"}>{/* [PR-E] the 3D tab is the editor's own preview, presented full-size */}
                   <PcbEditor
                     key={project?.id ?? "unloaded"}
                     schematic={authoritativeSchematic}
                     active={view === "pcb"}
                     hydrateToken={pcbHydrateToken}
+                    onJourneyFacts={setPcbFacts} // [PR-C] display only
+                    syncRequestToken={syncRequestToken} // [PR-C] "Prepare PCB" from the journey strip
+                    missingPartsRequestToken={missingPartsRequestToken} // [PR-F fA] the Missing parts list from the sidebar line or the journey
+                    onFindReplacement={(instances) => { setChatOpen(true); if (loading) { showToast("The assistant is still answering; ask for the replacement when it has finished. Nothing was sent."); return; } void send(findReplacementSentence(instances)); }} // [PR-M, 2026-10-18] "Find a replacement in the library": the SAME chat request through the composer's ask route to the assistant
+                    presentation={view === "3d" ? "3d" : "editor"} // [PR-E] the 3D tab renders the editor's one preview, never a second renderer
+                    onOpenPcbTab={() => workspaceView.open("pcb")}
                     gateSchematicSync={() => schematicConsumerGate("pcb-sync")}
                     aiOwnership={captureAiRequestOwnership}
                     editorContextBridge={editorContextBridgeRef.current!} // B10
@@ -6444,6 +7053,8 @@ export default function Home() {
                     viewSessionBridge={viewSessionBridgeRef.current!} // [B17-F]
                     layoutCandidateIntake={pendingLayoutCandidate} // [B17-F] — display only; apply lives inside PcbEditor
                     onLayoutCandidateSettled={() => setPendingLayoutCandidate(null)}
+                    stackupCandidateIntake={pendingStackupCandidate} // [PR-G, 2026-10-17] — display only; the preview and its Accept (the editor's own Stackup path) live inside PcbEditor
+                    onStackupCandidateSettled={() => setPendingStackupCandidate(null)}
                     executionGrantIntake={pendingExecutionGrant} // [B18-B] — display only; the granted-execution ritual lives inside PcbEditor
                     onExecutionGrantSettled={(grantId, outcome, detail) => {
                       setPendingExecutionGrant((current) => (current && current.grant.grantId === grantId ? null : current));
@@ -6478,31 +7089,99 @@ export default function Home() {
           </div>
         )}
 
+        {/* [PR-E] Workspace settings: the sheet size, the AI provider and runtime, the project's agent autonomy; nothing invented */}
+        <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+          <DialogContent data-testid="workspace-settings-dialog">
+            <DialogHeader>
+              <DialogTitle>Workspace settings</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 text-sm">
+              <section className="space-y-1.5">
+                <h3 className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">Schematic</h3>
+                <label className="flex items-center justify-between gap-3 text-xs text-zinc-300">
+                  <span>Sheet size (also sets the KiCad export page)</span>
+                  <select aria-label="Sheet size" value={pageSize} onChange={(event) => changeSheetSize(event.target.value as PageSize)} className="h-7 rounded border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-200 outline-none focus:border-teal-500">
+                    {(["A5", "A4", "A3", "A2", "A1", "USLetter", "USLegal"] as const).map((size) => <option key={size} value={size}>{size === "USLetter" ? "US Letter" : size === "USLegal" ? "US Legal" : size}</option>)}
+                  </select>
+                </label>
+              </section>
+              <section className="space-y-1.5">
+                <h3 className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">Assistant</h3>
+                <label className="flex items-center justify-between gap-3 text-xs text-zinc-300">
+                  <span>AI Brain</span>
+                  <select aria-label="AI Brain" value={aiBrain} onChange={(event) => selectAiBrain(event.target.value as LLMProviderId)} className="h-7 rounded border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-200 outline-none focus:border-teal-500">
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                  </select>
+                </label>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px] text-zinc-500">
+                  <dt>Model</dt><dd className="text-zinc-300">{aiRuntime?.providers[aiBrain].label ?? "Loading…"}</dd>
+                  {aiBrain === "openai" && aiRuntime?.providers.openai.contextWindowTokens ? <><dt>Context</dt><dd className="text-zinc-300" title={`${aiRuntime.providers.openai.contextWindowTokens.toLocaleString()} token context; ${aiRuntime.providers.openai.maxOutputTokens?.toLocaleString() ?? "provider-defined"} maximum output`}>{(aiRuntime.providers.openai.contextWindowTokens / 1_000_000).toFixed(2)}M tokens · app cap none</dd></> : null}
+                  <dt>Embeddings</dt><dd className="text-zinc-300">OpenAI</dd>
+                </dl>
+                {/* [B18-D I11] the project's agent autonomy: shown to every member; a project administrator may change it */}
+                <AutonomyModeControl key={project?.id ?? "no-project"} scope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} />
+                <p className="text-[11px] text-zinc-500">Release, qualification and ordering are never done by the assistant — use the release workflow.</p>
+              </section>
+              <section className="space-y-1 text-[11px] text-zinc-500">
+                <h3 className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">Runtime</h3>
+                <p>Authentication: local development identity (not production). Deployment flags are set by the operator, not here.</p>
+              </section>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setSettingsOpen(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {/* [PR-G, 2026-10-17] the EXISTING publication request (the Build Library's and the Missing parts list's AtomicPublicationReviewSection),
+            opened from a draft-request review card and PREFILLED from the sealed spec (MPN, manufacturer, pin table, package, datasheet,
+            profile; symbol and footprint left to the person). The page submits nothing: the section's own "Request evidence review" does,
+            as a human, and the server's governance, reviewer and administrator rules decide. Closing changes nothing. */}
+        <Dialog open={draftRequestOpen !== null} onOpenChange={(open) => { if (!open) setDraftRequestOpen(null); }}>
+          <DialogContent className="max-w-3xl" data-testid="draft-request-publication-dialog">
+            <DialogHeader>
+              <DialogTitle>Publication request from the assistant&apos;s draft request</DialogTitle>
+            </DialogHeader>
+            {draftRequestOpen && (
+              <div className="space-y-2 text-xs text-zinc-300">
+                <p data-testid="draft-request-publication-note">UNVERIFIED draft for <span className="font-mono text-zinc-100">{draftRequestOpen.proposal.instance.refDes}</span> ({draftRequestOpen.proposal.draftRequest.exactMpn}), prefilled from the sealed request; the symbol and footprint references are yours to pick. Submitting files a request: a reviewer approves and a different administrator publishes before the part is PCB-assignable. {draftRequestOpen.proposal.pcbAssignment.blocked ? `PCB assignment is blocked until these facts are documented: ${draftRequestOpen.proposal.pcbAssignment.blockers.join("; ")}.` : ""}</p>
+                {project
+                  ? <AtomicPublicationReviewSection key={draftRequestOpen.proposal.proposalId} projectScope={{ tenantId: "local", projectId: project.id, branchId: "main" }} prefill={draftRequestPublicationPrefill(draftRequestOpen.proposal)} />
+                  : <p className="text-amber-200">No project is open: the publication request needs the project&apos;s scope. Nothing was changed.</p>}
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setDraftRequestOpen(null)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         {/* Confirmation dialog for replacing existing schematic */}
         <Dialog
           open={pendingReplace !== null}
           onOpenChange={(open) => {
             if (!open) {
               if (pendingReplace?.logId) finishActivityLog(pendingReplace.logId, "Replacement discarded");
+              reportGenerationReview(pendingReplace?.task, "discarded"); // [PR-L, 2026-10-17] a durable task's result: the discard is recorded on its task
               setPendingReplace(null);
             }
           }}
         >
-          <DialogContent data-testid="schematic-proposal-review">
+          <DialogContent className="max-h-[90vh] overflow-y-auto" data-testid="schematic-proposal-review">{/* [PR-J5 integration, 2026-10-26] review B-6: the container itself is bounded and scrolls (the J3 dialogs' pattern), beside its bounded children - Approve stays reachable on a short viewport */}
             <DialogHeader>
               <DialogTitle>{pendingProposalSummary?.headline ?? "Apply the generated schematic?"}</DialogTitle>
             </DialogHeader>
             {/* [B16.1C §F] the approval names exactly what will change. */}
-            <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-400" data-testid="schematic-proposal-summary">
-              {(pendingProposalSummary?.details ?? []).map((line) => <li key={line}>{line}</li>)}
+            <ul className="max-h-[35vh] list-disc space-y-1 overflow-y-auto pl-5 text-sm text-zinc-400" data-testid="schematic-proposal-summary">{/* [PR-J5, 2026-10-23] bounded and scrollable: a generated multi-sheet design adds its sheet lines, and Approve must stay inside a 768 px viewport */}
+              {(pendingProposalSummary?.details ?? []).map((line) => (line === replacedSheetsLine(authoritativeSchematic) ? <li key={line} data-testid="schematic-proposal-replaced-sheets">{line}</li> : <li key={line}>{line}</li>))}{/* [PR-J5, 2026-10-23] OD-259 item 1: the sheets the apply replaces, from the live document; [PR-J5 integration, 2026-10-26] review B-3: the summary itself names them (its memo now reads the live sheet set), so the line is the details' own - shown once, never beside "on this sheet" */}
             </ul>
             {pendingReplace?.explanation && <p className="max-h-32 overflow-auto whitespace-pre-wrap text-xs text-zinc-500">{pendingReplace.explanation}</p>}
-            {pendingReplace?.validationNote && <p className="text-xs text-amber-300" data-testid="schematic-proposal-validation">{pendingReplace.validationNote}</p>}
+            {pendingReplace?.validationNote && <p className="max-h-24 overflow-auto text-xs text-amber-300" data-testid="schematic-proposal-validation">{pendingReplace.validationNote}</p>} {/* [PR-J5, 2026-10-23] bounded like the explanation above (the sheet set's notes travel here) */}
             <DialogFooter>
               <Button
                 variant="ghost"
                 onClick={() => {
                   if (pendingReplace?.logId) finishActivityLog(pendingReplace.logId, "Replacement discarded");
+                  reportGenerationReview(pendingReplace?.task, "discarded"); // [PR-L, 2026-10-17] a durable task's result: the discard is recorded on its task
                   setPendingReplace(null);
                 }}
               >
@@ -6521,6 +7200,7 @@ export default function Home() {
                       if (adopted) finishActivityLog(pending.logId, "Applied replacement to canvas");
                       else failActivityLog(pending.logId, "Replacement not applied (stale or rejected)");
                     }
+                    reportGenerationReview(pending.task, adopted ? "applied" : "not-applied"); // [PR-L, 2026-10-17] a durable task's result: the review (with the post-apply head mark) is recorded on its task
                   });
                 }
               }}>{pendingProposalSummary?.replaces ? "Replace" : "Apply"}</Button>
@@ -6535,8 +7215,10 @@ export default function Home() {
           onApply={() => void applyReplacementProposal()}
           onCancel={cancelReplacementProposal}
         />
+        <SheetOrganizationReviewCard review={pendingOrganization ? sheetOrganizationReview(pendingOrganization.received.proposal, { currency: sheetOrganizationCurrency(pendingOrganization.received.proposal, liveSheetForSealedArtifacts()), alreadyApplied: sheetOrganizationAlreadyApplied(pendingOrganization.received.proposal, authoritativeSchematic) }) : null} busy={organizationApplyBusy} onApprove={() => void applyOrganizationProposal()} onDiscard={discardOrganizationProposal} /> {/* [PR-J5, 2026-10-23] */} <ComponentResolutionReviewDialog review={pendingResolution ? componentResolutionReview(pendingResolution.received.proposal) : null} boardImpact={pendingResolution ? componentResolutionBoardImpactView(pendingResolution.boardImpact) : null} busy={resolutionApplyBusy} onApprove={() => void applyResolutionProposal()} onDiscard={discardResolutionProposal} /> {/* [PR-M, 2026-10-18] */}
+        {resolutionReceipt && <ComponentResolutionReceiptNotice receipt={resolutionReceipt} onDismiss={() => setResolutionReceipt(null)} />}
         {replacementReceipt && (
-          <div className="fixed bottom-28 right-4 z-50 max-w-xs rounded border border-teal-800/60 bg-zinc-900/95 px-3 py-2 text-[11px] text-teal-300 shadow-lg">
+          <div className="fixed bottom-28 right-4 z-50 max-w-xs rounded border border-teal-800/60 bg-zinc-900/95 px-3 py-2 text-[11px] text-teal-300 shadow-sm">
             <div className="font-medium text-teal-200">Exact replacement applied &amp; verified</div>
             <div className="mt-0.5 text-zinc-400">
               {replacementReceipt.sourcePartId} → {replacementReceipt.target.partId} · transaction {replacementReceipt.transactionId.slice(0, 12)}… · undoable
@@ -6551,7 +7233,7 @@ export default function Home() {
         {/* B12: verified-commit confirmation, driven by the receipt — success
             is truthful because it exists only after postcondition verification. */}
         {tier1Receipt && (
-          <div className="fixed bottom-16 right-4 z-50 max-w-xs rounded border border-teal-800/60 bg-zinc-900/95 px-3 py-2 text-[11px] text-teal-300 shadow-lg">
+          <div className="fixed bottom-16 right-4 z-50 max-w-xs rounded border border-teal-800/60 bg-zinc-900/95 px-3 py-2 text-[11px] text-teal-300 shadow-sm">
             <div className="font-medium text-teal-200">Approved edit applied &amp; verified</div>
             <div className="mt-0.5 text-zinc-400">
               transaction {tier1Receipt.transactionId.slice(0, 12)}… · {tier1Receipt.operationCount} operation(s)
@@ -6797,33 +7479,12 @@ export default function Home() {
                   {chatFullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
                 </button>
               </div>
-              <div className="mt-2 flex items-end gap-2 flex-wrap">
-                <label className="flex flex-col gap-1 min-w-28">
-                  <span className="text-[10px] uppercase tracking-wide text-zinc-500">AI Brain</span>
-                  <select
-                    aria-label="AI Brain"
-                    value={aiBrain}
-                    onChange={(event) => selectAiBrain(event.target.value as LLMProviderId)}
-                    className="h-7 rounded border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-200 outline-none focus:border-teal-500"
-                  >
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                  </select>
-                </label>
-                <div className="pb-0.5 text-[10px] leading-4 text-zinc-500">
-                  <div>Brain: <span className="text-teal-300">{aiBrain === "openai" ? "OpenAI" : "Anthropic"}</span></div>
-                  <div>Model: <span className="text-zinc-300">{aiRuntime?.providers[aiBrain].label ?? "Loading…"}</span></div>
-                  {aiBrain === "openai" && aiRuntime?.providers.openai.contextWindowTokens ? (
-                    <div title={`${aiRuntime.providers.openai.contextWindowTokens.toLocaleString()} token context; ${aiRuntime.providers.openai.maxOutputTokens?.toLocaleString() ?? "provider-defined"} maximum output`}>
-                      Context: <span className="text-zinc-300">{(aiRuntime.providers.openai.contextWindowTokens / 1_000_000).toFixed(2)}M</span>
-                      {" · "}App cap: <span className="text-zinc-300">none</span>
-                    </div>
-                  ) : null}
-                  <div>Embeddings: <span className="text-zinc-300">OpenAI</span></div>
-                </div>
-                {/* [B18-D I11] the project's agent autonomy: shown to every member; a project administrator may change it */}
-                <AutonomyModeControl key={project?.id ?? "no-project"} scope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} />
-              </div>
+              {/* [PR-E] provider choice and autonomy live in Workspace settings (secondary); the chat keeps a one-line summary */}
+              <p className="mt-1.5 text-[10px] leading-4 text-zinc-500" data-testid="chat-settings-summary">
+                {aiBrain === "openai" ? "OpenAI" : "Anthropic"} · {aiRuntime?.providers[aiBrain].label ?? "model loading…"} · every AI change waits for your confirmation
+                {" — "}
+                <button type="button" onClick={() => setSettingsOpen(true)} className="underline decoration-zinc-600 hover:text-zinc-300">change in Settings</button>
+              </p>
               {/* [B18-D review] §1 item 3: the static Tier 3 line */}
               <p className="mt-1.5 text-[10px] leading-4 text-zinc-500" data-testid="chat-tier3-line">Release, qualification and ordering are never done by the assistant — use the release workflow.</p>
             </div>
@@ -6836,7 +7497,7 @@ export default function Home() {
                   </p>
                 )}
                 {messages.map((message) => (
-                  <MessageBubble key={message.id} message={message} undoStates={executionUndoStates} onUndoExecution={undoAiChange} />
+                  <MessageBubble key={message.id} message={message} undoStates={executionUndoStates} onUndoExecution={undoAiChange} draftRequests={liveDraftRequests} onOpenDraftRequest={openDraftRequestPublication} generationTask={generationTask} onGenerationTaskAction={(action, blockId) => void runGenerationTaskAction(action, blockId)} onGenerationTaskStartAgain={startGenerationAgain} generationTaskControlBusy={generationTaskControlBusy} generationControls={liveGenerationControls} onConfirmGenerationControl={(requestId) => void confirmGenerationControl(requestId)} onDismissGenerationControl={dismissGenerationControl} /> // [PR-G, 2026-10-17] + the review cards' one action and the answer footer; [PR-L, 2026-10-18] + the design control chip
                 ))}
                 <div ref={chatEndRef} />
               </div>
@@ -6903,7 +7564,7 @@ export default function Home() {
                       size="sm"
                       variant="ghost"
                       title="Apply bounded support-part fixes via a validated edit"
-                      disabled={isEditing || isGenerating || loading || isSecondOpinion || isReviewing || isTidying}
+                      disabled={isEditing || isGenerating || designTaskBusy || loading || isSecondOpinion || isReviewing || isTidying}
                       onClick={handleApplySuggestions}
                     >
                       <Check className="size-3.5 mr-1" />
@@ -6979,6 +7640,9 @@ export default function Home() {
                   {composerRouting.hints.includes("tier3-release") && (
                     <span data-testid="composer-tier3-hint" className="text-amber-400/90">Release, qualification and ordering are never done by the assistant — use the release workflow.</span>
                   )}
+                  {composerRouting.hints.includes("prepare-pcb") && composerAction === "generate" && (
+                    <span data-testid="composer-prepare-pcb-hint">then offer Prepare PCB after your approval of the schematic (never automatic)</span>
+                  )}
                 </div>
               )}
               <div className="flex items-center justify-between mt-2 gap-2">
@@ -6993,22 +7657,25 @@ export default function Home() {
                 </div>
                 <div className="flex items-center flex-wrap justify-end gap-2">
                   {loading && (
-                    <Button size="sm" variant="outline" data-testid="chat-stop" title="Stop the assistant's run" onClick={stopChatRun}>
-                      Stop
+                    <Button size="sm" variant="outline" data-testid="chat-stop" title="Stop the assistant's answer (a design task it started keeps running; Stop design on its card stops that)" onClick={stopChatRun}>
+                      Stop answer
                     </Button>
                   )}
                   {showComposerButton && (
                     <Button
                       size="sm"
+                      data-testid="composer-submit"
                       title={
                         composerAction === "generate"
                           ? "Generate a schematic from this prompt"
-                          : "Apply this as an edit to the current schematic"
+                          : composerAction === "edit"
+                            ? "Apply this as an edit to the current schematic"
+                            : "Send this message to the assistant"
                       }
                       disabled={composerDisabled}
                       onClick={handleComposerSubmit}
                     >
-                      {(isGenerating || isEditing) && <Loader2 className="size-3.5 mr-1 animate-spin" />}
+                      {(isGenerating || isEditing || (designTaskBusy && composerAction !== "ask")) && <Loader2 className="size-3.5 mr-1 animate-spin" />}
                       {composerLabel}
                     </Button>
                   )}
@@ -7027,10 +7694,10 @@ export default function Home() {
                     {moreMenuOpen && (
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setMoreMenuOpen(false)} />
-                        <div className="absolute bottom-full right-0 mb-1 z-50 w-56 rounded-md border border-zinc-800 bg-zinc-900 py-1 shadow-lg">
+                        <div className="absolute bottom-full right-0 mb-1 z-50 w-56 rounded-md border border-zinc-800 bg-zinc-900 py-1 shadow-sm">
                           <button
                             className="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
-                            disabled={isReviewing || isTidying || isSecondOpinion || loading || isGenerating || isEditing ||
+                            disabled={isReviewing || isTidying || isSecondOpinion || loading || isGenerating || designTaskBusy || isEditing ||
                               (components.length === 0 && kicadComponents.length === 0)}
                             onClick={() => { setMoreMenuOpen(false); handleReview(); }}
                           >
@@ -7038,7 +7705,7 @@ export default function Home() {
                           </button>
                           <button
                             className="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
-                            disabled={isTidying || isReviewing || isSecondOpinion || loading || isGenerating || isEditing ||
+                            disabled={isTidying || isReviewing || isSecondOpinion || loading || isGenerating || designTaskBusy || isEditing ||
                               kicadComponents.length === 0}
                             onClick={() => { setMoreMenuOpen(false); handleTidyLayout(); }}
                           >
@@ -7047,7 +7714,7 @@ export default function Home() {
                           <button
                             className="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
                             title="Independent domain model designs the same request and diffs it (slow, ~1–2 min)"
-                            disabled={isSecondOpinion || isReviewing || isTidying || loading || isGenerating || isEditing ||
+                            disabled={isSecondOpinion || isReviewing || isTidying || loading || isGenerating || designTaskBusy || isEditing ||
                               kicadComponents.length === 0}
                             onClick={() => { setMoreMenuOpen(false); handleSecondOpinion(); }}
                           >
@@ -7069,7 +7736,7 @@ export default function Home() {
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-md">
           <div
             role="status"
-            className="flex items-start gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-200 shadow-lg"
+            className="flex items-start gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-200 shadow-sm"
           >
             <span className="flex-1">{toast}</span>
             <button
@@ -7371,15 +8038,15 @@ function ProbeSchematic({
 
   const panRef  = useRef(pan);
   const zoomRef = useRef(zoom);
-  panRef.current  = pan;
-  zoomRef.current = zoom;
+  useLayoutEffect(() => { panRef.current = pan; }, [pan]);
+  useLayoutEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
   const componentsRef    = useRef(components);
   const wiresRef         = useRef(wires);
   const netLabelsRef     = useRef(netLabels);
-  componentsRef.current  = components;
-  wiresRef.current       = wires;
-  netLabelsRef.current   = netLabels;
+  useLayoutEffect(() => { componentsRef.current = components; }, [components]);
+  useLayoutEffect(() => { wiresRef.current = wires; }, [wires]);
+  useLayoutEffect(() => { netLabelsRef.current = netLabels; }, [netLabels]);
 
   const isPanning = useRef(false);
   const panStart  = useRef<{ mouse: Point; pan: Point }>({ mouse: { x: 0, y: 0 }, pan: { x: 0, y: 0 } });
@@ -7789,7 +8456,7 @@ function FloatingPanel({
     return { x: 16, y: 16, w: 720, h: 280 };
   });
   const layoutRef = useRef(layout);
-  layoutRef.current = layout;
+  useLayoutEffect(() => { layoutRef.current = layout; }, [layout]);
 
   useLayoutEffect(() => {
     if (localStorage.getItem(PANEL_STORAGE_KEY)) return;
@@ -7869,7 +8536,7 @@ function FloatingPanel({
   return (
     <div
       style={{ position: "absolute", left: layout.x, top: layout.y, width: layout.w, height: layout.h, zIndex: 20 }}
-      className="flex flex-col bg-zinc-900/95 border border-zinc-700 rounded-md shadow-xl backdrop-blur-sm overflow-hidden"
+      className="flex flex-col bg-zinc-900/95 border border-zinc-700 rounded-md shadow-sm overflow-hidden"
     >
       <div
         className="h-8 px-3 flex items-center gap-2 shrink-0 border-b border-zinc-800 cursor-move select-none"
@@ -7998,7 +8665,7 @@ function SimView({
 
       {/* Toolbar — kept above the floating panel so it stays accessible
           even if the user drags the panel over it. */}
-      <div className="absolute top-2 left-2 z-30 flex items-center gap-0.5 bg-zinc-900/95 border border-zinc-800 rounded px-1 py-0.5 backdrop-blur-sm shadow">
+      <div className="absolute top-2 left-2 z-30 flex items-center gap-0.5 bg-zinc-900/95 border border-zinc-800 rounded px-1 py-0.5 shadow">
         <button
           title="Probe mode (P)"
           onClick={() => setSimMode("probe")}
@@ -8221,7 +8888,7 @@ function AnalysisPicker({
       </button>
 
       {open === "type" && (
-        <div className="absolute top-full left-0 mt-1 z-30 min-w-[140px] bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1">
+        <div className="absolute top-full left-0 mt-1 z-30 min-w-[140px] bg-zinc-900 border border-zinc-700 rounded-md shadow-sm py-1">
           {(["tran", "ac", "dc", "op"] as const).map((t) => (
             <button
               key={t}
@@ -8237,7 +8904,7 @@ function AnalysisPicker({
       )}
 
       {open === "settings" && (
-        <div className="absolute top-full left-0 mt-1 z-30 w-64 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl p-3">
+        <div className="absolute top-full left-0 mt-1 z-30 w-64 bg-zinc-900 border border-zinc-700 rounded-md shadow-sm p-3">
           <div className="text-[10px] uppercase text-zinc-500 mb-2 tracking-wide">
             {ANALYSIS_LABELS[config.type]} settings
           </div>
@@ -8359,7 +9026,8 @@ function ViewTab({ icon: Icon, label, active, onClick }: {
   );
 }
 
-function MessageBubble({ message, undoStates, onUndoExecution }: { message: Message; undoStates?: ReadonlyMap<string, { eligible: boolean; reason: string | null }>; onUndoExecution?: (grantId: string) => Promise<void> }) {
+function MessageBubble({ message, undoStates, onUndoExecution, draftRequests, onOpenDraftRequest, generationTask, onGenerationTaskAction, onGenerationTaskStartAgain, generationTaskControlBusy, generationControls, onConfirmGenerationControl, onDismissGenerationControl }: { message: Message; undoStates?: ReadonlyMap<string, { eligible: boolean; reason: string | null }>; onUndoExecution?: (grantId: string) => Promise<void>; /** [PR-G, 2026-10-17] the sealed draft requests this page still holds (a card's action is offered only for one of them) */ draftRequests?: ReadonlyMap<string, ReceivedDraftRequest>; onOpenDraftRequest?: (proposalId: string) => void; /** [PR-L, 2026-10-17] the followed durable design task: its status card is shown in ITS activity entry */ generationTask?: { logId: string; view: GenerationTaskView } | null; onGenerationTaskAction?: (action: GenerationTaskClientAction, blockId?: string) => void; onGenerationTaskStartAgain?: () => void; generationTaskControlBusy?: boolean; /** [PR-L, 2026-10-18] the design control chips this page holds (a chip's buttons only for one of them) */ generationControls?: ReadonlyMap<string, ReceivedGenerationTaskControl>; onConfirmGenerationControl?: (requestId: string) => void; onDismissGenerationControl?: (requestId: string) => void }) {
+  const [noteExpanded, setNoteExpanded] = useState(false); // [PR-G, 2026-10-17] a module-contract note card shows its summary row until expanded (view state only)
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
@@ -8374,16 +9042,38 @@ function MessageBubble({ message, undoStates, onUndoExecution }: { message: Mess
     const entryState = entryStateOfLogMessage(message); // [B18-D I6] a chat execution entry (display only; its one control is I8's Undo)
     const entryGrantId = entryState ? message.id.slice(EXECUTION_ENTRY_ID_PREFIX.length) : null;
     const undoState = entryGrantId && entryState === "committed" ? (undoStates?.get(entryGrantId) ?? null) : null; // [B18-D I8] live entries only
+    // [PR-G, 2026-10-17] the two review cards (text rows like every log): a draft request's card carries ONE action, offered while this
+    // page holds the sealed request (a restored card is a static record and says why); a module-contract note shows its summary until expanded.
+    const draftRequestId = message.id.startsWith(DRAFT_REQUEST_CARD_ID_PREFIX) ? message.id.slice(DRAFT_REQUEST_CARD_ID_PREFIX.length) : null;
+    const draftRequestHeld = draftRequestId !== null && (draftRequests?.has(draftRequestId) ?? false);
+    const moduleNote = message.id.startsWith(MODULE_CONTRACT_NOTE_ID_PREFIX);
+    const controlRequestId = message.id.startsWith(GENERATION_TASK_CONTROL_CARD_ID_PREFIX) ? message.id.slice(GENERATION_TASK_CONTROL_CARD_ID_PREFIX.length) : null; const controlHeld = controlRequestId !== null ? (generationControls?.get(controlRequestId) ?? null) : null; // [PR-L, 2026-10-18] a design control chip: its buttons only while this page holds the sealed request
+    const shownEntries = moduleNote && !noteExpanded ? message.entries.slice(0, 1) : message.entries;
     return (
-      <div className="flex justify-start w-full" {...(entryState ? { "data-testid": "chat-execution-entry", "data-grant-id": message.id.slice(EXECUTION_ENTRY_ID_PREFIX.length), "data-state": entryState, "data-tier": "1" } : {})}>
+      <div className="flex justify-start w-full" {...(entryState ? { "data-testid": "chat-execution-entry", "data-grant-id": message.id.slice(EXECUTION_ENTRY_ID_PREFIX.length), "data-state": entryState, "data-tier": "1" } : draftRequestId !== null ? { "data-testid": "chat-draft-request-card", "data-proposal-id": draftRequestId, "data-held": draftRequestHeld ? "true" : "false" } : moduleNote ? { "data-testid": "chat-module-note-card", "data-expanded": noteExpanded ? "true" : "false" } : controlRequestId !== null ? { "data-testid": "generation-task-control-card", "data-request-id": controlRequestId, "data-held": controlHeld ? "true" : "false" } : {})}>
         <div className="w-full rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs">
           <div className="flex items-center gap-2 text-zinc-300">
             <StatusIcon className={`size-3.5 shrink-0 ${message.status === "running" ? "animate-spin text-teal-300" : message.status === "error" ? "text-red-400" : "text-teal-400"}`} />
             <span className="font-medium">{message.title}</span>
           </div>
           {undoState && entryGrantId && onUndoExecution ? <ExecutionEntryActions eligible={undoState.eligible} reason={undoState.reason} onUndo={() => void onUndoExecution?.(entryGrantId)} /> : null}
-          <div className="mt-2 space-y-1.5">
-            {message.entries.map((entry) => (
+          {draftRequestId !== null && onOpenDraftRequest ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" data-testid="draft-request-open" disabled={!draftRequestHeld} aria-describedby={`${message.id}-action-note`} onClick={() => onOpenDraftRequest(draftRequestId)}>{DRAFT_REQUEST_OPEN_LABEL}</Button>
+              <span id={`${message.id}-action-note`} className="text-[11px] text-zinc-500">{draftRequestHeld ? "opens the Build Library's evidence review prefilled from this sealed request; nothing is requested until you submit it there" : "not available: this page no longer holds the sealed request (reload or project switch) — ask the assistant again"}</span>
+            </div>
+          ) : null}
+          {controlRequestId !== null && controlHeld && onConfirmGenerationControl && onDismissGenerationControl ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button size="sm" variant={controlHeld.request.action === "cancel" ? "destructive" : "outline"} data-testid="generation-task-control-confirm" onClick={() => onConfirmGenerationControl(controlRequestId)}>Confirm: {controlHeld.request.label}</Button>
+              <Button size="sm" variant="outline" data-testid="generation-task-control-dismiss" onClick={() => onDismissGenerationControl(controlRequestId)}>Dismiss</Button>
+            </div>
+          ) : null}
+          {moduleNote ? (
+            <button type="button" onClick={() => setNoteExpanded((open) => !open)} aria-expanded={noteExpanded} aria-controls={`${message.id}-details`} data-testid="module-note-toggle" className="mt-2 rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-200 hover:border-zinc-500">{noteExpanded ? "Hide details" : `Show details (${Math.max(0, message.entries.length - 1)} rows)`}</button>
+          ) : null}
+          <div id={moduleNote ? `${message.id}-details` : undefined} className="mt-2 space-y-1.5">
+            {shownEntries.map((entry) => (
               <div key={entry.id} className="flex items-start gap-2 text-[11px] leading-relaxed">
                 <span
                   className={`mt-1.5 size-1.5 rounded-full shrink-0 ${
@@ -8398,6 +9088,7 @@ function MessageBubble({ message, undoStates, onUndoExecution }: { message: Mess
               </div>
             ))}
           </div>
+          {generationTask && generationTask.logId === message.id && onGenerationTaskAction && onGenerationTaskStartAgain ? <GenerationTaskStatus view={generationTask.view} onAction={onGenerationTaskAction} onStartAgain={onGenerationTaskStartAgain} busy={generationTaskControlBusy ?? false} /> : null} {message.work ? <WorkLog work={message.work} entryId={message.id} /> : null} {/* [PR-L, 2026-10-17] the design task's live state, counts, blocks and its valid actions */}
         </div>
       </div>
     );
@@ -8407,6 +9098,7 @@ function MessageBubble({ message, undoStates, onUndoExecution }: { message: Mess
     <div className="flex justify-start w-full">
       <div className="w-full rounded-lg px-3 py-2.5 text-xs leading-relaxed bg-zinc-900 border border-zinc-800 overflow-hidden">
         <ChatMarkdown content={message.content} /> {/* [B19-D I5c row 02] images never fetched; links web/mail only */}
+        {message.footer ? <p data-testid="chat-answer-footer" className="mt-1.5 border-t border-zinc-800 pt-1 text-[10px] leading-4 text-zinc-500">{message.footer}</p> : null} {/* [PR-G, 2026-10-17] the model label from the run's own events (never configuration), with the fallback disclosure */}
       </div>
     </div>
   );
@@ -8446,14 +9138,19 @@ function BuildCategoryRow({ label, count }: { label: string; count: number }) {
   );
 }
 
-function CheckRow({ ok, label }: { ok?: boolean; label: string }) {
+/** [PR-E] A design check with its REAL state: pass, findings (with the first messages in the tooltip) or not run (with the
+ *  reason). Never a decorative pass: a check that did not run shows as not run. */
+function CheckRow({ check, muted = false }: { check: DesignCheck; muted?: boolean }) {
+  const title = check.state === "findings" ? check.findings.join("\n") : check.state === "not_run" ? `Not run: ${check.reason ?? "unknown"}` : "No findings on the current schematic";
   return (
-    <div className="flex items-center gap-2 text-zinc-300">
-      {ok
-        ? <Check         className="size-3.5 text-emerald-400" />
-        : <AlertTriangle className="size-3.5 text-amber-400" />
-      }
-      <span>{label}</span>
+    <div className={`flex items-center gap-2 ${muted ? "text-zinc-500" : "text-zinc-300"}`} title={title} data-testid={`design-check-${check.id}`} data-state={check.state}>
+      {check.state === "pass"
+        ? <Check         className="size-3.5 text-emerald-400" aria-hidden="true" />
+        : check.state === "findings"
+          ? <AlertTriangle className="size-3.5 text-amber-400" aria-hidden="true" />
+          : <Circle className="size-3.5 text-zinc-600" aria-hidden="true" />}
+      <span className="min-w-0">{check.label}</span>
+      <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] text-zinc-500">{check.state === "pass" ? "pass" : check.state === "findings" ? `${check.count} finding${check.count === 1 ? "" : "s"}` : "not run"}</span>
     </div>
   );
 }

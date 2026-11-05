@@ -42,7 +42,9 @@
     "stage10:test": "vitest run app/lib/engineering/__tests__",
     "pcb:verify-multilayer": "tsx scripts/verify-multilayer-freerouting.ts",
     "pcb:verify-two-layer-vias": "tsx scripts/verify-two-layer-via-routing.ts",
-    "setup:freerouting": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-freerouting.ps1"
+    "setup:freerouting": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-freerouting.ps1",
+    "worker:generation": "tsx scripts/generation-worker.ts",
+    "dev:with-worker": "node scripts/dev-with-worker.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",

@@ -364,3 +364,107 @@ export function consumeReplacementAuthority(input: {
   registerGrant(authority);
   return { ok: true, authority };
 }
+
+// ─── [PR-M, 2026-10-17] the CATALOG RESOLUTION authority (section M.0, M.2.4-M.2.5) ─────────────────────────────────────────
+// Appended on purpose: no line above moves, and the grant it mints is the SAME branded runtime grant the executor verifies.
+
+/** The content schema of the catalog-sourced resolution authority envelope (kind component-authority-records, source catalog). */
+export const CATALOG_RESOLUTION_AUTHORITY_SCHEMA = "sirkit.catalog-resolution-authority.v1" as const;
+
+/** ONE instance's resolution target as the server derived it from the catalog link, the published evidence and the status read. */
+export interface CatalogResolutionAuthorityEntry {
+  componentId: string;
+  /** The catalog part the instance is drawn from once resolved (its `partId`). */
+  catalogPartId: string;
+  valueKey: string;
+  atomicPartRevisionId: string;
+  symbolAssetVersionId: string;
+  footprintAssetVersionId: string;
+  mappingCertificateId: string;
+  exactMpn: string;
+  manufacturer: string;
+  /** The published-revision evidence digest the compatibility proof read. */
+  evidenceDigest: string;
+  /** Only `true` is ever written: the status read said published and never withdrawn at the time of the read. */
+  selectable: true;
+}
+
+interface CatalogResolutionAuthorityContent {
+  schema?: unknown;
+  resolutions?: CatalogResolutionAuthorityEntry[];
+}
+
+const RESOLUTION_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:@/+\-]{0,199}$/;
+
+/**
+ * [PR-M] Consume a validated bundle into the replacement authority of an UNRESOLVED instance whose target is a published,
+ * selectable catalog revision. No physical binding exists yet for such an instance (it has never been bound), so the B13
+ * durable-binding record cannot be the source; the catalog's published link is. Fail-closed checks, in order: the bundle's
+ * structure, digests, manifest and scope; its canonical revision equals the schematic head being planned against; exactly one
+ * component-authority-records envelope, VERIFIED, CURRENT and from the catalog authority source, whose content is this schema;
+ * exactly one entry for the component; the entry names the requested catalog part, is selectable and carries every exact asset
+ * identity as a bounded identifier; a caller-named field must equal the derived one. The minted grant is registered exactly as
+ * the replacement consumption above registers its own, so the executor's B06.2 gate verifies it the same way and retires it on
+ * acceptance.
+ */
+export function consumeCatalogResolutionAuthority(input: {
+  bundle: ReadResourceBundle;
+  scope: { tenantId: string; projectId: string; branchId: string };
+  expectedCanonicalRevision: string;
+  componentId: string;
+  targetPartId: string;
+  target: { atomicPartRevisionId: string; symbolAssetVersionId?: string; footprintAssetVersionId?: string; mappingCertificateId?: string };
+}): AuthorityConsumptionResult {
+  const failures = validateReadResourceBundle(input.bundle, input.scope);
+  if (failures.length > 0) {
+    const foreign = failures.some((failure) => failure.code === "foreign_resource");
+    const stale = failures.some((failure) => failure.code === "stale_resource");
+    return { ok: false, code: foreign ? "wrong_scope" : stale ? "stale_or_unavailable" : "invalid_bundle", detail: `Resolution authority bundle failed validation: ${failures.map((failure) => `${failure.code}(${failure.detail})`).join("; ")}` };
+  }
+  const canonicalRevision = input.bundle.canonicalState.sourceCanonicalRevision;
+  if (!canonicalRevision || canonicalRevision !== input.expectedCanonicalRevision) {
+    return { ok: false, code: "wrong_revision", detail: `Resolution authority is pinned to canonical revision ${canonicalRevision ?? "(none)"} but the resolution targets ${input.expectedCanonicalRevision}.` };
+  }
+  const envelopes = input.bundle.auxiliary.filter((candidate) => candidate.kind === "component-authority-records");
+  if (envelopes.length !== 1) return { ok: false, code: "missing_authority_record", detail: "The bundle must carry exactly one catalog resolution authority resource." };
+  const envelope = envelopes[0]!;
+  if (envelope.authoritySource !== "catalog") return { ok: false, code: "not_verified", detail: `Resolution authority must come from the catalog authority source, not ${envelope.authoritySource}.` };
+  if (envelope.authorityStatus !== "verified") return { ok: false, code: "not_verified", detail: `Resolution authority resource ${envelope.resourceId} is ${envelope.authorityStatus}, not verified.` };
+  if (envelope.freshness !== "current") return { ok: false, code: "stale_or_unavailable", detail: `Resolution authority resource ${envelope.resourceId} freshness is ${envelope.freshness}.` };
+  const content = envelope.content as CatalogResolutionAuthorityContent;
+  if (content?.schema !== CATALOG_RESOLUTION_AUTHORITY_SCHEMA || !Array.isArray(content.resolutions)) return { ok: false, code: "missing_authority_record", detail: "The resolution authority resource does not carry the catalog resolution schema." };
+  const entries = content.resolutions.filter((entry) => entry?.componentId === input.componentId);
+  if (entries.length !== 1) return { ok: false, code: entries.length === 0 ? "missing_authority_record" : "not_verified", detail: entries.length === 0 ? `No catalog resolution authority exists for component ${input.componentId}.` : `Component ${input.componentId} has conflicting catalog resolution entries; refusing to merge.` };
+  const entry = entries[0]!;
+  if (entry.catalogPartId !== input.targetPartId) return { ok: false, code: "wrong_part", detail: `The catalog resolution authority is for part ${entry.catalogPartId}, not ${input.targetPartId}.` };
+  if (entry.selectable !== true) return { ok: false, code: "stale_or_unavailable", detail: "The target revision was not selectable when the authority was derived." };
+  const derived = {
+    atomicPartRevisionId: entry.atomicPartRevisionId,
+    symbolAssetVersionId: entry.symbolAssetVersionId,
+    footprintAssetVersionId: entry.footprintAssetVersionId,
+    mappingCertificateId: entry.mappingCertificateId,
+  } as const;
+  for (const field of ["atomicPartRevisionId", "symbolAssetVersionId", "footprintAssetVersionId", "mappingCertificateId"] as const) {
+    if (typeof derived[field] !== "string" || !RESOLUTION_IDENTIFIER.test(derived[field])) return { ok: false, code: "incomplete_identity", detail: `Catalog resolution authority for component ${input.componentId} is missing a bounded ${field}.` };
+    const supplied = input.target[field];
+    if (supplied !== undefined && supplied !== derived[field]) return { ok: false, code: "asset_mismatch", detail: `Caller-supplied ${field} does not match the catalog resolution authority; asset identities are derived, never chosen by the caller.` };
+  }
+  const consumedResources: ConsumedAuthorityResource[] = [
+    { resourceId: input.bundle.canonicalState.resourceId, contentDigest: input.bundle.canonicalState.contentDigest },
+    { resourceId: envelope.resourceId, contentDigest: envelope.contentDigest },
+  ];
+  const authority = make({
+    componentId: input.componentId,
+    targetPartId: input.targetPartId,
+    atomicPartRevisionId: derived.atomicPartRevisionId,
+    symbolAssetVersionId: derived.symbolAssetVersionId,
+    footprintAssetVersionId: derived.footprintAssetVersionId,
+    mappingCertificateId: derived.mappingCertificateId,
+    consumedResources,
+    scope: { ...input.scope },
+    canonicalRevision: input.expectedCanonicalRevision,
+    grantId: mintGrantId({ schema: "sirkit.catalog-resolution-grant.v1", scope: input.scope, canonicalRevision: input.expectedCanonicalRevision, componentId: input.componentId, targetPartId: input.targetPartId, target: derived, consumedResources }),
+  });
+  registerGrant(authority);
+  return { ok: true, authority };
+}

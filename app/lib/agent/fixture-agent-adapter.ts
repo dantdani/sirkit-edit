@@ -28,7 +28,7 @@
  * and the tool results.
  */
 import type { AgentStep, ProviderAgentAdapter, ProviderToolDeclaration } from "./contracts";
-import type { LLMProviderId } from "../llm/types";
+import type { LLMProviderId } from "../llm/types"; import { fixtureSheetOrganizationArgs, fixtureSheetOrganizationCandidates, fixtureSheetOrganizationFor, type FixtureSheetOrganization } from "../fixture-runtime/sheet-organization-groups"; // [PR-J5 integration, 2026-10-26] review J5R-AI-6: the organise turn proposes the design's OWN groups (a data module that imports nothing; on this existing line so no cited line moves)
 
 export const FIXTURE_AGENT_ENV = "SIRKIT_FIXTURE_AGENT";
 export const FIXTURE_AGENT_SCRIPTED = "scripted";
@@ -233,7 +233,7 @@ export function planFixtureInstruction(message: string): Planned {
   if (LAYOUT.test(text)) return { kind: "layout-then", routeAsked: /\broute\b/i.test(text) };
   const replay = REPLAY.exec(text);
   if (replay) return { kind: "call", toolId: "sirkit.pcb.undo-redo-granted", args: { direction: replay[1]!.toLowerCase() } };
-  return { kind: "reply", text: "(fixture agent) I follow only the harness's scripted instructions: move or flip a selected part, add silkscreen text, dimension the board (and its mounting holes), resize or retarget the vias on a net, replace a component with the part its authority records, propose a placement, undo, redo, and the refusal scripts (release, qualify, order, a delegation, a double call)." };
+  return planGenerateSchematic(message) ?? { kind: "reply", text: "(fixture agent) I follow only the harness's scripted instructions: move or flip a selected part, add silkscreen text, dimension the board (and its mounting holes), resize or retarget the vias on a net, replace a component with the part its authority records, propose a placement, generate a schematic from a prompt, resolve or replace unresolved parts from the library, undo, redo, and the refusal scripts (release, qualify, order, a delegation, a double call)." }; // [PR-G, 2026-10-17] the generation script (appended below) is tried last, on the sentence as written: no earlier pattern opens with "generate", so the order changes nothing
 }
 
 /** [B18-E E14] The name the person used is not a net on this board: say so, and say what the board does have. */
@@ -418,7 +418,7 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
   }
 
   async start(input: Parameters<ProviderAgentAdapter["start"]>[0]): Promise<AgentStep> {
-    const roleStep = await scriptedRoleStart(this, input); if (roleStep) return roleStep; this.planned = planFixtureInstruction(input.userMessage); // [B21 F] a specialist run or the follow-up turn answers from the per-role script (D21-40), appended below
+    const roleStep = await scriptedRoleStart(this, input); if (roleStep) return roleStep; this.planned = planFixtureInstruction(input.userMessage); const resolutionStep = scriptedResolutionStart(this, input); if (resolutionStep) return resolutionStep; const generationStep = scriptedGenerationTaskStart(this, input); if (generationStep) return generationStep; const organizeStep = scriptedOrganizeStart(this, input); if (organizeStep) return organizeStep; const acquisitionStep = scriptedAcquisitionStart(this, input); if (acquisitionStep) return acquisitionStep; /* [K2, 2026-11-04] the acquisition script (appended below), in place on this line */ /* [PR-J5, 2026-10-23] the organise proposal's script (appended below), in place on this line */ /* [PR-L, 2026-10-18] the durable generation task's scripts (appended below), in place on this line */ // [B21 F] a specialist run or the follow-up turn answers from the per-role script (D21-40), appended below; [PR-M, 2026-10-18] the resolution script (appended below), in place on this line
     if (this.planned.kind === "reply") return this.step({ text: this.planned.text });
     if (this.planned.kind === "select-then") {
       this.awaitingSelection = true;
@@ -459,7 +459,7 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
   }
 
   async continueWith(input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): Promise<AgentStep> {
-    const roleStep = scriptedRoleContinue(this, input); if (roleStep) return roleStep; const planned = this.planned; // [B21 F] a specialist run continues on its per-role script
+    const roleStep = scriptedRoleContinue(this, input); if (roleStep) return roleStep; const planned = this.planned; const resolutionNext = scriptedResolutionContinue(this, input); if (resolutionNext) return resolutionNext; const generationNext = await scriptedGenerationTaskContinue(this, input); if (generationNext) return generationNext; const organizeNext = scriptedOrganizeContinue(this, input); if (organizeNext) return organizeNext; const acquisitionNext = await scriptedAcquisitionContinue(this, input); if (acquisitionNext) return acquisitionNext; /* [K2, 2026-11-04] the acquisition script's continue, in place on this line */ /* [PR-J5, 2026-10-23] the organise script's continue, in place on this line */ /* [PR-L, 2026-10-18] the durable generation task's scripts, in place on this line */ // [B21 F] a specialist run continues on its per-role script; [PR-M, 2026-10-18] a resolution run continues on its script (appended below)
     const outputText = input.results[0]?.outputText;
     if (this.awaitingBoard && planned.kind === "board-then") {
       this.awaitingBoard = false;
@@ -704,4 +704,426 @@ function scriptedFollowUp(adapter: FixtureAgentAdapter, input: Parameters<Provid
   const sentence = [...input.history].reverse().find((entry) => entry.role === "user")?.text ?? "";
   if (FIXTURE_FOLLOW_UP_FAILURES.includes(fixtureSentenceKey(sentence)) && followUpApprovalOutcome(input.userMessage) === "presented") throw new LLMProviderError(adapter.provider, FIXTURE_FOLLOW_UP_FAILURE.reason, FIXTURE_FOLLOW_UP_FAILURE.status);
   return roleStep(adapter, { text: followUpAnswer(input.userMessage) });
+}
+
+// ─── [PR-G, 2026-10-17] The Build-mode generation turn (G.11, OD-243) ────────────────────────────────────────────────────────────────
+// Appended on purpose (as B21-F and B21-F2b were): a `const` read only when a plan is made and a hoisted function declaration, so no
+// line cited above moves - the ONE in-place hook is `planFixtureInstruction`'s last line. Still never a model: the whole sentence
+// "Generate a schematic: <prompt>" becomes the ONE tool call a model would make, sirkit.schematic.generate-proposal { prompt }, through
+// the REAL loop, gateway and injected port. [PR-L, 2026-10-18] runbook L.5: the port STARTS the durable generation task (app/api/chat/
+// schematic-generation-runtime.ts -> GenerationTaskService.start, the composer's own start); the fixture's generation worker designs it
+// (the scripted provider, no credits). The class's plain closing reply says "the tool answered task_started"; the page follows the task
+// on its status card and offers its result in the SAME schematic review dialog as the composer's Generate. Every other instruction is
+// byte-identical to before.
+
+/** The instruction, whole: "Generate a schematic: <prompt>" - the prompt is 1 to 4000 characters (the tool's own bound), passed as the
+ *  person wrote it (whitespace collapsed; its own sentence punctuation kept, unlike the PCB scripts' normalized text). */
+const GENERATE_SCHEMATIC = /^(?:please\s+)?generate\s+a\s+schematic\s*:\s*(\S[\s\S]{0,3999})$/i;
+
+/** [PR-G] The generation plan for a whole instruction, or null when the sentence is not one (the plain reply then answers). */
+function planGenerateSchematic(message: string): Extract<Planned, { kind: "call" }> | null {
+  const match = GENERATE_SCHEMATIC.exec(message.replace(/\s+/g, " ").trim());
+  return match ? { kind: "call", toolId: "sirkit.schematic.generate-proposal", args: { prompt: match[1]!.trim() } } : null;
+}
+
+// ─── [PR-M, 2026-10-18] The unresolved-component resolution turn (runbook M.1, M.5 items 1-3 and 8) ──────────────────────────────────
+// Appended on purpose (as B21-F, B21-F2b and PR-G were): constants read only when a run starts and hoisted function declarations, so no
+// line cited above moves - the two in-place hooks sit on the start and continue lines after their existing statements. Still never a
+// model: three whole sentences become the calls a model would make, through the REAL loop, gateway, injected ports and seal -
+//   "Replace D1 and D2 with suitable alternatives already in the library." / "Find a replacement in the library for D1 and D2 (...)."
+//     -> sirkit.schematic.instance-inspect { componentIds: [the named references] };
+//   "Resolve the missing parts and footprints, then continue preparing the PCB." -> sirkit.schematic.instance-inspect {} (every
+//     instance Prepare PCB would refuse);
+// then sirkit.parts.candidate-search for the FIRST unresolved KiCad instance the inspection returned (its query built from what the
+// inspection reported: the catalog part's name and its functional class), then sirkit.schematic.propose-component-resolution with ONE
+// item per unresolved KiCad instance the inspection returned, each naming the first ELIGIBLE candidate the search reported (its catalog
+// part and exact revision, an assertion the server re-proves). Nothing here names a reference, part or revision: every id comes from the
+// sentence or a tool result. The sealed batch rides its own event to the page's review dialog; only the human applies it.
+
+const RESOLVE_REFS = "([a-z]+\\d+(?:\\s*(?:,\\s*(?:and\\s+)?|and\\s+)[a-z]+\\d+)*)";
+const RESOLVE_FROM_LIBRARY = new RegExp(`^(?:please\\s+)?replace\\s+${RESOLVE_REFS}\\s+with\\s+(?:suitable\\s+|compatible\\s+)?(?:alternatives?|parts?|replacements?)\\s+(?:already\\s+)?in\\s+the\\s+library$`, "i");
+const FIND_REPLACEMENT = new RegExp(`^(?:please\\s+)?find\\s+(?:a\\s+)?replacements?\\s+in\\s+the\\s+library\\s+for\\s+${RESOLVE_REFS}(?:\\s*\\([^()]{0,1200}\\))?$`, "i");
+const RESOLVE_MISSING = /^(?:please\s+)?resolve\s+the\s+missing\s+parts(?:\s+and\s+footprints)?(?:,?\s+then\s+continue\s+preparing\s+the\s+pcb)?$/i;
+/** The classes a candidate search may be asked for (the descriptor's enum); any other class is left to the instance's own. */
+const SEARCHABLE_CLASSES: ReadonlySet<string> = new Set(["diode", "schottky-diode", "zener-diode", "tvs-diode", "led", "resistor", "capacitor", "inductor", "transistor", "integrated-circuit", "connector"]);
+
+/** [PR-M] What a resolution sentence asks for: the references it names, or null for every instance Prepare PCB would refuse. */
+export function planFixtureResolution(message: string): { targets: string[] | null } | null {
+  const text = message.replace(/\s+/g, " ").trim().replace(/[.!]+$/, "").trim();
+  if (RESOLVE_MISSING.test(text)) return { targets: null };
+  const named = RESOLVE_FROM_LIBRARY.exec(text) ?? FIND_REPLACEMENT.exec(text);
+  if (!named) return null;
+  const targets = [...new Set((named[1] ?? "").split(/\s*(?:,|\band\b)\s*/i).map((ref) => ref.trim().toUpperCase()).filter((ref) => /^[A-Z]+\d+$/.test(ref)))];
+  return targets.length > 0 ? { targets } : null;
+}
+
+/** [PR-M] What the scripted agent reads out of the instance inspection: the unresolved KiCad instances (stable id, reference, class, name). */
+export interface FixtureUnresolvedInstance { componentId: string; refDes: string; functionalClass: string; partName: string | null; value: string }
+export function unresolvedInstanceFacts(outputText: string | undefined): FixtureUnresolvedInstance[] {
+  try {
+    const parsed = JSON.parse(outputText ?? "") as { output?: { report?: { inspection?: { instances?: unknown } } } };
+    const instances = Array.isArray(parsed.output?.report?.inspection?.instances) ? (parsed.output.report.inspection.instances as Array<Record<string, unknown>>) : [];
+    return instances.flatMap((instance) => {
+      const resolution = instance.resolution as { state?: unknown } | undefined;
+      const catalog = instance.catalog as { part?: { name?: unknown } | null } | undefined;
+      if (instance.family !== "kicad" || resolution?.state !== "unresolved" || typeof instance.componentId !== "string" || typeof instance.refDes !== "string") return [];
+      return [{ componentId: instance.componentId, refDes: instance.refDes, functionalClass: typeof instance.functionalClass === "string" ? instance.functionalClass : "unknown", partName: typeof catalog?.part?.name === "string" ? catalog.part.name : null, value: typeof instance.value === "string" ? instance.value : "" }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** [PR-M] What the scripted agent reads out of the candidate search: the eligible candidates (catalog part, exact revision) and the bucket counts. */
+export function eligibleCandidateFacts(outputText: string | undefined): { eligible: Array<{ catalogPartId: string; revisionId: string }>; counts: Record<string, number> } {
+  try {
+    const parsed = JSON.parse(outputText ?? "") as { output?: { result?: { buckets?: Record<string, unknown> } } };
+    const buckets = parsed.output?.result?.buckets ?? {};
+    const counts = Object.fromEntries(Object.entries(buckets).map(([bucket, entries]) => [bucket, Array.isArray(entries) ? entries.length : 0]));
+    const eligible = (Array.isArray(buckets.eligible) ? (buckets.eligible as Array<Record<string, unknown>>) : []).flatMap((entry) => {
+      const revision = entry.exactRevision as { revisionId?: unknown } | null | undefined;
+      return typeof entry.catalogPartId === "string" && typeof revision?.revisionId === "string" ? [{ catalogPartId: entry.catalogPartId, revisionId: revision.revisionId }] : [];
+    });
+    return { eligible, counts };
+  } catch {
+    return { eligible: [], counts: {} };
+  }
+}
+
+interface ResolutionRun { stage: "inspect" | "search" | "propose"; instances: FixtureUnresolvedInstance[]; seq: number }
+const RESOLUTION_RUNS = new WeakMap<FixtureAgentAdapter, ResolutionRun>();
+
+function resolutionCall(adapter: FixtureAgentAdapter, run: ResolutionRun, tools: readonly ProviderToolDeclaration[], toolId: string, args: Record<string, unknown>): AgentStep {
+  const declaration = tools.find((tool) => tool.toolId === toolId);
+  if (!declaration) { RESOLUTION_RUNS.delete(adapter); return roleStep(adapter, { text: `(fixture agent) ${toolId} is not available to this run; nothing was done.` }); }
+  run.seq += 1;
+  return roleStep(adapter, { toolCalls: [{ callId: `fx-resolve-${run.seq}`, providerName: declaration.providerName, argumentsText: JSON.stringify(args) }] });
+}
+
+/** [PR-M] The start hook: a resolution sentence reads the instances first; anything else is null (the scripts above answer). */
+function scriptedResolutionStart(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["start"]>[0]): AgentStep | null {
+  RESOLUTION_RUNS.delete(adapter);
+  const plan = planFixtureResolution(input.userMessage);
+  if (!plan) return null;
+  const run: ResolutionRun = { stage: "inspect", instances: [], seq: 0 };
+  RESOLUTION_RUNS.set(adapter, run);
+  return resolutionCall(adapter, run, input.tools, "sirkit.schematic.instance-inspect", plan.targets ? { componentIds: plan.targets } : {});
+}
+
+/** [PR-M] The continue hook: inspect -> search -> propose -> a closing reply that says what the tools answered; null outside a resolution run. */
+function scriptedResolutionContinue(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): AgentStep | null {
+  const run = RESOLUTION_RUNS.get(adapter);
+  if (!run) return null;
+  const outputText = input.results[0]?.outputText;
+  if (run.stage === "inspect") {
+    run.instances = unresolvedInstanceFacts(outputText);
+    if (run.instances.length === 0) { RESOLUTION_RUNS.delete(adapter); return roleStep(adapter, { text: `(fixture agent) the inspection answered ${statusOf(outputText)} and reported no unresolved catalog instance to resolve. Nothing was changed.` }); }
+    const first = run.instances[0]!;
+    run.stage = "search";
+    const query = `${first.partName ?? first.value} ${first.functionalClass === "unknown" ? "" : first.functionalClass.replace(/-/g, " ")}`.replace(/[^\x20-\x7E]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) || "replacement part";
+    return resolutionCall(adapter, run, input.tools, "sirkit.parts.candidate-search", { componentId: first.componentId, query, ...(SEARCHABLE_CLASSES.has(first.functionalClass) ? { functionalClass: first.functionalClass } : {}) });
+  }
+  if (run.stage === "search") {
+    const { eligible, counts } = eligibleCandidateFacts(outputText);
+    const candidate = eligible[0];
+    if (!candidate) {
+      RESOLUTION_RUNS.delete(adapter);
+      const tally = Object.entries(counts).filter(([, count]) => count > 0).map(([bucket, count]) => `${count} ${bucket}`).join(", ") || "no result";
+      return roleStep(adapter, { text: `(fixture agent) the candidate search answered ${statusOf(outputText)} with no eligible published revision in the local library (${tally}). Nothing was proposed and nothing was changed.` });
+    }
+    run.stage = "propose";
+    return resolutionCall(adapter, run, input.tools, "sirkit.schematic.propose-component-resolution", { items: run.instances.map((instance) => ({ componentId: instance.componentId, candidatePartId: candidate.catalogPartId, atomicPartRevisionId: candidate.revisionId })) });
+  }
+  RESOLUTION_RUNS.delete(adapter);
+  const status = statusOf(outputText);
+  const refs = run.instances.map((instance) => instance.refDes).join(", ");
+  return roleStep(adapter, { text: status === "proposal_sealed"
+    ? `(fixture agent) One batch for ${refs} is sealed for your review: each instance would be bound to the eligible published revision the search reported, with the proved pin mapping. Nothing has changed yet - review it, then approve or discard it in the dialog.`
+    : `(fixture agent) the resolution proposal answered ${status}. Nothing was changed.` });
+}
+
+// ─── [PR-L, 2026-10-18] The durable generation task's turns (runbook L.5, L.7 item 8) ────────────────────────────────────────────────
+// Appended on purpose (as PR-G and PR-M were): constants read only when a run starts and hoisted function declarations, so no line cited
+// above moves - the two in-place hooks sit on the start and continue lines after the resolution hooks. Still never a model: whole
+// sentences become the calls a model would make, through the REAL loop, gateway and injected port, and the closing reply says only what
+// the tool answered -
+//   "Generate a schematic, then keep answering: <prompt>" -> sirkit.schematic.generate-proposal { prompt }, then the reply is HELD (up
+//     to GENERATION_HOLD_MS, or until the run is aborted): a model still streaming its answer after the start, so "Stop answer" has a
+//     turn to end while the design task keeps running;
+//   "Check the design." / "How is the design going?" -> sirkit.generation.task-inspect {} and a reply from the snapshot it returned;
+//   "Stop the design." / "Pause the design." / "Resume the design." -> sirkit.generation.task-control { action } (a chip the user confirms).
+
+/** How long the held reply waits before it answers (well under the run's deadline). */
+export const GENERATION_HOLD_MS = 45_000;
+const GENERATE_AND_HOLD = /^(?:please\s+)?generate\s+a\s+schematic,?\s+then\s+keep\s+answering\s*:\s*(\S[\s\S]{0,3999})$/i;
+const CHECK_DESIGN = /^(?:please\s+)?(?:check\s+the\s+design(?:\s+task)?|how\s+is\s+the\s+design(?:\s+task)?\s+going|inspect\s+the\s+design(?:\s+task)?)[.?!]*$/i;
+const CONTROL_DESIGN = /^(?:please\s+)?(stop|pause|resume)\s+the\s+design(?:\s+task)?[.!]*$/i;
+const CONTROL_ACTIONS: Readonly<Record<string, string>> = Object.freeze({ stop: "cancel", pause: "pause", resume: "resume" });
+
+interface GenerationTaskRun { kind: "hold" | "inspect" | "control"; seq: number }
+const GENERATION_RUNS = new WeakMap<FixtureAgentAdapter, GenerationTaskRun>();
+
+/** [PR-L] What a generation-task sentence asks for, or null (the scripts above answer). */
+export function planFixtureGenerationTask(message: string): { kind: "hold"; prompt: string } | { kind: "inspect" } | { kind: "control"; action: string } | null {
+  const text = message.replace(/\s+/g, " ").trim();
+  const hold = GENERATE_AND_HOLD.exec(text);
+  if (hold) return { kind: "hold", prompt: hold[1]!.trim() };
+  if (CHECK_DESIGN.test(text)) return { kind: "inspect" };
+  const control = CONTROL_DESIGN.exec(text);
+  return control ? { kind: "control", action: CONTROL_ACTIONS[control[1]!.toLowerCase()]! } : null;
+}
+
+function generationCall(adapter: FixtureAgentAdapter, run: GenerationTaskRun, tools: readonly ProviderToolDeclaration[], toolId: string, args: Record<string, unknown>): AgentStep {
+  const declaration = tools.find((tool) => tool.toolId === toolId);
+  if (!declaration) { GENERATION_RUNS.delete(adapter); return roleStep(adapter, { text: `(fixture agent) ${toolId} is not available to this run; nothing was done.` }); }
+  run.seq += 1;
+  return roleStep(adapter, { toolCalls: [{ callId: `fx-generation-${run.seq}`, providerName: declaration.providerName, argumentsText: JSON.stringify(args) }] });
+}
+
+/** [PR-L] The start hook: a generation-task sentence makes its one call; anything else is null. */
+function scriptedGenerationTaskStart(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["start"]>[0]): AgentStep | null {
+  GENERATION_RUNS.delete(adapter);
+  const plan = planFixtureGenerationTask(input.userMessage);
+  if (!plan) return null;
+  const run: GenerationTaskRun = { kind: plan.kind, seq: 0 };
+  GENERATION_RUNS.set(adapter, run);
+  if (plan.kind === "hold") return generationCall(adapter, run, input.tools, "sirkit.schematic.generate-proposal", { prompt: plan.prompt });
+  if (plan.kind === "inspect") return generationCall(adapter, run, input.tools, "sirkit.generation.task-inspect", {});
+  return generationCall(adapter, run, input.tools, "sirkit.generation.task-control", { action: plan.action });
+}
+
+/** [PR-L] What the scripted agent reads out of the task inspection (the same fields a model would report). */
+export function generationTaskFacts(outputText: string | undefined): { found: boolean; taskId: string | null; state: string | null; phase: string | null; liveness: string | null; modelCalls: number | null; result: string | null } {
+  try {
+    const parsed = JSON.parse(outputText ?? "") as { output?: { report?: { found?: unknown; task?: Record<string, unknown>; result?: { status?: unknown; components?: unknown } | null } } };
+    const report = parsed.output?.report;
+    const task = report?.task;
+    const usage = task?.usage as { modelCalls?: unknown } | undefined;
+    const liveness = task?.liveness as { state?: unknown } | undefined;
+    return {
+      found: report?.found === true, taskId: typeof task?.taskId === "string" ? task.taskId : null, state: typeof task?.state === "string" ? task.state : null,
+      phase: typeof task?.phase === "string" ? task.phase : null, liveness: typeof liveness?.state === "string" ? liveness.state : null,
+      modelCalls: typeof usage?.modelCalls === "number" ? usage.modelCalls : null,
+      result: report?.result && typeof report.result.status === "string" ? `${report.result.status}, ${typeof report.result.components === "number" ? report.result.components : "?"} part(s)` : null,
+    };
+  } catch {
+    return { found: false, taskId: null, state: null, phase: null, liveness: null, modelCalls: null, result: null };
+  }
+}
+
+/** [PR-L] A wait the run's abort ends early (Stop answer): resolves true when the hold elapsed, false when the run was aborted. */
+function heldReply(signal: AbortSignal | undefined, ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) { resolve(false); return; }
+    const timer = setTimeout(() => { signal?.removeEventListener("abort", onAbort); resolve(true); }, ms);
+    const onAbort = (): void => { clearTimeout(timer); resolve(false); };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/** [PR-L] The continue hook: the closing reply from what the tool answered; null outside a generation-task run. */
+async function scriptedGenerationTaskContinue(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): Promise<AgentStep | null> {
+  const run = GENERATION_RUNS.get(adapter);
+  if (!run) return null;
+  GENERATION_RUNS.delete(adapter);
+  const outputText = input.results[0]?.outputText;
+  const status = statusOf(outputText);
+  if (run.kind === "hold") {
+    const elapsed = await heldReply(input.signal, GENERATION_HOLD_MS);
+    if (!elapsed) throw Object.assign(new Error("The run was stopped while the scripted agent was still answering."), { name: "AbortError" });
+    return roleStep(adapter, { text: `(fixture agent) the tool answered ${status}; the design keeps running in its worker while I answer.` });
+  }
+  if (run.kind === "inspect") {
+    const facts = generationTaskFacts(outputText);
+    if (!facts.found) return roleStep(adapter, { text: `(fixture agent) the inspection answered ${status}: ${facts.taskId ? "the task could not be read" : "this project has no design task"}. Nothing was changed.` });
+    return roleStep(adapter, { text: `(fixture agent) design task ${facts.taskId}: ${facts.state}${facts.phase ? ` (${facts.phase})` : ""}, liveness ${facts.liveness}, ${facts.modelCalls ?? 0} model call(s)${facts.result ? `; result ${facts.result}` : "; no result yet"}.` });
+  }
+  return roleStep(adapter, { text: status === "control_requested"
+    ? "(fixture agent) the control request is on a chip for you to confirm - nothing has happened to the design yet."
+    : `(fixture agent) the control request answered ${status}. Nothing was changed.` });
+}
+
+// ─── [PR-J5, 2026-10-23] The organise turn (runbook J.6 items 1, 4 and 6; OD-259 item 4) ─────────────────────────────────────────
+// Appended on purpose (as PR-L and PR-M were): constants read only when a run starts and hoisted function declarations, so no line
+// cited above moves - the two in-place hooks sit on the start and continue lines after their existing statements. Still never a
+// model: one whole sentence becomes the calls a model would make, through the REAL loop, gateway, injected catalog port and seal -
+//   "Organize this schematic into subsystem sheets." (also "this sheet" / "this design" / "this circuit") ->
+//     sirkit.schematic.inspect {} (the whole-project read: which catalog parts the overview holds), then
+//     sirkit.schematic.propose-sheet-organization with THAT design's own groups - [PR-J5 integration, 2026-10-26] review J5R-AI-6 (was:
+//     the four-motor drone's J4 default grouping for every schematic, so the LED dimmer was refused "D4 ... is not a catalog part"): the
+//     fixture data module app/lib/fixture-runtime/sheet-organization-groups.ts recognises the design by its parts
+//     (`fixtureSheetOrganizationFor`: the dimmer's three subsystems, the drone's plan blocks for 1..4 motors); any other schematic is
+//     answered in words (nothing is called); a run without that board-backed read (a schematic-only page: no PCB editor published a
+//     board) proposes the fixture organisations in order (`fixtureSheetOrganizationCandidates`) and moves on only while the tool refuses
+//     one as naming a part the schematic does not hold (`unknown-member`: not this design) - the server resolves every member by name,
+//     so the first proposal it seals is the design's own; any other refusal is reported as it is.
+// The sealed proposal rides its own event to the page's review card; only the human applies it (one schematic.move-to-sheet transaction).
+
+const ORGANIZE_SHEETS = /^(?:please\s+)?organi[sz]e\s+this\s+(?:schematic|sheet|design|circuit)\s+into\s+(?:subsystem\s+)?sheets$/i;
+
+/** The J4 planner's default grouping of the fixture drone (its proposal without hints; names from the hubs' values). [PR-J5 integration,
+ *  2026-10-23] review J5R-AI-6: no longer what the script proposes (the design's own groups are, from sheet-organization-groups.ts); kept as
+ *  the suites' fixture of a model-supplied grouping that differs from the plan's blocks. */
+export const FIXTURE_DRONE_ORGANIZE_GROUPS: ReadonlyArray<{ name: string; members: readonly string[] }> = Object.freeze([
+  { name: "MOTOR x4 (J2-J5)", members: Object.freeze(["C1", "C3", "D1", "D2", "D3", "D4", "J1", "J2", "J3", "J4", "J5", "Q1", "Q2", "Q3", "Q4", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8"]) },
+  { name: "MIC5504-3.3YM5 (U1)", members: Object.freeze(["C2", "C4", "C5", "C6", "C8", "C9", "C10", "U1"]) },
+  { name: "ATmega328P-AU (U2)", members: Object.freeze(["C7", "D5", "J6", "J7", "R9", "R10", "U2"]) },
+  { name: "LSM6DS3TR-C (U3)", members: Object.freeze(["R11", "R12", "U3"]) },
+]);
+
+interface OrganizeRun { stage: "inspect" | "propose"; seq: number; /** [PR-J5 integration] the organisations still to propose, the current one first */ candidates: FixtureSheetOrganization[] }
+const ORGANIZE_RUNS = new WeakMap<FixtureAgentAdapter, OrganizeRun>();
+
+/** [PR-J5] Whether a whole instruction is the organise sentence (exported for the harness's unit proofs). */
+export function planFixtureOrganize(message: string): boolean {
+  return ORGANIZE_SHEETS.test(message.replace(/\s+/g, " ").trim().replace(/[.!]+$/, "").trim());
+}
+
+function organizeCall(adapter: FixtureAgentAdapter, run: OrganizeRun, tools: readonly ProviderToolDeclaration[], toolId: string, args: Record<string, unknown>): AgentStep {
+  const declaration = tools.find((tool) => tool.toolId === toolId);
+  if (!declaration) { ORGANIZE_RUNS.delete(adapter); return roleStep(adapter, { text: `(fixture agent) ${toolId} is not available to this run; nothing was done.` }); }
+  run.seq += 1;
+  return roleStep(adapter, { toolCalls: [{ callId: `fx-organize-${run.seq}`, providerName: declaration.providerName, argumentsText: JSON.stringify(args) }] });
+}
+
+/** [PR-J5] The start hook: the organise sentence reads the schematic first; anything else is null (the scripts above answer). */
+function scriptedOrganizeStart(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["start"]>[0]): AgentStep | null {
+  ORGANIZE_RUNS.delete(adapter);
+  if (!planFixtureOrganize(input.userMessage)) return null;
+  const run: OrganizeRun = { stage: "inspect", seq: 0, candidates: [] };
+  ORGANIZE_RUNS.set(adapter, run);
+  // the whole-project read is a canonical-state read (it needs the PCB editor's board); a run without it - a schematic-only page -
+  // proposes the fixture organisations in order, whose server resolves every member by name and refuses an unknown one (nothing is guessed)
+  if (!input.tools.some((tool) => tool.toolId === "sirkit.schematic.inspect")) { run.stage = "propose"; run.candidates = fixtureSheetOrganizationCandidates(); return organizeCall(adapter, run, input.tools, SHEET_ORGANIZATION_TOOL_ID_FOR_SCRIPT, organizeArgs(run.candidates[0]!)); }
+  return organizeCall(adapter, run, input.tools, "sirkit.schematic.inspect", {});
+}
+
+/** [PR-J5] The tool id the script proposes with (spelt here: the adapter imports no proposal module) and its arguments. */
+const SHEET_ORGANIZATION_TOOL_ID_FOR_SCRIPT = "sirkit.schematic.propose-sheet-organization";
+function organizeArgs(organization: FixtureSheetOrganization): Record<string, unknown> {
+  return fixtureSheetOrganizationArgs(organization); // [PR-J5 integration, 2026-10-26] review J5R-AI-6: the design's own groups (the tool's closed input, fresh arrays)
+}
+
+/** [PR-J5] What the scripted agent reads out of the sealed organisation's result (the same fields a model would report). */
+export function organizeProposalFacts(outputText: string | undefined): { status: string; sheets: Array<{ name: string; members: number }>; interfaces: string[]; unassigned: string[]; checks: number; blockers: string[]; blockerCodes: string[] } {
+  try {
+    const parsed = JSON.parse(outputText ?? "") as { status?: unknown; sheets?: Array<{ name?: unknown; members?: unknown[] }>; interfaces?: Array<{ port?: unknown }>; unassigned?: unknown[]; checkThese?: unknown[]; blockers?: Array<{ code?: unknown; detail?: unknown }> };
+    return {
+      status: typeof parsed.status === "string" ? parsed.status : "an unparsed result",
+      sheets: Array.isArray(parsed.sheets) ? parsed.sheets.map((sheet) => ({ name: typeof sheet.name === "string" ? sheet.name : "?", members: Array.isArray(sheet.members) ? sheet.members.length : 0 })) : [],
+      interfaces: Array.isArray(parsed.interfaces) ? parsed.interfaces.map((item) => (typeof item.port === "string" ? item.port : "?")) : [],
+      unassigned: Array.isArray(parsed.unassigned) ? parsed.unassigned.filter((ref): ref is string => typeof ref === "string") : [],
+      checks: Array.isArray(parsed.checkThese) ? parsed.checkThese.length : 0,
+      blockers: Array.isArray(parsed.blockers) ? parsed.blockers.map((blocker) => (typeof blocker.detail === "string" ? blocker.detail : "")).filter((detail) => detail.length > 0) : [],
+      blockerCodes: Array.isArray(parsed.blockers) ? parsed.blockers.map((blocker) => (typeof blocker.code === "string" ? blocker.code : "")) : [], // [PR-J5 integration, 2026-10-26] review J5R-AI-6: why a candidate was refused
+    };
+  } catch {
+    return { status: "an unparsed result", sheets: [], interfaces: [], unassigned: [], checks: 0, blockers: [], blockerCodes: [] };
+  }
+}
+
+/** [PR-J5] The continue hook: after the read, the proposal (when the overview is the fixture drone); after the proposal, the reply. */
+function scriptedOrganizeContinue(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): AgentStep | null {
+  const run = ORGANIZE_RUNS.get(adapter);
+  if (!run) return null;
+  const outputText = input.results[0]?.outputText;
+  if (run.stage === "inspect") {
+    const refs = schematicComponentFacts(outputText).map((component) => component.displayRef.toUpperCase());
+    const organization = refs.length > 0 ? fixtureSheetOrganizationFor(refs) : null; // [PR-J5 integration, 2026-10-26] review J5R-AI-6: the design's own groups
+    if (organization === null) {
+      ORGANIZE_RUNS.delete(adapter);
+      return roleStep(adapter, { text: `(fixture agent) the schematic read answered ${statusOf(outputText)}; this schematic is not one of the fixture designs (the LED dimmer, the drone with 1-4 motors; ${refs.length === 0 ? "no parts were read" : `${refs.length} part${refs.length === 1 ? " was" : "s were"} read`}), so no organise script applies. Nothing was changed.` });
+    }
+    run.stage = "propose";
+    run.candidates = [organization];
+    return organizeCall(adapter, run, input.tools, SHEET_ORGANIZATION_TOOL_ID_FOR_SCRIPT, organizeArgs(organization));
+  }
+  const facts = organizeProposalFacts(outputText);
+  // [PR-J5 integration, 2026-10-26] review J5R-AI-6: a candidate naming a part this schematic does not hold is not this design - the next one
+  // is proposed (a blocked proposal issues nothing, so the run may propose again); any other refusal is the answer
+  if (facts.status === "proposal_blocked" && facts.blockerCodes[0] === "unknown-member" && run.candidates.length > 1) { run.candidates = run.candidates.slice(1); return organizeCall(adapter, run, input.tools, SHEET_ORGANIZATION_TOOL_ID_FOR_SCRIPT, organizeArgs(run.candidates[0]!)); }
+  ORGANIZE_RUNS.delete(adapter);
+  if (facts.status !== "proposal_sealed") return roleStep(adapter, { text: `(fixture agent) the organisation was refused (${facts.status})${facts.blockers.length > 0 ? `: ${facts.blockers[0]!.replace(/\s*Nothing was changed\.?\s*$/, "").replace(/[.\s]+$/, "")}` : ""}. Nothing was changed.` }); // [PR-J5 integration, 2026-10-26] review J5R-AI-6: the blocker's own closing sentence is not repeated
+  return roleStep(adapter, { text: `(fixture agent) the organisation is sealed for your review: ${facts.sheets.length} subsystem sheet(s) - ${facts.sheets.map((sheet) => `${sheet.name} (${sheet.members} part${sheet.members === 1 ? "" : "s"})`).join(", ")}; ${facts.interfaces.length} interface port(s)${facts.interfaces.length > 0 ? ` (${[...new Set(facts.interfaces)].join(", ")})` : ""}; ${facts.unassigned.length === 0 ? "every part is assigned" : `${facts.unassigned.join(", ")} stay on the overview`}${facts.checks > 0 ? `; ${facts.checks} placement(s) to check` : ""}. Nothing has been changed: approve it on the review card to create the sheets as one undoable step.` });
+}
+
+// ─── [K2, 2026-11-04] The acquisition turn (runbook K.2, K.8 item 1; OD-260 item 6) ──────────────────────────────────────────────────
+// Appended on purpose (as PR-L and PR-J5 were): constants read only when a run starts and hoisted function declarations, so no line cited
+// above moves - the two in-place hooks sit on the start and continue lines after the organise hooks. Still never a model: one whole
+// sentence becomes the calls a model would make, through the REAL loop, gateway and injected acquisition port -
+//   "Obtain the assets for D1 and D2." -> sirkit.schematic.instance-inspect { componentIds: [the named references] }, then
+//     sirkit.parts.acquisition-start { componentIds: [the unresolved instances' stable ids the inspection returned] }, then the turn
+//     HOLDS (up to ACQUISITION_HOLD_MS, or until the run is aborted) - a model still writing while the durable task runs in its worker,
+//     so the page's Work log shows the task's recorded steps before the answer - then sirkit.parts.acquisition-status { taskId } and a
+//     closing reply that says only what that read answered.
+
+/** How long the turn holds after the start before it reads the task (well under the run's deadline). */
+export const ACQUISITION_HOLD_MS = 12_000;
+const OBTAIN_ASSETS = new RegExp(`^(?:please\\s+)?obtain\\s+the\\s+(?:parts?'?\\s+)?assets\\s+for\\s+${RESOLVE_REFS}$`, "i");
+interface AcquisitionRun { stage: "inspect" | "start" | "status"; refs: string[]; taskId: string | null; seq: number }
+const ACQUISITION_RUNS = new WeakMap<FixtureAgentAdapter, AcquisitionRun>();
+
+/** [K2] The references an acquisition sentence names, or null (the scripts above answer). */
+export function planFixtureAcquisition(message: string): { refs: string[] } | null {
+  const text = message.replace(/\s+/g, " ").trim().replace(/[.!]+$/, "").trim();
+  const named = OBTAIN_ASSETS.exec(text);
+  if (!named) return null;
+  const refs = [...new Set((named[1] ?? "").split(/\s*(?:,|\band\b)\s*/i).map((ref) => ref.trim().toUpperCase()).filter((ref) => /^[A-Z]+\d+$/.test(ref)))];
+  return refs.length > 0 ? { refs } : null;
+}
+
+/** [K2] What the scripted agent reads out of an acquisition report: the first task's id, state, stage and next action. */
+export function acquisitionReportFacts(outputText: string | undefined): { taskId: string | null; state: string | null; stage: string | null; nextAction: string | null } {
+  try {
+    const parsed = JSON.parse(outputText ?? "") as { output?: { report?: { tasks?: Array<Record<string, unknown>> } } };
+    const task = parsed.output?.report?.tasks?.[0];
+    const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
+    return { taskId: text(task?.taskId), state: text(task?.state), stage: text(task?.stage), nextAction: text(task?.nextAction) };
+  } catch {
+    return { taskId: null, state: null, stage: null, nextAction: null };
+  }
+}
+
+function acquisitionCall(adapter: FixtureAgentAdapter, run: AcquisitionRun, tools: readonly ProviderToolDeclaration[], toolId: string, args: Record<string, unknown>): AgentStep {
+  const declaration = tools.find((tool) => tool.toolId === toolId);
+  if (!declaration) { ACQUISITION_RUNS.delete(adapter); return roleStep(adapter, { text: `(fixture agent) ${toolId} is not available to this run; nothing was done.` }); }
+  run.seq += 1;
+  return roleStep(adapter, { toolCalls: [{ callId: `fx-acquire-${run.seq}`, providerName: declaration.providerName, argumentsText: JSON.stringify(args) }] });
+}
+
+/** [K2] The start hook: an acquisition sentence reads the named instances first; anything else is null. */
+function scriptedAcquisitionStart(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["start"]>[0]): AgentStep | null {
+  ACQUISITION_RUNS.delete(adapter);
+  const plan = planFixtureAcquisition(input.userMessage);
+  if (!plan) return null;
+  const run: AcquisitionRun = { stage: "inspect", refs: plan.refs, taskId: null, seq: 0 };
+  ACQUISITION_RUNS.set(adapter, run);
+  return acquisitionCall(adapter, run, input.tools, "sirkit.schematic.instance-inspect", { componentIds: plan.refs });
+}
+
+/** [K2] The continue hook: inspect -> start -> (held) status -> a closing reply from what the status read answered; null outside the run. */
+async function scriptedAcquisitionContinue(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): Promise<AgentStep | null> {
+  const run = ACQUISITION_RUNS.get(adapter);
+  if (!run) return null;
+  const outputText = input.results[0]?.outputText;
+  if (run.stage === "inspect") {
+    const instances = unresolvedInstanceFacts(outputText).filter((instance) => run.refs.includes(instance.refDes.toUpperCase()));
+    if (instances.length === 0) { ACQUISITION_RUNS.delete(adapter); return roleStep(adapter, { text: `(fixture agent) the inspection reported no unresolved catalog instance among ${run.refs.join(", ")}; nothing was started and nothing was changed.` }); }
+    run.stage = "start";
+    return acquisitionCall(adapter, run, input.tools, "sirkit.parts.acquisition-start", { componentIds: instances.map((instance) => instance.componentId) });
+  }
+  if (run.stage === "start") {
+    const facts = acquisitionReportFacts(outputText);
+    if (!facts.taskId) { ACQUISITION_RUNS.delete(adapter); return roleStep(adapter, { text: "(fixture agent) the acquisition start did not answer a task; nothing was changed." }); }
+    run.taskId = facts.taskId;
+    run.stage = "status";
+    const elapsed = await heldReply(input.signal, ACQUISITION_HOLD_MS);
+    if (!elapsed) throw Object.assign(new Error("The run was stopped while the scripted agent was still answering."), { name: "AbortError" });
+    return acquisitionCall(adapter, run, input.tools, "sirkit.parts.acquisition-status", { taskId: facts.taskId });
+  }
+  ACQUISITION_RUNS.delete(adapter);
+  const facts = acquisitionReportFacts(outputText);
+  return roleStep(adapter, { text: facts.state
+    ? `(fixture agent) acquisition task ${run.taskId}: ${facts.state}, stage ${facts.stage}, next ${facts.nextAction}. Nothing in the design changed; the task keeps its own state and its recorded steps are in the work log.`
+    : "(fixture agent) the acquisition status could not be read; nothing was changed." });
 }

@@ -83,8 +83,8 @@ export interface ScenarioMapFacts {
 const P2G = ["prompt-to-gerber"];
 const CORE = ["benchmark-core", "benchmark-nightly"];
 const P2G_CORE = ["prompt-to-gerber", "benchmark-core", "benchmark-nightly"];
-const AGENT_BOUNDARY = ["agent-boundary-suites"]; // [B24-D0, 2026-10-09] OD-30's split: the suites under app/lib/mcp and app/lib/computation/__tests__ (ci-split.md)
-const BROWSER = ["page-browser-e2e"];
+const AGENT_BOUNDARY = ["agent-boundary-suites"]; // [B24-D0, 2026-10-09] OD-30's split: the suites under app/lib/mcp and app/lib/computation/__tests__ (ci-split.md); [PR-G, 2026-10-17] OD-250: and under app/lib/agent/orchestration/__tests__
+const BROWSER = ["page-browser-e2e"]; const AGENT_BROWSER = ["page-browser-e2e-agent"]; // [PR-L7, 2026-10-20] OD-254: e2e/agent-execution.spec.ts runs in its own appended browser job
 const NONE: readonly string[] = [];
 const ENG = "app/lib/engineering/__tests__/";
 const MFG = "app/lib/manufacturing-providers/__tests__/";
@@ -96,7 +96,7 @@ const B11 = "app/lib/agent/__tests__/b11-trace-replay-evaluation.test.ts";
 const B21F = "app/lib/agent/orchestration/__tests__/b21-f-evaluation.test.ts";
 
 const offline = (path: string, refs: readonly string[], ciJobs: readonly string[]): ScenarioEvidence => ({ class: "deterministic_offline", path, refs, ciJobs });
-const browser = (path: string, refs: readonly string[]): ScenarioEvidence => ({ class: "browser_e2e", path, refs, ciJobs: BROWSER });
+const browser = (path: string, refs: readonly string[]): ScenarioEvidence => ({ class: "browser_e2e", path, refs, ciJobs: path === AGENT_SPEC ? AGENT_BROWSER : BROWSER }); // [PR-L7, 2026-10-20] OD-254: the agent spec's job is page-browser-e2e-agent
 const record = (evalClass: EvalClass, path: string, refs: readonly string[]): ScenarioEvidence => ({ class: evalClass, path, refs, ciJobs: NONE });
 const live = (evalClass: EvalClass, path: string, refs: readonly string[], ciJobs: readonly string[] = P2G): ScenarioEvidence => ({ class: evalClass, path, refs, ciJobs }); // [B24-D0, 2026-10-09] the job is a parameter (default P2G)
 
@@ -216,7 +216,7 @@ const READINGS: readonly Reading[] = [
     evidence: [
       offline(`${ENG}b18-c-undo-redo.test.ts`, ["[B18-E E4] after a refresh"], P2G_CORE),
       browser(AGENT_SPEC, ["B18-D I9 Stop", "[B18-E E9b] a stale base (7b)"]),
-      offline(B21F, ["9", "10"], P2G),
+      offline(B21F, ["9", "10"], AGENT_BOUNDARY), // [PR-G, 2026-10-17] was P2G (OD-250)
       offline(`${ENG}b18-e-scenario-7.test.ts`, ["scenario 7f: the server refuses the tender"], P2G_CORE),
       offline("app/components/pcb/__tests__/snapshot-conflict-dialog.test.tsx", ["names both revisions and offers refresh / rebase / not now"], P2G), offline("app/lib/qualification/__tests__/b24-d2-process-cleanup.test.ts", ["1", "2", "4", "5", "7", "8"], P2G), // [B24-D2, 2026-10-09] FreeRouting and kicad-cli: the tree kill, the confirmed exit and one real node process tree (D24-31); [B24-D2 review, 2026-10-09] + 8: an unconfirmed kill reported in the attempt evidence and the bundle error
       offline("app/lib/computation/__tests__/b22-a3-diagnostic-runner.test.ts", ["6", "7", "8"], AGENT_BOUNDARY), // [B24-D0, 2026-10-09] was P2G
@@ -267,7 +267,7 @@ const READINGS: readonly Reading[] = [
     standing: "by recorded deviation",
     evidence: [
       record("deterministic_offline", "artifacts/ai-control-plane-b21/final-verdict.md", [":89 Scenario 17's disagreement is never resolved to a winner"]),
-      offline("app/lib/agent/orchestration/__tests__/b21-d3-scenario17.test.ts", ["runbook scenario 17"], P2G),
+      offline("app/lib/agent/orchestration/__tests__/b21-d3-scenario17.test.ts", ["runbook scenario 17"], AGENT_BOUNDARY), // [PR-G, 2026-10-17] was P2G (OD-250)
     ],
     missing: "the replacement DAG's disagreement escalates both parties to the human and is never resolved to a winner (B21's recorded deviation); a live run on two providers is LB-9",
     decisions: ["OD-122"], blockers: ["LB-9"],

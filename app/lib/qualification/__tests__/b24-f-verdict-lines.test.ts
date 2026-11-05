@@ -36,7 +36,7 @@
  * Failing first on 58c0834: the pages do not exist (D24-40's counterexample: no single list covers OD-1..OD-222). Files are read as
  * text; nothing is written and no process starts.
  */
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs"; import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NON_LIVE_GATES } from "@/app/lib/evaluation/live-suites";
@@ -160,6 +160,9 @@ describe("[B24-F] the verdict lines are the matrix's and the code's (runbook :11
     expect(everyJobLines("every pull-request job green; every job that ran")).toEqual([]);
     // security-6: CI runs a selection - scope 2, the report's Not-in-CI bullet and the final report name what no CI job selects
     expect(outsideCiProblems()).toEqual([]);
+    const historical = historicalCiSnapshot();
+    expect(ciCensusCounts(historical)).toEqual({ files: 878, outside: 302, security: 73, securityOutside: 64 });
+    expect(() => historicalCiSnapshot(readRepo(HISTORICAL_CI_CENSUS).replace('"project"', '"altered"') + " ")).toThrow(/HISTORICAL_CI_CENSUS_HASH/);
   });
 
   it("3. every LB the verdict names is a BLOCKED-LIVE-QUALIFICATION row of the register, mirrored in PROGRAM_STATE.json", () => {
@@ -292,7 +295,7 @@ describe("[B24-F] the verdict lines are the matrix's and the code's (runbook :11
   it("9. b24-e-statements scans every B24-F page: its page set is every artifacts Markdown page but the lead's records, B24's README and discovery and the matrix (deliverable 7)", () => {
     const tripwire = readRepo("app/lib/qualification/__tests__/b24-e-statements.test.ts");
     expect(tripwire).toContain(`const pages = (): string[] => [...everyFile("artifacts", (name) => name.endsWith(".md")).filter((path) => !EXCLUDED(path))`);
-    expect(tripwire).toContain(`const EXCLUDED = (path: string): boolean => path.startsWith("artifacts/remaining-builder-program/") || ["artifacts/ai-control-plane-b24/README.md", "artifacts/ai-control-plane-b24/discovery.md", MATRIX].includes(path);`);
+    expect(tripwire).toContain(`const EXCLUDED = (path: string): boolean => path.startsWith("artifacts/remaining-builder-program/") || ["artifacts/ai-control-plane-b24/README.md", "artifacts/ai-control-plane-b24/discovery.md", MATRIX, OWNER_DIRECTIVE].includes(path);`); // [PR-G, 2026-10-17] reviewed pin move: + OWNER_DIRECTIVE, the owner's assignment (an instruction, never a claim) excluded by path from b24-e's claim scan; the lead's records, B24's README and discovery and the matrix stand
     const excluded = (path: string): boolean => path.startsWith("artifacts/remaining-builder-program/") || [`${B24}README.md`, `${B24}discovery.md`, MATRIX].includes(path);
     for (const page of [...PAGES, `${B24}trust-boundary-map.md`, MAP, `${B24}agent-graph.md`, `${B24}generator-inventory.md`]) {
       expect(excluded(page), page).toBe(false);
@@ -456,7 +459,7 @@ function ciWorkflowProblems(rows: ReadonlyArray<Readonly<Record<string, string>>
   const named = [DETERMINISTIC_WORKFLOW, BENCHMARK_WORKFLOW].map((path) => [path, workflowName(path)] as const);
   for (const [path, name] of named) {
     const jobs = rows.filter((row) => row.workflow === name).map((row) => row.job ?? "");
-    const want = pullRequestJobs(path);
+    const want = pullRequestJobs(path).filter((job) => job !== "page-browser-e2e-agent"); // [PR-L7, 2026-10-20] reviewed pin move (OD-254): the table records the CI run at the final SHA; page-browser-e2e-agent was appended after it, so it is no row there (every job the workflow held at that SHA still is)
     if (want.length === 0 || jobs.join(", ") !== want.join(", ")) problems.push(`${name}: rows ${jobs.join(", ") || "none"}, its pull-request jobs ${want.join(", ")}`);
   }
   for (const row of rows) if (!named.some(([, name]) => name === row.workflow)) problems.push(`${row.workflow}: no workflow of the two`);
@@ -482,17 +485,52 @@ function vitestFiles(): string[] {
 /** security-6: what no CI job selects, by the job-scope rule (B24-B1's `ciAdmission`, as CI's guard derives it): the vitest files, and
  *  the `b16-0-*` security suites apart (OD-228 (f)); scope 2, the report's Not-in-CI bullet and the final report each name both. */
 function outsideCiProblems(): string[] {
-  const admission = ciAdmission();
-  const files = vitestFiles();
-  const outside = files.filter((path) => admission.jobsOf(path).length === 0);
-  const security = (paths: readonly string[]): number => paths.filter((path) => /\/b16-0-[^/]*\.test\.tsx?$/.test(path)).length;
-  const phrases = [`${outside.length} of the ${files.length} vitest test files`, `${security(outside)} of the ${security(files)} b16-0-* suites`];
+  // These reports name 26dc8b8. Later tests cannot change what its CI selected.
+  const counts = ciCensusCounts(historicalCiSnapshot());
+  const phrases = [`${counts.outside} of the ${counts.files} vitest test files`, `${counts.securityOutside} of the ${counts.security} b16-0-* suites`];
   const ci = sectionOf(readRepo(REPORT), CI_HEADING).split(NEWLINE);
   const at = ci.findIndex((line) => line.startsWith("- **Not in CI.**"));
   const bullet: string[] = [];
   if (at >= 0) for (let index = at; index < ci.length && (index === at || ci[index]!.startsWith("  ")); index += 1) bullet.push(ci[index]!);
   const places: ReadonlyArray<readonly [string, string]> = [["scope 2", scopeRows()[1]?.state ?? ""], ["the report's Not-in-CI bullet", bullet.join(" ")], ["the final report", sectionOf(readRepo(VERDICT), "5.1 The report")]];
   return places.flatMap(([place, text]) => phrases.filter((phrase) => !folded(text).includes(phrase)).map((phrase) => `${place}: "${phrase}" unnamed`));
+}
+
+/** Captured by git ls-tree/git show on 2026-10-11. Its digest detects edits;
+ * Git object ids record provenance, not authentication of a contributor. */
+const HISTORICAL_CI_CENSUS = `${B24}ci-census-26dc8b8.json`;
+const HISTORICAL_CI_CENSUS_SHA256 = "857de056bf70e1a69f7c05d2362e24be8106cdcb862a680499455b3ffd60bbb9";
+interface HistoricalCiSnapshot {
+  schemaVersion: "sirkit.historical-ci-census.v1";
+  sourceCommit: string;
+  sourceTree: string;
+  files: Array<{ path: string; blob: string }>;
+  policyInputs: Record<string, { blob: string; text: string }>;
+  existenceInputs: Array<{ path: string; blob: string }>;
+}
+function historicalCiSnapshot(raw = readRepo(HISTORICAL_CI_CENSUS)): HistoricalCiSnapshot {
+  if (createHash("sha256").update(raw).digest("hex") !== HISTORICAL_CI_CENSUS_SHA256) throw new Error("HISTORICAL_CI_CENSUS_HASH");
+  const snapshot = JSON.parse(raw) as HistoricalCiSnapshot;
+  if (snapshot.schemaVersion !== "sirkit.historical-ci-census.v1" || snapshot.sourceCommit !== "26dc8b8a71a2471cc0f542da9ecc05c37c1abc51" || !snapshot.sourceCommit.startsWith(FINAL_SHA) || !/^[a-f0-9]{40}$/.test(snapshot.sourceTree)) throw new Error("HISTORICAL_CI_CENSUS_PROVENANCE");
+  const paths = snapshot.files.map((entry) => entry.path);
+  if (new Set(paths).size !== paths.length || JSON.stringify(paths) !== JSON.stringify([...paths].sort((a, b) => a.localeCompare(b))) || snapshot.files.some((entry) => !/^app\/.*\/__tests__\/.*\.test\.tsx?$/.test(entry.path) || !/^[a-f0-9]{40}$/.test(entry.blob))) throw new Error("HISTORICAL_CI_CENSUS_FILES");
+  for (const [path, input] of Object.entries(snapshot.policyInputs)) {
+    const blob = createHash("sha1").update(`blob ${Buffer.byteLength(input.text)}\0`).update(input.text).digest("hex");
+    if (blob !== input.blob) throw new Error(`HISTORICAL_CI_CENSUS_BLOB: ${path}`);
+  }
+  return snapshot;
+}
+function ciCensusCounts(snapshot: HistoricalCiSnapshot): { files: number; outside: number; security: number; securityOutside: number } {
+  const existence = new Set(snapshot.existenceInputs.map((entry) => entry.path));
+  const admission = ciAdmission((path) => {
+    const input = snapshot.policyInputs[path];
+    if (input) return input.text;
+    if (existence.has(path)) return "";
+    throw new Error(`HISTORICAL_CI_CENSUS_INPUT_ABSENT: ${path}`);
+  });
+  const files = snapshot.files.map((entry) => entry.path), outside = files.filter((path) => admission.jobsOf(path).length === 0);
+  const security = (paths: readonly string[]): number => paths.filter((path) => /\/b16-0-[^/]*\.test\.tsx?$/.test(path)).length;
+  return { files: files.length, outside: outside.length, security: security(files), securityOutside: security(outside) };
 }
 /** correctness-2: the records-only phrasings; commit 2/2 changes this suite, so no page and no note here may use one. */
 const RECORDS_ONLY = new RegExp(["adds records(?: and reports)? only", "[(]records only[)]"].join("|"), "i");

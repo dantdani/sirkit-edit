@@ -80,10 +80,10 @@ export type EvalState = (typeof EVAL_STATES)[number];
 export const LINK_KINDS = ["suite", "spec", "pglite", "live_opt_in"] as const;
 export type LinkKind = (typeof LINK_KINDS)[number];
 /** The CI jobs a link can run in, recorded exactly as `b24-b1-catalog` case 4 derives them (a new job extends this by review). */
-export const CATALOG_CI_JOBS = ["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "page-browser-e2e", "agent-boundary-suites"] as const; // [B24-D0, 2026-10-09] + agent-boundary-suites (OD-30's split, ci-split.md)
+export const CATALOG_CI_JOBS = ["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "page-browser-e2e", "page-browser-e2e-agent", "agent-boundary-suites"] as const; // [B24-D0, 2026-10-09] + agent-boundary-suites (OD-30's split, ci-split.md); [PR-L7, 2026-10-20] + page-browser-e2e-agent (OD-254: e2e/agent-execution.spec.ts runs in its own appended browser job), after page-browser-e2e as _ci-admission.ts lists it
 export type CatalogCiJob = (typeof CATALOG_CI_JOBS)[number];
 /** The jobs that run on a pull request (benchmark-nightly runs on schedule and dispatch only). */
-export const PULL_REQUEST_CI_JOBS: readonly CatalogCiJob[] = Object.freeze(["prompt-to-gerber", "database-delivery", "benchmark-core", "page-browser-e2e", "agent-boundary-suites"]); // [B24-D0, 2026-10-09] the appended job runs on every pull request too
+export const PULL_REQUEST_CI_JOBS: readonly CatalogCiJob[] = Object.freeze(["prompt-to-gerber", "database-delivery", "benchmark-core", "page-browser-e2e", "page-browser-e2e-agent", "agent-boundary-suites"]); // [B24-D0, 2026-10-09] the appended job runs on every pull request too; [PR-L7, 2026-10-20] and page-browser-e2e-agent (OD-254)
 /** The owner of a missing row no B24 increment plans. */
 export const NONE_PLANNED_IN_B24 = "none planned in B24" as const;
 
@@ -125,8 +125,8 @@ const DBD: readonly CatalogCiJob[] = ["database-delivery"];
 const ENGINEERING: readonly CatalogCiJob[] = ["benchmark-core", "benchmark-nightly"];
 const P2G_ENGINEERING: readonly CatalogCiJob[] = ["prompt-to-gerber", "benchmark-core", "benchmark-nightly"];
 const NIGHTLY: readonly CatalogCiJob[] = ["benchmark-nightly"];
-const BROWSER: readonly CatalogCiJob[] = ["page-browser-e2e"];
-const AGENT_BOUNDARY: readonly CatalogCiJob[] = ["agent-boundary-suites"]; // [B24-D0, 2026-10-09] OD-30's split: the suites under app/lib/mcp and app/lib/computation/__tests__ (ci-split.md). [B24-B2, 2026-10-08] NO_JOB removed: since B24-B2 every catalogued suite runs in a CI job (D24-15, OD-204; b24-b2-ci-admission).
+const BROWSER: readonly CatalogCiJob[] = ["page-browser-e2e"]; const AGENT_BROWSER: readonly CatalogCiJob[] = ["page-browser-e2e-agent"]; // [PR-L7, 2026-10-20] OD-254: e2e/agent-execution.spec.ts runs in its own appended browser job
+const AGENT_BOUNDARY: readonly CatalogCiJob[] = ["agent-boundary-suites"]; // [B24-D0, 2026-10-09] OD-30's split: the suites under app/lib/mcp and app/lib/computation/__tests__ (ci-split.md). [PR-G, 2026-10-17] OD-250: and, since the re-measured split, the suites under app/lib/agent/orchestration/__tests__ (ci-split.md section 4). [B24-B2, 2026-10-08] NO_JOB removed: since B24-B2 every catalogued suite runs in a CI job (D24-15, OD-204; b24-b2-ci-admission).
 
 const link = (path: string, kind: LinkKind, refs: readonly string[], ciJobs: readonly CatalogCiJob[], ids: { readonly b11?: readonly string[]; readonly b21f?: readonly string[] } = {}): EvalLink =>
   Object.freeze({ path, kind, refs: Object.freeze([...refs]), ...(ids.b11 ? { b11Cases: Object.freeze([...ids.b11]) } : {}), ...(ids.b21f ? { b21FCases: Object.freeze([...ids.b21f]) } : {}), ciJobs: Object.freeze([...ciJobs]) });
@@ -144,13 +144,13 @@ const ACCEPTANCE_PIPELINE = "app/lib/workflow/prompt-to-gerber/__tests__/accepta
 const LIVE_COMMAND = "scripts/run-b21-live-orchestration-evaluation.ts";
 
 const suite = (path: string, refs: readonly string[], ciJobs: readonly CatalogCiJob[]): EvalLink => link(path, "suite", refs, ciJobs);
-const spec = (path: string, refs: readonly string[], b21f?: readonly string[]): EvalLink => link(path, "spec", refs, BROWSER, b21f ? { b21f } : {});
+const spec = (path: string, refs: readonly string[], b21f?: readonly string[]): EvalLink => link(path, "spec", refs, path === AGENT_SPEC ? AGENT_BROWSER : BROWSER, b21f ? { b21f } : {}); // [PR-L7, 2026-10-20] OD-254: the agent spec's job is page-browser-e2e-agent
 const pglite = (path: string, refs: readonly string[]): EvalLink => link(path, "pglite", refs, DBD);
 const liveOptIn = (path: string, refs: readonly string[], ciJobs: readonly CatalogCiJob[]): EvalLink => link(path, "live_opt_in", refs, ciJobs);
 /** B11's permanent cases replay in one suite, admitted to prompt-to-gerber by B24-B2 (D24-15, OD-204). */
 const b11 = (...ids: readonly string[]): EvalLink => link(`${AGENT}b11-trace-replay-evaluation.test.ts`, "suite", ["every permanent case passes"], P2G, { b11: ids });
 /** B21-F's runbook evaluations: one case each in b21-f-evaluation. */
-const b21f = (cases: Readonly<Record<string, string>>): EvalLink => link(`${ORCH}b21-f-evaluation.test.ts`, "suite", Object.values(cases), P2G, { b21f: Object.keys(cases) });
+const b21f = (cases: Readonly<Record<string, string>>): EvalLink => link(`${ORCH}b21-f-evaluation.test.ts`, "suite", Object.values(cases), AGENT_BOUNDARY, { b21f: Object.keys(cases) }); // [PR-G, 2026-10-17] was P2G (OD-250: the orchestration filter runs in agent-boundary-suites)
 const acceptancePipeline = suite(ACCEPTANCE_PIPELINE, ["B16.1C fresh-browser prompt-to-Gerber (deterministic, credit-free)"], P2G);
 const parity = suite("app/lib/mcp/server/__tests__/b20-c1-three-way-parity.test.ts", ["registry, providers and MCP render one tool three ways"], AGENT_BOUNDARY); // [B24-D0, 2026-10-09] was P2G
 const viaFacts = suite(`${ENG}b18-e-via-facts.test.ts`, ["the bounded via read answers what a via plan needs"], P2G_ENGINEERING);
@@ -287,7 +287,7 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
       suite(`${ENG}b06-schematic-mutations.test.ts`, ["deterministic delete"], ENGINEERING),
       suite(`${ENG}b14-replacement-proposal.test.ts`, ["1"], ENGINEERING),
       suite(`${ENG}b14-replacement-apply.test.ts`, ["one canonical transaction, exact adoption, exact undo/redo"], ENGINEERING),
-      suite(`${ORCH}b21-d3-replacement-roles.test.ts`, ["1"], P2G),
+      suite(`${ORCH}b21-d3-replacement-roles.test.ts`, ["1"], AGENT_BOUNDARY), // [PR-G, 2026-10-17] was P2G (OD-250)
       suite("app/api/chat/__tests__/b21-d3-chat-replacement.test.ts", ["1"], P2G),
       b21f({ F1: "1" }),
     ]),
@@ -387,9 +387,9 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
   },
   "provider-fallback-quota": {
     deterministic_offline: covered([
-      suite(`${ORCH}b21-e1-fallback.test.ts`, ["the compatible fallback (OD-117)"], P2G),
-      suite(`${ORCH}b21-e1-provider-breaker.test.ts`, ["the llm-provider meters and breaker (OD-115)"], P2G),
-      suite(`${ORCH}b21-e1-provider-policy.test.ts`, ["the per-role provider/model policy (OD-117)"], P2G),
+      suite(`${ORCH}b21-e1-fallback.test.ts`, ["the compatible fallback (OD-117)"], AGENT_BOUNDARY), // [PR-G, 2026-10-17] the three: was P2G (OD-250)
+      suite(`${ORCH}b21-e1-provider-breaker.test.ts`, ["the llm-provider meters and breaker (OD-115)"], AGENT_BOUNDARY),
+      suite(`${ORCH}b21-e1-provider-policy.test.ts`, ["the per-role provider/model policy (OD-117)"], AGENT_BOUNDARY),
       suite("app/api/chat/__tests__/b21-e1-chat-provider.test.ts", ["the provider layer through the production POST"], P2G),
       b11("e12-provider-quota", "e13-no-fallback", "e14-parity-anthropic"),
       suite(`${AGENT}b09-loop-safety.test.ts`, ["25"], P2G),
@@ -404,7 +404,7 @@ const CELLS: { readonly [A in EvalAreaId]: AreaCells } = {
   "specialist-disagreement": {
     deterministic_offline: covered([
       b21f({ F6: "6", F7: "7" }),
-      suite(`${ORCH}b21-d3-scenario17.test.ts`, ["runbook scenario 17: the timer replacement's disagreement is structural and deterministically resolved"], P2G),
+      suite(`${ORCH}b21-d3-scenario17.test.ts`, ["runbook scenario 17: the timer replacement's disagreement is structural and deterministically resolved"], AGENT_BOUNDARY), // [PR-G, 2026-10-17] was P2G (OD-250)
     ]),
     model_in_loop: blocked(["LB-7", "LB-9"], noPathForCases("F6 and F7", "LB-7, LB-9")),
     browser_e2e: inPart([spec(ORCHESTRATION_SPEC, ["[B21 F2] F6:"], ["F6"])], "Gap: the browser proves F6 in part (BROWSER_PROVEN_IN_PART_F6): a verifier decides and the one sealed replacement is presented once with its review cancelled, and two sealed parties that disagree escalate with nothing presented; the principal's approval and the escalation's exact authority stay offline (b21-f-evaluation case 6)."),

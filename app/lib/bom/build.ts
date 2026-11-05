@@ -11,7 +11,8 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import { parts, libraries, alternates } from "@/app/lib/db/schema";
 import type { SchematicState, SchComponentType } from "@/lib/schematic-types";
-import { schDisplayRef } from "@/lib/schematic-types";
+import { ROOT_SHEET_ID, schDisplayRef } from "@/lib/schematic-types";
+import { compareCodePoints } from "@/app/lib/stable-compare"; // [PR-J4, 2026-10-23] the Sheets column's order
 import {
   getPricingFor,
   pausedSources,
@@ -38,6 +39,7 @@ import { lineUnitPrice } from "@/app/lib/bom/line-price"; // [B19-D I5b review]
 
 export { lineUnitPrice };
 import { safeSpreadsheetCell } from "@/app/lib/atomic/security";
+import { assertWholeProject, sheetOf, sheetPathName, sheetsOf } from "@/app/lib/schematic/sheets"; // [PR-J, 2026-10-22] J2: one BOM for the whole project; [PR-J4, 2026-10-23] + the sheet names of a line's parts
 import { safeHref } from "@/app/lib/net/href-policy"; // [B19-D I5c review]
 import { vendorProductPageUrl } from "@/app/lib/distributor-links"; // [B19-D I5c review]
 
@@ -82,6 +84,10 @@ export type BomRow = {
   riskScore: LineRiskBreakdown; // synthesized supply-chain risk (Stage 5)
   /** [B19-E E5] the line's atomic revision status; null when the line names no atomic revision; absent unless the build asked */
   catalogStatus?: BomCatalogStatus | null;
+  /** [PR-J4, 2026-10-23] The sheets the line's parts are drawn on (sheet path names such as "Power/Regulator"; the root by its own
+   *  name), sorted and unique. Present ONLY for a project with sheets (J.5: one line per package whatever its sheet), so a
+   *  single-sheet document's rows keep their exact bytes (j2-consumers-golden). */
+  sheets?: string[];
 };
 
 /** Aggregate lifecycle counts + a single risk verdict for the whole BOM. */
@@ -135,7 +141,15 @@ type Group = {
   refs: string[];
   componentInstanceIds: string[];
   atomicRevisionId: string | null;
+  /** [PR-J4, 2026-10-23] the sheet of every instance in the group (document order; duplicates kept) */
+  sheetIds: string[];
 };
+
+/** [PR-J4, 2026-10-23] The display names of a line's sheets: the sheet path ("Power/Regulator"), the root by its own name; sorted, unique. */
+export function sheetNamesOf(state: Pick<SchematicState, "sheets">, sheetIds: readonly string[]): string[] {
+  const rootName = sheetsOf(state).find((sheet) => sheet.parentId === null)?.name ?? "Overview";
+  return [...new Set(sheetIds.map((id) => (id === ROOT_SHEET_ID ? rootName : sheetPathName(state, id) || rootName)))].sort(compareCodePoints);
+}
 
 /** [B19-D I5b row 20] Every unit price is in the one pricing currency (`cheapestUnitPrice`), so that is its currency. */
 function currencyOfBest(pricing: AggregatedPricing | null): string | null {
@@ -152,6 +166,9 @@ export async function buildBom(
   componentSelections: Readonly<Record<string, ProjectComponentPin>> = {},
   options: BomBuildOptions = {},
 ): Promise<BomResult> {
+  // [PR-J, 2026-10-22] J2 (J.5): every part on every sheet is one line item once (sheets organise the drawing, not the board); a
+  // sheet's view is refused (SHEET_LENS_NOT_PROJECT)
+  assertWholeProject(state, "bom");
   const kicadComponents = state.kicadComponents ?? [];
   const components = state.components ?? [];
 
@@ -162,11 +179,12 @@ export async function buildBom(
     const key = `k|${k.atomicPartRevisionId ?? k.partId}|${k.value}`;
     let g = groups.get(key);
     if (!g) {
-      g = { partId: k.partId, type: null, value: k.value, refs: [], componentInstanceIds: [], atomicRevisionId: k.atomicPartRevisionId ?? null };
+      g = { partId: k.partId, type: null, value: k.value, refs: [], componentInstanceIds: [], atomicRevisionId: k.atomicPartRevisionId ?? null, sheetIds: [] };
       groups.set(key, g);
     }
     g.refs.push(k.refDes);
     g.componentInstanceIds.push(k.id);
+    g.sheetIds.push(sheetOf(k));
   }
 
   for (const c of components) {
@@ -174,11 +192,12 @@ export async function buildBom(
     const key = `t|${c.type}|${c.value}`;
     let g = groups.get(key);
     if (!g) {
-      g = { partId: null, type: c.type, value: c.value, refs: [], componentInstanceIds: [], atomicRevisionId: null };
+      g = { partId: null, type: c.type, value: c.value, refs: [], componentInstanceIds: [], atomicRevisionId: null, sheetIds: [] };
       groups.set(key, g);
     }
     // B07.1 — the BOM line shows the DISPLAYED reference (refDes ?? id).
     g.refs.push(schDisplayRef(c));
+    g.sheetIds.push(sheetOf(c));
   }
 
   // ── Enrich KiCad groups with catalog metadata (one DB round-trip) ────────────
@@ -263,6 +282,8 @@ export async function buildBom(
       lifecycleStatus,
       alternatesCount: g.partId ? alternatesCounts.get(g.partId) ?? 0 : 0,
       riskScore: computeLineRisk({ pricing, lifecycleStatus }),
+      // [PR-J4, 2026-10-23] the key exists only for a project with sheets: a single-sheet row's JSON is byte-identical
+      ...(state.sheets !== undefined ? { sheets: sheetNamesOf(state, g.sheetIds) } : {}),
     });
   }
 
@@ -430,6 +451,8 @@ function csvCell(v: string | number | null): string {
 }
 
 export function bomToCsv(result: BomResult): string {
+  // [PR-J4, 2026-10-23] the Sheets column exists only when a line carries sheets (a project with sheets): a single-sheet CSV is byte-identical
+  const withSheets = result.rows.some((row) => row.sheets !== undefined);
   const header = [
     "refDes",
     "Qty",
@@ -448,6 +471,7 @@ export function bomToCsv(result: BomResult): string {
     "Risk Score",
     "Risk Grade",
     "Risk Notes",
+    ...(withSheets ? ["Sheets"] : []),
   ];
 
   const rows = result.rows.map((row) => {
@@ -474,6 +498,7 @@ export function bomToCsv(result: BomResult): string {
       row.riskScore.total,
       row.riskScore.grade,
       row.riskScore.notes.join("; "),
+      ...(withSheets ? [(row.sheets ?? []).join("; ")] : []),
     ];
   });
 

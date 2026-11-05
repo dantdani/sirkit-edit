@@ -223,7 +223,7 @@ same bytes with the sink bound and unbound (the 503 `providerErrorResponse` body
 - **The two fixture short-circuits.** `LLMRouter.generate` under the fixture runtime (`router.ts:26-32`) and `runBuildToolLoop`
   (`build-loop.ts:139`) make no provider call and write no record (case 4). The public searches have no fixture branch: under the fixture
   runtime a request to `/api/parts/search` or `/api/pcb/footprints/search` reaches `embedBatch` and records into the fixture's in-memory
-  repository (case 4); whether the browser proof calls those routes is the lead's Playwright run to record.
+  repository (case 4); whether the browser proof calls those routes is the lead's Playwright run to record. [PR-L/M integration, 2026-10-18] Since then `/api/parts/search` (and `/api/parts/categories`) answer from the committed fixture catalog under the fixture runtime, with no provider call (the Build Library answered 500 there); case 4 drives the footprint search, which still reaches `embedBatch`.
 - **A whole, self-consistent rewrite** of a stored record (its fields and its digest recomputed together) by someone with database write
   access is not detectable without a signature: the digests catch a partial edit (RECORDED, low; section 12).
 - **`/api/chat`'s model calls.** They go through `app/lib/agent/adapters.ts`, not the router: the run trace covers them (its `step` events
@@ -1210,7 +1210,7 @@ Each row resolves on the line it names (`b24-c3-recorded-limits` 11): the anchor
 | C34 | `app/lib/engineering/tool-invocation.ts` | 442 | `if (this.traceLog.length > this.maxTraces) this.traceLog.shift();` |
 | C35 | `app/lib/mcp/server/request-trace.ts` | 124 | `export function setMcpServerTraceSinkFactory(` |
 | C36 | `app/lib/mcp/server/read-trace.ts` | 219 | `export function setMcpReadTraceSinkFactory(` |
-| C37 | `app/lib/agent/gateway.ts` | 493 | `new ReadToolInvocationService(registry)` |
+| C37 | `app/lib/agent/gateway.ts` | 494 | `new ReadToolInvocationService(registry)` |
 | C38 | `app/lib/mcp/server/read-call.ts` | 235 | `service = new ReadToolInvocationService(registry, { now: () => Date.now() });` |
 | C39 | `app/lib/observability/trace-read.ts` | 60 | `export const TRACE_READ_ACCESS_AUDIT = "not_recorded" as const;` |
 | C40 | `app/lib/observability/trace-read.ts` | 41 | `export const TRACE_READ_KINDS = Object.freeze(["run-trace", "run-trace-attribution", "llm-call-record", "specialist-trace"] as const);` |
@@ -1223,11 +1223,11 @@ Each row resolves on the line it names (`b24-c3-recorded-limits` 11): the anchor
 | C47 | `scripts/retention-purge.ts` | 75 | `if (selectsTraceRead(argv)) {` |
 | C48 | `scripts/retention-purge.ts` | 65 | `repositoryFor: () => new PostgresDurableWorkflowRepository()` |
 | C49 | `scripts/retention-purge.ts` | 88 | `if (ENTRY_MODULE) void main(process.argv.slice(2), process.env)` |
-| C50 | `.github/workflows/deterministic-manufacturing.yml` | 383 | `app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts` |
+| C50 | `.github/workflows/deterministic-manufacturing.yml` | 601 | `app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts` |
 | C51 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 54 | `const CHAPTERS = ["b19-", "b20-", "b21-", "b22-", "b23-", "b24-"] as const;` |
-| C52 | `app/lib/durable-workflow/types.ts` | 45 | `export interface DurableWorkflowRepository {` |
-| C53 | `app/lib/durable-workflow/types.ts` | 50 | `getReplay<TResult extends object = object>(` |
-| C54 | `app/lib/durable-workflow/types.ts` | 55 | `listOutbox(input?:` |
+| C52 | `app/lib/durable-workflow/types.ts` | 50 | `export interface DurableWorkflowRepository {` |
+| C53 | `app/lib/durable-workflow/types.ts` | 55 | `getReplay<TResult extends object = object>(` |
+| C54 | `app/lib/durable-workflow/types.ts` | 60 | `listOutbox(input?:` |
 | C55 | `app/lib/durable-workflow/server-repository.ts` | 14 | `async loadHead<T extends object = object>(value: DurableAggregateIdentity)` |
 | C56 | `app/lib/durable-workflow/server-repository.ts` | 17 | `async history<T extends object = object>(value: DurableAggregateIdentity)` |
 | C57 | `app/lib/durable-workflow/stable.ts` | 18 | `export function canonicalDurableScope(scope: DurableWorkflowScope)` |
@@ -1388,4 +1388,4 @@ dependency; no UI control; every live step BLOCKED-LIVE-QUALIFICATION (LB-14, LB
   lead's `git stash`, never the builder's) and add their counts to the note.
 - **Never run** `scripts/retention-purge.ts --read` against any database (OD-191, OD-211, LB-14).
 
-[B24-D1, 2026-10-09] C50 re-pinned `:380` -> `:383` in place: B24-D1's OD-30 steps at `:32` and `:344-345`; `b24-c3-recorded-limits` resolves it.
+[B24-D1, 2026-10-09] C50 re-pinned `:380` -> `:383` in place: B24-D1's OD-30 steps at `:32` and `:344-345`; `b24-c3-recorded-limits` resolves it. [PR-G, 2026-10-17] C50 re-pinned `:383` -> `:422` in place: PR-G's 39 prompt-to-gerber lines at `:294-312`, `:316` and `:352-370` (OD-250). [PR-L7, 2026-10-20] C50 re-pinned `:422` -> `:493` in place: PR-L7's 71 prompt-to-gerber lines at `:313-381` and `:440-441` (OD-254). [PR-J7, 2026-11-04] C50 re-pinned `:493` -> `:601` in place: PR-J7's 108 prompt-to-gerber lines at `:382-435` and `:496-549` (OD-261).

@@ -8,8 +8,8 @@ that wrote it (OD-95): change the code and regenerate, never this page.
 ## 1. Identity
 
 - Report schema: `sirkit.mcp-provider-parity.v1`.
-- Registry digest `eng1-a0270c5feaa2c1c4`; listing digest (B1's, role-independent: the manifest identity) `eng1-8a3159295efd1508`.
-- 48 registry descriptors, 37 agent-exposed, 9 MCP-exposed, 28 agent-only.
+- Registry digest `eng1-4981031f19d7f7d2`; listing digest (B1's, role-independent: the manifest identity) `eng1-d2912d4982a7a534`.
+- 64 registry descriptors, 52 agent-exposed, 9 MCP-exposed, 43 agent-only.
 
 ## 2. The MCP-exposed tools, leg by leg
 
@@ -56,9 +56,19 @@ members: object nodes of the declared output schema with no `properties` of thei
 | `sirkit.computation.analytical-equation` | 1.0.0 | `sirkit_computation_analytical-equation` | `computation` |
 | `sirkit.computation.artifact-compare` | 1.0.0 | `sirkit_computation_artifact-compare` | `computation` |
 | `sirkit.computation.artifact-parse` | 1.0.0 | `sirkit_computation_artifact-parse` | `computation` |
+| `sirkit.generation.task-control` | 1.0.0 | `sirkit_generation_task-control` | `withheld` |
+| `sirkit.generation.task-inspect` | 1.0.0 | `sirkit_generation_task-inspect` | `withheld` |
 | `sirkit.mcp.observation-read` | 1.0.0 | `sirkit_mcp_observation-read` | `external_read` |
+| `sirkit.module.propose-contracts` | 1.0.0 | `sirkit_module_propose-contracts` | `withheld` |
+| `sirkit.parts.acquisition-start` | 1.0.0 | `sirkit_parts_acquisition-start` | `withheld` |
+| `sirkit.parts.acquisition-status` | 1.0.0 | `sirkit_parts_acquisition-status` | `withheld` |
+| `sirkit.parts.candidate-search` | 1.0.0 | `sirkit_parts_candidate-search` | `withheld` |
+| `sirkit.parts.catalog-inspect` | 1.0.0 | `sirkit_parts_catalog-inspect` | `withheld` |
+| `sirkit.parts.draft-request` | 1.0.0 | `sirkit_parts_draft-request` | `withheld` |
 | `sirkit.parts.evidence-read` | 1.0.0 | `sirkit_parts_evidence-read` | `external_read` |
 | `sirkit.parts.external-search` | 1.0.0 | `sirkit_parts_external-search` | `external_read` |
+| `sirkit.parts.missing-facts` | 1.0.0 | `sirkit_parts_missing-facts` | `withheld` |
+| `sirkit.pcb-sync.preflight` | 1.0.0 | `sirkit_pcb-sync_preflight` | `withheld` |
 | `sirkit.pcb.arrange` | 1.1.1 | `sirkit_pcb_arrange` | `granted_execution` |
 | `sirkit.pcb.board-page-inspect` | 1.0.0 | `sirkit_pcb_board-page-inspect` | `withheld` |
 | `sirkit.pcb.dimension` | 1.2.0 | `sirkit_pcb_dimension` | `granted_execution` |
@@ -67,15 +77,20 @@ members: object nodes of the declared output schema with no `properties` of thei
 | `sirkit.pcb.rotate-side-footprint` | 1.2.1 | `sirkit_pcb_rotate-side-footprint` | `granted_execution` |
 | `sirkit.pcb.silkscreen-text` | 1.0.1 | `sirkit_pcb_silkscreen-text` | `granted_execution` |
 | `sirkit.pcb.undo-redo-granted` | 1.0.1 | `sirkit_pcb_undo-redo-granted` | `granted_execution` |
-| `sirkit.placement.propose` | 1.1.0 | `sirkit_placement_propose` | `withheld` |
+| `sirkit.placement.propose` | 1.2.0 | `sirkit_placement_propose` | `withheld` |
 | `sirkit.project.history-inspect` | 1.0.0 | `sirkit_project_history-inspect` | `withheld` |
 | `sirkit.routing.propose` | 1.1.0 | `sirkit_routing_propose` | `withheld` |
-| `sirkit.schematic.inspect` | 1.1.0 | `sirkit_schematic_inspect` | `withheld` |
+| `sirkit.schematic.generate-proposal` | 2.0.0 | `sirkit_schematic_generate-proposal` | `withheld` |
+| `sirkit.schematic.inspect` | 1.2.0 | `sirkit_schematic_inspect` | `withheld` |
+| `sirkit.schematic.instance-inspect` | 1.0.0 | `sirkit_schematic_instance-inspect` | `withheld` |
 | `sirkit.schematic.propose-component-replacement` | 1.0.0 | `sirkit_schematic_propose-component-replacement` | `withheld` |
+| `sirkit.schematic.propose-component-resolution` | 1.0.0 | `sirkit_schematic_propose-component-resolution` | `withheld` |
+| `sirkit.schematic.propose-sheet-organization` | 1.0.0 | `sirkit_schematic_propose-sheet-organization` | `withheld` |
 | `sirkit.schematic.propose-tier1-edit` | 1.1.0 | `sirkit_schematic_propose-tier1-edit` | `withheld` |
 | `sirkit.selection.control` | 1.0.0 | `sirkit_selection_control` | `view_session` |
 | `sirkit.selection.inspect` | 1.1.0 | `sirkit_selection_inspect` | `view_state_read` |
-| `sirkit.view.canvas-navigation` | 1.1.0 | `sirkit_view_canvas-navigation` | `view_session` |
+| `sirkit.stackup.propose` | 1.0.0 | `sirkit_stackup_propose` | `withheld` |
+| `sirkit.view.canvas-navigation` | 1.2.0 | `sirkit_view_canvas-navigation` | `view_session` |
 | `sirkit.view.layers` | 1.0.0 | `sirkit_view_layers` | `view_session` |
 | `sirkit.view.measure` | 1.0.0 | `sirkit_view_measure` | `view_session` |
 | `sirkit.view.pcb3d` | 1.0.0 | `sirkit_view_pcb3d` | `view_session` |
@@ -107,6 +122,6 @@ detail, so a directive-shaped id is never echoed back.
 - Rules: `length`, `characters`, `secret-shape`, `marker`, `directive-phrase`, `reserved-name`, `schema-bounds`, `unreadable`, `annotation-field`.
 - Bounds: `idMaxChars` 128, `titleMaxChars` 120, `descriptionMaxChars` 1000, `schemaTextMaxChars` 500, `schemaMaxStrings` 512, `schemaMaxDepth` 64, `schemaMaxNodes` 4096.
 - Characters: U+0020 to U+007E, plus `U+2013`, `U+2014`, `U+2018`, `U+2019`, `U+201C`, `U+201D`, `U+2026`, `U+00B0`, `U+00B1`, `U+00B5`, `U+00D7`, `U+2192`, `U+2212`, `U+2260`, `U+2264`, `U+2265`. Everything else — line breaks, tabs, format and bidirectional characters, no-break space, other scripts, astral characters and lone surrogates — is refused.
-- Measured today over the 48 registry descriptors, with the gate's OWN collector: longest title 56, longest description 844, longest schema text 264, most judged schema strings on one descriptor 100.
+- Measured today over the 64 registry descriptors, with the gate's OWN collector: longest title 56, longest description 990, longest schema text 264, most judged schema strings on one descriptor 319.
 - A descriptor carrying its own `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` or `annotations` key is invalid (OD-100): MCP annotations stay derived from Sirkit's classification alone.
 - Stated limit: `TOOL_REGISTRY_INVALID` still echoes the refused descriptor's `id@version` — the refused id included — its `owningCommandId` and its view command ids, as it did before C3. That message is a build-time refusal on the server, never model-bound text; the MCP renderer's own refusal carries neither the id nor the text.

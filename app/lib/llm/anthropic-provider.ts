@@ -8,7 +8,7 @@ import type {
   ToolChoice,
 } from "@anthropic-ai/sdk/resources/messages/messages";
 import { composeInstructions } from "./context";
-import { toProviderError } from "./errors";
+import { LLMProviderError, toProviderError } from "./errors";
 import type {
   LLMContentPart,
   LLMChunk,
@@ -83,7 +83,7 @@ export class AnthropicProvider implements LLMProvider {
 
   constructor(
     client?: AnthropicClient,
-    private readonly model = configuredAnthropicModel(),
+    readonly model = configuredAnthropicModel(), // [PR-L6 spend, 2026-10-19] SPEND-3-A3: readable (LLMProvider.model), so the router names the model it serves; still fixed at construction
   ) {
     this.client = client;
   }
@@ -116,7 +116,9 @@ export class AnthropicProvider implements LLMProvider {
 
   async generate(request: LLMRequest): Promise<LLMResponse> {
     try {
-      const response = await this.getClient().messages.create(this.params(request));
+      const response = await (sdkRequestOptions(request) // [PR-L6 integration, 2026-10-19] SPEND-1: the signal and the per-call retries
+        ? this.getClient().messages.create(this.params(request), sdkRequestOptions(request))
+        : this.getClient().messages.create(this.params(request)));
       const text = response.content
         .filter((block) => block.type === "text")
         .map((block) => block.text)
@@ -140,6 +142,7 @@ export class AnthropicProvider implements LLMProvider {
         },
       };
     } catch (error) {
+      if (request.signal?.aborted) throw new LLMProviderError(this.id, "cancelled");
       throw toProviderError(this.id, error);
     }
   }
@@ -147,7 +150,9 @@ export class AnthropicProvider implements LLMProvider {
   async *stream(request: LLMRequest): AsyncIterable<LLMChunk> {
     let stream: ReturnType<AnthropicClient["messages"]["stream"]> | undefined;
     try {
-      stream = this.getClient().messages.stream(this.params(request));
+      stream = sdkRequestOptions(request) // [PR-L6 integration, 2026-10-19] SPEND-1: as generate
+        ? this.getClient().messages.stream(this.params(request), sdkRequestOptions(request))
+        : this.getClient().messages.stream(this.params(request));
       for await (const event of stream) {
         if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
           yield { type: "text_delta", text: event.delta.text };
@@ -177,6 +182,7 @@ export class AnthropicProvider implements LLMProvider {
       for (const toolCall of response.toolCalls) yield { type: "tool_call", toolCall };
       yield { type: "done", response };
     } catch (error) {
+      if (request.signal?.aborted) throw new LLMProviderError(this.id, "cancelled");
       throw toProviderError(this.id, error);
     } finally {
       stream?.abort();
@@ -188,3 +194,14 @@ export class AnthropicProvider implements LLMProvider {
 // hoisted): no line cited in this file moves
 import { ANTHROPIC_TEMPERATURE_MODEL_FAMILY, configuredAnthropicModel } from "./anthropic-config";
 import { sendableAnthropicModel } from "./anthropic-model-guard"; // [B24-A1] on its own line at the end (an import is hoisted): no cited line moves
+
+// [PR-L6 integration, 2026-10-19] SPEND-1: appended after the last line (a function declaration is hoisted), so no cited line moves.
+/** The SDK's per-call request options: the transport signal and the caller's `maxProviderRetries` (0 for every metered generation slice
+ *  call, so the SDK never resends an attempt the provider may already have billed - the client keeps the SDK default for every other
+ *  caller). Undefined when the request carries neither, so a plain call stays a one-argument call. */
+function sdkRequestOptions(request: LLMRequest): { signal?: AbortSignal; maxRetries?: number } | undefined {
+  const retries = request.maxProviderRetries;
+  const maxRetries = typeof retries === "number" && Number.isSafeInteger(retries) && retries >= 0 ? retries : undefined;
+  if (!request.signal && maxRetries === undefined) return undefined;
+  return { ...(request.signal ? { signal: request.signal } : {}), ...(maxRetries !== undefined ? { maxRetries } : {}) };
+}

@@ -47,20 +47,68 @@ NOT READY (`eslint .` exits 1, none of its 33 errors introduced by B24), CI read
 
 | count | value |
 |---|---|
-| route-methods | 168 |
-| canonical-wrappers | 165 |
+| route-methods | 177 |
+| canonical-wrappers | 174 |
 | approved-factories | 3 |
 | raw-handlers | 0 |
-| action-records | 107 |
-| registry-tools | 48 |
-| agent-exposed-tools | 37 |
+| action-records | 114 |
+| registry-tools | 64 |
+| agent-exposed-tools | 52 |
 | mcp-exposed-tools | 9 |
-| agent-only-tools | 28 |
+| agent-only-tools | 43 |
 | agent-exposed-tier-3-tools | 0 |
-| control-sites | 628 |
-| control-surfaces | 63 |
+| control-sites | 719 |
+| control-surfaces | 75 |
 | sql-migrations | 32 |
-| generators | 28 |
+| generators | 32 |
+
+[PR-D, 2026-10-17] Count lines moved with the regenerated map (product reliability D): registry-tools 48 -> 52, agent-exposed-tools
+37 -> 40, agent-only-tools 28 -> 31 (PR-D's four descriptors, OD-243, OD-244; mcp-exposed-tools stays 9); generators 28 -> 30 (PR-D's
+coverage-matrix and tool-manual generators, OD-245, OD-247); control-sites 628 -> 636, control-surfaces 63 -> 64 (the B17-A inventory as
+PR-C 6bdd7f7 and PR-E 390afa4 left it - the simplified workspace's settings dialog and entry action; PR-D adds no control).
+
+[PR-F, 2026-10-17] Count lines moved with the regenerated map (product reliability F): action-records 107 -> 108 (parts.draft-request, the sealed draft request own propose record), registry-tools 52 -> 56, agent-exposed-tools
+40 -> 44, agent-only-tools 31 -> 35 (PR-F's four descriptors; mcp-exposed-tools stays 9); control-sites 636 -> 640, control-surfaces 64 -> 65
+(the Missing parts list and its actions, the B17-A inventory as regenerated); generators 30 -> 31 (the routing capability matrix, moved by fF).
+
+[PR-G, 2026-10-17] Count lines moved with the regenerated map (product reliability G): control-sites 640 -> 646, control-surfaces 65 -> 66 -
+the stackup candidate panel's Accept and Discard (a new surface) and the page's draft-request, module-note and dialog controls (the
+B17-A inventory as regenerated); the descriptor counts stand.
+
+[PR-F, 2026-10-17] Count line moved with the regenerated map (Astra increment E, builder fF): generators 30 -> 31 (the routing
+capability matrix generator `scripts/generate-pr-f-routing-capability-matrix.ts`, directive section 10; the other count lines of this
+table are the concurrent PR-F builders' to move with their descriptors and controls).
+
+[PR-L, 2026-10-17] Count lines moved with the regenerated map (runbook L.4, increment 4): route-methods 168 -> 174 and canonical-wrappers 165 -> 171 (the durable generation task's six canonical-wrapper methods: POST/GET /api/generation-tasks, GET /api/generation-tasks/[id], GET .../events, POST .../control and the worker pump POST /api/generation-worker; 3 factories and 0 raw unchanged); control-sites 646 -> 649 and control-surfaces 66 -> 67 (the design task's status card `GenerationTaskStatus.tsx`, a new surface, as the B17-A inventory is regenerated); the descriptor and action-record rows are the concurrent section M builder's to move with its descriptors and records.
+
+[PR-M, 2026-10-17] Count lines moved with the regenerated map (runbook section M, increment M1): action-records 108 -> 110 (schematic.resolve-components-propose, the sealed resolution batch, and schematic.resolve-components, its reviewed destructive apply), registry-tools 56 -> 59, agent-exposed-tools 44 -> 47, agent-only-tools 35 -> 38 and agent-exposed-proposal-tools 9 -> 10 - PR-M's three descriptors: the schematic-instance inspection and the resolution candidate search (Tier 0 reads) and the component resolution proposal (Tier 2), all three agent-exposed and withheld from MCP; mcp-exposed-tools stays 9; the verdict's status lines stand.
+
+[PR-M, 2026-10-18] Count lines moved with the regenerated map (runbook section M, M1's page intake): route-methods 174 -> 175 and canonical-wrappers 171 -> 172 (POST /api/component-resolution-authority, the reviewed resolution's fresh-facts endpoint, one canonical wrapper; 3 factories and 0 raw unchanged); control-sites 649 -> 654 and control-surfaces 67 -> 68 (the resolution review dialog `ComponentResolutionReviewDialog.tsx`, a new surface - Approve, Discard, its close and the receipt's Dismiss - and the Missing parts list's Find a replacement in the library, as the B17-A inventory is regenerated).
+
+[PR-M, 2026-10-18] Count lines moved with the regenerated map (runbook section M, M2's acquisition): route-methods 175 -> 177 and canonical-wrappers 172 -> 174 (GET and POST /api/parts/acquisitions); action-records 110 -> 111 (parts.cad-acquisition); registry-tools 59 -> 63, agent-exposed-tools 47 -> 51 and agent-only-tools 38 -> 42 - runbook L.5's two descriptors as the tree holds them and M2's two (the CAD acquisition start and status, both withheld from MCP; mcp-exposed-tools stays 9); control-sites 654 -> 663 and control-surfaces 68 -> 70 - L.5's design control chip (two controls) as the tree holds it, and M2's seven controls on two new surfaces (the Missing parts list's acquisition panel, the Build Library's component review inbox), the B17-A inventory as regenerated; generators 31 -> 32 (the CAD source registry generator `scripts/generate-cad-source-registry.ts`).
+
+[PR-J, 2026-10-22] Count lines moved with the regenerated map (runbook section J increment 1, OD-255): action-records 111 -> 113 (schematic.sheet-structure and schematic.move-to-sheet, the canonical schematic sheet commands; both partial until the Sheets navigator binds them).
+
+[PR-J3, 2026-10-22] Count lines moved with the regenerated map (runbook section J increment 3, OD-255 item 7, OD-257): control-sites 663 -> 708 (707 with the navigator's surfaces, 708 once app/page.tsx's label map gained the scoped label glyph's pointer-down site under schematic.drag-gesture) and control-surfaces 70 -> 73 - the Sheets navigator (the canvas chip, its tree and keys, New / Rename / Up / Down / Add port / Delete, the Move to sheet and Follow signal dialogs with their drafts), the overview block's double-click and the scoped label glyph's drag, each classified under a PR-J3 control rule; action-records stays 113 (schematic.sheet-structure and schematic.move-to-sheet flipped partial -> implemented: their controls now reach them; no record added).
+
+[PR-J3 integration, 2026-10-23] Count lines moved with the regenerated map (section J increment 3 review, J3N-5): control-sites 708 -> 709 - the overview block of the Sheets navigator (app/components/schematic/SheetBlocksLayer.tsx) is announced as a button, so it gained a key handler (Enter / Space open the sheet, `onBlockKeyDown`), one more `key` control site classified under view.sheets-navigation; control-surfaces stays 73, action-records 113.
+
+[PR-J4 integration, 2026-10-23] Count line moved with the regenerated map (section J4): control-sites 709 -> 715 (the B17-A inventory
+as J4 left it - the Sheets navigator's Organize into sheets and Normalise rail-named labels controls and the BOM Sheet column's sort
+header; the sync control's accessible name now states that it synchronises the whole project, OD-258 item 6); control-surfaces stays
+73; no action record added (113).
+
+[PR-J5, 2026-10-23] Count lines moved with the regenerated map (runbook section J increment 5, J.6 / OD-259 item 4): action-records
+113 -> 114 (schematic.sheet-organize-propose, the agent's sealed organise proposal, placed before the two-record tail), registry-tools
+63 -> 64, agent-exposed-tools 51 -> 52 and agent-only-tools 42 -> 43 - the organise proposal descriptor
+sirkit.schematic.propose-sheet-organization (a Tier 2 sealed proposal the human applies through schematic.move-to-sheet; withheld from
+MCP, so mcp-exposed-tools stays 9); control-sites 715 -> 718 and control-surfaces 73 -> 74 with the B17-A inventory as J5-B left it
+(the organise proposal's review card, app/components/schematic/SheetOrganizationReviewCard.tsx: its Approve, Discard and close, one
+new surface); the lead regenerates the map once at integration.
+
+[K2, 2026-11-04] Count lines moved with the regenerated map (runbook section K increment K2, K.2 / OD-260 item 6): control-sites
+718 -> 719 and control-surfaces 74 -> 75 with the B17-A inventory as K2 left it (the Work log's Show details toggle on the chat's
+activity entry, app/components/chat/WorkLog.tsx, rule view.work-log-toggle: one new surface); no registry, tool or route count moved.
 
 ## 4. Earlier verdicts
 

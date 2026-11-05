@@ -106,13 +106,13 @@ describe("B16.0.2 §E — loadSessionIdentity: typed, scope-exact, abort-bound, 
 
   it("SOURCE: the module has NO local-dev fallback, NO cache, NO prime; the page seal site awaits the load and seals only from it", () => {
     const root = process.cwd();
-    const module = readFileSync(join(root, "app", "lib", "project", "session-identity.ts"), "utf8");
-    expect(module.includes("LOCAL_DEV_PRINCIPAL_ID")).toBe(false);
-    expect(module.includes("localDevMembership")).toBe(false);
-    expect(module.includes("auth/project-membership")).toBe(false);
-    expect(module.includes("primeSessionIdentity")).toBe(false);
-    expect(module.includes("let cached")).toBe(false);
-    expect(module.includes("export function sessionAuthorizationBinding(")).toBe(false);
+    const source = readFileSync(join(root, "app", "lib", "project", "session-identity.ts"), "utf8");
+    expect(source.includes("LOCAL_DEV_PRINCIPAL_ID")).toBe(false);
+    expect(source.includes("localDevMembership")).toBe(false);
+    expect(source.includes("auth/project-membership")).toBe(false);
+    expect(source.includes("primeSessionIdentity")).toBe(false);
+    expect(source.includes("let cached")).toBe(false);
+    expect(source.includes("export function sessionAuthorizationBinding(")).toBe(false);
     const page = readFileSync(join(root, "app", "page.tsx"), "utf8");
     expect(page.includes("sessionAuthorizationBinding(")).toBe(false);
     const sealIndex = page.indexOf("sealTier1Proposal({");

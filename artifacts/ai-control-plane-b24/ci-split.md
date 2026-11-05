@@ -1,195 +1,125 @@
 # B24-D0 - The OD-30 split of prompt-to-gerber: the measurement, the lead's decision, the split
 
-Increment B24-D0 of chapter B24 on `chapter/b24-production-qualification`: the lead's corrective increment under OD-30. It closes no
-defect. The first run (base `ba4f562`, B24-C3 committed) measured and STOPPED; the second run (base `aaa6a1b`, the lead's C3 fix on
-top) applied the lead's decision and split the job by insertions only. Labels: **CONFIRMED** (executed here, or read at the cited
-line), **INFERRED**, **PROPOSED**, **RECORDED** (taken from a record), **UNKNOWN**, **BLOCKED-LIVE-QUALIFICATION**. Every workflow
-line below is this tree's unless it says otherwise; sections 1 to 3 are the first run's record, kept whole (the line numbers inside
-them are `ba4f562`'s, as they were read).
+Increment B24-D0 of chapter B24 on `chapter/b24-production-qualification`: the lead's corrective increment under OD-30. It closes no defect. The first run (base `ba4f562`, B24-C3 committed) measured and STOPPED; the second run (base `aaa6a1b`, the lead's C3 fix on top) applied the lead's decision and split the job by insertions only. Labels: **CONFIRMED** (executed here, or read at the cited line), **INFERRED**, **PROPOSED**, **RECORDED** (taken from a record), **UNKNOWN**, **BLOCKED-LIVE-QUALIFICATION**. Every workflow line below is this tree's unless it says otherwise; sections 1 to 3 are the first run's record, kept whole (the line numbers inside
+them are `ba4f562`'s, as they were read). [PR-G, 2026-10-17] superseded in part (OD-250): the measurement was re-run at this tree (HEAD `d8b590f`, product reliability G, with the PR-G working tree) because the suites B24-D1 to B24-F and PR-A/C/D/G added to the positional selection had left the committed evidence behind (471 -> 514 files) and `b24-d0-ci-split` 1 and 7 were red on it; OD-250 admitted the 19 pr- suites no CI job selected as exact-path positional entries and moved them, with the `app/lib/agent/orchestration/__tests__` filter, to agent-boundary-suites. The tables and totals of sections 1, 2 and 4 are the re-measurement's, derived from the new xml by the suite's own derivations, each line replaced in place; section 3's candidate sets and the lead's recorded decision keep the first run's figures (931.21 s total, ratio 1.328), as they were decided. [PR-L7, 2026-10-20] superseded in part again (OD-254): re-measured once more at this tree (HEAD `deaf15ca` with the PR-L7 working tree) after the 69 L/M suites no CI job selected were admitted as exact-path positional entries (`:313-381`; 514 -> 585 measured files) and the two heaviest of them moved; the tables and totals of sections 1, 2 and 4 are this re-measurement's, each line replaced in place (the two tables that gained rows are offset by five wrapped lines of section 0 joined, so no line other pages cite moved). [PR-J7, 2026-11-04] superseded in part again (OD-261): re-measured once more at this tree (HEAD `89009036` with the PR-J7 working tree, four workers) after the 54 section J suites no job of this workflow selected were admitted as exact-path positional entries (`:382-435`) and all moved to agent-boundary-suites, and the four J4/J5 suites set aside until then were measured (585 -> 643 measured files); the tables and totals of sections 1, 2 and 4 are this re-measurement's, each line replaced in place (the tables that gained 56 rows are offset by 56 wrapped lines of sections 0 to 3 joined, so no line other pages cite moved; section 11.13 records the CI times).
 
 ## 0. What B24-D0 is: the measurement, the lead's decision, the split
 
-- **Why.** CI's `prompt-to-gerber` job (`timeout-minutes: 25`, C1) measured 19 min 58 s at B24-C1's run (37872711743), 20 min 37 s
-  at B24-C2's (37889413102) and 21 min 33 s at B24-C3's (37905772899); the runner varies by up to seven minutes between runs
-  (12 min 38 s at B24-B3's). OD-30's rule, "split it if a run comes within five minutes of the limit" (C26), is crossed, and the
-  owner forbids raising any `timeout-minutes`. **RECORDED** (the lead's readings, task-D0 and OD-30's C2 lead line, C27).
-- **What the task asked.** An insertion-only split: `--exclude` lines before prompt-to-gerber's `--reporter` line, one per moved item,
-  and a job `agent-boundary-suites` appended at the end of the workflow running exactly those items; the moved set "the heaviest files
-  and directory filters that together take at least 40 % of the measured total", database-free, the e2e replay chain staying.
-- **The first run measured and stopped.** It ran prompt-to-gerber's own selection locally, once, exactly as the workflow lists it
-  (section 1), and derived what holds each heavy entry (section 2). The entries that carry 77.6 % of the measured time are the five
-  chapter directory filters, whose suites the golden catalog and the scenario map record as production data (`ciJobs`), and every
-  entry no production record holds adds up to 22.5 %: the task's 40 % and its "no production source change" rule could not both
-  hold, so the first run edited no workflow line and recorded the candidate sets (section 3) for the lead. **CONFIRMED** by execution.
-- **The lead's decision (2026-10-09).** The lead chose **option 2** of section 3: B24-B2's 25 unlinked named suites, the 11 unheld
-  files of 2 s or more, PLUS the `app/lib/mcp` and `app/lib/computation/__tests__` directory filters - 38 items, 109 files, 398.84 s
-  of the 931.21 s measured (42.8 %) - and relaxed the "no production source change" rule exactly to the two catalog modules
-  (`golden-catalog.ts`, `scenario-map.ts`) recording the move, both generators re-run twice with zero drift. Option 1 (16 min 56 s
-  expected) was not enough margin against a seven-minute runner variance once C3's run read 21 min 33 s (headroom 3 min 27 s).
-  **RECORDED** (task-D0, "The lead's decision after the measurement"; recorded by the lead under OD-30, no new OD number).
-- **What D0 did (the split).** By insertions only - no existing workflow line removed, reordered or edited: 38 `--exclude '<pattern>'`
-  lines inserted before prompt-to-gerber's `--reporter` line (`deterministic-manufacturing.yml:293-330`; [B24-D1, 2026-10-09] now `:294-331` after B24-D1's prompt-to-gerber start step at `:32`; C8-C11; the `--reporter`
-  line is now `:331`, C2) and the job `agent-boundary-suites` appended at the end (`:551-616`: one blank line, three comment lines,
-  the job at `:555`, C12-C14) with `timeout-minutes: 20`, prompt-to-gerber's checkout, pnpm, node and install steps verbatim, one
-  folded vitest step listing exactly the 38 items in prompt-to-gerber's order with the reporter line last, and an `if: always()`
-  diagnostics upload; no environment variable, no secret, no database, no browser. The helper `_ci-admission.ts` reads the
-  exclusions (C16, C17), the B19-E guard admits every suite by exactly one job (C15), the two catalog modules record the move
-  (C18-C21), and every pin and page citation the insertions moved was moved in place with a dated note (section 5). **CONFIRMED**
-  (by the suite `b24-d0-ci-split`, section 6). The review round ([B24-D0 review, 2026-10-09], section 6) closed its ten confirmed
-  findings (seven distinct) in-tree, each red first in the suite's case 12: the guard's helpers moved to the end of its file and the
-  guard citations re-pinned, the gates recorded with no placeholder, the superseded B24-B2 statements and the C1-C3 README-row
-  drafts noted, A2's case (c) retitled, the evidence's hostname recorded, the merge gate drafted for the lead.
-- **What the split is expected to do.** At CI's ratio 1.328 (20 min 37 s over the local total), prompt-to-gerber about 11 min 47 s of
-  25 and agent-boundary-suites about 8 min 50 s of 20 (section 4) - **INFERRED** until the first CI run after the push, which the
-  lead reads for all three jobs. No `timeout-minutes` changed.
-- **What stands.** Census 168 = 165 canonical + 3 factories + 0 raw, the tool counts 47 / 36 / 9 / 27, 107 action records, 32
-  migrations, the six SDK importers: unchanged, each re-measured by its own pin inside the first run's measurement at `ba4f562` and
-  again by the pins among this run's gates (section 6); `aaa6a1b` differs from `ba4f562` in one test file and the ledger only
-  (`git diff --stat`). Production simulation authority stays BLOCKED (B22); no provider is admitted and ordering stays disabled
-  (B23). No production source changed but the two catalog modules the lead named; no `next build`, `next start` or `next dev`; no
-  browser run; nothing live.
+- **Why.** CI's `prompt-to-gerber` job (`timeout-minutes: 25`, C1) measured 19 min 58 s at B24-C1's run (37872711743), 20 min 37 s at B24-C2's (37889413102) and 21 min 33 s at B24-C3's (37905772899); the runner varies by up to seven minutes between runs (12 min 38 s at B24-B3's). OD-30's rule, "split it if a run comes within five minutes of the limit" (C26), is crossed, and the owner forbids raising any `timeout-minutes`. **RECORDED** (the lead's readings, task-D0 and OD-30's C2 lead line, C27).
+- **What the task asked.** An insertion-only split: `--exclude` lines before prompt-to-gerber's `--reporter` line, one per moved item, and a job `agent-boundary-suites` appended at the end of the workflow running exactly those items; the moved set "the heaviest files and directory filters that together take at least 40 % of the measured total", database-free, the e2e replay chain staying.
+- **The first run measured and stopped.** It ran prompt-to-gerber's own selection locally, once, exactly as the workflow lists it (section 1), and derived what holds each heavy entry (section 2). The entries that carry 77.6 % of the measured time are the five chapter directory filters, whose suites the golden catalog and the scenario map record as production data (`ciJobs`), and every entry no production record holds adds up to 22.5 %: the task's 40 % and its "no production source change" rule could not both hold, so the first run edited no workflow line and recorded the candidate sets (section 3) for the lead. **CONFIRMED** by execution.
+- **The lead's decision (2026-10-09).** The lead chose **option 2** of section 3: B24-B2's 25 unlinked named suites, the 11 unheld files of 2 s or more, PLUS the `app/lib/mcp` and `app/lib/computation/__tests__` directory filters - 38 items, 109 files, 398.84 s of the 931.21 s measured (42.8 %) - and relaxed the "no production source change" rule exactly to the two catalog modules (`golden-catalog.ts`, `scenario-map.ts`) recording the move, both generators re-run twice with zero drift. Option 1 (16 min 56 s expected) was not enough margin against a seven-minute runner variance once C3's run read 21 min 33 s (headroom 3 min 27 s). **RECORDED** (task-D0, "The lead's decision after the measurement"; recorded by the lead under OD-30, no new OD number). [PR-G, 2026-10-17] the figures are the first run's, on which the decision was taken; re-measured at this tree the 38 items fell under the line, and OD-250 (the default the lead set, `OWNER_DECISIONS.md`) moved the orchestration filter and the 19 admitted pr- suites beside them: **487.79 s** of the measured 1147.98 s (42.5 %), 177 files, 58 items (section 4). [PR-L7, 2026-10-20] re-measured again (OD-254): **502.64 s** of the measured 1146.10 s (43.9 %), 179 files, 60 items (the two PR-L7 moved by weight among them).
+- **What D0 did (the split).** By insertions only - no existing workflow line removed, reordered or edited: 38 `--exclude '<pattern>'` lines inserted before prompt-to-gerber's `--reporter` line (`deterministic-manufacturing.yml:293-330`; [B24-D1, 2026-10-09] now `:294-331` after B24-D1's prompt-to-gerber start step at `:32`; C8-C11; the `--reporter` line is now `:331`, C2) and the job `agent-boundary-suites` appended at the end (`:551-616`: one blank line, three comment lines, the job at `:555`, C12-C14) with `timeout-minutes: 20`, prompt-to-gerber's checkout, pnpm, node and install steps verbatim, one folded vitest step listing exactly the 38 items in prompt-to-gerber's order with the reporter line last, and an `if: always()` diagnostics upload; no environment variable, no secret, no database, no browser. The helper `_ci-admission.ts` reads the exclusions (C16, C17), the B19-E guard admits every suite by exactly one job (C15), the two catalog modules record the move (C18-C21), and every pin and page citation the insertions moved was moved in place with a dated note (section 5). **CONFIRMED** (by the suite `b24-d0-ci-split`, section 6). The review round ([B24-D0 review, 2026-10-09], section 6) closed its ten confirmed findings (seven distinct) in-tree, each red first in the suite's case 12: the guard's helpers moved to the end of its file and the guard citations re-pinned, the gates recorded with no placeholder, the superseded B24-B2 statements and the C1-C3 README-row drafts noted, A2's case (c) retitled, the evidence's hostname recorded, the merge gate drafted for the lead.
+- **What the split is expected to do.** At CI's ratio 0.961 (20 min 37 s over the local total; [PR-J7, 2026-11-04] re-measured at four workers, was 1.079; [PR-L7, 2026-10-20] re-measured, was 1.078; [PR-G, 2026-10-17] re-measured, was 1.328), prompt-to-gerber about 11 min 41 s of 25 and agent-boundary-suites about 8 min 56 s of 20 (section 4; [PR-J7, 2026-11-04] were 11 min 34 s and 9 min 03 s at PR-L7's re-measurement, and CI recorded 18 min 22 s and 6 min 33 s at `24beea1e` before this change, section 11.13: the ratio reads CI low; [PR-L7, 2026-10-20] were 11 min 51 s and 8 min 46 s at PR-G's re-measurement; [PR-G, 2026-10-17] were 11 min 47 s and 8 min 50 s at the first run) - **INFERRED** until the first CI run after the push, which the lead reads for all three jobs. No `timeout-minutes` changed.
+- **What stands.** Census 168 = 165 canonical + 3 factories + 0 raw, the tool counts 47 / 36 / 9 / 27, 107 action records, 32 migrations, the six SDK importers: unchanged, each re-measured by its own pin inside the first run's measurement at `ba4f562` and again by the pins among this run's gates (section 6); `aaa6a1b` differs from `ba4f562` in one test file and the ledger only (`git diff --stat`). Production simulation authority stays BLOCKED (B22); no provider is admitted and ordering stays disabled (B23). No production source changed but the two catalog modules the lead named; no `next build`, `next start` or `next dev`; no browser run; nothing live.
 
 ## 1. The measurement
 
-One local run of prompt-to-gerber's own vitest selection, read from the step's folded scalar (first entry after `pnpm exec vitest run`
-to the line before `--reporter`, `deterministic-manufacturing.yml:52-292` ([B24-D1, 2026-10-09] now `:53-293`); the line `app/api/pcb/qualify app/api/pcb/release` splits as
-the shell splits it): 242 entries, 21 of them directory filters. Through the lead's runner (two workers, the global lock), with
-`--reporter=dot --reporter=junit --outputFile=...` (the dot reporter added beside the junit one the task named, so the log carries
-vitest's own summary as CI's does): started 04:48:26, ended 04:59:41 local on 2026-10-09; vitest `Duration 670.97s (transform 23.11s,
-setup 716ms, collect 270.53s, tests 935.30s, environment 21.77s, prepare 38.39s)`; `Test Files 466 passed | 5 skipped (471)`, `Tests 5388
-passed | 42 skipped (5430)`, exit 0; the lock's cleanup reported 0 processes left. Log `b24/logs/d0-ptg-timing.log`. The junit file is
-committed as `artifacts/ai-control-plane-b24/evidence/d0-ptg-timing.xml` (2,091,656 bytes, LF, no control byte) so `b24-d0-ci-split`
-reads it. The five skipped files are the opt-in live suites (OD-222), which skip whole without their flags. **CONFIRMED** by execution.
+[PR-J7, 2026-11-04] re-measured once more at this tree (PR-L7's record of 2026-10-19 - started 21:49:37, ended 22:04:17, `Duration 877.94s`, `Test Files 577 passed | 8 skipped (585)`, `Tests 6398 passed | 54 skipped (6452)`, exit 0, 1146.10 s of testcase time, 2,526,656 bytes, two workers - stands in git history at the committed xml's previous version; the run below is PR-J7's). [PR-L7, 2026-10-20] re-measured once more at this tree (PR-G's record of 2026-10-17 - started 07:08:28, ended 07:21:42, `Duration 791.72s`, `Test Files 506 passed | 8 skipped (514)`, `Tests 5794 passed | 54 skipped (5848)`, exit 0, 1147.98 s of testcase time, 2,260,995 bytes - stands in git history at the committed xml's previous version; the lines below are this run's). [PR-G, 2026-10-17] re-measured at this tree (the first run's record of 2026-10-09 - started 04:48:26, ended 04:59:41, `Duration 670.97s`, `Test Files 466 passed | 5 skipped (471)`, `Tests 5388 passed | 42 skipped (5430)`, exit 0, 2,091,656 bytes - stands in git history at the committed xml's previous version). One local run of prompt-to-gerber's own vitest selection, read from the step's folded scalar (first entry after `pnpm exec vitest run` to the line before the first `--exclude`, `deterministic-manufacturing.yml:53-435` ([PR-J7, 2026-11-04] was `:53-381`; [PR-L7, 2026-10-20] was `:53-312`), the 114 `--exclude` lines at `:436-549` left out on purpose - the measurement is the positional selection, both jobs' union, `b24-d0-ci-split` 1's rule; the line `app/api/pcb/qualify app/api/pcb/release` splits as the shell splits it): 384 entries (the 242, OD-250's 19 pr- entries at `:294-312`, OD-254's 69 L/M entries at `:313-381` and OD-261's 54 J entries at `:382-435`), 21 of them directory filters. Started as `node node_modules/vitest/vitest.mjs run <384 entries> --exclude 'app/lib/qualification/__tests__/b24-d0-ci-split.test.ts' --maxWorkers=4` (the one file set aside is this suite, which pins the evidence the run writes and so cannot be green inside it; [PR-J7, 2026-11-04] four workers, the owner's rule for every local run, where the earlier records used two as the first run - the per-file times are this run's and not comparable one to one with theirs; the entry script the `.bin` shim execs, because pnpm's `.cmd` shim passes the entries through cmd.exe, whose 8191-character line limit refuses them), `SIRKIT_B16_1C_EVIDENCE_DIR` set to a scratchpad folder outside the repository as the job sets it, with `--reporter=dot --reporter=junit --outputFile=...` (the dot reporter added beside the junit one the task named, so the log carries vitest's own summary as CI's does): started 08:28:42, ended 08:37:22 local on 2026-11-04 (13:28:42-13:37:22 UTC); vitest `Duration 517.03s (transform 31.10s, setup 1.45s, collect 492.37s, tests 1295.27s, environment 53.97s, prepare 79.69s)`; `Test Files 635 passed | 8 skipped (643)`, `Tests 6890 passed | 54 skipped (6944)`, exit 0; the run's node processes exited with it (no vitest, tsx, eslint, tsc or playwright process left). Log `scratchpad/j-ci/d0-ptg-timing.new.log`. The junit file is committed as `artifacts/ai-control-plane-b24/evidence/d0-ptg-timing.xml` (2,722,741 bytes, LF, no control byte, no local path; its `hostname` attribute scrubbed to `local` on every element before it was written there, the lead's option (b) of section 9) so `b24-d0-ci-split` reads it. The 8 files skipped whole are the five opt-in live suites (OD-222), which skip whole without their flags, and 3 B24-D1/D2 suites gated by `SIRKIT_B24_BENCHMARK` (`b24-d1-latency-workflow.test.ts`, `b24-d1-latency.test.ts`, `b24-d2-memory.test.ts`). **CONFIRMED** by execution.
 
-The selection is the job's: the xml's 471 files are exactly the files the 242 positional entries select on this tree by B19-E's rule
-(a path that contains the entry), `b24-d0-ci-split` 1 (the suite itself, which joined the `app/lib/qualification/__tests__` filter
-after the run, is the one file set aside). The positional entries are unchanged by the split (the 38 `--exclude` lines follow them).
+The selection is the job's: the xml's 643 files are exactly the files the 384 positional entries select on this tree by B19-E's rule (a path that contains the entry), `b24-d0-ci-split` 1 (the suite itself, set aside by the one `--exclude` above since it pins this evidence, is the one file set aside; [PR-J7, 2026-11-04] the four J4/J5 suites set aside from `[PR-J4 integration, 2026-10-23]` and `[PR-J5, 2026-10-23]` until this re-measurement are measured, `J4_SET_ASIDE` and `J5_SET_ASIDE` retired; [PR-G, 2026-10-17] at the first run it had joined the `app/lib/qualification/__tests__` filter after the run). The positional entries are unchanged by the split (the 38 `--exclude` lines follow them; [PR-G, 2026-10-17] OD-250 appended 19 exact-path entries after the last one and 20 more `--exclude` lines; [PR-L7, 2026-10-20] OD-254 appended 69 more after them and 2 more `--exclude` lines; [PR-J7, 2026-11-04] OD-261 appended 54 more after those and 54 more `--exclude` lines).
 
-Totals: **931.21 s** of testcase time over 471 files (5430 tests, 0 failures, 0 errors, 42 skipped); vitest's per-file `testsuite`
-time, collect and setup included, sums to 935.30 s and is not the figure the tables rank by. Every figure below is the summed
-`testcase` time of a file, to the hundredth (`b24-d0-ci-split` 2 re-derives each from the xml in document order).
+Totals: **1287.16 s** of testcase time over 643 files (6944 tests, 0 failures, 0 errors, 54 skipped); vitest's per-file `testsuite` time, collect and setup included, sums to 1295.27 s and is not the figure the tables rank by. Every figure below is the summed `testcase` time of a file, to the hundredth (`b24-d0-ci-split` 2 re-derives each from the xml in document order).
 
 The top 25 files, with the entry that selects each (the first in prompt-to-gerber's order):
 
 | rank | file | testcase time (s) | selected by |
 |---|---|---|---|
-| 1 | `app/lib/mcp/server/__tests__/b20-b4-process-gate.test.ts` | 37.70 | `app/lib/mcp` |
-| 2 | `app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts` | 33.50 | `app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts` |
-| 3 | `app/lib/qualification/__tests__/b24-a3-principal-limits.test.ts` | 29.95 | `app/lib/qualification/__tests__` |
-| 4 | `app/lib/manufacturing-providers/__tests__/b23-c-purchase-authorization.test.ts` | 29.78 | `app/lib/manufacturing-providers/__tests__` |
-| 5 | `app/lib/project/__tests__/b18-b-import-gates.test.ts` | 29.52 | `app/lib/project/__tests__/b18-b-import-gates.test.ts` |
-| 6 | `app/lib/manufacturing-providers/__tests__/b23-c-order-contract.test.ts` | 29.26 | `app/lib/manufacturing-providers/__tests__` |
-| 7 | `app/lib/mcp/__tests__/b20-a5-connector-tripwires.test.ts` | 29.16 | `app/lib/mcp` |
-| 8 | `app/lib/manufacturing-providers/__tests__/b23-a-route-vocabulary.test.ts` | 28.03 | `app/lib/manufacturing-providers/__tests__` |
-| 9 | `app/lib/auth/__tests__/b16-0-2-gates.test.ts` | 27.43 | `app/lib/auth/__tests__/b16-0-2-gates.test.ts` |
-| 10 | `app/lib/computation/__tests__/b22-b-no-generic-exec.test.ts` | 27.22 | `app/lib/computation/__tests__` |
-| 11 | `app/lib/qualification/__tests__/b24-c1-llm-call-record.test.ts` | 26.97 | `app/lib/qualification/__tests__` |
-| 12 | `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 26.39 | `app/lib/agent/orchestration/__tests__` |
-| 13 | `app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts` | 24.90 | `app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts` |
-| 14 | `app/lib/manufacturing-providers/__tests__/b23-a-no-order-structural.test.ts` | 23.63 | `app/lib/manufacturing-providers/__tests__` |
-| 15 | `app/lib/manufacturing-providers/__tests__/b23-d-physical-evidence-contract.test.ts` | 23.00 | `app/lib/manufacturing-providers/__tests__` |
-| 16 | `app/lib/mcp/server/__tests__/b20-b3-import-gates.test.ts` | 21.99 | `app/lib/mcp` |
-| 17 | `app/lib/mcp/__tests__/b20-a4-agent-read-port.test.ts` | 21.37 | `app/lib/mcp` |
-| 18 | `app/lib/engineering/__tests__/b18-e-scenario-7.test.ts` | 20.92 | `app/lib/engineering/__tests__/b18-e-scenario-7.test.ts` |
-| 19 | `app/lib/qualification/__tests__/b24-c3-recorded-limits.test.ts` | 20.39 | `app/lib/qualification/__tests__` |
-| 20 | `app/lib/mcp/server/__tests__/b20-b2-import-gates.test.ts` | 20.28 | `app/lib/mcp` |
-| 21 | `app/lib/mcp/__tests__/b20-a3-secret-hygiene.test.ts` | 20.11 | `app/lib/mcp` |
-| 22 | `app/lib/manufacturing-providers/__tests__/b23-b-egress-import-gate.test.ts` | 19.76 | `app/lib/manufacturing-providers/__tests__` |
-| 23 | `app/lib/manufacturing-providers/__tests__/b23-d-latent-claim-paths.test.ts` | 19.44 | `app/lib/manufacturing-providers/__tests__` |
-| 24 | `app/lib/qualification/__tests__/b24-c3-trace-read.test.ts` | 18.34 | `app/lib/qualification/__tests__` |
-| 25 | `app/lib/qualification/__tests__/b24-c2-retention.test.ts` | 15.20 | `app/lib/qualification/__tests__` |
+| 1 | `app/lib/qualification/__tests__/b24-f-maps.test.ts` | 50.76 | `app/lib/qualification/__tests__` |
+| 2 | `app/lib/manufacturing-providers/__tests__/b23-c-purchase-authorization.test.ts` | 38.62 | `app/lib/manufacturing-providers/__tests__` |
+| 3 | `app/lib/mcp/server/__tests__/b20-b4-process-gate.test.ts` | 38.26 | `app/lib/mcp` |
+| 4 | `app/lib/manufacturing-providers/__tests__/b23-a-route-vocabulary.test.ts` | 33.25 | `app/lib/manufacturing-providers/__tests__` |
+| 5 | `app/lib/qualification/__tests__/b24-c1-llm-call-record.test.ts` | 32.23 | `app/lib/qualification/__tests__` |
+| 6 | `app/lib/manufacturing-providers/__tests__/b23-c-order-contract.test.ts` | 32.10 | `app/lib/manufacturing-providers/__tests__` |
+| 7 | `app/lib/qualification/__tests__/b24-a3-principal-limits.test.ts` | 28.38 | `app/lib/qualification/__tests__` |
+| 8 | `app/lib/auth/__tests__/b16-0-2-gates.test.ts` | 27.14 | `app/lib/auth/__tests__/b16-0-2-gates.test.ts` |
+| 9 | `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 26.87 | `app/lib/agent/orchestration/__tests__` |
+| 10 | `app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts` | 25.93 | `app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts` |
+| 11 | `app/lib/mcp/__tests__/b20-a5-connector-tripwires.test.ts` | 25.69 | `app/lib/mcp` |
+| 12 | `app/lib/component-resolution/__tests__/m1-boundaries.test.ts` | 25.52 | `app/lib/component-resolution/__tests__/m1-boundaries.test.ts` |
+| 13 | `app/lib/qualification/__tests__/b24-e-production-auth-config.test.ts` | 24.91 | `app/lib/qualification/__tests__` |
+| 14 | `app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts` | 24.81 | `app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts` |
+| 15 | `app/lib/computation/__tests__/b22-b-no-generic-exec.test.ts` | 23.90 | `app/lib/computation/__tests__` |
+| 16 | `app/lib/mcp/__tests__/b20-a3-secret-hygiene.test.ts` | 23.84 | `app/lib/mcp` |
+| 17 | `app/lib/mcp/server/__tests__/b20-b3-import-gates.test.ts` | 23.63 | `app/lib/mcp` |
+| 18 | `app/lib/project/__tests__/b18-b-import-gates.test.ts` | 23.58 | `app/lib/project/__tests__/b18-b-import-gates.test.ts` |
+| 19 | `app/lib/manufacturing-providers/__tests__/b23-a-no-order-structural.test.ts` | 23.45 | `app/lib/manufacturing-providers/__tests__` |
+| 20 | `app/lib/manufacturing-providers/__tests__/b23-d-latent-claim-paths.test.ts` | 22.82 | `app/lib/manufacturing-providers/__tests__` |
+| 21 | `app/lib/mcp/server/__tests__/b20-b2-import-gates.test.ts` | 22.71 | `app/lib/mcp` |
+| 22 | `app/lib/manufacturing-providers/__tests__/b23-d-physical-evidence-contract.test.ts` | 22.68 | `app/lib/manufacturing-providers/__tests__` |
+| 23 | `app/lib/manufacturing-providers/__tests__/b23-b-egress-import-gate.test.ts` | 22.50 | `app/lib/manufacturing-providers/__tests__` |
+| 24 | `app/lib/mcp/__tests__/b20-a4-agent-read-port.test.ts` | 22.50 | `app/lib/mcp` |
+| 25 | `app/lib/qualification/__tests__/b24-c3-trace-read.test.ts` | 21.99 | `app/lib/qualification/__tests__` |
 
-Every directory filter, in prompt-to-gerber's order, with its files, its summed testcase time, its share of the total and its class
-(section 2):
+Every directory filter, in prompt-to-gerber's order, with its files, its summed testcase time, its share of the total and its class (section 2):
 
 | directory filter | files | testcase time (s) | share | class |
 |---|---|---|---|---|
-| `app/lib/workflow/prompt-to-gerber/__tests__` | 5 | 5.36 | 0.6 % | production-data |
+| `app/lib/workflow/prompt-to-gerber/__tests__` | 6 | 5.73 | 0.4 % | production-data |
 | `app/api/pcb/qualify` | 1 | 0.01 | 0.0 % | production-data |
-| `app/api/pcb/release` | 2 | 0.03 | 0.0 % | production-data |
-| `app/api/pcb-sync/__tests__` | 3 | 0.29 | 0.0 % | free |
-| `app/lib/pcb/fab/__tests__` | 7 | 0.15 | 0.0 % | free |
-| `app/lib/pcb-sync/__tests__` | 7 | 1.66 | 0.2 % | free |
-| `app/api/physical-bindings/__tests__` | 2 | 0.18 | 0.0 % | free |
-| `app/lib/fixture-runtime` | 2 | 0.38 | 0.0 % | free |
-| `app/components/view-session` | 1 | 0.06 | 0.0 % | free |
-| `app/lib/pcb/candidates` | 1 | 0.15 | 0.0 % | production-data |
-| `app/lib/view-session` | 5 | 0.30 | 0.0 % | production-data |
-| `app/lib/net` | 3 | 0.72 | 0.1 % | free |
+| `app/api/pcb/release` | 2 | 0.04 | 0.0 % | production-data |
+| `app/api/pcb-sync/__tests__` | 4 | 0.44 | 0.0 % | free |
+| `app/lib/pcb/fab/__tests__` | 7 | 0.22 | 0.0 % | free |
+| `app/lib/pcb-sync/__tests__` | 9 | 2.31 | 0.2 % | free |
+| `app/api/physical-bindings/__tests__` | 2 | 0.26 | 0.0 % | free |
+| `app/lib/fixture-runtime` | 5 | 3.44 | 0.3 % | free |
+| `app/components/view-session` | 1 | 1.05 | 0.1 % | free |
+| `app/lib/pcb/candidates` | 1 | 0.21 | 0.0 % | production-data |
+| `app/lib/view-session` | 6 | 0.44 | 0.0 % | production-data |
+| `app/lib/net` | 3 | 0.79 | 0.1 % | free |
 | `app/lib/schgen` | 1 | 0.18 | 0.0 % | free |
-| `app/lib/acquisition` | 15 | 15.90 | 1.7 % | production-data |
-| `app/lib/mcp` | 45 | 181.28 | 19.5 % | production-data |
-| `app/lib/agent/orchestration/__tests__` | 49 | 66.20 | 7.1 % | production-data |
-| `app/api/mcp/__tests__` | 7 | 3.24 | 0.3 % | production-data |
-| `app/lib/computation/__tests__` | 28 | 51.02 | 5.5 % | production-data |
-| `app/lib/manufacturing-providers/__tests__` | 29 | 222.19 | 23.9 % | production-data |
-| `app/lib/qualification/__tests__` | 33 | 135.70 | 14.6 % | production-data |
-| `app/lib/footprint-resolver/__tests__` | 5 | 0.36 | 0.0 % | production-data |
+| `app/lib/acquisition` | 15 | 18.14 | 1.4 % | production-data |
+| `app/lib/mcp` | 45 | 194.87 | 15.1 % | production-data |
+| `app/lib/agent/orchestration/__tests__` | 49 | 83.58 | 6.5 % | production-data |
+| `app/api/mcp/__tests__` | 7 | 5.64 | 0.4 % | production-data |
+| `app/lib/computation/__tests__` | 28 | 57.57 | 4.5 % | production-data |
+| `app/lib/manufacturing-providers/__tests__` | 29 | 255.70 | 19.9 % | production-data |
+| `app/lib/qualification/__tests__` | 55 | 298.81 | 23.2 % | production-data |
+| `app/lib/footprint-resolver/__tests__` | 5 | 0.51 | 0.0 % | production-data |
 
-The 221 explicit file entries carry the rest (`b24/d0/ptg-summary.json` in the scratchpad holds every entry's figures; the page keeps
-the ones a decision needs, in section 2). The 21 directory filters together: 685.37 s, 73.6 %; the five chapter filters alone:
-656.40 s, 70.5 %. **CONFIRMED** (derived from the xml).
+The 363 explicit file entries carry the rest (`scratchpad/j-ci/derive-new.json`, the derivation script's output, holds every entry's figures; the page keeps the ones a decision needs, in section 2). The 21 directory filters together: 929.94 s, 72.2 %; the five chapter filters alone: 890.53 s, 69.2 %. **CONFIRMED** (derived from the xml; [PR-J7, 2026-11-04] re-measured: 832.04 s, 72.6 % and 799.15 s, 69.7 % at PR-L7's; [PR-L7, 2026-10-20] re-measured: 911.76 s, 79.4 % and 883.20 s, 76.9 % at PR-G's; [PR-G, 2026-10-17] re-measured: 685.37 s, 73.6 % and 656.40 s, 70.5 % at the first run).
 
 ## 2. What holds each heavy entry, and the ceiling
 
-An entry can move only where nothing records it as prompt-to-gerber's. Three classes, each derived from the tree by
-`b24-d0-ci-split` 3 (never asserted by hand):
+An entry can move only where nothing records it as prompt-to-gerber's. Three classes, each derived from the tree by `b24-d0-ci-split` 3 (never asserted by hand):
 
-- **production data**: a file the entry selects is a golden-catalog link (`eval-catalog.json`, 99 paths) or scenario-map evidence
-  (`scenario-map.json`, 54 paths). Each records the file's `ciJobs`, checked against the helper's derivation by
-  `b24-b1-catalog` 4, `b24-b2-ci-admission` 1 and `b24-b3-scenario-map` 3. A move needs `golden-catalog.ts` and
-  `scenario-map.ts` edited (the rows, `CATALOG_CI_JOBS` and `PULL_REQUEST_CI_JOBS`, since the new job runs on pull requests), both
-  generators re-run, and the three pins moved by review.
-- **test or page pins only**: no production record, but a file the entry selects is in the live registry (`live-suites.ts`, C30:
-  `b24-b3-live-suite-honesty` needs any job), a workflow citation anchor a page checks once on its line (B21's C31-C34, C39, C50, C51,
-  C55, C60, C115 in `evaluation-matrix.md` and `orchestration-contracts.md`), in B19-E's explicit prompt-to-gerber list ([B19-E E3],
-  [B20 A4], [SEC-1]), in B24-B2's named list (`b24-b2-ci-admission` 3 and 4, "exactly one prompt-to-gerber filter"), a B20 suite
-  under the mcp filters ([B20 A0]) or a B21 suite ([B21 A]); or the entry is a filter a suite pins as prompt-to-gerber's
-  (the e2e chain, A1's and B23's filter lines once each, the mcp, orchestration and acquisition filters). A move needs reviewed
-  pin moves in test files and pages only.
+- **production data**: a file the entry selects is a golden-catalog link (`eval-catalog.json`, 99 paths) or scenario-map evidence (`scenario-map.json`, 54 paths). Each records the file's `ciJobs`, checked against the helper's derivation by `b24-b1-catalog` 4, `b24-b2-ci-admission` 1 and `b24-b3-scenario-map` 3. A move needs `golden-catalog.ts` and `scenario-map.ts` edited (the rows, `CATALOG_CI_JOBS` and `PULL_REQUEST_CI_JOBS`, since the new job runs on pull requests), both generators re-run, and the three pins moved by review.
+- **test or page pins only**: no production record, but a file the entry selects is in the live registry (`live-suites.ts`, C30: `b24-b3-live-suite-honesty` needs any job), a workflow citation anchor a page checks once on its line (B21's C31-C34, C39, C50, C51, C55, C60, C115 in `evaluation-matrix.md` and `orchestration-contracts.md`), in B19-E's explicit prompt-to-gerber list ([B19-E E3], [B20 A4], [SEC-1]), in B24-B2's named list (`b24-b2-ci-admission` 3 and 4, "exactly one prompt-to-gerber filter"), a B20 suite under the mcp filters ([B20 A0]) or a B21 suite ([B21 A]); or the entry is a filter a suite pins as prompt-to-gerber's (the e2e chain, A1's and B23's filter lines once each, the mcp, orchestration and acquisition filters). A move needs reviewed pin moves in test files and pages only.
 - **held by nothing**: free to move with no pin moved.
 
-The totals (per-entry sums; the one file two entries select, `qualify-human-only` under `app/api/pcb/qualify` and its own line, counts
-in each, 0.01 s): production data: 57 entries, **722.16 s** (77.6 %); test or page pins only: 37 entries, **100.08 s** (10.7 %);
-held by nothing: 148 entries, **108.98 s** (11.7 %); the ceiling without a production-data edit is **209.06 s** (22.5 %). The
-task's target, at least 40 % (372.48 s), is 163 s above that ceiling. **CONFIRMED** (derived).
+The totals (per-entry sums; the one file two entries select, `qualify-human-only` under `app/api/pcb/qualify` and its own line, counts in each, 0.01 s): production data: 57 entries, **970.56 s** (75.4 %); test or page pins only: 37 entries, **105.57 s** (8.2 %); held by nothing: 290 entries, **211.04 s** (16.4 %); the ceiling without a production-data edit is **316.61 s** (24.6 %). The task's target, at least 40 % (514.86 s), is 198 s above that ceiling. **CONFIRMED** (derived; [PR-J7, 2026-11-04] re-measured - at PR-L7's the classes were 57 / 37 / 236 entries, 872.36 s (76.1 %) / 98.27 s (8.6 %) / 175.49 s (15.3 %), ceiling 273.76 s (23.9 %), 185 s under the 458.44 s target; the 54 admitted J entries are held by nothing; [PR-L7, 2026-10-20] re-measured - at PR-G's the classes were 57 / 37 / 167 entries, 949.48 s (82.7 %) / 95.01 s (8.3 %) / 103.51 s (9.0 %), ceiling 198.52 s (17.3 %), 261 s under the 459.19 s target; the 69 admitted L/M entries are held by nothing; [PR-G, 2026-10-17] re-measured - the first run's classes were 57 / 37 / 148 entries, 722.16 s (77.6 %) / 100.08 s (10.7 %) / 108.98 s (11.7 %), ceiling 209.06 s (22.5 %), 163 s under the 372.48 s target; the classes count every positional entry, moved or not).
 
-Every entry of 5 s or more, with what holds it (the labels are the suite's: catalog, scenario-map, live-registry, citation-anchor,
-guard-explicit = B19-E's named files, b24-b2-named, guard-b20, guard-b21, pinned-filter):
+Every entry of 5 s or more, with what holds it (the labels are the suite's: catalog, scenario-map, live-registry, citation-anchor, guard-explicit = B19-E's named files, b24-b2-named, guard-b20, guard-b21, pinned-filter; [PR-J7, 2026-11-04] re-measured: `app/lib/workflow/prompt-to-gerber/__tests__` and `app/api/mcp/__tests__` reach 5 s now, no J entry does):
 
 | entry | files | testcase time (s) | share | held by |
 |---|---|---|---|---|
-| `app/lib/manufacturing-providers/__tests__` | 29 | 222.19 | 23.9 % | pinned-filter (A1 case 12 wants B23's line once), catalog, scenario-map |
-| `app/lib/mcp` | 45 | 181.28 | 19.5 % | pinned-filter ([B20 A0]), guard-b20, guard-explicit ([B20 A4]), catalog, scenario-map |
-| `app/lib/qualification/__tests__` | 33 | 135.70 | 14.6 % | pinned-filter (A1's own filter, OD-222), live-registry, catalog, scenario-map |
-| `app/lib/agent/orchestration/__tests__` | 49 | 66.20 | 7.1 % | pinned-filter ([B21 A]; B21's C39 and C55 anchor it), guard-b21, catalog, scenario-map |
-| `app/lib/computation/__tests__` | 28 | 51.02 | 5.5 % | catalog, scenario-map, live-registry |
-| `app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts` | 1 | 33.50 | 3.6 % | b24-b2-named |
-| `app/lib/project/__tests__/b18-b-import-gates.test.ts` | 1 | 29.52 | 3.2 % | nothing |
-| `app/lib/auth/__tests__/b16-0-2-gates.test.ts` | 1 | 27.43 | 2.9 % | b24-b2-named |
-| `app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts` | 1 | 24.90 | 2.7 % | b24-b2-named |
-| `app/lib/engineering/__tests__/b18-e-scenario-7.test.ts` | 1 | 20.92 | 2.2 % | scenario-map |
-| `app/lib/acquisition` | 15 | 15.90 | 1.7 % | pinned-filter ([B20 A4]), guard-explicit, catalog, scenario-map, live-registry |
-| `app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts` | 1 | 10.39 | 1.1 % | nothing |
-| `app/lib/engineering/__tests__/b18-c-undo-redo.test.ts` | 1 | 7.51 | 0.8 % | catalog, scenario-map |
-| `app/lib/distributors/__tests__/b19-connector-policy.test.ts` | 1 | 5.58 | 0.6 % | nothing |
-| `app/lib/workflow/prompt-to-gerber/__tests__` | 5 | 5.36 | 0.6 % | pinned-filter (the job's name; the task keeps it), catalog, scenario-map |
-| `app/lib/engineering/__tests__/b18-c-review-3.test.ts` | 1 | 5.34 | 0.6 % | nothing |
-| `app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts` | 1 | 5.29 | 0.6 % | nothing |
+| `app/lib/qualification/__tests__` | 55 | 298.81 | 23.2 % | pinned-filter (A1's own filter, OD-222), live-registry, catalog, scenario-map |
+| `app/lib/manufacturing-providers/__tests__` | 29 | 255.70 | 19.9 % | pinned-filter (A1 case 12 wants B23's line once), catalog, scenario-map |
+| `app/lib/mcp` | 45 | 194.87 | 15.1 % | pinned-filter ([B20 A0]), guard-b20, guard-explicit ([B20 A4]), catalog, scenario-map |
+| `app/lib/agent/orchestration/__tests__` | 49 | 83.58 | 6.5 % | pinned-filter ([B21 A]; B21's C39 and C55 anchor it), guard-b21, catalog, scenario-map |
+| `app/lib/computation/__tests__` | 28 | 57.57 | 4.5 % | pinned-filter, catalog, scenario-map, live-registry |
+| `app/lib/auth/__tests__/b16-0-2-gates.test.ts` | 1 | 27.14 | 2.1 % | b24-b2-named |
+| `app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts` | 1 | 25.93 | 2.0 % | b24-b2-named |
+| `app/lib/component-resolution/__tests__/m1-boundaries.test.ts` | 1 | 25.52 | 2.0 % | nothing |
+| `app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts` | 1 | 24.81 | 1.9 % | b24-b2-named |
+| `app/lib/project/__tests__/b18-b-import-gates.test.ts` | 1 | 23.58 | 1.8 % | nothing |
+| `app/lib/engineering/__tests__/b18-e-scenario-7.test.ts` | 1 | 20.86 | 1.6 % | scenario-map |
+| `app/lib/acquisition` | 15 | 18.14 | 1.4 % | pinned-filter ([B20 A4]), guard-explicit, catalog, scenario-map, live-registry |
+| `app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts` | 1 | 10.60 | 0.8 % | nothing |
+| `app/lib/engineering/__tests__/b18-c-undo-redo.test.ts` | 1 | 7.56 | 0.6 % | catalog, scenario-map |
+| `app/api/generation-tasks/__tests__/l7-fixture-vertical-slice.test.ts` | 1 | 5.90 | 0.5 % | nothing |
+| `app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts` | 1 | 5.88 | 0.5 % | nothing |
+| `app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts` | 1 | 5.79 | 0.4 % | nothing |
+| `app/lib/workflow/prompt-to-gerber/__tests__` | 6 | 5.73 | 0.4 % | pinned-filter (the e2e replay chain, the job's name), catalog, scenario-map |
+| `app/api/mcp/__tests__` | 7 | 5.64 | 0.4 % | pinned-filter ([B20 A0]), guard-b20, catalog |
+| `app/lib/distributors/__tests__/b19-connector-policy.test.ts` | 1 | 5.55 | 0.4 % | nothing |
+| `app/lib/engineering/__tests__/b18-c-review-3.test.ts` | 1 | 5.40 | 0.4 % | nothing |
 
-The five heaviest directory filters each hold at least one catalog link and one scenario-map path (`b24-d0-ci-split` 3). The
-"test or page pins only" class is, apart from seven B21 route suites (4.2 s, anchored once by B21's pages), B24-B2's named list: the
-25 B09-B11 and B16.0 suites the catalog does not link (93.72 s, 10.1 %) - the set B24-B2's page called the candidate for an
-`agent-boundary-suites` job (C29). **CONFIRMED** (derived). The classes are those of `ba4f562`'s records; since the split, the catalog
-and the map record the moved mcp and computation suites under `agent-boundary-suites` (section 5), which changes no file's class.
+The five heaviest directory filters each hold at least one catalog link and one scenario-map path (`b24-d0-ci-split` 3). The "test or page pins only" class is, apart from 12 entries (11.69 s: B21 route suites anchored once by B21's pages, B19-E's [B20 A4] files, `worker-integration`), B24-B2's named list: the 25 B09-B11 and B16.0 suites the catalog does not link (93.88 s, 7.3 %; [PR-J7, 2026-11-04] re-measured, 8.83 s and 89.44 s, 7.8 % at PR-L7's) - the set B24-B2's page called the candidate for an `agent-boundary-suites` job (C29). **CONFIRMED** (derived). The classes are those of `ba4f562`'s records; since the split, the catalog and the map record the moved mcp and computation suites under `agent-boundary-suites` (section 5), which changes no file's class.
 
 ## 3. The candidate sets and the OD-30 arithmetic
 
-The arithmetic the task fixed: a job's expected CI time = its local testcase time x CI's ratio, the ratio = 20 min 37 s (B24-C2's run)
-/ the local total = 1237 s / 931.21 s = 1.328. It assumes CI's time scales with testcase time; it does not (CI's job also installs,
-type-checks with a 4 GB heap and collects 471 files: locally `collect` alone took 270.53 s of the 670.97 s wall), so every figure
-below is **INFERRED** until the first CI run of the split, which measures all three jobs. The split is insertion-only in every option:
-`--exclude` lines before the `--reporter` line, the new job appended after `secret-scan`.
+The arithmetic the task fixed: a job's expected CI time = its local testcase time x CI's ratio, the ratio = 20 min 37 s (B24-C2's run) / the local total = 1237 s / 931.21 s = 1.328. It assumes CI's time scales with testcase time; it does not (CI's job also installs, type-checks with a 4 GB heap and collects 471 files: locally `collect` alone took 270.53 s of the 670.97 s wall), so every figure below is **INFERRED** until the first CI run of the split, which measures all three jobs. The split is insertion-only in every option: `--exclude` lines before the `--reporter` line, the new job appended after `secret-scan`. [PR-G, 2026-10-17] this section keeps the first run's figures (931.21 s, ratio 1.328), on which the lead decided; the re-measured arithmetic of the split as it stands (OD-250's 58 items) is section 4's.
 
 | option | moved items | files | local testcase time | share | expected prompt-to-gerber (of 25) | expected new job (of 20) | what it needs |
 |---|---|---|---|---|---|---|---|
@@ -199,15 +129,9 @@ below is **INFERRED** until the first CI run of the split, which measures all th
 | 2b: option 2 + the orchestration filter | + `app/lib/agent/orchestration/__tests__` (39 lines) | 158 | 465.04 s | 49.9 % | 10 min 19 s | 10 min 18 s | option 2, plus [B21 A] and B21's C39 and C55 (the filter line anchored once) |
 | 3: B23's filter | option 1 + `app/lib/manufacturing-providers/__tests__` (37 lines) | 65 | 388.73 s | 41.7 % | 12 min 01 s | 8 min 36 s | option 1, plus the production-data edits for B23's 29 suites, and A1 case 12 wants B23's filter line in the workflow exactly once - the new job's line would double it: an A1 STOP; not recommended |
 
-Option 1 meets the task's shape and its rules but not its 40 % line; it puts prompt-to-gerber about 3 min back outside OD-30's
-five-minute line, inside the runner's own seven-minute spread. Option 2 meets the 40 % line and needs the lead's leave to edit the two
-catalog modules. The owner's rule stands in every option: no `timeout-minutes` changes. **PROPOSED** by the first run; **RECORDED**:
-the lead chose option 2 on 2026-10-09 (section 0), and section 4 is its delivery.
+Option 1 meets the task's shape and its rules but not its 40 % line; it puts prompt-to-gerber about 3 min back outside OD-30's five-minute line, inside the runner's own seven-minute spread. Option 2 meets the 40 % line and needs the lead's leave to edit the two catalog modules. The owner's rule stands in every option: no `timeout-minutes` changes. **PROPOSED** by the first run; **RECORDED**: the lead chose option 2 on 2026-10-09 (section 0), and section 4 is its delivery.
 
-The 36 items of option 1, in prompt-to-gerber's order (each is one `--exclude '<path>'` line and one line of the new job):
-`app/api/__tests__/b16-0-auth-route-coverage.test.ts`, `app/lib/engineering/__tests__/b18-c-review-3.test.ts`,
-`app/lib/engineering/__tests__/b18-c-review-fixes.test.ts`, `app/lib/engineering/__tests__/b18-c-result-contract.test.ts`,
-`app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts`, `app/lib/project/__tests__/b18-b-import-gates.test.ts`,
+The 36 items of option 1, in prompt-to-gerber's order (each is one `--exclude '<path>'` line and one line of the new job): `app/api/__tests__/b16-0-auth-route-coverage.test.ts`, `app/lib/engineering/__tests__/b18-c-review-3.test.ts`, `app/lib/engineering/__tests__/b18-c-review-fixes.test.ts`, `app/lib/engineering/__tests__/b18-c-result-contract.test.ts`, `app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts`, `app/lib/project/__tests__/b18-b-import-gates.test.ts`,
 `app/lib/distributors/__tests__/b19-distributor-egress.test.ts`, `app/lib/distributors/__tests__/b19-connector-policy.test.ts`,
 `app/lib/distributors/__tests__/b19-d-exact-mpn-connectors.test.ts`, `app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx`,
 `app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts`, `app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts`, 17 of the 19
@@ -228,65 +152,141 @@ an explicit positional file is left out when excluded by its own path, a directo
 flags accumulate. The first run's two probes (one file under a directory filter; one directory glob) stand beside it. **CONFIRMED**.
 
 **What moves.** The 38 items of option 2, each one `--exclude` line of prompt-to-gerber (`:293-330`, in this order) and one positional
-line of `agent-boundary-suites` (`:570-607`); the first column is the item's own positional line in prompt-to-gerber, unchanged:
+line of `agent-boundary-suites` (`:570-607`); the first column is the item's own positional line in prompt-to-gerber, unchanged. [PR-G, 2026-10-17] OD-250 (the default the lead set: OD-30's rule as it stands, the split's mechanism unchanged): re-measured, the 38 items held 412.94 s of the measured 1147.98 s (36.0 %), 109 files, under the line; the 19 pr- suites no CI job selected were admitted as exact-path positional entries (`:294-312`) and moved, and since every entry no production record holds that had not moved - 149 entries, 43.12 s (3.8 %), 137 of them held by nothing - could not lift the share to 40 % (the 38 items, the 19 and all of them together 458.02 s, 39.9 %), the next item by weight was taken with the production-data edit section 2 describes: the `app/lib/agent/orchestration/__tests__` filter (49 files, 72.88 s, 6.3 %; `golden-catalog.ts` and `scenario-map.ts` record it, both generators re-run twice with zero drift, the B21 pins moved; the two heavier filters, A1's and B23's, stay: A1 case 12 wants each line once). The 58 items, each one `--exclude` line (`:313-370`) and one line of `agent-boundary-suites` (`:619-676`). [PR-L7, 2026-10-20] OD-254 (the default applied: OD-30's rule as it stands, the split's mechanism unchanged): the 69 L/M suites no CI job selected were admitted as exact-path positional entries after the last one (`:313-381`); re-measured, the 58 items held 471.88 s of the measured 1146.10 s (41.2 %), above the line, and the two heaviest admitted suites, held by nothing (`m1-boundaries` 24.47 s, `l7-fixture-vertical-slice` 6.29 s), were moved by weight for margin. The 60 items, each one `--exclude` line (`:382-441`) and one line of `agent-boundary-suites` (`:703-762`; [PR-J7, 2026-11-04] now `:436-495` and `:811-870`). [PR-J7, 2026-11-04] OD-261 (OD-250's mechanism, the alternative OD-254 lists): the 54 section J suites no job of this workflow selected were admitted as exact-path positional entries after the last one (`:382-435`) and all moved, so prompt-to-gerber keeps its 411 files and OD-30's margin (CI recorded it at 18 min 22 s of 25 before this change, section 11.13); re-measured, the 60 items alone hold 534.72 s of the measured 1287.16 s (41.5 %). The 114 items, each one `--exclude` line (`:436-549`) and one line of `agent-boundary-suites` (`:811-924`):
 
 | line | item | files | testcase time (s) | share |
 |---|---|---|---|---|
-| `:99` | `app/lib/project/__tests__/b18-b-import-gates.test.ts` | 1 | 29.52 | 3.2 % |
-| `:126` | `app/lib/distributors/__tests__/b19-distributor-egress.test.ts` | 1 | 2.63 | 0.3 % |
-| `:132` | `app/lib/mcp` | 45 | 181.28 | 19.5 % |
-| `:137` | `app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts` | 1 | 3.94 | 0.4 % |
-| `:139` | `app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts` | 1 | 5.29 | 0.6 % |
-| `:155` | `app/lib/distributors/__tests__/b19-connector-policy.test.ts` | 1 | 5.58 | 0.6 % |
-| `:162` | `app/lib/distributors/__tests__/b19-d-exact-mpn-connectors.test.ts` | 1 | 3.50 | 0.4 % |
-| `:208` | `app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx` | 1 | 2.31 | 0.2 % |
-| `:227` | `app/lib/computation/__tests__` | 28 | 51.02 | 5.5 % |
-| `:230` | `app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts` | 1 | 10.39 | 1.1 % |
-| `:253` | `app/lib/engineering/__tests__/b18-c-result-contract.test.ts` | 1 | 2.27 | 0.2 % |
-| `:255` | `app/lib/engineering/__tests__/b18-c-review-3.test.ts` | 1 | 5.34 | 0.6 % |
-| `:256` | `app/lib/engineering/__tests__/b18-c-review-fixes.test.ts` | 1 | 2.04 | 0.2 % |
-| `:261` | `app/lib/agent/__tests__/b09-1-boundary.test.ts` | 1 | 0.67 | 0.1 % |
-| `:262` | `app/lib/agent/__tests__/b09-1-recovery.test.tsx` | 1 | 0.00 | 0.0 % |
-| `:263` | `app/lib/agent/__tests__/b09-2-closure.test.ts` | 1 | 0.12 | 0.0 % |
+| `:99` | `app/lib/project/__tests__/b18-b-import-gates.test.ts` | 1 | 23.58 | 1.8 % |
+| `:126` | `app/lib/distributors/__tests__/b19-distributor-egress.test.ts` | 1 | 2.62 | 0.2 % |
+| `:132` | `app/lib/mcp` | 45 | 194.87 | 15.1 % |
+| `:133` | `app/lib/agent/orchestration/__tests__` | 49 | 83.58 | 6.5 % |
+| `:137` | `app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts` | 1 | 5.88 | 0.5 % |
+| `:139` | `app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts` | 1 | 5.79 | 0.4 % |
+| `:155` | `app/lib/distributors/__tests__/b19-connector-policy.test.ts` | 1 | 5.55 | 0.4 % |
+| `:162` | `app/lib/distributors/__tests__/b19-d-exact-mpn-connectors.test.ts` | 1 | 3.65 | 0.3 % |
+| `:208` | `app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx` | 1 | 2.42 | 0.2 % |
+| `:227` | `app/lib/computation/__tests__` | 28 | 57.57 | 4.5 % |
+| `:230` | `app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts` | 1 | 10.60 | 0.8 % |
+| `:253` | `app/lib/engineering/__tests__/b18-c-result-contract.test.ts` | 1 | 2.32 | 0.2 % |
+| `:255` | `app/lib/engineering/__tests__/b18-c-review-3.test.ts` | 1 | 5.40 | 0.4 % |
+| `:256` | `app/lib/engineering/__tests__/b18-c-review-fixes.test.ts` | 1 | 2.18 | 0.2 % |
+| `:261` | `app/lib/agent/__tests__/b09-1-boundary.test.ts` | 1 | 0.75 | 0.1 % |
+| `:262` | `app/lib/agent/__tests__/b09-1-recovery.test.tsx` | 1 | 0.01 | 0.0 % |
+| `:263` | `app/lib/agent/__tests__/b09-2-closure.test.ts` | 1 | 0.26 | 0.0 % |
 | `:264` | `app/lib/agent/__tests__/b09-2-recovery.test.tsx` | 1 | 0.00 | 0.0 % |
-| `:265` | `app/lib/agent/__tests__/b09-3-closure.test.ts` | 1 | 0.24 | 0.0 % |
-| `:267` | `app/lib/agent/__tests__/b09-proposals.test.ts` | 1 | 0.07 | 0.0 % |
-| `:268` | `app/lib/agent/__tests__/b09-provider-contracts.test.ts` | 1 | 0.00 | 0.0 % |
-| `:269` | `app/lib/agent/__tests__/b10-1-strict-mode-publisher.test.tsx` | 1 | 0.03 | 0.0 % |
-| `:270` | `app/lib/agent/__tests__/b10-editor-context.test.ts` | 1 | 0.12 | 0.0 % |
-| `:271` | `app/lib/agent/__tests__/b11-1-trace-integrity.test.ts` | 1 | 0.77 | 0.1 % |
-| `:272` | `app/lib/agent/__tests__/b11-2-replay-context.test.ts` | 1 | 1.01 | 0.1 % |
-| `:273` | `app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts` | 1 | 24.90 | 2.7 % |
-| `:274` | `app/lib/agent/__tests__/b11-4-capture-ownership.test.ts` | 1 | 0.98 | 0.1 % |
-| `:275` | `app/lib/agent/__tests__/b11-4-no-execution.test.ts` | 1 | 0.46 | 0.0 % |
-| `:276` | `app/lib/agent/__tests__/b11-5-capture-exactness.test.ts` | 1 | 1.01 | 0.1 % |
-| `:277` | `app/lib/agent/__tests__/b11-6-projection-ownership.test.ts` | 1 | 0.59 | 0.1 % |
-| `:278` | `app/lib/agent/__tests__/b11-7-primitive-discipline.test.ts` | 1 | 0.60 | 0.1 % |
-| `:280` | `app/api/chat/__tests__/b10-1-request-boundary.test.ts` | 1 | 0.03 | 0.0 % |
-| `:281` | `app/api/chat/__tests__/b10-2-closure.test.ts` | 1 | 0.12 | 0.0 % |
-| `:282` | `app/api/chat/__tests__/b10-chat-boundary.test.ts` | 1 | 0.09 | 0.0 % |
-| `:283` | `app/api/chat/__tests__/b11-1-route-finalization.test.ts` | 1 | 0.15 | 0.0 % |
-| `:284` | `app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts` | 1 | 33.50 | 3.6 % |
-| `:285` | `app/lib/auth/__tests__/b16-0-2-gates.test.ts` | 1 | 27.43 | 2.9 % |
+| `:265` | `app/lib/agent/__tests__/b09-3-closure.test.ts` | 1 | 0.47 | 0.0 % |
+| `:267` | `app/lib/agent/__tests__/b09-proposals.test.ts` | 1 | 0.16 | 0.0 % |
+| `:268` | `app/lib/agent/__tests__/b09-provider-contracts.test.ts` | 1 | 0.01 | 0.0 % |
+| `:269` | `app/lib/agent/__tests__/b10-1-strict-mode-publisher.test.tsx` | 1 | 0.05 | 0.0 % |
+| `:270` | `app/lib/agent/__tests__/b10-editor-context.test.ts` | 1 | 0.22 | 0.0 % |
+| `:271` | `app/lib/agent/__tests__/b11-1-trace-integrity.test.ts` | 1 | 1.65 | 0.1 % |
+| `:272` | `app/lib/agent/__tests__/b11-2-replay-context.test.ts` | 1 | 2.95 | 0.2 % |
+| `:273` | `app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts` | 1 | 25.93 | 2.0 % |
+| `:274` | `app/lib/agent/__tests__/b11-4-capture-ownership.test.ts` | 1 | 2.06 | 0.2 % |
+| `:275` | `app/lib/agent/__tests__/b11-4-no-execution.test.ts` | 1 | 0.90 | 0.1 % |
+| `:276` | `app/lib/agent/__tests__/b11-5-capture-exactness.test.ts` | 1 | 1.93 | 0.1 % |
+| `:277` | `app/lib/agent/__tests__/b11-6-projection-ownership.test.ts` | 1 | 1.33 | 0.1 % |
+| `:278` | `app/lib/agent/__tests__/b11-7-primitive-discipline.test.ts` | 1 | 1.25 | 0.1 % |
+| `:280` | `app/api/chat/__tests__/b10-1-request-boundary.test.ts` | 1 | 0.06 | 0.0 % |
+| `:281` | `app/api/chat/__tests__/b10-2-closure.test.ts` | 1 | 0.21 | 0.0 % |
+| `:282` | `app/api/chat/__tests__/b10-chat-boundary.test.ts` | 1 | 0.16 | 0.0 % |
+| `:283` | `app/api/chat/__tests__/b11-1-route-finalization.test.ts` | 1 | 0.26 | 0.0 % |
+| `:284` | `app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts` | 1 | 24.81 | 1.9 % |
+| `:285` | `app/lib/auth/__tests__/b16-0-2-gates.test.ts` | 1 | 27.14 | 2.1 % |
 | `:286` | `app/api/__tests__/b16-0-auth-route-coverage.test.ts` | 1 | 0.02 | 0.0 % |
-| `:287` | `app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts` | 1 | 0.80 | 0.1 % |
+| `:287` | `app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts` | 1 | 1.30 | 0.1 % |
+| `:294` | `app/api/schematic/__tests__/pr-c-build-iteration-cap.test.ts` | 1 | 0.15 | 0.0 % |
+| `:295` | `app/api/schematic/__tests__/pr-c-build-multi-status.test.ts` | 1 | 0.24 | 0.0 % |
+| `:296` | `app/api/schematic/__tests__/pr-c-theory-route-classification.test.ts` | 1 | 0.08 | 0.0 % |
+| `:297` | `app/components/pcb/__tests__/pr-c-sync-feedback.test.ts` | 1 | 0.01 | 0.0 % |
+| `:298` | `app/components/workflow/__tests__/pr-c-journey-strip.test.tsx` | 1 | 0.20 | 0.0 % |
+| `:299` | `app/lib/__tests__/pr-c-build-loop-budget.test.ts` | 1 | 0.37 | 0.0 % |
+| `:300` | `app/lib/project/__tests__/pr-c-composer-question.test.ts` | 1 | 0.26 | 0.0 % |
+| `:301` | `app/lib/project/__tests__/pr-c-pending-proposal-store.test.ts` | 1 | 0.01 | 0.0 % |
+| `:302` | `app/lib/project/__tests__/pr-c-theory-request.test.ts` | 1 | 0.03 | 0.0 % |
+| `:303` | `app/lib/workflow/__tests__/pr-c-journey.test.ts` | 1 | 0.03 | 0.0 % |
+| `:304` | `app/lib/schematic/__tests__/pr-e-design-checks.test.ts` | 1 | 0.01 | 0.0 % |
+| `:305` | `app/lib/agent/__tests__/pr-f-placement-intent.test.ts` | 1 | 0.70 | 0.1 % |
+| `:306` | `app/lib/agent/__tests__/pr-f-stackup-candidate.test.ts` | 1 | 0.30 | 0.0 % |
+| `:307` | `app/lib/llm/__tests__/pr-f-astra-profile.test.ts` | 1 | 0.14 | 0.0 % |
+| `:308` | `app/lib/parts/__tests__/pr-f-missing-facts-read.test.ts` | 1 | 0.44 | 0.0 % |
+| `:309` | `app/lib/parts/__tests__/pr-f-missing-facts.test.ts` | 1 | 0.02 | 0.0 % |
+| `:310` | `app/lib/pcb/experiments/__tests__/pr-f-capability-matrix.test.ts` | 1 | 0.06 | 0.0 % |
+| `:311` | `app/lib/pcb/experiments/__tests__/pr-f-placement-routing-feedback.test.ts` | 1 | 0.30 | 0.0 % |
+| `:312` | `app/lib/project/__tests__/pr-g-artifact-receivers.test.ts` | 1 | 0.07 | 0.0 % |
+| `:314` | `app/api/generation-tasks/__tests__/l7-fixture-vertical-slice.test.ts` | 1 | 5.90 | 0.5 % |
+| `:333` | `app/lib/component-resolution/__tests__/m1-boundaries.test.ts` | 1 | 25.52 | 2.0 % |
+| `:382` | `app/api/export/kicad/__tests__/j2-sheets-export-refusal.test.ts` | 1 | 0.03 | 0.0 % |
+| `:383` | `app/api/export/kicad/__tests__/j4-kicad-hierarchy-route.test.ts` | 1 | 0.24 | 0.0 % |
+| `:384` | `app/api/schematic/__tests__/j2-tidy-sheets-refusal.test.ts` | 1 | 0.03 | 0.0 % |
+| `:385` | `app/api/schematic/__tests__/j4-tidy-sheet.test.ts` | 1 | 0.10 | 0.0 % |
+| `:386` | `app/api/simulate/__tests__/j2-simulate-sheets-refusal.test.ts` | 1 | 0.04 | 0.0 % |
+| `:387` | `app/components/bom/__tests__/j4-bom-sheet-column.test.tsx` | 1 | 0.40 | 0.0 % |
+| `:388` | `app/components/pcb/__tests__/j4-missing-parts-sheet.test.tsx` | 1 | 0.06 | 0.0 % |
+| `:389` | `app/components/schematic/__tests__/j3-sheet-lens-hook.test.tsx` | 1 | 0.54 | 0.0 % |
+| `:390` | `app/components/schematic/__tests__/j3-sheet-lens-strict-mode.test.tsx` | 1 | 0.17 | 0.0 % |
+| `:391` | `app/components/schematic/__tests__/j3-sheet-navigator-layout.test.tsx` | 1 | 0.17 | 0.0 % |
+| `:392` | `app/components/schematic/__tests__/j3-sheet-navigator.test.tsx` | 1 | 3.39 | 0.3 % |
+| `:393` | `app/components/schematic/__tests__/j4-organize-dialog.test.tsx` | 1 | 1.79 | 0.1 % |
+| `:394` | `app/components/schematic/__tests__/j5-open-sheet-wiring.test.tsx` | 1 | 0.12 | 0.0 % |
+| `:395` | `app/components/schematic/__tests__/j5-sheet-organization-card.test.tsx` | 1 | 0.40 | 0.0 % |
+| `:396` | `app/lib/__tests__/j4-kicad-hierarchy-export.test.ts` | 1 | 0.18 | 0.0 % |
+| `:397` | `app/lib/__tests__/j4-spice-sheets.test.ts` | 1 | 0.07 | 0.0 % |
+| `:398` | `app/lib/__tests__/j5-build-sheet-layout.test.ts` | 1 | 0.66 | 0.1 % |
+| `:399` | `app/lib/agent/__tests__/j5-inspect-sheets.test.ts` | 1 | 0.19 | 0.0 % |
+| `:400` | `app/lib/agent/__tests__/j5-organize-proposal-tool.test.ts` | 1 | 0.96 | 0.1 % |
+| `:401` | `app/lib/bom/__tests__/j4-bom-sheets.test.ts` | 1 | 0.03 | 0.0 % |
+| `:402` | `app/lib/engineering/__tests__/j1-sheet-operations.test.ts` | 1 | 0.36 | 0.0 % |
+| `:403` | `app/lib/engineering/__tests__/j3-coordinator-sheets.test.ts` | 1 | 0.20 | 0.0 % |
+| `:404` | `app/lib/engineering/__tests__/j5-inspect-sheet-aware.test.ts` | 1 | 0.29 | 0.0 % |
+| `:405` | `app/lib/engineering/__tests__/j5-sheet-organization-proposal.test.ts` | 1 | 1.02 | 0.1 % |
+| `:406` | `app/lib/generation-task/__tests__/j5-result-sheets-contract.test.ts` | 1 | 0.48 | 0.0 % |
+| `:407` | `app/lib/generation-task/__tests__/j7-allowance-contention.test.ts` | 1 | 2.92 | 0.2 % |
+| `:408` | `app/lib/generation-task/__tests__/j7-allowance-review.test.ts` | 1 | 0.83 | 0.1 % |
+| `:409` | `app/lib/generation-task/__tests__/j7-provider-wait-sibling-end.test.ts` | 1 | 0.19 | 0.0 % |
+| `:410` | `app/lib/generation-task/__tests__/j7-queue-beyond-slots.test.ts` | 1 | 0.99 | 0.1 % |
+| `:411` | `app/lib/project/__tests__/j1-sheets-persistence.test.tsx` | 1 | 0.27 | 0.0 % |
+| `:412` | `app/lib/project/__tests__/j3-board-checkpoint-sheets.test.ts` | 1 | 0.12 | 0.0 % |
+| `:413` | `app/lib/project/__tests__/j3-canonical-adoption-sheets.test.ts` | 1 | 0.02 | 0.0 % |
+| `:414` | `app/lib/project/__tests__/j3-history-step-sheets.test.ts` | 1 | 0.56 | 0.0 % |
+| `:415` | `app/lib/project/__tests__/j3-page-carriage.test.ts` | 1 | 0.15 | 0.0 % |
+| `:416` | `app/lib/project/__tests__/j3-sheet-navigation-store.test.ts` | 1 | 0.01 | 0.0 % |
+| `:417` | `app/lib/project/__tests__/j3-sheet-replace-guard.test.ts` | 1 | 0.01 | 0.0 % |
+| `:418` | `app/lib/project/__tests__/j5-page-intake-sheets.test.ts` | 1 | 0.01 | 0.0 % |
+| `:419` | `app/lib/project/__tests__/j5-pending-proposal-sheets.test.ts` | 1 | 0.02 | 0.0 % |
+| `:420` | `app/lib/project/__tests__/j5-result-sheets-client.test.ts` | 1 | 0.02 | 0.0 % |
+| `:421` | `app/lib/project/__tests__/j5-sheet-organization-events.test.ts` | 1 | 1.04 | 0.1 % |
+| `:422` | `app/lib/project/__tests__/j5-sheeted-replace-transaction.test.ts` | 1 | 0.58 | 0.0 % |
+| `:423` | `app/lib/schematic/__tests__/j1-connectivity-caller-ratchet.test.ts` | 1 | 0.41 | 0.0 % |
+| `:424` | `app/lib/schematic/__tests__/j1-project-connectivity.test.ts` | 1 | 1.14 | 0.1 % |
+| `:425` | `app/lib/schematic/__tests__/j2-consumers-golden.test.ts` | 1 | 0.23 | 0.0 % |
+| `:426` | `app/lib/schematic/__tests__/j2-project-consumers.test.ts` | 1 | 0.44 | 0.0 % |
+| `:427` | `app/lib/schematic/__tests__/j3-fixture-readability.test.ts` | 1 | 0.37 | 0.0 % |
+| `:428` | `app/lib/schematic/__tests__/j3-sheet-lens.test.ts` | 1 | 0.13 | 0.0 % |
+| `:429` | `app/lib/schematic/__tests__/j4-flat-drone-fixture.test.ts` | 1 | 0.03 | 0.0 % |
+| `:430` | `app/lib/schematic/__tests__/j4-organize-sheets.test.ts` | 1 | 0.24 | 0.0 % |
+| `:431` | `app/lib/schematic/__tests__/j4-rail-label-normalisation.test.ts` | 1 | 0.09 | 0.0 % |
+| `:432` | `app/lib/schematic/__tests__/j4-sheet-tidy.test.ts` | 1 | 0.08 | 0.0 % |
+| `:433` | `app/lib/schematic/__tests__/j5-generated-sheets.test.ts` | 1 | 0.04 | 0.0 % |
+| `:434` | `app/lib/schematic/__tests__/j5-organize-port-names.test.ts` | 1 | 0.06 | 0.0 % |
+| `:435` | `app/lib/spice/__tests__/j4-ir-sheets.test.ts` | 1 | 0.27 | 0.0 % |
 
-The moved set: **398.84 s** of the measured 931.21 s (42.8 %), 109 files, 38 items - the task's "at least 40 %" holds [B24-D1, 2026-10-09] the first column (each item's positional line in prompt-to-gerber) moved +1 after B24-D1's prompt-to-gerber start step at `:32`; `b24-d0-ci-split` 8 derives it from the tree.
+The moved set: **557.90 s** of the measured 1287.16 s (43.3 %), 233 files, 114 items - the task's "at least 40 %" holds ([PR-J7, 2026-11-04] re-measured with OD-261's 54 items, which hold 23.18 s; 502.64 s of 1146.10 s, 43.9 %, 179 files, 60 items at PR-L7's; [PR-L7, 2026-10-20] re-measured with OD-254's two items; 487.79 s of 1147.98 s, 42.5 %, 177 files, 58 items at PR-G's; [PR-G, 2026-10-17] re-measured with OD-250's 20 items; 398.84 s of 931.21 s, 42.8 %, 109 files, 38 items at the first run) [B24-D1, 2026-10-09] the first column (each item's positional line in prompt-to-gerber) moved +1 after B24-D1's prompt-to-gerber start step at `:32`; `b24-d0-ci-split` 8 derives it from the tree.
 (`b24-d0-ci-split` 9). Every moved file is database-free (no suite under the two filters or among the 36 imports
 `app/lib/db/disposable-postgres`, by the guard's detector and the helper's: `b19-e-ci-job-scope`, `b24-d0-ci-split` 7). The opt-in
 live suites under the moved filters (`b22-a3-runner-live`, `b22-d-adversarial-live`, under `app/lib/computation/__tests__`) move with
 their filter and skip there as before, since the new job sets no flag (`b24-b3-live-suite-honesty` 2). **CONFIRMED** (derived from
 the xml and the tree).
 
-**What stays** in prompt-to-gerber: 362 files, 532.37 s (57.2 %) - the whole e2e replay chain
+**What stays** in prompt-to-gerber: 410 files, 729.26 s (56.7 %; [PR-J7, 2026-11-04] re-measured, was 406 files, 643.46 s, 56.1 %, the four J4/J5 suites now measured among them; [PR-L7, 2026-10-20] re-measured, was 337 files, 660.20 s, 57.5 %; [PR-G, 2026-10-17] re-measured, was 362 files, 532.37 s, 57.2 %) - the whole e2e replay chain
 (`app/lib/workflow/prompt-to-gerber/__tests__`, the job's name), A1's and B23's directory filters (`app/lib/qualification/__tests__`,
-`app/lib/manufacturing-providers/__tests__`, 357.89 s together, each cited once by A1 case 12), the orchestration, acquisition and
+`app/lib/manufacturing-providers/__tests__`, 554.51 s together ([PR-J7, 2026-11-04] 491.38 s at PR-L7's; [PR-L7, 2026-10-20] 550.82 s at PR-G's), each cited once by A1 case 12), the orchestration ([PR-G, 2026-10-17] moved by OD-250), acquisition and
 `app/api/mcp/__tests__` filters, every other directory filter, the 11 of B24-B2's 36 that the catalog links (`b09-loop-safety`,
 `b11-trace-replay-evaluation`, `pin-pad-mapping`, the five footprint-resolver suites and the three opt-in live suites), every B21 route
-suite and B19-E's explicit expectations, and this suite. The 242 positional lines are untouched; the step's folded scalar gained only
+suite and B19-E's explicit expectations, and this suite. The 242 positional lines are untouched ([PR-G, 2026-10-17] OD-250 appended 19 after them; [PR-L7, 2026-10-20] OD-254 appended 69 after those; [PR-J7, 2026-11-04] OD-261 appended 54 after those); the step's folded scalar gained only
 the 38 `--exclude` lines (a `#` would have been a shell comment and swallowed every later argument, so nothing was commented out).
 
-**The new job** (`deterministic-manufacturing.yml:551-616`; [B24-D1, 2026-10-09] the block is `:557-625` after B24-D1's OD-30 steps: every number in this paragraph moves +6 up to `:558` and +7 from `:559` on, the job's start step sits at `:565` after `steps:` and its headroom step at `:624-625`; [B24-D4, 2026-10-10] now `:560-628`, its start step at `:568`, its headroom step at `:627-628`: +1 after B24-D2's entry at `:384`, +2 after B24-D4's `env:` mapping at `:418-419`): one blank line (`:551`), three `  # [B24-D0]` comment lines
+**The new job** (`deterministic-manufacturing.yml:551-616`; [B24-D1, 2026-10-09] the block is `:557-625` after B24-D1's OD-30 steps: every number in this paragraph moves +6 up to `:558` and +7 from `:559` on, the job's start step sits at `:565` after `steps:` and its headroom step at `:624-625`; [B24-D4, 2026-10-10] now `:560-628`, its start step at `:568`, its headroom step at `:627-628`: +1 after B24-D2's entry at `:384`, +2 after B24-D4's `env:` mapping at `:418-419`; [PR-G, 2026-10-17] now `:599-687`, its start step at `:607`, its headroom step at `:686-687`: +39 after PR-G's 39 prompt-to-gerber lines at `:294-312`, `:316` and `:352-370`, +20 more inside the job at `:622` and `:658-676`, its 58 items at `:619-676` (OD-250); [PR-L7, 2026-10-20] now `:683-773`, its start step at `:691`, its headroom step at `:772-773`: +84 after PR-L7's 71 prompt-to-gerber lines at `:313-381` and `:440-441` and its 13 database-delivery entries at `:495-507`, +2 more inside the job at `:761-762`, its 60 items at `:703-762` (OD-254); [PR-J7, 2026-11-04] now `:791-935`, its start step at `:799`, its headroom step at `:934-935`: +108 after PR-J7's 54 admitted J prompt-to-gerber entries at `:382-435` and their 54 excludes at `:496-549`, +54 more inside the job at `:871-924`, its 114 items at `:811-924` (OD-261)): one blank line (`:551`), three `  # [B24-D0]` comment lines
 (`:552-554`), `agent-boundary-suites:` (`:555`, C12), `runs-on: ubuntu-latest`, `timeout-minutes: 20`, prompt-to-gerber's nine
 checkout, pnpm, node and install lines verbatim (`:559-567`), `- run: >-` with `pnpm exec vitest run` (`:568-569`), the 38 items
 (`:570-607`), `--reporter=dot --reporter=junit --outputFile=vitest-agent-boundary-suites.xml` last (`:608`, C13), and `Upload
@@ -295,14 +295,14 @@ diagnostics` (`actions/upload-artifact@v4`, `if: always()`, `:609-616`, C14) for
 workflow's triggers (`pull_request`, `push` to main, `workflow_dispatch`), so `PULL_REQUEST_CI_JOBS` names it (C19). **CONFIRMED**
 (`b24-d0-ci-split` 5).
 
-**The OD-30 arithmetic** (the task's method; ratio 1.328 = 1237 s / 931.21 s; **INFERRED** until the first CI run, which the lead
+**The OD-30 arithmetic** (the task's method; ratio 0.961 = 1237 s / 1287.16 s; [PR-J7, 2026-11-04] re-measured at four workers, was 1.079 = 1237 s / 1146.10 s - the ratio reads CI low: CI recorded prompt-to-gerber at 18 min 22 s before this change, section 11.13; [PR-L7, 2026-10-20] re-measured, was 1.078 = 1237 s / 1147.98 s; [PR-G, 2026-10-17] re-measured, was 1.328 = 1237 s / 931.21 s; **INFERRED** until the first CI run, which the lead
 reads for all three jobs; the ratio assumes CI's time scales with testcase time, and section 3 says why it does not quite):
 
-- prompt-to-gerber: 532.37 s x 1.328 = about 11 min 47 s of 25 (headroom about 13 min 13 s against the limit, C1) - **INFERRED**;
-  it also still installs, type-checks and collects 363 files (this suite joined), none of which the ratio counts.
-- agent-boundary-suites: 398.84 s x 1.328 = about 8 min 50 s of 20 (headroom about 11 min 10 s against its limit) - **INFERRED**;
-  it installs and collects 109 files and runs no `tsc`.
-- page-browser-e2e: untouched by D0 (21 min 15 s of 30 at B24-C2's run, the lead's reading, **RECORDED**); B24-D1's headroom steps
+- prompt-to-gerber: 729.26 s x 0.961 = about 11 min 41 s of 25 (headroom about 13 min 19 s against the limit, C1; [PR-J7, 2026-11-04] re-measured, was 11 min 34 s, headroom 13 min 26 s; [PR-L7, 2026-10-20] re-measured, was 11 min 51 s, headroom 13 min 09 s; [PR-G, 2026-10-17] re-measured, was 11 min 47 s, headroom 13 min 13 s) - **INFERRED**;
+  it also still installs, type-checks and collects 411 files (this suite joined; [PR-J7, 2026-11-04] 407 at PR-L7's, + the four J4/J5 suites no longer set aside), none of which the ratio counts.
+- agent-boundary-suites: 557.90 s x 0.961 = about 8 min 56 s of 20 (headroom about 11 min 04 s against its limit; [PR-J7, 2026-11-04] re-measured with OD-261's 54 items, was 9 min 03 s, headroom 10 min 57 s; [PR-L7, 2026-10-20] re-measured with OD-254's two items, was 8 min 46 s, headroom 11 min 14 s; [PR-G, 2026-10-17] re-measured with OD-250's 20 items, was 8 min 50 s, headroom 11 min 10 s) - **INFERRED**;
+  it installs and collects 233 files ([PR-J7, 2026-11-04] re-measured; 179 at PR-L7's; [PR-L7, 2026-10-20] re-measured; 109 at the first run) and runs no `tsc`.
+- page-browser-e2e: untouched by D0 (21 min 15 s of 30 at B24-C2's run, the lead's reading, **RECORDED**; [PR-L7, 2026-10-20] split twice since: B24-D4's page-browser-e2e-b24, section 11, and OD-254's page-browser-e2e-agent, section 11.11); B24-D1's headroom steps
   record all three.
 
 **The proof that nothing was lost** - the new job's own selection run locally once through the runner, after every edit of the
@@ -313,7 +313,7 @@ skipped (109)`, `Tests 1556 passed | 18 skipped (1574)`, exit 0; the lock's clea
 580.64 s of testcase time. Its 109 files are exactly the measurement's 109 moved files (set equality both ways, by name), and the two
 files skipped whole are the two opt-in live suites under `app/lib/computation/__tests__` (`b22-a3-runner-live`,
 `b22-d-adversarial-live`), skipped whole in the measurement too; every other file passed, none failed. Its testcase time is above the
-measurement's 398.84 s for the same files (two workers over 109 files on a loaded machine: `b20-b4-process-gate` 56.68 s against
+first run's measurement's 398.84 s for the same files (two workers over 109 files on a loaded machine: `b20-b4-process-gate` 56.68 s against
 37.70 s) and is no re-measurement - the OD-30 arithmetic above keeps the first run's figures. The second run's attempt at this proof
 (`d0r2-abs-selection`) had exited 1 after 86 s with no summary and an empty junit and was never a record ([B24-D0 review, 2026-10-09]
 correctness-2, security-1: the page had claimed it); this run is. **CONFIRMED** by execution.
@@ -441,7 +441,7 @@ recorded, section 4).
 | `app/lib/qualification/__tests__/b24-d0-ci-split.test.ts` | 12 |
 
 Gates (every heavy job alone through the global lock; the lock's cleanup reported 0 processes left after each; logs
-`b24/logs/d0r2-*` for the split and `b24/logs/d0r3-*` for the review round):
+`b24/logs/d0r2-*` for the split and `b24/logs/d0r3-*` for the review round): [PR-G, 2026-10-17] the re-measurement run (section 1; `scratchpad/g3/d0-ptg-timing.new.log`): 514 files, `Tests 5794 passed | 54 skipped (5848)`, Duration 791.72s, exit 0; its gates and the suites run after the pins moved are in PR-G's report, not in this table (no row added: no line of this page moves). [PR-L7, 2026-10-20] the second re-measurement run (section 1; `scratchpad/ci/d0-ptg-timing.new.log`): 585 files, `Tests 6398 passed | 54 skipped (6452)`, Duration 877.94s, exit 0; its gates are in PR-L7's report (OD-254), not in this table.
 
 | gate | files | tests | exit |
 |---|---|---|---|
@@ -518,7 +518,7 @@ Each carries a dated `[B24-D0, 2026-10-09]` note on its own line:
 - **RECORDED** ([B24-D0 review, 2026-10-09] security-2; [B24-D0 lead, 2026-10-09] scrubbed): the evidence xml disclosed the measuring
   machine's name - vitest's junit reporter wrote it as the `hostname` attribute on each of its 471 `<testsuite>` elements; the lead
   replaced every occurrence with `hostname="local"` before the commit (option (b) of section 9; 471 replacements, the file's
-  2,091,656 bytes unchanged, sha256 `19d56fd7b4694fd030eb4172fc8a13f7fdf109461bb5af98b800d167db226b9d`) (one value; no path, user name or secret in the
+  2,091,656 bytes unchanged, sha256 `19d56fd7b4694fd030eb4172fc8a13f7fdf109461bb5af98b800d167db226b9d`; [PR-G, 2026-10-17] the re-measured file was scrubbed the same way before it was written to the evidence path: `hostname="local"` on all 514 `<testsuite>` elements, 2,260,995 bytes, sha256 `05b2f42ec17f9378a151ae0d54c9a9dc2ed1f3e1fd6dff82077ca957a8f02377`, 35 `<system-out>`/`<system-err>` blocks, 0 hits for the user's folder or `/Users/`; [PR-L7, 2026-10-20] the second re-measured file the same way: `hostname="local"` on all 585 `<testsuite>` elements, 2,526,656 bytes, sha256 `f6c9c10c4975f67909c7ed8b11af99a593af236200831276f62e06f7b82b5ad9`, 55 `<system-out>`/`<system-err>` blocks, 0 hits for the user's folder or `/Users/`) (one value; no path, user name or secret in the
   file: 0 hits for the user's folder or `/Users/`; the 33 `<system-out>`/`<system-err>` blocks hold console text such as a refused
   database connection) and no scanner rule covers a hostname (`secret-scan.ts:34`, C49). This run kept the file byte-identical (its
   rule); the scrub is drafted for the lead in section 9, and `b24-d0-ci-split` 12 pins the one value to this note.
@@ -532,7 +532,7 @@ Each carries a dated `[B24-D0, 2026-10-09]` note on its own line:
 
 ### OD-30 amendment
 
-- [B24-D0, 2026-10-09] B24-D0 split prompt-to-gerber by insertions only (the lead's option 2 of `ci-split.md` section 3, decided 2026-10-09 after the first run's measurement and STOP): 38 `--exclude` lines before its `--reporter` line (`deterministic-manufacturing.yml:293-330`) move B24-B2's 25 unlinked named suites, the 11 unheld files of 2 s or more and the `app/lib/mcp` and `app/lib/computation/__tests__` directory filters - 109 files, 398.84 s of the measured 931.21 s of local testcase time (42.8 %) - to the appended job `agent-boundary-suites` (`:551-616`; `timeout-minutes: 20`; prompt-to-gerber's setup steps verbatim; no environment variable, secret, database or browser), which runs exactly those items. Expected at CI's ratio 1.328 (20 min 37 s / 931.21 s): prompt-to-gerber about 11 min 47 s of 25 (headroom about 13 min 13 s), agent-boundary-suites about 8 min 50 s of 20 (headroom about 11 min 10 s) - INFERRED until the first CI run after the push, which the lead reads for all three jobs. The two catalog modules record the move (`CATALOG_CI_JOBS` and `PULL_REQUEST_CI_JOBS` gain `agent-boundary-suites`; eight catalog link declarations in six rows and eight scenario-map evidence items in four scenarios record it), both generators re-run twice with zero drift; the helper reads the exclusions and the B19-E guard admits every non-PGlite suite in exactly one of the two jobs. No `timeout-minutes` changed; no job removed; no existing workflow line edited.
+- [B24-D0, 2026-10-09] B24-D0 split prompt-to-gerber by insertions only (the lead's option 2 of `ci-split.md` section 3, decided 2026-10-09 after the first run's measurement and STOP): 38 `--exclude` lines before its `--reporter` line (`deterministic-manufacturing.yml:293-330`) move B24-B2's 25 unlinked named suites, the 11 unheld files of 2 s or more and the `app/lib/mcp` and `app/lib/computation/__tests__` directory filters - 109 files, 398.84 s of the measured 931.21 s of local testcase time (42.8 %) - to the appended job `agent-boundary-suites` (`:551-616`; `timeout-minutes: 20`; prompt-to-gerber's setup steps verbatim; no environment variable, secret, database or browser), which runs exactly those items. Expected at CI's ratio 1.328 (20 min 37 s / 931.21 s): prompt-to-gerber about 11 min 47 s of 25 (headroom about 13 min 13 s), agent-boundary-suites about 8 min 50 s of 20 (headroom about 11 min 10 s) - INFERRED until the first CI run after the push, which the lead reads for all three jobs. The two catalog modules record the move (`CATALOG_CI_JOBS` and `PULL_REQUEST_CI_JOBS` gain `agent-boundary-suites`; eight catalog link declarations in six rows and eight scenario-map evidence items in four scenarios record it), both generators re-run twice with zero drift; the helper reads the exclusions and the B19-E guard admits every non-PGlite suite in exactly one of the two jobs. No `timeout-minutes` changed; no job removed; no existing workflow line edited. [PR-G, 2026-10-17] OD-250 (`OWNER_DECISIONS.md`): re-measured at `d8b590f` with PR-G's tree the 38 items held 412.94 s of the measured 1147.98 s (36.0 %), 109 files; the 19 pr- suites no CI job selected are admitted as exact-path prompt-to-gerber entries and moved, with the `app/lib/agent/orchestration/__tests__` filter (the next item by weight once every unheld and pin-only entry could not reach 40 %), by insertions only: 58 `--exclude` lines (`:313-370`), 58 items in agent-boundary-suites (`:619-676`); **487.79 s** of the measured 1147.98 s (42.5 %), 177 files; expected prompt-to-gerber about 11 min 51 s of 25 and agent-boundary-suites about 8 min 46 s of 20 (INFERRED).
 
 ### The discovery section 10 line
 
@@ -567,7 +567,7 @@ Test-first on `chapter/b24-production-qualification`, two runs. The first run (f
 ### The evidence file's hostname attribute
 
 - [B24-D0, 2026-10-09] `artifacts/ai-control-plane-b24/evidence/d0-ptg-timing.xml` carries vitest's junit `hostname="<name>"` attribute on each of its 471 `<testsuite>` elements - the measuring machine's name, the one value in the file; no path, user name or secret (0 hits for the user's folder or `/Users/`; the 33 `<system-out>`/`<system-err>` blocks hold console text such as a refused database connection, read); no scanner rule covers a hostname (`app/lib/deployment/secret-scan.ts:34`). The owner's choice, recorded by the lead: (a) commit the file as measured (this run's rule: byte-identical, sha256 `d7c515c7ba984fa69c86f33f3b09bcac1680ea44140b032b343ed6c74c52c0d7`), or (b) scrub the attribute before the commit - `sed -i 's/hostname="<name>"/hostname="local"/g' artifacts/ai-control-plane-b24/evidence/d0-ptg-timing.xml` - which keeps the 2,091,656 bytes (sha256 `19d56fd7b4694fd030eb4172fc8a13f7fdf109461bb5af98b800d167db226b9d`, computed in the scratchpad on a copy); `b24-d0-ci-split` 1 never reads the attribute and case 12 wants one value recorded in section 8, so after a scrub the section 8 note changes `hostname="<name>"` to `hostname="local"` in place and the suite stays green. D0 wrote neither.
-- [B24-D0 lead, 2026-10-09] Option (b) applied: the attribute is `hostname="local"` on all 471 elements; sha256 `19d56fd7b4694fd030eb4172fc8a13f7fdf109461bb5af98b800d167db226b9d`; the measurement figures are unchanged (the attribute carries no time); the machine's name is spelled nowhere on this page.
+- [B24-D0 lead, 2026-10-09] Option (b) applied: the attribute is `hostname="local"` on all 471 elements; sha256 `19d56fd7b4694fd030eb4172fc8a13f7fdf109461bb5af98b800d167db226b9d`; the measurement figures are unchanged (the attribute carries no time); the machine's name is spelled nowhere on this page. [PR-G, 2026-10-17] applied again to the re-measured file before it was written to the evidence path: `hostname="local"` on all 514 elements, sha256 `05b2f42ec17f9378a151ae0d54c9a9dc2ed1f3e1fd6dff82077ca957a8f02377`. [PR-L7, 2026-10-20] and to the second re-measured file: `hostname="local"` on all 585 elements, sha256 `f6c9c10c4975f67909c7ed8b11af99a593af236200831276f62e06f7b82b5ad9`.
 
 ### The merge gate
 
@@ -583,29 +583,29 @@ Test-first on `chapter/b24-production-qualification`, two runs. The first run (f
 | id | file | line | anchor |
 |---|---|---|---|
 | C1 | `.github/workflows/deterministic-manufacturing.yml` | 26 | `timeout-minutes: 25` |
-| C2 | `.github/workflows/deterministic-manufacturing.yml` | 332 | `--reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml` |
+| C2 | `.github/workflows/deterministic-manufacturing.yml` | 550 | `--reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml` |
 | C3 | `.github/workflows/deterministic-manufacturing.yml` | 228 | `app/lib/manufacturing-providers/__tests__` |
 | C4 | `.github/workflows/deterministic-manufacturing.yml` | 132 | `app/lib/mcp` |
 | C5 | `.github/workflows/deterministic-manufacturing.yml` | 229 | `app/lib/qualification/__tests__` |
 | C6 | `.github/workflows/deterministic-manufacturing.yml` | 133 | `app/lib/agent/orchestration/__tests__` |
 | C7 | `.github/workflows/deterministic-manufacturing.yml` | 227 | `app/lib/computation/__tests__` |
-| C8 | `.github/workflows/deterministic-manufacturing.yml` | 294 | `--exclude 'app/lib/project/__tests__/b18-b-import-gates.test.ts'` |
-| C9 | `.github/workflows/deterministic-manufacturing.yml` | 296 | `--exclude 'app/lib/mcp/**'` |
-| C10 | `.github/workflows/deterministic-manufacturing.yml` | 302 | `--exclude 'app/lib/computation/__tests__/**'` |
-| C11 | `.github/workflows/deterministic-manufacturing.yml` | 331 | `--exclude 'app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts'` |
-| C12 | `.github/workflows/deterministic-manufacturing.yml` | 564 | `agent-boundary-suites:` |
-| C13 | `.github/workflows/deterministic-manufacturing.yml` | 618 | `--outputFile=vitest-agent-boundary-suites.xml` |
-| C14 | `.github/workflows/deterministic-manufacturing.yml` | 623 | `name: agent-boundary-suites-diagnostics` |
+| C8 | `.github/workflows/deterministic-manufacturing.yml` | 436 | `--exclude 'app/lib/project/__tests__/b18-b-import-gates.test.ts'` |
+| C9 | `.github/workflows/deterministic-manufacturing.yml` | 438 | `--exclude 'app/lib/mcp/**'` |
+| C10 | `.github/workflows/deterministic-manufacturing.yml` | 445 | `--exclude 'app/lib/computation/__tests__/**'` |
+| C11 | `.github/workflows/deterministic-manufacturing.yml` | 474 | `--exclude 'app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts'` |
+| C12 | `.github/workflows/deterministic-manufacturing.yml` | 795 | `agent-boundary-suites:` |
+| C13 | `.github/workflows/deterministic-manufacturing.yml` | 925 | `--outputFile=vitest-agent-boundary-suites.xml` |
+| C14 | `.github/workflows/deterministic-manufacturing.yml` | 930 | `name: agent-boundary-suites-diagnostics` |
 | C15 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 253 | `it("[B24-D0, 2026-10-09] OD-30's split:` |
 | C16 | `app/lib/qualification/__tests__/_ci-admission.ts` | 101 | `function foldedVitestStep(lines: readonly string[], key: string, file: string): FoldedStep {` |
 | C17 | `app/lib/qualification/__tests__/_ci-admission.ts` | 220 | `const runs = (step: FoldedStep, path: string): boolean =>` |
-| C18 | `app/lib/evaluation/golden-catalog.ts` | 83 | `export const CATALOG_CI_JOBS = ["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "page-browser-e2e", "agent-boundary-suites"] as const;` |
-| C19 | `app/lib/evaluation/golden-catalog.ts` | 86 | `export const PULL_REQUEST_CI_JOBS: readonly CatalogCiJob[] = Object.freeze(["prompt-to-gerber", "database-delivery", "benchmark-core", "page-browser-e2e", "agent-boundary-suites"]);` |
+| C18 | `app/lib/evaluation/golden-catalog.ts` | 83 | `export const CATALOG_CI_JOBS = ["prompt-to-gerber", "database-delivery", "benchmark-core", "benchmark-nightly", "page-browser-e2e", "page-browser-e2e-agent", "agent-boundary-suites"] as const;` |
+| C19 | `app/lib/evaluation/golden-catalog.ts` | 86 | `export const PULL_REQUEST_CI_JOBS: readonly CatalogCiJob[] = Object.freeze(["prompt-to-gerber", "database-delivery", "benchmark-core", "page-browser-e2e", "page-browser-e2e-agent", "agent-boundary-suites"]);` |
 | C20 | `app/lib/evaluation/scenario-map.ts` | 86 | `const AGENT_BOUNDARY = ["agent-boundary-suites"];` |
 | C21 | `app/lib/evaluation/scenario-map.ts` | 402 | `export function recordedCiJobsOf(rows: readonly ScenarioRow[]): (path: string) => readonly string[] {` |
 | C22 | `app/lib/qualification/__tests__/b24-b2-ci-admission.test.ts` | 146 | `const runsIn = (path: string)` |
 | C23 | `app/lib/qualification/__tests__/b24-b1-catalog.test.ts` | 293 | `CI_ADMISSION_ANCHORS.agentBoundary]` |
-| C24 | `app/lib/qualification/__tests__/b24-a1-environment-profile.test.ts` | 643 | `expect(insertionRowsOf(planned.page)).toHaveLength(19);` |
+| C24 | `app/lib/qualification/__tests__/b24-a1-environment-profile.test.ts` | 643 | `expect(insertionRowsOf(planned.page)).toHaveLength(32);` |
 | C25 | `app/lib/qualification/__tests__/b24-a2-secret-scan.test.ts` | 187 | `const last = all.indexOf("  secret-scan:");` |
 | C26 | `artifacts/remaining-builder-program/OWNER_DECISIONS.md` | 104 | `## OD-30 — CI time (B18-E, 2026-09-11)` |
 | C27 | `artifacts/remaining-builder-program/OWNER_DECISIONS.md` | 112 | `- [B24-C2 lead, 2026-10-09] B24-C1's CI run (37872711743 at` |
@@ -629,13 +629,21 @@ Test-first on `chapter/b24-production-qualification`, two runs. The first run (f
 | C45 | `artifacts/ai-control-plane-b24/observability-and-replay.md` | 526 | `deterministic-manufacturing.yml:378` |
 | C46 | `artifacts/ai-control-plane-b24/observability-and-replay.md` | 1336 | `deterministic-manufacturing.yml:380` |
 | C47 | `artifacts/ai-control-plane-b24/retention-and-deletion.md` | 274 | `deterministic-manufacturing.yml:379` |
-| C48 | `app/lib/qualification/__tests__/b24-d0-ci-split.test.ts` | 607 | `it("12. [B24-D0 review, 2026-10-09] the review round` |
+| C48 | `app/lib/qualification/__tests__/b24-d0-ci-split.test.ts` | 608 | `it("12. [B24-D0 review, 2026-10-09] the review round` |
 | C49 | `app/lib/deployment/secret-scan.ts` | 34 | `export const SECRET_SCAN_RULES: readonly SecretScanRule[] = Object.freeze([` |
 | C50 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 95 | `describe("[B19-E E2 review] CI job scope", () => {` |
 
+[PR-L7, 2026-10-20] C2 and C8-C14 re-pinned in place after PR-L7's insertions (OD-254: the 69 admitted entries at `:313-381` and the two moved ones' excludes at `:440-441` above them all, the 13 database-delivery entries at `:495-507` above C12-C14, agent-boundary-suites' two lines at `:761-762` above C13 and C14): C2 `:371` -> `:442`, C8 `:313` -> `:382`, C9 `:315` -> `:384`, C10 `:322` -> `:391`, C11 `:351` -> `:420`, C12 `:603` -> `:687`, C13 `:677` -> `:763`, C14 `:682` -> `:768`; C18's and C19's anchors re-pinned in place on their unmoved lines (`golden-catalog.ts` names `page-browser-e2e-agent` in both lists since OD-254), and C24's `toHaveLength(24)` -> `toHaveLength(29)` (A1 case 16's reviewed move: PR-L7's five insertion rows). [PR-J7, 2026-11-04] C2 and C8-C14 re-pinned in place after PR-J7's insertions (OD-261: the 54 admitted J entries at `:382-435` above them all, their 54 excludes at `:496-549` above C2 and C12-C14, agent-boundary-suites' 54 lines at `:871-924` above C13 and C14): C2 `:442` -> `:550`, C8 `:382` -> `:436`, C9 `:384` -> `:438`, C10 `:391` -> `:445`, C11 `:420` -> `:474`, C12 `:687` -> `:795`, C13 `:763` -> `:925`, C14 `:768` -> `:930`; C24's anchor re-pinned in place, `toHaveLength(29)` -> `toHaveLength(32)` (A1 case 16's reviewed move: PR-J7's three insertion rows).
+
 - [B24-D1 lead, 2026-10-09] C24's anchor re-pinned in place, `toHaveLength(15)` -> `toHaveLength(17)`: the lead's reviewed move of A1 case 16 after B24-D1's six insertion rows (A1 planned four groups for D1; lead decision D19 added agent-boundary-suites's two).
 
-[B24-D1, 2026-10-09] C2-C14 re-pinned in place after B24-D1's OD-30 steps (prompt-to-gerber's start step at `:32`, +1 from `:32`; its headroom step at `:344-345`, +2 more from `:343`; page-browser-e2e's start and headroom steps at `:405` and `:432-433`, +1 and +2 more from `:402` and `:428`; agent-boundary-suites's start step at `:565`, +1 more from `:559`); C45-C47 stand on their lines, which keep their text with a dated note. [B24-D1, 2026-10-09] C16 and C17 re-pinned 100 -> 101 and 216 -> 220 (`_ci-admission.ts` gained the benchmark-latency job's id, anchor, filter, env and jobsOf lines before them); C48 re-pinned 590 -> 607 (the dated pin moves in cases 1, 5, 7, 10 and 11 of this suite, above case 12). [B24-D2, 2026-10-09] C12-C14 re-pinned +1 in place after B24-D2's database-delivery entry at `:384` (the rows carry no note cell; this line holds the note). [B24-D4, 2026-10-10] C12-C14 re-pinned +2 in place after B24-D4's `env:` mapping at `:418-419` (OD-30's split of page-browser-e2e, section 11); C24's anchor re-pinned in place, `toHaveLength(17)` -> `toHaveLength(19)` (A1 case 16 after B24-D4's two insertion rows).
+[PR-G, 2026-10-17] C2 and C8-C14 re-pinned in place after PR-G's insertions (OD-250: the 19 admitted entries at `:294-312`, the orchestration filter's exclude at `:316`, the 19 excludes at `:352-370`; agent-boundary-suites' orchestration line at `:622` and 19 entries at `:658-676`): C2 332 -> 371, C8 294 -> 313, C9 296 -> 315, C10 302 -> 322, C11 331 -> 351, C12 564 -> 603, C13 618 -> 677, C14 623 -> 682 (C3-C7 above `:294` unmoved); section 11.10's D4-C1-C7 likewise (+39 to `:458`, +59 from `:692`) and D4-C21's anchor `const JOB_FIRST_LINE = 560;` -> `599;` (the suite's pin moved with its dated note); C24's anchor re-pinned in place, `toHaveLength(19)` -> `toHaveLength(24)` (A1 case 16 after PR-G's five insertion rows). [B24-D1, 2026-10-09] C2-C14 re-pinned in place after B24-D1's OD-30 steps (prompt-to-gerber's start step at `:32`, +1 from `:32`; its headroom step at `:344-345`, +2 more from `:343`; page-browser-e2e's start and headroom steps at `:405` and `:432-433`, +1 and +2 more from `:402` and `:428`; agent-boundary-suites's start step at `:565`, +1 more from `:559`); C45-C47 stand on their lines, which keep their text with a dated note. [B24-D1, 2026-10-09] C16 and C17 re-pinned 100 -> 101 and 216 -> 220 (`_ci-admission.ts` gained the benchmark-latency job's id, anchor, filter, env and jobsOf lines before them); C48 re-pinned 590 -> 607 (the dated pin moves in cases 1, 5, 7, 10 and 11 of this suite, above case 12). [B24-D2, 2026-10-09] C12-C14 re-pinned +1 in place after B24-D2's database-delivery entry at `:384` (the rows carry no note cell; this line holds the note). [B24-D4, 2026-10-10] C12-C14 re-pinned +2 in place after B24-D4's `env:` mapping at `:418-419` (OD-30's split of page-browser-e2e, section 11); C24's anchor re-pinned in place, `toHaveLength(17)` -> `toHaveLength(19)` (A1 case 16 after B24-D4's two insertion rows).
+
+[PR-J4 integration, 2026-10-23] C48 re-pinned in place (`:607` -> `:608`, the anchor unchanged and verified by content) after the one line section J4's
+integration added above it: the `J4_SET_ASIDE` constant beside `SELF` (J4-B's `app/lib/pcb-sync/__tests__/j4-missing-parts-sheets.test.ts` joined
+prompt-to-gerber's `app/lib/pcb-sync/__tests__` filter after the measurement and is set aside like this suite until the J CI step's one
+re-measurement, OD-254 / OD-258 item 7; case 7's count 586 -> 587 moved the same way). The citation helper re-points rows of the
+`| Cn | path | line | — | anchor |` shape only, so this row was moved by hand.
 
 ## 11. B24-D4 - the OD-30 split of page-browser-e2e
 
@@ -690,7 +698,7 @@ Counts unchanged at `1fe719e` and after (the pinned suites green both times, sec
 | job | at `1fe719e` | after B24-D4 | limit |
 |---|---|---|---|
 | `page-browser-e2e` | every `e2e/*.spec.ts` (9 files, 69 cases), then the orchestration step | [B24-D4 lead, 2026-10-10] 5 files (56 cases by the probe's count, 55 by CI's): the same step, with `SIRKIT_E2E_SKIP` naming the four moved specs (was: 7 files, 61 cases, the two); the orchestration step unchanged | 30 min (unchanged) |
-| `page-browser-e2e-b24` | (none) | [B24-D4 lead, 2026-10-10] `e2e/multi-tab.spec.ts`, `e2e/crash-recovery.spec.ts`, `e2e/keyboard-and-focus.spec.ts` and `e2e/minimum-width.spec.ts` (4 files, 13 cases; was B24-D3's two, 8 cases, in the job drafted as `page-browser-e2e-accessibility`, renamed) | 20 min (new) |
+| `page-browser-e2e-b24` | (none) | [B24-D4 lead, 2026-10-10] `e2e/multi-tab.spec.ts`, `e2e/crash-recovery.spec.ts`, `e2e/keyboard-and-focus.spec.ts` and `e2e/minimum-width.spec.ts` (4 files, 13 cases; was B24-D3's two, 8 cases, in the job drafted as `page-browser-e2e-accessibility`, renamed) | 30 min ([PR-J1 integration, 2026-10-22] OD-256; was 20 min, new at B24-D4) |
 
 The case counts are the lead's scratch-config probe (`--list` only; 2026-10-10); on the real config they are the lead's `--list`
 run at close, **INFERRED** until then (section 11.9). [B24-D4 review, 2026-10-10] CI's run at `1fe719e` listed 68 tests, 60 outside
@@ -831,7 +839,7 @@ C16 `:101` and C17 `:220` hold); `jobsOf` models both. Reviewed pin moves, each 
 | [B24-D4 review] `threshold-census.csv` | the two budget rows | `b24-d2-working-copy` 10, `b24-d3-bom-dialogs` 5 | 13, 6 (regenerated twice, zero drift on the second) |
 | [B24-D4 lead] `b24-d4-browser-split` | `MOVED_SPECS`, `JOB`; 1, 2, 3, 7, 8 | B24-D3's two; the draft name; the two-spec arithmetic, under OD-30's five minutes required | the four (the run line lists B24-D2's two first; Playwright runs the files in name order: crash-recovery, keyboard-and-focus, minimum-width, multi-tab); `page-browser-e2e-b24`; the four-spec arithmetic, both jobs at least five minutes; case 8 checks the rename and D2's readers |
 | [B24-D4 lead] the job's name | `_ci-admission.ts` (`:30`, `:47`, the browser split's field and messages); `b21-f-page` 10; `b24-a1-environment-profile` 16 (its note); `b24-a2-secret-scan` (c); `b24-d0-ci-split` 4, 5, 10; `b24-d1-latency-policy` 9, 10; `b24-d1-threshold-census` 4; `playwright.config.ts:21` (its note); `environment-names.ts:137` (its reason) | the draft name; the two specs | `page-browser-e2e-b24`; the four (`b21-f-page` 10's third line, `b24-a2-secret-scan` (c)'s note); `b24-d1-latency-policy` 9's upload label `Upload browser evidence (B24's specs)` |
-| [B24-D4 lead] pages | `accessibility.md` C52, C70; `edge-security.md:317`; `environments-and-deployment.md:370`, `:404`; `performance-and-reliability.md:152`, section 25 (`:1600`), section 27 (`:1759`), section 29 (`:1897`); B21's C49 | the draft name; page-browser-e2e as the CI job of B24-D2's two specs | `page-browser-e2e-b24`, each with a dated lead note (the A1 table row, whose shape is pinned, by the paragraph above it) |
+| [B24-D4 lead] pages | `accessibility.md` C52, C70; `edge-security.md:317` ([PR-G, 2026-10-17] now `:320`, the three secret-scan allowlist rows PR-G added in its section 6 standing above it); `environments-and-deployment.md:370`, `:404`; `performance-and-reliability.md:152`, section 25 (`:1600`), section 27 (`:1759`), section 29 (`:1897`); B21's C49 | the draft name; page-browser-e2e as the CI job of B24-D2's two specs | `page-browser-e2e-b24`, each with a dated lead note (the A1 table row, whose shape is pinned, by the paragraph above it) |
 | [B24-D4 lead] `threshold-census.csv` | the job's limit row | the draft name's row | `ci.page-browser-e2e-b24.timeout-minutes` (regenerated twice, zero drift on the second) |
 
 Part 1's suites: `b24-d2-working-copy` (10; cases 9 and 10 added) and `b24-d3-bom-dialogs` (5 `it(` blocks, 17 cases; case 5
@@ -1021,30 +1029,61 @@ Test-first on `chapter/b24-production-qualification` from `1fe719e`: two runs, t
 
 | id | file | line | anchor |
 |---|---|---|---|
-| D4-C1 | `.github/workflows/deterministic-manufacturing.yml` | 417 | `- run: pnpm exec playwright test` |
-| D4-C2 | `.github/workflows/deterministic-manufacturing.yml` | 418 | `env:` |
-| D4-C3 | `.github/workflows/deterministic-manufacturing.yml` | 419 | `SIRKIT_E2E_SKIP: "**/multi-tab.spec.ts,**/crash-recovery.spec.ts,**/keyboard-and-focus.spec.ts,**/minimum-width.spec.ts"` |
-| D4-C4 | `.github/workflows/deterministic-manufacturing.yml` | 633 | `page-browser-e2e-b24:` |
-| D4-C5 | `.github/workflows/deterministic-manufacturing.yml` | 635 | `timeout-minutes: 20` |
-| D4-C6 | `.github/workflows/deterministic-manufacturing.yml` | 651 | `run: pnpm exec playwright test e2e/multi-tab.spec.ts e2e/crash-recovery.spec.ts e2e/keyboard-and-focus.spec.ts e2e/minimum-width.spec.ts` |
-| D4-C7 | `.github/workflows/deterministic-manufacturing.yml` | 663 | `scripts/ci-job-headroom.ts .github/workflows/deterministic-manufacturing.yml page-browser-e2e-b24` |
+| D4-C1 | `.github/workflows/deterministic-manufacturing.yml` | 648 | `- run: pnpm exec playwright test` |
+| D4-C2 | `.github/workflows/deterministic-manufacturing.yml` | 649 | `env:` |
+| D4-C3 | `.github/workflows/deterministic-manufacturing.yml` | 650 | `SIRKIT_E2E_SKIP: "**/multi-tab.spec.ts,**/crash-recovery.spec.ts,**/keyboard-and-focus.spec.ts,**/minimum-width.spec.ts,**/agent-execution.spec.ts"` |
+| D4-C4 | `.github/workflows/deterministic-manufacturing.yml` | 940 | `page-browser-e2e-b24:` |
+| D4-C5 | `.github/workflows/deterministic-manufacturing.yml` | 942 | `timeout-minutes: 30` |
+| D4-C6 | `.github/workflows/deterministic-manufacturing.yml` | 958 | `run: pnpm exec playwright test e2e/multi-tab.spec.ts e2e/crash-recovery.spec.ts e2e/keyboard-and-focus.spec.ts e2e/minimum-width.spec.ts` |
+| D4-C7 | `.github/workflows/deterministic-manufacturing.yml` | 970 | `scripts/ci-job-headroom.ts .github/workflows/deterministic-manufacturing.yml page-browser-e2e-b24` |
 | D4-C8 | `playwright.config.ts` | 21 | `testIgnore: (process.env.SIRKIT_E2E_SKIP ?? "").split(",").map((glob) => glob.trim()).filter(Boolean),` |
 | D4-C9 | `app/lib/deployment/flag-inventory.ts` | 65 | `{ name: "SIRKIT_E2E_SKIP", kind: "tooling", default: "unset (ignores nothing)", direction: "disables",` |
 | D4-C10 | `app/lib/deployment/environment-names.ts` | 137 | `undeclared("SIRKIT_E2E_SKIP", "platform", "playwright.config.ts",` |
-| D4-C11 | `app/lib/qualification/__tests__/_ci-admission.ts` | 30 | `"page-browser-e2e", "page-browser-e2e-b24", "agent-boundary-suites"` |
+| D4-C11 | `app/lib/qualification/__tests__/_ci-admission.ts` | 30 | `"page-browser-e2e", "page-browser-e2e-b24", "page-browser-e2e-agent", "agent-boundary-suites"` |
 | D4-C12 | `app/lib/qualification/__tests__/_ci-admission.ts` | 185 | `${E2E_SKIP_SUFFIX}` |
 | D4-C13 | `app/lib/qualification/__tests__/_ci-admission.ts` | 299 | `export const E2E_SKIP_SUFFIX =` |
-| D4-C14 | `app/lib/qualification/__tests__/_ci-admission.ts` | 311 | `function browserSplit(lines: readonly string[], playwrightRun: number, browserEnd: number, read: RepoReader)` |
+| D4-C14 | `app/lib/qualification/__tests__/_ci-admission.ts` | 312 | `function browserSplit(lines: readonly string[], playwrightRun: number, browserEnd: number, read: RepoReader)` |
 | D4-C15 | `artifacts/ai-control-plane-b24/environments-and-deployment.md` | 404 | `[B24-D4, 2026-10-10] \| page-browser-e2e-b24 \|` |
 | D4-C16 | `app/lib/pcb/board-persistence.ts` | 189 | `if (write.skip) return true;` |
 | D4-C17 | `app/lib/pcb/board-persistence.ts` | 255 | `notOurs = known !== undefined && !untouched && known.boardJson !== null && storedJson !== known.boardJson;` |
 | D4-C18 | `app/lib/pcb/board-persistence.ts` | 262 | `restored = stored && JSON.stringify(stored.board) === JSON.stringify(restoredBoard) ? stored : null;` |
 | D4-C19 | `app/components/pcb/GrantedExecutionDialog.tsx` | 55 | `finalFocus={promptFocus}` |
 | D4-C20 | `e2e/keyboard-and-focus.spec.ts` | 235 | `"focus returns to the prompt after Escape"` |
-| D4-C21 | `app/lib/qualification/__tests__/b24-d0-ci-split.test.ts` | 90 | `const JOB_FIRST_LINE = 560;` |
+| D4-C21 | `app/lib/qualification/__tests__/b24-d0-ci-split.test.ts` | 91 | `const JOB_FIRST_LINE = 791;` |
 | D4-C22 | `app/lib/agent/orchestration/__tests__/b21-f-page.test.ts` | 266 | `"two browser runs, one after the other").toEqual([` |
 | D4-C23 | `artifacts/ai-control-plane-b21/evaluation-matrix.md` | 1183 | `\| C93 \|` |
 | D4-C24 | `app/components/pcb/GrantedExecutionDialog.tsx` | 125 | `return prompt && !prompt.disabled ? prompt : false;` |
-| D4-C25 | `app/components/pcb/PcbEditor.tsx` | 602 | `rememberStoredWorkingCopy(init.scope.projectId, board); adoptBoardLifecycle("checkpoint-restore", board);` |
-| D4-C26 | `app/components/pcb/PcbEditor.tsx` | 629 | `rememberStoredWorkingCopy(syncIdentity.projectId, restored); adoptBoardLifecycle("checkpoint-restore", restored);` |
+| D4-C25 | `app/components/pcb/PcbEditor.tsx` | 647 | `rememberStoredWorkingCopy(init.scope.projectId, board); adoptBoardLifecycle("checkpoint-restore", board);` |
+| D4-C26 | `app/components/pcb/PcbEditor.tsx` | 674 | `rememberStoredWorkingCopy(syncIdentity.projectId, restored); adoptBoardLifecycle("checkpoint-restore", restored);` |
 | D4-C27 | `app/lib/pcb/board-persistence.ts` | 261 | `export function rememberStoredWorkingCopy(projectId: string, restoredBoard: PcbBoard): void {` |
+
+[PR-J4 integration, 2026-10-23] D4-C21 `:90` -> `:91` (`J4_SET_ASIDE` was added beside `SELF` in `b24-d0-ci-split.test.ts`; the anchor is unchanged).
+
+[PR-L7, 2026-10-20] D4-C1 to D4-C7 re-pinned in place after PR-L7's insertions above them (OD-254: +84 for page-browser-e2e's lines - the 71 prompt-to-gerber lines at `:313-381` and `:440-441` and the 13 database-delivery entries at `:495-507` - and +86 for page-browser-e2e-b24's, with agent-boundary-suites' two lines at `:761-762`): D4-C1 `:456` -> `:540`, D4-C2 `:457` -> `:541`, D4-C3 `:458` -> `:542` (its anchor re-pinned too: the skip list names agent-execution since OD-254), D4-C4 `:692` -> `:778`, D4-C5 `:694` -> `:780`, D4-C6 `:710` -> `:796`, D4-C7 `:722` -> `:808`; D4-C11's anchor re-pinned in place (`CI_JOB_IDS` names `page-browser-e2e-agent` after `page-browser-e2e-b24`) and D4-C14 `:311` -> `:312` (`browserSplit`'s doc comment gained a line, the reader of both appended jobs); D4-C21's anchor re-pinned in place, `JOB_FIRST_LINE` 599 -> 683 (b24-d0-ci-split's reviewed move: agent-boundary-suites' first line +84). [PR-J7, 2026-11-04] D4-C1 to D4-C7 re-pinned in place after PR-J7's insertions above them (OD-261: +108 for page-browser-e2e's lines - the 54 admitted J entries at `:382-435` and their 54 excludes at `:496-549` - and +162 for page-browser-e2e-b24's, with agent-boundary-suites' 54 lines at `:871-924`): D4-C1 `:540` -> `:648`, D4-C2 `:541` -> `:649`, D4-C3 `:542` -> `:650`, D4-C4 `:778` -> `:940`, D4-C5 `:780` -> `:942`, D4-C6 `:796` -> `:958`, D4-C7 `:808` -> `:970`; D4-C21's anchor re-pinned in place, `JOB_FIRST_LINE` 683 -> 791 (b24-d0-ci-split's reviewed move; `:91` unmoved, the retired set-asides' line `:75` rewritten in place).
+
+[PR-J1 integration, 2026-10-22] D4-C5's anchor re-pinned in place on its unmoved line `:780`: `timeout-minutes: 20` -> `timeout-minutes: 30` (OD-256, section 11.12).
+
+### 11.11 PR-L7 - page-browser-e2e split again: agent-execution in its own job (OD-254)
+
+[PR-L7, 2026-10-20] PR #16's CI run at `0f1c446b` failed page-browser-e2e at its 30-minute limit: 73 tests passed in 28.1 min, then the orchestration step was cancelled (**RECORDED**, the lead's reading of that run). Per spec on that run: `agent-execution` 1,022 s (464 s on the previous green run), `semantic-editor` 99 s, `prompt-to-gerber` 72 s, `l4-generation-task` 67 s, `l7-drone-vertical-slice` 53 s, `l5-chat-task` 45 s, `m4-existing-board-resolution` 45 s, `l7-second-circuit` 41 s, `m1-resolve-missing-parts` 31 s, `m2-acquire-missing-part` 21 s, `simple-workspace` 20 s, `pr-g-agent-generation` 19 s, `journey-contract` 18 s, `pr-f-missing-parts` 16 s, `security-headers` 8.5 s, `mcp-endpoint` 1.5 s - 1,579 s together - and the orchestration step 147.8 s on the green run. The default applied (OD-254, under OD-30): `e2e/agent-execution.spec.ts` runs in a job appended last, `page-browser-e2e-agent` (`:809-843`: one blank line, three `  # [PR-L7]` comment lines, the job at `:813`, `timeout-minutes: 30` - OD-30's browser limit - B24-D1's start and headroom steps, page-browser-e2e's setup verbatim, one named step running the spec, its own upload), and page-browser-e2e's `SIRKIT_E2E_SKIP` names it beside B24-D4's four (`:542`, the one line edited in place). `_ci-admission.ts` reads both appended jobs (`appendedBrowserSpecs`): the skip list must be exactly their specs, none in both; the new job's key may be absent (a workflow from before OD-254, as `b24-f-verdict-lines` reads B24's final tree), never doubled. The spec is a golden-catalog and scenario-map link, so `golden-catalog.ts` and `scenario-map.ts` record it under `page-browser-e2e-agent` (both generators re-run, zero drift on the second run). `b24-d4-browser-split` 1-3 and 5 pin the job, the skip list and A1's rows; every reader moved with a dated `[PR-L7, 2026-10-20]` note.
+
+- page-browser-e2e: 56 s of setup + (28 min 06 s - 1,022 s) + 2 min 28 s of orchestration = 14 min 28 s of 30, a headroom of 15 min 32 s, **INFERRED**: at least OD-30's five minutes, with room for the slower runner seen at `0f1c446b` twice over.
+- page-browser-e2e-agent: 56 s of setup + 107 s of web-server start and test overhead (28 min 06 s less the 1,579 s the specs took) + 1,022 s = 19 min 45 s of 30, a headroom of 10 min 15 s, **INFERRED**: at least OD-30's five minutes on the slow runner's figure (10 min 27 s on the green run's 464 s).
+- page-browser-e2e-b24 is unchanged. The fixture worker's idle pump (OD-254 item 4: an idle backoff, 1 s doubling to 8 s, with an in-process wake) lowers the dev server's load in all three jobs; no CI time is claimed for it until CI measures.
+- [PR-L7 verify, 2026-10-20] The merge gate (section 9): no job `needs:` another and the tree records no required-status-check list, so a list configured by job name would not include `page-browser-e2e-agent` until someone adds it (as section 8 records for `agent-boundary-suites` and section 11.8 for `page-browser-e2e-b24`); it is now the only job that runs `e2e/agent-execution.spec.ts`, the browser evidence of seven eval-catalog rows (OD-254). Once `main` has a required-status-check list, it must name `agent-boundary-suites`, `page-browser-e2e-b24` and `page-browser-e2e-agent` (`remaining-blockers.md` section 3 item 7).
+- [PR-L7 verify, 2026-10-20] Known-stale prose, kept on purpose: `playwright.config.ts:21`'s dated note still reads "page-browser-e2e skips the four page-browser-e2e-b24 runs"; since OD-254 the skip list also names `agent-execution`, which `page-browser-e2e-agent` runs (the workflow's `:542` and `_ci-admission.ts`' `browserSplit` are right). The line is pinned verbatim by `E2E_SKIP_SUFFIX`, which `b24-f-verdict-lines` 2 also applies to B24's final-SHA snapshot of the config (`ci-census-26dc8b8.json`), and `b24-d4-browser-split` 4 keeps the file at 74 lines, so the note cannot be corrected in place without a second admitted suffix; `E2E_SKIP_SUFFIX`'s doc comment records it. The `_ci-admission.ts` block comment and `b24-d4-browser-split` case 2's title and header now say the skip list names the specs of both appended jobs.
+
+### 11.12 PR-J1 integration - page-browser-e2e-b24 to OD-30's 30-minute browser limit (OD-256)
+
+[PR-J1 integration, 2026-10-22] PR #16's CI run 39822933120 at `e1830cfc` cancelled page-browser-e2e-b24 at its 20-minute limit (**RECORDED**, the lead's reading): `pnpm exec playwright install --with-deps chromium` took 12 min 58 s on that runner (17:28:36 to 17:41:34; 19 s on run 39795211563 and 26 s on 39243479765, the same tree and step), the web server was ready 4 s after the test step began, five of the thirteen cases passed at their usual pace (1.5 min, 25 s, 2.2 min, 4 s, 56 s) and the sixth was 90 s in when the limit fired; no assertion failed and no artifact was uploaded. The job's own tests take 8 to 13 min across the recorded runs, so a slow setup leaves it no OD-30 headroom. Default applied (OD-256): `timeout-minutes: 30` for page-browser-e2e-b24, the browser limit page-browser-e2e and page-browser-e2e-agent already carry; no spec moved, no step changed. Readers moved with dated notes: `b24-d4-browser-split` 1 (the job body and the all-jobs limit list), its header, the threshold census row `ci.page-browser-e2e-b24.timeout-minutes` (regenerated), the limits table in section 11.8 above. INFERRED headroom on the slow runner's figures: 13 min of setup + 12 min 48 s = 25 min 48 s of 30, 4 min 12 s - under five minutes only when the setup is that slow; on the usual 56 s of setup, 16 min 12 s. A browser-download cache would remove the download share of the setup but not the `apt` share; left to the owner.
+
+### 11.13 PR-J7 - the section J suites admitted, the J set-asides retired, the split re-measured (OD-261)
+
+[PR-J7, 2026-11-04] At `89009036` 54 of section J's 58 vitest suites ran in no job of this workflow (50 in no job at all, four only in `benchmark-core` and `benchmark-nightly` through `stage10:test`); the other four rode prompt-to-gerber's directory filters and were set aside from the measurement (`J4_SET_ASIDE`, `J5_SET_ASIDE`). By OD-261 (OD-250's mechanism, the alternative OD-254 lists) the 54 are exact-path positional entries at `:382-435`, excluded again at `:496-549` and run by agent-boundary-suites at `:871-924`; the set-asides are retired and the four are measured where they run (sections 1, 2 and 4 are this re-measurement's). The three J browser specs already run in page-browser-e2e: its skip list leaves them in (`jobsOf` is `["page-browser-e2e"]` for each), and no browser line changed.
+
+- The CI times before this change, as the jobs' own OD-30 headroom lines printed them (run 41824471402 at `24beea1e`, 2026-11-04 11:52-12:11 UTC), **RECORDED**: prompt-to-gerber "elapsed 18 min 22 s of 25 min, headroom 6 min 38 s" (job 18 min 27 s); page-browser-e2e "elapsed 18 min 24 s of 30 min, headroom 11 min 36 s" (the three J specs green); page-browser-e2e-b24 "elapsed 10 min 30 s of 30 min, headroom 19 min 30 s"; page-browser-e2e-agent "elapsed 12 min 51 s of 30 min, headroom 17 min 09 s"; agent-boundary-suites "elapsed 6 min 33 s of 20 min, headroom 13 min 27 s" (job 6 min 38 s, red on `b22-closeout-statements` 1 and 3, fixed here); database-delivery 5 min 12 s of 15; production-smoke 2 min 34 s of 20; secret-scan 41 s of 10. Run 41817862566 at `7d8ef423`: prompt-to-gerber 18 min 07 s, agent-boundary-suites 9 min 10 s (green), page-browser-e2e red at 14 min 39 s on `j3-multi-sheet` case 4 ("element(s) not found"), green at `24beea1e` after its numbered dismissal of transient errors.
+- The local measurement (one run, four workers, `b24-d0-ci-split` set aside), **CONFIRMED** by execution: 08:28:42-08:37:22 local on 2026-11-04, `Duration 517.03s`, `Test Files 635 passed | 8 skipped (643)`, `Tests 6890 passed | 54 skipped (6944)`, exit 0, 1287.16 s of testcase time; the 54 admitted J suites hold 23.18 s of it (the moved set 557.90 s, 43.3 %, 233 files, above OD-30's 40 % line), the four J4/J5 suites 1.85 s under their directory filters (`j5-fixture-recipes` 1.77 s). The 54 alone, run before it: 54 files, 454 tests, `Duration 25.60s`, 22.49 s of testcase time, exit 0.
+- What CI should read, **INFERRED** until the lead's CI run after the push: prompt-to-gerber's selection is unchanged (411 files: the 54 entries are excluded again, the four set-aside suites always ran there), so about 18 min 07 s to 18 min 27 s of 25 on the two runners above, headroom about 6 min 33 s to 6 min 53 s; agent-boundary-suites gains 54 files, between +17 s (their 23.18 s at 0.73, the job's CI vitest `Duration` of 367 s at `24beea1e` over its 502.64 s at PR-L7's measurement) and +111 s (the job's own 2.05 s a file, 367 s over 179 files), so about 6 min 55 s to 8 min 29 s of 20 on `24beea1e`'s runner and about 11 min 43 s on `7d8ef423`'s (550 s, scaled), headroom at least 8 min 17 s there; on the slowest run the planner read across 38 runs since 2026-10-06 (676 s, not re-read here) about 14 min 25 s, headroom 5 min 35 s. The other six jobs are unchanged. Section 4's ratio (1237 s over the local total) reads prompt-to-gerber at 11 min 41 s, far under the 18 min 22 s CI recorded, so OD-30 is judged on the headroom lines `scripts/ci-job-headroom.ts` prints in every job.
+- The fixes the admission needed. (1) `j7-allowance-contention:25`, `j7-allowance-review:23` and `j7-provider-wait-sibling-end:17` ran the clock ("a simulated clock") and the closing denial of a paid call, a database and a network together in one sentence, which `b22-closeout-statements` 1 and 3 read as the runner's own no-network guarantee: each sentence now ends at the clock, in place; no allow-list entry. (2) `j1-project-connectivity`'s PC-2 bound is a CI row now, classified a complexity-proof (`threshold-classification.ts`: 61.9 ms against the union's 7.8 ms here, 7.9x; the pre-fix derivation at `91dd2c3c^` 651.6 ms, 83.5x, on the same workload; the bound 25x + 20 ms). (3) `b16-1b-auth-composition` "exactly 177 route methods" and `b20-b4-withhold-proposals` 8 walk once at module load: they outran vitest's 5 s default in a four-worker full run; no timeout raised; each still fails on a planted raw route file or stale phrase.
+- Pins moved, each with a dated `[PR-J7, 2026-11-04]` note and none loosened: `b24-d0-ci-split` (the retired set-asides at `:75`, `FIRST_EXCLUDE` 382 -> 436, `JOB_FIRST_LINE` 683 -> 791, `MOVED` +54, `MOVED_FILES` 179 -> 233, cases 1, 5, 6, 7, 10 and 11), `b24-d4-browser-split` 2, 5 and 8, `b24-a1-environment-profile` 16 and its row reader, `b24-d1-threshold-census` 1, A1's insertion table (PR-J7's three rows; three wrapped lines of its section 11 joined so its later lines stand), the page citations OD-261 lists, sections 10 and 11.10 here, and the tables of sections 1, 2 and 4 that gained 56 rows, offset by 56 wrapped lines of sections 0 to 3 joined (`:289`, `:388`, `:476`, `:485` and `:523`, which other pages cite, stand).
+- The merge gate (section 9): the 54 J suites now fail only in agent-boundary-suites; once `main` has a required-status-check list it must name it.

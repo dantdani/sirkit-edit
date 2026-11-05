@@ -42,6 +42,7 @@ path,methods,record_id,class
 /api/circuit-verification/propose,POST,cd.circuit-verification.workbench,propose
 /api/circuit-verification/readiness,POST,cd.circuit-verification.workbench,propose
 /api/circuit-verification/run,POST,cd.circuit-verification.workbench,propose
+/api/component-resolution-authority,POST,schematic.resolve-components,read
 /api/component-selection/alternative,POST,cd.component-selection.workbench,propose
 /api/component-selection/catalog,POST,cd.component-selection.workbench,read
 /api/component-selection/evaluate,POST,cd.component-selection.workbench,propose
@@ -67,6 +68,11 @@ path,methods,record_id,class
 /api/full-flow/propose,POST,full-flow.run,propose
 /api/full-flow/run,POST,full-flow.run,propose
 /api/full-flow/transition,POST,full-flow.run,mutate
+/api/generation-tasks,GET;POST,schematic.generate,mutate
+/api/generation-tasks/[id],GET,schematic.generate,read
+/api/generation-tasks/[id]/control,POST,schematic.generate,mutate
+/api/generation-tasks/[id]/events,GET,schematic.generate,read
+/api/generation-worker,POST,schematic.generate,mutate
 /api/health,GET,project.service-health,read
 /api/interfaces/allocate,POST,cd.interfaces.workbench,propose
 /api/interfaces/alternatives,POST,cd.interfaces.workbench,propose
@@ -89,6 +95,7 @@ path,methods,record_id,class
 /api/model-simulation/readiness,POST,cd.model-simulation.workbench,propose
 /api/parts/[id],GET,parts.catalog-read,read
 /api/parts/[id]/alternates,GET,parts.catalog-read,read
+/api/parts/acquisitions,GET;POST,parts.cad-acquisition,mutate
 /api/parts/categories,GET,parts.catalog-read,read
 /api/parts/external-search,POST,parts.external-observation-read,read
 /api/parts/search,POST,parts.catalog-read,read

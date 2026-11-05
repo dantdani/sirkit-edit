@@ -5572,3 +5572,257 @@ Test-first on `chapter/b24-production-qualification` from `1fe719e`: two runs, t
   close: pcb 977 passed, 4 skipped; B14.4 22; confinement 375; qualification 525 passed, 15 skipped; tsc 0; eslint 0 on the changed
   TypeScript file; the page checks after the records 6,693 passed, 35 skipped (553 files, app/api and app/lib/agent included);
   citation sweeps 0 broken; the tree secret scan 0 hits; counts 168/165/3/0, 48/37/9/28, 107, 32.
+
+### B24 post-merge corrective closeout - reconciliation and current checkpoint (2026-10-11)
+
+- **CONFIRMED, read-only metadata:** the GitHub connector authenticated `dantdani`; `dantdani/sirkit-edit` is private and the
+  authenticated owner has admin permission. No credential value was read into an artifact or printed. The local GitHub CLI's
+  config was sandbox-inaccessible, so the authenticated connector supplied the metadata instead; no escalation was used.
+- **Merge:** PR #15, `chapter/b24-production-qualification` into `main`, merged normally at 2026-10-11T05:26:33Z. Final head
+  `9dee4fb2d2ea205c3da8b00798a213ce8cea2935`; merge `32b081e152620b46e791f9589256f7d0603f300f`. Local first-parent history agrees.
+- **Final-head CI, independently checked:** deterministic-manufacturing run 38113287508 completed successfully with all seven
+  pull-request jobs successful; benchmark-quality run 38113287472 completed successfully with `benchmark-core` and
+  `benchmark-latency` successful. `benchmark-nightly` was skipped by its schedule/dispatch-only condition, not counted as passing.
+  Only metadata was fetched: no external write, workflow dispatch/rerun, provider call, simulator or database operation.
+- **Record repair:** section 5.1 of B24's final verdict now carries the verified merge SHA and the chapter PR list; dated section
+  5.5 records the metadata and distinguishes it from the historical `26dc8b8` gate evidence. None of the historical scope states,
+  test counts, integrity statements, qualification matrix or live-blocker entries was changed.
+- **Current checkpoint:** post-merge corrective closeout **IN PROGRESS**, branch `codex/astra-foundation`, base
+  `32b081e152620b46e791f9589256f7d0603f300f`. The owner approved OD-229 (refuse AI deletion disconnecting final surviving circuitry,
+  without changing human editor deletion) and OD-236 (strict-provider null means omission only where the original schema permits
+  omission). Pre-existing deterministic lint/readiness defects are also being corrected. This entry records no completed gate
+  for the corrective tree; narrow and program-wide non-live validation belong to the lead's serial run.
+- **Handoff rule:** runbook section 0 permits a resource blocker only when no deterministic local/fake-backed work remains;
+  its final report admits an honest PARTIAL verdict and names remaining live/physical unknowns. Close the deterministic local
+  corrections first and record their own results. Only then begin the additive Astra foundation; no Astra activation, default
+  model change, new live qualification or unqualified specialist-model admission is authorized by this metadata reconciliation.
+  The historical chapter remains PARTIAL and all existing live blockers remain unchanged.
+
+### Product-reliability assignment, checkpoints A and B (2026-10-14)
+
+Assignment: `artifacts/astra-guided-pcb/PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.md` (prepared 2026-10-14), evidence under
+`artifacts/product-reliability-simple-ui/`. Branch `codex/astra-foundation`, base `32b081e`; the protected original untouched.
+
+- **A, establish and reproduce (CONFIRMED):** the pending corrective tree inventoried file by file (32 modified, 10 untracked)
+  and preserved; credentials by name only; the normal app (`pnpm dev`, port 3000, the owner's `.env.local`) and the fixture
+  journey both exercised. Theory generate refused 400 `AUTH_PROJECT_SELECTOR_REQUIRED` before any provider work (the client
+  sends no selector, `lib/apply-netlist.ts:11-15`); the owner's own Build run of 2026-10-11 (durable `llm.call-record.v1`:
+  13 model calls, 28,878 in / 3,211 out) ended "No parts produced" on the then-missing table (migrated the same day); chat
+  closed on load with the sheet pointing "above"; no submit for the ask route; dead Settings; "3D view" literal; decorative
+  check rows; a silent sync return. Fixture baseline `e2e/prompt-to-gerber.spec.ts`: 1 passed (1.4 min), exit 0.
+  Reproduction suite `app/lib/qualification/__tests__/pr-a-journey-reproductions.test.ts` (1 ordinary + 10 `it.fails`):
+  11 passed. Fault register and chain contract: `fault-register.md`, `workflow-contract.md` (from four read-only traces).
+  Live spend by the builder: none (`live-spend.json`; price basis recorded from the official model page).
+- **B, finish the pending corrective foundation:** OD-229/OD-236 and the lifecycle repairs verified on the current tree
+  (13 suites green). Four holes closed test-first, each shown failing with the fixes reversed string-exactly
+  (`scratchpad/b/counterexample.py`): inspector subtree keyed to the selected references (same-kind, same-value A→B no longer
+  reuses A's draft; a same-selection refresh keeps it), the live-preview hint retired on identity change (A→B→A does not
+  revive it), the committed assignment result panel-owned (survives the keyed detail's remount), the BOM request chain's
+  `.catch` (a rejection settles the request). A review claim that "Refresh prices" was broken under StrictMode was
+  REFUTED (mount-only double invocation); kept as a pin. `requestAgain` registered in the control registry; both sanctioned
+  generators re-run (628 controls / 63 surfaces; in scope 168, unnamed 0). Gates on the corrective tree: `tsc --noEmit`
+  exit 0 (after removing a truncated generated `.next/dev/types/validator.ts`); whole-repository `eslint .` exit 0 with
+  0 errors and 34 warnings (28 `no-unused-vars`, 5 `no-console`, 1 `exhaustive-deps`), down from the historical 33 errors;
+  the registry, accessibility, reproduction and lifecycle suites recorded in `validation.md`.
+- **Unchanged:** B24's verdict PARTIAL and every live blocker LB-1..LB-17; no Astra activation; no provider or database write
+  by the builder; no default-model change.
+- **Next:** checkpoint C, the vertical slice: Theory request contract through the shared preparation, structured partial /
+  skipped-check status from `build-multi`, provider-failure classification with `reason`, bounded loops, visible route and
+  submission for every composer route, the journey stages with next actions, individually named unresolved instances
+  (mount the existing readiness panel), no silent sync returns, the real reason on a stale apply.
+
+### Product-reliability assignment, checkpoint C — one understandable workflow (2026-10-14/15)
+
+Branch `codex/astra-foundation` from `535760f`. Evidence: `artifacts/product-reliability-simple-ui/` (root-causes-and-fixes.md §C,
+validation.md §C, workflow-contract.md, fault-register.md, live-spend.json).
+
+- **Contracts (CONFIRMED by suites):** the Theory client prepares its request through the one shared helper
+  (`app/lib/project/ai-request.ts`: selector headers + content type) and carries the lifecycle signal; an answer that is not a
+  netlist is invalid local output. `build-multi` answers `app/lib/schematic/build-result.ts` (`status` complete/partial,
+  `omittedBlocks`, `electricalCheck` passed/findings/skipped/not_run, `planner`, `budget`); the loops are bounded (iteration
+  cap, one 40 s deadline, three blocks in flight; the operator's `SIRKIT_BUILD_ITERATION_CAP` may lower the cap); failures are
+  classified (`provider_unavailable` with `reason`/`retryable`, `build_budget_exhausted`, `build_loop_failed`,
+  `build_invalid_output`) and the shared card withholds Retry on `insufficient_quota`. The apply 409 carries `code`.
+- **Progression (CONFIRMED):** every composer route has a labelled submission ("Send" for ask); a pure question on an empty
+  project is a question (rule 1b); the "prepare-pcb" hint carries the intent; the proposal dialog carries the partial/skipped
+  notes; a pinned proposal survives a reload against the schematic's content digest; the journey model
+  (`app/lib/workflow/journey.ts`) derives ten stages with one next permitted action, shown by `JourneyStrip` under the
+  header; "Prepare PCB" starts the same preparation the PCB tab's button starts; apply, qualify and release stay their own
+  clicks. Unresolved instances are named per refDes before any server call; a blocked preflight is shown per blocker
+  (`PcbSyncReadinessPanel` mounted); no sync entry returns silently; a stale apply says so and withdraws the Apply buttons.
+- **Records:** OD-242 (OWNER_DECISIONS.md) re-pins OD-106's byte tripwire on `build-multi` (sha256 `eaf4e8d6…`); 27
+  citation rows re-pointed by content and the page line-count pin 8459 → 8556 (dated notes).
+- **Gates:** tsc 0; whole-repository eslint 0 errors / 33 warnings (prior debt); C suites + page-citation suites 440 + 48
+  passed; generators 630 controls / 64 surfaces, in scope 168, unnamed 0; `e2e/journey-contract.spec.ts` 1 passed after three
+  diagnosed restore defects (validation.md); the full browser suite 68 passed / 1 failed (`prompt-to-gerber` replay miss from one extra browser id drawn by the new activity step; the fixture's recorded design now carries its electrical report; the two journey specs re-run 2 passed).
+- **Live:** ONE bounded Build request in the normal app with the owner's key (cap 6; 0.19 USD priced from the durable call records; cap 5.00, remaining 4.81) reached a complete 8-part proposal, approval, bindings, a verified plan, the durable board and a real local qualification (routed, 0 unrouted, parity pass); release not exercised live (`validation.md`).
+- **Unchanged:** B24 PARTIAL; LB-1..LB-17; no Astra activation; no default-model change.
+- **Next:** checkpoint D (semantic parity: the generated coverage matrix, dispositions, registry manuals, drift gates).
+
+### Product-reliability assignment, checkpoint E — the interface simplified in place (2026-10-16)
+
+- **Scope:** `app/page.tsx` (the empty sheet's entry action; the Workspace settings dialog; the chat header's one-line summary; the
+  3D tab mounted as a PCB-editor presentation; the computed design-checks footer under both library panels; the canvas sheet-size
+  select removed), `app/components/pcb/PcbEditor.tsx` (`presentation`, `onOpenPcbTab`, the 3D pane), `app/lib/schematic/design-checks.ts`
+  (new), `app/lib/engineering/control-registry.ts` (three rules), the class-only styling pass in 15 component files,
+  `e2e/simple-workspace.spec.ts` (new), `pr-e-design-checks` (new), `pr-a` E cases flipped to ordinary cases.
+- **Records:** B17 inventory 636 controls / 64 surfaces; B24 census in scope 168, unnamed 0; accessibility.md C19 re-anchored and
+  29 rows re-pointed (dated notes); page line-count pin 8618 → 8626 → 8612; fault register F-07 FIXED, F-30 and F-31 added and FIXED.
+- **Gates:** tsc 0 (×2); eslint 0 on the touched files; the eight gate suites 81 passed (×3); fixture Playwright 11 passed
+  (`simple-workspace`, `journey-contract`, `prompt-to-gerber`, `minimum-width` ×3, `keyboard-and-focus` ×5); secret scan 0 hits.
+  Two real defects found by the new spec and the screenshots (F-30, F-31) were fixed before the run went green.
+- **Live:** none this checkpoint (spend unchanged: 0.19 USD of 5.00).
+- **Unchanged:** B24 PARTIAL; LB-1..LB-17; no Astra activation; no default-model change.
+- **Next:** checkpoint D — the first background workflow died unfinished at 00:14 EDT (no completion record); assess and complete
+  its partial outputs, then the coverage matrix, the manuals and the drift gates.
+
+### Product-reliability assignment, checkpoint D — AI semantic parity (2026-10-16/17)
+
+- **Scope:** the shared commands `sirkit.schematic.generate-proposal` (OD-243; `app/lib/schematic/build-multi-generation.ts` extracted
+  from the route, `app/lib/agent/generation-proposals.ts`, `app/api/chat/schematic-generation-runtime.ts`), `sirkit.pcb-sync.preflight`,
+  `sirkit.parts.catalog-inspect`, `sirkit.component.review-request` (unavailable) (OD-244; `app/lib/pcb-sync/preflight-read.ts`,
+  `app/lib/agent/pcb-sync-preflight-reads.ts`, `app/lib/atomic/catalog-part-detail.ts`, `app/lib/agent/catalog-inspection-reads.ts`,
+  `app/api/chat/catalog-inspection-runtime.ts`); the registries (`tool-catalog`, `tool-registry`, `tool-discovery`, `agent-exposure`,
+  `mcp-exposure-review`), the agent runtime (`contracts`, `context`, `gateway`, `loop`, `orchestration/scheduler`), `app/api/chat/route.ts`;
+  the page intake (`app/page.tsx`, `app/lib/project/generation-proposal-events.ts`; OD-246); the coverage matrix (`parity-matrix.ts`,
+  `scripts/generate-pr-d-coverage-matrix.ts`, OD-245) and the manuals (`tool-manual.ts`, `scripts/generate-pr-d-tool-manuals.ts`, OD-247);
+  the B09 manifest generator taught the two read bindings; `SIRKIT_BUILD_ITERATION_CAP` inventoried (flag inventory, environment-name
+  census, `.env.example`, the A1 and census pages).
+- **Records:** OD-243 … OD-247; OD-106's tripwire re-pinned to sha256 `fa3ddf58b02834734df1752ab0def3e03c90f9a25fd61b27df058295e23ca8ca`;
+  registry 52 descriptors / 40 agent-exposed / 9 MCP-exposed / 11 withheld, digest `eng1-17588a420afaec9f`; the sanctioned generators
+  re-run (B01, B04, B05, B09, B10, B11, B16-0-4, B20, B21, B24 maps, PR-D matrix and manuals); the two new generator scripts rows of the
+  generator inventory; B11 capsules expect the preflight read wherever a schematic is (`evaluation-cases.ts`); page line-count pin
+  8612 → 8690 (d5). Pin moves with dated "[PR-D, 2026-10-16/17]" notes: b04 (exposure tripwire for the two non-B05 read bindings; artifacts),
+  b09-1 (13 → 14 declarations), b09-2/b09-3/b10/b19-e (the board-less toolset holds the preflight read beside the Tier 1 proposal; b10's
+  runtime-availability csv regenerated), b09-3 case D (two reviewed branches), b20-b1/b20-b4/b20-d2 pages (49 → 52, 9 → 11 withheld,
+  partition and sweep counts), b20-b2 (body-boundary matrix regenerated), b20-a2/b20-a5 (citations re-pointed), b20-c1/b20-c3 (counts,
+  descriptor-text maxima kept by shortening two descriptions), b21-c (the coordinator row; the A4L bound +5 → +8; case 6's technique
+  extended, HEAD digests untouched), b21-e2 (the event list; markup counts 38/77 → 40/81, no new control), b21-e2b/b21-f (the
+  evaluation-cases.ts digest), b21 specialist pages (loop.ts/gateway.ts rows re-pointed), b22-b (31 → 32), b23-a (48 → 52 census),
+  b24-a1/a2 (67 → 68 flags; 99 → 100 census rows; configuration 28 → 29), b24-f maps and verdict lines (D9 literals), four B21 pages'
+  page.tsx rows re-pointed by content, 37 CRLF-smudged working files renormalized to LF.
+- **Gates:** the 304-file gate set 3754 passed (2 skipped); tsc 0; eslint 0 on 93 changed files; fixture Playwright 3 passed; the matrix
+  and manuals drift gates green over the final tree; secret scan 0 hits. Deferred to G: `b24-d0-ci-split` (the 471-file junit evidence
+  must be re-measured by the full selection run); the whole suite; an e2e spec for the agent generation intake.
+- **Live:** none this checkpoint (spend unchanged: 0.19 USD of 5.00). Fixture/fake-backed throughout: the generation and catalog ports are
+  fakes in the tests; the production port was only proven to resolve under the fixture runtime and to be null without a key.
+- **Pre-existing breaks fixed in passing:** the B20 A2/A5 citation rows commit 535760f moved; the `b24-a1-flags` census red since PR-C.
+- **Owner's runbook:** sections J and K appended by the owner (the K edit is committed with this checkpoint, unchanged, so it is preserved).
+- **Unchanged:** B24 PARTIAL; LB-1..LB-17; no Astra activation; no default-model change; `SIRKIT_ORCHESTRATION_ENABLED` off by default.
+- **Next:** F (missing parts in the ordinary workflow; the remaining Astra work with exact live blockers), then G, H, I, then J, then K.
+
+### Product-reliability assignment, checkpoint F — missing parts in the ordinary workflow; the first Astra increments (2026-10-17)
+
+- **Scope:** `app/lib/parts/missing-facts.ts` (the one checklist derivation), `app/components/pcb/MissingPartsList.tsx` + `PcbEditor.tsx`
+  (the refusal rows as workflow items), `app/page.tsx` (the sidebar line, the journey wiring), `app/lib/workflow/journey.ts`;
+  `app/lib/agent/missing-facts-reads.ts`, `app/lib/agent/draft-request-proposals.ts` (+ the registries, `parts.draft-request` record);
+  `app/lib/llm/openai-config.ts` (+ provider-policy, deployment configuration mirror: the `gpt-6-astra` profile);
+  `app/lib/engineering/module-contract.ts`, `app/lib/agent/module-contract-proposals.ts`; `app/lib/pcb/placement/intent.ts` (+ types,
+  engine, layout-candidate, layout-proposals, `stackup-candidate.ts`, `app/lib/agent/stackup-proposals.ts`);
+  `app/lib/pcb/experiments/{placement-routing-feedback,routing-capability-matrix}.ts` + `scripts/generate-pr-f-routing-capability-matrix.ts`;
+  `e2e/pr-f-missing-parts.spec.ts`; `playwright.config.ts` (distributor sources operator-disabled for the fixture server); ten new
+  vitest suites (144 tests) and the evidence pages under `artifacts/product-reliability-simple-ui/` (+ `astra/`).
+- **Records:** OD-248 (missing parts; the draft request's own record; the b19-d ratchet amendment accepted), OD-249 (the Astra
+  increments and their exact live blockers; the free models probe); registry 56 / 44 / 9 / 15 (digest `eng1-39bc5a6b899a0b50` at the final
+  regeneration), 108 action records, 932 matrix rows, 56 manuals, capability matrix 18 rows; pin moves with dated notes by the builders
+  (fB 23, fC 7, fD 19, fE 19, fA 6, fF 1) and the lead (the list in validation.md); the B21 pages' rows re-pointed by content; two HEAD
+  digests of `b21-c` re-recorded (the placement descriptor changed under review); page line-count pin 8690 → 8705.
+- **Gates:** files: 383 passed | 3 skipped (386); tests: 4384 passed | 21 skipped (4405); vitest exit 1: 2 unhandled worker error(s) ([vitest-worker] Timeout calling onTaskUpdate under the 383-file load, no test failed); tsc 0; eslint 0 on 80 changed files; fixture Playwright 4 passed (54.8 s) in the integrated run, then simple-workspace 1 passed (15.8 s) after its wait for the post-apply passes; secret scan 0 real hits.
+- **Live:** one zero-cost read-only models probe (names only): `gpt-6-astra` is listed for the owner's key; spend unchanged at 0.19 USD of 5.00.
+- **Unchanged:** B24 PARTIAL; LB-1..LB-17 (LB-F1 account availability resolved; LB-F2/F3 spend and the contract turn open); no Astra
+  activation (the default model stays `gpt-5.6-sol`); no default-model, exposure-list or release-boundary change beyond the reviewed ones.
+- **Next:** G (the whole suite with the CI-split evidence re-measurement, whole-repo eslint, every Playwright config, an e2e spec for the
+  agent generation intake, the live `gpt-6-astra` contract turn), H, I; then J, then K.
+
+### Product-reliability assignment, checkpoint G — verification (2026-10-17)
+
+- **Scope:** `app/page.tsx` (three artifact intakes, a draft-request dialog, the chat footer), `app/lib/project/{sheet-artifact-currency,
+  draft-request-events,module-contract-events,stackup-candidate-events}.ts`, `app/lib/project/chat-run-view.ts`, `lib/persistence.ts`
+  (the footer), `app/components/pcb/{PcbEditor,StackupCandidatePanel}.tsx`, `app/components/parts/AtomicPublicationReviewPanel.tsx`
+  (prefill), `app/lib/agent/fixture-agent-adapter.ts` (the generation turn), `e2e/pr-g-agent-generation.spec.ts`,
+  `app/lib/schematic/theory-physicality.ts` (the Stage 3 boundary fix), `app/lib/deployment/secret-scan-allowlist.ts` (+3), the
+  evidence pages `README.md`, `remaining-blockers.md`, `verification-matrix.md`, `agent-artifact-intakes.md`.
+- **Records:** pin moves with dated "[PR-G …]" notes across B10, B18, B21, B22, B23, B24 suites and pages (the builders' and the lead's
+  lists in validation.md); B17 inventory 646 / 66; PR-D matrix 939 rows; threshold census +8 rows; live spend LR-2 0.0028 USD
+  (cumulative 0.1928 of 5.00).
+- **Gates:** worktree HEAD + G: tsc 0; the CI job's full positional selection 486 / 495 files (one explained environment case); this
+  assignment's 110 suites 854 passed; history and tree secret scans exit 0. Main checkout: three cases red only through the concurrent
+  agent's uncommitted edits.
+- **Browser:** the five fixture specs passed on the commit's tree in the side worktree (`codex/product-reliability-g`).
+- **Carried forward:** 19 suites in no CI job → admission + the CI-split re-measurement.
+- **Concurrent work:** an OpenAI Codex agent edited 15 files from 05:47 (Build generation deadline and cancellation); excluded from
+  this commit, untouched.
+
+### Product-reliability assignment, sections L and M — the persistent generation task and component resolution (2026-10-17/20)
+
+- **Scope:** the owner's corrective section L (a durable, resumable generation task instead of one blocking request) and section M
+  (resolving and replacing missing parts), on `codex/astra-foundation`: step 0 `84a2f72c` (OD-251), increments 1-4 `aa8b2512`,
+  `c8e53499`, `382fd59f`, `2e938241`; M1 `2e938241` + `03d473f1`; increment 5 and M2 `00d03430`, `ada0b194`, `7bf0fa55`; increment 6
+  `8b76793f` (OD-253), `2240363a`, `9a42c36b`, `0f1c446b`, `2a0e3079`; M4 `e03c532f`; LR-3 `3337f3f3` (reservation), `deaf15ca`
+  (result). 522 files, 240 new, +50,390 / -2,691 (`artifacts/product-reliability-simple-ui/persistent-generation/changed-files.md`).
+- **What landed:** the durable task store, contracts and events on the existing durable tables (no migration); a separate worker
+  (`pnpm run worker:generation`, `pnpm run dev:with-worker`) running fenced, finite plan / block / merge slices with checkpoints,
+  continuation, a strategy ladder and per-task accounting (an operator unit that may only lower it, an input dimension admitted before
+  each call and across slices, SDK retries 0, both planner attempts reserved); six canonical routes with SSE and a worker pump behind
+  its secret; the task card (Stop design, Pause, Resume, Retry block, Continue with another allowance, Review saved blocks); chat on the
+  same task (`generate-proposal` 2.0.0, task-inspect, task-control as a confirm chip; Stop answer vs Stop design); the L.6 search fixes;
+  a bounded input for the automatic Tidy / Review; schematic-only resolution of unresolved parts through review and one canonical
+  transaction; CAD acquisition from the bundled KiCad library and a fixture source to a validated candidate and the two-human
+  publication; board impact before approval with a durable PCB.
+- **Records:** OD-251, OD-252, OD-253 (and the CI builder's OD-254 for increment 7); pin moves with dated "[PR-L …]", "[PR-M …]",
+  "[PR-L6 …]" notes; route census 168 -> 177; flag census 68 -> 75; the history-only secret-scan entry for a placeholder (`0f1c446b`);
+  the evidence package `persistent-generation/` (progress, stall map, contract, worker, changed files, validation, verdict, screenshots)
+  and `component-resolution/` (M2 design with OD-M2-1 … 14, M4 page, verdict).
+- **Gates (recorded in `persistent-generation/validation.md`):** increment 5 + M2 combined tree: 962/962 vitest files, every CI selection
+  0 failed at 4 workers (15 timing-only failures at 13 workers, each green alone with its numbers), full Playwright 82/82, orchestration
+  4/4 after `ada0b194`, B24 13/13, 30 generators without drift, tsc and eslint clean, secret scans 0. Increment 6 integration:
+  1001/1001 vitest files; prompt-to-gerber 3640 passed 0 failed; agent-boundary 0 failed; five functional pin failures fixed; every
+  remaining failure timing-only and green alone (numbers recorded); tsc clean; Playwright default 73, set1 24, orchestration 4, B24 13
+  (run 2; run 1 lost its server to one `0xC0000409` worker crash under load). Post-approval bound: 559 qualification, 1286 stage10, 1327
+  in the affected folders, 52 page suites 678 tests.
+- **Live:** LR-3, the one bounded live four-motor run (OD-252 item 10, OD-253 item 7): 3.83 USD reserved first; the plan with assumptions
+  and one block saved, two slices yielded and continued, then the owner's OpenAI account answered `insufficient_quota`; 1.17 USD spent
+  (call records); the task durable and resumable. Cumulative known spend 1.3628 USD of 5.00; 2.66 USD held for LR-3's resume.
+- **Verdicts:** section L PARTIAL (L.7 items 1-8 and 10 CONFIRMED by permanent tests, 9 PARTIAL: fixture CONFIRMED, live blocked by the
+  quota; the L.8 stop condition holds live on its blocker branch and fixture-backed on its reviewable-artifact branch); section M
+  PARTIAL (M.5 1-6 and 8 CONFIRMED with fixture evidence, 7 PARTIAL; the online source blocked on OD-M2-3 et al.); the assignment
+  PARTIAL.
+- **Open:** the owner's OpenAI quota; OD-M2-1 … OD-M2-14; rebinding a bound part from the page (`PB_ACTIVE_SELECTION_CONFLICT`); the
+  server-side currency guard; the B14 dialog as an impact consumer; semantic-editor scenario 3 intermittent (no root cause after 16
+  passes); one `0xC0000409` worker crash; the post-apply latch per server process (`remaining-blockers.md`).
+- **Unchanged:** B24 PARTIAL; LB-1..LB-17; the default model `gpt-5.6-sol`; no agent release, purchase, publication or credential tool;
+  `C:\Users\robsa\sirkit` untouched.
+- **Next:** increment 7's CI admission (OD-254) and integration; PR #16's head fast-forwarded and its CI read; LR-3's task resumed once
+  the owner restores the quota; then runbook section J, then K (neither started).
+
+### Product-reliability assignment, section J — CI admission of the J suites (PR-J7, 2026-11-04)
+
+- **Scope:** on `codex/astra-foundation` after `89009036` (J7-2 review and J7-9), as WIP `2f00d4b3` (cut off by a session end,
+  unverified) and its completion: every J vitest suite runs in a CI job of `.github/workflows/deterministic-manufacturing.yml`
+  (OD-261). The 54 no job selected are exact-path prompt-to-gerber entries (`:382-435`), excluded again (`:496-549`) and run by
+  agent-boundary-suites (`:871-924`); the four J4/J5 suites keep prompt-to-gerber's directory filters and `J4_SET_ASIDE` /
+  `J5_SET_ASIDE` are retired; the three J browser specs already ran in page-browser-e2e. The split re-measured once (local, four
+  workers): 643 files, 6,944 tests, 0 failures, 54 skipped, 1,287.16 s, the moved set 43.3 %
+  (`artifacts/ai-control-plane-b24/evidence/d0-ptg-timing.xml`, `ci-split.md` section 11.13).
+- **Fixes:** PR #16's agent-boundary-suites was red at `24beea1e` on `b22-closeout-statements` 1 and 3 (the J7 suite headers named
+  the fixture clock and denied a network in one sentence); the three J7 headers and the page's own quotation of them are reworded
+  in place, no allow-list entry. `j1-project-connectivity`'s PC-2 bound is a classified CI row (a complexity-proof). The two
+  tree-walking cases that outran the 5 s default under a four-worker full run (`b16-1b-auth-composition` "exactly 177 route methods",
+  `b20-b4-withhold-proposals` 8) walk once at module load; no timeout raised; each still fails on a planted raw route file or stale
+  phrase (re-shown in the completion run, probes removed).
+- **Records:** OD-261 (departs from OD-254's default by the alternative it lists); pin moves with dated "[PR-J7, 2026-11-04]" notes in
+  `b24-d0-ci-split`, `b24-d4-browser-split`, `b24-a1-environment-profile`, `b24-d1-threshold-census` and the page citations;
+  `threshold-classification.ts` +1; `threshold-census.csv` and `generator-inventory.md` regenerated; `multi-sheet/progress.md` J5,
+  J6, J7 rows.
+- **Gates (completion run, each alone, keys unset, `--maxWorkers=4`):** the 35 CI-split / admission / page pin suites first: 2 failed
+  (`b22-closeout-statements` 2 and 3 on `ci-split.md:1087`'s quotation of the old header), reworded in place; then the final
+  selection (those 35; the b24-c1 suites, b24-b1-score-separation, b24-b3-scenario-map, b24-d1-latency, b16-1b, b20-b4, b20-d2 x2,
+  b21-closeout; b20-a2-negotiation, a reader of `OWNER_DECISIONS.md`): 47 files, 517 passed, 11 skipped, 0 failed; the 58 J
+  suites 475 passed; agent-boundary-suites' whole selection (114 entries) 233 files,
+  2,671 passed, 18 skipped, 0 failed, `Duration 304.82s`; tsc 0; eslint 0 on the ten touched TypeScript files; the four B24
+  generators zero drift; scan-secrets tree and `--history 89009036..HEAD` exit 0; the workflow parses (js-yaml; eight jobs, limits
+  unchanged); `app/page.tsx` 9,156 lines; no CR in any changed file.
+- **Expected CI (INFERRED until the lead's run):** prompt-to-gerber unchanged (411 files), about 18 min 07 s to 18 min 27 s of 25;
+  agent-boundary-suites about 6 min 55 s to 8 min 29 s of 20 on `24beea1e`'s runner, at worst about 14 min 25 s on the slowest run
+  since 2026-10-06; the other six jobs unchanged.
+- **Next:** the lead's CI run and its eight headroom lines; the J browser evidence and the J verdict; then section K.

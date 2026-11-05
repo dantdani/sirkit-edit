@@ -264,7 +264,7 @@ test("[B21 F2] F12's browser half: a DAG run interrupted after its plan (Stop wh
   const provider = interrupted.body.provider!;
   await expect(page.getByText(/^Orchestration: specialist circuit-topology started \(task /).last(), "the stalled specialist is running").toBeVisible({ timeout: 60_000 });
   await page.getByTestId("chat-stop").click();
-  await expect(page.getByText("Stopped by you — the assistant's run was cancelled.").last()).toBeVisible();
+  await expect(page.getByText("Stopped by you — the assistant's answer (Stop answer) was cancelled.").last()).toBeVisible(); // [PR-L/M integration, 2026-10-18] the run-log line runbook L.5 renamed (app/page.tsx: Stop answer vs Stop design; e2e/l5-chat-task.spec.ts pins its full text) - the same Stop, the same visible line
   await expect.poll(() => interrupted.stream.end, { message: "Stop cancelled the stream the page was reading" }).toBe("cancelled");
   const before = interrupted.stream.events;
   expect(typesOf(before).slice(0, 1)).toEqual(["run_started"]);

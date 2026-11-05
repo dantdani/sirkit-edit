@@ -74,9 +74,9 @@ describe("[B24-D1] the threshold census (D24-28, OD-212)", () => {
     const classified = classifyThresholdCensus(scan.rows, THRESHOLD_CLASSIFICATIONS);
     expect(classified.problems).toEqual([]);
     const counts = censusCounts(classified.rows);
-    expect([counts["elapsed:ci"], counts["moved:ci"], counts["elapsed:none"]]).toEqual([48, 7, 13]); // [B24-D1 review, 2026-10-09] was [47, 6, 12]
-    expect([counts["elapsed:ci:deadline-proof"], counts["elapsed:ci:complexity-proof"], counts["elapsed:ci:performance"] ?? 0, counts["moved:ci:performance"]]).toEqual([33, 15, 0, 7]); // [B24-D1 review, 2026-10-09] was [33, 14, 0, 6]
-    expect(THRESHOLD_CLASSIFICATIONS).toHaveLength(55); // [B24-D1 review, 2026-10-09] was 53
+    expect([counts["elapsed:ci"], counts["moved:ci"], counts["elapsed:none"]]).toEqual([51, 7, 13]); // [PR-J7, 2026-11-04] reviewed pin move (OD-261): 14 -> 13 outside CI and 50 -> 51 CI bounds, j1-project-connectivity's PC-2 bound in CI once the J suites were admitted (agent-boundary-suites), classified a complexity-proof (threshold-classification.ts); [PR-J1 integration, 2026-10-22] reviewed pin move: 13 -> 14 outside CI, the elapsed bound review PC-2 asked for in j1-project-connectivity (a file no CI job selects): the single-sheet connectivity derivation on 17,200 pins stays under 25x the union's own time (+20 ms) - a complexity proof (the quadratic scan it replaced measured ~250x), unclassified as the other thirteen are (only a CI row needs a class); the CI counts and this case's title unchanged (the title keys its own budget row); [PR-G, 2026-10-17] reviewed pin move (OD-250): [48, 7, 15] -> [50, 7, 13] - the two bounds below joined CI with their suites (prompt-to-gerber's positional selection, run in agent-boundary-suites), each classified as its neighbours are: pr-c-composer-question's linearity bound a complexity-proof, pr-f-missing-facts-read's port deadline a deadline-proof; [PR-G, 2026-10-17] reviewed pin move: 13 -> 15 outside CI, the two elapsed bounds PR-C and PR-F added in files no CI job selects (pr-c-composer-question: the empty-project question rule linear on hostile text, < 1,000 ms; pr-f-missing-facts-read: a hanging catalog port meets the read's deadline), unclassified as the other thirteen are (only a CI row needs a class); the CI counts unchanged; [B24-D1 review, 2026-10-09] was [47, 6, 12]
+    expect([counts["elapsed:ci:deadline-proof"], counts["elapsed:ci:complexity-proof"], counts["elapsed:ci:performance"] ?? 0, counts["moved:ci:performance"]]).toEqual([34, 17, 0, 7]); // [PR-J7, 2026-11-04] reviewed pin move (OD-261): was [34, 16, 0, 7], + PC-2's complexity-proof; [PR-G, 2026-10-17] reviewed pin move (OD-250): was [33, 15, 0, 7], + one deadline-proof and one complexity-proof (the two admitted bounds); [B24-D1 review, 2026-10-09] was [33, 14, 0, 6]
+    expect(THRESHOLD_CLASSIFICATIONS).toHaveLength(58); // [PR-J7, 2026-11-04] reviewed pin move (OD-261): was 57, + PC-2's classification; [PR-G, 2026-10-17] reviewed pin move (OD-250): was 55, + the two admitted bounds; [B24-D1 review, 2026-10-09] was 53
     for (const entry of THRESHOLD_CLASSIFICATIONS) {
       expect(THRESHOLD_CLASSES, entry.key).toContain(entry.class);
       expect(entry.reason.length, entry.key).toBeGreaterThan(24);
@@ -218,7 +218,7 @@ describe("[B24-D1] the threshold census (D24-28, OD-212)", () => {
       "ci.production-smoke.timeout-minutes": 20 * 60_000,
       "ci.secret-scan.timeout-minutes": 10 * 60_000,
       "ci.agent-boundary-suites.timeout-minutes": 20 * 60_000,
-      "ci.page-browser-e2e-b24.timeout-minutes": 20 * 60_000, // [B24-D4, 2026-10-10] reviewed pin move: + the job B24-D4 appended (OD-30's split of page-browser-e2e)
+      "ci.page-browser-e2e-b24.timeout-minutes": 30 * 60_000 /* [PR-J1 integration, 2026-10-22] reviewed pin move, OD-256: 20 -> 30 min */, "ci.page-browser-e2e-agent.timeout-minutes": 30 * 60_000, // [B24-D4, 2026-10-10] reviewed pin move: + the job B24-D4 appended (OD-30's split of page-browser-e2e); [PR-L7, 2026-10-20] reviewed pin move: + page-browser-e2e-agent, the job PR-L7 appended (OD-254)
       "ci.benchmark-core.timeout-minutes": 20 * 60_000,
       "ci.benchmark-nightly.timeout-minutes": 90 * 60_000,
       "ci.benchmark-latency.timeout-minutes": 30 * 60_000,
@@ -255,7 +255,7 @@ describe("[B24-D1] the threshold census (D24-28, OD-212)", () => {
     expect(inCi.map((row) => [row.file, row.count, row.defaults, row.max])).toEqual([
       ["app/api/chat/__tests__/b18-d-chat-stop.test.ts", 2, 2, null],
       ["app/api/chat/__tests__/b21-b-chat-router.test.ts", 4, 4, null],
-      ["app/api/chat/__tests__/b21-d2-chat-proposals.test.ts", 1, 1, null],
+      ["app/api/chat/__tests__/b21-d2-chat-proposals.test.ts", 1, 1, null], ["app/lib/__tests__/l6-embedding-cache.test.ts", 1, 1, null], // [PR-L7, 2026-10-20] reviewed pin move: + l6-embedding-cache, admitted to database-delivery (OD-254)
       ["app/lib/computation/__tests__/b22-b-exposure.test.ts", 1, 0, 15_000],
       ["app/lib/mcp/__tests__/b20-a1-http-transport.test.ts", 5, 5, null],
       ["app/lib/mcp/__tests__/b20-a3-authorized-post.test.ts", 2, 2, null],
@@ -266,8 +266,8 @@ describe("[B24-D1] the threshold census (D24-28, OD-212)", () => {
       ["app/lib/qualification/__tests__/b24-c1-llm-call-record.test.ts", 1, 1, null],
       ["app/lib/qualification/__tests__/b24-c2-attribution.test.ts", 1, 0, 15_000], ["app/lib/qualification/__tests__/b24-d2-process-cleanup.test.ts", 4, 0, 7_000], // [B24-D2, 2026-10-09] + the process cleanup's four polls (5 s, 5 s, 7 s and the confirm wait)
     ]);
-    expect([inCi.reduce((sum, row) => sum + (row.count ?? 0), 0), inCi.reduce((sum, row) => sum + (row.defaults ?? 0), 0)]).toEqual([30, 24]); // [B24-D2, 2026-10-09] 26 -> 30 (+ b24-d2-process-cleanup's four, none at the default)
-    expect(waits.filter((row) => row.ci.length === 0).map((row) => [row.file, row.count])).toEqual([["app/lib/project/__tests__/b14-1-production-integration.test.tsx", 1]]);
+    expect([inCi.reduce((sum, row) => sum + (row.count ?? 0), 0), inCi.reduce((sum, row) => sum + (row.defaults ?? 0), 0)]).toEqual([31, 25]); // [PR-L7, 2026-10-20] 30 -> 31 and 24 -> 25 (+ l6-embedding-cache's one, at the default; OD-254); [B24-D2, 2026-10-09] 26 -> 30 (+ b24-d2-process-cleanup's four, none at the default)
+    expect(waits.filter((row) => row.ci.length === 0).map((row) => [row.file, row.count])).toEqual([["app/lib/project/__tests__/b14-1-production-integration.test.tsx", 1]]); // [PR-L7, 2026-10-20] reviewed pin move: - l6-embedding-cache, in CI since PR-L7 admitted it to database-delivery (OD-254); [PR-L6 integration, 2026-10-19] reviewed pin move: + l6-embedding-cache's one vi.waitFor at the default (PR-L6, a suite in no CI job until increment 7 admits it)
   });
 
   it("7. the seven moved markers: four in b20-a4-observation-normalizer case 6, two in pcb-sync performance-resilience and one in b20-a1-redaction-linear, each a performance row with its catalogued metric, in a converted file whose line count and it( count are unchanged (674 and 17; 62 and 4; 109 and 4); this suite's own budget and yield rows", { timeout: 120_000 }, async () => { // [B24-D1 review, 2026-10-09] reviewed pin move: six -> seven (the redaction-linear bound the first scan missed)

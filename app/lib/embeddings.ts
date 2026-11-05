@@ -30,8 +30,8 @@ function getOpenAIClient(): OpenAI {
  * Embed a single string — convenience wrapper for the search endpoint, where
  * there is exactly one query to embed.
  */
-export async function embedQuery(text: string): Promise<number[]> {
-  const [vector] = await embedBatch([text]);
+export async function embedQuery(text: string, options?: { signal?: AbortSignal }): Promise<number[]> { // [PR-L6, 2026-10-19] an optional signal, passed to the SDK call (in place: :11 and :25 are cited)
+  const [vector] = await embedBatch([text], options);
   return vector;
 }
 
@@ -40,7 +40,7 @@ export async function embedQuery(text: string): Promise<number[]> {
  * Output order matches input order. Throws if the batch is too large — callers
  * with arbitrary counts should use `embedMany`.
  */
-export async function embedBatch(texts: string[]): Promise<number[][]> {
+export async function embedBatch(texts: string[], options?: { signal?: AbortSignal }): Promise<number[][]> {
   if (texts.length === 0) return [];
   if (texts.length > MAX_EMBED_BATCH_SIZE) {
     throw new Error(
@@ -50,7 +50,7 @@ export async function embedBatch(texts: string[]): Promise<number[][]> {
   const openai = getOpenAIClient(); const res = await recordModelCall({ provider: "openai", model: EMBEDDING_MODEL, kind: "embedding", usage: embeddingUsage }, () => openai.embeddings.create({ // [B24-C1] D24-21, OD-207: one call record per SDK call; the client comes first, so a missing key leaves no record
     model: EMBEDDING_MODEL,
     input: texts,
-  }));
+  }, options?.signal ? { signal: options.signal } : undefined));
   return res.data.map((d) => d.embedding);
 }
 

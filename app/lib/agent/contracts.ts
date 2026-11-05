@@ -149,7 +149,7 @@ export interface AgentRunContext {
   externalAcquisitionAvailable?: boolean;
   /** [B20 A4] SERVER fact: the chat route bound the external tool port (approved MCP servers) to this run AND a verified canonical
    *  state exists. Present (true) exactly when the discovery context advertises the external-mcp-observation authority. */
-  mcpObservationAvailable?: boolean; /** [B22-B] SERVER fact: the chat route bound the named computation port (the bounded engine host) to this run; present (true) exactly when the discovery context advertises the computation-engine authority. */ computationAvailable?: boolean;
+  mcpObservationAvailable?: boolean; /** [B22-B] SERVER fact: the chat route bound the named computation port (the bounded engine host) to this run; present (true) exactly when the discovery context advertises the computation-engine authority. */ computationAvailable?: boolean; /** [PR-D] SERVER fact: the chat route bound the Build-mode generation port to this run AND a validated schematic exists; present (true) exactly when the discovery context advertises the schematic-generation authority (OD-243). [PR-L, 2026-10-18] The port is the durable generation-task service (a task store here and the run's provider servable), not an in-turn generation (runbook L.5). */ schematicGenerationAvailable?: boolean; /** [PR-D d2] SERVER fact: the chat route bound the catalog inspection port (the shared catalog part detail loader behind the parts route, app/api/chat/catalog-inspection-runtime.ts) to this run; present (true) exactly when the discovery context advertises the catalog authority. */ catalogInspectionAvailable?: boolean; /** [PR-M, 2026-10-17] SERVER fact: the chat route bound the published revision evidence port (app/api/chat/component-resolution-runtime.ts) beside the catalog port; present (true) exactly with the catalog fact - the component resolution proposal and the candidate search need it (no board). */ componentResolutionAvailable?: boolean; /** [PR-M, 2026-10-17] SERVER fact: the chat route bound the local catalog search port (the Build loop's own recall); present (true) exactly with the resolution fact - the candidate search needs it. */ catalogSearchAvailable?: boolean; /** [PR-M, 2026-10-18] M2: SERVER fact: the chat route bound the CAD acquisition port (app/api/chat/cad-acquisition-runtime.ts: the durable task store and the catalog) AND a validated schematic exists; never a board, never a body field. The acquisition start / status need it. */ cadAcquisitionAvailable?: boolean;
 }
 
 /** [B15.3] see `AgentRunContext.pcbProposalBasis`. */
@@ -352,7 +352,7 @@ export type GatewayInvocationOutcome =
   | { kind: "proposal"; ok: true; toolId: string; version: string; proposal: SealedAgentProposal }
   /** [B15.3] the PCB proposal rides a DISTINCT outcome kind so the schematic
    *  proposal path can never receive one by type or by accident. */
-  | { kind: "pcb-proposal"; ok: true; toolId: string; version: string; proposal: SealedPcbEditProposal }
+  | { kind: "pcb-proposal"; ok: true; toolId: string; version: string; proposal: SealedPcbEditProposal } | { kind: "generation-task"; ok: true; toolId: string; version: string; task: GenerationTaskReference } | { kind: "acquisition-task"; ok: true; toolId: string; version: string; output: Record<string, unknown>; sourceRevisionDigest: string; verification: string; task: CadAcquisitionTaskReference } /* [K2, 2026-11-04] runbook K.2 (OD-260 item 6): a chat start or attach of the durable acquisition task answers the SAME read result the model got before (the report: no contract change, no version bump) beside a typed reference the page follows through its own route; a status read stays `read` */ | { kind: "generation-task-control"; ok: true; toolId: string; version: string; request: SealedGenerationTaskControlRequest } /* [PR-L, 2026-10-18] runbook L.5: the Build-mode generation is a DURABLE task - a start or attach answers its reference (never a sealed design), a control request is a sealed chip the human confirms; the v1 `generation-proposal` kind (an in-turn design sealed inside the run) is removed with its path */ | { kind: "draft-request-proposal"; ok: true; toolId: string; version: string; proposal: SealedPartDraftRequest } | { kind: "module-contract-proposal"; ok: true; toolId: string; version: string; proposal: SealedModuleContractProposal } | { kind: "resolution-proposal"; ok: true; toolId: string; version: string; proposal: SealedResolutionProposal } | { kind: "sheet-organization-proposal"; ok: true; toolId: string; version: string; proposal: SealedSheetOrganizationProposal } /* [PR-J5, 2026-10-23] the organise proposal rides its own kind (never the tier-1 `proposal`); a refused plan is `proposal-blocked` below, never ok */ /* [PR-M, 2026-10-17] the unresolved-component resolution batch rides its own kind (never the B14 replacement's `proposal`); a blocked batch is `proposal-blocked` below, never ok */ /* [PR-F fD] the module contract set rides its own kind too (an engineering note validated against the pinned sheet; no apply path); a refused set is `proposal-blocked` below, never ok */ /* [PR-F] the UNVERIFIED part draft request rides its own kind too; a refused request is `proposal-blocked` below, never ok */ // [PR-D] the Build-mode generation proposal rides its own kind too (OD-243); a failed generation is `proposal-blocked` below, never ok
   | { kind: "proposal-blocked"; ok: false; toolId: string; version: string; blockers: Array<{ code: string; detail: string }> }
   /** [B17-F] a server-VALIDATED view-session command request the BROWSER
    *  executes on the user's own view bus (stale-revision rule, role gate and
@@ -361,7 +361,7 @@ export type GatewayInvocationOutcome =
   /** [B17-F] the shared revision-bound layout candidate (placement or
    *  routing) — an artifact the human previews and applies in the editor's
    *  own panel; producing it changes nothing. */
-  | { kind: "layout-candidate"; ok: true; toolId: string; version: string; candidate: LayoutCandidate }
+  | { kind: "layout-candidate"; ok: true; toolId: string; version: string; candidate: LayoutCandidate } | { kind: "stackup-candidate"; ok: true; toolId: string; version: string; candidate: StackupCandidate } /* [PR-F fE, 2026-10-17] the sealed stackup / via-policy recommendation rides its own kind (never the layout candidate union the editor's store applies); an unsupported request is `proposal-blocked` below, never ok */
   /** [B18-B] a SERVER-MINTED one-shot execution grant for a Tier 1 family:
    *  the browser tenders it (one compare-and-set burn) and commits the
    *  operations through its canonical editor session; the loop awaits the
@@ -390,7 +390,7 @@ export interface AgentToolInvocationGateway {
     /** [B18-C] the provider call id. REQUIRED by the granted-execution dispatch (a grant is minted once per run + call —
      *  the mint idempotency key); every other operation class ignores it. */
     callId?: string;
-  }): Promise<GatewayInvocationOutcome>;
+  }): Promise<GatewayInvocationOutcome>; /** [K2, 2026-11-04] K1 case 3: the stored revision a STATUS READ OF A LIVE TASK would observe now (a side-effect-free read through the same gate; null for every other tool, on any refusal or error) - the loop's identical-call guard keys on it, so such a read is refused as unchanged only while the stored task is unchanged; optional (a gateway without it keeps the args-only key) */ observedRevision?(input: { runId: string; provider: LLMProviderId; toolId: string; version: string; args: Record<string, unknown>; context: AgentRunContext; signal?: AbortSignal }): Promise<string | null>;
 }
 
 // ─── Run events (the chat UI protocol source) ────────────────────────────────
@@ -414,7 +414,7 @@ export type AgentRunEvent =
    *  overloaded onto the schematic `proposal_ready`. Receiving or displaying
    *  it grants nothing and mutates nothing; apply authority stays behind the
    *  human-gated PCB approval boundary. Emitted at most once per run. */
-  | { type: "pcb_proposal_ready"; runId: string; toolId: string; proposal: SealedPcbEditProposal }
+  | { type: "pcb_proposal_ready"; runId: string; toolId: string; proposal: SealedPcbEditProposal } | { type: "generation_task_ready"; runId: string; toolId: string; task: GenerationTaskReference } | { type: "acquisition_task_ready"; runId: string; toolId: string; callId: string; task: CadAcquisitionTaskReference } /* [K2, 2026-11-04] runbook K.2 (OD-260 item 6): the acquisition task's OWN event - its reference (identities and the public state when the start answered); the page follows the task by re-reading it through GET /api/parts/acquisitions and shows its stored progress events in the activity entry's Work log; receiving it grants nothing and changes nothing */ | { type: "generation_task_control_ready"; runId: string; toolId: string; request: SealedGenerationTaskControlRequest } /* [PR-L, 2026-10-18] runbook L.5: the durable task's OWN events, in place of v1's generation_proposal_ready: a task reference the page follows with the same status card and review intake as a Build start (it re-reads the task through its own authorized route; the reference grants nothing), and a sealed control request the page shows as a confirm chip (only the human's click calls the control route) */ | { type: "draft_request_ready"; runId: string; toolId: string; proposal: SealedPartDraftRequest } | { type: "module_contracts_ready"; runId: string; toolId: string; proposal: SealedModuleContractProposal } | { type: "component_resolution_ready"; runId: string; toolId: string; proposal: SealedResolutionProposal } | { type: "sheet_organization_ready"; runId: string; toolId: string; proposal: SealedSheetOrganizationProposal } /* [PR-J5, 2026-10-23] the organise proposal's OWN event: a sealed organisation (sirkit.sheet-organization-proposal.v1) the page shows for review and applies only through the human's Approve as one schematic.move-to-sheet transaction (the page re-plans and refuses on a differing digest); receiving it mutates nothing; until the page names the event its default run-log line shows it */ /* [PR-M, 2026-10-17] the component resolution batch's OWN event: a sealed batch the page shows for review (its intake and the review dialog land with the next round; until then its default run-log line); receiving it mutates nothing - applying is the human's reviewed schematic.resolve-components */ /* [PR-F fD] the module contracts' OWN event: a sealed engineering note the page shows in the run log as a reviewable note (no apply: the human accepts by continuing); receiving it mutates nothing; until the page names the event its default run-log line shows it */ /* [PR-F] the part draft request's OWN event: a sealed UNVERIFIED review task for a human to file; receiving it mutates nothing; the page has no intake for it yet (its default run-log line) */ // [PR-D] the Build-mode generation proposal's OWN event (OD-243): never overloaded onto proposal_ready; receiving it mutates nothing; the page's intake (the review dialog) is a later round and ignores it until then
   /** [B17-F] a validated view-command request for the browser's view bus.
    *  The page dispatches it on the named editor session with the agent
    *  actor; the bus's own stale-revision / role / session rules decide. */
@@ -422,7 +422,7 @@ export type AgentRunEvent =
   /** [B17-F] a layout candidate for the editor's candidate store — displayed
    *  in the placement / routing panel; apply stays the human's explicit
    *  action through the B17-E apply path. */
-  | { type: "layout_candidate_ready"; runId: string; toolId: string; candidate: LayoutCandidate }
+  | { type: "layout_candidate_ready"; runId: string; toolId: string; candidate: LayoutCandidate } | { type: "stackup_candidate_ready"; runId: string; toolId: string; candidate: StackupCandidate } /* [PR-F fE, 2026-10-17] the stackup / via-policy candidate's OWN event: a sealed recommendation the human reads (the page has no intake for it yet - its default run-log line; the stackup is changed only through the editor's Stackup selector); receiving it mutates nothing */
   /** [B18-B] a server-minted execution grant for the browser's granted-
    *  execution ritual: preview_then_confirm shows the exact preview and
    *  waits for the human; execute_explicit tenders and commits through the
@@ -496,3 +496,18 @@ export type OrchestrationRunEvent =
 export function isOrchestrationRunEventType(type: unknown): type is OrchestrationRunEventType {
   return typeof type === "string" && (ORCHESTRATION_RUN_EVENT_TYPES as readonly string[]).includes(type);
 }
+
+// [PR-D] the Build-mode generation proposal artifact, imported at the END (a type import is hoisted and erased): no line cited in this file moves; [PR-L, 2026-10-18] now the durable task's reference and control request (runbook L.5)
+import type { GenerationTaskReference, SealedGenerationTaskControlRequest } from "./generation-task-tools";
+// [PR-F] the part draft request artifact, imported at the END too (a type import is hoisted and erased): no line cited in this file moves
+import type { SealedPartDraftRequest } from "./draft-request-proposals";
+// [PR-F fE] the stackup / via-policy candidate, imported at the END too (a type import is hoisted and erased): no line cited in this file moves
+import type { StackupCandidate } from "../pcb/candidates/stackup-candidate";
+// [PR-F fD] the module contract artifact, imported at the END too (a type import is hoisted and erased): no line cited in this file moves
+import type { SealedModuleContractProposal } from "./module-contract-proposals";
+// [PR-M, 2026-10-17] the component resolution batch artifact, imported at the END too (a type import is hoisted and erased): no line cited in this file moves
+import type { SealedResolutionProposal } from "../component-resolution/resolution-proposal";
+// [PR-J5, 2026-10-23] the organise proposal artifact, imported at the END too (a type import is hoisted and erased): no line cited in this file moves
+import type { SealedSheetOrganizationProposal } from "../engineering/sheet-organization-proposal";
+// [K2, 2026-11-04] the acquisition task reference, imported at the END too (a type import is hoisted and erased): no line cited in this file moves
+import type { CadAcquisitionTaskReference } from "../acquisition/cad-acquisition-contract";

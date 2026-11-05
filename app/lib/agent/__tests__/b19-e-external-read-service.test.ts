@@ -125,7 +125,7 @@ describe("[B19-E E6] b — discovery and integrity", () => {
     expect(boardless.canonicalState).toBeNull();
     expect(boardless.externalAcquisitionAvailable ?? false).toBe(false);
     expect(boardless.discovery.availableAuthority).not.toContain("external-observation");
-    expect(toolIds(boardless)).toEqual([PROPOSAL]);
+    expect(toolIds(boardless)).toEqual(["sirkit.module.propose-contracts", "sirkit.parts.draft-request", "sirkit.parts.missing-facts", "sirkit.pcb-sync.preflight", "sirkit.schematic.instance-inspect", PROPOSAL]); // [PR-M, 2026-10-17] pin move: + the schematic-instance inspection (over the verified schematic, no board, no port needed); // [PR-F fD, 2026-10-17] pin move: + the module contract proposal (over the verified schematic and its head mark, no board, no port); // [PR-F fB, 2026-10-17] pin move: + the part draft request and the missing-facts read (both over the verified schematic, no board, no port); // [PR-D, 2026-10-17] pin move: + the Schematic to PCB preflight read, a Tier 0 read over the verified schematic snapshot (no board, no port); the external reads stay withheld
   });
 
   it("the automation channel never discovers them, even when the authority is claimed", () => {

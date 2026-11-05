@@ -3221,3 +3221,491 @@ Under the existing OD-217 heading (`:2599`), append:
 - (f) The superseded-statement table: one row per `path:line` an increment's list names, re-resolved at `58c0834` by the statement's own text (the discovery's at `58c0834`'s numbering, a dated line B24-F or the closeout adds not counted), with the increment and its own list's `path:line` (a row's increment is its source's) and one of six note states - `noted`, `noted nearby`, `rewritten`, `not noted`, `never noted in place (checksum-bound)` for a forward migration and `never noted in place (B11-scanned, OD-113)` for a B11-scanned file; never the statement's text (the review round, correctness-1, correctness-4, security-1).
 - (g) The pin Fb's two suites move by joining prompt-to-gerber's selection: `b24-d0-ci-split` 7's count 489 -> 491 (`b24-d0-ci-split.test.ts:501`, the same dated in-place note as Fa's; both suites already set aside by the pattern Fa's move widened); neither suite carries a budget or a yield, so the threshold census does not move for them.
 - (h) The citation rule of `b24-f-verdict-lines` 8: every backticked `path:line` on F's pages resolves - a bare file name against the page's directory or the lead's records, a `:N` continuation against the last path of its paragraph or table row, a runbook line as the runbook's - and case 4's physical-completion check needs the negation on the completion word itself (the review round, correctness-11).
+
+## OD-242 — `build-multi` answers a structured result contract; OD-106's byte pin re-pinned (product reliability C, 2026-10-14)
+
+- **Question:** the owner's assignment `artifacts/astra-guided-pcb/PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.md` (section C) requires
+  `POST /api/schematic/build-multi` to report a partial subsystem merge, a skipped or not-run electrical check, the planner's state and
+  the budget spent as data (fault F-03), and to bound its loops. OD-106's B21-B tripwire pins the route's bytes. Change the route and
+  re-pin, or leave the route as the tripwire recorded it?
+- **Default applied:** the route answers `app/lib/schematic/build-result.ts` (`status`, `omittedBlocks`, `electricalCheck`, `planner`,
+  `budget`; failures carry `reason` and `retryable`), its block loops run three at a time under one deadline, and the tripwire is
+  re-pinned to sha256 `eaf4e8d6c7acab7babba2fd75fff8899400adcb15767bf8e083b0437131c22b1` with a dated note. Everything OD-106 decided stands: the route is outside
+  the B21 DAG, reads no orchestration flag and no orchestration module, and the B21-A import gate keeps every orchestration module from
+  importing it or `runBuildToolLoop`. Retirement stays a separate owner-approved change.
+- **The owner may choose otherwise:** retire the route (OD-106's first alternative), or route it through the B21-B DAG (its second).
+
+## OD-243 — `build-multi` is a thin caller of the ONE shared generation; the agent's generate-proposal reuses it through the chat port; OD-106's byte pin re-pinned (product reliability D, 2026-10-16)
+
+- **Question:** the owner's assignment `artifacts/astra-guided-pcb/PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.md` (section D) requires
+  the AI to share the UI's semantic commands through the same domain authority and validations. The Build composer's Generate POSTs
+  `/api/schematic/build-multi`; the route's generation lived inline in the route, which OD-106's B21-B tripwire pins byte for byte. Give
+  the agent its own second generation, or extract the route's generation into one shared function and re-pin?
+- **Default applied:** the generation is extracted verbatim into `app/lib/schematic/build-multi-generation.ts` (`runBuildMultiGeneration`:
+  the planner, the complexity gate, the bounded block pool, the deterministic merge, the advisory post-merge ERC and OD-242's structured
+  result, under the same `BUILD_BUDGET`); the route is a thin caller that serializes its outcome exactly as before (PR-C's suites pass
+  unchanged), and the agent's `sirkit.schematic.generate-proposal` (a Tier 2 sealed proposal, `sirkit.schematic-generation-proposal.v1`,
+  reviewed in `agent-exposure.ts`, withheld from MCP in `mcp-exposure-review.ts`) runs the SAME function through the chat route's injected
+  port (`app/api/chat/schematic-generation-runtime.ts`, resolved only for a configured provider or the fixture runtime, as the external
+  reads and the named computations are injected), behind the server's `schematicGenerationAvailable` fact and the `schematic-generation`
+  authority. Discovery requires Build mode (`schematic-build-mode`: the validated sheet holds no Theory component, the server's fact for a
+  mode the chat body does not carry), a validated schematic with its canonical head mark, and the port fact; the run's remaining wall
+  clock is the budget; one generation per run. A complete or partial generation is sealed with completeness, omitted blocks, the
+  electrical check, the planner and the budget as data; a failed one is `proposal-blocked` data (class, retryable, provider, reason),
+  never ok; nothing is applied by the tool (the page's intake of the artifact is a later round). The tripwire is re-pinned to sha256
+  `fa3ddf58b02834734df1752ab0def3e03c90f9a25fd61b27df058295e23ca8ca` with a dated note, and the route's header no longer spells the gate's
+  words. Everything OD-106 decided stands: the route is outside the B21 DAG, reads no B21 flag and imports no B21 module (it imports the
+  generation directly, never the chat runtime), and the B21-A import gate keeps every orchestration module from importing it, the
+  generation or `runBuildToolLoop`. Retirement stays a separate owner-approved change.
+- **The owner may choose otherwise:** retire the route (OD-106's first alternative) once the agent path is the only producer; route it
+  through the B21-B DAG (its second); or admit `generation_proposal_ready` to `COORDINATOR_ARTIFACT_EVENTS` so a coordinator's generation
+  counts as the run's one artifact under the flag (today the loop's proposal single-flight bounds it; the flag is off by default).
+
+## OD-244 — three further shared commands for the AI: the Schematic-to-PCB preflight read, the catalog part inspection, and the component review request registered as unavailable (product reliability D, 2026-10-17)
+
+- **Question:** section D of the owner's assignment names sync preflight, part inspection and component review requests among the
+  missing high-value shared commands. Give the agent each as a tool over the same domain functions the UI uses, or leave them UI-only?
+- **Default applied:** (1) `sirkit.pcb-sync.preflight` (Tier 0 read, `app/lib/pcb-sync/preflight-read.ts`): the Prepare PCB pre-server
+  checks over the run's verified schematic through the editor's own `listUnresolvedInstances` / `unresolvedInstancesRefusal` (no second
+  checker), board-less, the server stages reported `not_run`; withheld from MCP because it reads browser-only `SchematicState` (as OD-69).
+  (2) `sirkit.parts.catalog-inspect` (Tier 0 read): one catalog part by id through the chat route's injected catalog port over the parts
+  route's read, extracted into `app/lib/atomic/catalog-part-detail.ts` (one reader for the route and the tool); B04's `catalog` authority
+  is the port's fact; withheld from MCP by choice (as OD-235). (3) `sirkit.component.review-request` is registered NOT callable
+  (disposition `unavailable`, reason in its descriptor): no server-owned review-request service exists that an agent may call — the
+  evidence review lives in the Build Library's import-review path, which a human drives; restoring it needs a domain service with its
+  own authority and tests, not a tool over React state. The registry is 52 descriptors, 40 agent-exposed, 9 MCP-exposed, 11 withheld.
+- **The owner may choose otherwise:** expose either read over MCP once a server-side schematic source exists; implement the review
+  request as a domain service and lift the tool's binding.
+
+## OD-245 — the generated UI↔AI coverage matrix: dispositions derived from the registries, tests by presence, and the fourteen honestly `missing` records (product reliability D, 2026-10-17)
+
+- **Question:** section D.1–2 requires a current coverage matrix with a disposition per meaningful operation and no unexplained row.
+  Hand-maintain it, or derive it from the registries with a drift gate?
+- **Default applied:** `app/lib/engineering/parity-matrix.ts` + `scripts/generate-pr-d-coverage-matrix.ts` derive every row at run time
+  from `ACTION_COVERAGE_REGISTRY`, `API_ROUTE_COVERAGE`, the live control scan (the B17 generator's), `sirkitToolRegistry()`,
+  `agent-exposure.ts`, `granted-execution-families.ts`, `permission-tiers.ts`, `mcp-exposure.ts` and `authorization.ts`; no id is
+  hard-coded; the disposition set is closed (callable-now, proposal-only, grant-required, human-admin-only, view-session-only,
+  intentionally-ui-only, unavailable, legacy, missing) and every reason names the registry fact that decided it. Precedence as reviewed by
+  the lead: B01 `toolExposure` preview-apply / structured-route chat-router exposures count as the AI's live path (proposal-only, the
+  human applies); `domainCommand === null` with UI controls is intentionally-ui-only (hydrate, undo/redo, checkpoint, autosave, files,
+  footprint resolution, KiCad export, BOM workbench); sources under `app/api/auth` / `app/lib/auth` and `app/lib/agent/autonomy-*` are
+  human-admin-only; sources under `app/lib/execution-grant/` are grant-required. `tests` is file presence by whole dotted token under
+  `app/**/__tests__/**` and `e2e/**` (directories listed), never a declaration; the gate names an exposed id without a test. The gate
+  byte-compares the committed CSV and summary (drift), so a new actionable control, route or tool without a classified row fails.
+  Fourteen action records are `missing` with their gaps listed, read by the lead as: human-only by policy (`pcb.sync-durable` apply,
+  `pcb.physical-binding`, `pcb.board-revision`, `pcb.routed-board-revision`, `pcb.component-review`, `pcb.assignment-queue`), UI/session
+  plumbing (`pcb.placement-settings`, `schematic.sheet-size`, `project.operation-timeline`, `schematic.import-export-kicad`), and
+  genuinely absent shared commands (`pcb.clear-nets`, `pcb.create-via`, `pcb.autonomous-layout`, `computation.request`). They stay
+  `missing` in the data rather than being relabelled by a hand table.
+- **The owner may choose otherwise:** add a reviewed restriction table (never a permissive one) that narrows those fourteen to their
+  policy dispositions; or implement the four absent commands.
+
+## OD-246 — the agent's generated schematic is reviewed in the SAME dialog as the composer's Generate; the Build-mode fact is the sheet's (product reliability D, 2026-10-17)
+
+- **Question:** OD-243 left the page's intake of `generation_proposal_ready` to a later round. A second dialog, auto-apply, or the
+  existing review path?
+- **Default applied:** `app/page.tsx` receives the event through `app/lib/project/generation-proposal-events.ts` (verifies integrity,
+  base digest, scope, head mark and expiry against the live editor), lays the netlist out through `autoLayoutBuildValidated` with the
+  catalog parts, and offers it through the existing `pendingReplace` review dialog (`schematic-proposal-review` / `-approve`, the
+  validation note as data, the exact-base pin, the pending-proposal store); nothing is applied by the tool or the intake; a stale,
+  foreign or expired artifact is refused with its run-log sentence. The base digest is the posted sheet's content digest (authoritative
+  state with the sheet-size fallback). The Build-mode discovery fact `schematic-build-mode` is "the validated sheet holds no Theory
+  component", because the chat body carries no editor mode (`ALLOWED_BODY_KEYS`); a Theory-mode user on an empty sheet is therefore
+  offered the Build generation, and the intake treats the artifact as the Build Generate path. `generation_proposal_ready` is NOT
+  admitted to `COORDINATOR_ARTIFACT_EVENTS` (the flag-on DAG path), so under `SIRKIT_ORCHESTRATION_ENABLED=1` a coordinator's generation
+  does not count as the run's one artifact; the loop's proposal single-flight still bounds it.
+- **The owner may choose otherwise:** send the editor mode in the chat body (a body key, route validation, context input) and derive
+  the fact from the toggle; admit the event to `COORDINATOR_ARTIFACT_EVENTS` (pin moves in B21-D2/E3 suites and pages).
+
+## OD-247 — registry-generated tool manuals are artifacts with a digest pin, not a second tool list in the prompt (product reliability D, 2026-10-17)
+
+- **Question:** section D.9 requires concise registry-backed manuals with validated examples and a digest pin. Where do they live and
+  what reads them?
+- **Default applied:** `app/lib/engineering/tool-manual.ts` + `scripts/generate-pr-d-tool-manuals.ts` render one Markdown manual per
+  catalog descriptor (ID/version; schema with examples validated by the project's own input validator; units and coordinate frame from
+  the descriptor, the schema field names or the domain modules — "not declared" otherwise, never invented; preconditions; exact effects;
+  permissions and approval; budget; failure codes read from the handlers and gate-verified to be quoted in the cited files;
+  postconditions) under `artifacts/product-reliability-simple-ui/manuals/` with `MANIFEST.json` (registry digest, sha256 per manual).
+  The gate regenerates in memory and compares, requires a manual for every exposed id, refuses a stale manual, and validates every
+  example. The manuals are evidence for operators and reviewers; they are deliberately NOT injected into the model's prompt (no second
+  drifting tool list). A handler's NEW failure code is not auto-extracted: the manual says so and the code source table must be updated.
+- **The owner may choose otherwise:** a reviewed run-time exposure that lets the assistant read a manual as a bounded tool.
+
+## OD-248 — missing parts in the ordinary workflow: the checklist, the four actions, the agent's read and sealed draft request, and the publication boundary (product reliability F, 2026-10-17)
+
+- **Question:** section F.1–F.5 of the owner's assignment and CONTINUATION C require that a missing part is a workflow item with a
+  precise missing-facts checklist and the existing search / review / draft paths — never an invented package or pin map — and that
+  the agent has the same information and the same bounded request. How is this surfaced, and what may the agent do?
+- **Default applied:** ONE derivation, `app/lib/parts/missing-facts.ts` (`sirkit.missing-facts-checklist.v1`): identity (manufacturer,
+  exact MPN, package variant), evidence (symbol, footprint, pin-to-pad mapping — the import-review needs) and sourcing (stock, price)
+  kept apart; sourcing never makes identity or evidence known (`ENGINEERING_FACTS_NEVER_PROVEN_BY_SOURCING`); a Theory symbol is "not a
+  physical part"; the actions in order — search the published atomic revisions, search the admitted distributors (an unavailable,
+  paused or refused source returns that state), request component review (the existing review handoff), create an explicitly
+  UNVERIFIED draft (the existing publication request, prefilled; a draft is never PCB-assignable until the deterministic mapping checks
+  and human publication pass) — each available or "not available" with its reason. The UI renders it per unresolved instance inside the
+  existing Schematic → PCB refusal (`MissingPartsList`), the journey strip's parts stage counts "missing parts", and the Build sidebar
+  carries a "Missing parts (N)" line that opens the list. The agent gets `sirkit.parts.missing-facts` (Tier 0 read over the run's
+  verified schematic; the catalog facts only with the chat route's catalog port; MCP withheld) and `sirkit.parts.draft-request` (Tier 2
+  sealed REQUEST carrying the documented facts with their sources and the missing ones; it refuses without a pin table or with
+  conflicting facts; the human submits it through `POST /api/components/atomic/publication`). The draft request has its OWN propose
+  record `parts.draft-request`; B19-E E4 stands — no tool is owned by the human-only `parts.atomic-publication-review` record and no
+  tool publishes. The b19-d chat import-closure ratchet admits two pure acquisition modules (`external-search-contract.ts`,
+  `source-labels.ts`: constants and labels, no connector) with a tripwire — accepted by the lead. The fixture browser proof
+  (`e2e/pr-f-missing-parts.spec.ts`) runs with every distributor source operator-disabled (`playwright.config.ts`), so the fixture
+  server can never reach a vendor; the proof shows the fixture's own no-call source states and no request leaving the origin.
+- **The owner may choose otherwise:** a page intake for `draft_request_ready` that prefills the Build Library's evidence review from the
+  sealed request (today the event reaches the run log; the UI's own draft action prefills the same publication request); a member-callable
+  draft-creation route; re-pointing the three constants out of `app/lib/acquisition/` instead of the ratchet amendment.
+
+## OD-249 — the first Astra increments: a qualifiable `gpt-6-astra` profile behind the role override, module contracts, structured placement intent, stackup / via-policy candidates, the placement → routing feedback loop and its capability matrix (product reliability F, 2026-10-17)
+
+- **Question:** section F's "remaining Astra work" and the owner's additive directive (increments A–E) ask for compatibility, module
+  contracts, evidence-backed placement and stackup proposals and bounded routing feedback — without a second runtime, without widening
+  defaults and without claiming engineering quality from fakes. What landed, and what stays blocked?
+- **Default applied:** (A) `gpt-6-astra` is a `MODEL_PROFILES` entry classified by the existing reasoning / no-temperature family rules and
+  admitted ONLY through `SIRKIT_ORCHESTRATION_ROLE_MODELS`; `DEFAULT_OPENAI_MODEL` stays `gpt-5.6-sol`; the documentation facts are
+  cited in `astra/compatibility.md` (WebFetch reads of 2026-10-17); the rebaseline of every directive section against the tree is
+  `astra/rebaseline.md`. A zero-cost `GET /v1/models` probe with the owner's key on 2026-10-17 listed `gpt-6-astra` (and `gpt-6-sol`,
+  `gpt-6-luna`, `gpt-6.1-sol`): account availability is NOT a blocker; the live contract turn stays subject to the US$5 allowance.
+  (C) `sirkit.module-contract.v1` + validator + the Tier 2 `sirkit.module.propose-contracts` (identities from the pinned sheet only,
+  named nets as ports, every value with units, every recommendation with evidence shape and kind); the artifact is a reviewable note in
+  the run log (no apply). (D) the placement proposal 1.2.0 takes an optional `sirkit.placement-intent.v1` block (groups, regions,
+  coordinates and side, pin proximity, corridors, critical nets; mm, the board frame stated) that seeds one extra candidate through the
+  EXISTING engine; legalization and locks win and every departure from the intent is a listed conflict; boards over 50 physical
+  instances are `unsupported-scope`; `sirkit.stackup.propose` recommends only the qualified profiles the tree defines (today the
+  two-layer `simple-2` with through vias) and refuses everything else as data; a profile change marks dependent approvals invalid.
+  (E) `app/lib/pcb/experiments/placement-routing-feedback.ts` runs the directive's chain over an isolated snapshot through the existing
+  FreeRouting executor port (absent → `routing_engine_unavailable`), bounded, cancellable, resumable by stage, retaining the best valid
+  candidate by a declared ordering and never relaxing clearances, nets or requirements; the generated capability matrix
+  (`astra/routing-capability-matrix.csv`, 18 constraint kinds, every row cited) says which constraints survive export, routing, import
+  and independent checking — differential coupling, skew, impedance and return paths are UNSUPPORTED. All of it is fixture/fake-backed.
+- **Live blockers (exact):** one authorized contract turn with `gpt-6-astra` (≤ ~0.46 USD worst case at the list prices read on
+  2026-10-17; LB-F3); the contained routing platform for real FreeRouting measurements (LB-3 / LB-8); the live-model comparison corpus of
+  directive 13 (LB-7 / LB-9 + spend); four-layer profiles need their own qualification increment.
+- **The owner may choose otherwise:** page intakes for `module_contracts_ready` and `stackup_candidate_ready` (today the run log);
+  exposing the feedback loop as an agent tool or through the layout-experiment request; a user-visible model label in the chat bubble
+  (the trace and events already carry it).
+
+## OD-250 — the product-reliability suites no CI job selected are admitted to prompt-to-gerber and moved to agent-boundary-suites; the OD-30 split re-measured and kept at OD-30's 40 % with the orchestration filter (product reliability G, 2026-10-17)
+
+- **Question:** at PR-G's tree 19 vitest suites of the assignment (PR-C 10, PR-E 1, PR-F 7, PR-G 1) were selected by no CI job
+  (`_ci-admission.ts`: `ciAdmission().jobsOf(path)` was `[]` for each), and `b24-d0-ci-split` 1 and 7 were red: the committed junit
+  evidence recorded the 2026-10-09 selection (471 files) while the tree's positional selection had grown. Re-measured, the 38 items
+  B24-D0 moved hold 412.94 s of the measured 1147.98 s (36.0 %), 109 files - under OD-30's "at least 40 %" line that case 9 pins. How are the
+  suites admitted, and how does the split meet the line again?
+- **Default applied:** OD-30's rule as it stands, and the split mechanism the lead chose on 2026-10-09 (`ci-split.md` sections 3-5):
+  insertion-only; each moved item one `--exclude` line of prompt-to-gerber, contiguous right before its `--reporter` line, and one
+  line of agent-boundary-suites; no item runs in both jobs; the union of both is prompt-to-gerber's positional selection; no
+  `timeout-minutes` changed. (1) The 19 suites are exact-path positional entries of prompt-to-gerber's folded step, right after its
+  last positional line (`deterministic-manufacturing.yml:294-312`: the reader refuses a positional filter after an `--exclude`).
+  (2) All 19 move to agent-boundary-suites (`--exclude` lines `:352-370`, job lines `:658-676`): fast, provider-free agent and
+  product suites. (3) The share was still under 40 %, and every entry no production record holds that had not moved - 149
+  entries, 43.12 s (3.8 %), 137 of them held by nothing - could not reach it even all together
+  (the 38 items, the 19 and all of them together 458.02 s, 39.9 %, with more than a hundred `--exclude` lines), so the next item by weight that no STOP holds was moved with
+  the production-data edit `ci-split.md` section 2 describes: the `app/lib/agent/orchestration/__tests__` filter (49 files, 72.88 s, 6.3 %;
+  its exclude at `:316`, its job line at `:622`). The two heavier filters, A1's `app/lib/qualification/__tests__` and B23's
+  `app/lib/manufacturing-providers/__tests__`, stay: A1 case 12 wants each line once (section 3's option 3 STOP). The move is recorded
+  in `golden-catalog.ts` (six declarations: the `b21f` helper and five suites, 14 links in `eval-catalog.json`) and `scenario-map.ts` (its two evidence items), both generators
+  re-run twice with zero drift (`catalogDigest` `eng1-4e881a14bfcd1d45`, `mapDigest` `eng1-26176c7eb5877463`); B19-E's [B21 A] case
+  (the orchestration suites in agent-boundary-suites, every other B21 suite in prompt-to-gerber), `b24-e-register` Q15,
+  `b24-b1-catalog` 4 and 9, `b21-f-page` 6 and B21's C39 and C55 (re-anchored on the exclude line, the filter's text no longer
+  standing once) moved with dated notes. Measured at the tree (local, two workers, `b24-d0-ci-split` set aside):
+  514 files, 5848 tests (54 skipped, 0 failures, 0 errors), Duration 791.72s, exit 0;
+  moved: 487.79 s of 1147.98 s (42.5 %, 177 files, 58 items). At CI's ratio 1.078 (20 min 37 s over
+  the local total) prompt-to-gerber about 11 min 51 s of 25 and agent-boundary-suites about 8 min 46 s of 20 -
+  INFERRED until the first CI run, which the lead reads for both jobs. The threshold census classifies the two bounds the admission
+  brought into CI as their neighbours are (pr-c-composer-question's linearity bound a complexity-proof, pr-f-missing-facts-read's
+  port deadline a deadline-proof); A1's insertion table records PR-G's five rows (the row pattern admits `PR-[A-G]`). Recorded on
+  `ci-split.md` (sections 0, 1, 2 and 4) and the evidence `artifacts/ai-control-plane-b24/evidence/d0-ptg-timing.xml`.
+- **The owner may choose otherwise:** move B24-E's or B24-F's heavy qualification suites out of A1's filter instead (A1 case 12 and the
+  filter's single line would need the owner's leave); give the pr- suites a job of their own; keep the orchestration filter in
+  prompt-to-gerber and accept a share under 40 % (an amendment of OD-30's line, which this default does not make). The merge gate of
+  `ci-split.md` section 9 applies to all 177 moved files: they now fail only in agent-boundary-suites, so a required-status-check
+  list on `main` must name it.
+
+## OD-251 — the generation-budget correction (180 s, one cancellation boundary, stage-named failures) is integrated as an interim measure; it is NOT section L's persistent-task fix (PR-L step 0, 2026-10-17)
+
+- **Question:** the owner's four-motor drone request ended in the Build interface with `All 3 subsystem blocks failed to design.`
+  A correction made beside PR #16's head (`5b4a941b`, uncommitted there) raised the shared Build generation budget and added real
+  cancellation. Its retry by the owner then ended with `Schematic generation reached its 180 s deadline during design. No complete
+  design was produced.` The correction moved pinned sources (the OD-106 / OD-243 tripwire on `app/api/schematic/build-multi/route.ts`,
+  B21's C27, B24-A1's C23). Is it kept, and what is it?
+- **Default applied:** integrated at the owner's instruction of 2026-10-17 as an interim measure, as it stands:
+  (1) `BUILD_BUDGET.deadlineMs` 40,000 -> 180,000 (`app/lib/schematic/build-result.ts`); the 20-turn iteration ceiling, the
+  concurrency of three and the operator's ability only to lower the ceiling are unchanged, and a caller's tighter deadline still wins;
+  (2) one wall-clock / cancellation boundary (`app/lib/schematic/build-boundary.ts`) through `build-multi-generation.ts`,
+  `build-loop.ts`, both provider adapters (`app/lib/llm/{openai,anthropic}-provider.ts`, `types.ts`) and `app/lib/parts-search.ts`:
+  pre-aborted work starts nothing, pending provider calls receive the abort, late results cannot become proposals (already-running
+  SQL and embedding requests are not claimed to be cancelled); (3) stage-named failures (`stage` planning / design) with bounded,
+  redacted per-block causes and the new failure class `build_cancelled`; (4) the route forwards the canonical wrapper's abort signal
+  (`exposeAbortSignal: true`; authorization, CSRF, media and the 16 MB / 45 s body bounds unchanged) and the chat's generation port
+  forwards the run's; (5) `sirkit.schematic.generate-proposal`'s descriptor timeout 45 s -> 185 s (the agent run's remaining
+  deadline still tightens it) and its manual lists `build_cancelled`. Its three suites (`generation-recovery`,
+  `generation-request-cancellation`, `parts-search-cancellation`) and its page
+  (`artifacts/product-reliability-simple-ui/generation-failure-fix-2026-10-17.md`) are historical evidence for that narrower
+  correction. Pins moved with dated `[PR-L step 0, 2026-10-17]` notes: route case 6's `BUILD_MULTI_SHA256_AT_HEAD`
+  `fa3ddf58...` -> `8e69576cc0a2f2682a26a36d42f443d8240b6b6ba3c8683f93c993a5b8939989` (OD-106's facts stand: the route reads no
+  orchestration flag and imports no orchestration module), `task-complexity-router.md` section 5 and C27, `environments-and-deployment.md`
+  C23 190 -> 196 with `b24-a1-configuration` case 8 (its note joined onto the pinned line so open-risks' `:368` holds). This is
+  **explicitly NOT the persistent-task fix section L of `artifacts/astra-guided-pcb/PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.md`
+  requires**: L forbids treating a larger deadline as the solution; the generation is still one blocking request whose window, once
+  elapsed, discards the completed blocks, and the owner's request still does not reach a reviewable circuit. Section L replaces that
+  request-lifetime architecture (a durable, resumable task, a real worker, checkpoints, progress, Stop / Resume); until it lands, 180 s
+  is the request's ceiling, not a qualification of any design.
+- **The owner may choose otherwise:** return the budget to 40 s (the starvation the correction's page records comes back); keep 180 s
+  only as one execution slice's window under section L's worker (the default L expects to revisit, never a total task allowance); or
+  keep the cancellation boundary and stage-named failures while L's task lifecycle replaces the deadline-shaped failure text.
+
+## OD-252 — section L's design defaults: durable generation tasks on the existing durable store, a separate worker, finite slices (product reliability L, 2026-10-17)
+
+- **Question:** the section L design (`artifacts/product-reliability-simple-ui/persistent-generation/task-worker-contract.md`, section 11)
+  leaves eleven choices to the owner. The owner's instruction of 2026-10-17 ("complete everything; you are the chief SWE"; section L:
+  "ask only when a real external resource, additional paid-test authority or irreversible owner decision prevents the next step")
+  asks the lead to proceed. Which defaults apply?
+- **Default applied:** (1) the per-task allowance of the contract's section 5 (calls and tokens, reserved worst case at claim, settled
+  at slice end, an unfinished attempt stays charged as uncertain; reaching it parks the task as waiting-for-resource with an explicit
+  "continue with another allowance" action, never a silent extension; an operator may lower it); (2) generation tasks are stored in
+  the EXISTING durable tables of the configured database, as the app already stores its call records there, and the worker runs
+  against that database; no schema change; (3) no migration 0032 (the cross-scope claim filters by topic without an index);
+  (4) generation aggregates are retained, not purged; (5) `pnpm dev` is unchanged, the worker starts with its own script, and a
+  combined local script starts both; without a worker the UI says so ("waiting for a worker"), never "running"; (6) agent stop, pause
+  and resume are confirm chips the human clicks; (7) the worker pump route is enabled behind the worker secret and fails closed when
+  it is unset; (8) `POST /api/schematic/build-multi` stays, unused by the page; (9) no provider failover inside a task; (10) one
+  bounded live four-motor run inside the remaining US$5 builder allowance, worst case reserved in `live-spend.json` first, its task
+  allowance capped below the remaining balance (an allowance stop is a valid, resumable outcome); (11) a partial result is reviewed
+  only through an explicit review-partial action.
+- **The owner may choose otherwise:** each item independently; none is irreversible (no migration, no deletion, no purchase).
+
+## OD-253 — increment 6 defaults: the fixture four-motor and LED-dimmer slices, the operator allowance with an input dimension, one bounded live run, board impact before approval (product reliability L/M, 2026-10-19)
+
+- **Question:** increment 6 of section L (L.6, L.7 items 9-10) and section M.5 item 7 leave choices the read-only maps
+  (`artifacts/product-reliability-simple-ui/persistent-generation/progress.md`, increment 6) name. The owner's instruction ("complete
+  everything; you are the chief SWE") asks the lead to proceed. Which defaults apply?
+- **Default applied:** (1) the fixture four-motor design uses parts today's KiCad parser can publish: ATmega328P-AU (a pre-composed
+  ATmega48PV-10A + ATmega328P-A library, as `Timer_NE555` already is), LSM6DS3TR-C on I2C, AO3400A low-side N-MOSFETs with SS14
+  flyback diodes, MIC5504-3.3 LDO, 1x02 battery and motor headers, 2x03 ISP and 1x04 UART headers. STM32 symbols (alternate pins) and
+  ESP32 module footprints (zones) are refused by the parser; extending it is separate work. (2) Disclosed assumptions: brushed 1S
+  coreless motors of about 1 A each, a 1S LiPo without charger or protection, the internal 8 MHz oscillator, a UART header for a
+  receiver and no radio, no firmware or flight qualification; one to four motors. (3) A Build generation never pauses for a
+  question: the planner records material assumptions and requested coverage (optional fields of `submit_plan`), shown in the task
+  card and the review dialog; the user may Stop design and restate. (4) The second ordinary circuit is a 555 PWM LED dimmer. (5) The
+  fixture browser proofs stop at the PCB-preparation handoff (awaiting qualification); no new router recording is made. (6) An
+  operator may only LOWER the per-task allowance (environment names, a new input-token dimension, a pre-call input admission), and a
+  worker may be restricted to one scope. (7) The one bounded live run of OD-252 item 10 runs on the builder's own server and worker
+  (never the owner's :3000 or `.env.local`), with an allowance unit whose provable worst case is reserved in `live-spend.json` first;
+  it writes no acquisition or publication into the owner's catalog. (8) A replacement on a project with a durable board shows its
+  board impact before approval; Approve is disabled while the impact loads or cannot be read (fail closed); the receipt discloses it;
+  after apply, qualify and release are refused in the page while the board is behind the schematic (derived from facts, so Undo,
+  Redo and reload recompute it). A server-side schematic-currency guard on qualify / release is left to the owner. (9) A generation
+  task never starts a CAD acquisition for a role that has no schematic instance; a missing role waits for a library action and Retry.
+- **The owner may choose otherwise:** each item independently (another MCU or IMU, a pause-and-ask question path, another second
+  circuit, a router recording, other allowance numbers, a server-side currency guard).
+
+## OD-254 — CI for sections L and M: the suites no job selected admitted, the split re-measured, agent-execution in its own browser job, the fixture pump's idle backoff with an in-process wake (PR-L7, 2026-10-20)
+
+- **Question:** (1) At `deaf15ca`, 81 vitest suites that sections L and M (and the interim 180 s correction of OD-251) added or touched
+  were selected by no CI job (`_ci-admission.ts`: `jobsOf` was `[]` for each; 388 of the 1,003 test files `git ls-files` lists were in
+  no job), 82 with this increment's own `l7-pump-idle-backoff`. How are they admitted, and does prompt-to-gerber keep OD-30's margin?
+  (2) PR #16's CI run at `0f1c446b` failed page-browser-e2e at its 30-minute limit (73 tests in 28.1 min, then the orchestration step
+  was cancelled; `agent-execution` alone 1,022 s, 464 s on the previous green run). How is it split? (3) The fixture worker's pump
+  posted `/api/generation-worker` every second while idle (812 of 2,206 requests of one local full browser run), loading the dev
+  server in every browser job. How is that load removed without making a task start later?
+- **Default applied:** (1) OD-250's mechanism as it stands (`ci-split.md` section 5): the 13 suites that start PGlite are
+  database-delivery entries after its last one (`deterministic-manufacturing.yml:495-507`); the 69 others are exact-path positional
+  entries of prompt-to-gerber after its last positional line (`:313-381`). Re-measured once at this tree (585 files, 6,452 tests,
+  0 failures, 54 skipped, 1146.10 s of testcase time, exit 0; `artifacts/ai-control-plane-b24/evidence/d0-ptg-timing.xml`), the 58
+  items moved since OD-250 hold 41.2 %, above OD-30's 40 % line, and the two heaviest admitted suites, held by nothing
+  (`m1-boundaries` 24.47 s, `l7-fixture-vertical-slice` 6.29 s), move to agent-boundary-suites by weight for margin (one `--exclude`
+  line each at `:440-441`, one job line each at `:761-762`): 502.64 s, 43.9 %, 179 files, 60 items. At CI's ratio 1.079,
+  prompt-to-gerber about 11 min 34 s of 25 (headroom about 13 min 26 s) and agent-boundary-suites about 9 min 03 s of 20 - INFERRED
+  until CI; neither comes within OD-30's five minutes, so neither is split further. Test files in no job: 388 of 1,003 before, 307 of
+  1,004 after (the 307 are older chapters' suites this assignment did not touch); suites of sections L and M in no job: 81 -> 0.
+  (2) `e2e/agent-execution.spec.ts` runs in a third browser job appended last, `page-browser-e2e-agent` (`:809-843`,
+  `timeout-minutes: 30`, B24-D1's start and headroom steps, page-browser-e2e's setup verbatim, one named run step, its own upload);
+  page-browser-e2e's `SIRKIT_E2E_SKIP` names it beside B24-D4's four; `_ci-admission.ts` reads both appended jobs (the skip list is
+  exactly their specs, none in both); `golden-catalog.ts` and `scenario-map.ts` record the spec's links under the new job (both
+  generators re-run, zero drift on the second run). On `0f1c446b`'s figures page-browser-e2e about 14 min 28 s of 30 and
+  page-browser-e2e-agent about 19 min 45 s of 30 (10 min 27 s on the green run's 464 s) - INFERRED, each keeping at least OD-30's
+  five minutes on the slow runner's figure (`ci-split.md` section 11.11). (3) The pump transport backs off while idle - 1 s, doubling
+  to 8 s over consecutive empty answers, reset by any settled slice (`app/lib/generation-task/worker/pump-transport.ts`) - and so that
+  no Start, Resume, Retry or acquisition waits out the worker's sleep, a fixture server holds an idle pump request
+  (`POST /api/generation-worker?hold=<ms>`, at most 8 s; no new route) and the fixture container's in-process work signal, notified by
+  every durable commit that schedules outbox work, wakes it at once (`runHeldPumpedSlice`); outside the fixture nothing is held and
+  the worker sleeps the same doubling. Local browser runs of l4, l5, l7-drone and m2 (fixture, one port of their own): 9 passed in
+  2.2 min before, 2.6 min with the backoff alone (l5 case 1 8.8 s -> 20.6 s), 2.3 min with the hold (every pickup immediate; 117 -> 75
+  pump requests). Pins moved with dated `[PR-L7, 2026-10-20]` notes: `b24-d0-ci-split`, `b24-d4-browser-split`,
+  `b24-a1-environment-profile` 16 (A1's insertion table gained PR-L7's five rows; the row reader admits `PR-L7`), `b24-a2-secret-scan`
+  (c), `b24-b1-catalog` 4, `b24-b2-ci-admission` 1, `b24-d1-latency-policy` 9 and 10, `b24-d1-threshold-census` 4 and 6,
+  `b24-f-verdict-lines` 2 (the CI table at B24's final SHA lists that SHA's jobs), `b21-f-page` 10, and the page citations (B21's C39,
+  C49, C55, C93, C94; B23's C64 and its prose citation; B24's accessibility C52, C53, C70 and observability C50; `ci-split.md`
+  sections 0-4, 10 and 11).
+- **The owner may choose otherwise:** keep all 69 admitted suites in prompt-to-gerber (41.2 % without the two moves) or move them all
+  to agent-boundary-suites as OD-250 did with its 19; give the L/M suites a job of their own; give agent-execution's job 20 minutes; or
+  split page-browser-e2e by the new L/M specs instead (about 26 min 27 s of 30 left in page-browser-e2e on `0f1c446b`'s figures, under
+  OD-30's five minutes); another backoff ceiling, or no hold (a Start then waits up to 8 s for the worker). The merge gate of
+  `ci-split.md` section 9 applies to the new job too: a required-status-check list on `main` must name `page-browser-e2e-agent`.
+
+## OD-255 — section J defaults: one sheet document and one project connectivity, legacy single-sheet behaviour kept, sheets as an additive optional field (product reliability J, 2026-10-22)
+
+- **Question:** runbook section J (multi-sheet schematics and workload limits) leaves choices the read-only maps name (`scratchpad` J maps,
+  summarised in `artifacts/product-reliability-simple-ui/multi-sheet/`). The owner's instruction ("complete everything; you are the chief
+  SWE") asks the lead to proceed. Which defaults apply?
+- **Default applied:** (1) a multi-sheet project is the SAME document with an optional sheet set (`sheets` on the schematic state and the
+  canonical schematic, optional `sheetId` on each entity, missing = root); an old single-sheet project loads, saves, digests and exports
+  byte-identically, and the project file's format version moves only when sheets exist (forward-only). (2) ONE project connectivity
+  function serves every consumer (PCB publication, ERC, design checks, BOM, missing parts, SPICE, KiCad export); local labels join only on
+  their own sheet; power and ground labels are project rails by EXACT name (KiCad power-symbol semantics), distinct names are never merged
+  by look-alike; hierarchical ports connect exactly the pins they bind. (3) The existing AGND/DGND/PGND -> "GND" collapse in the PCB netlist
+  and ERC is KEPT for documents without sheets (existing boards keep their nets) and reported as a finding; documents with sheets use the
+  strict rule. (4) Joining two distinct rails or isolation domains is a reported finding on existing designs; a sheet operation that would
+  create such a join is refused. (5) PCB publication keeps `hierarchyPath ["root"]` (component authority stays independent of sheet
+  organisation); sheet-local nets are displayed by sheet path name, their identity stays endpoint-based. (6) Until sheet-aware generation
+  lands, an AI replace-style result (generation, edit, tidy) on a multi-sheet project is refused with a message, never silently flattened.
+  (7) `app/page.tsx` keeps its line count (in-place edits; new UI in components and hooks); the Sheets navigator is a canvas chip with a
+  tree popover. (8) Bus / bundle ports, repeated sheet instances and placing one package's units on different sheets are refused with a
+  diagnostic until their own increment. (9) Generated results become sheets when the planner planned two or more blocks; an undeclared
+  same-name signal label in two blocks keeps the flat page and shows a finding; approving a generated multi-sheet result replaces the
+  project as one undoable transaction. (10) Workload: the 8-block plan limit, 3 worker slots and the orchestration cap stay; their limits
+  are stated truthfully in the task card and larger designs are organised into more sheets after review; no new spend.
+- **The owner may choose otherwise:** each item independently (notably a retroactive ground-split with a board re-sync, real sheet paths in
+  PCB publication, raising the block limit or the specialist cap, an editor-chosen workload size).
+
+## OD-256 — page-browser-e2e-b24 keeps OD-30's 30-minute browser limit (PR-J1 integration, 2026-10-22)
+
+- **Question:** PR #16's run 39822933120 (`e1830cfc`) cancelled page-browser-e2e-b24 at its 20-minute limit after `playwright install --with-deps chromium` took 13 minutes on that runner (19-26 s on the previous runs); every finished case was green. Raise the limit, cache the browser, or move specs again?
+- **Default applied:** `timeout-minutes: 30`, the limit the other two browser jobs carry under OD-30; no spec moved, no step changed; the pins moved with dated notes (`ci-split.md` section 11.12). The headroom step still reports OD-30's five minutes against the job's elapsed time, so a slow setup is visible, not hidden.
+- **The owner may choose otherwise:** add an `actions/cache` step for `~/.cache/ms-playwright` keyed on the Playwright version (removes the download share, not the `apt` share), or move `keyboard-and-focus` to its own job.
+
+## OD-257 — section J3 defaults: the Sheets navigator, carriage of the sheet set through the page, moving a selection, the AI replace-result refusal (product reliability J3, 2026-10-22)
+
+- **Question:** the J3 build plan (the editor increment of section J; `multi-sheet/progress.md`) names choices the owner has not made. The
+  owner's instruction ("complete everything; you are the chief SWE") asks the lead to proceed. Which defaults apply?
+- **Default applied:** (1) `Move to sheet` moves the selected part with its attached wires and local labels on the active sheet; a
+  second option, `Move connected group`, moves the connected group restricted to the active sheet; no marquee or multi-select is added.
+  (2) Deleting a populated sheet is two previewed transactions (move its contents to the parent, then delete the empty sheet; two undo
+  steps); no executor binding mixes the two. (3) The AI replace-result refusal (OD-255 item 6) fires at the Build composer's start on a
+  multi-sheet project (no task, no spend); a chat-started task is refused at the offer; the final guard in the apply path stays in both
+  cases. (4) The pending-proposal digest includes the sheet set when present, so a proposal made before the project was organised reads
+  stale and is discarded. (5) The active sheet and per-sheet camera live in a per-project localStorage presentation store, cleared with
+  the project; never in the document. (6) A port created for an unnamed crossing net takes the first unused `SIG<n>` name; it is renamed
+  afterwards through the port's Rename action. (7) `app/page.tsx` keeps 9,156 lines: in-place edits only, new logic in components and
+  hooks. (8) Importing a multi-sheet project file is enabled in J3 (the editor now hydrates the sheet set); SPICE and the hierarchical
+  KiCad export stay refused until J4. (9) The browser proof organises the fixture four-motor drone into subsystem sheets and imports a
+  committed multi-sheet project file; no router recording and no live-model proof (US$0).
+- **The owner may choose otherwise:** each item independently (a marquee selection, a one-command sheet delete, refusing Build only
+  at apply, a digest over the four arrays only, no presentation store, a port-name prompt in the move preview, a reviewed PAGE_LINES
+  move, keeping import refused until J4).
+
+## OD-258 — section J4 defaults: SPICE and KiCad export on the project connectivity, per-sheet Tidy, Organize into sheets, the rail-named label normalisation (product reliability J4, 2026-10-22)
+
+- **Question:** the J4 build plan (project-wide outputs and the organise refactor; `multi-sheet/progress.md`) names choices the owner
+  has not made. The owner's instruction ("complete everything; you are the chief SWE") asks the lead to proceed. Which defaults apply?
+- **Default applied:** (1) SPICE under the strict rule: node 0 is the GND rail (a Theory ground symbol, or a ground-kind net named GND
+  or 0; a lone ground rail of another name when it is the only one); every other ground-kind rail (AGND, DGND, PGND) is a separate
+  named node with a deck comment and a response warning, never collapsed; several ground rails with none named GND refuse
+  `SIM_GROUND_AMBIGUOUS` naming them. Sheet-local nets take sanitized sheet-path names; single-sheet decks stay byte-identical.
+  (2) The KiCad hierarchical export writes each sheet pin at the nearest block-edge point with a two-point wire from the Sirkit anchor;
+  it refuses on name shadowing (`EXPORT_SHADOWED_PORT`; a local label equal to a global or rail name on its sheet) rather than
+  emit a file KiCad would read differently; a sheeted project downloads as one zip from the same `POST /api/export/kicad` (sorted
+  entries, fixed dates); the single-sheet response and bytes are unchanged. (3) Rail-named plain labels (the label-tool `GND` case):
+  the first-sheet refusal names the offending labels, and a previewed, undoable "Normalise N rail-named labels" transaction is
+  offered before organising; the single-sheet PCB netlist is unchanged by it. (4) Organize into sheets derives groups
+  deterministically from connectivity and roles; a passive attached to two hubs with equal weight goes by hint, then the smaller
+  refDes, and is listed under "check these" in the preview (a usable proposal, not a refusal); the pure planner
+  `planOrganizeIntoSheets` is built in J4 and J5's proposal tool reuses it. (5) Per-sheet Tidy tidies leaf sheets only (a sheet
+  with child blocks refuses `SHEETS_TIDY_BLOCKS_PENDING`); the apply path keeps the lifecycle replacement with components
+  re-identified by refDes so ids and authority fields survive. (6) "Sync schematic to PCB" states that it synchronises the whole
+  project (N sheets); the accessible-name census is regenerated once at J4's integration. (7) New suites are admitted by exact-path
+  positional entries and the organise proof rides `e2e/j3-multi-sheet.spec.ts` unless the OD-30 headroom re-measurement allows its
+  own spec.
+- **Amendment to item 3 ([PR-J4 integration, 2026-10-23], review C-NORM-1):** the pin-to-net partition is unchanged by the
+  normalisation, but a lone plain label named for a non-GND ground (AGND / DGND / PGND / VSS) is published as GND by the legacy rule
+  once it is a ground label, so that net's board name and the PCB netlist hash change - previewed as `renamedNets` ("Board names
+  change (connections do not)"), never silently; `planRailLabelNormalisation`'s contract and j4-rail-label-normalisation pin the
+  behaviour. The owner may instead have such labels left untouched by the normalisation (refused with a named reason).
+- **The owner may choose otherwise:** each item independently (one ground node with explicit ties, lossy sheet-pin placement,
+  exporting shadowed names with a warning, N separate downloads, refusing ambiguous organise proposals, tidying overview sheets).
+
+## OD-259 — section J5 defaults: generated results as sheets, the organise proposal tool, sheet-aware inspection, planner interfaces kept fixture-only (product reliability J5, 2026-10-22)
+
+- **Question:** the J5 build plan (sheet-aware AI; `multi-sheet/progress.md`) names choices the owner has not made. Which defaults
+  apply?
+- **Default applied:** (1) A generated multi-sheet result over a multi-sheet project replaces every sheet in one undoable
+  transaction and the review dialog names the replaced sheets; per-sheet regeneration (J5-6) is deferred to a later round with its
+  design recorded. (2) OD-257 item 3 is revised once J5-2 lands: the Build composer no longer refuses on a multi-sheet base (an
+  advisory activity step says the result will replace the sheets); the refusal stays for a FLAT result at the offer and apply
+  boundaries. (3) The overview of a generated design connects blocks with plain local labels named after each interface at the
+  sheet-pin points. (4) In an organise proposal, components the model leaves unassigned stay on their source sheet; unnamed crossing
+  nets take `SIG<n>` with an optional model-supplied name. (5) The page's organise receiver case shares an existing line (PAGE_LINES
+  9,156 stays); the pinned flat-layout literal stays, so a planned result lays out flat once before its sheeted layout. (6) Typed
+  planner interfaces stay a fixture-only plan field: `PLAN_SYSTEM_PROMPT` is each task's identity and is not edited until a live
+  qualification is authorised. (7) Every J5 proof is fixture-backed at US$0; a live multi-sheet generation needs the owner's spend
+  approval under the cumulative US$5 allowance.
+- **The owner may choose otherwise:** each item independently (merge instead of replace, keeping the composer refusal, routed
+  overview wires, requiring every component assigned, a reviewed PAGE_LINES move, editing the live planner prompt, a live run).
+
+## OD-260 — section K defaults: the work log on the existing activity entry, recovery proofs, the reusable library view, real 3D assets as VRML through the existing viewer (product reliability K, 2026-10-23)
+
+- **Question:** the section K map (`scratchpad` K map; the K ledger under `artifacts/product-reliability-simple-ui/work-log-and-assets/`)
+  names ten choices (OD-K-1 … OD-K-10) the owner has not made. The owner's instruction ("complete everything; you are the chief SWE")
+  asks the lead to proceed. Which defaults apply?
+- **Default applied:** (1) 3D format scope: VRML 2.0 (`.wrl`) rendered with three's bundled VRMLLoader (no new dependency); STEP is
+  stored as metadata and labelled unsupported in the viewer. (2) 3D fixture bytes: original MIT-licensed VRML box models authored
+  offline; no fetch of KiCad's packages3D until the owner pins it (extends OD-M2-5). (3) Model bytes reach the browser through ONE new
+  canonical wrapped GET read route (the route census moves 177 -> 178 with a dated ratchet note) unless an existing asset read route
+  can carry them; the lead records which. (4) A generation block's missing role keeps waiting for a library action and Retry (OD-253
+  item 9); K1 only links to the Build Library search. (5) Spend accounting stays per task (OD-252 item 1); "Start again" is a new
+  task with a fresh unit; the remaining allowance is shown in the work log. (6) Acquisition events join the conversation's activity
+  entry collapsed under "Show details". (7) VRML / STEP text is stored in the append-only durable store under the KiCad CC-BY-SA
+  indefinite retention with a 2 MiB per-model ceiling; PDFs stay refused until OD-M2-7's deletable blob table. (8) `app/page.tsx`
+  keeps its line count; K edits it in place with logic in components and hooks. (9) K's evidence lives under
+  `work-log-and-assets/` and records what L / M already satisfied with the proving suites instead of redoing it. (10) Every K claim
+  is fixture- or fake-labelled at US$0; live acquisition proof waits on OD-M2-3/5/12/13 and live generation proof on the owner's
+  OpenAI quota (LR-3's 2.66 USD reservation stays held for its resume).
+- **The owner may choose otherwise:** each item independently (a STEP converter dependency, a bounded fetch of real KiCad 3D
+  models, an existing route instead of a new read route, a requirement-only acquisition target, a project-level cumulative
+  allowance, separate panels, a different retention or ceiling).
+
+## OD-261 — CI for section J: the 54 J suites no job selected admitted and all moved to agent-boundary-suites, the J set-asides retired, the split re-measured (PR-J7, 2026-11-04)
+
+- **Question:** At `89009036`, 54 of section J's 58 vitest suites (`j1-` … `j7-`, the J7 queue and allowance suites under
+  `app/lib/generation-task/__tests__` among them) ran in no job of `.github/workflows/deterministic-manufacturing.yml`
+  (`_ci-admission.ts` `jobsOf`: `[]` for 50; only `benchmark-core` and `benchmark-nightly` for the four under
+  `app/lib/engineering/__tests__`); the other four rode prompt-to-gerber's directory filters but were set aside from the split's
+  measurement (`J4_SET_ASIDE`, `J5_SET_ASIDE` in `b24-d0-ci-split`) until "the J CI step's one re-measurement" (OD-254, OD-259). The
+  three J browser specs already run in page-browser-e2e (its skip list leaves them in). OD-254's default puts admitted suites in
+  prompt-to-gerber and moves only the heaviest by weight; at `24beea1e` (run 41824471402) prompt-to-gerber's own headroom step read
+  "elapsed 18 min 22 s of 25 min, headroom 6 min 38 s", and CI spends about 2.4 s a file there (996 s of vitest for 411 files), so 54
+  more files could take it inside OD-30's five minutes. The same run's agent-boundary-suites was red: `b22-closeout-statements` 1 and 3
+  read J7-2's suite header, which named the fixture clock and denied a paid call, a database and a network in one sentence, as the
+  runner's own no-network guarantee. How are the J suites admitted?
+- **Default applied (departs from OD-254's default, by the alternative it lists):** OD-250's mechanism, as for its 19. (1) The 54
+  suites are exact-path positional entries of prompt-to-gerber after its last positional line (`deterministic-manufacturing.yml:382-435`,
+  byte-sorted), each excluded again before its `--reporter` line (`:496-549`) and listed in agent-boundary-suites after its last line
+  (`:871-924`): no item in both jobs, the union is the positional selection, none starts PGlite, no `timeout-minutes` changed, no job
+  added; prompt-to-gerber keeps its 411 files. (2) `J4_SET_ASIDE` and `J5_SET_ASIDE` are retired in place (`b24-d0-ci-split.test.ts:75`):
+  the four suites stay in prompt-to-gerber by their directory filters and are measured. (3) Re-measured once at this tree (local, four
+  workers, the owner's rule; the earlier records used two; `b24-d0-ci-split` set aside): 643 files, 6,944 tests, 0 failures, 54
+  skipped, 1,287.16 s of testcase time, `Duration 517.03s`, exit 0 (`artifacts/ai-control-plane-b24/evidence/d0-ptg-timing.xml`);
+  the 54 J suites hold 23.18 s of it and the four J4/J5 suites 1.85 s; the moved set is 114 items, 233 files, 557.90 s, 43.3 %, above
+  OD-30's 40 % line. (4) The three J7 suite headers (`j7-allowance-contention:25`, `j7-allowance-review:23`,
+  `j7-provider-wait-sibling-end:17`) now end their sentence at the clock, before "No paid call, no database, no network." - a
+  functional fix of the red job, no allow-list entry. (5) The PC-2 bound of `j1-project-connectivity` became a CI row: a
+  complexity-proof in `threshold-classification.ts` (61.9 ms against the union's 7.8 ms here, 7.9x; the pre-fix derivation at
+  `91dd2c3c^` 651.6 ms, 83.5x, on the same workload; the bound 25x + 20 ms). (6) Two tree-walking cases that outran vitest's 5 s
+  default in a four-worker full run walk once at module load (no timeout raised, the same assertions, each still red on a planted
+  route file or stale phrase): `b16-1b-auth-composition` "exactly 177 route methods" (1.05 s -> 0.03 s alone) and
+  `b20-b4-withhold-proposals` 8 (0.69 s -> 0.005 s). Pins moved with dated `[PR-J7, 2026-11-04]` notes: `b24-d0-ci-split`,
+  `b24-d4-browser-split`, `b24-a1-environment-profile` 16 (A1's insertion table gained PR-J7's three rows; the row readers admit
+  `PR-J7`), `b24-d1-threshold-census` 1, the page citations (B21's C39, C49, C55, C93, C94; B23's C64 and its prose; B24's
+  accessibility C52, C53, C70 and observability C50; `ci-split.md` C2, C8-C14, C24, D4-C1..C7, D4-C21) and `performance-and-reliability.md`'s
+  two now-notes; `threshold-census.csv` and `generator-inventory.md` regenerated (the ci column of the J rows; every B24 generator
+  re-run with zero drift). Expected CI, **INFERRED** until the lead's run after the push (`ci-split.md` section 11.13): prompt-to-gerber
+  unchanged, about 18 min 07 s to 18 min 27 s of 25 (headroom about 6 min 33 s to 6 min 53 s); agent-boundary-suites +17 s to +111 s,
+  about 6 min 55 s to 8 min 29 s of 20 on `24beea1e`'s runner, about 11 min 43 s on `7d8ef423`'s and about 14 min 25 s on the slowest
+  run read since 2026-10-06 (headroom at least 5 min 35 s); database-delivery, the three browser jobs, production-smoke and
+  secret-scan unchanged. OD-30 is judged on each job's `scripts/ci-job-headroom.ts` line.
+- **The owner may choose otherwise:** OD-254's default as written (the 54 in prompt-to-gerber, moving only the heaviest by weight;
+  about 19 to 20.5 min of 25 on the runners seen, inside OD-30's five minutes at the upper end); a J job of its own; or the four
+  set-aside suites moved too. The merge gate of `ci-split.md` section 9 applies: the 54 suites now fail only in
+  agent-boundary-suites, so a required-status-check list on `main` must name it.

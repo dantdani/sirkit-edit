@@ -274,7 +274,7 @@ describe("[B24-A1] the deployment configuration record (OD-199)", () => {
     const provider = read("app/lib/llm/anthropic-provider.ts").split(NEWLINE);
     expect(provider[106]).toMatch(/^ {6}model: sendableAnthropicModel\(this\.model\),/);
     expect(provider[104]).toBe("    const supportsTemperature = ANTHROPIC_TEMPERATURE_MODEL_FAMILY.test(this.model);");
-    expect(provider[189]).toMatch(/^import \{ sendableAnthropicModel \} from "\.\/anthropic-model-guard";/);
+    expect(provider[195]).toMatch(/^import \{ sendableAnthropicModel \} from "\.\/anthropic-model-guard";/); // Generation cancellation adds SDK options and aborted-error handling above this footer (2026-10-17). [PR-L step 0, 2026-10-17] OD-251: the note is joined onto this line so no later line of this file moves (open-risks' superseded table cites `:368`)
     const guard = read("app/lib/llm/anthropic-model-guard.ts");
     expect(guard.match(/^import .*$/gm)).toEqual(['import { LLMProviderError } from "./errors";']);
     // B21-E1's cited lines keep their places (C16, C19, C20 re-anchored, C21-C24, C56, C57; C14 in anthropic-config.ts)

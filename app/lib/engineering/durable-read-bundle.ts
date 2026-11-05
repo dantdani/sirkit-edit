@@ -104,7 +104,7 @@ export function readOnlyDurableWorkflow(workflow: DurableWorkflowRepository): Du
     commit: readOnlyRefusal,
     claimOutbox: readOnlyRefusal,
     completeOutbox: readOnlyRefusal,
-    failOutbox: readOnlyRefusal,
+    failOutbox: readOnlyRefusal, renewOutboxLease: readOnlyRefusal, // [PR-L, 2026-10-17] S2 lease renewal is a write: refused like the four above (kept on this line so the cited lines below do not move)
     listOutbox: readOnlyRefusal,
   }) as DurableWorkflowRepository;
 }

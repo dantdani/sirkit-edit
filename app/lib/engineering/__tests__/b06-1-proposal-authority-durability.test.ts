@@ -772,6 +772,12 @@ describe("B06.1 §6 — registry truth and boundaries", () => {
       // sealed artifact leaves the assembler or handed to the approved
       // replacement service, which retires it on every terminal path.
       "app/lib/engineering/replacement-proposal-assembler.ts",
+      // [PR-M, 2026-10-17] reviewed pin move: the component RESOLUTION assembler is the second composition root - it consumes the
+      // CATALOG-sourced resolution authority (consumeCatalogResolutionAuthority: a verified, current, catalog-source envelope the
+      // assembler builds from the server catalog link, the published evidence and its status) for unresolved instances that have no
+      // durable binding yet; every grant it mints is retired before the sealed batch leaves it, or handed to the approved-resolution
+      // service, which retires it on every terminal path (m1-led-dimmer-resolution exercises both)
+      "app/lib/component-resolution/resolution-assembler.ts",
     ]);
     const root = process.cwd();
     const offenders: string[] = [];

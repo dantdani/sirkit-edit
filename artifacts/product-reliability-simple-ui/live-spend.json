@@ -1,0 +1,82 @@
+{
+  "schema": "sirkit.product-reliability.live-spend.v1",
+  "currency": "USD",
+  "owner_cap_total": "5.00",
+  "cap_note": "US$5 cumulative for the builder's bounded live API tests on synthetic fixtures (assignment, 2026-10-14). Not per checkpoint, process, retry or agent.",
+  "price_basis": {
+    "provider": "openai",
+    "model": "gpt-5.6-sol",
+    "input_per_million": "4.00",
+    "cached_input_per_million": "0.40",
+    "output_per_million": "20.00",
+    "source": "developers.openai.com model page (promotional rate through at least 2026-11-21; list rate 5.00 / 30.00)",
+    "checked_at": "2026-10-14",
+    "label": "RECORDED (official page read on the date shown); the repository's MODEL_PRICE_TABLE constant stays null (OD-107): this file prices only the builder's own bounded tests"
+  },
+  "builder_requests": [
+    {
+      "id": "LR-1",
+      "status": "completed",
+      "reserved_at": "2026-10-14T16:40:00-04:00",
+      "purpose": "checkpoint C acceptance in NORMAL mode: one Build-mode circuit request through the real page on localhost:3000 with the owner's key (synthetic circuit: a 555 LED blinker), to observe the live proposal and the blockers the sync reports; no PCB mutation beyond the explicit review path",
+      "bounds": "SIRKIT_BUILD_ITERATION_CAP=6 on the builder's own dev-server launch config (not the owner's .env.local); the route's 40 s deadline; three loops in flight at most",
+      "worst_case_usd": "1.70",
+      "worst_case_basis": "INFERRED: planner judged single-loop (the owner's 2026-10-11 run of a comparable prompt ran one loop of 13 turns, 28,878 in / 3,211 out): plan call 4,096 output + ~5,000 input; loop 6 turns x 8,192 output = 49,152 and <= 25,000 input per turn = 150,000; at 4.00/20.00 per million -> 0.08 + 0.02 + 0.98 + 0.60 = 1.68; embeddings negligible. A fan-out (planner > 1 block) multiplies the loop term; if the response reports planner.blocks > 1 the actual usage is priced from the durable call records and no second live request is made before the cap is re-evaluated",
+      "actual_usd": "0.19",
+      "actual_basis": "CONFIRMED from the durable llm.call-record.v1 rows of the run window 2026-10-16T03:37:27Z..03:39:03Z (read-only, counts only): build-multi 4 gpt-5.6-sol calls, 17,481 input / 3,171 output tokens (planner single, loop 3 of 6 iterations, 47.7 s); the page's post-approval automatic passes layout-critic (7,779 / 325) and review (1,867 / 301) - 2 calls outside the reservation's scope but inside the cap; 9 Anthropic claude-haiku-4-5 rerank calls refused insufficient_quota (0 tokens, no charge); 17 text-embedding-3-small calls (< 0.001 USD). Priced at 4.00/20.00 per million: 27,127 x 4.00 + 3,797 x 20.00 = 0.108 + 0.076 = 0.184 -> 0.19 rounded up. The fan-out assumption held (planner.state single).",
+      "completed_at": "2026-10-16T03:42:22Z"
+    },
+    {
+      "id": "LR-2",
+      "status": "completed",
+      "reserved_at": "2026-10-17T06:20:00-04:00",
+      "purpose": "checkpoint G / Astra increment A (LB-F3): ONE live CONTRACT turn with gpt-6-astra through the repository's OpenAIProvider and the B21-F contract-turn runner (a forced-tool turn with a strict tool; SDK retries 0; the adapters' output ceiling) - proves the API accepts the request the adapter builds and returns a valid tool call; proves nothing about engineering quality",
+      "bounds": "one request (a scratch meter refuses a second); max output = the adapters' ceiling; no capsule cases run (the full live evaluation is NOT invoked)",
+      "worst_case_usd": "0.46",
+      "worst_case_basis": "INFERRED from the list prices read on 2026-10-17 (input 10 / cached 1 / output 50 USD per million): the output ceiling plus a one-tool prompt",
+      "actual_usd": "0.0028",
+      "actual_basis": "CONFIRMED from the adapter's reported usage of the one request (121 input tokens, 0 cached, 31 output tokens) at the list prices read on 2026-10-17 (10 / 1 / 50 USD per million); the record: toolCalled true, nameMatched true, argumentsValid true, verdict valid; wall 2.6 s",
+      "completed_at": "2026-10-17T06:24:00-04:00"
+    },
+    {
+      "id": "LR-3",
+      "status": "paused (provider insufficient_quota); reservation remainder held for a resume",
+      "reserved_at": "2026-10-19T20:45:00-04:00",
+      "purpose": "runbook L.7 items 9-10, the ONE bounded live run of OD-252 item 10 / OD-253 item 7: the owner's four-motor sentence through the real page (Build) in NORMAL mode on the builder's own server (port 3005, verification worktree at 2a0e3079) and its own worker (--no-env-file --concurrency 1 --scope <the run's project>), the owner's OpenAI key and main database; a new synthetic project; Approve if a reviewable result arrives (the automatic Tidy and Review follow), then Prepare PCB's truthful preflight; no Continue-with-another-allowance click, no manual AI control, no chat, no acquisition or publication into the owner's catalog",
+      "bounds": "server and worker env: SIRKIT_OPENAI_MODEL=gpt-5.6-sol, SIRKIT_BUILD_ITERATION_CAP=4, ANTHROPIC_API_KEY empty (reranker off), vendor keys absent, SIRKIT_DB_POOL_MAX=5; the task's operator unit SIRKIT_GENERATION_ALLOWANCE_MODEL_CALLS=24 / _OUTPUT_TOKENS=57344 / _INPUT_TOKENS=450000 / _CATALOG_SEARCHES=120 / _WALL_CLOCK_MS=21600000, one unit (pre-call input admission and admitCall across slices; SDK maxRetries 0 on every metered call); SIRKIT_POST_APPLY_INPUT_TOKENS=100000 per automatic Tidy / Review request (refused before any provider call above it; maxRetries 0)",
+      "worst_case_usd": "3.83",
+      "worst_case_basis": "CONFIRMED bounds in code (9a42c36b, 2a0e3079) at the price read 2026-10-19 on developers.openai.com (gpt-5.6-sol 4.00 input / 20.00 output per million, promotional through at least 2026-11-21): task input <= 450,000 x 4/M = 1.8000; task output <= 57,344 x 20/M = 1.1469 (both planner attempts reserved inside the unit); automatic post-approval passes: input <= 2 x 100,000 x 4/M = 0.8000 (image at detail high <= 3,000 tokens for gpt-5.6-sol per OpenAI's vision guide, inside the 100,000), output <= (1,536 + 2,048) x 20/M = 0.0717; embeddings (text-embedding-3-small, <= 120 catalog searches) <= 0.01 INFERRED generous. Sum 3.8286 -> 3.83. Tokens <= UTF-8 bytes of the request plus framing is the bound's stated assumption (byte-level BPE); a reported input above its bound stops the slice / pauses the passes",
+      "remaining_after_reservation_usd": "0.9772",
+      "run_window": "2026-10-20T00:44:34Z (worker start) .. 2026-10-20T01:02Z (worker and server stopped by the builder)",
+      "actual_usd_so_far": "1.17",
+      "actual_basis": "CONFIRMED from the durable llm.call-record.v1 rows of project 21558dad-52cd-473a-9101-e72a16deded6 in the run window (read-only, counts only): 15 completed gpt-5.6-sol calls, 219,005 input / 14,629 output tokens; 1 call refused insufficient_quota with no tokens; 69 text-embedding-3-small calls, 1,470 tokens. Priced at 4.00 / 20.00 per million (all input at the uncached rate, an upper bound): 0.8760 + 0.2926 = 1.1686 -> 1.17 rounded up; embeddings < 0.0001. No automatic post-approval pass ran (nothing was approved).",
+      "outcome": "The plan slice planned 3 blocks with disclosed assumptions and coverage (shown in the task card). Block \"Four brushed-motor drivers\" was designed and SAVED. Then OpenAI refused the next calls: block \"Flight controller, IMU, and radio\" -> blocked provider_quota (insufficient_quota); block \"Battery input and regulated power\" -> waiting for the provider (rate_limit) with a scheduled retry at 01:49:36Z. The task kept the saved block, said so on the page (\"Waiting for the model provider; the design continues by itself at 01:49:36 UTC\"), and offered Stop design / Pause design. The builder stopped the worker and server while no slice was in flight; the task stays durable in the owner database for a resume. BLOCKER (owner): the owner's OpenAI account answers insufficient_quota - billing quota or spend limit reached; nothing more can run live until it is raised.",
+      "reserved_remaining_usd": "2.66"
+    }
+  ],
+  "builder_spent_known": "1.3628",
+  "builder_reserved_uncertain": "0.00",
+  "builder_remaining_provable": "0.9772",
+  "prior_continuation_paid_calls": {
+    "claim": "the prior work in this continuation made no paid calls",
+    "verification": "CONFIRMED independently: the durable llm.call-record.v1 rows (65) all belong to the owner's own browser session of 2026-10-11 (routes /api/schematic/build-multi and embeddings, written while the owner tested with the owner's key); no row names a builder script, suite or command; no record-only evaluation command was run (its outputs are absent)",
+    "checked_at": "2026-10-14"
+  },
+  "owner_own_usage_not_counted": {
+    "note": "the owner's own 2026-10-11 session: 13 gpt-5.6-sol calls (28,878 input / 3,211 output tokens) plus 51 embedding calls on one Build request; priced at the basis above ≈ 0.18 USD; the owner's spend on the owner's key, outside the builder's cap Between 2026-10-11 and 2026-10-15 23:53Z the owner's own sessions added 76 more call records (not the builder's; not counted)."
+  },
+  "worst_case_per_request_note": "a Build request is bounded today only by MAX_ITERATIONS=20 × maxTokens 8,192 output and the route's 45 s deadline: analytically ≈ 3.36 USD output + input, which is not provable under the cap; checkpoint C adds an explicit loop budget before any builder-initiated live Build request",
+  "builder_probes": [
+    {
+      "id": "LP-1",
+      "status": "completed",
+      "at": "2026-10-17T02:05:00-04:00",
+      "purpose": "Astra increment A: does the owner's OpenAI account list gpt-6-astra? (directive 4 / CONTINUATION B: account availability is a precondition of any live turn)",
+      "request": "GET https://api.openai.com/v1/models with the owner's key from .env.local (read in a scratch script outside the repo; the key was never printed or stored)",
+      "result": "200; 135 models; gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-6.1-sol listed beside gpt-5.6-sol/-luna/-terra",
+      "cost_usd": "0.00",
+      "cost_basis": "CONFIRMED: the models list is not metered (no tokens)"
+    }
+  ],
+  "builder_reserved_open": "2.66"
+}

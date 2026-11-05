@@ -18,6 +18,11 @@ export interface DurableOutboxEffect {
   owner: { aggregateType: string; aggregateKey: string };
   eventType: string; eventVersion: number; topic: string;
   payload: Record<string, unknown>; idempotencyKey?: string;
+  /** [PR-L, 2026-10-17] S1 (task-worker-contract.md section 3.4): the earliest dispatch time, at or after the commit's `committedAt`
+   *  (the default), so a delayed retry (backoff, Retry-After) is scheduled atomically with the checkpoint that decided it. Both
+   *  repositories refuse an unparseable or earlier value (DW_OUTBOX_AVAILABLE_AT_INVALID); `claimOutbox` honours it. Not digested:
+   *  like `failOutbox`'s `retryAt`, it is dispatch state, not event identity. */
+  availableAt?: string;
 }
 
 export type DurableOutboxState = "pending" | "processing" | "completed" | "failed";
@@ -53,4 +58,11 @@ export interface DurableWorkflowRepository {
   completeOutbox(input: { scope: DurableWorkflowScope; eventId: string; workerId: string; leaseToken: string; completedAt: string }): Promise<void>;
   failOutbox(input: { scope: DurableWorkflowScope; eventId: string; workerId: string; leaseToken: string; errorCode: string; failedAt: string; retryAt: string; terminal: boolean }): Promise<void>;
   listOutbox(input?: { scope?: DurableWorkflowScope; scopeKey?: string; state?: DurableOutboxState; topic?: string; eventType?: string }): Promise<DurableOutboxEvent[]>;
+  /** [PR-L, 2026-10-17] S2 (task-worker-contract.md section 3.4): extend a HELD lease - one fenced update that matches only the
+   *  `processing` event of this scope, owner and token whose lease has not yet expired at `now`; anything else (lapsed, re-claimed,
+   *  completed, failed, another scope) is DW_OUTBOX_LEASE_LOST and changes nothing. `leaseUntil` must be after `now`
+   *  (DW_OUTBOX_LEASE_INVALID). The token is unchanged, so complete/fail stay fenced by it. Optional on the interface so the read-only
+   *  views and test doubles that enumerate the repository keep compiling; both concrete repositories implement it, and a caller that
+   *  needs renewal (the generation-task store) refuses a repository without it. */
+  renewOutboxLease?(input: { scope: DurableWorkflowScope; eventId: string; workerId: string; leaseToken: string; now: string; leaseUntil: string }): Promise<void>;
 }

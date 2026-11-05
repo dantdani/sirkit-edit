@@ -405,3 +405,7 @@ export function verifyPublicGrantCoherence(grant: PublicExecutionGrant): { ok: t
   if (Date.parse(grant.binding.expiresAt) - Date.parse(grant.binding.issuedAt) !== grant.binding.ttlMs) return { ok: false, reason: "ttlMs does not match the issue/expiry stamps" };
   return { ok: true };
 }
+// [K2 review, 2026-11-04] honesty-K2-PT-1, appended after the last line (no cited line moves): the retirements AFTER a consumption whose
+// commit outcome nobody learned. The retry guard (app/lib/execution-grant/store.ts) and the chat's Work log (app/lib/project/work-log.ts)
+// read this ONE list: such a change MAY have changed the board, so neither treats it as "nothing was changed".
+export const OUTCOME_UNKNOWN_RETIREMENT_REASONS: readonly RetirementReason[] = Object.freeze(["recovery_required", "consumed_unsettled"]);

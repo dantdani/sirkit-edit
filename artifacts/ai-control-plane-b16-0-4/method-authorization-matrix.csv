@@ -48,6 +48,7 @@ POST,/api/circuit-verification/problem,auth+csrf,authenticated,authenticatedJson
 POST,/api/circuit-verification/propose,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/circuit-verification/readiness,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/circuit-verification/run,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
+POST,/api/component-resolution-authority,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/component-selection/alternative,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/component-selection/catalog,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/component-selection/evaluate,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
@@ -75,6 +76,12 @@ POST,/api/footprint-resolution,auth+csrf,authenticated,authenticatedJsonRoute(�
 POST,/api/full-flow/propose,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/full-flow/run,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/full-flow/transition,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
+POST,/api/generation-tasks/[id]/control,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
+GET,/api/generation-tasks/[id]/events,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+GET,/api/generation-tasks/[id],auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+POST,/api/generation-tasks,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
+GET,/api/generation-tasks,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+POST,/api/generation-worker,auth,worker,workerRoute(…),load-bearing,wrapper,workerRoute
 GET,/api/health,public,public,publicRoute(…),n/a(public),-,-
 POST,/api/interfaces/allocate,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/interfaces/alternatives,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
@@ -98,6 +105,8 @@ POST,/api/model-simulation/propose,auth+csrf,authenticated,authenticatedJsonRout
 POST,/api/model-simulation/readiness,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 GET,/api/parts/[id]/alternates,public,public,publicRoute(…),n/a(public),-,-
 GET,/api/parts/[id],public,public,publicRoute(…),n/a(public),-,-
+GET,/api/parts/acquisitions,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+POST,/api/parts/acquisitions,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 GET,/api/parts/categories,public,public,publicRoute(…),n/a(public),-,-
 POST,/api/parts/external-search,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/parts/search,public,public,publicJsonRoute(…),n/a(public),-,-

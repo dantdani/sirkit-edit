@@ -14,6 +14,7 @@ export function SyncButton({
   progress,
   onSync,
   onOptions,
+  sheetCount = 1,
 }: {
   dirty: boolean;
   syncing: boolean;
@@ -21,15 +22,18 @@ export function SyncButton({
   progress?: string | null;
   onSync: () => void;
   onOptions: () => void;
+  /** [PR-J4, 2026-10-23] runbook J.5 / OD-258 item 6: the project's sheet count - the control states that it synchronises the WHOLE project. */
+  sheetCount?: number;
 }) {
+  const whole = `synchronises the whole project (${sheetCount} sheet${sheetCount === 1 ? "" : "s"})`;
   return (
     <div className="flex shrink-0 overflow-hidden rounded-md border border-teal-500/45 bg-teal-500/15 text-teal-200 shadow-sm">
       <button
         type="button"
         onClick={onSync}
         disabled={syncing}
-        title={dirty ? "Schematic changed — update the PCB now" : "Place the schematic on the PCB"}
-        aria-label="Schematic to PCB"
+        title={dirty ? `Schematic changed — update the PCB now (${whole}, whatever sheet is open)` : `Place the schematic on the PCB (${whole}, whatever sheet is open)`}
+        aria-label={`Schematic to PCB: ${whole}`}
         className="relative flex items-center gap-1.5 px-2.5 py-1 font-medium hover:bg-teal-500/20 disabled:opacity-50"
       >
         {syncing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}

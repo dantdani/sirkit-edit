@@ -49,6 +49,8 @@ export const ORGANIZATION_AUTHORED_LICENSE: LicenseRecord = Object.freeze({
   exportDisposition: "redistributable",
 });
 const KICAD_SOURCE: SourceIdentity = Object.freeze({ id: "source_kicad_official_libraries", sourceClass: "official_kicad_library", name: "KiCad official symbol and footprint libraries", officialDomains: ["kicad.org", "gitlab.com"], licenseId: KICAD_LIBRARY_LICENSE.id }) as SourceIdentity;
+/** [PR-M, 2026-10-18] M2.4: the official KiCad source identity, exported unchanged so an acquired KiCad asset names the SAME source row. */
+export const KICAD_OFFICIAL_SOURCE: SourceIdentity = KICAD_SOURCE;
 const MEDIA_SYMBOL = "application/x-kicad-symbol";
 const MEDIA_FOOTPRINT = "application/x-kicad-footprint";
 
@@ -60,6 +62,37 @@ export interface BundledKicadLibrary {
   /** The library file's text, or null when the reference names nothing in the bundled library. */
   symbol(library: string, name: string): string | null;
   footprint(library: string, name: string): string | null;
+}
+
+// ── [PR-M, 2026-10-18] M2.4: the KiCad asset source port ────────────────────
+/**
+ * What a symbol or footprint reference resolves to: its text and its provenance. The bundled library is one implementation
+ * (`bundledAssetText` below: the SAME source identity, licence, revision and locator the reads always had, so every id it yields is
+ * byte-identical); the acquired one reads a handoff's STORED objects through a store port that imports no egress
+ * (app/lib/component-resolution/acquisition/handoff.ts) - a request still never carries bytes.
+ */
+export interface KicadAssetText {
+  text: string;
+  source: SourceIdentity;
+  license: LicenseRecord;
+  revision: string;
+  /** the source record's locator (a library path or an origin + path; never a query string) */
+  locator: string;
+  /** when the bytes were retrieved (null: the request's authoring time, the bundled library's rule) */
+  retrievedAt: string | null;
+}
+/** M2.4: an acquired asset pointer inside a reference: the governance-scope handoff and the stored object's SHA-256. */
+export interface AcquiredAssetPointer { handoffId: string; objectHash: string }
+/** M2.4: an acquired pin table (a permitted source's datasheet text, parsed deterministically) the handoff carries. */
+export interface AcquiredPinTable extends KicadAssetText {
+  /** the table in `terminalTableText` form */
+  terminals: string;
+  parserVersion: string;
+}
+/** The acquired assets a request names, preloaded by the caller (the reads are durable and async; authoring is synchronous). */
+export interface AcquiredKicadAssets {
+  read(kind: "symbol" | "footprint", reference: { library: string; name: string; acquired: AcquiredAssetPointer }): KicadAssetText | null;
+  pinTable: AcquiredPinTable | null;
 }
 
 const LIBRARY_NAME = /^[A-Za-z0-9][A-Za-z0-9_.+-]{0,127}$/;
@@ -112,10 +145,17 @@ function text(value: unknown, max: number): string | null {
   return typeof value === "string" && value.length <= max * 4 ? inertExternalText(value, max) : null;
 }
 
-function reference(value: unknown, field: string): Normalized<{ library: string; name: string } | null> {
+const HANDOFF_ID = /^acquisition-handoff:[0-9a-f]{32}$/;
+const OBJECT_HASH = /^[0-9a-f]{64}$/;
+
+function reference(value: unknown, field: string): Normalized<{ library: string; name: string; acquired?: AcquiredAssetPointer } | null> {
   if (value === null || value === undefined) return { ok: true, value: null };
-  if (!closedRecord(value, ["library", "name"]) || typeof value.library !== "string" || typeof value.name !== "string" || !validReference(value.library, value.name)) return { ok: false, field };
-  return { ok: true, value: { library: value.library, name: value.name } };
+  if (!closedRecord(value, ["library", "name", "acquired"]) || typeof value.library !== "string" || typeof value.name !== "string" || !validReference(value.library, value.name)) return { ok: false, field };
+  // [PR-M, 2026-10-18] M2.4: the closed acquired alternative names a stored object by its handoff and hash - never bytes, a source class or a URL
+  if (value.acquired === undefined) return { ok: true, value: { library: value.library, name: value.name } };
+  const acquired = value.acquired;
+  if (!closedRecord(acquired, ["handoffId", "objectHash"]) || typeof acquired.handoffId !== "string" || !HANDOFF_ID.test(acquired.handoffId) || typeof acquired.objectHash !== "string" || !OBJECT_HASH.test(acquired.objectHash)) return { ok: false, field };
+  return { ok: true, value: { library: value.library, name: value.name, acquired: { handoffId: acquired.handoffId, objectHash: acquired.objectHash } } };
 }
 
 export type NormalizedSpec = { ok: true; spec: AtomicPublicationSpec } | { ok: false; field: string };
@@ -216,11 +256,16 @@ export interface AtomicAuthoringContext {
   authoredAt: string;
   identity: AtomicAuthoringIdentity;
   library: BundledKicadLibrary;
+  /** [PR-M, 2026-10-18] M2.4: the acquired assets the request names (preloaded through the store port); absent: none */
+  acquired?: AcquiredKicadAssets | null;
 }
 
 interface ReadAssets {
   symbolSource: string | null;
   footprintSource: string | null;
+  /** [PR-M, 2026-10-18] where each text came from (the bundled library or an acquired object) */
+  symbolText: KicadAssetText | null;
+  footprintText: KicadAssetText | null;
   symbol: SymbolAssetVersion | null;
   footprint: FootprintAssetVersion | null;
   symbolLocator: string | null;
@@ -228,21 +273,35 @@ interface ReadAssets {
   diagnostics: string[];
 }
 
-function kicadRecordFor(source: string, revision: string, locator: string, mediaType: string, at: string) {
-  return makeSourceRecord({ source: KICAD_SOURCE, content: source, revision, locator, mediaType, retrievedAt: new Date(at) });
+function kicadRecordFor(text: KicadAssetText, mediaType: string, at: string) {
+  return makeSourceRecord({ source: text.source, content: text.text, revision: text.revision, locator: text.locator, mediaType, retrievedAt: new Date(text.retrievedAt ?? at) });
+}
+
+/** [PR-M, 2026-10-18] The bundled library as a KiCad asset source: the source identity, licence, revision and locator it always had. */
+function bundledAssetText(library: BundledKicadLibrary, kind: "symbol" | "footprint", ref: { library: string; name: string }): KicadAssetText | null {
+  const text = kind === "symbol" ? library.symbol(ref.library, ref.name) : library.footprint(ref.library, ref.name);
+  if (text === null) return null;
+  const locator = kind === "symbol" ? `data/kicad-symbols/${ref.library}.kicad_symdir/${ref.name}.kicad_sym` : `data/kicad-footprints/${ref.library}.pretty/${ref.name}.kicad_mod`;
+  return { text, source: KICAD_SOURCE, license: KICAD_LIBRARY_LICENSE, revision: kind === "symbol" ? library.symbolsRevision : library.footprintsRevision, locator, retrievedAt: null };
+}
+
+function assetText(context: AtomicAuthoringContext, kind: "symbol" | "footprint", ref: { library: string; name: string; acquired?: AcquiredAssetPointer }): KicadAssetText | null {
+  if (!ref.acquired) return bundledAssetText(context.library, kind, ref);
+  return context.acquired?.read(kind, { library: ref.library, name: ref.name, acquired: ref.acquired }) ?? null;
 }
 
 function readAssets(spec: AtomicPublicationSpec, context: AtomicAuthoringContext): ReadAssets {
-  const out: ReadAssets = { symbolSource: null, footprintSource: null, symbol: null, footprint: null, symbolLocator: null, footprintLocator: null, diagnostics: [] };
+  const out: ReadAssets = { symbolSource: null, footprintSource: null, symbolText: null, footprintText: null, symbol: null, footprint: null, symbolLocator: null, footprintLocator: null, diagnostics: [] };
   if (spec.symbol) {
     const { library, name } = spec.symbol;
-    out.symbolLocator = `data/kicad-symbols/${library}.kicad_symdir/${name}.kicad_sym`;
-    out.symbolSource = context.library.symbol(library, name);
-    if (out.symbolSource === null) out.diagnostics.push(`symbol ${library}:${name} is not in the bundled KiCad library`);
+    out.symbolText = assetText(context, "symbol", spec.symbol);
+    out.symbolLocator = out.symbolText?.locator ?? `data/kicad-symbols/${library}.kicad_symdir/${name}.kicad_sym`;
+    out.symbolSource = out.symbolText?.text ?? null;
+    if (out.symbolSource === null || !out.symbolText) out.diagnostics.push(spec.symbol.acquired ? `symbol ${library}:${name} is not among the stored objects of ${spec.symbol.acquired.handoffId}` : `symbol ${library}:${name} is not in the bundled KiCad library`);
     else {
       try {
-        const record = kicadRecordFor(out.symbolSource, context.library.symbolsRevision, out.symbolLocator, MEDIA_SYMBOL, context.authoredAt);
-        const parsed = parseSymbolAssets({ source: out.symbolSource, origin: { sourceRecordId: record.id, libraryNickname: library, sourceUri: `kicad://symbols/${library}/${name}`, licenseId: KICAD_LIBRARY_LICENSE.id } }).find((asset) => asset.symbolName === name) ?? null;
+        const record = kicadRecordFor(out.symbolText, MEDIA_SYMBOL, context.authoredAt);
+        const parsed = parseSymbolAssets({ source: out.symbolSource, origin: { sourceRecordId: record.id, libraryNickname: library, sourceUri: `kicad://symbols/${library}/${name}`, licenseId: out.symbolText.license.id } }).find((asset) => asset.symbolName === name) ?? null;
         if (!parsed) out.diagnostics.push(`symbol ${library}:${name} was not found in its library file`);
         else if (parsed.validationState !== "valid" && parsed.validationState !== "valid_with_limitations") out.diagnostics.push(`symbol ${library}:${name} is ${parsed.validationState}`);
         else out.symbol = parsed;
@@ -253,13 +312,14 @@ function readAssets(spec: AtomicPublicationSpec, context: AtomicAuthoringContext
   }
   if (spec.footprint) {
     const { library, name } = spec.footprint;
-    out.footprintLocator = `data/kicad-footprints/${library}.pretty/${name}.kicad_mod`;
-    out.footprintSource = context.library.footprint(library, name);
-    if (out.footprintSource === null) out.diagnostics.push(`footprint ${library}:${name} is not in the bundled KiCad library`);
+    out.footprintText = assetText(context, "footprint", spec.footprint);
+    out.footprintLocator = out.footprintText?.locator ?? `data/kicad-footprints/${library}.pretty/${name}.kicad_mod`;
+    out.footprintSource = out.footprintText?.text ?? null;
+    if (out.footprintSource === null || !out.footprintText) out.diagnostics.push(spec.footprint.acquired ? `footprint ${library}:${name} is not among the stored objects of ${spec.footprint.acquired.handoffId}` : `footprint ${library}:${name} is not in the bundled KiCad library`);
     else {
       try {
-        const record = kicadRecordFor(out.footprintSource, context.library.footprintsRevision, out.footprintLocator, MEDIA_FOOTPRINT, context.authoredAt);
-        const parsed = parseFootprintAsset({ source: out.footprintSource, libraryNickname: library, origin: { sourceRecordId: record.id, libraryNickname: library, sourceUri: `kicad://footprints/${library}/${name}`, licenseId: KICAD_LIBRARY_LICENSE.id } });
+        const record = kicadRecordFor(out.footprintText, MEDIA_FOOTPRINT, context.authoredAt);
+        const parsed = parseFootprintAsset({ source: out.footprintSource, libraryNickname: library, origin: { sourceRecordId: record.id, libraryNickname: library, sourceUri: `kicad://footprints/${library}/${name}`, licenseId: out.footprintText.license.id } });
         if (parsed.validationState !== "valid" && parsed.validationState !== "valid_with_limitations") out.diagnostics.push(`footprint ${library}:${name} is ${parsed.validationState}`);
         else out.footprint = parsed;
       } catch {
@@ -291,11 +351,12 @@ function citation(spec: AtomicPublicationSpec, authoredBy: string, what: string)
 export function authoringCandidates(spec: AtomicPublicationSpec, context: AtomicAuthoringContext): { candidates: NormalizedCandidate[]; diagnostics: string[] } {
   const assets = readAssets(spec, context);
   const candidates: NormalizedCandidate[] = [];
-  if (assets.symbol && assets.symbolSource !== null) {
-    candidates.push(candidateFromExtraction({ exactMpn: spec.exactMpn, sourceId: KICAD_SOURCE.id, sourceClass: "official_kicad_library", method: "kicad_parser", parserVersion: KICAD_ASSET_PARSER_VERSION, documentHash: sha256(assets.symbolSource), sourceRevision: context.library.symbolsRevision, facts: [{ property: "symbol", facet: "terminal", value: `${spec.symbol!.library}:${spec.symbol!.name}`, locator: assets.symbolLocator! }] }));
+  // [PR-M, 2026-10-18] each candidate names the source its text came from (for the bundled library: the identity, class and revision it always had)
+  if (assets.symbol && assets.symbolSource !== null && assets.symbolText) {
+    candidates.push(candidateFromExtraction({ exactMpn: spec.exactMpn, sourceId: assets.symbolText.source.id, sourceClass: assets.symbolText.source.sourceClass, method: "kicad_parser", parserVersion: KICAD_ASSET_PARSER_VERSION, documentHash: sha256(assets.symbolSource), sourceRevision: assets.symbolText.revision, facts: [{ property: "symbol", facet: "terminal", value: `${spec.symbol!.library}:${spec.symbol!.name}`, locator: assets.symbolLocator! }] }));
   }
-  if (assets.footprint && assets.footprintSource !== null) {
-    candidates.push(candidateFromExtraction({ exactMpn: spec.exactMpn, sourceId: KICAD_SOURCE.id, sourceClass: "official_kicad_library", method: "kicad_parser", parserVersion: KICAD_ASSET_PARSER_VERSION, documentHash: sha256(assets.footprintSource), sourceRevision: context.library.footprintsRevision, facts: [{ property: "footprint", facet: "package", value: `${spec.footprint!.library}:${spec.footprint!.name}`, locator: assets.footprintLocator! }] }));
+  if (assets.footprint && assets.footprintSource !== null && assets.footprintText) {
+    candidates.push(candidateFromExtraction({ exactMpn: spec.exactMpn, sourceId: assets.footprintText.source.id, sourceClass: assets.footprintText.source.sourceClass, method: "kicad_parser", parserVersion: KICAD_ASSET_PARSER_VERSION, documentHash: sha256(assets.footprintSource), sourceRevision: assets.footprintText.revision, facts: [{ property: "footprint", facet: "package", value: `${spec.footprint!.library}:${spec.footprint!.name}`, locator: assets.footprintLocator! }] }));
   }
   const facts: Array<{ property: string; facet: "identity" | "terminal" | "package"; value: string; locator: string }> = [
     { property: "mpn", facet: "identity", value: spec.exactMpn, locator: citation(spec, context.authoredBy, "exact MPN") },
@@ -331,7 +392,7 @@ export interface AssembledAtomicDraft {
 /** The draft revision for a request, in a fresh in-memory catalog that starts at the logical part's latest revision number. */
 export function assembleAtomicDraft(spec: AtomicPublicationSpec, context: AtomicAuthoringContext & { manufacturer: { canonicalName: string; officialDomains: string[] } }): AssembledAtomicDraft {
   const assets = readAssets(spec, context);
-  if (!assets.symbol || assets.symbolSource === null) throw new AtomicAuthoringError(assets.diagnostics.length > 0 ? assets.diagnostics : ["the request names no symbol"]);
+  if (!assets.symbol || assets.symbolSource === null || !assets.symbolText) throw new AtomicAuthoringError(assets.diagnostics.length > 0 ? assets.diagnostics : ["the request names no symbol"]);
   const at = new Date(context.authoredAt);
   const catalog = new AtomicCatalog();
   catalog.addLicense(KICAD_LIBRARY_LICENSE);
@@ -343,15 +404,27 @@ export function assembleAtomicDraft(spec: AtomicPublicationSpec, context: Atomic
   const organization = organizationSource(context.authoredBy);
   catalog.addSource(KICAD_SOURCE);
   catalog.addSource(organization);
+  // [PR-M, 2026-10-18] M2.4: an acquired asset's own source identity and licence (the KiCad licence is the same record, so it deduplicates)
+  for (const text of [assets.symbolText, assets.footprintText]) {
+    if (!text) continue;
+    catalog.addSource(text.source);
+    catalog.addLicense(text.license);
+  }
 
   const content = organizationContent(spec, context.authoredBy);
   const organizationRecord = makeSourceRecord({ source: organization, content, revision: "person-entered/1", locator: `sirkit://organization-authored/${sha256(content).slice(0, 32)}`, mediaType: "application/json", retrievedAt: at });
-  const symbolRecord = kicadRecordFor(assets.symbolSource, context.library.symbolsRevision, assets.symbolLocator!, MEDIA_SYMBOL, context.authoredAt);
-  const footprintRecord = assets.footprint && assets.footprintSource !== null ? kicadRecordFor(assets.footprintSource, context.library.footprintsRevision, assets.footprintLocator!, MEDIA_FOOTPRINT, context.authoredAt) : null;
+  const symbolRecord = kicadRecordFor(assets.symbolText, MEDIA_SYMBOL, context.authoredAt);
+  const footprintRecord = assets.footprint && assets.footprintSource !== null && assets.footprintText ? kicadRecordFor(assets.footprintText, MEDIA_FOOTPRINT, context.authoredAt) : null;
+  // [PR-M, 2026-10-18] M2.4: an acquired pin table that states exactly the spec's terminal table joins the mapping's terminal evidence
+  const acquiredTable = context.acquired?.pinTable ?? null;
+  const pinTable = acquiredTable && spec.terminals.length > 0 && acquiredTable.terminals === terminalTableText(spec.terminals) ? acquiredTable : null;
+  const pinTableRecord = pinTable ? makeSourceRecord({ source: pinTable.source, content: pinTable.text, revision: pinTable.revision, locator: pinTable.locator, mediaType: "text/plain", retrievedAt: new Date(pinTable.retrievedAt ?? context.authoredAt) }) : null;
+  if (pinTable) { catalog.addSource(pinTable.source); catalog.addLicense(pinTable.license); }
   const blobs = [
     { record: organizationRecord, content, mediaType: "application/json", licenseId: ORGANIZATION_AUTHORED_LICENSE.id },
-    { record: symbolRecord, content: assets.symbolSource, mediaType: MEDIA_SYMBOL, licenseId: KICAD_LIBRARY_LICENSE.id },
-    ...(footprintRecord ? [{ record: footprintRecord, content: assets.footprintSource!, mediaType: MEDIA_FOOTPRINT, licenseId: KICAD_LIBRARY_LICENSE.id }] : []),
+    { record: symbolRecord, content: assets.symbolSource, mediaType: MEDIA_SYMBOL, licenseId: assets.symbolText.license.id },
+    ...(footprintRecord ? [{ record: footprintRecord, content: assets.footprintSource!, mediaType: MEDIA_FOOTPRINT, licenseId: assets.footprintText!.license.id }] : []),
+    ...(pinTableRecord && pinTable ? [{ record: pinTableRecord, content: pinTable.text, mediaType: "text/plain", licenseId: pinTable.license.id }] : []),
   ];
   for (const blob of blobs) {
     catalog.addSourceRecord(blob.record);
@@ -364,6 +437,9 @@ export function assembleAtomicDraft(spec: AtomicPublicationSpec, context: Atomic
   const footprintEvidence = footprintRecord ? makeEvidence({ sourceRecord: footprintRecord, locator: assets.footprintLocator!, method: "kicad_parser", extractorVersion: KICAD_ASSET_PARSER_VERSION, extractedAt: at }) : null;
   catalog.addEvidence(organizationEvidence);
   if (footprintEvidence) catalog.addEvidence(footprintEvidence);
+  const pinTableEvidence = pinTableRecord && pinTable ? makeEvidence({ sourceRecord: pinTableRecord, locator: `${pinTable.locator} (pin table)`, method: "deterministic_inference", extractorVersion: pinTable.parserVersion, extractedAt: at }) : null;
+  if (pinTableEvidence) catalog.addEvidence(pinTableEvidence);
+  const terminalEvidenceIds = pinTableEvidence ? [organizationEvidence.id, pinTableEvidence.id] : [organizationEvidence.id];
 
   const symbol = assets.symbol;
   const footprint = footprintRecord ? assets.footprint : null;
@@ -377,7 +453,7 @@ export function assembleAtomicDraft(spec: AtomicPublicationSpec, context: Atomic
   const diagnostics = [...assets.diagnostics];
   if (footprint && footprintEvidence && spec.terminals.length > 0) {
     // the pin-to-pad mapping rests on the person's terminal table alone: the KiCad library carries no manufacturer terminal table
-    const terminals: ManufacturerTerminal[] = spec.terminals.map((terminal) => ({ id: `terminal_${exactPart.id}_${terminal.number}`, publishedIdentifier: terminal.number, function: terminal.function, classification: "electrical", evidenceIds: [organizationEvidence.id] }));
+    const terminals: ManufacturerTerminal[] = spec.terminals.map((terminal) => ({ id: `terminal_${exactPart.id}_${terminal.number}`, publishedIdentifier: terminal.number, function: terminal.function, classification: "electrical", evidenceIds: [...terminalEvidenceIds] }));
     const electricalPadCount = new Set(footprint.pads.filter((pad) => !pad.mechanical).map((pad) => pad.number)).size;
     const tablePads = new Set(spec.terminals.flatMap((terminal) => terminal.pads)).size;
     const packageProof = provePackage({
@@ -394,9 +470,9 @@ export function assembleAtomicDraft(spec: AtomicPublicationSpec, context: Atomic
     try {
       mapping = buildMappingCertificate({
         exactPartId: exactPart.id, symbol, footprint, terminals,
-        mapping: spec.terminals.map((terminal) => ({ manufacturerTerminalId: `terminal_${exactPart.id}_${terminal.number}`, symbolPinNumbers: [terminal.number], logicalPadNumbers: terminal.pads, evidenceIds: [organizationEvidence.id] })),
+        mapping: spec.terminals.map((terminal) => ({ manufacturerTerminalId: `terminal_${exactPart.id}_${terminal.number}`, symbolPinNumbers: [terminal.number], logicalPadNumbers: terminal.pads, evidenceIds: [...terminalEvidenceIds] })),
         packageProof,
-        evidenceIds: [organizationEvidence.id],
+        evidenceIds: [...terminalEvidenceIds],
       });
       catalog.addMapping(mapping);
     } catch {
@@ -412,7 +488,7 @@ export function assembleAtomicDraft(spec: AtomicPublicationSpec, context: Atomic
     claimIds: [],
     guidanceIds: [],
     offerSnapshotIds: [],
-    licenseIds: [KICAD_LIBRARY_LICENSE.id, ORGANIZATION_AUTHORED_LICENSE.id],
+    licenseIds: [...new Set([KICAD_LIBRARY_LICENSE.id, ORGANIZATION_AUTHORED_LICENSE.id, ...[assets.symbolText, footprint ? assets.footprintText : null].flatMap((text) => (text ? [text.license.id] : [])), ...(pinTableEvidence && pinTable ? [pinTable.license.id] : [])])],
     publicationState: "draft",
     policyVersion: ATOMIC_PUBLICATION_POLICY_VERSION,
     createdAt: context.authoredAt,

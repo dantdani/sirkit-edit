@@ -10,7 +10,7 @@
  * approves NOTHING (every specialist refused `provider_policy_invalid`, visibly - never a partial or silently ignored map). A model the
  * pinned family rules of its provider do not all classify (`openai-config.ts`, `anthropic-config.ts` - the rule objects themselves,
  * never copies) is refused for a role until it is qualified live (LB-9); the provider's configured model is always qualified (today's
- * behaviour). The coordinator is never routed here: its adapter is `agentAdapterFor`'s, unchanged, and it never switches provider
+ * behaviour). [PR-F, 2026-10-17] A profile whose admission is pinned to the server env (gpt-6-astra) is qualified ONLY as the configured model or when the role map names it (`serverEnvAdmission`, appended). The coordinator is never routed here: its adapter is `agentAdapterFor`'s, unchanged, and it never switches provider
  * mid-run (route.ts:13-15 stands).
  *
  * A specialist whose provider is PAUSED by the llm-provider breaker runs on the other provider ONLY when every declaration it would
@@ -22,7 +22,7 @@
  */
 import type { LLMProviderId } from "../../llm/types";
 import { LLMProviderError } from "../../llm/errors";
-import { OPENAI_NO_TEMPERATURE_MODEL_FAMILY, OPENAI_REASONING_MODEL_FAMILY, configuredOpenAIModel } from "../../llm/openai-config";
+import { OPENAI_NO_TEMPERATURE_MODEL_FAMILY, OPENAI_REASONING_MODEL_FAMILY, configuredOpenAIModel, openAIModelProfile } from "../../llm/openai-config"; // [PR-F, 2026-10-17] + the profile (its admission pin), in place
 import { ANTHROPIC_TEMPERATURE_MODEL_FAMILY, configuredAnthropicModel } from "../../llm/anthropic-config";
 import { currentLlmProviderPause, recordLlmProviderOutcome, requestLlmProviderAdmission, type AdmissionPause, type AdmissionPurpose, type LlmProviderAdmission, type LlmProviderOutcome, type LlmProviderTicket } from "../../acquisition/admission-control";
 import { canonicalJson } from "../../engineering/stable";
@@ -82,9 +82,9 @@ export function configuredModelOf(provider: LLMProviderId, environment: Readonly
 }
 /** The pinned model-family rules per provider: the SAME objects the provider modules apply (read, never copied). */
 export const MODEL_FAMILY_RULES: Readonly<Record<LLMProviderId, readonly RegExp[]>> = Object.freeze({ openai: Object.freeze([OPENAI_REASONING_MODEL_FAMILY, OPENAI_NO_TEMPERATURE_MODEL_FAMILY]), anthropic: Object.freeze([ANTHROPIC_TEMPERATURE_MODEL_FAMILY]) });
-/** Qualified for a role: the provider's configured model (today's behaviour), or a model EVERY pinned rule of its provider classifies. */
+/** Qualified for a role: the provider's configured model (today's behaviour), or a model EVERY pinned rule of its provider classifies - [PR-F, 2026-10-17] and, when its profile pins admission to the server env, one the role map names. */
 export function qualifiedModel(provider: LLMProviderId, model: string, environment: Readonly<Record<string, string | undefined>>): boolean {
-  return model === configuredModelOf(provider, environment) || MODEL_FAMILY_RULES[provider].every((rule) => rule.test(model));
+  return model === configuredModelOf(provider, environment) || (MODEL_FAMILY_RULES[provider].every((rule) => rule.test(model)) && serverEnvAdmission(provider, model, environment)); // [PR-F, 2026-10-17] in place: gpt-6-astra is never admitted by its family rule alone
 }
 
 /** Where a specialist runs: its provider and model, whether the table inherited them or the server env set them, its SDK's own
@@ -280,4 +280,17 @@ function duplicateKeyOf(json: string): string | null {
     }
   }
   return null;
+}
+
+// ─── [PR-F, 2026-10-17] Server-env admission of a qualifiable profile (directive 4; CONTINUATION B: never widen the allowlist because an id parses) ──
+// Appended on purpose (a function declaration is hoisted): no line cited above moves.
+
+/** True unless the model's profile pins its admission to the server env (`openAIModelProfile(model).admission === "server-env"`; today
+ *  gpt-6-astra: documented 2026-10-17, never qualified live). Such a model is qualified for a role ONLY when the role map names it
+ *  exactly - for its provider, or as `inherit` (the route then lands on the coordinator's provider, whose rules still judge it) - or
+ *  when it is the provider's configured model (qualifiedModel's first clause). A map the schema refuses names nothing. */
+function serverEnvAdmission(provider: LLMProviderId, model: string, environment: Readonly<Record<string, string | undefined>>): boolean {
+  if (provider !== "openai" || openAIModelProfile(model).admission !== "server-env") return true;
+  const parsed = parseRoleModelOverrides(environment[ROLE_MODELS_ENV]);
+  return parsed.ok && Object.values(parsed.overrides).some((choice) => choice.model === model && (choice.provider === provider || choice.provider === "inherit"));
 }

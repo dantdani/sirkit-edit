@@ -237,19 +237,19 @@ cases 2 and 3. D2 cites those two by title and asserts the titles still exist; i
 ### D2.1 The derived population
 
 Every number below is computed from the landed registry and the landed reviewed lists at run time, never typed into a
-case, so a reviewed subset move moves the sweep with it. As of base `6e3efa7` ([B22-B, 2026-10-01] updated for the five named computations, OD-139: 42 -> 47 descriptors, 26 -> 31 structurally excluded under the new `computation` reason; 210 -> 235 requests, 167 -> 192 refusals; the served reads unchanged; [B24-D2, 2026-10-09] updated for the paged board read, OD-235: 47 -> 48 descriptors, 7 -> 8 withheld (the read withheld from MCP by choice), 31 structurally excluded unchanged; 235 -> 240 requests, 192 -> 197 refusals; the served reads unchanged):
+case, so a reviewed subset move moves the sweep with it. As of base `6e3efa7` ([B22-B, 2026-10-01] updated for the five named computations, OD-139: 42 -> 47 descriptors, 26 -> 31 structurally excluded under the new `computation` reason; 210 -> 235 requests, 167 -> 192 refusals; the served reads unchanged; [B24-D2, 2026-10-09] updated for the paged board read, OD-235: 47 -> 48 descriptors, 7 -> 8 withheld (the read withheld from MCP by choice), 31 structurally excluded unchanged; 235 -> 240 requests, 192 -> 197 refusals; the served reads unchanged; [PR-D, 2026-10-17] updated for PR-D's four descriptors, OD-243 and d2: 48 -> 52 descriptors (the Build-mode generation proposal and d2's two Tier 0 reads, all three withheld from MCP; the not-callable component review request, structurally excluded as `not_agent_exposed`), 8 -> 11 withheld, 31 -> 32 structurally excluded; 240 -> 260 requests, 197 -> 217 refusals; the served reads unchanged):
 
 | quantity | value |
 |---|---|
-| descriptors | 48 |
+| descriptors | 64 |
 | MCP-exposed | 9 |
-| withheld | 8 |
-| structurally excluded | 31 |
+| withheld | 23 |
+| structurally excluded | 32 |
 | mapped stored roles | 5 |
 
 The served listing is **not uniform across roles**: the viewer, the reviewer, the editor and the admin see the nine
-reads, the commenter the seven its role permits. The sweep is therefore **240 requests**, of which **43 served reads**
-and **197 unknown-tool refusals**.
+reads, the commenter the seven its role permits. The sweep is therefore **320 requests**, of which **43 served reads**
+and **277 unknown-tool refusals** ([PR-J5, 2026-10-23] updated for section J increment 5's organise proposal `sirkit.schematic.propose-sheet-organization`, withheld from MCP: 63 -> 64 descriptors, 22 -> 23 withheld, 32 structurally excluded unchanged; 315 -> 320 requests, 272 -> 277 refusals; the served reads unchanged; [PR-M, 2026-10-18] updated for section M2's two descriptors - the CAD acquisition start `sirkit.parts.acquisition-start` and status `sirkit.parts.acquisition-status`, both withheld from MCP: 61 -> 63 descriptors, 20 -> 22 withheld, 32 structurally excluded unchanged; 305 -> 315 requests, 262 -> 272 refusals; the served reads unchanged; [PR-L, 2026-10-18] updated for runbook L.5's two descriptors - the durable generation task's inspection `sirkit.generation.task-inspect` and its control request `sirkit.generation.task-control`, both withheld from MCP: 59 -> 61 descriptors, 18 -> 20 withheld, 32 structurally excluded unchanged; 295 -> 305 requests, 252 -> 262 refusals; the served reads unchanged; [PR-M, 2026-10-17] updated for PR-M's three descriptors - the schematic-instance inspection `sirkit.schematic.instance-inspect`, the resolution candidate search `sirkit.parts.candidate-search` and the component resolution proposal `sirkit.schematic.propose-component-resolution`, all three withheld from MCP: 56 -> 59 descriptors, 15 -> 18 withheld, 32 structurally excluded unchanged; 280 -> 295 requests, 237 -> 252 refusals; the served reads unchanged; [PR-F fE, 2026-10-17] updated for PR-F fE's stackup / via-policy proposal `sirkit.stackup.propose`, withheld from MCP: 55 -> 56 descriptors, 14 -> 15 withheld, 32 structurally excluded unchanged; 275 -> 280 requests, 232 -> 237 refusals; the served reads unchanged; [PR-F fD, 2026-10-17] updated for PR-F fD's module contract proposal, withheld from MCP: 54 -> 55 descriptors, 13 -> 14 withheld, 32 structurally excluded unchanged; 270 -> 275 requests, 227 -> 232 refusals; the served reads unchanged; [PR-F fB, 2026-10-17] updated for PR-F's two descriptors, the missing-facts read and the part draft request, both withheld from MCP: 52 -> 54 descriptors, 11 -> 13 withheld, 32 structurally excluded unchanged; 260 -> 270 requests, 217 -> 227 refusals; the served reads unchanged).
 
 ### D2.2 The partition (DEC-5), and why it exists
 

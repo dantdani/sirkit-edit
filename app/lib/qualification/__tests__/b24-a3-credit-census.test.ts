@@ -157,9 +157,9 @@ describe("[B24-A3] credit declarations and the abuse-limit census (D24-8, OD-197
 
   it("6. the gate's scope at A3a: 43 rows are credit, expensive or public model egress - the three public ones limited here, the 40 authenticated ones listed on the page as unlimited until B24-A3b (OD-197's full scope); A1's health and readiness rows are neither", () => {
     const gated = routeResourceClassification().filter((row) => row.providerCredit || row.expensive || (row.isPublic && row.modelEgress));
-    expect(gated).toHaveLength(43);
+    expect(gated).toHaveLength(44); // [PR-L, 2026-10-17] reviewed census move (runbook L.4): + POST /api/generation-tasks, the durable generation task's start (provider credit, its own per-principal window): was 43
     expect(gated.filter((row) => row.isPublic).map(keyOf).sort()).toEqual([...SEARCHES, PREVIEW].sort());
-    expect(gated.filter((row) => !row.isPublic)).toHaveLength(40);
+    expect(gated.filter((row) => !row.isPublic)).toHaveLength(41); // [PR-L, 2026-10-17] reviewed census move (runbook L.4): + POST /api/generation-tasks, the durable generation task's start (provider credit, its own per-principal window): was 40
     expect(gated.map((row) => row.path)).not.toEqual(expect.arrayContaining(["/api/health"]));
     expect(gated.map((row) => row.path)).not.toEqual(expect.arrayContaining(["/api/ready"]));
   });
@@ -210,7 +210,7 @@ describe("[B24-A3] credit declarations and the abuse-limit census (D24-8, OD-197
     expect(abuseLimitViolations([publicExpensive.row], [publicExpensive.policy], {}, { "POST /api/b24-probe/public-expensive": valid })).toEqual(["POST /api/b24-probe/public-expensive: public_expensive_unlimited", "POST /api/b24-probe/public-expensive: orphan_limit"]);
     // the key set, pinned exactly: 43 gated rows plus sign-in
     const gated = routeResourceClassification().filter((row) => row.providerCredit || row.expensive || (row.isPublic && row.modelEgress)).map(keyOf);
-    expect(gated).toHaveLength(43);
+    expect(gated).toHaveLength(44); // [PR-L, 2026-10-17] reviewed census move (runbook L.4): + POST /api/generation-tasks, the durable generation task's start (provider credit, its own per-principal window): was 43
     expect([...Object.keys(ABUSE_LIMITS), ...Object.keys(principal!)].sort()).toEqual([...gated, SIGNIN].sort());
   });
 });

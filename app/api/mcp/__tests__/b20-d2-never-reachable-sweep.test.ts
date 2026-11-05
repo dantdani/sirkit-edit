@@ -87,7 +87,7 @@ const resetSpies = (): void => { spies.boardRead = 0; spies.componentAuthority =
 const spySum = (s: Omit<typeof spies, "unclassified" | "scopes">): number => s.boardRead + s.componentAuthority + s.membership + s.workflowRead + s.workflowWrite + s.viewRead + s.viewWrite;
 const spyTotal = (): number => spySum(spies);
 /** The repository's OWN method names, classified by name — never by a prefix regex (E1c asserts the classification is total). */
-const WORKFLOW_WRITE_METHODS: ReadonlySet<string> = new Set(["commit", "claimOutbox", "completeOutbox", "failOutbox"]);
+const WORKFLOW_WRITE_METHODS: ReadonlySet<string> = new Set(["commit", "claimOutbox", "completeOutbox", "failOutbox", "renewOutboxLease"]); // [PR-L, 2026-10-17] reviewed pin move: the repository gained S2 `renewOutboxLease` (it extends a lease: a write), classified here as E1c requires and refused by the read-only view
 const WORKFLOW_READ_METHODS: ReadonlySet<string> = new Set(["loadHead", "listHeads", "loadRecord", "history", "getReplay", "listOutbox"]);
 
 function stubMcp(): void {

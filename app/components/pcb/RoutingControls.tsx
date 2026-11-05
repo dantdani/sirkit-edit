@@ -35,7 +35,7 @@ export function RoutingControls({
   return (
     <section
       data-testid="routing-controls"
-      className="absolute top-3 left-3 z-30 w-64 rounded-lg border border-zinc-700 bg-zinc-950/95 shadow-xl"
+      className="absolute top-3 left-3 z-30 w-64 rounded-lg border border-zinc-700 bg-zinc-950/95 shadow-sm"
     >
       <div className="px-3 py-2 border-b border-zinc-800">
         <p className="text-xs font-medium text-zinc-100">New route setup</p>

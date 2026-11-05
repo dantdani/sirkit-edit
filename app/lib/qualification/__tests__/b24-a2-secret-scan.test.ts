@@ -180,13 +180,13 @@ describe("[B24-A2] the scanner (D24-4, OD-195)", () => {
     expect(runSecretScan({ entries: [], allowlist: [entry], mode: "history" }).exitCode).toBe(0);
   });
 
-  it("(c) the CI job: secret-scan follows production-smoke and precedes the appended agent-boundary-suites ([B24-D0, 2026-10-09] was: the workflow's last job is secret-scan), declares no permissions (it inherits contents: read), checks out, sets up pnpm and node 24, installs, then runs pnpm exec tsx scripts/scan-secrets.ts; the file has exactly three lines containing `playwright test` ([B24-D4, 2026-10-10] was two: + page-browser-e2e-b24's, OD-30's split; b21-f-page.test.ts:259-267)", () => { // [B24-D0, 2026-10-09] reviewed pin move: secret-scan follows production-smoke and precedes B24-D0's appended agent-boundary-suites (OD-30's split); the job is found by content and read to the next header; [B24-D0 review, 2026-10-09] correctness-5: the title retitled in place to what the body pins
+  it("(c) the CI job: secret-scan follows production-smoke and precedes the appended agent-boundary-suites ([B24-D0, 2026-10-09] was: the workflow's last job is secret-scan), declares no permissions (it inherits contents: read), checks out, sets up pnpm and node 24, installs, then runs pnpm exec tsx scripts/scan-secrets.ts; the file has exactly four lines containing `playwright test` ([PR-L7, 2026-10-20] was three: + page-browser-e2e-agent's, OD-254; [B24-D4, 2026-10-10] was two: + page-browser-e2e-b24's, OD-30's split; b21-f-page.test.ts:259-267)", () => { // [B24-D0, 2026-10-09] reviewed pin move: secret-scan follows production-smoke and precedes B24-D0's appended agent-boundary-suites (OD-30's split); the job is found by content and read to the next header; [B24-D0 review, 2026-10-09] correctness-5: the title retitled in place to what the body pins
     const all = read(WORKFLOW).split(NEWLINE);
     const jobsAt = all.indexOf("jobs:");
     const headers = all.flatMap((line, index) => (index > jobsAt && /^ {2}[a-z][a-z0-9-]*:$/.test(line) ? [index] : []));
     const last = all.indexOf("  secret-scan:");
     expect(headers).toContain(last);
-    expect(headers.map((index) => all[index]!.trim())).toEqual(["prompt-to-gerber:", "database-delivery:", "page-browser-e2e:", "production-smoke:", "secret-scan:", "agent-boundary-suites:", "page-browser-e2e-b24:"]); // [B24-D4, 2026-10-10] reviewed pin move: + the browser job B24-D4 appended after agent-boundary-suites (OD-30's split of page-browser-e2e)
+    expect(headers.map((index) => all[index]!.trim())).toEqual(["prompt-to-gerber:", "database-delivery:", "page-browser-e2e:", "production-smoke:", "secret-scan:", "agent-boundary-suites:", "page-browser-e2e-b24:", "page-browser-e2e-agent:"]); // [PR-L7, 2026-10-20] reviewed pin move: + the browser job PR-L7 appended after page-browser-e2e-b24 (OD-254); [B24-D4, 2026-10-10] reviewed pin move: + the browser job B24-D4 appended after agent-boundary-suites (OD-30's split of page-browser-e2e)
     expect(headers[headers.indexOf(last) - 1]).toBe(all.indexOf("  production-smoke:"));
     const job = all.slice(last, headers[headers.indexOf(last) + 1]).join(NEWLINE);
     expect(job).not.toMatch(/permissions:/);
@@ -197,7 +197,7 @@ describe("[B24-A2] the scanner (D24-4, OD-195)", () => {
     expect(job).toMatch(/^ {10}node-version: 24$/m);
     expect(job).not.toMatch(/\$\{\{[^}]*\bsecrets\./);
     expect(read(WORKFLOW).match(/^permissions:$/gm)).toHaveLength(1);
-    expect(all.filter((line) => line.includes("playwright test"))).toHaveLength(3); // [B24-D4, 2026-10-10] reviewed pin move: 2 -> 3, page-browser-e2e-b24's run line (the four moved specs, [B24-D4 lead, 2026-10-10] option (b); OD-30's split)
+    expect(all.filter((line) => line.includes("playwright test"))).toHaveLength(4); // [PR-L7, 2026-10-20] reviewed pin move: 3 -> 4, page-browser-e2e-agent's run line (OD-254); [B24-D4, 2026-10-10] reviewed pin move: 2 -> 3, page-browser-e2e-b24's run line (the four moved specs, [B24-D4 lead, 2026-10-10] option (b); OD-30's split)
   });
 
   it("(d) scanning the scanner, its allowlist, the script, this suite and the page gives zero hits with no allowlist entry; the allowlist is exactly the six sentinel lines of the task's Lead note 2 and, since the review round, the two connection-string fakes, each holding in the tree; [B24-A2F, 2026-10-09] and a ninth, history-only entry for the fake B24-C3 committed and the lead's fix rewrote, which holds in history only (cases l-q)", () => {
@@ -215,18 +215,21 @@ describe("[B24-A2] the scanner (D24-4, OD-195)", () => {
       "app/lib/agent/__tests__/b11-trace-replay-evaluation.test.ts anthropic-key-shape",
       "app/api/__tests__/b16-0-12-tranche-parity.test.ts connection-string-password",
       "app/lib/db/__tests__/b16-b-database-qualification.test.ts connection-string-password",
+      "app/lib/engineering/__tests__/pr-d-catalog-inspect.test.ts anthropic-key-shape", // [PR-G lead, 2026-10-17] reviewed pin move, nine -> twelve: the three redaction cases PR-D/PR-F added (a key-shaped alphabet placeholder inside a thrown error message, asserted never to leak into the refusal diagnostics), each read in its test first
+      "app/lib/engineering/__tests__/pr-d-generate-proposal.test.ts anthropic-key-shape",
+      "app/lib/parts/__tests__/pr-f-missing-facts-read.test.ts anthropic-key-shape",
       "app/lib/qualification/__tests__/b24-c3-trace-read.test.ts connection-string-password", // [B24-A2F, 2026-10-09] reviewed pin move, eight -> nine: the history-only entry for the fake B24-C3 committed at ba4f562:75 and the lead's fix rewrote (aaa6a1b)
-    ]);
+    "app/lib/engineering/__tests__/pr-d-generate-proposal.test.ts anthropic-key-shape", "app/lib/schematic/__tests__/l6-plan-assumptions.test.ts openai-key-shape", ]); /* [PR-L6 integration, 2026-10-19] reviewed pin move, thirteen -> fourteen: a third history-only entry, LAST - the l6-plan-assumptions literal as committed at 2240363a, rewritten at 9a42c36b (on the closing line: line-neutral) */ // [PR-L, 2026-10-18] reviewed pin move, twelve -> thirteen: a second history-only entry, LAST - PR-D's v1 line of the generate-proposal redaction case (committed at e5817558), rewritten by runbook L.5 for the 2.0.0 port; the tree entry above now holds the rewritten line (on the closing line: line-neutral)
     expect(allowlistProblems(SECRET_SCAN_ALLOWLIST)).toEqual([]);
     for (const entry of SECRET_SCAN_ALLOWLIST) expect(entry.reason.length, entry.path).toBeGreaterThan(40);
     // over the files the allowlist names, tree mode passes: every ordinary entry holds its line, nothing else hits ([B24-A2F, 2026-10-09]
     // the ninth, history-only, is neither used nor stale, so the count stays 8)
     const files = [...new Set(SECRET_SCAN_ALLOWLIST.map((entry) => entry.path))];
     const named = runSecretScan({ entries: files.map((path) => ({ path, text: read(path) })), allowlist: SECRET_SCAN_ALLOWLIST });
-    expect(named).toMatchObject({ exitCode: 0, lines: [], allowlisted: 8 });
+    expect(named).toMatchObject({ exitCode: 0, lines: [], allowlisted: 11 /* [PR-G lead, 2026-10-17] 8 -> 11: the three PR-D/PR-F redaction cases */ });
     // without the allowlist those files hit eight times, and the lines (never the text) say where
     const bare = runSecretScan({ entries: files.map((path) => ({ path, text: read(path) })), allowlist: [], mode: "staged" });
-    expect(bare.lines).toHaveLength(8);
+    expect(bare.lines).toHaveLength(11) /* [PR-G lead, 2026-10-17] 8 -> 11: the three PR-D/PR-F redaction cases */;
     for (const line of bare.lines) expect(line).toMatch(/^app\/[a-z0-9/_.-]+\/__tests__\/[a-z0-9_.-]+\.test\.ts:\d+ [a-z-]+$/); // [B24-A2 review, 2026-10-06] app/lib/ -> app/: one fake is under app/api/__tests__
   });
 });
@@ -584,18 +587,18 @@ describe("[B24-A2F, 2026-10-09] the history-only allowlist entries (OD-195 amend
   });
 
   it("(q) red first on b3a4f2d (eight entries): the committed allowlist's ninth entry is history-only - B24-C3's test path, the connection-string rule, the lead's 64-hex digest over the line as committed at ba4f562, a reason naming ba4f562:75 and aaa6a1b and saying replaced; no line of that file at HEAD carries the digest, so tree mode over it is green with nothing allowlisted and nothing stale, and the eight ordinary entries carry no mark", () => {
-    expect(SECRET_SCAN_ALLOWLIST).toHaveLength(9);
-    const ninth = SECRET_SCAN_ALLOWLIST[8]!;
+    expect(SECRET_SCAN_ALLOWLIST).toHaveLength(14); /* [PR-L6 integration, 2026-10-19] reviewed pin move: 13 -> 14 (the l6-plan-assumptions literal as a third history-only entry, LAST) */ // [PR-L, 2026-10-18] reviewed pin move: 12 -> 13 (PR-D's v1 generate-proposal line as a second history-only entry, after this one); [PR-G lead, 2026-10-17] reviewed pin move: 9 -> 12 (the three PR-D/PR-F redaction cases, ordinary entries placed before the history-only one, which stays last)
+    const ninth = SECRET_SCAN_ALLOWLIST[11] /* [PR-G lead, 2026-10-17] the history-only entry stays LAST: index 8 -> 11 after the three ordinary PR-D/PR-F entries */!;
     expect(ninth).toMatchObject({ path: C3_TEST, rule: "connection-string-password", historyOnly: true });
     expect(ninth.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(ninth.sha256).toBe("8bbe84aef14181902a233659797cf030bfd89aceb5f844542df7aee61e584a01");
     for (const word of ["ba4f562:75", "aaa6a1b", "replaced", ["FAKE", "URL"].join("_"), ["FAKE", "CONNECTION"].join("_"), "db.invalid", "no credential"]) expect(ninth.reason).toContain(word);
-    expect(SECRET_SCAN_ALLOWLIST.slice(0, 8).every((entry) => entry.historyOnly === undefined)).toBe(true);
+    expect(SECRET_SCAN_ALLOWLIST.slice(0, 11).every((entry) => entry.historyOnly === undefined)).toBe(true);
     expect(allowlistProblems(SECRET_SCAN_ALLOWLIST)).toEqual([]);
     const current = read(C3_TEST);
     expect(current.split(NEWLINE).map((raw) => lineDigest(raw.endsWith(CR) ? raw.slice(0, -1) : raw))).not.toContain(ninth.sha256);
     expect(runSecretScan({ entries: [{ path: C3_TEST, text: current }], allowlist: [ninth] })).toMatchObject({ exitCode: 0, lines: [], allowlisted: 0 });
-    expect(runSecretScan({ entries: [{ path: C3_TEST, text: current }], allowlist: [], mode: "staged" }).lines).toEqual([]);
+    expect(runSecretScan({ entries: [{ path: C3_TEST, text: current }], allowlist: [], mode: "staged" }).lines).toEqual([]); /* [PR-L/M integration, 2026-10-18] F7 (on this line: no line moves, the page citations of (r) and (s) hold): the thirteenth entry - the second history-only one, LAST - is pinned as the ninth is (inside this case, so the page's it( counts hold): PR-D's test path, the key-shape rule, the digest of the line as committed at e5817558, a reason naming e5817558 AND the replacing commit 00d0343 and saying rewritten; no line of that file at HEAD carries the digest; the header names the last TWO; the file's CURRENT line is the ordinary tree entry's (it holds the rewritten line); the history-only entry beside it is never used, never stale */ { const thirteenth = SECRET_SCAN_ALLOWLIST[12]!; expect(SECRET_SCAN_ALLOWLIST).toHaveLength(14) /* [PR-L6 integration, 2026-10-19] 13 -> 14 */; expect(thirteenth).toMatchObject({ path: "app/lib/engineering/__tests__/pr-d-generate-proposal.test.ts", rule: "anthropic-key-shape", historyOnly: true }); expect(thirteenth.sha256).toBe("4ac308fec5066095a8b2153307f2c714c48da82f5326474fdf097ce9d4495eeb"); for (const word of ["e5817558", "00d0343", "rewritten", "runbook L.5", "no key material", "history"]) expect(thirteenth.reason, word).toContain(word); expect(SECRET_SCAN_ALLOWLIST.filter((entry) => entry.historyOnly === true)).toEqual([SECRET_SCAN_ALLOWLIST[11], SECRET_SCAN_ALLOWLIST[12], SECRET_SCAN_ALLOWLIST[13]]) /* [PR-L6 integration, 2026-10-19] + the fourteenth */; expect(allowlistProblems([thirteenth])).toEqual([]); const currentPrD = read(thirteenth.path); expect(currentPrD.split(NEWLINE).map((raw) => lineDigest(raw.endsWith(CR) ? raw.slice(0, -1) : raw))).not.toContain(thirteenth.sha256); const forPath = SECRET_SCAN_ALLOWLIST.filter((entry) => entry.path === thirteenth.path); expect(forPath.map((entry) => entry.historyOnly === true)).toEqual([false, true]); expect(runSecretScan({ entries: [{ path: thirteenth.path, text: currentPrD }], allowlist: forPath })).toMatchObject({ exitCode: 0, lines: [], allowlisted: 1 }); const header = read("app/lib/deployment/secret-scan-allowlist.ts").split(NEWLINE).slice(0, 7).join(" "); expect(header).toContain("the LAST TWO"); expect(header).toContain("00d0343"); } /* [PR-L6 integration, 2026-10-19] the fourteenth entry - the third history-only one, LAST - pinned the same way, on this line (no line moves) */ { const fourteenth = SECRET_SCAN_ALLOWLIST[13]!; expect(fourteenth).toMatchObject({ path: "app/lib/schematic/__tests__/l6-plan-assumptions.test.ts", rule: "openai-key-shape", historyOnly: true }); expect(fourteenth.sha256).toBe("e4e6b02a0774fb3e13b9a94a68d7ce97237f20787db4df08286de9410337eade"); for (const word of ["2240363a", "9a42c36b", "rewritten", "no key material", "history"]) expect(fourteenth.reason, word).toContain(word); expect(allowlistProblems([fourteenth])).toEqual([]); const currentL6 = read(fourteenth.path); expect(currentL6.split(NEWLINE).map((raw) => lineDigest(raw.endsWith(CR) ? raw.slice(0, -1) : raw))).not.toContain(fourteenth.sha256); expect(runSecretScan({ entries: [{ path: fourteenth.path, text: currentL6 }], allowlist: [fourteenth] })).toMatchObject({ exitCode: 0, lines: [], allowlisted: 0 }); const header3 = read("app/lib/deployment/secret-scan-allowlist.ts").split(NEWLINE).slice(0, 7).join(" "); expect(header3).toContain("the LAST THREE"); expect(header3).toContain("9a42c36b"); }
   });
 
   it("(r) [B24-A2F review, 2026-10-09] security-1, red first on the review's tree: the allowlist module's header amends the sentence the ninth entry falsifies - `Every entry is a test sentinel ... read in its test` (its :3-4) carries the dated history-only exception on those lines, the stale sentence (:5-6) keeps its own, and the header stays seven lines (the import on :8), so C26 :10, C31 :50 and C42 :67 hold", () => {
@@ -609,7 +612,7 @@ describe("[B24-A2F, 2026-10-09] the history-only allowlist entries (OD-195 amend
     for (const fact of ["[B24-A2F, 2026-10-09]", "historyOnly: true", "history"]) expect(sentinel, fact).toContain(fact);
     const stale = header.slice(4, 6).join(" ");
     for (const fact of ["makes its entry stale", "except an entry marked `historyOnly: true`", "[B24-A2F, 2026-10-09]", "(LB-13)"]) expect(stale, fact).toContain(fact);
-    expect(header[66]).toBe("    historyOnly: true as const,");
+    expect(header[86]).toBe("    historyOnly: true as const,"); // [PR-G lead, 2026-10-17] pin move: 66 -> 86, the three ordinary entries (20 lines) sit above the history-only one
   });
 
   it("(s) [B24-A2F review, 2026-10-09] security-3, green at launch - the kind's limit pinned as the page records it (section 15, INFERRED): in --history mode a history-only entry matches its path, rule and digest under every commit of the range, no commit compared, exactly as an ordinary entry does; the id its reason names is checked for shape only, so a numeral of seven digits passes; a `commit` field compared against the `<commit>:` prefix is the lead's choice, not this increment's", () => {

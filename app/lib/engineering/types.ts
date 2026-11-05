@@ -199,7 +199,32 @@ export type EngineeringOperation =
   | (OperationBase & { kind: "schematic_delete_net_label"; labelId: string })
   | (OperationBase & { kind: "schematic_update_net_label"; labelId: string; patch: { position?: { x: number; y: number }; name?: string; orientation?: 0 | 90 | 180 | 270 } })
   | (OperationBase & { kind: "schematic_add_component"; family: "theory"; component: SchematicComponentSnapshot; atIndex: number })
-  | (OperationBase & { kind: "schematic_add_component"; family: "kicad"; component: SchematicKicadSnapshot; atIndex: number });
+  | (OperationBase & { kind: "schematic_add_component"; family: "kicad"; component: SchematicKicadSnapshot; atIndex: number })
+  // ── [PR-J, 2026-10-22] canonical schematic SHEET operations (units: "px"; runbook J, OD-255) ───────────────
+  // Each has an exact inverse. The sheet tree exists only while a child sheet exists: the first create carries
+  // the root record (`root`) and turns the document into sirkit.schematic.v2; deleting the last child sheet
+  // removes the tree (back to v1) and its inverse carries the root record again. Deleting a populated sheet,
+  // a port still referenced by a label, or any batch that would join two different rail / isolation domains
+  // is refused (OD-255 item 4).
+  | (OperationBase & { kind: "schematic_create_sheet"; sheet: SchematicSheetSnapshot; atIndex: number; root?: SchematicSheetSnapshot })
+  | (OperationBase & { kind: "schematic_delete_sheet"; sheetId: string })
+  | (OperationBase & { kind: "schematic_rename_sheet"; sheetId: string; name: string })
+  /** The complete new sheet order (a permutation of every sheet id, root first). */
+  | (OperationBase & { kind: "schematic_reorder_sheets"; order: string[] })
+  | (OperationBase & { kind: "schematic_add_sheet_port"; sheetId: string; port: SchematicSheetPortSnapshot; atIndex: number })
+  | (OperationBase & { kind: "schematic_remove_sheet_port"; sheetId: string; portId: string })
+  /** A sheet pin is a net label with scope "sheet-pin" on the child's parent sheet. */
+  | (OperationBase & { kind: "schematic_add_sheet_pin"; pin: SchematicNetLabelSnapshot; atIndex: number })
+  | (OperationBase & { kind: "schematic_remove_sheet_pin"; labelId: string })
+  /** Exact snapshot of a label's connection fields (null = absent). */
+  | (OperationBase & { kind: "schematic_set_label_scope"; labelId: string; scope: "global" | "hierarchical" | "sheet-pin" | null; portId: string | null; childSheetId: string | null })
+  /** Move entities between sheets. `from` is a hard precondition ("root" = no sheetId), `to` the target ("root" = clear it). */
+  | (OperationBase & { kind: "schematic_assign_sheet"; entries: SchematicSheetAssignment[] });
+
+/** [PR-J, 2026-10-22] Sheet-operation payload shapes (structural; the canonical validator owns the rules). */
+export interface SchematicSheetPortSnapshot { id: string; name: string; direction: "input" | "output" | "bidirectional" | "passive" | "power_in" | "power_out" }
+export interface SchematicSheetSnapshot { id: string; name: string; parentId: string | null; block?: { x: number; y: number; width: number; height: number }; ports?: SchematicSheetPortSnapshot[] }
+export interface SchematicSheetAssignment { family: "theory" | "kicad" | "wire" | "label"; id: string; from: string; to: string }
 
 /** An entity snapshot plus the array index it is restored at (order-exact inverse). */
 export interface RestoreEntry<T> { at: number; entity: T }
@@ -208,10 +233,10 @@ export interface RestoreEntry<T> { at: number; entity: T }
  *  B07: theory components carry an optional editable display reference
  *  (`refDes`); the immutable stable identity is `id`, and display falls back
  *  to `id` when `refDes` is absent (the deterministic legacy rule). */
-export interface SchematicComponentSnapshot { id: string; type: string; x: number; y: number; rotation: 0 | 90 | 180 | 270; value: string; refDes?: string }
-export interface SchematicKicadSnapshot { id: string; partId: string; x: number; y: number; rotation: 0 | 90 | 180 | 270; refDes: string; value: string; atomicPartRevisionId?: string; symbolAssetVersionId?: string; footprintAssetVersionId?: string; mappingCertificateId?: string; selectionRecordId?: string }
-export interface SchematicWireSnapshot { id: string; vertices: Array<{ x: number; y: number }> }
-export interface SchematicNetLabelSnapshot { id: string; position: { x: number; y: number }; name: string; kind: string; orientation: 0 | 90 | 180 | 270 }
+export interface SchematicComponentSnapshot { id: string; type: string; x: number; y: number; rotation: 0 | 90 | 180 | 270; value: string; refDes?: string; sheetId?: string }
+export interface SchematicKicadSnapshot { id: string; partId: string; x: number; y: number; rotation: 0 | 90 | 180 | 270; refDes: string; value: string; atomicPartRevisionId?: string; symbolAssetVersionId?: string; footprintAssetVersionId?: string; mappingCertificateId?: string; selectionRecordId?: string; sheetId?: string }
+export interface SchematicWireSnapshot { id: string; vertices: Array<{ x: number; y: number }>; sheetId?: string }
+export interface SchematicNetLabelSnapshot { id: string; position: { x: number; y: number }; name: string; kind: string; orientation: 0 | 90 | 180 | 270; sheetId?: string; scope?: "global" | "hierarchical" | "sheet-pin"; portId?: string; childSheetId?: string }
 
 export interface DeclaredMutationScope {
   objectIds: string[];

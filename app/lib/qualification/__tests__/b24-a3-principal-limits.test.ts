@@ -182,7 +182,7 @@ describe("[B24-A3] part 2: the per-principal windows on authenticated spend (D24
     expect(Object.isFrozen(registry)).toBe(true);
     const rows = routeResourceClassification();
     const census = rows.filter((row) => !row.isPublic && (row.providerCredit || row.expensive));
-    expect(census).toHaveLength(40);
+    expect(census).toHaveLength(41); // [PR-L, 2026-10-17] reviewed census move (runbook L.4): + POST /api/generation-tasks, the durable generation task's start (provider credit, its own per-principal window): was 40
     expect(Object.keys(registry!).sort()).toEqual(census.map(keyOf).sort());
     const { validateFixedWindowLimit } = await import("@/app/lib/mcp/server/inbound-limits");
     for (const row of census) {
@@ -196,7 +196,7 @@ describe("[B24-A3] part 2: the per-principal windows on authenticated spend (D24
       expect(entry.reason.length, key).toBeGreaterThan(40);
     }
     const gated = rows.filter((row) => row.providerCredit || row.expensive || (row.isPublic && row.modelEgress)).map(keyOf);
-    expect(gated).toHaveLength(43);
+    expect(gated).toHaveLength(44); // [PR-L, 2026-10-17] reviewed census move (runbook L.4): + POST /api/generation-tasks, the durable generation task's start (provider credit, its own per-principal window): was 43
     const both = [...Object.keys(limits.ABUSE_LIMITS as object), ...Object.keys(registry!)];
     expect(new Set(both).size).toBe(both.length);
     expect(both.sort()).toEqual([...gated, "POST /api/auth/signin"].sort());
@@ -342,24 +342,25 @@ describe("[B24-A3] part 2: the per-principal windows on authenticated spend (D24
         if (target === PARTS_SEARCH && (/\bsearchPartsForAI\b/.test(source) || /import\s*\*\s*as|export\s*\*\s*from/.test(source))) callers.add(file);
       }
     }
-    expect([...callers].sort(), "the modules that import searchPartsForAI").toEqual(["app/lib/build-loop.ts"]);
+    expect([...callers].sort(), "the modules that import searchPartsForAI").toEqual(["app/api/chat/component-resolution-runtime.ts", "app/lib/build-loop.ts"]); // [PR-M, 2026-10-17] reviewed pin move (runbook M.2.2): + the chat route's component resolution runtime, the search port behind the agent's sirkit.parts.candidate-search - imported only by the chat route (so the routes below are unchanged: /api/chat is held to its own window), bound only with a configured catalog database outside the fixture runtime, and at most 3 searches per run (candidate-search-reads.ts)
     // every file that reaches a caller through runtime imports (reverse closure), and the routes among them
     const reaching = new Set<string>(callers);
     const queue = [...callers];
     while (queue.length > 0) for (const importer of importersOf.get(queue.shift()!) ?? []) if (!reaching.has(importer)) { reaching.add(importer); queue.push(importer); }
     const routes = listRouteFiles(ROOT).map((file) => ({ file: relative(ROOT, file).replaceAll(String.fromCharCode(92), "/"), path: routePathOf(ROOT, file) }));
     const gatedPaths = routes.filter((route) => reaching.has(route.file)).map((route) => route.path).sort();
-    expect(gatedPaths, "the routes whose runtime closure reaches the build loop").toEqual(["/api/schematic/build", "/api/schematic/build-multi", "/api/schematic/edit-build"]);
-    for (const path of gatedPaths) expect(PRINCIPAL_ABUSE_LIMITS[`POST ${path}`]?.perPrincipal.limit, path).toBe(CREDIT);
+    expect(gatedPaths, "the routes whose runtime closure reaches the build loop").toEqual(["/api/chat", "/api/generation-worker", "/api/schematic/build", "/api/schematic/build-multi", "/api/schematic/edit-build"]); // [PR-L, 2026-10-17] reviewed pin move (runbook L.4): + /api/generation-worker, the worker pump that runs a queued design task's slices (the build loop's searches); the five generation-task routes that accept, read and control tasks do NOT reach the loop (their servable rule is app/lib/generation-task/provider-servable.ts, l4-routes case 1); // [PR-G, 2026-10-17] reviewed pin move: + /api/chat - since product reliability D (OD-243) the chat route injects the ONE shared Build generation as the agent's generate-proposal port (app/api/chat/schematic-generation-runtime.ts -> app/lib/schematic/build-multi-generation.ts -> build-loop.ts), so its runtime closure reaches searchPartsForAI; it is a PRINCIPAL_ABUSE_LIMITS row (the chat window, taken in agentStreamRoute: case 7), one generation per run under BUILD_BUDGET
+    for (const path of gatedPaths) expect(PRINCIPAL_ABUSE_LIMITS[`POST ${path}`]?.perPrincipal.limit, path).toBe(path === "/api/chat" ? CHAT : path === "/api/generation-worker" ? undefined : CREDIT); expect(PRINCIPAL_ABUSE_LIMITS["POST /api/generation-tasks"]?.perPrincipal.limit, "the start that admits the pump's work").toBe(CREDIT); // [PR-L, 2026-10-17] the pump is a worker-secret route with no principal (no window can key it): its searches belong to a task a principal started through POST /api/generation-tasks, held to the provider-credit window, and each task's searches are bounded by its durable allowance (GENERATION_TASK_ALLOWANCE_UNIT.catalogSearches, at most 4 extensions); // [PR-G, 2026-10-17] the chat row is held to its own window (CHAT), the build routes to the provider-credit window
     // the registered tool whose binding names searchPartsForAI is exposed to neither the agent nor MCP
     const { sirkitToolRegistry } = await import("@/app/lib/engineering/tool-catalog");
     const { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } = await import("@/app/lib/engineering/agent-exposure");
     const { mcpExposureReport } = await import("@/app/lib/engineering/mcp-exposure");
     const registry = sirkitToolRegistry();
     const bound = registry.list().filter((descriptor) => JSON.stringify(descriptor).includes("searchPartsForAI")).map((descriptor) => (descriptor as { toolId: string }).toolId);
-    expect(bound).toEqual(["sirkit.parts.search"]);
+    expect(bound).toEqual(["sirkit.parts.candidate-search", "sirkit.parts.search"]); // [PR-M, 2026-10-18] order corrected to the registry's own (ToolRegistry.list() sorts by toolId; the same two ids, the rule unchanged: the only exposed one is held to /api/chat's window and withheld from MCP); [PR-M, 2026-10-17] reviewed pin move (runbook M.2.2): + the resolution candidate search, whose binding notes name the search it recalls through - agent-exposed over /api/chat only (the chat window, 3 searches per run), withheld from MCP (below)
     expect((INTENTIONAL_AGENT_EXPOSED_TOOL_IDS as readonly string[]).includes("sirkit.parts.search")).toBe(false);
     expect(mcpExposureReport(registry).excludedByReason.not_agent_exposed).toContain("sirkit.parts.search");
+    expect(mcpExposureReport(registry).excludedByReason.withheld).toContain("sirkit.parts.candidate-search"); // [PR-M, 2026-10-17] never over MCP
   });
 
   it("9. [B24-A3 review, 2026-10-08] regressions-1 (red on the reviewed tree): the per-principal windows read a clock the fixture runtime does not freeze - with the browser job's frozen clock installed, the local-development principal's chat window (60) and a provider-credit row's window (60) each refuse request 61 and, once the real clock has moved 61 s (the frozen Date.now() has not), admit again: a browser run's whole chat count is never one window", { timeout: 120_000 }, async () => {

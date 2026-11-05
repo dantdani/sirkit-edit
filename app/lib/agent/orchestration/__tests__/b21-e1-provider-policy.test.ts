@@ -106,8 +106,8 @@ describe("[B21 E1] the per-role provider/model policy (OD-117)", () => {
     expect(MODEL_FAMILY_RULES.openai[1]).toBe(OPENAI_NO_TEMPERATURE_MODEL_FAMILY);
     expect(MODEL_FAMILY_RULES.anthropic).toEqual([ANTHROPIC_TEMPERATURE_MODEL_FAMILY]);
     expect(MODEL_FAMILY_RULES.anthropic[0]).toBe(ANTHROPIC_TEMPERATURE_MODEL_FAMILY);
-    expect(OPENAI_REASONING_MODEL_FAMILY.source).toBe("^gpt-5\\.6(?:-|$)");
-    expect(OPENAI_NO_TEMPERATURE_MODEL_FAMILY.source).toBe("^(?:gpt-5|o\\d)");
+    expect(OPENAI_REASONING_MODEL_FAMILY.source).toBe("^gpt-5\\.6(?:-|$)|^gpt-6-astra$"); // [PR-F, 2026-10-17] reviewed pin move: + the one documented GPT-6 id with a profile, anchored exactly (was "^gpt-5\\.6(?:-|$)")
+    expect(OPENAI_NO_TEMPERATURE_MODEL_FAMILY.source).toBe("^(?:gpt-5|o\\d)|^gpt-6-astra$"); // [PR-F, 2026-10-17] reviewed pin move (was "^(?:gpt-5|o\\d)"): temperature is never sent to Astra
     expect(ANTHROPIC_TEMPERATURE_MODEL_FAMILY.source).toBe("^claude-3-|^claude-(?:sonnet|opus)-4-[0-5]");
     // one literal of each rule in the tree, in its config module; the providers and the policy name the constants
     const literals = [OPENAI_REASONING_MODEL_FAMILY.source, OPENAI_NO_TEMPERATURE_MODEL_FAMILY.source, ANTHROPIC_TEMPERATURE_MODEL_FAMILY.source];
@@ -120,18 +120,19 @@ describe("[B21 E1] the per-role provider/model policy (OD-117)", () => {
     // qualification: every rule of the provider classifies the model, or it is the provider's configured model
     for (const model of ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]) expect(qualifiedModel("openai", model, {}), model).toBe(true);
     for (const model of ["claude-3-5-haiku", "claude-sonnet-4-5", "claude-opus-4-1"]) expect(qualifiedModel("anthropic", model, {}), model).toBe(true);
-    for (const model of ["gpt-6-astra", "gpt-5.2", "o3", "gpt-4o"]) expect(qualifiedModel("openai", model, {}), model).toBe(false);
+    for (const model of ["gpt-6-astra", "gpt-6-luna", "gpt-5.2", "o3", "gpt-4o"]) expect(qualifiedModel("openai", model, {}), model).toBe(false); // [PR-F, 2026-10-17] gpt-6-astra STAYS unqualified with an empty env (its profile's admission is the server env's: pr-f-astra-profile); + gpt-6-luna, a documented sibling without a profile
     for (const model of ["claude-opus-5-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"]) expect(qualifiedModel("anthropic", model, {}), model).toBe(false);
     expect(ANTHROPIC_TEMPERATURE_MODEL_FAMILY.test(DEFAULT_ANTHROPIC_MODEL)).toBe(false); // the default model is outside the rule...
     expect(qualifiedModel("anthropic", DEFAULT_ANTHROPIC_MODEL, {})).toBe(true); // ...and qualified as the configured model: today's behaviour
     expect(qualifiedModel("anthropic", DEFAULT_ANTHROPIC_MODEL, { SIRKIT_ANTHROPIC_MODEL: "claude-sonnet-4-5" })).toBe(false); // named as an override while another is configured: refused
     expect(resolveRoleRoute("verification-critic", "anthropic", {})).toMatchObject({ ok: true, route: { model: DEFAULT_ANTHROPIC_MODEL } }); // inherit is always today's model
     expect(qualifiedModel("openai", "gpt-6-astra", { SIRKIT_OPENAI_MODEL: "gpt-6-astra" })).toBe(true);
-    for (const [provider, model] of [["openai", "gpt-6-astra"], ["anthropic", "claude-opus-5-5"]] as const) {
+    for (const [provider, model] of [["openai", "gpt-6-luna"], ["anthropic", "claude-opus-5-5"]] as const) { // [PR-F, 2026-10-17] reviewed pin move: the refused OpenAI example was gpt-6-astra, now admitted when the role map names it (next line); gpt-6-luna is a documented sibling without a profile
       const route = resolveRoleRoute("schematic", "openai", env({ schematic: { provider, model } }));
       expect(route, model).toMatchObject({ ok: false, refusal: { code: "model_unqualified", role: "schematic", provider, model } });
       if (!route.ok) expect(route.refusal.detail).toMatch(/outside the pinned family rules[\s\S]*until it is qualified live \(LB-9\)/);
     }
+    expect(resolveRoleRoute("schematic", "openai", env({ schematic: { provider: "openai", model: "gpt-6-astra" } }))).toMatchObject({ ok: true, route: { provider: "openai", model: "gpt-6-astra", source: "env" } }); // [PR-F, 2026-10-17] the server env names it: admitted for that role only (pr-f-astra-profile holds the rest)
     // an inherited provider with an overridden model is judged against the provider it lands on
     expect(resolveRoleRoute("schematic", "anthropic", env({ schematic: { provider: "inherit", model: "gpt-5.6-luna" } }))).toMatchObject({ ok: false, refusal: { code: "model_unqualified", provider: "anthropic" } });
   });

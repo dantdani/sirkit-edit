@@ -71,7 +71,7 @@ export function ContextMenu({
     <div
       ref={menuRef}
       style={{ left: x, top: y }}
-      className="absolute z-50 min-w-44 py-1 rounded border border-zinc-700 bg-zinc-900/95 shadow-xl text-xs"
+      className="absolute z-50 min-w-44 py-1 rounded border border-zinc-700 bg-zinc-900/95 shadow-sm text-xs"
       onContextMenu={(e) => e.preventDefault()}
     >
       {items.map((item, i) => (

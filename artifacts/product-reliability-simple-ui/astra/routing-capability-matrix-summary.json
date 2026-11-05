@@ -1,0 +1,179 @@
+{
+  "schema": "sirkit.routing-capability-matrix.v1",
+  "rows": 18,
+  "citations": 159,
+  "byVerdict": {
+    "survives": 3,
+    "survives-conservatively": 2,
+    "placement-only": 3,
+    "check-only": 3,
+    "advisory-only": 1,
+    "scope-only": 1,
+    "unsupported": 5
+  },
+  "byStage": {
+    "export": {
+      "exact": 3,
+      "conservative": 3,
+      "advisory": 0,
+      "post_route_check": 0,
+      "not_applicable": 3,
+      "unsupported": 9
+    },
+    "routing": {
+      "exact": 4,
+      "conservative": 2,
+      "advisory": 0,
+      "post_route_check": 0,
+      "not_applicable": 3,
+      "unsupported": 9
+    },
+    "import": {
+      "exact": 5,
+      "conservative": 0,
+      "advisory": 0,
+      "post_route_check": 0,
+      "not_applicable": 13,
+      "unsupported": 0
+    },
+    "check": {
+      "exact": 8,
+      "conservative": 0,
+      "advisory": 1,
+      "post_route_check": 3,
+      "not_applicable": 1,
+      "unsupported": 5
+    }
+  },
+  "unsupportedRows": [
+    "keepouts",
+    "sensitive-analog-routing-separation",
+    "return-paths",
+    "differential-coupling-separation",
+    "impedance"
+  ],
+  "directive10": [
+    {
+      "id": "differential-coupling-separation",
+      "routing": "unsupported",
+      "check": "unsupported",
+      "verdict": "unsupported"
+    },
+    {
+      "id": "differential-skew",
+      "routing": "unsupported",
+      "check": "post_route_check",
+      "verdict": "check-only"
+    },
+    {
+      "id": "impedance",
+      "routing": "unsupported",
+      "check": "unsupported",
+      "verdict": "unsupported"
+    },
+    {
+      "id": "return-paths",
+      "routing": "unsupported",
+      "check": "unsupported",
+      "verdict": "unsupported"
+    },
+    {
+      "id": "via-policy-per-net",
+      "routing": "unsupported",
+      "check": "post_route_check",
+      "verdict": "check-only"
+    }
+  ],
+  "rowReasons": [
+    {
+      "id": "connectivity-conservation",
+      "verdict": "survives",
+      "reason": "survives every stage; an unrouted connection is reported per net, never hidden"
+    },
+    {
+      "id": "net-class-width-clearance",
+      "verdict": "survives-conservatively",
+      "reason": "survives; a class whose members differ is routed at the most restrictive member's values (never relaxed)"
+    },
+    {
+      "id": "via-policy-board",
+      "verdict": "survives",
+      "reason": "survives for the board-wide through-via policy; blind / buried / micro vias have no representation here (directive section 9)"
+    },
+    {
+      "id": "via-policy-per-net",
+      "verdict": "check-only",
+      "reason": "check-only: the router is not told; a violation surfaces after import and the candidate stays unproven for that net"
+    },
+    {
+      "id": "layer-policy-per-net",
+      "verdict": "check-only",
+      "reason": "check-only: a per-net layer restriction is found after routing, not obeyed during it"
+    },
+    {
+      "id": "stackup-layer-roles",
+      "verdict": "survives",
+      "reason": "survives for the represented stackup; dielectric / material data has no field in BoardStackup (thickness only), so no impedance-bearing stackup fact exists"
+    },
+    {
+      "id": "keepouts",
+      "verdict": "unsupported",
+      "reason": "unsupported for autorouted copper: a required routing keepout is an explicit limitation of the FreeRouting path until the writer carries it and DRC checks it"
+    },
+    {
+      "id": "mechanical-envelope",
+      "verdict": "survives-conservatively",
+      "reason": "survives conservatively: the router may route up to the edge; the edge-clearance violation is caught by DRC and the candidate stays unproven"
+    },
+    {
+      "id": "decoupling-proximity",
+      "verdict": "placement-only",
+      "reason": "placement-only: proved at placement by the hard validator (a soft objective otherwise); the router can neither honour nor violate it"
+    },
+    {
+      "id": "sensitive-analog-separation-placement",
+      "verdict": "placement-only",
+      "reason": "placement-only for the footprint distance; the routed-copper separation is the next row"
+    },
+    {
+      "id": "sensitive-analog-routing-separation",
+      "verdict": "unsupported",
+      "reason": "unsupported: a required analog routing separation is an explicit limitation of this path (a wider class clearance for the net is the qualified alternative)"
+    },
+    {
+      "id": "switching-loops",
+      "verdict": "advisory-only",
+      "reason": "advisory-only: a loop requirement is placement evidence, never a routed proof (not EMI, current-capacity or PI proof)"
+    },
+    {
+      "id": "connectors",
+      "verdict": "placement-only",
+      "reason": "placement-only: side and orientation are hard-checked; the edge distance itself is advisory"
+    },
+    {
+      "id": "critical-net-priority",
+      "verdict": "scope-only",
+      "reason": "scope-only: priority is realized as routing scope and sequence, never as a rule the router enforces"
+    },
+    {
+      "id": "return-paths",
+      "verdict": "unsupported",
+      "reason": "unsupported: a required return-path constraint is an explicit limitation of this path"
+    },
+    {
+      "id": "differential-coupling-separation",
+      "verdict": "unsupported",
+      "reason": "unsupported: a required differential coupling is an explicit limitation of this path"
+    },
+    {
+      "id": "differential-skew",
+      "verdict": "check-only",
+      "reason": "check-only: skew is measured after routing (static length), never obeyed during it"
+    },
+    {
+      "id": "impedance",
+      "verdict": "unsupported",
+      "reason": "unsupported: a required impedance is an explicit limitation of this path"
+    }
+  ]
+}

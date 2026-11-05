@@ -481,15 +481,15 @@ added by the review fixes ([B21 E4 fix]).
 
 | # | file | line | within | anchor | what it shows |
 |---|---|---|---|---|---|
-| C1 | `app/lib/project/composer-routing.ts` | 41 | — | `export const REPLACE_PART = ` | the composer's pairing, unchanged: a part / component / MPN / alternate word |
-| C2 | `app/lib/project/composer-routing.ts` | 53 | — | `partKindSwap(replacementMessage(text), text)) return routed("ask"` | rule 5b: the pairing OR the router's predicate, the reason unchanged |
-| C3 | `app/lib/project/composer-routing.ts` | 77 | — | `export const POLITE = ` | the polite prefix, moved with the grammar and imported by the router |
-| C4 | `app/lib/project/composer-routing.ts` | 79 | — | `const PART_KIND_SWAP = ` | the polite-prefix pattern, moved verbatim |
-| C5 | `app/lib/project/composer-routing.ts` | 140 | — | `const REPLACEMENT_FORMS: readonly RegExp[] = ` | the three request shapes per object kind, moved verbatim |
-| C6 | `app/lib/project/composer-routing.ts` | 147 | — | `const VACUOUS_FORMS: readonly RegExp[] = ` | a bare new part names nothing new, moved verbatim |
-| C7 | `app/lib/project/composer-routing.ts` | 161 | — | `export function partKindSwap(message: string, raw: string): boolean {` | the ONE exported predicate |
-| C8 | `app/lib/project/composer-routing.ts` | 167 | — | `if (!kindForm && !(partForm && REPLACE_PART.test(rest))) return false;` | a part-word form still requires the pairing, in the same module |
-| C9 | `app/lib/project/composer-routing.ts` | 175 | — | `function replacementMessage(text: string): string {` | the router's normalization restated verbatim (no import of the router) |
+| C1 | `app/lib/project/composer-routing.ts` | 51 | — | `export const REPLACE_PART = ` | the composer's pairing, unchanged: a part / component / MPN / alternate word |
+| C2 | `app/lib/project/composer-routing.ts` | 80 | — | `partKindSwap(replacementMessage(text), text)) return routed("ask"` | rule 5b: the pairing OR the router's predicate, the reason unchanged |
+| C3 | `app/lib/project/composer-routing.ts` | 104 | — | `export const POLITE = ` | the polite prefix, moved with the grammar and imported by the router |
+| C4 | `app/lib/project/composer-routing.ts` | 106 | — | `const PART_KIND_SWAP = ` | the polite-prefix pattern, moved verbatim |
+| C5 | `app/lib/project/composer-routing.ts` | 167 | — | `const REPLACEMENT_FORMS: readonly RegExp[] = ` | the three request shapes per object kind, moved verbatim |
+| C6 | `app/lib/project/composer-routing.ts` | 174 | — | `const VACUOUS_FORMS: readonly RegExp[] = ` | a bare new part names nothing new, moved verbatim |
+| C7 | `app/lib/project/composer-routing.ts` | 188 | — | `export function partKindSwap(message: string, raw: string): boolean {` | the ONE exported predicate |
+| C8 | `app/lib/project/composer-routing.ts` | 194 | — | `if (!kindForm && !(partForm && REPLACE_PART.test(rest))) return false;` | a part-word form still requires the pairing, in the same module |
+| C9 | `app/lib/project/composer-routing.ts` | 202 | — | `function replacementMessage(text: string): string {` | the router's normalization restated verbatim (no import of the router) |
 | C10 | `app/lib/agent/orchestration/router.ts` | 23 | — | `import { POLITE, partKindSwap } from "../../project/composer-routing";` | the router imports the predicate and the prefix, in place |
 | C11 | `app/lib/agent/orchestration/router.ts` | 71 | — | `const headVerb = (verbs: string): RegExp => new RegExp(` | the router's own head verbs read the imported prefix |
 | C12 | `app/lib/agent/orchestration/router.ts` | 160 | — | `export function normalizeRouterMessage(text: string): string {` | the router's normalization ([B21 E4 fix: security-3] its trailing strip made linear in place, C40 - the same answers) |
@@ -518,6 +518,6 @@ added by the review fixes ([B21 E4 fix]).
 | C35 | `app/lib/agent/orchestration/scheduler.ts` | 494 | — | `if (routing?.kind === "coordinator-paused") { stop = "provider_paused";` | a resumed request's specialists consult the breaker (E1) |
 | C36 | `app/api/chat/route.ts` | 14 | — | `No silent cross-provider fallback exists;` | the route header stands: a gated request never switches provider |
 | C37 | `app/api/chat/orchestration-runtime.ts` | 850 | — | `function halfOpenTrialInFlight(pause: AdmissionPause, at: number): boolean {` | [B21 E4 fix: regressions-1] a half-open breaker's trial in flight is the metered calls' pause, never the first turn's |
-| C38 | `app/lib/project/composer-routing.ts` | 168 | — | `const trailing = /(?<![.!?\s])[.!?\s]*$/.exec(raw.trim())?.[0] ?? "";` | [B21 E4 fix: security-3] the raw message's trailing run found from its start: the one moved line rewritten |
-| C39 | `app/lib/project/composer-routing.ts` | 176 | — | `.toLowerCase().replace(/(?<![.!?])[.!?]+$/, "").trim();` | [B21 E4 fix: security-3] the composer's normalization, linear |
+| C38 | `app/lib/project/composer-routing.ts` | 195 | — | `const trailing = /(?<![.!?\s])[.!?\s]*$/.exec(raw.trim())?.[0] ?? "";` | [B21 E4 fix: security-3] the raw message's trailing run found from its start: the one moved line rewritten |
+| C39 | `app/lib/project/composer-routing.ts` | 203 | — | `.toLowerCase().replace(/(?<![.!?])[.!?]+$/, "").trim();` | [B21 E4 fix: security-3] the composer's normalization, linear |
 | C40 | `app/lib/agent/orchestration/router.ts` | 161 | — | `.toLowerCase().replace(/(?<![.!?])[.!?]+$/, "").trim();` | [B21 E4 fix: security-3] the router's normalization, the same line |

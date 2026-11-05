@@ -343,3 +343,34 @@ describe("[B18-E E18] the scripted agent's layout plan (scenario 5)", () => {
     expect(layoutFacts("not json").ok).toBe(false);
   });
 });
+
+// ─── [PR-G, 2026-10-17] the scripted agent's generation turn (G.11, OD-243) ────────────────────────────────────────────────────────
+
+describe("[PR-G] the scripted agent's generation instruction", () => {
+  const PROMPT = "A 555 timer LED blinker powered from a 9 V battery through a 5 V linear regulator.";
+  const SENTENCE = `Generate a schematic: ${PROMPT}`;
+
+  it("'Generate a schematic: <prompt>' is ONE call to the generation proposal carrying the prompt as written (its own punctuation kept); every other script is unchanged", () => {
+    expect(planFixtureInstruction(SENTENCE)).toEqual({ kind: "call", toolId: "sirkit.schematic.generate-proposal", args: { prompt: PROMPT } });
+    expect(planFixtureInstruction("  please   GENERATE a schematic:   a blinker  ")).toEqual({ kind: "call", toolId: "sirkit.schematic.generate-proposal", args: { prompt: "a blinker" } });
+    expect(planFixtureInstruction("Generate a schematic:"), "no prompt: nothing to generate").toMatchObject({ kind: "reply" });
+    expect(planFixtureInstruction("Generate a schematic for a blinker"), "not the whole sentence").toMatchObject({ kind: "reply" });
+    expect(planFixtureInstruction("Design a 555 timer LED blinker."), "the role-script sentence stays a plain reply (b21-f2b)").toMatchObject({ kind: "reply" });
+    expect(planFixtureInstruction("Move R3 2 mm to the right.")).toMatchObject({ kind: "select-then", ref: "R3" });
+    expect(planFixtureInstruction("Release the board.")).toMatchObject({ kind: "forged", providerName: "sirkit_manufacturing_release" });
+    expect((planFixtureInstruction("What is on the board?") as { kind: string; text: string }).text, "the plain reply names the new script").toContain("generate a schematic from a prompt");
+  });
+
+  it("the call goes to the advertised declaration with no interim claim; the sealed result is answered plainly; an unadvertised tool is refused in words", async () => {
+    const tools = [tool("sel", "sirkit.selection.inspect"), tool("gen", "sirkit.schematic.generate-proposal")];
+    const adapter = new FixtureAgentAdapter("openai");
+    const first = await adapter.start({ system: "", history: [], userMessage: SENTENCE, tools });
+    expect(first.text, "a proposal call carries no interim success claim").toBe("");
+    expect(first.toolCalls).toEqual([{ callId: "fx-1", providerName: "gen", argumentsText: JSON.stringify({ prompt: PROMPT }) }]);
+    const sealed = JSON.stringify({ ok: true, status: "proposal_sealed", proposalId: "genprop-fixture", generation: { status: "complete", components: 9 } });
+    const second = await adapter.continueWith({ continuation: first.continuation, results: [{ callId: "fx-1", outputText: sealed, isError: false }], tools });
+    expect(second).toMatchObject({ toolCalls: [], text: "(fixture agent) the tool answered proposal_sealed." });
+    const withheld = await new FixtureAgentAdapter("openai").start({ system: "", history: [], userMessage: SENTENCE, tools: [tool("sel", "sirkit.selection.inspect")] });
+    expect(withheld).toMatchObject({ toolCalls: [], text: expect.stringMatching(/sirkit\.schematic\.generate-proposal is not available to this run; nothing was done/) });
+  });
+});

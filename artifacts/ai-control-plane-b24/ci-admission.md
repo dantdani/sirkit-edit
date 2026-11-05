@@ -262,7 +262,7 @@ in `benchmark.yml`, both outside their scans.
 ## 9. Power and ground preservation (`b24-b2-power-ground`, OD-205)
 
 **The facts** (`_power-ground-facts.ts`, pure): for every net `classifyNets` (`app/lib/nets.ts:90`) rates power or ground - its name
-(label names, else the derived rail name), its symbols (`power`/`ground` net labels, `lib/schematic-types.ts:71-74`), its member pins
+(label names, else the derived rail name), its symbols (`power`/`ground` net labels, `lib/schematic-types.ts:76-79`), its member pins
 keyed `componentId:pin` (never the refDes), and on a board each same-named board net's id, net-class assignment
 (`board.netClassing`, `app/lib/pcb/types.ts:349`) and pads. **The contract:** the member rule has no exemption - over the surviving
 components (a sealed delete's or replacement's target excluded) every power/ground pin keeps its role and exactly its co-members; the

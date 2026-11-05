@@ -34,11 +34,12 @@
  * preserved, and acknowledged drops that strand a label are surfaced.
  */
 
-import { PIN_NAMES, schDisplayRef, type SchematicEditOp, type SchematicState } from "@/lib/schematic-types";
+import { PIN_NAMES, ROOT_SHEET_ID, schDisplayRef, type SchematicEditOp, type SchematicState } from "@/lib/schematic-types"; import { sheetOf } from "../schematic/sheets"; // [PR-J, 2026-10-22] J2
 import { kicadPinWorldPos, pinWorldPos } from "../geometry";
 import type { KicadPin } from "../kicad/types";
 import { VerifiedReplacementAuthority } from "./schematic-authority.internal";
 import type { EngineeringOperation } from "./types";
+import { agentDeleteConnectivityRefusal } from "./agent-delete-connectivity";
 
 const key = (p: { x: number; y: number }): string => `${p.x},${p.y}`;
 
@@ -71,31 +72,31 @@ export function planSchematicDelete(
 ): SchematicDeletePlanResult {
   let pinCoordinates: Array<{ x: number; y: number }>;
   let componentLabel: string;
-  let hasAuthority = false;
+  let hasAuthority = false; let onSheet: string = ROOT_SHEET_ID; // [PR-J, 2026-10-22] J2: the cleanup stays on the deleted part's own sheet
   if (target.family === "theory") {
     const component = state.components.find((item) => item.id === target.componentId);
     if (!component) return { ok: false, refusal: "component-not-found", detail: `No theory component ${target.componentId}.` };
-    pinCoordinates = (PIN_NAMES[component.type] ?? []).map((pin) => pinWorldPos(component, pin));
+    pinCoordinates = (PIN_NAMES[component.type] ?? []).map((pin) => pinWorldPos(component, pin)); onSheet = sheetOf(component);
     // B07.1 — user-facing plan labels show the DISPLAYED reference.
     componentLabel = `${component.type} ${schDisplayRef(component)}`;
   } else {
     const component = (state.kicadComponents ?? []).find((item) => item.id === target.componentId);
     if (!component) return { ok: false, refusal: "component-not-found", detail: `No component ${target.componentId}.` };
     if (!kicadPins) return { ok: false, refusal: "pins-unavailable", detail: `Pin data for part ${component.partId} was not supplied; deterministic cleanup requires it.` };
-    pinCoordinates = kicadPins.map((pin) => kicadPinWorldPos(component, pin));
+    pinCoordinates = kicadPins.map((pin) => kicadPinWorldPos(component, pin)); onSheet = sheetOf(component);
     componentLabel = component.refDes;
     hasAuthority = Boolean(component.atomicPartRevisionId || component.mappingCertificateId || component.selectionRecordId);
   }
   const pinKeys = new Set(pinCoordinates.map(key));
   const removeWireIds = state.wires
-    .filter((wire) => {
+    .filter((wire) => { if (sheetOf(wire) !== onSheet) return false; // [PR-J J2] equal coordinates on another sheet are another circuit
       const first = wire.vertices[0];
       const last = wire.vertices[wire.vertices.length - 1];
       return (first && pinKeys.has(key(first))) || (last && pinKeys.has(key(last)));
     })
     .map((wire) => wire.id)
     .sort();
-  const removedLabels = (state.netLabels ?? []).filter((label) => pinKeys.has(key(label.position)));
+  const removedLabels = (state.netLabels ?? []).filter((label) => sheetOf(label) === onSheet && pinKeys.has(key(label.position)));
   const plan: SchematicDeleteImpactPlan = {
     family: target.family,
     componentId: target.componentId,
@@ -324,6 +325,8 @@ export function compileTier1Proposal(state: SchematicState, input: Tier1CompileI
   });
 
   if (blockers.length > 0) return { ok: false, blockers };
+  const connectivityRefusal = agentDeleteConnectivityRefusal(state, impacts.deletes, input.pinsByPartId);
+  if (connectivityRefusal) return { ok: false, blockers: [{ code: "delete-plan-refused", detail: connectivityRefusal }] };
   return { ok: true, operations, impacts };
 }
 
@@ -362,7 +365,7 @@ export function planSchematicReplacement(state: SchematicState, input: Schematic
   const wireEndpointsAt = (coordinate: { x: number; y: number }): Array<{ wireId: string; end: "start" | "end" }> => {
     const at = key(coordinate);
     const hits: Array<{ wireId: string; end: "start" | "end" }> = [];
-    for (const wire of state.wires) {
+    for (const wire of state.wires) { if (sheetOf(wire) !== sheetOf(component)) continue; // [PR-J, 2026-10-22] J2: only the part's own sheet
       const first = wire.vertices[0];
       const last = wire.vertices[wire.vertices.length - 1];
       if (first && key(first) === at) hits.push({ wireId: wire.id, end: "start" });
@@ -372,7 +375,7 @@ export function planSchematicReplacement(state: SchematicState, input: Schematic
   };
   const connectedPins = input.currentPins.filter((pin) => {
     const coordinate = kicadPinWorldPos(component, pin);
-    return wireEndpointsAt(coordinate).length > 0 || (state.netLabels ?? []).some((label) => key(label.position) === key(coordinate));
+    return wireEndpointsAt(coordinate).length > 0 || (state.netLabels ?? []).some((label) => sheetOf(label) === sheetOf(component) && key(label.position) === key(coordinate));
   });
 
   // Pin mapping: exact number+name identity, or the caller's explicit map.
@@ -438,7 +441,7 @@ export function planSchematicReplacement(state: SchematicState, input: Schematic
     const newCoordinate = kicadPinWorldPos(component, newPin);
     if (key(oldCoordinate) === key(newCoordinate)) continue;
     for (const hit of wireEndpointsAt(oldCoordinate)) wireEndpointMoves.push({ ...hit, to: newCoordinate });
-    for (const netLabel of (state.netLabels ?? []).filter((candidate) => key(candidate.position) === key(oldCoordinate))) {
+    for (const netLabel of (state.netLabels ?? []).filter((candidate) => sheetOf(candidate) === sheetOf(component) && key(candidate.position) === key(oldCoordinate))) {
       const existing = labelDestinations.get(netLabel.id);
       if (existing !== undefined && existing !== key(newCoordinate)) {
         return { ok: false, refusal: "ambiguous-label-move", detail: `Net label ${netLabel.name} (${netLabel.id}) sits on stacked pins that map to different positions; refusing the ambiguous move.` };
@@ -461,7 +464,7 @@ export function planSchematicReplacement(state: SchematicState, input: Schematic
     const droppedPin = oldByNumber.get(pinNumber);
     if (!droppedPin) continue;
     const coordinate = kicadPinWorldPos(component, droppedPin);
-    const strandedNames = (state.netLabels ?? []).filter((candidate) => key(candidate.position) === key(coordinate)).map((candidate) => candidate.name).sort();
+    const strandedNames = (state.netLabels ?? []).filter((candidate) => sheetOf(candidate) === sheetOf(component) && key(candidate.position) === key(coordinate)).map((candidate) => candidate.name).sort();
     if (strandedNames.length > 0) warnings.push(`Acknowledged drop of pin ${pinNumber} leaves net label(s) ${strandedNames.join(", ")} at the old pin position, no longer attached to this component.`);
   }
 

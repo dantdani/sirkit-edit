@@ -82,7 +82,7 @@ describe("[B21 E3] the resume offer is a run-log line", () => {
     expect(lines[spent - 1]).toContain("resumableChatRunRef.current = null;");
     expect(lines[spent - 1]).toContain("const runProvider = aiBrainRef.current;");
     expect(readRunId).toBeGreaterThan(spent);
-    expect(lines[one("lastAiRetryRef.current = null;") - 1]).toContain("resumableChatRunRef.current = null;");
+    expect(lines[one("lastAiRetryRef.current = null; resumableChatRunRef.current = null;") - 1]).toContain("never replay across projects"); expect(lines.filter((line) => line.includes("lastAiRetryRef.current = null;") && !line.includes("resumableChatRunRef.current = null;")).map((line) => line.includes("err instanceof PostApplyInputRefusalError"))).toEqual([true, true]); // [PR-L6 spend, 2026-10-19] reviewed pin move: the project switch's line is found by the PAIR it clears (was "lastAiRetryRef.current = null;" alone, then checked for the resume half) - the post-apply input refusal (SPEND-3) clears the Retry on two more lines, handleReview's and handleTidyLayout's catch, and each other clearing line is held to exactly those two
     expect(page).toContain("const resumableChatRunRef = useRef<ResumableChatRun | null>(null);");
     // [B21 E3 fix: tests-9] no snapshot pin on the page's length: every line a page cites is checked where it is cited (this suite's page
     // case 5, the B20 page suites); the controls are the B17-A inventory's. Here: no line of E3's wiring writes JSX

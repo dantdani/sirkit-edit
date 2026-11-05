@@ -19,9 +19,9 @@
  *     agent path can never acknowledge a drop);
  *  7. edit: Tier 1 set-value (theory) and rename (KiCad) change no fact; a theory rename refuses `unsupported-theory-rename`;
  *  8. edit: one granted PCB move (sirkit.pcb.move-footprint) changes no net-class membership and no pad;
- *  9. RECORDED counterexample: a delete whose wire ends on the deleted pin and also joins two surviving parts' pins to GND removes the
- *     whole wire (B06's audited policy, schematic-plans.ts:90-98) and names no net - the member rule reports both surviving pins
- *     (a STOP for the lead: changing what a delete plan removes is a behaviour change);
+ *  9. OD-229 approved: a shared-wire AI delete refuses before sealing. The original counterexample is retained in B24's reports;
+ *     the AI compiler now protects the batch's surviving circuitry, using canonical connectivity.
+ *     Human-editor deletion retains its existing semantics;
  * 10. the catalog links this suite under power-ground x deterministic offline.
  *
  * Failing first on b0af256: the suite and its catalog link are absent (ci-admission.md section 2). Nothing is written to disk and no
@@ -337,19 +337,17 @@ describe("[B24-B2] power and ground preservation (D24-16, OD-205)", () => {
     expect(powerGroundViolations(was, powerGroundFacts(schematic, after), { targets: [], named: [] })).toEqual([]);
   });
 
-  it("9. RECORDED counterexample (a STOP for the lead): one wire ends on the deleted pin and also joins two surviving parts' pins to GND - the sealed delete removes the whole wire (B06's policy, schematic-plans.ts:90-98) and names no net; the member rule reports both surviving pins", { timeout: 30_000 }, async () => {
+  it("9. OD-229 approved: a shared-wire AI delete is blocked before sealing or mutation", { timeout: 30_000 }, async () => {
     const state = wireThroughDeletedPin();
     const editor = await readyEditor(state);
-    const proposal = sealedTier1(await sealTier1([{ op: "delete", target: "r4" }], state, editor));
-    expect(proposal.impacts.deletes[0]).toMatchObject({ componentId: "r4", removeWireIds: ["w-through"], removeNetLabelIds: [], removedLabelNames: [] });
-    const after = await applyTier1(editor, state, proposal);
+    const before = structuredClone(state);
+    const outcome = await sealTier1([{ op: "delete", target: "r4" }], state, editor);
+    expect(outcome).toMatchObject({ kind: "proposal-blocked", ok: false });
+    expect(outcome).not.toHaveProperty("proposal");
+    expect(JSON.stringify(outcome)).toContain("delete-plan-refused");
+    expect(state).toEqual(before);
     expect(powerGroundFacts(state).nets.find((net) => net.name === "GND")!.members).toEqual(["c5:left", "c6:left", "r4:right"]);
-    expect(powerGroundViolations(powerGroundFacts(state), powerGroundFacts(after), { targets: deletedBy(proposal), named: namedBy(proposal) })).toEqual([
-      "member c5:left: ground [c5:left, c6:left] -> on no power/ground net",
-      "member c6:left: ground [c5:left, c6:left] -> ground [c6:left]",
-      expect.stringMatching(/^net changed or lost: .*"name":"GND"/),
-      expect.stringMatching(/^net changed or gained: .*"name":"GND"/),
-    ]);
+    expect(powerGroundViolations(powerGroundFacts(before), powerGroundFacts(state), { targets: [], named: [] })).toEqual([]);
   });
 
   it("10. the catalog links this suite under power-ground x deterministic offline (OD-205 applied)", () => {

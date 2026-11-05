@@ -38,7 +38,7 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: `pnpm exec next dev --port ${PORT}`,
+    command: `node scripts/dev-with-worker.mjs --port ${PORT}`, // [PR-L, 2026-10-17] next dev AND a generation worker (under the fixture runtime the pump transport with a per-launch secret): the browser proofs run the real durable task lifecycle
     url: `http://localhost:${PORT}/api/ai/runtime`,
     reuseExistingServer: !process.env.CI,
     timeout: 240_000,
@@ -56,6 +56,9 @@ export default defineConfig({
       SIRKIT_PCB_SYNC_STAGE3: "opt_in",
       // [B18-C I10] the chat route answers with the SCRIPTED agent (never a model): honoured only under the fixture runtime.
       SIRKIT_FIXTURE_AGENT: "scripted",
+      // [PR-F, 2026-10-17] the fixture proof must never reach a vendor: every admitted distributor source is operator-disabled for the
+      // fixture server unless the shell names its own set (a developer's .env.local credentials would otherwise let e2e/pr-f-missing-parts call out).
+      SIRKIT_ACQUISITION_DISABLED_SOURCES: process.env.SIRKIT_ACQUISITION_DISABLED_SOURCES ?? "digikey,mouser,octopart,lcsc",
       // [B20 D3] the MCP endpoint, for the wire-level proof (e2e/mcp-endpoint.spec.ts). The flag must be exactly "1".
       // SIRKIT_EXPECTED_ORIGIN moves CSRF resolution from request-url-local-dev to `configured`; the value is exactly the
       // origin `baseURL` produces, so every existing spec's Origin still matches (the four pre-existing specs staying

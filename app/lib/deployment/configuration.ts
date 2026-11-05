@@ -24,7 +24,7 @@ import { runtimeProfiles } from "@/app/lib/computation/runtime-profile";
 import { engineeringDigest } from "@/app/lib/engineering/stable";
 import { sirkitToolRegistry } from "@/app/lib/engineering/tool-catalog";
 import { anthropicModelSetting } from "@/app/lib/llm/anthropic-config";
-import { OPENAI_REASONING_MODEL_FAMILY, configuredOpenAIModel, type OpenAIReasoningEffort } from "@/app/lib/llm/openai-config";
+import { OPENAI_REASONING_MODEL_FAMILY, boundOpenAIReasoningEffort, configuredOpenAIModel, type OpenAIReasoningEffort } from "@/app/lib/llm/openai-config"; // [PR-F, 2026-10-17] + the profile bound, in place
 import { PROVIDER_REGISTRY_VERSION, PROVIDER_ROWS } from "@/app/lib/manufacturing-providers/provider-registry";
 import { MCP_SERVER_REGISTRY, MCP_SERVER_REGISTRY_VERSION } from "@/app/lib/mcp/server-registry";
 import { FLAG_INVENTORY, type FlagInventoryEntry, type FlagKind } from "./flag-inventory";
@@ -104,8 +104,8 @@ export interface DeploymentConfiguration {
 function reasoningEffortOf(environment: Environment, model: string): OpenAIReasoningEffort | null {
   if (!OPENAI_REASONING_MODEL_FAMILY.test(model)) return null;
   const configured = environment.SIRKIT_OPENAI_REASONING_EFFORT?.trim().toLowerCase();
-  if (!configured) return "high";
-  return OPENAI_REASONING_EFFORTS.find((effort) => effort === configured) ?? "high";
+  if (!configured) return boundOpenAIReasoningEffort(model, "high"); // [PR-F, 2026-10-17] in place, as openai-config.ts:49: a profile's pinned effort (gpt-6-astra)
+  return boundOpenAIReasoningEffort(model, OPENAI_REASONING_EFFORTS.find((effort) => effort === configured) ?? "high"); // [PR-F, 2026-10-17] in place, as openai-config.ts:50: the record reports what the adapters send
 }
 
 /** A flag's state by its owner's parse, as the inventory records it; never the value itself. */

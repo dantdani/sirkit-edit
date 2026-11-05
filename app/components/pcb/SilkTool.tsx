@@ -28,13 +28,19 @@ const fieldClass =
   "w-14 bg-zinc-950 border border-zinc-700 rounded px-1 py-0.5 text-zinc-200 focus:outline-none focus:border-teal-600";
 
 export function SilkTool({ silk, active }: { silk: SilkToolHandle; active: boolean }) {
-  const [draft, setDraft] = useState("");
+  const [textSession, setTextSession] = useState({ at: silk.pendingTextAt, draft: "" });
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Reset before the new position renders, so a later passive effect cannot
+  // discard text typed into the new draft.
+  if (textSession.at !== silk.pendingTextAt) {
+    setTextSession({ at: silk.pendingTextAt, draft: "" });
+  }
+  const draft = textSession.at === silk.pendingTextAt ? textSession.draft : "";
 
   // Fresh draft + focus every time a text position lands.
   useEffect(() => {
     if (silk.pendingTextAt) {
-      setDraft("");
       inputRef.current?.focus();
     }
   }, [silk.pendingTextAt]);
@@ -45,7 +51,7 @@ export function SilkTool({ silk, active }: { silk: SilkToolHandle; active: boole
 
   return (
     <>
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 p-2 rounded border border-zinc-700 bg-zinc-900/95 shadow-lg text-xs flex flex-col gap-2 w-64">
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 p-2 rounded border border-zinc-700 bg-zinc-900/95 shadow-sm text-xs flex flex-col gap-2 w-64">
         <div className="flex items-center gap-1">
           {MODES.map((m) => (
             <button
@@ -106,13 +112,13 @@ export function SilkTool({ silk, active }: { silk: SilkToolHandle; active: boole
       </div>
 
       {silk.pendingTextAt && (
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 p-2 rounded border border-zinc-700 bg-zinc-900/95 shadow-lg text-xs flex items-center gap-2">
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 p-2 rounded border border-zinc-700 bg-zinc-900/95 shadow-sm text-xs flex items-center gap-2">
           <input
             ref={inputRef}
             aria-label="Silk text"
             value={draft}
             placeholder={`Text on ${LAYER_LABEL[silk.layer]}…`}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => setTextSession({ at: silk.pendingTextAt, draft: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();

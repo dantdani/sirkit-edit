@@ -6,122 +6,117 @@
  * the same submission validation. The only differences are the system prompt,
  * the seed user message, and (for edits) a set of pre-validated parts — so they
  * are parameters here.
+ *
+ * [PR-L, 2026-10-17] Runbook L.3 (increment 3 part 1): the loop's turns, the submission judgement and the ERC gate now live in the
+ * RESUMABLE slice core, app/lib/schematic/build-loop-slice.ts; `runBuildToolLoop` is the thin request-lifetime wrapper over it
+ * (`runInMemoryBuildLoop`: the same turn code, no checkpoint), unchanged in its inputs, results and messages. This module keeps
+ * the production seams the core is handed - the LLM router and the catalog search (the one module that takes `searchPartsForAI`,
+ * b24-a3 case 8) - and the fixture runtime's recorded answer.
  */
 
-import type {
-  BuildLogicalNetlist,
-  BuildLogicalComponent,
-  BuildLogicalConnection,
-  NetLabelKind,
-} from "@/lib/schematic-types";
 import { llmRouter } from "@/app/lib/llm/router";
-import { LLMProviderError } from "@/app/lib/llm/errors";
-import {
-  assistantResponseMessage,
-  toolResultsMessage,
-  type LLMMessage,
-  type LLMProviderId,
-  type LLMToolResultPart,
-} from "@/app/lib/llm/types";
-import { normalizeComponentRole, inferNetLabelKind } from "@/lib/schematic-types";
+import { isRetryableReason, type LLMProviderFailureReason } from "@/app/lib/llm/errors";
+import { BuildBoundaryError, withinBuildBoundary } from "@/app/lib/schematic/build-boundary";
+import type { LLMProviderId } from "@/app/lib/llm/types";
+import type { BuildLogicalNetlist } from "@/lib/schematic-types";
 import {
   searchPartsForAI,
   fetchAlternatesForAI,
   getPartsByIds,
-  type AiAlternateResult,
+  readCatalogEpoch,
   type AiPartResult,
 } from "@/app/lib/parts-search";
+import { EMBEDDING_MODEL, embedQuery } from "@/app/lib/embeddings";
+import { CatalogSlots, resolveCatalogSearchConcurrency } from "@/app/lib/schematic/catalog-slots";
+import { runErc, type ErcReport } from "@/lib/erc";
 import {
-  BUILD_NUDGE,
-  BUILD_SEARCH_PARTS_TOOL,
-  BUILD_FIND_ALTERNATES_TOOL,
-  BUILD_SUBMIT_SCHEMATIC_TOOL,
-} from "@/app/lib/prompts";
-import { runErc, formatErcFeedback, type ErcReport } from "@/lib/erc";
-import { boundUntrustedText, boundUntrustedTextOrNull } from "@/app/lib/untrusted-text";
-import { redactSecrets } from "@/app/lib/atomic/security";
-import { sanitizeTraceText } from "@/app/lib/agent/redaction";
-
-/**
- * [B19-D I5e row 05] What a search_parts result may put in front of the model: identifiers and facts it acts on at the top
- * level, and every free-text catalog field — bounded, cleaned, under `untrustedCatalogText`. The full part record stays in
- * `returnedParts` for submission validation.
- */
-function modelFacingPart(part: AiPartResult): Record<string, unknown> {
-  const { name, mpn, description, pins, ...facts } = part;
-  return {
-    ...facts,
-    pins: pins.map((pin) => ({ number: boundUntrustedText(pin.number, 32), name: boundUntrustedText(pin.name, 128), type: pin.type })),
-    untrustedCatalogText: { name: boundUntrustedText(name, 128), mpn: boundUntrustedTextOrNull(mpn, 128), description: boundUntrustedTextOrNull(description, 300) },
-  };
-}
-
-/**
- * [B19-D I5e review] What a find_alternates result may put in front of the model — the same split as `modelFacingPart`: the
- * identifiers and engine facts at the top level, the catalog's free text (and the match reasons that quote it) bounded under
- * `untrustedCatalogText`.
- */
-function modelFacingAlternate(alternate: AiAlternateResult): Record<string, unknown> {
-  return {
-    partId: alternate.partId,
-    lifecycleStatus: boundUntrustedText(alternate.lifecycleStatus, 32),
-    score: alternate.score,
-    kind: boundUntrustedText(alternate.kind, 32),
-    pinCount: alternate.pinCount,
-    untrustedCatalogText: {
-      name: boundUntrustedText(alternate.name, 128),
-      mpn: boundUntrustedTextOrNull(alternate.mpn, 128),
-      manufacturer: boundUntrustedTextOrNull(alternate.manufacturer, 128),
-      matchReasons: alternate.matchReasons.slice(0, 10).map((reason) => boundUntrustedText(String(reason), 128)),
-    },
-  };
-}
-
-/** [B19-D I5e row 30] A tool failure tells the model a closed sentence; the detail goes to the server log, redacted. */
-function toolFailure(tool: string, error: unknown): string {
-  const detail = error instanceof Error ? error.message : String(error);
-  console.error(`[build-loop] ${tool} failed: ${sanitizeTraceText(redactSecrets(detail))}`); // one URL-credential rule with the trace redactor
-  return JSON.stringify({ error: `The ${tool === "search_parts" ? "part search" : "alternates lookup"} failed. Try a different query, or continue with the parts already found.` });
-}
-import { kgDesignNotes } from "@/lib/kg";
+  clampBuildTurns,
+  runInMemoryBuildLoop,
+  type BuildCatalogPort,
+  type BuildLlmPort,
+  type InMemoryBuildLoopEnd,
+} from "@/app/lib/schematic/build-loop-slice";
 
 import { BLINKER_NETLIST } from "@/app/lib/fixture-runtime/blinker/catalog";
 import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode";
-const MAX_ITERATIONS = 20;
-const SEARCH_LIMIT = 5;
-const ALTERNATES_LIMIT = 5;
-// ERC gate: reject a submission with critical electrical errors at most this
-// many times (pin-localized feedback drives self-correction); after that,
-// accept the best effort and surface the report instead of looping forever.
-const MAX_ERC_REJECTIONS = 2;
+import { fixtureContainer } from "@/app/lib/fixture-runtime/container"; // [PR-C] the fixture catalog's pins for the recorded design's electrical report
+
+/** [PR-C] The bounds a caller may put on one loop: an iteration cap (clamped to the
+ *  historical 20) and an absolute deadline (`Date.now()` epoch ms) checked before
+ *  every model turn — a multi-block request hands every loop the same deadline. */
+export type BuildLoopBudget = { maxIterations?: number; deadlineAt?: number; signal?: AbortSignal };
+
+/** [PR-C] The loop's failure classes. `provider_unavailable` keeps the provider's
+ *  `reason`; the other two are local and always say whether a retry can help. */
+export type BuildLoopFailureCode = "provider_unavailable" | "build_budget_exhausted" | "build_cancelled" | "build_loop_failed";
 
 export type BuildLoopResult =
-  | { ok: true; netlist: BuildLogicalNetlist; explanation: string; erc?: ErcReport }
+  | { ok: true; netlist: BuildLogicalNetlist; explanation: string; erc?: ErcReport; iterationsUsed: number }
   | {
       ok: false;
       error: string;
       status: number;
-      code?: "provider_unavailable";
+      code: BuildLoopFailureCode;
       provider?: LLMProviderId;
+      reason?: LLMProviderFailureReason;
+      retryable: boolean;
+      iterationsUsed: number;
     };
 
-/** A connection endpoint is either the ground rail sentinel or a refDes.pin pair. */
-function parseEndpoint(ep: string): { ground: true } | { refDes: string; pin: string } {
-  const trimmed = ep.trim();
-  if (trimmed.toUpperCase() === "GND") return { ground: true };
-  const idx = trimmed.indexOf(".");
-  if (idx < 0) return { refDes: trimmed, pin: "" };
-  return { refDes: trimmed.slice(0, idx), pin: trimmed.slice(idx + 1) };
+// ─── [PR-L, 2026-10-17] The production seams of the slice core ─────────────────────────────────────────────────────────
+
+const PRODUCTION_LLM: BuildLlmPort = { generate: (request) => llmRouter.generate(request) };
+/** [PR-L6, 2026-10-19] L.6 part 2, item 5: the process's catalog slots (`min(4, max(1, SIRKIT_DB_POOL_MAX - 3))`, lowered only by
+ *  SIRKIT_CATALOG_SEARCH_CONCURRENCY): every production catalog read holds one, so concurrent turns and slices never take the whole pool
+ *  from the durable store's lease renewals. */
+const CATALOG_SLOTS = new CatalogSlots(resolveCatalogSearchConcurrency());
+/** [PR-L6, 2026-10-19] item 2b: the catalog epoch, read at most once per 30 s per process (a failed read is not remembered). */
+const CATALOG_EPOCH_MEMO_MS = 30_000;
+let catalogEpochMemo: { at: number; value: Promise<string> } | null = null;
+const PRODUCTION_CATALOG: BuildCatalogPort = {
+  get identity() {
+    return { catalogProfile: fixtureRuntimeEnabled() ? ("fixture-blinker" as const) : ("postgres" as const), embeddingModel: EMBEDDING_MODEL };
+  },
+  searchParts: (query, category, limit, options) => CATALOG_SLOTS.run(options.signal, () => searchPartsForAI(query, category, limit, options)),
+  findAlternates: (partId, kind, limit, options) => CATALOG_SLOTS.run(options.signal, () => fetchAlternatesForAI(partId, kind, limit, options)),
+  partsByIds: (ids) => CATALOG_SLOTS.run(undefined, () => getPartsByIds(ids)),
+  // [PR-L6, 2026-10-19] item 1: the raw query embedder a task's embedding cache answers its misses with (the signal reaches the SDK call)
+  embedQuery: (text, signal) => embedQuery(text, signal ? { signal } : undefined),
+  catalogEpoch: () => {
+    const now = Date.now();
+    if (!catalogEpochMemo || now - catalogEpochMemo.at >= CATALOG_EPOCH_MEMO_MS || now < catalogEpochMemo.at) {
+      const value = CATALOG_SLOTS.run(undefined, () => readCatalogEpoch());
+      catalogEpochMemo = { at: now, value };
+      value.catch(() => { if (catalogEpochMemo?.value === value) catalogEpochMemo = null; });
+    }
+    return catalogEpochMemo.value;
+  },
+};
+/** [PR-L6, 2026-10-19] The process's catalog slots (diagnostics and tests). */
+export function productionCatalogSlots(): CatalogSlots {
+  return CATALOG_SLOTS;
+}
+/** The model port a production slice uses: the LLM router (its fixture short-circuit, call records and admission included). */
+export function productionBuildLlmPort(): BuildLlmPort {
+  return PRODUCTION_LLM;
+}
+/** The catalog port a production slice uses: parts-search (category vocabulary, reranker memo, verified relevance band). */
+export function productionBuildCatalogPort(): BuildCatalogPort {
+  return PRODUCTION_CATALOG;
 }
 
-/** Case-insensitive match of a connection pin token against a part's pins. */
-function pinExists(part: AiPartResult, pin: string): boolean {
-  const target = pin.trim().toLowerCase();
-  if (target === "") return false;
-  return part.pins.some(
-    (p) => p.name.toLowerCase() === target || p.number.toLowerCase() === target,
-  );
+function budgetExhausted(error: string, iterationsUsed: number): BuildLoopResult {
+  return { ok: false, error, status: 503, code: "build_budget_exhausted", retryable: true, iterationsUsed };
 }
+
+/** The request-lifetime sentence for each step the deadline (or the request's signal) stopped the loop at. */
+const STOPPED_AT: Readonly<Record<Extract<InMemoryBuildLoopEnd, { kind: "stopped" }>["stage"], (iterationsUsed: number) => string>> = Object.freeze({
+  turn_start: (iterationsUsed: number) => `Build deadline reached after ${iterationsUsed} model turn(s) without a submitted schematic.`,
+  provider: () => "Build deadline reached while waiting for the provider or part search; no schematic was submitted.",
+  response: () => "Build deadline reached before the model response could be accepted.",
+  search: () => "Build deadline reached during part search; no schematic was submitted.",
+  alternates: () => "Build deadline reached during alternates lookup; no schematic was submitted.",
+});
 
 /**
  * Run the search/submit loop. `seedParts` are partIds the model may reference
@@ -133,318 +128,72 @@ export async function runBuildToolLoop(opts: {
   systemPrompt: string;
   userMessage: string;
   seedParts?: AiPartResult[];
+  /** [PR-C] optional bounds; absent, the historical 20 iterations and no deadline */
+  budget?: BuildLoopBudget;
 }): Promise<BuildLoopResult> {
+  if (opts.budget?.deadlineAt === undefined && !opts.budget?.signal) return runBuildToolLoopInternal(opts);
+  let iterationsUsed = 0;
+  try {
+    return await withinBuildBoundary(opts.budget?.deadlineAt, opts.budget?.signal, (signal) =>
+      runBuildToolLoopInternal({ ...opts, budget: { ...opts.budget, signal } }, (used) => { iterationsUsed = used; }));
+  } catch (error) {
+    if (!(error instanceof BuildBoundaryError)) throw error;
+    return error.kind === "cancelled"
+      ? { ok: false, error: "Schematic generation was cancelled.", code: "build_cancelled", status: 408, retryable: false, iterationsUsed }
+      : budgetExhausted("Build deadline reached while waiting for the provider or part search; no schematic was submitted.", iterationsUsed);
+  }
+}
+
+async function runBuildToolLoopInternal(opts: Parameters<typeof runBuildToolLoop>[0], onIteration?: (used: number) => void): Promise<BuildLoopResult> {
   // [B16-C §5] fixture runtime: the recorded blinker design is the provider's answer
   // (the same design the deterministic acceptance suite uses) — no model turn.
-  if (fixtureRuntimeEnabled()) return { ok: true, netlist: structuredClone(BLINKER_NETLIST), explanation: BLINKER_NETLIST.explanation } as BuildLoopResult;
-  // Every part surfaced by a search (or seeded). Used to validate the final
-  // submission: a partId must have been surfaced, and its pins must exist.
-  const returnedParts = new Map<string, AiPartResult>();
-  for (const p of opts.seedParts ?? []) returnedParts.set(p.partId, p);
-
-  let ercRejections = 0;
-
-  const messages: LLMMessage[] = [{ role: "user", content: opts.userMessage }];
-
-  try {
-    for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const response = await llmRouter.generate({
-        provider: opts.provider,
-        // This bounds one structured tool turn, not the input context. Leaving
-        // every parallel turn at the provider's 128K output maximum can reserve
-        // enough TPM to rate-limit a multi-block build before it starts.
-        maxTokens: 8_192,
-        temperature: 0,
-        system: opts.systemPrompt,
-        tools: [BUILD_SEARCH_PARTS_TOOL, BUILD_FIND_ALTERNATES_TOOL, BUILD_SUBMIT_SCHEMATIC_TOOL],
-        messages,
-      });
-
-      messages.push(assistantResponseMessage(response));
-
-      const toolUses = response.toolCalls;
-      if (toolUses.length === 0) {
-        console.warn(
-          `[build-loop] no tool call (stop_reason=${response.stopReason}); nudging. Text: ${response.text.slice(0, 300)}`,
-        );
-        messages.push({ role: "user", content: BUILD_NUDGE });
-        continue;
-      }
-
-      // Run search_parts calls in parallel; dedup the echoed payload per turn.
-      const searchBlocks = toolUses.filter((b) => b.name === "search_parts");
-      const rawSearches = await Promise.all(
-        searchBlocks.map(async (block) => {
-          const { query, category } = block.input as { query?: unknown; category?: unknown };
-          if (typeof query !== "string" || query.trim() === "") {
-            return { block, error: "query is required", results: [] as AiPartResult[] };
-          }
-          try {
-            const results = await searchPartsForAI(
-              query,
-              typeof category === "string" ? category : undefined,
-              SEARCH_LIMIT,
-            );
-            for (const r of results) returnedParts.set(r.partId, r);
-            return { block, error: null as string | null, results };
-          } catch (err) {
-            return { block, error: toolFailure("search_parts", err), results: [] as AiPartResult[] };
-          }
-        }),
-      );
-
-      const seenPartIds = new Set<string>();
-      const searchResults: LLMToolResultPart[] = rawSearches.map(
-        ({ block, error, results }) => {
-          if (error !== null) {
-            return {
-              type: "tool_result" as const,
-              toolCallId: block.id,
-              output: error.startsWith("{") ? error : JSON.stringify({ error }),
-              isError: true,
-            };
-          }
-          const payload = results.map((r) => {
-            if (seenPartIds.has(r.partId)) {
-              return {
-                partId: r.partId,
-                mainCategory: r.mainCategory,
-                untrustedCatalogText: { name: boundUntrustedText(r.name, 128), mpn: boundUntrustedTextOrNull(r.mpn, 128) },
-                note: "Already returned in an earlier search this turn — reuse this partId; full pin list is in that result.",
-              };
-            }
-            seenPartIds.add(r.partId);
-            // Ground generation in datasheet-derived pin roles + required
-            // connections when this part has a KG entry (Phase 2 "unified
-            // context assembly" — only matched parts pay the tokens).
-            const designNotes = kgDesignNotes(r.name);
-            const facing = modelFacingPart(r);
-            return designNotes ? { ...facing, designNotes } : facing;
-          });
-          return {
-            type: "tool_result" as const,
-            toolCallId: block.id,
-            output: JSON.stringify(payload),
-          };
-        },
-      );
-
-      // Run find_alternates calls in parallel. For each, register the full part
-      // record (with pins) of every returned alternate into `returnedParts`, so
-      // the model may submit a chosen alternate and still pass validation — while
-      // the AI-facing payload stays compact (no pins).
-      const alternateBlocks = toolUses.filter((b) => b.name === "find_alternates");
-      const alternateResults: LLMToolResultPart[] = await Promise.all(
-        alternateBlocks.map(async (block) => {
-          const { partId, kind } = block.input as { partId?: unknown; kind?: unknown };
-          if (typeof partId !== "string" || partId.trim() === "") {
-            return {
-              type: "tool_result" as const,
-              toolCallId: block.id,
-              isError: true,
-              output: JSON.stringify({ error: "partId is required" }),
-            };
-          }
-          const safeKind = kind === "drop_in" || kind === "fff" ? kind : "all";
-          try {
-            console.log(`[AI] called find_alternates for partId=${partId} (kind=${safeKind})`);
-            const alternates = await fetchAlternatesForAI(partId, safeKind, ALTERNATES_LIMIT);
-            const full = await getPartsByIds(alternates.map((a) => a.partId));
-            for (const p of full) returnedParts.set(p.partId, p);
-            return {
-              type: "tool_result" as const,
-              toolCallId: block.id,
-              output: JSON.stringify(alternates.map(modelFacingAlternate)),
-            };
-          } catch (err) {
-            return {
-              type: "tool_result" as const,
-              toolCallId: block.id,
-              isError: true,
-              output: toolFailure("find_alternates", err),
-            };
-          }
-        }),
-      );
-
-      const submitResults: LLMToolResultPart[] = [];
-      for (const block of toolUses.filter((b) => b.name === "submit_schematic")) {
-        const result = finalizeSubmission(block.input, returnedParts);
-        if (result.ok) {
-          // Deterministic ERC gate (design-level, not drawing-level): critical
-          // electrical faults — undriven power pins, shorted rails, fighting
-          // outputs — bounce back with pin-localized feedback so the model can
-          // self-correct. Bounded, so a stubborn design still ships WITH its
-          // report rather than dying in the loop.
-          const erc = runErc(result.netlist, returnedParts);
-          if (!erc.ok && ercRejections < MAX_ERC_REJECTIONS) {
-            ercRejections++;
-            console.warn(
-              `[build-loop] ERC rejected submission (${erc.criticalCount} critical, attempt ${ercRejections}/${MAX_ERC_REJECTIONS}, reward ${erc.reward.toFixed(2)})`,
-            );
-            submitResults.push({
-              type: "tool_result",
-              toolCallId: block.id,
-              isError: true,
-              output: formatErcFeedback(erc),
-            });
-            continue;
-          }
-          if (!erc.ok) {
-            console.warn(
-              `[build-loop] ERC still failing after ${MAX_ERC_REJECTIONS} rejections — accepting with ${erc.criticalCount} critical finding(s).`,
-            );
-          }
-          return { ok: true, netlist: result.netlist, explanation: result.explanation, erc };
-        }
-        submitResults.push({
-          type: "tool_result",
-          toolCallId: block.id,
-          isError: true,
-          output: result.error,
-        });
-      }
-
-      messages.push(toolResultsMessage([...searchResults, ...alternateResults, ...submitResults]));
-    }
-  } catch (err) {
-    if (err instanceof LLMProviderError) {
+  if (fixtureRuntimeEnabled()) {
+    // [PR-C] the recorded design carries the same electrical report a real loop attaches at acceptance (run on the fixture
+    // catalog's pins), so the page's structured status reads "passed"/"findings" — never "not run" — exactly as live.
+    const netlist = structuredClone(BLINKER_NETLIST);
+    const parts = new Map([...fixtureContainer().catalog.cachedParts.values()].map((part) => [part.id, { name: part.name, pins: part.pins }] as const));
+    return { ok: true, netlist, explanation: netlist.explanation, erc: runErc(netlist, parts), iterationsUsed: 0 } as BuildLoopResult;
+  }
+  // [PR-L, 2026-10-17] the turns run in the slice core (build-loop-slice.ts), in memory: the same search/submit turns, submission
+  // validation and ERC gate as before the extraction; every result below is the one this function returned before it.
+  const iterationCap = clampBuildTurns(opts.budget?.maxIterations);
+  const { end, usage } = await runInMemoryBuildLoop({
+    block: { systemPrompt: opts.systemPrompt, userMessage: opts.userMessage, seedParts: opts.seedParts, allowEmpty: true },
+    provider: opts.provider,
+    llm: PRODUCTION_LLM,
+    catalog: PRODUCTION_CATALOG,
+    maxTurns: iterationCap,
+    deadlineAt: opts.budget?.deadlineAt,
+    signal: opts.budget?.signal,
+    onCallStarted: onIteration,
+  });
+  // [PR-C] model turns started; reported on every result so the route can sum a request's budget use.
+  const iterationsUsed = usage.modelCalls;
+  switch (end.kind) {
+    case "submitted":
+      return { ok: true, netlist: end.netlist, explanation: end.explanation, erc: end.erc, iterationsUsed };
+    case "stopped":
+      return budgetExhausted(STOPPED_AT[end.stage](iterationsUsed), iterationsUsed);
+    case "turn_allowance":
+      // [PR-C] the historical "Max iterations reached" is budget exhaustion, not a server fault.
+      return budgetExhausted(`Max iterations reached (${iterationCap}) without a submitted schematic.`, iterationsUsed);
+    case "provider_error": {
+      // [PR-C] the provider's own vocabulary travels with the failure: `reason` decides
+      // whether the page offers Retry (credits out and an open breaker withhold it).
+      const err = end.error;
       return {
         ok: false,
         error: err.message,
         status: 503,
         code: err.code,
         provider: err.provider,
+        reason: err.reason,
+        retryable: isRetryableReason(err.reason),
+        iterationsUsed,
       };
     }
-    const message = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: message, status: 500 };
+    case "loop_failed":
+      // [PR-C] any other throw is a local loop failure: the redacted, bounded sentence (logged by the core).
+      return { ok: false, error: end.error, status: 500, code: "build_loop_failed", retryable: true, iterationsUsed };
   }
-
-  return { ok: false, error: "Max iterations reached", status: 500 };
-}
-
-type FinalizeResult =
-  | { ok: true; netlist: BuildLogicalNetlist; explanation: string }
-  | { ok: false; error: string };
-
-/**
- * Validate a submitted netlist against the parts surfaced by search/seed. Unknown
- * partIds return a structured error (fed back into the loop for self-correction);
- * connections referencing non-existent pins are dropped with a warning.
- */
-function finalizeSubmission(
-  raw: unknown,
-  returnedParts: Map<string, AiPartResult>,
-): FinalizeResult {
-  const input = raw as {
-    components?: BuildLogicalComponent[];
-    connections?: unknown[];
-    explanation?: string;
-  };
-  const rawComponents = Array.isArray(input.components) ? input.components : [];
-  const rawConnections = Array.isArray(input.connections) ? input.connections : [];
-  const explanation = typeof input.explanation === "string" ? input.explanation : "";
-
-  const invalid = rawComponents.filter((c) => !returnedParts.has(c.partId));
-  if (invalid.length > 0) {
-    const offenders = invalid.map((c) => `${c.refDes} (partId "${c.partId}")`).join(", ");
-    return {
-      ok: false,
-      error:
-        `These components reference partIds that were never returned by search_parts: ${offenders}. ` +
-        `Every partId must be copied exactly from a search_parts result — never the part name or MPN. ` +
-        `Search for the missing parts (or reuse a partId you already found) and call submit_schematic again.`,
-    };
-  }
-
-  const refDesSet = new Set(rawComponents.map((c) => c.refDes));
-  const components: BuildLogicalComponent[] = rawComponents.map((c) => {
-    const part = returnedParts.get(c.partId);
-    const role = normalizeComponentRole(c.role, c.refDes, part?.pins.length ?? 0);
-    const parentRefDes =
-      role === "support" &&
-      typeof c.parentRefDes === "string" &&
-      c.parentRefDes !== c.refDes &&
-      refDesSet.has(c.parentRefDes)
-        ? c.parentRefDes
-        : undefined;
-    return {
-      refDes: c.refDes,
-      partId: c.partId,
-      value: c.value,
-      role,
-      ...(parentRefDes !== undefined ? { parentRefDes } : {}),
-    };
-  });
-
-  const partByRefDes = new Map<string, AiPartResult>();
-  for (const c of components) {
-    const part = returnedParts.get(c.partId);
-    if (part) partByRefDes.set(c.refDes, part);
-  }
-
-  const validConnections: BuildLogicalConnection[] = [];
-  const warnings: string[] = [];
-
-  function pinError(ep: string): string | null {
-    const parsed = parseEndpoint(ep);
-    if ("ground" in parsed) return null;
-    const part = partByRefDes.get(parsed.refDes);
-    if (!part) return `unknown component "${parsed.refDes}"`;
-    if (!pinExists(part, parsed.pin)) return `pin "${parsed.pin}" not found on ${parsed.refDes}`;
-    return null;
-  }
-
-  const VALID_LABEL_KINDS: readonly NetLabelKind[] = ["label", "power", "ground"];
-
-  for (const rawConn of rawConnections) {
-    if (typeof rawConn !== "object" || rawConn === null) continue;
-    const conn = rawConn as {
-      kind?: unknown; from?: unknown; to?: unknown;
-      pin?: unknown; labelName?: unknown; labelKind?: unknown;
-    };
-
-    if (conn.kind === "label" || (typeof conn.pin === "string" && typeof conn.labelName === "string")) {
-      const pin = typeof conn.pin === "string" ? conn.pin.trim() : "";
-      const name = typeof conn.labelName === "string" ? conn.labelName.trim().toUpperCase() : "";
-      if (pin === "" || name === "") {
-        warnings.push(`dropped label connection: requires both "pin" and "labelName"`);
-        continue;
-      }
-      const err = pinError(pin);
-      if (err) {
-        warnings.push(`dropped label "${name}" on ${pin}: ${err}`);
-        continue;
-      }
-      const labelKind =
-        typeof conn.labelKind === "string" && (VALID_LABEL_KINDS as readonly string[]).includes(conn.labelKind)
-          ? (conn.labelKind as NetLabelKind)
-          : inferNetLabelKind(name);
-      validConnections.push({ kind: "label", pin, labelName: name, labelKind });
-      continue;
-    }
-
-    if (typeof conn.from !== "string" || typeof conn.to !== "string") {
-      warnings.push(`dropped malformed connection ${JSON.stringify(rawConn).slice(0, 120)}`);
-      continue;
-    }
-    const err = pinError(conn.from) ?? pinError(conn.to);
-    if (err) {
-      warnings.push(`dropped connection ${conn.from} → ${conn.to}: ${err}`);
-      continue;
-    }
-    validConnections.push({ kind: "wire", from: conn.from, to: conn.to });
-  }
-
-  const fullExplanation =
-    warnings.length > 0
-      ? `${explanation}\n\nNote: ${warnings.length} connection(s) were dropped because referenced pins did not exist:\n- ${warnings.join("\n- ")}`
-      : explanation;
-
-  return {
-    ok: true,
-    netlist: { components, connections: validConnections, explanation: fullExplanation },
-    explanation: fullExplanation,
-  };
 }

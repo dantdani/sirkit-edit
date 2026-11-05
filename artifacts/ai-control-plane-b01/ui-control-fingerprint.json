@@ -40,17 +40,21 @@
       "Save project to a local .sirkit.json file",
       "Schematic drawing: pointer-only, not readable by assistive technology. From the keyboard, use Go to component in the schematic toolbar to select a component by its reference designator.",
       "Select",
-      "Sheet size — also sets the KiCad export page",
-      "Stop the assistant's run",
+      "Sheet size",
+      "Stop the assistant's answer (a design task it started keeps running; Stop design on its card stops that)",
       "Toggle AI chat",
       "Undo schematic action",
-      "Wire"
+      "Wire",
+      "Workspace settings"
     ],
     "app/components/pcb/PcbEditor.tsx": [
       "Close 3D preview",
       "Close AI assist",
       "Design rule check",
-      "Run DRC to check the board against the current fab preset."
+      "Run DRC to check the board against the current fab preset.",
+      "Schematic → PCB refusal",
+      "Schematic → PCB: synchronise the whole project (* sheet*) to the board",
+      "Synchronises the whole project (* sheet*) to the board, whatever sheet is open"
     ],
     "app/components/pcb/PcbToolbar.tsx": [
       "3D preview",
@@ -94,8 +98,8 @@
     ],
     "app/components/pcb/SyncButton.tsx": [
       "Schematic changed since last sync",
-      "Schematic to PCB",
-      "Schematic to PCB placement options"
+      "Schematic to PCB placement options",
+      "Schematic to PCB: *"
     ],
     "app/components/pcb/FabDialog.tsx": [
       "Fab preset",

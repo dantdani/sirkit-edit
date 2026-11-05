@@ -47,11 +47,11 @@ export type McpRequestOutcome = RequestOutcome | "inconclusive";
 /** [B20 A0] What a meter is for: a distributor source, an MCP server, or one tool of an MCP server [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): or, since B21-E1, an LLM provider, OD-115]. [B23-B2: or a manufacturing provider, OD-165]. [B24-A3: or an OpenAI embedding model, OD-197]. */
 export type AdmissionKey =
   | { kind: "acquisition-source"; id: AcquisitionSourceId }
-  | { kind: "mcp-server"; serverId: string; tool?: string } | { kind: "llm-provider"; provider: "openai" | "anthropic"; model?: string } | { kind: "manufacturing-provider"; providerId: string } | { kind: "embedding"; provider: "openai"; model: string }; // [B21 E1] + an LLM provider with an optional model (OD-115): a reviewed extension of the union; [B23-B2] + a manufacturing provider (OD-165), the same kind of reviewed extension; [B24-A3] + an embedding model (OD-197), the same reviewed, append-only extension
+  | { kind: "mcp-server"; serverId: string; tool?: string } | { kind: "llm-provider"; provider: "openai" | "anthropic"; model?: string } | { kind: "manufacturing-provider"; providerId: string } | { kind: "embedding"; provider: "openai"; model: string } | { kind: "cad-source"; sourceId: string }; // [B21 E1] + an LLM provider with an optional model (OD-115): a reviewed extension of the union; [B23-B2] + a manufacturing provider (OD-165), the same kind of reviewed extension; [B24-A3] + an embedding model (OD-197), the same reviewed, append-only extension
 
 /** [B20 A0] The map key of one meter; tool names are registry-validated (`[A-Za-z0-9_.-]`), so the separators are unambiguous. */
 export function admissionKeyString(key: AdmissionKey): string {
-  if (key.kind === "acquisition-source") return `acquisition-source:${key.id}`; if (key.kind === "llm-provider") return key.model === undefined ? `llm-provider:${key.provider}` : `llm-provider:${key.provider}/model:${key.model}`; if (key.kind === "manufacturing-provider") return `manufacturing-provider:${key.providerId}`; if (key.kind === "embedding") return `embedding:${key.provider}/model:${key.model}`; // [B23-B2] provider ids are registry ids; [B21 E1] model ids are policy-validated `[a-z0-9._-]`; [B24-A3] the embedding model is the embeddings module's constant, named by its caller
+  if (key.kind === "acquisition-source") return `acquisition-source:${key.id}`; if (key.kind === "cad-source") return `cad-source:${key.sourceId}`; /* [PR-M, 2026-10-18] M2: a CAD source (cad-source-registry.ts ids), the same reviewed, append-only extension */ if (key.kind === "llm-provider") return key.model === undefined ? `llm-provider:${key.provider}` : `llm-provider:${key.provider}/model:${key.model}`; if (key.kind === "manufacturing-provider") return `manufacturing-provider:${key.providerId}`; if (key.kind === "embedding") return `embedding:${key.provider}/model:${key.model}`; // [B23-B2] provider ids are registry ids; [B21 E1] model ids are policy-validated `[a-z0-9._-]`; [B24-A3] the embedding model is the embeddings module's constant, named by its caller
   return key.tool === undefined ? `mcp-server:${key.serverId}` : `mcp-server:${key.serverId}/tool:${key.tool}`;
 }
 
@@ -593,4 +593,35 @@ export function currentEmbeddingPause(key: EmbeddingKey, now: number = Date.now(
 /** The test hook's part (`resetAdmissionControl`): every embedding meter forgets why it opened (its windows and breaker are states). */
 function resetEmbeddingMeter(): void {
   embeddingOpenCauses.clear();
+}
+
+// ─── [PR-M, 2026-10-18] The CAD-source meter (section M2, m2-acquisition-design.md M2.2) ─────────────────────────────────────────
+// Appended on purpose, as B23-B2 and B24-A3 appended theirs: no line the earlier pages cite in this file moves. One meter per CAD
+// source (cad-source-registry.ts), keyed `cad-source:<id>`: a minute window from the row's `quota.requestsPerMinute` with the purpose
+// share (OD-40: an agent-started retrieval may use at most 25% of it) and the row's breaker (consecutive failures open it; a 429 opens
+// it at once). The caller (cad-egress.ts) turns a pause into a SCHEDULED wait on the durable task, never a hot retry. Per process, as
+// every meter here.
+
+export type CadSourceAdmissionKey = Extract<AdmissionKey, { kind: "cad-source" }>;
+/** A CAD source's window and breaker, from its registry row. */
+export interface CadSourceMeterPolicy { readonly displayName: string; readonly requestsPerMinute: number; readonly consecutiveFailuresToOpen: number; readonly openMs: number }
+
+function cadSourceMeter(key: CadSourceAdmissionKey, policy: CadSourceMeterPolicy): Meter {
+  const subject = `CAD source "${policy.displayName}"`;
+  return { key: admissionKeyString(key), policy: { subject, shareSubject: subject, limits: [{ window: "minute", max: policy.requestsPerMinute, unit: "request" }], breaker: { consecutiveFailuresToOpen: policy.consecutiveFailuresToOpen, openMs: policy.openMs } } };
+}
+
+/** Ask to send ONE request to a CAD source. An allowed request MUST be followed by `recordCadSourceOutcome`. */
+export function requestCadSourceAdmission(key: CadSourceAdmissionKey, policy: CadSourceMeterPolicy, now: number = Date.now(), purpose: AdmissionPurpose = "interactive"): RequestAdmission {
+  return admit(cadSourceMeter(key, policy), null, 1, now, purpose);
+}
+
+/** Record how an admitted CAD request ended (the breaker is the source's). */
+export function recordCadSourceOutcome(key: CadSourceAdmissionKey, policy: CadSourceMeterPolicy, outcome: RequestOutcome, now: number = Date.now()): void {
+  settle(cadSourceMeter(key, policy), outcome, now);
+}
+
+/** Why a CAD source is paused right now, per purpose, without reserving anything (half-open admits a trial). */
+export function currentCadSourcePause(key: CadSourceAdmissionKey, policy: CadSourceMeterPolicy, now: number = Date.now(), purpose: AdmissionPurpose = "interactive"): AdmissionPause | null {
+  return preview(cadSourceMeter(key, policy), null, 1, now, purpose, { halfOpenAdmits: true });
 }

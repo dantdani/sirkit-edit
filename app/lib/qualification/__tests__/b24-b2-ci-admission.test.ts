@@ -79,7 +79,7 @@ const catalogRows = (): CatalogJsonRow[] => (JSON.parse(read(CATALOG_JSON)) as {
 const isFile = (path: string): boolean => existsSync(join(ROOT, path)) && statSync(join(ROOT, path)).isFile();
 /** A link is admitted when a job that may run its kind selects it. */
 const admitted = (kind: CatalogJsonLink["kind"], jobs: readonly CiJobId[]): boolean =>
-  kind === "pglite" ? jobs.includes("database-delivery") : kind === "spec" ? jobs.includes("page-browser-e2e") : jobs.length > 0;
+  kind === "pglite" ? jobs.includes("database-delivery") : kind === "spec" ? jobs.some((job) => job === "page-browser-e2e" || job === "page-browser-e2e-b24" || job === "page-browser-e2e-agent") : jobs.length > 0; // [PR-L7, 2026-10-20] reviewed pin move (OD-254): a spec through a browser job - page-browser-e2e or one of its appended splits (was page-browser-e2e alone; e2e/agent-execution.spec.ts runs in page-browser-e2e-agent)
 
 // [B24-B2 review, 2026-10-08] the browser order case (cases 8 and 9)
 const AGENT_SPEC = "e2e/agent-execution.spec.ts";

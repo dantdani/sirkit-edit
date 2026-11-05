@@ -301,12 +301,12 @@ describe("[B24-E] the live-blocker register in OD-217's vocabulary, its mirror a
     has("Q14", "`b20-c1-three-way-parity.test.ts:241`", "mcpExposed 9", "`e2e/mcp-endpoint.spec.ts`", "agent-boundary-suites", "page-browser-e2e");
     // Q15: B21's suites offline in CI - prompt-to-gerber lists the orchestration folder, page-browser-e2e runs the orchestration config
     expect(admission.filters["prompt-to-gerber"]).toContain("app/lib/agent/orchestration/__tests__");
-    expect(admission.jobsOf("app/lib/agent/orchestration/__tests__/b21-a-contracts.test.ts")).toEqual(["prompt-to-gerber"]);
+    expect(admission.jobsOf("app/lib/agent/orchestration/__tests__/b21-a-contracts.test.ts")).toEqual(["agent-boundary-suites"]); // [PR-G, 2026-10-17] reviewed pin move (OD-250): was ["prompt-to-gerber"] - prompt-to-gerber's positional filter stays and excludes the directory, agent-boundary-suites runs its suites (ci-split.md section 4)
     expect(admission.jobsOf("e2e-orchestration/specialist-orchestration.spec.ts")).toEqual(["page-browser-e2e"]);
     const workflow = read(".github/workflows/deterministic-manufacturing.yml").split(NEWLINE);
     const job = (key: string): string[] => { const start = workflow.indexOf(`  ${key}:`); const end = workflow.findIndex((text, index) => index > start && /^ {2}[a-z][a-z0-9-]*:$/.test(text)); return workflow.slice(start, end < 0 ? undefined : end); };
     expect(job("page-browser-e2e").some((text) => text.trim() === "run: pnpm exec playwright test -c playwright.orchestration.config.ts")).toBe(true);
-    has("Q15", "`app/lib/agent/orchestration/__tests__`", "`pnpm exec playwright test -c playwright.orchestration.config.ts`", "`e2e-orchestration/specialist-orchestration.spec.ts`", "prompt-to-gerber", "page-browser-e2e");
+    has("Q15", "`app/lib/agent/orchestration/__tests__`", "`pnpm exec playwright test -c playwright.orchestration.config.ts`", "`e2e-orchestration/specialist-orchestration.spec.ts`", "prompt-to-gerber", "page-browser-e2e", "agent-boundary-suites"); // [PR-G, 2026-10-17] + agent-boundary-suites (OD-250)
     // the matrix names B22's pins, never the retired variable
     expect(readOrEmpty(MATRIX)).not.toContain(["NGSPICE", "BIN"].join("_"));
   });

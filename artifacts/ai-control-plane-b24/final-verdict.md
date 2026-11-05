@@ -97,18 +97,40 @@ Counts, from `current-system-map.md` (generated; each pinned count equals its pi
 
 | count | value |
 |---|---|
-| route-methods | 168 |
-| canonical-wrappers | 165 |
+| route-methods | 177 |
+| canonical-wrappers | 174 |
 | approved-factories | 3 |
 | raw-handlers | 0 |
-| action-records | 107 |
-| registry-tools | 48 |
-| agent-exposed-tools | 37 |
+| action-records | 114 |
+| registry-tools | 64 |
+| agent-exposed-tools | 52 |
 | mcp-exposed-tools | 9 |
 | granted-tier-1-tools | 6 |
-| agent-exposed-proposal-tools | 5 |
+| agent-exposed-proposal-tools | 13 |
 | agent-exposed-tier-3-tools | 0 |
 | sql-migrations | 32 |
+
+[PR-D, 2026-10-17] Count lines moved with the regenerated map (product reliability D): registry-tools 48 -> 52, agent-exposed-tools
+37 -> 40, agent-exposed-proposal-tools 5 -> 6 - PR-D's four descriptors (OD-243, OD-244): the Build-mode generation proposal (Tier 2,
+agent-exposed), the Schematic-to-PCB preflight read and the catalog part inspection (Tier 0, agent-exposed, withheld from MCP) and the
+component review request (registered, not callable); mcp-exposed-tools stays 9. Section 5's report lines stand as drafted at the
+closeout's final SHA.
+
+[PR-L, 2026-10-17] Count lines moved with the regenerated map (runbook L.4, increment 4): route-methods 168 -> 174 and canonical-wrappers 165 -> 171 (the durable generation task's six canonical-wrapper methods: POST/GET /api/generation-tasks, GET /api/generation-tasks/[id], GET .../events, POST .../control and the worker pump POST /api/generation-worker; 3 factories and 0 raw unchanged); the descriptor and action-record rows are the concurrent section M builder's to move with its descriptors and records.
+
+[PR-M, 2026-10-17] Count lines moved with the regenerated map (runbook section M, increment M1): action-records 108 -> 110 (schematic.resolve-components-propose, the sealed resolution batch, and schematic.resolve-components, its reviewed destructive apply), registry-tools 56 -> 59, agent-exposed-tools 44 -> 47, agent-only-tools 35 -> 38 and agent-exposed-proposal-tools 9 -> 10 - PR-M's three descriptors: the schematic-instance inspection and the resolution candidate search (Tier 0 reads) and the component resolution proposal (Tier 2), all three agent-exposed and withheld from MCP; mcp-exposed-tools stays 9; the verdict's status lines stand.
+
+[PR-M, 2026-10-18] Count lines moved with the regenerated map (runbook section M, M1's page intake): route-methods 174 -> 175 and canonical-wrappers 171 -> 172 (POST /api/component-resolution-authority, the reviewed resolution's fresh-facts endpoint, one canonical wrapper; 3 factories and 0 raw unchanged).
+
+[PR-M, 2026-10-18] Count lines moved with the regenerated map (runbook section M, M2's acquisition): route-methods 175 -> 177 and canonical-wrappers 172 -> 174 (GET and POST /api/parts/acquisitions, two canonical wrappers); action-records 110 -> 111 (parts.cad-acquisition); registry-tools 59 -> 63, agent-exposed-tools 47 -> 51 and agent-exposed-proposal-tools 10 -> 12 - runbook L.5's two descriptors (the durable generation task's inspection and its control request, a proposal) as the tree holds them, and M2's two (the CAD acquisition start, a proposal, and its status read; both agent-exposed, withheld from MCP); mcp-exposed-tools stays 9; the verdict's status lines stand.
+
+[PR-J, 2026-10-22] Count lines moved with the regenerated map (runbook section J increment 1, OD-255): action-records 111 -> 113 (schematic.sheet-structure and schematic.move-to-sheet, the canonical schematic sheet commands; both partial until the Sheets navigator binds them).
+
+[PR-J5, 2026-10-23] Count lines moved with the regenerated map (runbook section J increment 5, J.6 / OD-259 item 4): action-records 113 -> 114 (schematic.sheet-organize-propose, the agent's sealed organise proposal, placed before the two-record tail), registry-tools 63 -> 64, agent-exposed-tools 51 -> 52 and agent-exposed-proposal-tools 12 -> 13 - the organise proposal descriptor sirkit.schematic.propose-sheet-organization (a Tier 2 sealed proposal the human applies through schematic.move-to-sheet; withheld from MCP, so mcp-exposed-tools stays 9); the verdict's status lines stand.
+
+[PR-F, 2026-10-17] Count lines moved with the regenerated map (product reliability F): action-records 107 -> 108 (parts.draft-request, the sealed draft request own propose record), registry-tools 52 -> 56, agent-exposed-tools
+40 -> 44, agent-exposed-proposal-tools 6 -> 9 - PR-F's four descriptors: the missing-facts read and the part draft request (missing parts,
+OD-248), the module-contract proposal and the stackup / via-policy proposal (Astra increments C-D, OD-249); the verdict's status lines stand.
 
 BENCHMARK-QUALITY RESULT: BLOCKED (`baseline_missing` while the latest `latency-baseline.json` version is the declared-without-values
 v1, OD-212, OD-30; printed as BLOCKED, never as pass), as `performance-reliability-report.md` section 1 states. [B24-closeout,
@@ -143,11 +165,11 @@ lines are answered with their methods and their reach in 5.3 (the same case hold
 ```text
 SIRKIT REMAINING BUILDER PROGRAM: PARTIAL
 
-FINAL MAIN SHA: {MERGE}
+FINAL MAIN SHA: 32b081e152620b46e791f9589256f7d0603f300f (B24's normal merge, PR #15; verified 2026-10-11)
 CHAPTERS COMPLETED: B16, B17, B18, B19 - each passed its deterministic gate (its own final-verdict.md) and merged normally
 CHAPTERS PARTIAL/BLOCKED: B20, B21, B22, B23 - PARTIAL, merged normally (their own final-verdict.md pages); B24 - PARTIAL (this
-  page), its pull request merging after green CI; no chapter is BLOCKED as a whole
-PULL REQUESTS MERGED: {MERGE}
+  page), merged normally as PR #15 after green CI; no chapter is BLOCKED as a whole
+PULL REQUESTS MERGED: #6 B16, #7 B17, #8 B18, #9 B19, #10 B20, #11 B21, #13 B22, #14 B23, #15 B24; #12 corrective SPICE security; preceding foundation integrations #2-#5 (local first-parent history)
 FULL TEST RESULT: the lead's final run at 26dc8b8 (win32, Node v24.15.0): vitest over the whole repository, the three real-process
   suites excluded (they need java, FreeRouting or kicad-cli) - 864 files passed, 11 skipped (875); 9,733 tests passed, 68 skipped
   (9,801); exit 0, 1,164 s. tsc exit 0, 0 errors. eslint . exit 1: 68 problems (33 errors, 35 warnings), none introduced by B24.
@@ -273,3 +295,29 @@ multi-agent (Q15) have no scope of their own (their Readiness scope cell is `—
 - The verdict above is the chapter's at `26dc8b8`; a merge that changes no code moves none of its states, and any later code change
   needs its own final run. Commit 2/2's test change is such a change for CI: scope 2 stands as measured at `26dc8b8` only once commit
   2/2's own CI run is green in every pull-request job, which the lead records before the merge.
+
+### 5.5 Post-merge reconciliation (2026-10-11; metadata only)
+
+**CONFIRMED:** read-only GitHub metadata authenticated the repository owner, `dantdani`, with admin access to the private
+`dantdani/sirkit-edit` repository. [PR #15](https://github.com/dantdani/sirkit-edit/pull/15) merged normally into `main` at
+2026-10-11T05:26:33Z: head `9dee4fb2d2ea205c3da8b00798a213ce8cea2935`, merge `32b081e152620b46e791f9589256f7d0603f300f`.
+The local first-parent history matches the merge and the chapter PR list now filled in section 5.1. The earlier drafting text
+in sections 5 and 5.4 describes the pre-merge placeholders, not the current repository state.
+
+The final-head pull-request workflows were checked independently through read-only GitHub metadata: [deterministic-manufacturing
+run 38113287508](https://github.com/dantdani/sirkit-edit/actions/runs/38113287508) succeeded with all seven pull-request jobs
+(`agent-boundary-suites`, `production-smoke`, `prompt-to-gerber`, `page-browser-e2e`, `page-browser-e2e-b24`, `database-delivery`,
+`secret-scan`) successful; [benchmark-quality run 38113287472](https://github.com/dantdani/sirkit-edit/actions/runs/38113287472)
+had successful `benchmark-core` and `benchmark-latency` jobs. Its schedule/dispatch-only `benchmark-nightly` job was skipped,
+not qualified by a pull-request run. No workflow was dispatched, rerun or modified by this metadata check.
+
+The chapter's historical measurements, ten scope states, integrity statements and **PARTIAL** verdict at `26dc8b8` remain
+unchanged. In particular, the merge does not turn the whole-repository lint failure, any missing live qualification, or the
+recorded sandbox failure into a pass. A post-merge corrective checkpoint is **IN PROGRESS** on `codex/astra-foundation`, starting
+from the merge SHA: the two owner-approved decisions OD-229 and OD-236 and the remaining deterministic local readiness defects.
+Its current-tree validation is pending and must be reported separately before the additive Astra extension starts; no default
+provider/model change, live model qualification or Astra activation is claimed here. All existing live-blocker entries remain.
+
+## Post-B24 census addendum — 2026-10-11
+
+The 878/302 and 73/64 census statements above remain measurements at `26dc8b8`. Later regression tests change the current checkout's census, not the earlier Git tree. `ci-census-26dc8b8.json` now preserves that tree's test listing and exact CI-reader inputs, and the verdict suite recomputes the dated counts from that snapshot. See `../astra-guided-pcb/qualification-census-addendum.md` for provenance and the separately labelled current-checkout measurement.

@@ -396,6 +396,12 @@ Only then does route case 4 run specialists in a chat (the replacement request u
 
 ## 5. `build-multi` untouched and tripwired (OD-106); the gates; D21-33
 
+[Product reliability C, 2026-10-14] OD-242 amends OD-106: `app/api/schematic/build-multi/route.ts` now answers the structured
+result contract (`app/lib/schematic/build-result.ts`: completeness, omitted blocks, the electrical check's state, planner, budget) by the
+owner's assignment; its sha256 was `eaf4e8d6c7acab7babba2fd75fff8899400adcb15767bf8e083b0437131c22b1`. [PR-D, 2026-10-16] OD-243 re-pins again: the route is now a thin caller of the ONE shared `runBuildMultiGeneration` (`app/lib/schematic/build-multi-generation.ts`), which the agent's `sirkit.schematic.generate-proposal` reuses through the chat route's injected port; its sha256 was `fa3ddf58b02834734df1752ab0def3e03c90f9a25fd61b27df058295e23ca8ca`. [PR-L step 0, 2026-10-17] OD-251 re-pins: the generation-budget correction makes the route forward the canonical wrapper's abort signal (`exposeAbortSignal: true`) into the same `runBuildMultiGeneration` (authorization, CSRF, media and body bounds unchanged); its sha256 is `8e69576cc0a2f2682a26a36d42f443d8240b6b6ba3c8683f93c993a5b8939989`, which route case 6 pins and page case 3 recomputes. The B21 facts
+below stand as recorded at B21-B: the route reads no orchestration flag and no orchestration module, and the import gate still keeps
+every orchestration module from importing it; the historical hash is kept as the B21-B measurement.
+
 - `app/api/schematic/build-multi/route.ts` (C27) is byte-identical to HEAD: sha256
   `1655e03595430d9e42b4c3c65800d907e3daaa7ed4d8bc6ac1705fd9640242cb` (git blob `9a29e676ae95b7449f7fcc2402edece8aad79e8d`), pinned by
   route case 6 and by this page (page case 3 recomputes it); it reads no orchestration flag and no orchestration module; A's gate keeps
@@ -654,8 +660,8 @@ never checked (`composer-routing.ts`, `adapters.ts` and the gate test gained lin
 | C5 | `app/lib/agent/orchestration/router.ts` | 175 | — | `if (EXPLICIT_VERB.test(message)) return single("S-explicit");` | a direct Tier 0/1 command stays single before any DAG rule |
 | C6 | `app/lib/engineering/permission-tiers.ts` | 36 | — | `export const TIER3_FAMILY_PATTERN = ` | the tiers' family pattern the Tier 3 rules are pinned to |
 | C7 | `app/lib/engineering/permission-tiers.ts` | 131 | — | `export const TIER1_EXECUTE_ROLES: readonly ProjectRole[] = Object.freeze(["pcb_editor", "project_admin"]);` | the roles that may recruit specialists |
-| C8 | `app/lib/project/composer-routing.ts` | 36 | — | `const EXECUTION_VERB = ` | the composer's explicit verbs the router mirrors |
-| C9 | `app/lib/project/composer-routing.ts` | 42 | — | `export const REPLACE_PART = ` | the composer's replacement pairing, exported for the router (B21-B) |
+| C8 | `app/lib/project/composer-routing.ts` | 46 | — | `const EXECUTION_VERB = ` | the composer's explicit verbs the router mirrors |
+| C9 | `app/lib/project/composer-routing.ts` | 51 | — | `export const REPLACE_PART = ` | the composer's replacement pairing, exported for the router (B21-B) |
 | C10 | `app/lib/agent/orchestration/scheduler.ts` | 58 | — | `export const SPECIALIST_CAPS = Object.freeze({` | the caps as data |
 | C11 | `app/lib/agent/orchestration/scheduler.ts` | 195 | — | `export function deriveSpecialistContext(context: AgentRunContext): AgentRunContext {` | the derived, narrowed specialist context |
 | C12 | `app/lib/agent/orchestration/scheduler.ts` | 291 | — | `export function readOnlySpecialistGateway(` | the read-only narrowing |
@@ -671,14 +677,14 @@ never checked (`composer-routing.ts`, `adapters.ts` and the gate test gained lin
 | C22 | `app/api/chat/orchestration-runtime.ts` | 146 | — | `export function holdTraceTerminal(` | the trace terminal held for the driver |
 | C23 | `app/api/chat/route.ts` | 426 | — | `const plan = planChatRun(userMessage, routerFactsOf(runContext));` | the plan before the adapter |
 | C24 | `app/api/chat/route.ts` | 520 | — | `result = plan.kind === "dag" ? await runOrchestratedChat({ request, deps, plan, startedAt: Date.now(), providers: productionSpecialistProviders() }) : await runAgentLoop(request, deps);` | the three-way call site ([B21 E1] with the provider layer) |
-| C25 | `app/lib/agent/loop.ts` | 54 | — | `export const MAX_RESULT_CHARS = 60_000;` | the model transfer bound the envelope respects |
-| C26 | `app/lib/agent/loop.ts` | 25 | — | `import { resolveReadBinding } from "../engineering/tool-bindings-readonly";` | D21-33: the first hop of the loop's chain to the fab presets |
-| C27 | `app/api/schematic/build-multi/route.ts` | 73 | — | `export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000 }, async ({ body: rawBody }): Promise<Response> => {` | the untouched route |
+| C25 | `app/lib/agent/loop.ts` | 55 | — | `export const MAX_RESULT_CHARS = 60_000;` | the model transfer bound the envelope respects |
+| C26 | `app/lib/agent/loop.ts` | 26 | — | `import { resolveReadBinding } from "../engineering/tool-bindings-readonly";` | D21-33: the first hop of the loop's chain to the fab presets |
+| C27 | `app/api/schematic/build-multi/route.ts` | 48 | — | `export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000, exposeAbortSignal: true }, async ({ body: rawBody, signal }): Promise<Response> => {` | the untouched route ([PR-L step 0, 2026-10-17] re-anchored, OD-251: the wrapper's abort signal is forwarded; line unchanged) |
 | C28 | `app/lib/durable-workflow/runtime.ts` | 18 | — | `if (fixtureRuntimeEnabled()) return fixtureContainer().durableRepository;` | the fixture runtime's in-memory repository |
 | C29 | `app/lib/agent/orchestration/store.ts` | 348 | — | `export function resolveOrchestrationRunStore(): OrchestrationRunStore {` | A's unavailable default the runtime falls back to |
 | C30 | `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 147 | — | `injected.set(at("evil-loop"), ` | the gate's loop probe (D21-33), pinned as an invariant |
 | C31 | `.github/workflows/deterministic-manufacturing.yml` | 146 | — | `app/api/chat/__tests__/b21-b-chat-router.test.ts` | the one explicit CI entry [B24-D1, 2026-10-09] re-pinned +1: B24-D1's prompt-to-gerber start step at `:32` (OD-30) |
-| C32 | `app/lib/llm/errors.ts` | 151 | — | `export function isRetryableReason(reason: LLMProviderFailureReason): boolean {` | the classifier's retryable set |
+| C32 | `app/lib/llm/errors.ts` | 152 | — | `export function isRetryableReason(reason: LLMProviderFailureReason): boolean {` | the classifier's retryable set |
 | C33 | `app/lib/agent/contracts.ts` | 185 | — | `runDeadlineMs: 120_000,` | the coordinator's 120 s per turn |
 | C34 | `app/lib/engineering/explicit-request.ts` | 35 | — | `const MOVE_PATTERN = ` | the explicit-request grammar the S-explicit rule mirrors |
 | C35 | `app/lib/agent/orchestration/router.ts` | 23 | — | `import { POLITE, partKindSwap } from "../../project/composer-routing";` | the replacement rule IS the composer's pairing ([B21 E4, 2026-09-28] anchor re-pinned, line unchanged: since D21-38 the router no longer imports `REPLACE_PART` - it imports the ONE replacement predicate `partKindSwap` and its polite prefix `POLITE` from the composer module, where the pairing the predicate requires is checked - `composer-and-first-turn.md`) |

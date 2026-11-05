@@ -262,8 +262,7 @@ held). The failures were assertions on today's tree, not only a missing module:
 
 ## 11. The authenticated rows, unlimited after part 1
 
-At the A3a tree these 40 authenticated rows are provider credit (33) or expensive (7) and had no window of their own (39 use
-`authenticatedJsonRoute`, `/api/chat` uses `agentStreamRoute`); part 2 gives each a per-principal window (section 15):
+At the A3a tree these 40 authenticated rows are provider credit (33) or expensive (7) and had no window of their own (39 use `authenticatedJsonRoute`, `/api/chat` uses `agentStreamRoute`); part 2 gives each a per-principal window (section 15). [PR-L, 2026-10-17] 41 since runbook L.4: + `POST /api/generation-tasks` (provider credit, `authenticatedJsonRoute`), the durable generation task's start, which has its own per-principal window from the start (this paragraph is one line so that the page's line citations stand):
 
 - `POST /api/architecture/alternatives`
 - `POST /api/architecture/candidates`
@@ -275,6 +274,7 @@ At the A3a tree these 40 authenticated rows are provider credit (33) or expensiv
 - `POST /api/circuit-knowledge/propose`
 - `POST /api/circuit-verification/propose`
 - `POST /api/component-selection/propose`
+- `POST /api/generation-tasks`
 - `POST /api/interfaces/alternatives`
 - `POST /api/interfaces/candidates`
 - `POST /api/interfaces/compare`
@@ -403,6 +403,7 @@ never a body field (`PRINCIPAL_ABUSE_LIMITS`, C40; one constant per kind, C41). 
 | `POST /api/circuit-knowledge/propose` | provider-credit | 60 | 60 s | 10,000 | `[tenantId, projectId, principalId]` |
 | `POST /api/circuit-verification/propose` | provider-credit | 60 | 60 s | 10,000 | `[tenantId, projectId, principalId]` |
 | `POST /api/component-selection/propose` | provider-credit | 60 | 60 s | 10,000 | `[tenantId, projectId, principalId]` |
+| `POST /api/generation-tasks` | provider-credit | 60 | 60 s | 10,000 | `[tenantId, projectId, principalId]` |
 | `POST /api/interfaces/alternatives` | provider-credit | 60 | 60 s | 10,000 | `[tenantId, projectId, principalId]` |
 | `POST /api/interfaces/candidates` | provider-credit | 60 | 60 s | 10,000 | `[tenantId, projectId, principalId]` |
 | `POST /api/interfaces/compare` | provider-credit | 60 | 60 s | 10,000 | `[tenantId, projectId, principalId]` |
@@ -467,7 +468,7 @@ The per-principal windows stand beside the meters that already bound these rows;
   `searchPartsForAI` are exactly the build loop (by name, or by a namespace or star form), and the routes whose runtime closure reaches
   it are exactly those three, each a per-principal row, however they import - and pins that the tool registered on that binding
   (`sirkit.parts.search`) is exposed to neither the agent nor MCP (`not_agent_exposed`). A module reached from the public footprint
-  route that re-exported `searchPartsForAI` failed it (section 21).
+  route that re-exported `searchPartsForAI` failed it (section 21). [PR-G, 2026-10-17] Four since product reliability D (OD-243): `POST /api/chat` injects the shared Build generation as the agent's generate-proposal port (`app/api/chat/schematic-generation-runtime.ts`), so its closure reaches the build loop too; its bound is its own per-principal chat window (60 runs a minute, taken in `agentStreamRoute`), one generation per run under `BUILD_BUDGET`, and case 8 now lists it and holds it to that window.
 
 ## 18. Part 2: the gate at OD-197's full scope, and its test-first record
 

@@ -32,7 +32,9 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=4096
       - run: pnpm exec vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts --reporter=dot --reporter=junit --outputFile=vitest-benchmark-core.xml
-      - run: pnpm run stage10:test -- --reporter=dot --reporter=junit --outputFile=vitest-stage10.xml
+      # [PR-L/M integration, 2026-10-18] no literal `--` before the flags: pnpm 11 passes it through to vitest, which then ignored every flag
+      # after it, so vitest-stage10.xml was never written for the failure diagnostics upload
+      - run: pnpm run stage10:test --reporter=dot --reporter=junit --outputFile=vitest-stage10.xml
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -64,7 +66,9 @@ jobs:
       - run: pnpm exec vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts app/lib/pcb/__tests__/stage-08-professional-routing.test.ts app/lib/qualification/__tests__/b24-b2-corpus-nightly.test.ts --reporter=dot --reporter=junit --outputFile=vitest-nightly.xml
         env:
           SIRKIT_B24_CORPUS_NIGHTLY: "1"
-      - run: pnpm run stage10:test -- --reporter=dot --reporter=junit --outputFile=vitest-stage10.xml
+      # [PR-L/M integration, 2026-10-18] no literal `--` before the flags: pnpm 11 passes it through to vitest, which then ignored every flag
+      # after it, so vitest-stage10.xml was never written for the failure diagnostics upload
+      - run: pnpm run stage10:test --reporter=dot --reporter=junit --outputFile=vitest-stage10.xml
         if: ${{ !cancelled() }} # [B24-B2 review, 2026-10-08] a red corpus run above never skips this step
       - name: Upload failure diagnostics
         if: failure()

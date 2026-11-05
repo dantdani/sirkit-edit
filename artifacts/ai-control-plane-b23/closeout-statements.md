@@ -225,12 +225,15 @@ accepts only a JSON body" and "a quote priced in euros" are no claims.
 - **The control name "Send to fab"** is admitted wherever it names the control, pinned per file (review tests-6):
   12 times in production - `app/components/pcb/FabDialog.tsx` (3), `app/components/pcb/PcbEditor.tsx` (2),
   `app/components/pcb/PcbToolbar.tsx` (3), `app/components/pcb/ShortcutsHelp.tsx` (1) and the registry's three hand-off notes,
-  `app/lib/manufacturing-providers/provider-registry.ts` (3) - and 6 on the pages:
+  `app/lib/manufacturing-providers/provider-registry.ts` (3) - and 7 on the pages ([PR-G, 2026-10-17] was 6; + the fault register below):
   `artifacts/ai-control-plane-b19/acquisition-ux.md` (1), `artifacts/ai-control-plane-b19/final-verdict.md` (1),
   `artifacts/ai-control-plane-b19/unknowns-and-owner-decisions.md` (1), `artifacts/ai-control-plane-b23/provider-registry.md` (1),
-  `docs/native-fab-compiler.md` (1) and `docs/pcb-quickstart.md` (1), the quickstart's step 5. B19 recorded it as a fabrication ZIP
-  export, not procurement, and deferred the rename (`acquisition-ux.md`); a rename is an owner decision and a UI change (the B01
-  fingerprint and the B17-A inventory pin the label). The uses are pinned per file, so a new or moved use is reviewed.
+  `docs/native-fab-compiler.md` (1) and `docs/pcb-quickstart.md` (1), the quickstart's step 5. [PR-G, 2026-10-17] And
+  `artifacts/product-reliability-simple-ui/fault-register.md` (1): its F-27 row (written at checkpoint A+B, `535760f`) names the export
+  control in its stage column, "export (Send to fab)" - the control's own name in a defect record, not a send to a provider. B19
+  recorded it as a fabrication ZIP export, not procurement, and deferred the rename (`acquisition-ux.md`); a rename is an owner
+  decision and a UI change (the B01 fingerprint and the B17-A inventory pin the label). The uses are pinned per file, so a new or
+  moved use is reviewed.
 - **The lines that quote a superseded statement as the record of it**: `artifacts/ai-control-plane-b23/outbound-disclosure.md` (B1's
   record of the registry header, which `b23-b-page` case 4 requires while the sentence stands, and its citation row C31), and the two
   page suites that pin them, `app/lib/manufacturing-providers/__tests__/b23-b-page.test.ts` and

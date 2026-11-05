@@ -291,9 +291,152 @@ jobs:
           app/lib/auth/__tests__/b16-1b-live-qualification.test.ts
           app/lib/pcb/__tests__/kicad-cli-oracle.test.ts
           app/lib/spice/__tests__/worker-integration.test.ts
+          app/api/schematic/__tests__/pr-c-build-iteration-cap.test.ts
+          app/api/schematic/__tests__/pr-c-build-multi-status.test.ts
+          app/api/schematic/__tests__/pr-c-theory-route-classification.test.ts
+          app/components/pcb/__tests__/pr-c-sync-feedback.test.ts
+          app/components/workflow/__tests__/pr-c-journey-strip.test.tsx
+          app/lib/__tests__/pr-c-build-loop-budget.test.ts
+          app/lib/project/__tests__/pr-c-composer-question.test.ts
+          app/lib/project/__tests__/pr-c-pending-proposal-store.test.ts
+          app/lib/project/__tests__/pr-c-theory-request.test.ts
+          app/lib/workflow/__tests__/pr-c-journey.test.ts
+          app/lib/schematic/__tests__/pr-e-design-checks.test.ts
+          app/lib/agent/__tests__/pr-f-placement-intent.test.ts
+          app/lib/agent/__tests__/pr-f-stackup-candidate.test.ts
+          app/lib/llm/__tests__/pr-f-astra-profile.test.ts
+          app/lib/parts/__tests__/pr-f-missing-facts-read.test.ts
+          app/lib/parts/__tests__/pr-f-missing-facts.test.ts
+          app/lib/pcb/experiments/__tests__/pr-f-capability-matrix.test.ts
+          app/lib/pcb/experiments/__tests__/pr-f-placement-routing-feedback.test.ts
+          app/lib/project/__tests__/pr-g-artifact-receivers.test.ts
+          app/api/generation-tasks/__tests__/l4-routes.test.ts
+          app/api/generation-tasks/__tests__/l7-fixture-vertical-slice.test.ts
+          app/api/parts/__tests__/m2-acquisitions-route.test.ts
+          app/api/parts/__tests__/pr-lm-fixture-catalog-routes.test.ts
+          app/api/schematic/__tests__/l6-post-apply-admission.test.ts
+          app/api/schematic/__tests__/l6-post-approval-retries.test.ts
+          app/components/parts/__tests__/m2-acquisition-panels.test.tsx
+          app/components/pcb/__tests__/m4-manufacturing-gate.test.ts
+          app/components/schematic/__tests__/m4-resolution-dialog-impact.test.tsx
+          app/lib/__tests__/l6-build-loop-submission.test.ts
+          app/lib/__tests__/l6-catalog-slots.test.ts
+          app/lib/__tests__/l6-context-dedup.test.ts
+          app/lib/__tests__/l6-pins-first-shown.test.ts
+          app/lib/__tests__/l6-rerank-refusal-memo.test.ts
+          app/lib/__tests__/l6-verified-relevance-band.test.ts
+          app/lib/__tests__/parts-search-cancellation.test.ts
+          app/lib/agent/__tests__/l5-generation-task-tool.test.ts
+          app/lib/agent/__tests__/l6-inspect-bound.test.ts
+          app/lib/auth/__tests__/b16-0-23-tranche16-confinement-gate.test.ts
+          app/lib/auth/__tests__/b16-1b-auth-composition.test.ts
+          app/lib/component-resolution/__tests__/m1-boundaries.test.ts
+          app/lib/component-resolution/__tests__/m1-channel-and-receiver.test.ts
+          app/lib/component-resolution/__tests__/m1-compatibility.test.ts
+          app/lib/component-resolution/__tests__/m1-orchestration-withdrawal.test.ts
+          app/lib/component-resolution/__tests__/m1-page-intake-fixture.test.ts
+          app/lib/component-resolution/__tests__/m2-1-schematic-acquisition-discovery.test.ts
+          app/lib/component-resolution/__tests__/m2-2-cad-egress.test.ts
+          app/lib/component-resolution/__tests__/m2-2-cad-source-registry.test.ts
+          app/lib/component-resolution/__tests__/m2-3-cad-validation.test.ts
+          app/lib/component-resolution/__tests__/m2-3-object-store.test.ts
+          app/lib/component-resolution/__tests__/m2-4-handoff-boundaries.test.ts
+          app/lib/component-resolution/__tests__/m4-board-impact-agrees-with-preflight.test.ts
+          app/lib/component-resolution/__tests__/m4-board-impact.test.ts
+          app/lib/component-resolution/__tests__/m4-journal-size.test.ts
+          app/lib/component-resolution/__tests__/m4-receipt-board-impact.test.ts
+          app/lib/component-resolution/__tests__/m4-reresolve-after-undo.test.ts
+          app/lib/component-resolution/__tests__/m4-schematic-drift.test.ts
+          app/lib/durable-workflow/__tests__/repository-outbox.test.ts
+          app/lib/generation-task/__tests__/l2-task-contracts.test.ts
+          app/lib/generation-task/__tests__/l2-task-store.test.ts
+          app/lib/generation-task/__tests__/l3-continuation.test.ts
+          app/lib/generation-task/__tests__/l3-fencing.test.ts
+          app/lib/generation-task/__tests__/l3-input-allowance.test.ts
+          app/lib/generation-task/__tests__/l3-long-task.test.ts
+          app/lib/generation-task/__tests__/l3-strategies.test.ts
+          app/lib/generation-task/__tests__/l6-allowance-operator.test.ts
+          app/lib/generation-task/__tests__/l6-input-bound.test.ts
+          app/lib/generation-task/__tests__/l6-input-concurrency.test.ts
+          app/lib/generation-task/__tests__/l6-liveness-scope.test.ts
+          app/lib/generation-task/__tests__/l6-missing-role.test.ts
+          app/lib/generation-task/__tests__/l6-plan-reservation.test.ts
+          app/lib/generation-task/__tests__/l6-repeat-turns.test.ts
+          app/lib/generation-task/__tests__/l6-search-cache-keys.test.ts
+          app/lib/generation-task/__tests__/l6-unfilled-role-same-turn.test.ts
+          app/lib/generation-task/__tests__/l7-pump-idle-backoff.test.ts
+          app/lib/kicad/__tests__/l6-category-vocabulary.test.ts
+          app/lib/llm/__tests__/generation-request-cancellation.test.ts
+          app/lib/llm/__tests__/l6-provider-stop-reasons.test.ts
+          app/lib/llm/__tests__/l6-request-input-bound.test.ts
+          app/lib/llm/__tests__/l6-sdk-retries.test.ts
+          app/lib/project/__tests__/l4-task-client.test.ts
+          app/lib/schematic/__tests__/generation-recovery.test.ts
+          app/lib/schematic/__tests__/l3-block-slice.test.ts
+          app/lib/schematic/__tests__/l3-plan-merge.test.ts
+          app/lib/schematic/__tests__/l6-block-assumptions.test.ts
+          app/lib/schematic/__tests__/l6-plan-assumptions.test.ts
+          app/lib/schematic/__tests__/l6-shared-net-obligations.test.ts
+          app/lib/workflow/__tests__/m4-board-rebind.test.ts
+          app/lib/workflow/__tests__/m4-journey-board-behind.test.ts
+          app/api/export/kicad/__tests__/j2-sheets-export-refusal.test.ts
+          app/api/export/kicad/__tests__/j4-kicad-hierarchy-route.test.ts
+          app/api/schematic/__tests__/j2-tidy-sheets-refusal.test.ts
+          app/api/schematic/__tests__/j4-tidy-sheet.test.ts
+          app/api/simulate/__tests__/j2-simulate-sheets-refusal.test.ts
+          app/components/bom/__tests__/j4-bom-sheet-column.test.tsx
+          app/components/pcb/__tests__/j4-missing-parts-sheet.test.tsx
+          app/components/schematic/__tests__/j3-sheet-lens-hook.test.tsx
+          app/components/schematic/__tests__/j3-sheet-lens-strict-mode.test.tsx
+          app/components/schematic/__tests__/j3-sheet-navigator-layout.test.tsx
+          app/components/schematic/__tests__/j3-sheet-navigator.test.tsx
+          app/components/schematic/__tests__/j4-organize-dialog.test.tsx
+          app/components/schematic/__tests__/j5-open-sheet-wiring.test.tsx
+          app/components/schematic/__tests__/j5-sheet-organization-card.test.tsx
+          app/lib/__tests__/j4-kicad-hierarchy-export.test.ts
+          app/lib/__tests__/j4-spice-sheets.test.ts
+          app/lib/__tests__/j5-build-sheet-layout.test.ts
+          app/lib/agent/__tests__/j5-inspect-sheets.test.ts
+          app/lib/agent/__tests__/j5-organize-proposal-tool.test.ts
+          app/lib/bom/__tests__/j4-bom-sheets.test.ts
+          app/lib/engineering/__tests__/j1-sheet-operations.test.ts
+          app/lib/engineering/__tests__/j3-coordinator-sheets.test.ts
+          app/lib/engineering/__tests__/j5-inspect-sheet-aware.test.ts
+          app/lib/engineering/__tests__/j5-sheet-organization-proposal.test.ts
+          app/lib/generation-task/__tests__/j5-result-sheets-contract.test.ts
+          app/lib/generation-task/__tests__/j7-allowance-contention.test.ts
+          app/lib/generation-task/__tests__/j7-allowance-review.test.ts
+          app/lib/generation-task/__tests__/j7-provider-wait-sibling-end.test.ts
+          app/lib/generation-task/__tests__/j7-queue-beyond-slots.test.ts
+          app/lib/project/__tests__/j1-sheets-persistence.test.tsx
+          app/lib/project/__tests__/j3-board-checkpoint-sheets.test.ts
+          app/lib/project/__tests__/j3-canonical-adoption-sheets.test.ts
+          app/lib/project/__tests__/j3-history-step-sheets.test.ts
+          app/lib/project/__tests__/j3-page-carriage.test.ts
+          app/lib/project/__tests__/j3-sheet-navigation-store.test.ts
+          app/lib/project/__tests__/j3-sheet-replace-guard.test.ts
+          app/lib/project/__tests__/j5-page-intake-sheets.test.ts
+          app/lib/project/__tests__/j5-pending-proposal-sheets.test.ts
+          app/lib/project/__tests__/j5-result-sheets-client.test.ts
+          app/lib/project/__tests__/j5-sheet-organization-events.test.ts
+          app/lib/project/__tests__/j5-sheeted-replace-transaction.test.ts
+          app/lib/schematic/__tests__/j1-connectivity-caller-ratchet.test.ts
+          app/lib/schematic/__tests__/j1-project-connectivity.test.ts
+          app/lib/schematic/__tests__/j2-consumers-golden.test.ts
+          app/lib/schematic/__tests__/j2-project-consumers.test.ts
+          app/lib/schematic/__tests__/j3-fixture-readability.test.ts
+          app/lib/schematic/__tests__/j3-sheet-lens.test.ts
+          app/lib/schematic/__tests__/j4-flat-drone-fixture.test.ts
+          app/lib/schematic/__tests__/j4-organize-sheets.test.ts
+          app/lib/schematic/__tests__/j4-rail-label-normalisation.test.ts
+          app/lib/schematic/__tests__/j4-sheet-tidy.test.ts
+          app/lib/schematic/__tests__/j5-generated-sheets.test.ts
+          app/lib/schematic/__tests__/j5-organize-port-names.test.ts
+          app/lib/spice/__tests__/j4-ir-sheets.test.ts
           --exclude 'app/lib/project/__tests__/b18-b-import-gates.test.ts'
           --exclude 'app/lib/distributors/__tests__/b19-distributor-egress.test.ts'
           --exclude 'app/lib/mcp/**'
+          --exclude 'app/lib/agent/orchestration/__tests__/**'
           --exclude 'app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts'
           --exclude 'app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts'
           --exclude 'app/lib/distributors/__tests__/b19-connector-policy.test.ts'
@@ -329,6 +472,81 @@ jobs:
           --exclude 'app/lib/auth/__tests__/b16-0-2-gates.test.ts'
           --exclude 'app/api/__tests__/b16-0-auth-route-coverage.test.ts'
           --exclude 'app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts'
+          --exclude 'app/api/schematic/__tests__/pr-c-build-iteration-cap.test.ts'
+          --exclude 'app/api/schematic/__tests__/pr-c-build-multi-status.test.ts'
+          --exclude 'app/api/schematic/__tests__/pr-c-theory-route-classification.test.ts'
+          --exclude 'app/components/pcb/__tests__/pr-c-sync-feedback.test.ts'
+          --exclude 'app/components/workflow/__tests__/pr-c-journey-strip.test.tsx'
+          --exclude 'app/lib/__tests__/pr-c-build-loop-budget.test.ts'
+          --exclude 'app/lib/project/__tests__/pr-c-composer-question.test.ts'
+          --exclude 'app/lib/project/__tests__/pr-c-pending-proposal-store.test.ts'
+          --exclude 'app/lib/project/__tests__/pr-c-theory-request.test.ts'
+          --exclude 'app/lib/workflow/__tests__/pr-c-journey.test.ts'
+          --exclude 'app/lib/schematic/__tests__/pr-e-design-checks.test.ts'
+          --exclude 'app/lib/agent/__tests__/pr-f-placement-intent.test.ts'
+          --exclude 'app/lib/agent/__tests__/pr-f-stackup-candidate.test.ts'
+          --exclude 'app/lib/llm/__tests__/pr-f-astra-profile.test.ts'
+          --exclude 'app/lib/parts/__tests__/pr-f-missing-facts-read.test.ts'
+          --exclude 'app/lib/parts/__tests__/pr-f-missing-facts.test.ts'
+          --exclude 'app/lib/pcb/experiments/__tests__/pr-f-capability-matrix.test.ts'
+          --exclude 'app/lib/pcb/experiments/__tests__/pr-f-placement-routing-feedback.test.ts'
+          --exclude 'app/lib/project/__tests__/pr-g-artifact-receivers.test.ts'
+          --exclude 'app/api/generation-tasks/__tests__/l7-fixture-vertical-slice.test.ts'
+          --exclude 'app/lib/component-resolution/__tests__/m1-boundaries.test.ts'
+          --exclude 'app/api/export/kicad/__tests__/j2-sheets-export-refusal.test.ts'
+          --exclude 'app/api/export/kicad/__tests__/j4-kicad-hierarchy-route.test.ts'
+          --exclude 'app/api/schematic/__tests__/j2-tidy-sheets-refusal.test.ts'
+          --exclude 'app/api/schematic/__tests__/j4-tidy-sheet.test.ts'
+          --exclude 'app/api/simulate/__tests__/j2-simulate-sheets-refusal.test.ts'
+          --exclude 'app/components/bom/__tests__/j4-bom-sheet-column.test.tsx'
+          --exclude 'app/components/pcb/__tests__/j4-missing-parts-sheet.test.tsx'
+          --exclude 'app/components/schematic/__tests__/j3-sheet-lens-hook.test.tsx'
+          --exclude 'app/components/schematic/__tests__/j3-sheet-lens-strict-mode.test.tsx'
+          --exclude 'app/components/schematic/__tests__/j3-sheet-navigator-layout.test.tsx'
+          --exclude 'app/components/schematic/__tests__/j3-sheet-navigator.test.tsx'
+          --exclude 'app/components/schematic/__tests__/j4-organize-dialog.test.tsx'
+          --exclude 'app/components/schematic/__tests__/j5-open-sheet-wiring.test.tsx'
+          --exclude 'app/components/schematic/__tests__/j5-sheet-organization-card.test.tsx'
+          --exclude 'app/lib/__tests__/j4-kicad-hierarchy-export.test.ts'
+          --exclude 'app/lib/__tests__/j4-spice-sheets.test.ts'
+          --exclude 'app/lib/__tests__/j5-build-sheet-layout.test.ts'
+          --exclude 'app/lib/agent/__tests__/j5-inspect-sheets.test.ts'
+          --exclude 'app/lib/agent/__tests__/j5-organize-proposal-tool.test.ts'
+          --exclude 'app/lib/bom/__tests__/j4-bom-sheets.test.ts'
+          --exclude 'app/lib/engineering/__tests__/j1-sheet-operations.test.ts'
+          --exclude 'app/lib/engineering/__tests__/j3-coordinator-sheets.test.ts'
+          --exclude 'app/lib/engineering/__tests__/j5-inspect-sheet-aware.test.ts'
+          --exclude 'app/lib/engineering/__tests__/j5-sheet-organization-proposal.test.ts'
+          --exclude 'app/lib/generation-task/__tests__/j5-result-sheets-contract.test.ts'
+          --exclude 'app/lib/generation-task/__tests__/j7-allowance-contention.test.ts'
+          --exclude 'app/lib/generation-task/__tests__/j7-allowance-review.test.ts'
+          --exclude 'app/lib/generation-task/__tests__/j7-provider-wait-sibling-end.test.ts'
+          --exclude 'app/lib/generation-task/__tests__/j7-queue-beyond-slots.test.ts'
+          --exclude 'app/lib/project/__tests__/j1-sheets-persistence.test.tsx'
+          --exclude 'app/lib/project/__tests__/j3-board-checkpoint-sheets.test.ts'
+          --exclude 'app/lib/project/__tests__/j3-canonical-adoption-sheets.test.ts'
+          --exclude 'app/lib/project/__tests__/j3-history-step-sheets.test.ts'
+          --exclude 'app/lib/project/__tests__/j3-page-carriage.test.ts'
+          --exclude 'app/lib/project/__tests__/j3-sheet-navigation-store.test.ts'
+          --exclude 'app/lib/project/__tests__/j3-sheet-replace-guard.test.ts'
+          --exclude 'app/lib/project/__tests__/j5-page-intake-sheets.test.ts'
+          --exclude 'app/lib/project/__tests__/j5-pending-proposal-sheets.test.ts'
+          --exclude 'app/lib/project/__tests__/j5-result-sheets-client.test.ts'
+          --exclude 'app/lib/project/__tests__/j5-sheet-organization-events.test.ts'
+          --exclude 'app/lib/project/__tests__/j5-sheeted-replace-transaction.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j1-connectivity-caller-ratchet.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j1-project-connectivity.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j2-consumers-golden.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j2-project-consumers.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j3-fixture-readability.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j3-sheet-lens.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j4-flat-drone-fixture.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j4-organize-sheets.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j4-rail-label-normalisation.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j4-sheet-tidy.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j5-generated-sheets.test.ts'
+          --exclude 'app/lib/schematic/__tests__/j5-organize-port-names.test.ts'
+          --exclude 'app/lib/spice/__tests__/j4-ir-sheets.test.ts'
           --reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml
       - name: Upload evidence and diagnostics
         if: always()
@@ -382,6 +600,19 @@ jobs:
           app/lib/qualification/database/__tests__/b24-c2-retention-pglite.test.ts
           app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts
           app/lib/qualification/database/__tests__/b24-d2-restart-pglite.test.ts
+          app/lib/__tests__/l6-embedding-cache.test.ts
+          app/lib/__tests__/l6-search-stall-repro.test.ts
+          app/lib/component-resolution/__tests__/m1-led-dimmer-resolution.test.ts
+          app/lib/component-resolution/__tests__/m2-3-acquisition-pipeline-pglite.test.ts
+          app/lib/component-resolution/__tests__/m2-5-resolution-after-acquisition-pglite.test.ts
+          app/lib/component-resolution/__tests__/m2-6-acquisition-refusals-pglite.test.ts
+          app/lib/component-resolution/__tests__/m2-6-reuse-isolation-pglite.test.ts
+          app/lib/component-resolution/__tests__/m2-7-existing-board-acquired-binding.test.ts
+          app/lib/generation-task/__tests__/l2-generation-task-pglite.test.ts
+          app/lib/generation-task/__tests__/l3-crash-resume.test.ts
+          app/lib/generation-task/__tests__/l3-worker-process.test.ts
+          app/lib/generation-task/__tests__/l3-worker-scope.test.ts
+          app/lib/generation-task/__tests__/l6-catalog-epoch.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-database-delivery.xml
       - name: Upload diagnostics
         if: failure()
@@ -416,7 +647,7 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm exec playwright test
         env:
-          SIRKIT_E2E_SKIP: "**/multi-tab.spec.ts,**/crash-recovery.spec.ts,**/keyboard-and-focus.spec.ts,**/minimum-width.spec.ts" # [B24-D4] OD-30: all four run in page-browser-e2e-b24
+          SIRKIT_E2E_SKIP: "**/multi-tab.spec.ts,**/crash-recovery.spec.ts,**/keyboard-and-focus.spec.ts,**/minimum-width.spec.ts,**/agent-execution.spec.ts" # [B24-D4] OD-30: all four run in page-browser-e2e-b24; [PR-L7, 2026-10-20] OD-254: agent-execution runs in page-browser-e2e-agent
       # [B21 F2] D21-43: the orchestration spec on its own config and flag-on server, AFTER the step above - one next dev at a time
       - name: Orchestration browser proof (B21 F2)
         run: pnpm exec playwright test -c playwright.orchestration.config.ts
@@ -580,6 +811,7 @@ jobs:
           app/lib/project/__tests__/b18-b-import-gates.test.ts
           app/lib/distributors/__tests__/b19-distributor-egress.test.ts
           app/lib/mcp
+          app/lib/agent/orchestration/__tests__
           app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts
           app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts
           app/lib/distributors/__tests__/b19-connector-policy.test.ts
@@ -615,6 +847,81 @@ jobs:
           app/lib/auth/__tests__/b16-0-2-gates.test.ts
           app/api/__tests__/b16-0-auth-route-coverage.test.ts
           app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts
+          app/api/schematic/__tests__/pr-c-build-iteration-cap.test.ts
+          app/api/schematic/__tests__/pr-c-build-multi-status.test.ts
+          app/api/schematic/__tests__/pr-c-theory-route-classification.test.ts
+          app/components/pcb/__tests__/pr-c-sync-feedback.test.ts
+          app/components/workflow/__tests__/pr-c-journey-strip.test.tsx
+          app/lib/__tests__/pr-c-build-loop-budget.test.ts
+          app/lib/project/__tests__/pr-c-composer-question.test.ts
+          app/lib/project/__tests__/pr-c-pending-proposal-store.test.ts
+          app/lib/project/__tests__/pr-c-theory-request.test.ts
+          app/lib/workflow/__tests__/pr-c-journey.test.ts
+          app/lib/schematic/__tests__/pr-e-design-checks.test.ts
+          app/lib/agent/__tests__/pr-f-placement-intent.test.ts
+          app/lib/agent/__tests__/pr-f-stackup-candidate.test.ts
+          app/lib/llm/__tests__/pr-f-astra-profile.test.ts
+          app/lib/parts/__tests__/pr-f-missing-facts-read.test.ts
+          app/lib/parts/__tests__/pr-f-missing-facts.test.ts
+          app/lib/pcb/experiments/__tests__/pr-f-capability-matrix.test.ts
+          app/lib/pcb/experiments/__tests__/pr-f-placement-routing-feedback.test.ts
+          app/lib/project/__tests__/pr-g-artifact-receivers.test.ts
+          app/api/generation-tasks/__tests__/l7-fixture-vertical-slice.test.ts
+          app/lib/component-resolution/__tests__/m1-boundaries.test.ts
+          app/api/export/kicad/__tests__/j2-sheets-export-refusal.test.ts
+          app/api/export/kicad/__tests__/j4-kicad-hierarchy-route.test.ts
+          app/api/schematic/__tests__/j2-tidy-sheets-refusal.test.ts
+          app/api/schematic/__tests__/j4-tidy-sheet.test.ts
+          app/api/simulate/__tests__/j2-simulate-sheets-refusal.test.ts
+          app/components/bom/__tests__/j4-bom-sheet-column.test.tsx
+          app/components/pcb/__tests__/j4-missing-parts-sheet.test.tsx
+          app/components/schematic/__tests__/j3-sheet-lens-hook.test.tsx
+          app/components/schematic/__tests__/j3-sheet-lens-strict-mode.test.tsx
+          app/components/schematic/__tests__/j3-sheet-navigator-layout.test.tsx
+          app/components/schematic/__tests__/j3-sheet-navigator.test.tsx
+          app/components/schematic/__tests__/j4-organize-dialog.test.tsx
+          app/components/schematic/__tests__/j5-open-sheet-wiring.test.tsx
+          app/components/schematic/__tests__/j5-sheet-organization-card.test.tsx
+          app/lib/__tests__/j4-kicad-hierarchy-export.test.ts
+          app/lib/__tests__/j4-spice-sheets.test.ts
+          app/lib/__tests__/j5-build-sheet-layout.test.ts
+          app/lib/agent/__tests__/j5-inspect-sheets.test.ts
+          app/lib/agent/__tests__/j5-organize-proposal-tool.test.ts
+          app/lib/bom/__tests__/j4-bom-sheets.test.ts
+          app/lib/engineering/__tests__/j1-sheet-operations.test.ts
+          app/lib/engineering/__tests__/j3-coordinator-sheets.test.ts
+          app/lib/engineering/__tests__/j5-inspect-sheet-aware.test.ts
+          app/lib/engineering/__tests__/j5-sheet-organization-proposal.test.ts
+          app/lib/generation-task/__tests__/j5-result-sheets-contract.test.ts
+          app/lib/generation-task/__tests__/j7-allowance-contention.test.ts
+          app/lib/generation-task/__tests__/j7-allowance-review.test.ts
+          app/lib/generation-task/__tests__/j7-provider-wait-sibling-end.test.ts
+          app/lib/generation-task/__tests__/j7-queue-beyond-slots.test.ts
+          app/lib/project/__tests__/j1-sheets-persistence.test.tsx
+          app/lib/project/__tests__/j3-board-checkpoint-sheets.test.ts
+          app/lib/project/__tests__/j3-canonical-adoption-sheets.test.ts
+          app/lib/project/__tests__/j3-history-step-sheets.test.ts
+          app/lib/project/__tests__/j3-page-carriage.test.ts
+          app/lib/project/__tests__/j3-sheet-navigation-store.test.ts
+          app/lib/project/__tests__/j3-sheet-replace-guard.test.ts
+          app/lib/project/__tests__/j5-page-intake-sheets.test.ts
+          app/lib/project/__tests__/j5-pending-proposal-sheets.test.ts
+          app/lib/project/__tests__/j5-result-sheets-client.test.ts
+          app/lib/project/__tests__/j5-sheet-organization-events.test.ts
+          app/lib/project/__tests__/j5-sheeted-replace-transaction.test.ts
+          app/lib/schematic/__tests__/j1-connectivity-caller-ratchet.test.ts
+          app/lib/schematic/__tests__/j1-project-connectivity.test.ts
+          app/lib/schematic/__tests__/j2-consumers-golden.test.ts
+          app/lib/schematic/__tests__/j2-project-consumers.test.ts
+          app/lib/schematic/__tests__/j3-fixture-readability.test.ts
+          app/lib/schematic/__tests__/j3-sheet-lens.test.ts
+          app/lib/schematic/__tests__/j4-flat-drone-fixture.test.ts
+          app/lib/schematic/__tests__/j4-organize-sheets.test.ts
+          app/lib/schematic/__tests__/j4-rail-label-normalisation.test.ts
+          app/lib/schematic/__tests__/j4-sheet-tidy.test.ts
+          app/lib/schematic/__tests__/j5-generated-sheets.test.ts
+          app/lib/schematic/__tests__/j5-organize-port-names.test.ts
+          app/lib/spice/__tests__/j4-ir-sheets.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-agent-boundary-suites.xml
       - name: Upload diagnostics
         if: always()
@@ -632,7 +939,7 @@ jobs:
   # page-browser-e2e's first browser step leaves them out through SIRKIT_E2E_SKIP. The same setup steps; no secret, database or live resource.
   page-browser-e2e-b24:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       CI: "true"
     steps:
@@ -661,3 +968,38 @@ jobs:
           retention-days: 14
       - if: always() # [B24-D1] OD-30: page-browser-e2e-b24's headroom
         run: pnpm exec tsx scripts/ci-job-headroom.ts .github/workflows/deterministic-manufacturing.yml page-browser-e2e-b24
+
+  # [PR-L7] OD-30, OD-254: page-browser-e2e reached its 30-minute limit at 0f1c446b's run (73 tests in 28.1 min, then the orchestration
+  # step was cancelled), agent-execution alone 1,022 s of it (464 s on the previous green run), so that spec runs here instead;
+  # page-browser-e2e's first browser step leaves it out through SIRKIT_E2E_SKIP. The same setup steps; no secret, database or live resource.
+  page-browser-e2e-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "true"
+    steps:
+      - run: echo "SIRKIT_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV" # [B24-D1] OD-30: page-browser-e2e-agent's start
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: The agent-execution browser spec (OD-254; OD-30's split)
+        run: pnpm exec playwright test e2e/agent-execution.spec.ts
+      - name: Upload browser evidence (the agent-execution spec)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: page-browser-e2e-agent-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
+      - if: always() # [B24-D1] OD-30: page-browser-e2e-agent's headroom
+        run: pnpm exec tsx scripts/ci-job-headroom.ts .github/workflows/deterministic-manufacturing.yml page-browser-e2e-agent

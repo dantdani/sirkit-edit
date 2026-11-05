@@ -155,7 +155,7 @@ describe("[B21 E1] the llm-provider meters and breaker (OD-115)", () => {
       return openAIResultResponse(role);
     });
     const anthropic = fakeAnthropic((params) => anthropicResultMessage(roleOf(params)));
-    const env = { [ROLE_MODELS_ENV]: JSON.stringify({ "requirements-analyst": { provider: "anthropic", model: "claude-sonnet-4-5" }, "manufacturing-readiness-reviewer": { provider: "openai", model: "gpt-6-astra" } }) };
+    const env = { [ROLE_MODELS_ENV]: JSON.stringify({ "requirements-analyst": { provider: "anthropic", model: "claude-sonnet-4-5" }, "manufacturing-readiness-reviewer": { provider: "openai", model: "gpt-6-luna" } }) }; // [PR-F, 2026-10-17] reviewed pin move: the refused example was gpt-6-astra, now admitted when the role map names it (pr-f-astra-profile); gpt-6-luna is a documented sibling without a profile
     const { providers, built } = fakeProviders(openai, anthropic, { env });
     const repository = new InMemoryDurableWorkflowRepository();
     const run = await runE1Dag(["requirements-analyst", "component-sourcing-evidence", "verification-critic", "manufacturing-readiness-reviewer"], providers, { repository });
@@ -168,7 +168,7 @@ describe("[B21 E1] the llm-provider meters and breaker (OD-115)", () => {
     ]);
     expect(run.ran!.tasks[1]!.reason).toMatch(/^result_tool_not_called: /);
     expect(run.ran!.tasks[2]!.reason).toMatch(/^stop_max_tokens: /);
-    expect(run.ran!.tasks[3]!.reason).toMatch(/^model_unqualified: .*gpt-6-astra.*LB-9/);
+    expect(run.ran!.tasks[3]!.reason).toMatch(/^model_unqualified: .*gpt-6-luna.*LB-9/); // [PR-F, 2026-10-17] the refused example (was gpt-6-astra)
     expect(built.map((route) => [route.role, route.provider, route.model])).toEqual([["requirements-analyst", "anthropic", "claude-sonnet-4-5"], ["component-sourcing-evidence", "openai", "gpt-5.6-sol"], ["verification-critic", "openai", "gpt-5.6-sol"]]);
     expect(anthropic.calls.map((params) => params.model)).toEqual(["claude-sonnet-4-5"]);
     expect(openai.calls.map((params) => params.model)).toEqual(["gpt-5.6-sol", "gpt-5.6-sol"]);

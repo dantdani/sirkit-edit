@@ -183,7 +183,7 @@ export interface AssembleAgentContextInput {
   externalAcquisitionAvailable?: boolean;
   /** [B20 A4] SERVER fact from the composition root: the external tool port (approved MCP servers) is bound to this run. Never a
    *  body field. It becomes the external-mcp-observation authority only alongside a verified canonical state. */
-  mcpObservationAvailable?: boolean; /** [B22-B] SERVER fact from the composition root: the named computation port is bound to this run. Never a body field. */ computationAvailable?: boolean;
+  mcpObservationAvailable?: boolean; /** [B22-B] SERVER fact from the composition root: the named computation port is bound to this run. Never a body field. */ computationAvailable?: boolean; /** [PR-D] SERVER fact from the composition root: the Build-mode generation port is bound to this run (OD-243). Never a body field. It becomes the schematic-generation authority only alongside a validated schematic (the base the proposal replaces). */ schematicGenerationAvailable?: boolean; /** [PR-D d2] SERVER fact from the composition root: the catalog inspection port is bound to this run. Never a body field. It becomes the catalog authority on its own (the catalog is server-owned: no board and no schematic needed). */ catalogInspectionAvailable?: boolean; /** [PR-M, 2026-10-17] SERVER facts from the composition root: the published revision evidence port and the local catalog search port are bound to this run. Never body fields. Each is claimed only beside the catalog fact (the search also beside the evidence fact); neither is a new authority and neither needs a board. */ componentResolutionAvailable?: boolean; catalogSearchAvailable?: boolean; /** [PR-M, 2026-10-18] M2: SERVER fact from the composition root: the CAD acquisition port is bound to this run. Never a body field. It becomes the run's fact only beside a validated schematic (no board: the acquisition is what lets the first board exist). */ cadAcquisitionAvailable?: boolean;
 }
 
 /** [B10] oversized selections are REJECTED (resource withheld), never
@@ -349,7 +349,7 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
   const canonicalRevisionDigest = canonicalState ? computeProjectRevision(canonicalState).canonicalStateDigest : null;
   const projectState: ToolProjectState[] = [];
   if (canonicalState) projectState.push("board-present");
-  if (schematic) projectState.push("schematic-present");
+  if (schematic) projectState.push("schematic-present"); if (schematic && schematic.components.length === 0) projectState.push("schematic-build-mode"); if (input.catalogInspectionAvailable === true) projectState.push("catalog-available"); /* [PR-M, 2026-10-17] the registry's catalog-available state is claimed exactly with the server's catalog fact (never a body field), so a tool that needs server catalog facts but is not a catalog-authority read - the component resolution proposal - is withheld at DISCOVERY without them, as the catalog reads are */ // [PR-D] no Theory component on the validated sheet (empty, or a Build sheet of catalog parts): the server's fact for the editor's Build mode, which the body does not carry (OD-243)
 
   // [B09.3] the head mark claimed on the context follows the validated
   // schematic: without a validated schematic the mark is a label with no
@@ -493,7 +493,7 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
   // [B19-E E6] the external read tools need the server's port AND a verified canonical state (reads never run board-less)
   const externalAcquisition = input.externalAcquisitionAvailable === true && canonicalState !== null;
   // [B20 A4] the external tool read needs the server's MCP port AND a verified canonical state; the fact is independent of E6's
-  const mcpObservation = input.mcpObservationAvailable === true && canonicalState !== null; const computation = input.computationAvailable === true; // [B22-B] the named computations need only the server's port (an equation needs no board; a parse refuses an absent board itself)
+  const mcpObservation = input.mcpObservationAvailable === true && canonicalState !== null; const computation = input.computationAvailable === true; const schematicGeneration = input.schematicGenerationAvailable === true && schematic !== null; const catalogInspection = input.catalogInspectionAvailable === true; /* [PR-D d2] the catalog inspection needs only the server's catalog port (the catalog is server-owned) */ const componentResolution = input.componentResolutionAvailable === true && catalogInspection; const catalogSearch = input.catalogSearchAvailable === true && componentResolution; const cadAcquisition = input.cadAcquisitionAvailable === true && schematic !== null; /* [PR-M, 2026-10-18] M2: the acquisition fact rides a validated schematic only (independent of canonicalState: line 494's external acquisition stays board-gated) */ /* [PR-M, 2026-10-17] the resolution facts ride the catalog fact (the evidence port is useless without the catalog; the search without both) */ // [B22-B] the named computations need only the server's port (an equation needs no board; a parse refuses an absent board itself); [PR-D] the generation proposal needs the server's port AND a validated schematic (the base it replaces), never a board
   const discovery: DiscoveryContext = {
     tenantId: input.tenantId,
     projectId: input.projectId,
@@ -521,7 +521,7 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
     // server-owned component-authority resource was loaded and verified.
     // [B19-E E6] external-observation is advertised ONLY with the server's port fact and a verified canonical state.
     // [B20 A4] external-mcp-observation likewise, ONLY with the server's MCP port fact and a verified canonical state.
-    availableAuthority: [...(componentAuthority ? ["local-working-copy", "durable-server-board"] : ["local-working-copy"]), ...(externalAcquisition ? ["external-observation"] : []), ...(mcpObservation ? ["external-mcp-observation"] : []), ...(computation ? ["computation-engine"] : [])], // [B22-B] computation-engine ONLY with the server's computation fact
+    availableAuthority: [...(componentAuthority ? ["local-working-copy", "durable-server-board"] : ["local-working-copy"]), ...(externalAcquisition ? ["external-observation"] : []), ...(mcpObservation ? ["external-mcp-observation"] : []), ...(computation ? ["computation-engine"] : []), ...(schematicGeneration ? ["schematic-generation"] : []), ...(catalogInspection ? ["catalog"] : []) /* [PR-D d2] catalog ONLY with the server's catalog inspection fact */], // [B22-B] computation-engine ONLY with the server's computation fact; [PR-D] schematic-generation ONLY with the server's generation fact and a validated schematic
     providerCapabilities: {
       supportsJsonSchema: input.providerSupportsJsonSchema ?? true,
       toolNameMaxLength: 64,
@@ -561,7 +561,7 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
       pcbProposalBasis,
       executionGrantsAvailable: grantable,
       ...(externalAcquisition ? { externalAcquisitionAvailable: true } : {}),
-      ...(mcpObservation ? { mcpObservationAvailable: true } : {}), ...(computation ? { computationAvailable: true } : {}), // [B20 A4]; [B22-B] the computation fact
+      ...(mcpObservation ? { mcpObservationAvailable: true } : {}), ...(computation ? { computationAvailable: true } : {}), ...(schematicGeneration ? { schematicGenerationAvailable: true } : {}), ...(catalogInspection ? { catalogInspectionAvailable: true } : {}), /* [PR-D d2] the catalog fact */ ...(componentResolution ? { componentResolutionAvailable: true } : {}), ...(catalogSearch ? { catalogSearchAvailable: true } : {}), ...(cadAcquisition ? { cadAcquisitionAvailable: true } : {}), /* [PR-M, 2026-10-18] M2: the acquisition fact */ /* [PR-M, 2026-10-17] the resolution facts */ // [B20 A4]; [B22-B] the computation fact; [PR-D] the generation fact
       view,
       viewDigest,
       autonomy,

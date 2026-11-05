@@ -12,6 +12,7 @@ import {
   PCB_SYNC_DEMO_PUBLICATION_REQUEST_VERSION,
   PCB_SYNC_SNAPSHOT_VERSION,
   type PcbSyncApplyRequest,
+  type PcbSyncApplyResult,
   type PcbSyncAuthoritativeSnapshot,
   type PcbSyncBoardLoadResult,
   type PcbSyncDemoSnapshotPublicationRequest,
@@ -39,6 +40,15 @@ function errorResponse(error: unknown): Response {
 }
 
 function fail(code: string): never { throw new Error(code); }
+
+// [PR-C] a refused apply (409) names its class and says why in one sentence beside the full result: the first blocker's
+// code when there is one, else the status itself as PS_APPLY_<STATUS>; the human sentence is per status, with the first
+// blocker's message (bounded) appended. The 200 path is untouched.
+const APPLY_REFUSAL_SENTENCES: Partial<Record<PcbSyncApplyResult["status"], string>> = { blocked_stale: "The plan is stale against the current board; refresh and preflight again.", blocked_authorization: "The actor is not authorized to apply this plan.", failed_precommit: "The apply failed before anything was committed.", recoverable_commit_uncertainty: "The commit outcome is uncertain; reload the board before retrying." };
+function applyRefusal(result: PcbSyncApplyResult): { code: string; error: string } {
+  const blocker = result.blockers[0], sentence = APPLY_REFUSAL_SENTENCES[result.status] ?? `The apply was refused (${result.status}).`;
+  return { code: blocker?.code ?? `PS_APPLY_${result.status.toUpperCase()}`, error: blocker && typeof blocker.message === "string" && blocker.message.trim() ? `${sentence} ${blocker.message.trim().slice(0, 200)}` : sentence };
+}
 function exact(value: Record<string, unknown>, keys: readonly string[]): void { const allowed = new Set(keys); if (Object.keys(value).some((key) => !allowed.has(key))) fail("PS_API_UNKNOWN_FIELD"); }
 function text(value: unknown, code: string, max = 256): string { if (typeof value !== "string" || !value.trim() || value.length > max) fail(code); return value.trim(); }
 function id(value: unknown, code: string): string { const result = text(value, code); if (!ID.test(result)) fail(code); return result; }
@@ -141,7 +151,8 @@ export function createPcbSyncPostHandler(service: PcbSynchronizationService, fea
         if (!object(body.request)) return Response.json({ ok: false, code: "PS_API_REQUEST_REQUIRED", error: "request object is required." }, { status: 400, headers: { "Cache-Control": "no-store" } });
         const input = body.request as unknown as PcbSyncApplyRequest;
         const result = await service.apply({ ...input, tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId, actorContext: scope.actor }, request.signal);
-        return Response.json({ ok: result.status === "applied" || result.status === "idempotent_replay", operation: "apply", boardChanged: result.boardChanged, result }, { status: result.status === "applied" || result.status === "idempotent_replay" ? 200 : 409, headers: { "Cache-Control": "no-store", "X-Sirkit-Pcb-Sync-State": state } });
+        const accepted = result.status === "applied" || result.status === "idempotent_replay";
+        return Response.json({ ok: accepted, operation: "apply", boardChanged: result.boardChanged, ...(accepted ? {} : applyRefusal(result)), result }, { status: accepted ? 200 : 409, headers: { "Cache-Control": "no-store", "X-Sirkit-Pcb-Sync-State": state } });
       }
       // ── [B16-C.1] routed-board revision lifecycle: preview the rework plan, then derive it deliberately ──
       if (operation === "preview_board_revision" || operation === "derive_board_revision") {

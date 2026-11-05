@@ -42,7 +42,10 @@ export const DEMO_FIXTURES: readonly DemoFixture[] = [
 `;
 
 for (const { file, libName } of SOURCES) {
-  const source = readFileSync(join(FIXTURES_DIR, file), "utf8");
+  // [PR-J3 integration, 2026-10-23] the .kicad_mod fixtures are kept byte-exact (CRLF, `-text` in their .gitattributes) while this
+  // output is a text source git normalizes to LF on commit (`* text=auto eol=lf`): embed LF, so a run reproduces the committed bytes
+  // instead of leaving app/lib/pcb/demo/fixtures.ts modified (CRLF inside the template literals) after every generator pass
+  const source = readFileSync(join(FIXTURES_DIR, file), "utf8").replace(/\r\n?/g, "\n");
   const name = file.replace(/\.kicad_mod$/, "");
   out += `  {\n    libName: ${JSON.stringify(libName)},\n    name: ${JSON.stringify(name)},\n    source: \`${escapeTemplate(source)}\`,\n  },\n`;
 }

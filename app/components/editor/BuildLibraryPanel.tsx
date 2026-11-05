@@ -37,7 +37,7 @@ import { Badge } from "@/components/ui/badge";
 import { KicadSymbol } from "@/app/components/schematic/KicadSymbol";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import { DatasheetLink } from "@/app/components/parts/DatasheetLink"; // [B19-D I5c row 34, review]
-import { AtomicPublicationReviewSection, type AtomicPublicationPrefill } from "@/app/components/parts/AtomicPublicationReviewPanel"; // [B19-E E4]
+import { AtomicPublicationReviewSection, type AtomicPublicationPrefill } from "@/app/components/parts/AtomicPublicationReviewPanel"; import { ComponentReviewInbox } from "@/app/components/parts/ComponentReviewInbox"; // [B19-E E4]; [PR-M, 2026-10-18] M2: + the governance project's component review inbox (in place: no line moves)
 import { adoptPublishedExactRevision, type AdoptedAtomicIdentity } from "@/lib/build-auto-layout"; // [B19-E E5]
 import type { CachedPart } from "@/app/lib/parts-cache";
 import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
@@ -338,10 +338,10 @@ export function BuildLibraryPanel({
               <X className="size-3.5" />
             </button>
           </div>
-          <AtomicPublicationReviewSection key={`${evidenceReview.exactMpn ?? ""}:${evidenceReview.partId ?? ""}`} projectScope={projectScope} prefill={evidenceReview} />
+          <AtomicPublicationReviewSection key={`${evidenceReview.exactMpn ?? ""}:${evidenceReview.partId ?? ""}:${evidenceReview.acquisition?.handoffId ?? ""}`} projectScope={projectScope} prefill={evidenceReview} />
         </div>
       )}
-      {selectedCategory === null
+      <ComponentReviewInbox projectScope={projectScope} onOpen={(prefill) => requestEvidenceReview(prefill)} />{/* [PR-M, 2026-10-18] M2: in the catalog governance project only, the acquisition handoffs waiting for review; each opens the evidence review above, prefilled (in place) */}{selectedCategory === null
         ? renderCategoryList()
         : renderPartsList()}
 
@@ -628,7 +628,7 @@ function PreviewPanel({
     if (exactIdentity) onPlace?.(partId, { exactIdentity });
   }
   return (
-    <aside className="absolute top-0 left-full h-full w-96 z-30 bg-zinc-950 border-l border-zinc-800 shadow-2xl flex flex-col">
+    <aside className="absolute top-0 left-full h-full w-96 z-30 bg-zinc-950 border-l border-zinc-800 shadow-sm flex flex-col">
       <div className="h-10 px-3 flex items-center gap-2 border-b border-zinc-800 shrink-0">
         <span className="text-sm text-zinc-200 font-medium flex-1 truncate">
           {detail?.name ?? "Part preview"}

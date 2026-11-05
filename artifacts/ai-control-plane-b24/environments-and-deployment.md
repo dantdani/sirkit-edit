@@ -85,7 +85,7 @@ lead. Every citation in section 14 is the line at this increment's working tree;
   `SIRKIT_ANTHROPIC_MODEL_EMPTY` or `SIRKIT_ANTHROPIC_MODEL_PADDED`. The module stays dependency-free and B21's `:11` holds.
 - **Refused rather than sent.** `sendableAnthropicModel` (`anthropic-model-guard.ts`, C18) throws `LLMProviderError("anthropic",
   "bad_request")` while the request is built, in place at `adapters.ts:219` and `anthropic-provider.ts:107` (C20, C22), each import after
-  the file's last line (C21, C23): neither client calls the SDK with an empty or padded model. No provider-SDK importer is added.
+  the file's last line (C21, C23): neither client calls the SDK with an empty or padded model. No provider-SDK importer is added. [PR-L step 0, 2026-10-17] C23 190 -> 196: the generation-budget correction (OD-251) adds the SDK request options and the aborted-error handling above the footer import; the anchor is unchanged and still after the file's last line, the `b24-a1-configuration` case 8 pin moved with it. Appended on this line so no line moves.
   [B24-A1 review] regressions-4: the refusal carries its own message (C58): Sirkit did not send the request, and the cause is the server
   setting `SIRKIT_ANTHROPIC_MODEL` - not the generic `bad_request` text, which says Anthropic rejected a request Sirkit built. The reason
   stays `bad_request`, as the task text set it (OD-223 (l)). **CONFIRMED** (`b24-a1-configuration` 7, 8).
@@ -106,7 +106,7 @@ lead. Every citation in section 14 is the line at this increment's working tree;
   catalog names inside a description string). **CONFIRMED** (`b24-a1-flags` 1, 2: the census is re-derived from the tree). [B24-A2, 2026-10-06] 49 -> 51: B24-A2 reads and appends `SIRKIT_MCP_TOKEN_SECRET_PREVIOUS` and `SIRKIT_WORKFLOW_WORKER_SECRET_PREVIOUS` (kind secret, verification only; D16, OD-195), on the lines of their current names (`flag-inventory.ts:84`, `:99`), and moved `b24-a1-flags` case 1 in place with a dated note. [B24-A3, 2026-10-06] 51 -> 52: B24-A3 reads and appends `SIRKIT_TRUSTED_CLIENT_IP_HEADER` (kind configuration: the trusted proxy header that keys the public per-client windows, unset by default; D16, OD-197) on the line of `SIRKIT_PHYSICAL_BINDING_SHADOW` (`flag-inventory.ts:98`), and moved `b24-a1-flags` case 1 in place with a dated note. [B24-B3, 2026-10-08] 52 -> 62: B24-B3's live-suite registry (`app/lib/evaluation/live-suites.ts`, OD-209) reads ten live-suite and opt-in names by name - `SIRKIT_LIVE_AUTH_QUALIFICATION` and its six `SIRKIT_AUTH_QUALIFICATION_*` resources, `SIRKIT_LIVE_ACQUISITION_CONTRACT`, `SIRKIT_B22_LIVE_RUNNER` and B24-B2's `SIRKIT_B24_CORPUS_NIGHTLY` - kind live-test-gate, appended on the lines of their sorted neighbours (`flag-inventory.ts:56`, `:57`, `:77`), and moved `b24-a1-flags` case 1 and `b24-a2-env-names` case 10 in place with dated notes. [B24-D1, 2026-10-09] 62 -> 65: B24-D1 reads and appends `SIRKIT_B24_BENCHMARK` (kind live-test-gate: the latency benchmark flag, measurement only, set by `benchmark-latency`'s vitest step), `SIRKIT_B24_BENCHMARK_DIR` and `SIRKIT_JOB_STARTED_AT` (kind tooling: the results directory outside the repository and the CI job's start second; D16, OD-212, OD-30), on the lines of their sorted neighbours (`flag-inventory.ts:57`, `:75`), and moved `b24-a1-flags` case 1 and `b24-a2-env-names` case 10 in place with dated notes. [B24-D4, 2026-10-10] 65 -> 66: B24-D4 (OD-30's split of page-browser-e2e, the lead's option A) reads and appends `SIRKIT_E2E_SKIP` (kind tooling: the spec globs a browser run leaves out, read on `playwright.config.ts:21` and set by CI's page-browser-e2e step; direction disables, a list parse; no flag state is recorded), on the line of its sorted neighbour `SIRKIT_E2E_PORT` (`flag-inventory.ts:65`), and moved `b24-a1-flags` case 1 and `b24-a2-env-names` cases 5, 9 and 10 in place with dated notes. [B24-E, 2026-10-10] 66 -> 67: B24-E's production-auth target (`app/lib/deployment/production-auth-target.ts`, D24-34 offline, OD-191) reads `SIRKIT_AUTH_QUALIFICATION_TENANT_ID` in production code (kind live-test-gate: the selector tenant, default `local`; the other seven live-auth names were already B24-B3's rows), appended on the line of its sorted neighbour `SIRKIT_AUTH_QUALIFICATION_PROJECT_ID` (`flag-inventory.ts:56`), and moved `b24-a1-flags` case 1 and `b24-a2-env-names` cases 5 and 10 in place with dated notes.
 - **The kinds** are closed: enable-flag (3), disable-switch (5), rollout-stage (4), shadow (2), fixture (6), live-test-gate (4),
   configuration (19), secret (3), tooling (3). `SIRKIT_AUTH_MODE` is configuration, never a fixture. B24-A2 pins the map to its census
-  classes (D16); B24-D1 adds its three names in these kinds (D15). Live-suite flags read only by tests are B24-B3's (OD-209). [B24-A2, 2026-10-06] secret (3) -> secret (5): the same two `*_PREVIOUS` names. [B24-A3, 2026-10-06] configuration (19) -> configuration (20): `SIRKIT_TRUSTED_CLIENT_IP_HEADER`. [B24-B3, 2026-10-08] live-test-gate (4) -> live-test-gate (14): the ten names above. [B24-D4, 2026-10-10] tooling (5) -> tooling (6): `SIRKIT_E2E_SKIP` (B24-D1's two tooling names made it 5). [B24-E, 2026-10-10] live-test-gate (15) -> live-test-gate (16): `SIRKIT_AUTH_QUALIFICATION_TENANT_ID` (B24-D1's `SIRKIT_B24_BENCHMARK` made it 15).
+  classes (D16); B24-D1 adds its three names in these kinds (D15). Live-suite flags read only by tests are B24-B3's (OD-209). [B24-A2, 2026-10-06] secret (3) -> secret (5): the same two `*_PREVIOUS` names. [B24-A3, 2026-10-06] configuration (19) -> configuration (20): `SIRKIT_TRUSTED_CLIENT_IP_HEADER`. [B24-B3, 2026-10-08] live-test-gate (4) -> live-test-gate (14): the ten names above. [B24-D4, 2026-10-10] tooling (5) -> tooling (6): `SIRKIT_E2E_SKIP` (B24-D1's two tooling names made it 5). [B24-E, 2026-10-10] live-test-gate (15) -> live-test-gate (16): `SIRKIT_AUTH_QUALIFICATION_TENANT_ID` (B24-D1's `SIRKIT_B24_BENCHMARK` made it 15). [PR-D, 2026-10-17] 67 -> 68: `SIRKIT_BUILD_ITERATION_CAP` (configuration: PR-C's operator cap of the Build generation's model turns, an integer 1..20 lowering `BUILD_BUDGET.iterationCap`; owner `app/lib/schematic/build-result.ts:75`, constant `BUILD_ITERATION_CAP_ENV`; read in production since 6bdd7f7 and censused here, OD-242); configuration (20) -> configuration (21). Appended on this line so no line moves. [PR-L step 0, 2026-10-17] the owner line is now `build-result.ts:80` (OD-251: the generation-budget correction added fields and a comment above it); appended on this line so no line moves. [PR-L6, 2026-10-19] 68 -> 74: + `SIRKIT_GENERATION_ALLOWANCE_MODEL_CALLS`, `_OUTPUT_TOKENS`, `_INPUT_TOKENS`, `_CATALOG_SEARCHES`, `_WALL_CLOCK_MS` (configuration: the operator's per-task allowance unit, which may only lower the default and adds an optional input dimension; owner `app/lib/generation-task/contracts.ts:159`, read once by the composition root; OD-252 item 1, OD-253 item 6) and `SIRKIT_CATALOG_SEARCH_CONCURRENCY` (configuration: the catalog slots' bound, which may only lower `min(4, max(1, SIRKIT_DB_POOL_MAX - 3))`; owner `app/lib/schematic/catalog-slots.ts:16`, constant `CATALOG_SEARCH_CONCURRENCY_ENV`; L.6 part 2 item 5); configuration (21) -> configuration (27). [PR-L6 spend, 2026-10-19] 74 -> 75: + `SIRKIT_POST_APPLY_INPUT_TOKENS` (configuration: the per-request input ceiling of the post-apply Tidy and Review calls, default 200000, which an integer 1..199999 may only LOWER; owner `app/lib/llm/post-apply-admission.ts:26`, constant `POST_APPLY_INPUT_TOKENS_ENV`; SPEND-3, runbook line 28 and L.6), inserted on the line of its sorted neighbour `SIRKIT_PHYSICAL_BINDING_SHADOW` (`flag-inventory.ts:98`), and moved `b24-a1-flags` case 1 and `b24-a2-env-names` cases 5 and 10 in place with dated notes; configuration (27) -> configuration (28).
 - **Defaults pinned through the owners.** With an empty environment MCP, orchestration and named computations are off, the four stages
   off, both shadows off, every off-only switch unset; each flag's parse equals its owner's over sample values. **CONFIRMED** (cases 3, 4).
 - **The off-only switches** only ever turn something off (acquisition sources, manufacturing providers, ordering, MCP servers, the
@@ -367,7 +367,7 @@ after `page-browser-e2e`, so a job appended after it is allowed.
 
 [B24-A1 check, 2026-10-06] The review round's note here named only B3, C1 and C2 and gave a row of another form; it is replaced by
 the following. The later B24 tasks that insert workflow lines are, by their task files read at this date (section 13):
-A2, A4, B2, B3, C1, C2, C3, D1 and D2 (A3, B1, D3, E and F add none). [B24-D4, 2026-10-10] B24-D4, the lead's corrective increment under OD-30, appends two rows below: page-browser-e2e's `env:` mapping (`SIRKIT_E2E_SKIP`) and the appended `page-browser-e2e-b24` job (its count includes the leading blank line; [B24-D4 lead, 2026-10-10] named for B24's own browser specs, B24-D2's two and B24-D3's two, by the lead's option (b), `ci-split.md` section 11.9).
+A2, A4, B2, B3, C1, C2, C3, D1 and D2 (A3, B1, D3, E and F add none). [B24-D4, 2026-10-10] B24-D4, the lead's corrective increment under OD-30, appends two rows below: page-browser-e2e's `env:` mapping (`SIRKIT_E2E_SKIP`) and the appended `page-browser-e2e-b24` job (its count includes the leading blank line; [B24-D4 lead, 2026-10-10] named for B24's own browser specs, B24-D2's two and B24-D3's two, by the lead's option (b), `ci-split.md` section 11.9). [PR-G, 2026-10-17] PR-G (OD-250: the 19 pr- suites no CI job selected admitted to prompt-to-gerber and moved with the `app/lib/agent/orchestration/__tests__` filter to agent-boundary-suites, `ci-split.md` section 4) appends five rows below in the same form under its own id, `[PR-G, 2026-10-17]` (the row pattern of `b24-a1-environment-profile`, `b24-d0-ci-split` and `b24-d4-browser-split` admits `PR-[A-G]` beside `B24-<id>`), and joins five wrapped lines of section 11 (no word changed) so every line from section 12 on keeps its number.
 None of them rewrites the table above or moves any workflow line number on this page, here or in section 14. For each contiguous
 group of lines it inserts - an appended job, and lines inside `production-smoke` (PROPOSED until its first CI run), included - it
 appends one row to the insertion table below, in insertion order: ``| [B24-<id>, <date>] | <job> | `:<first>` | <count> |``, where
@@ -402,6 +402,19 @@ handover text the lead pastes into the nine task files is in section 13.
 | [B24-D2, 2026-10-09] | database-delivery | `:384` | 1 |
 | [B24-D4, 2026-10-10] | page-browser-e2e | `:418` | 2 |
 | [B24-D4, 2026-10-10] | page-browser-e2e-b24 | `:629` | 35 |
+| [PR-G, 2026-10-17] | prompt-to-gerber | `:294` | 19 |
+| [PR-G, 2026-10-17] | prompt-to-gerber | `:316` | 1 |
+| [PR-G, 2026-10-17] | prompt-to-gerber | `:352` | 19 |
+| [PR-G, 2026-10-17] | agent-boundary-suites | `:622` | 1 |
+| [PR-G, 2026-10-17] | agent-boundary-suites | `:658` | 19 |
+| [PR-L7, 2026-10-20] | prompt-to-gerber | `:313` | 69 |
+| [PR-L7, 2026-10-20] | prompt-to-gerber | `:440` | 2 |
+| [PR-L7, 2026-10-20] | database-delivery | `:495` | 13 |
+| [PR-L7, 2026-10-20] | agent-boundary-suites | `:761` | 2 |
+| [PR-L7, 2026-10-20] | page-browser-e2e-agent | `:809` | 35 |
+| [PR-J7, 2026-11-04] | prompt-to-gerber | `:382` | 54 |
+| [PR-J7, 2026-11-04] | prompt-to-gerber | `:496` | 54 |
+| [PR-J7, 2026-11-04] | agent-boundary-suites | `:871` | 54 |
 
 ## 11. Gates
 
@@ -412,10 +425,7 @@ handover text the lead pastes into the nine task files is in section 13.
 | `app/lib/qualification/__tests__/b24-a1-flags.test.ts` | 10 |
 | `app/lib/qualification/__tests__/b24-a1-readiness.test.ts` | 11 |
 
-[B24-A1 check, 2026-10-06] `b24-a1-environment-profile` went from 19 to 20 cases (case 20, the handover); the four suites now hold 55.
-
-Every gate below ran through the lock script (two workers), one at a time, every process stopped after; `.next/` was removed before
-the first. Counts are files, then tests.
+[B24-A1 check, 2026-10-06] `b24-a1-environment-profile` went from 19 to 20 cases (case 20, the handover); the four suites now hold 55. Every gate below ran through the lock script (two workers), one at a time, every process stopped after; `.next/` was removed before the first. Counts are files, then tests.
 
 | gate | result |
 |---|---|
@@ -436,17 +446,11 @@ the first. Counts are files, then tests.
 | a content scan of every changed or new file (control bytes, CRLF, PEM markers, provider key shapes; the staged-content scan is the lead's) | none found |
 
 Found in the run and fixed before the final gates (each was this increment's own slip, caught by an existing gate):
-- `b23-a-provider-admission` case 8 listed the new B24 files until its one reviewed move (D6) landed;
-- `b23-closeout-statements` case 7 refused `b24-a1-configuration` for spelling B23's deferred retirement (`DC-05R`) in a list of
-  names production must not use; the name was dropped from the list (the closeout's own case pins it);
-- `b23-d-physical-evidence-contract` case 8 refused the flag inventory for spelling the evidence module's path in an exclusion's
-  sites; the exclusion now cites no site and says why.
-No other gate failed; no case timed out and no `Timeout calling onTaskUpdate` was seen.
+- `b23-a-provider-admission` case 8 listed the new B24 files until its one reviewed move (D6) landed; `b23-closeout-statements` case 7 refused `b24-a1-configuration` for spelling B23's deferred retirement (`DC-05R`) in a list of names production must not use; the name was dropped from the list (the closeout's own case pins it);
+- `b23-d-physical-evidence-contract` case 8 refused the flag inventory for spelling the evidence module's path in an exclusion's sites; the exclusion now cites no site and says why. No other gate failed; no case timed out and no `Timeout calling onTaskUpdate` was seen.
 
 ### The review round's gates (2026-10-06, the final tree)
-
-The table above is A1's own run. After the review fixes every gate ran again through the lock script, one at a time, with no `.next/`
-present, every process stopped after. **CONFIRMED**:
+The table above is A1's own run. After the review fixes every gate ran again through the lock script, one at a time, with no `.next/` present, every process stopped after. **CONFIRMED**:
 
 | gate | result |
 |---|---|
@@ -465,13 +469,9 @@ present, every process stopped after. **CONFIRMED**:
 | the 21 generators | each exit 0; no drift (status, every changed or new file's hash and the tracked diff identical before and after) |
 | a byte scan of every file the review round changed (control bytes, CR, PEM markers, provider key shapes) | none found |
 
-No gate failed, no case timed out and no `Timeout calling onTaskUpdate` was seen. The slowest new case is `b24-a1-flags` 4 (about
-1.2 s here; it declares a 30 s timeout).
-
+No gate failed, no case timed out and no `Timeout calling onTaskUpdate` was seen. The slowest new case is `b24-a1-flags` 4 (about 1.2 s here; it declares a 30 s timeout).
 ### The check round's gates (2026-10-06, the final tree)
-
-The check round changed only `b24-a1-environment-profile` and this page. Each gate ran through the lock script, one at a time, with no
-`.next/` present and every process stopped after. **CONFIRMED**:
+The check round changed only `b24-a1-environment-profile` and this page. Each gate ran through the lock script, one at a time, with no `.next/` present and every process stopped after. **CONFIRMED**:
 
 | gate | result |
 |---|---|
@@ -661,7 +661,7 @@ then the job's probes against `http://localhost:3200` (section 6), the build and
 | C20 | `app/lib/agent/adapters.ts` | 219 | `model: sendableAnthropicModel(this.model),` |
 | C21 | `app/lib/agent/adapters.ts` | 335 | `import { sendableAnthropicModel } from "../llm/anthropic-model-guard";` |
 | C22 | `app/lib/llm/anthropic-provider.ts` | 107 | `model: sendableAnthropicModel(this.model),` |
-| C23 | `app/lib/llm/anthropic-provider.ts` | 190 | `import { sendableAnthropicModel } from "./anthropic-model-guard";` |
+| C23 | `app/lib/llm/anthropic-provider.ts` | 196 | `import { sendableAnthropicModel } from "./anthropic-model-guard";` |
 | C24 | `app/lib/agent/contracts.ts` | 185 | `runDeadlineMs: 120_000,` |
 | C25 | `app/api/ai/runtime/route.ts` | 16 | `const anthropicSetting = anthropicModelSetting();` |
 | C26 | `app/lib/deployment/flag-inventory.ts` | 103 | `export const FLAG_INVENTORY: readonly FlagInventoryEntry[]` |

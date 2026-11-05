@@ -48,6 +48,7 @@ POST,/api/circuit-verification/problem,auth+csrf,canonical-wrapper,authenticated
 POST,/api/circuit-verification/propose,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/circuit-verification/readiness,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/circuit-verification/run,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/component-resolution-authority,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/component-selection/alternative,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/component-selection/catalog,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/component-selection/evaluate,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
@@ -75,6 +76,12 @@ POST,/api/footprint-resolution,auth+csrf,canonical-wrapper,authenticatedJsonRout
 POST,/api/full-flow/propose,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/full-flow/run,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/full-flow/transition,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/generation-tasks/[id]/control,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+GET,/api/generation-tasks/[id]/events,auth,canonical-wrapper,authenticatedRoute,(adopted),adopted
+GET,/api/generation-tasks/[id],auth,canonical-wrapper,authenticatedRoute,(adopted),adopted
+POST,/api/generation-tasks,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+GET,/api/generation-tasks,auth,canonical-wrapper,authenticatedRoute,(adopted),adopted
+POST,/api/generation-worker,auth,canonical-wrapper,workerRoute,(adopted),adopted
 GET,/api/health,public,canonical-wrapper,publicRoute,(adopted),adopted
 POST,/api/interfaces/allocate,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/interfaces/alternatives,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
@@ -98,6 +105,8 @@ POST,/api/model-simulation/propose,auth+csrf,canonical-wrapper,authenticatedJson
 POST,/api/model-simulation/readiness,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 GET,/api/parts/[id]/alternates,public,canonical-wrapper,publicRoute,(adopted),adopted
 GET,/api/parts/[id],public,canonical-wrapper,publicRoute,(adopted),adopted
+GET,/api/parts/acquisitions,auth,canonical-wrapper,authenticatedRoute,(adopted),adopted
+POST,/api/parts/acquisitions,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 GET,/api/parts/categories,public,canonical-wrapper,publicRoute,(adopted),adopted
 POST,/api/parts/external-search,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/parts/search,public,canonical-wrapper,publicJsonRoute,(adopted),adopted

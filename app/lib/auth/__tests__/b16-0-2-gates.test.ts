@@ -217,6 +217,7 @@ describe("B16.0.2 — no provider/model/gateway module imports reauthorization o
   it("the agent / llm / model-simulation / provider layers import NEITHER reauthorization NOR approval authority", { timeout: 120_000 }, () => {
     const gated = [
       "app/lib/project/membership-reauthorization",
+      "app/lib/project/sheet-organization-reauthorization", // [PR-J5 integration, 2026-10-26] review J5R-AI-2: the organise proposal's Approve reauthorization (imported by app/page.tsx only)
       "app/lib/project/pcb-apply-reauthorization",
       "app/lib/project/pcb-edit-approval-controller.internal",
       "app/lib/project/replacement-approval-controller.internal",
@@ -233,6 +234,11 @@ describe("B16.0.2 — no provider/model/gateway module imports reauthorization o
     const offenders = moduleImportOffenders(production, "app/lib/project/session-identity", new Set(["app/page.tsx"]));
     const agentLayer = offenders.filter((p) => p.startsWith("app/lib/agent/") || p.startsWith("app/lib/llm/"));
     expect(agentLayer).toEqual([]);
+  });
+
+  it("[PR-J5 integration, 2026-10-26] review J5R-AI-2: the organise Approve's reauthorization is imported by the composition root ONLY", { timeout: 120_000 }, () => {
+    expect(moduleImportOffenders(production, "app/lib/project/sheet-organization-reauthorization", new Set(["app/page.tsx"]))).toEqual([]);
+    expect([...production.keys()].filter((path) => production.get(path)!.includes("@/app/lib/project/sheet-organization-reauthorization"))).toEqual(["app/page.tsx"]); // not vacuous: the page does import it
   });
 
   it("NEGATIVE tripwire: a synthetic agent-layer reauthorization importer IS detected", () => {

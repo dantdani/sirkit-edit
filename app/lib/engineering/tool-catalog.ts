@@ -146,13 +146,13 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   // ── Schematic inspection ──────────────────────────────────────────────────
   {
     ...readDefaults,
-    toolId: "sirkit.schematic.inspect", version: "1.1.0",
+    toolId: "sirkit.schematic.inspect", version: "1.2.0",
     agentExposed: true, // B09 — statically exposed; per-run availability requires the canonical-state resource
     owningCommandId: "schematic.review-advisory",
     title: "Inspect schematic state",
-    description: "Read the current schematic: component list (display refs, types, values, positions), wire/net-label counts, and the schematic digest.",
+    description: "Read the current schematic: component list (display refs, types, values, positions), wire/net-label counts, and the schematic digest. Example input: {} for the whole project (every sheet's parts in one list, as before); {\"sheetId\":\"root\"} for the overview with the sheet tree (each sheet's id, name, parent, path, component count and ports with their bound state); {\"sheetId\":\"sheet-imu\"} for ONE sheet's components, local labels, ports and child blocks (bounded); {\"sheetId\":\"sheet-imu\",\"neighbours\":true} also fetches the other sheets' ports the connectivity authority joins to its ports. An unknown sheetId answers the tree and a diagnostic, never a guess.",
     category: "schematic", operationClass: "read",
-    inputSchema: obj(), outputSchema: OUT_REPORT,
+    inputSchema: obj({ sheetId: { type: "string", description: "Optional: one sheet's id (the tree lists them; \"root\" is the overview). Omitted: the whole project." }, neighbours: { type: "boolean", description: "Optional, with sheetId: fetch the other sheets' ports joined to this sheet's ports (an explicit neighbour read)." } }), outputSchema: OUT_REPORT, // [PR-J5, 2026-10-23] 1.2.0: sheetId / neighbours (runbook J.6.7, OD-259)
     requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
     requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
     binding: { status: "bound-read", module: "app/lib/engineering/schematic-read.ts", symbol: "inspectSchematicState", notes: "B09/B09.3: the ONLY invocation path is the registered B05/B05.1 read binding consuming the verified canonical-state resource (whose envelope carries the authoritative schematic snapshot, B07.3); without a complete validated canonical project resource the tool is withheld — no snapshot bypass exists." },
@@ -161,7 +161,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     validationStrategy: "structural schematic-shape validation (fails closed on malformed snapshots)",
     verificationStrategy: "deterministic sorted projection + schematic digest",
     sourceEvidence: ["app/lib/engineering/schematic-read.ts", "app/lib/engineering/schematic-model.ts"],
-    versionNotes: "1.1.0 (B09): bound to the reusable pure accessor and agent-exposed; output carries the schematic digest. B09.3: canonical-state binding is the only path (the B09.2 boardless gateway bypass was removed).",
+    versionNotes: "1.2.0 (PR-J5, 2026-10-23; runbook J.6.7, OD-259): sheet-aware on request - sheetId answers ONE sheet's components, labels, ports and child blocks beside the sheet tree (sheetId root: the overview and the tree); neighbours fetches the joined ports through the project connectivity authority; a read without options is byte-identical to 1.1.0 for every document, multi-sheet included. 1.1.0 (B09): bound to the reusable pure accessor and agent-exposed; output carries the schematic digest. B09.3: canonical-state binding is the only path (the B09.2 boardless gateway bypass was removed).",
   },
   {
     ...readDefaults,
@@ -563,22 +563,22 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   // ── Proposals (real engines; propose-class, never auto-apply) ─────────────
   {
     ...readDefaults,
-    toolId: "sirkit.placement.propose", version: "1.1.0",
+    toolId: "sirkit.placement.propose", version: "1.2.0", // [PR-F fE, 2026-10-17] 1.1.0 -> 1.2.0: the optional structured intent block (schema change, same producer)
     agentExposed: true, // B17-F — the shared revision-bound layout candidate; the HUMAN applies it in the placement panel
     owningCommandId: "placement.auto",
     title: "Propose a placement candidate",
-    description: "Run the engineering placement engine over the CURRENT board and produce a revision-bound placement candidate (sirkit.layout-candidate.v1) that appears in the user's placement panel for review. Receiving the candidate changes nothing; the user applies or discards it explicitly. Optionally restrict to selected footprint ids.",
+    description: "Run the engineering placement engine over the CURRENT board and produce a revision-bound placement candidate (sirkit.layout-candidate.v1) that appears in the user's placement panel for review. Receiving the candidate changes nothing; the user applies or discards it explicitly. Optionally restrict to selected footprint ids. An optional intent block (sirkit.placement-intent.v1: millimetres in the board frame, exact component and net identities) seeds the engine; where legalization, a lock, a keepout or a clearance changed what it asked, the candidate lists each conflict; a board over 50 physical instances is classified unsupported-scope in the candidate's data.",
     category: "placement", operationClass: "propose",
-    inputSchema: obj({ instanceIds: { type: "array", items: { type: "string" }, description: "Restrict the search to these footprint ids; absent = the whole board" }, candidateCount: { type: "number", description: "2–8 (enforced by the service)" }, maxIterations: { type: "number", description: "1–2000 (enforced by the service)" } }), outputSchema: OUT_RESULT,
+    inputSchema: obj({ instanceIds: { type: "array", items: { type: "string" }, description: "Restrict the search to these footprint ids; absent = the whole board" }, candidateCount: { type: "number", description: "2–8 (enforced by the service)" }, maxIterations: { type: "number", description: "1–2000 (enforced by the service)" }, intent: placementIntentInputSchema() /* [PR-F fE] declared at the END (hoisted) */ }), outputSchema: OUT_RESULT,
     sideEffects: "proposal-artifact",
     requiredCapability: "read_project", requiredRoles: ["pcb_editor", "project_admin"],
     requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
     binding: { status: "bound-proposal", module: "app/lib/pcb/candidates/layout-candidate.ts", symbol: "runPlacementCandidate" },
     discovery: "discoverable", callability: "callable",
     timeoutMs: 120_000, budgetClass: "long-running",
-    validationStrategy: "one options builder (placementRunOptions); candidate hard-constraint validation; digest-sealed, pinned to the board revision", verificationStrategy: "applyLayoutCandidate re-verifies revision, hashes and protected copper at apply — the user-facing workflow only",
-    sourceEvidence: ["app/lib/pcb/candidates/layout-candidate.ts", "app/lib/pcb/placement/engine.ts", "app/components/pcb/PlacementSetup.tsx"],
-    versionNotes: "1.1.0 (B17-F): exposed as the shared candidate producer; apply remains the editor's decision.",
+    validationStrategy: "one options builder (placementRunOptions); candidate hard-constraint validation; digest-sealed, pinned to the board revision; [PR-F fE] the intent is compiled all-or-nothing against exact component and net identities of the board revision (compilePlacementIntent: an unknown identity refuses the whole proposal as proposal-blocked data), seeds one extra engine candidate, and is re-measured against the selected candidate (evaluatePlacementIntent: conflicts listed, never dropped); over 50 physical instances the intent is recorded unapplied (unsupported-scope)", verificationStrategy: "applyLayoutCandidate re-verifies revision, hashes and protected copper at apply — the user-facing workflow only",
+    sourceEvidence: ["app/lib/pcb/candidates/layout-candidate.ts", "app/lib/pcb/placement/engine.ts", "app/lib/pcb/placement/intent.ts", "app/components/pcb/PlacementSetup.tsx"],
+    versionNotes: "1.2.0 (PR-F fE, 2026-10-17): the optional structured placement intent (sirkit.placement-intent.v1; directive section 8) passed through the same engine, legalization and validators with a conflict list, and the 50-instance scope gate; 1.1.0 (B17-F): exposed as the shared candidate producer; apply remains the editor's decision.",
   },
   {
     ...readDefaults,
@@ -880,23 +880,23 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   },
   {
     ...viewSession,
-    toolId: "sirkit.view.canvas-navigation", version: "1.1.0",
+    toolId: "sirkit.view.canvas-navigation", version: "1.2.0",
     owningCommandId: "view.canvas-navigation",
     title: "Navigate a canvas or open an editor tab",
-    description: "Fit the board/page, zoom by a bounded factor or to a scale, pan to or focus a semantic target (component by refdes/id, object, net, world point, or the user's current selection) on the PCB or schematic canvas; open a workspace editor tab. Relative commands refuse a stale view revision; selection-relative targets refuse a stale or empty selection.",
+    description: "Fit the board/page, zoom by a bounded factor or to a scale, pan to or focus a semantic target (component by refdes/id, object, net, world point, or the user's current selection) on the PCB or schematic canvas; open a workspace editor tab; open a schematic SHEET by id, unique display name or path (action open-sheet with sheet; a name two sheets share is refused with the candidates). Relative commands refuse a stale view revision; selection-relative targets refuse a stale or empty selection.",
     inputSchema: obj({
       editor: { type: "string", enum: ["pcb", "schematic", "workspace"] },
-      action: { type: "string", enum: ["fit", "fit-selection", "zoom", "zoom-to", "pan-to", "focus", "open-editor"] },
+      action: { type: "string", enum: ["fit", "fit-selection", "zoom", "zoom-to", "pan-to", "focus", "open-editor", "open-sheet"] },
       target: TARGET,
       factor: { type: "number", description: "zoom: relative factor 0.25–4 (the bus refuses others)" },
       scale: { type: "number", description: "zoom-to: pcb px/mm or schematic zoom" },
-      tab: { type: "string", enum: VIEW_TOOL_ENUMS.workspaceTabs, description: "open-editor" },
+      tab: { type: "string", enum: VIEW_TOOL_ENUMS.workspaceTabs, description: "open-editor" }, sheet: { type: "string", description: "open-sheet (schematic only): the sheet's id, its unique display name or its path (sirkit.schematic.inspect lists them)" }, // [PR-J5, 2026-10-23] + sheet, in place on this line (no catalog line moves)
     }, ["editor", "action"]), outputSchema: OUT_VIEW_COMMAND,
     requiredProjectState: [],
     binding: { status: "bound-view-session", module: "app/lib/view-session/pcb.ts", symbol: "pcbCommands" },
-    viewCommands: ["pcb.fit-board", "pcb.fit-selection", "pcb.zoom", "pcb.zoom-to", "pcb.pan-to", "pcb.focus", "schematic.fit-page", "schematic.zoom", "schematic.zoom-to", "schematic.pan-to", "schematic.focus", "workspace.open-editor"],
+    viewCommands: ["pcb.fit-board", "pcb.fit-selection", "pcb.zoom", "pcb.zoom-to", "pcb.pan-to", "pcb.focus", "schematic.fit-page", "schematic.zoom", "schematic.zoom-to", "schematic.pan-to", "schematic.focus", "workspace.open-editor", "schematic.open-sheet"], // [PR-J5, 2026-10-23] + schematic.open-sheet (runbook J.6.5 / J.6.6: navigation stays a view command)
     sourceEvidence: ["app/lib/view-session/pcb.ts", "app/lib/view-session/schematic.ts", "app/lib/view-session/workspace.ts", "app/lib/agent/view-context.ts"],
-    versionNotes: "1.1.0 (B17-F): bound to the view-session bus (was an unbound schema declaration).",
+    versionNotes: "1.2.0 (PR-J5, 2026-10-23; runbook J.6.5, OD-259): + open-sheet - the schematic.open-sheet bus command opens a sheet by id, unique name or path through the editor's Sheets navigator; an ambiguous name is refused with the candidates. 1.1.0 (B17-F): bound to the view-session bus (was an unbound schema declaration).",
   },
   {
     ...viewSession,
@@ -1057,7 +1057,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     timeoutMs: 5_000,
     sourceEvidence: ["app/lib/pcb/dimensions/commands.ts", "app/lib/pcb/dimensions/geometry.ts", "app/components/pcb/hooks/useDimensionTool.ts", "app/components/pcb/inspectors/DimensionInspector.tsx", "app/lib/engineering/operations.ts", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
     versionNotes: "1.2.0 (B18-C I7): bound and agent-exposed as a reviewed granted execution (confirmation-only: no explicit grammar); re-tiered reversible per the runbook's PCB Tier 1 list (OD-13); deterministic add ids; an update never moves the measured points. 1.1.0 (B09.1): reconciled with B08 truth — implemented and active, no tool adapter.",
-  }, ...COMPUTATION_TOOL_DESCRIPTORS, boardPageInspectDescriptor(), // [B22-B] the five named computations (OD-139), from computation-tool-descriptors.ts; [B24-D2, 2026-10-09] the bounded paged board read (OD-213), its declaration at the END of this file
+  }, ...COMPUTATION_TOOL_DESCRIPTORS, boardPageInspectDescriptor(), generateProposalDescriptor(), pcbSyncPreflightDescriptor(), catalogInspectDescriptor(), componentReviewRequestDescriptor(), missingFactsDescriptor(), draftRequestDescriptor(), moduleContractsDescriptor(), stackupProposalDescriptor(), instanceInspectDescriptor(), candidateSearchDescriptor(), componentResolutionDescriptor(), cadAcquisitionStartDescriptor(), cadAcquisitionStatusDescriptor(), /* [PR-M, 2026-10-18] M2: the schematic-scoped CAD acquisition start and status, declared at the END too */ generationTaskInspectDescriptor(), generationTaskControlDescriptor(), sheetOrganizationProposalDescriptor(), /* [PR-J5, 2026-10-23] the organise proposal (runbook J.6, OD-259 item 4), declared at the END too */ /* [PR-L, 2026-10-18] the durable generation task's inspection and control request (runbook L.5), declared at the END too */ /* [PR-M, 2026-10-17] the schematic-instance inspection, the candidate search and the component resolution proposal, declared at the END too */ /* [PR-F fE, 2026-10-17] the stackup / via-policy proposal, declared at the END too */ /* [PR-F fD, 2026-10-17] the module contract proposal, declared at the END too */ /* [PR-F fB, 2026-10-17] the missing-facts read and the part draft request, declared at the END too */ // [B22-B] the five named computations (OD-139), from computation-tool-descriptors.ts; [B24-D2, 2026-10-09] the bounded paged board read (OD-213), its declaration at the END of this file; [PR-D, 2026-10-16] the Build-mode generation proposal (OD-243), its declaration at the END too; [PR-D d2, 2026-10-16] the Schematic to PCB preflight read, the catalog part inspection and the (unavailable) component review request, declared at the END too
 ] satisfies readonly ToolDescriptor[]);
 
 let cached: ToolRegistry | null = null;
@@ -1099,5 +1099,617 @@ function boardPageInspectDescriptor(): ToolDescriptor {
     verificationStrategy: "derived from the canonical board revision through buildAIPcbSnapshot; membership by layer (footprints with a pad on it, pads with copper on it, tracks on it, vias whose span includes it, zones on it, keepouts listing it), by net (the net, footprints with a pad on it, its pads, tracks, vias and zones) or by region (footprint body bounds, pad and via positions, track segments, zone and keepout polygon bounding boxes meeting the rectangle); kinds in a fixed order, ids by code point; each page's result within BOARD_PAGE_MAX_RESULT_CHARS, and following nextCursor visits every selected item once; an item larger than a whole page is refused by kind and id (item_over_budget), never truncated; a cursor from another revision or selector is refused (stale_cursor)",
     sourceEvidence: ["app/lib/pcb/ai/board-pages.ts", "app/lib/pcb/ai/snapshot.ts", "app/lib/engineering/tool-bindings-readonly.ts"],
     versionNotes: "1.0.0 (B24-D2): first exposure, reviewed in `agent-exposure.ts` (OD-213); withheld from MCP by a reviewed choice in `mcp-exposure-review.ts` although it is servable from the durable board. It states nothing board-inspect does not already state; it exists because board-inspect's whole snapshot does not fit in one tool result on a routed board.",
+  };
+}
+
+/**
+ * [PR-D, 2026-10-16] OD-243: the agent's Build-mode GENERATION proposal, declared at the END (a function declaration is hoisted; the
+ * defaults above are initialized before the catalog calls it), so no line of this catalog moves. It is the semantic equivalent of
+ * the Build composer's Generate. [PR-L, 2026-10-18] Runbook L.5: since 2.0.0 both start the SAME durable generation task
+ * (GenerationTaskService.start; the composer through POST /api/generation-tasks, the agent through the chat route's injected port,
+ * app/api/chat/schematic-generation-runtime.ts); the tool answers the task's reference and the page follows it with the same status
+ * card and the same review intake (app/lib/agent/generation-proposals.ts). Discovery requires Build mode (`schematic-build-mode`: the
+ * validated sheet holds no Theory component), a validated schematic and its canonical head mark (the base the task pins), and the
+ * durable task port bound to the run (`schematic-generation`: the server's port fact, never a body claim); the chat turn's deadline
+ * ends the turn, never the task, and the loop's single-flight allows one start (or attach) per run.
+ */
+function generateProposalDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.schematic.generate-proposal", version: "2.0.0", // [PR-L, 2026-10-18] runbook L.5: a DURABLE task start (2.0.0); the in-turn generation of 1.0.0 is removed
+    agentExposed: true, // [PR-D] sealed artifact ONLY (since 2.0.0 a task reference); approval stays human-only in the schematic review dialog
+    owningCommandId: "schematic.generate",
+    title: "Start or follow a Build-mode schematic design",
+    description: "Start a Build-mode schematic design (real catalog parts) from a one-paragraph circuit request as the project's DURABLE design task - the SAME task the Build composer's Generate starts - or attach to the design already running for this project. Example input: {\"prompt\":\"A 555 timer LED blinker powered from a 9 V battery through a 5 V linear regulator.\"}. It answers at once with the task's reference and state; the design runs in a generation worker in saved steps, NOT inside this chat turn, so the turn ending or Stop answer never stops it (Stop design does). The page shows its progress and offers its result in the schematic review dialog, where a human approves or discards it; NOTHING is changed by this call. One start per turn; a second design request while one runs attaches to the running one. Read its state later with sirkit.generation.task-inspect.",
+    category: "schematic", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({ prompt: { type: "string", description: "The circuit request in plain words (1 to 4000 characters): what the circuit does, its supply, its inputs and outputs, and named parts where they matter." } }, ["prompt"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present", "schematic-build-mode"], requiredAuthority: ["schematic-generation"],
+    requiresExpectedRevision: true,
+    // the task pins the editor's sheet as its base and the loop's B09.1 gate holds every schematic proposal to a canonical head mark, so discovery requires an open lineage
+    requiresLineage: true,
+    binding: { status: "bound-proposal", module: "app/lib/generation-task/service.ts", symbol: "GenerationTaskService", notes: "PR-L (runbook L.5, 2026-10-18): the ONE durable generation-task service the routes call - start / attach with the start route's closed body, its idempotency (a client request id derived from the run and the provider call), one active task per project and branch (the index CAS), the editor roles, the provider-servable rule and the per-task allowance; origin chat, the asking run recorded. The agent reaches it only through the chat route's injected port (app/api/chat/schematic-generation-runtime.ts); SchematicGenerationProposalService (app/lib/agent/generation-proposals.ts) checks the binding, integrity, discovery, role and the closed argument surface, then answers the task reference (sirkit.generation-task-ref.v1). The design runs in the generation worker (app/lib/generation-task/worker); nothing is applied here." },
+    discovery: "discoverable", callability: "callable",
+    // [PR-L, 2026-10-18] a durable start answers in milliseconds: an interactive tool now (it was the 185 s in-turn generation ceiling)
+    timeoutMs: 15_000, budgetClass: "interactive",
+    validationStrategy: "closed argument surface (exactly prompt, 1-4000 characters; authority-shaped keys such as scope, base, provider or clientRequestId refused by name) under the B05 input limits; the server's generation fact and port, a validated schematic and a provider call id are required; the start route's own validation (GenerationTaskService.start: the closed body, the editor role, the provider rule, the index CAS) decides acceptance; a refused start is reported as data, nothing accepted",
+    verificationStrategy: "the reference names a task read back from the durable store in the trusted scope; the page re-reads the task through its own authorized GET /api/generation-tasks/[id] before following it, and its result is verified at intake (the task's result digest, the base digest under the task's recipe, the exact-base pin) and laid out through the same autoLayoutBuildValidated the Build composer uses",
+    sourceEvidence: ["app/lib/generation-task/service.ts", "app/lib/agent/generation-proposals.ts", "app/lib/agent/generation-task-tools.ts", "app/api/chat/schematic-generation-runtime.ts", "app/api/generation-tasks/route.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "2.0.0 (PR-L, runbook L.5, 2026-10-18): starts or attaches the durable generation task the Build composer uses and answers its reference (generation_task_ready); the 1.0.0 in-turn generation (runBuildMultiGeneration inside the run, sealed as sirkit.schematic-generation-proposal.v1) is removed from the agent tool. 1.0.0 (PR-D, OD-243): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts.",
+  };
+}
+
+/**
+ * [PR-D d2, 2026-10-16] The agent's Schematic → PCB PREFLIGHT read, declared at the END (a function declaration is hoisted), so no line
+ * of this catalog moves. It is the semantic equivalent of what the editor's Prepare PCB (`PcbEditor.handleSync`; the journey strip's
+ * `prepare_pcb`) decides BEFORE its first server call: the SAME `listUnresolvedInstances` / `unresolvedInstancesRefusal` / row texts,
+ * and the same bind filter, through the ONE pure report function (app/lib/pcb-sync/preflight-read.ts) over the run's verified
+ * schematic snapshot - board-less, as the editor's own run is (Prepare PCB exists to make the first board), so it travels its own Tier 0
+ * service (app/lib/agent/pcb-sync-preflight-reads.ts) and not the B05 canonical-state binding. The server stages (bindings,
+ * publication, the durable preflight and its blockers) travel as `not_run` data: not checked is not a pass.
+ */
+function pcbSyncPreflightDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.pcb-sync.preflight", version: "1.0.0",
+    agentExposed: true, // [PR-D d2] a Tier 0 read over the run's verified schematic snapshot; nothing is bound, published or applied
+    owningCommandId: "pcb.sync-durable",
+    title: "Check what blocks Prepare PCB before any server call",
+    description: "Run the checks the editor's Prepare PCB (Schematic to PCB) runs BEFORE it calls the server, over the run's verified schematic: every instance that cannot reach the board (no published exact revision, a published revision without its installed symbol asset, or a Theory symbol with no physical package), each with the missing fact and the review path the editor shows, the refusal sentence the editor would show, and a census of the instances the server preparation would bind. Example input: {}. The server stages (bindings, publication, the durable preflight and its blockers) are reported as not run: not checked is not a pass, and no board is prepared, bound or applied by this read; the user runs Prepare PCB in the PCB editor.",
+    category: "validation", operationClass: "read",
+    inputSchema: obj({}), outputSchema: OUT_REPORT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
+    binding: { status: "bound-read", module: "app/lib/pcb-sync/preflight-read.ts", symbol: "buildPcbSyncPreflightReport", notes: "PR-D d2: the SAME listUnresolvedInstances / unresolvedInstancesRefusal / UNRESOLVED_MISSING_LABEL / UNRESOLVED_REVIEW_PATH the editor's handleSync calls (app/components/pcb/PcbEditor.tsx) and the same Boolean(atomicPartRevisionId) bind filter, in one pure report; invoked only through PcbSyncPreflightReadService (app/lib/agent/pcb-sync-preflight-reads.ts) over the run's verified schematic snapshot (digest-pinned by the gateway's integrity check), board-less like the editor's own run. No second checker; no server stage runs." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 2_000,
+    validationStrategy: "closed argument surface (no arguments; an authority-shaped key is refused by name) under the B05 input limits; the verified schematic snapshot and its digest are required; discovery, role and capability rechecked per call; the output is schema-checked and bounded (at most 200 unresolved rows listed, the rest counted)",
+    verificationStrategy: "pure over the run's verified schematic snapshot (the integrity check recomputes its digest before every call; the result names that digest as its source); the server stages are stated as not run, never inferred",
+    sourceEvidence: ["app/lib/pcb-sync/preflight-read.ts", "app/lib/pcb-sync/unresolved-instances.ts", "app/components/pcb/PcbEditor.tsx", "app/lib/agent/pcb-sync-preflight-reads.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "1.0.0 (PR-D d2): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (its only input is the editor's browser-only SchematicState, as OD-69's reads).",
+  };
+}
+
+/**
+ * [PR-D d2, 2026-10-16] The agent's CATALOG PART INSPECTION read, declared at the END too. ONE part of Sirkit's own parts catalog by
+ * its id, through the SAME `loadCatalogPartDetail` the parts detail route answers the browser's part cache with (extracted from
+ * app/api/parts/[id]/route.ts into app/lib/atomic/catalog-part-detail.ts: one reader) plus the published revision status read; the
+ * agent reaches them only through the chat route's injected catalog port (app/api/chat/catalog-inspection-runtime.ts), advertised
+ * as the `catalog` authority ONLY with the server's fact. Bounded, closed output; never a distributor call.
+ */
+function catalogInspectDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.parts.catalog-inspect", version: "1.0.0",
+    agentExposed: true, // [PR-D d2] a Tier 0 read of ONE catalog part through the chat route's injected catalog port; no distributor call; nothing placed, bound or published
+    owningCommandId: "parts.catalog-read",
+    title: "Inspect one catalog part by id",
+    description: "Read ONE part of Sirkit's own parts catalog by its part id (a placed KiCad instance's partId): name, manufacturer part number, manufacturer, library and category, the footprint hint and normalized package, the lifecycle and RoHS status, the symbol's pins (number, name, type; at most 128 listed, the rest counted), and its published exact atomic revisions per value key with each revision's catalog status (published, deprecated, superseded or revoked; selectable; pinnable) and the value keys whose link points at a withdrawn or missing revision. Example input: {\"partId\":\"3f2a9c1e-0b7d-4e5a-9c21-7d8e6f5a4b3c\"}. The answer is catalog data read on the server, never a distributor lookup and never engineering authority: a part that is not in the catalog is reported as not found, and nothing is placed, bound or published.",
+    category: "parts", operationClass: "read",
+    inputSchema: obj({ partId: { type: "string", description: "The catalog part id (1 to 128 characters: letters, digits, dot, underscore, colon or hyphen), as a placed KiCad instance's partId." } }, ["partId"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: [], requiredAuthority: ["catalog"],
+    binding: { status: "bound-read", module: "app/lib/atomic/catalog-part-detail.ts", symbol: "loadCatalogPartDetail", notes: "PR-D d2: the ONE catalog part read the parts detail route (app/api/parts/[id]/route.ts) answers the browser's part cache with, plus the published revision status read (loadAtomicRevisionStatus, app/lib/atomic/server-catalog.ts); the agent reaches them only through the chat route's injected port (app/api/chat/catalog-inspection-runtime.ts), and CatalogInspectionReadService (app/lib/agent/catalog-inspection-reads.ts) checks the binding, integrity, the server's fact, discovery and role, then answers a closed bounded projection. No live distributor call." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 8_000,
+    validationStrategy: "closed argument surface (exactly partId, 1-128 characters of the id alphabet; authority-shaped keys refused by name) under the B05 input limits; the server's catalog fact and port are required; discovery, role and capability rechecked per call; the port's answer is projected through a closed allowlist (no raw symbol text, no properties blob, no links) and schema-checked",
+    verificationStrategy: "a server catalog read at the time of the call (never pinned to a project revision): the loader's id shape check runs before any database read, a miss is data (found false), a failure is a refusal with a closed code",
+    sourceEvidence: ["app/lib/atomic/catalog-part-detail.ts", "app/lib/atomic/server-catalog.ts", "app/api/parts/[id]/route.ts", "app/lib/agent/catalog-inspection-reads.ts", "app/api/chat/catalog-inspection-runtime.ts"],
+    versionNotes: "1.0.0 (PR-D d2): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (the MCP server binds no catalog port; servable from durable state in principle, as OD-235's read).",
+  };
+}
+
+/**
+ * [PR-D d2, 2026-10-16] The component REVIEW REQUEST, declared at the END too, registered NOT callable so the coverage matrix shows the
+ * operation with its disposition (unavailable) and its honest reason instead of a missing row. The editor's two review paths - the
+ * Component review panel's Request review (physical-bindings request_atomic_review, app/lib/physical-binding/review-handoff.ts) and the
+ * Build Library's Request evidence review (the atomic publication review, app/lib/atomic/publication-review.ts) - both refuse any
+ * non-human actor on the server (assertHuman; the publication review admits no AI actor at any step), so no server-owned service
+ * exists that an agent may call, and inventing one would be a second, agent-callable review path. Restoring it needs an owner decision.
+ */
+function componentReviewRequestDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.component.review-request", version: "1.0.0",
+    owningCommandId: "pcb.component-review",
+    title: "Component review request (human-only path; unavailable)",
+    description: "The editor's Request review (Component review panel; the reviewer handoff of Prepare PCB's bind step) files a durable review request for one component's exact atomic candidate, which a reviewer approves or rejects (physical-bindings request_atomic_review). UNAVAILABLE to the assistant, because the server's requestComponentReview admits a human requester only and the parts evidence review (Build Library, Request evidence review) is the human-only atomic publication review. No server-owned review-request service accepts an agent actor, so no binding exists and this descriptor is not callable; the assistant may only name the handoff for the user.",
+    category: "pcb", operationClass: "mutate",
+    inputSchema: obj({ componentInstanceId: { type: "string" }, reason: { type: "string" } }, ["componentInstanceId"]), outputSchema: OUT_RESULT,
+    sideEffects: "engineering-state",
+    requiredCapability: "edit_components", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    approvalTier: "reversible",
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["durable-server-board"],
+    requiresExpectedRevision: false, idempotency: "required-key", requiresLineage: false,
+    binding: { status: "unbound", notes: "[PR-D d2] disposition unavailable, by honest reason: the existing review paths (app/lib/physical-binding/review-handoff.ts requestComponentReview; app/lib/atomic/publication-review.ts submitAtomicPublicationRequest) refuse any non-human actor, so a tool here would have no service to call, and a new agent-callable review service would be a second review path. Restoring it needs an owner decision on an agent-filed review request (the requester of record, what the reviewer sees) - recorded for the lead." },
+    discovery: "discoverable", callability: "not-callable",
+    timeoutMs: 5_000, audit: "event-log",
+    validationStrategy: "human path only (not invocable here): the route's closed request shape, the server-projected evidence digest, REVIEW_REQUESTER_ROLES, retirement on revocation or role change",
+    verificationStrategy: "human path only (not invocable here): the durable review-request aggregate's revisions; approval publishes the binding under the reviewer's identity",
+    sourceEvidence: ["app/lib/physical-binding/review-handoff.ts", "app/api/physical-bindings/route.ts", "app/components/pcb/hooks/useComponentReview.ts", "app/lib/atomic/publication-review.ts", "app/components/editor/BuildLibraryPanel.tsx"],
+    versionNotes: "1.0.0 (PR-D d2): registered not-callable so the coverage matrix shows the component review request with its disposition (unavailable) and reason instead of a missing row; never agent-exposed.",
+  };
+}
+
+/**
+ * [PR-F fB, 2026-10-17] The agent's MISSING-FACTS read, declared at the END too (a function declaration is hoisted), so no line of this
+ * catalog moves. For every instance the editor's own Schematic to PCB refusal list names (`listUnresolvedInstances`), the SAME
+ * checklist the editor's missing-parts list renders: `deriveMissingFacts` (app/lib/parts/missing-facts.ts, the UI's module - ONE
+ * derivation) over the run's verified schematic snapshot (no board, as the preflight read) and, ONLY when the chat route's catalog
+ * port is bound, the catalog part each instance was placed from (identity and the published exact revision per value) through the
+ * SAME port the catalog inspection reads. Without the port every catalog fact is unknown with the source "catalog unavailable": a
+ * footprint hint, a pin count or a vendor text never becomes identity or evidence (ENGINEERING_FACTS_NEVER_PROVEN_BY_SOURCING).
+ */
+function missingFactsDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.parts.missing-facts", version: "1.0.0",
+    agentExposed: true, // [PR-F] a Tier 0 read over the run's verified schematic snapshot and the bound catalog port; nothing placed, bound, published or bought
+    owningCommandId: "pcb.sync-durable",
+    title: "List the missing facts of every unresolved part",
+    description: "For every instance the Schematic to PCB run cannot carry to the board (the editor's own refusal list), derive the SAME missing-facts checklist the editor's missing-parts list shows: identity (manufacturer, exact MPN, package), evidence (symbol, footprint, pin-to-pad mapping - known only from a published exact revision) and stock/pricing (sourcing observations, never proof), each known, unknown or conflicting with its source, plus the next actions in order. Example input: {}. Catalog facts come through the server's catalog port only when it is bound to the run; without it every identity and evidence fact is unknown with the source \"catalog unavailable\" - never guessed from a footprint hint, a pin count or a vendor text. At most 50 instances listed, the rest counted. Nothing is placed, bound or published.",
+    category: "validation", operationClass: "read",
+    inputSchema: obj({}), outputSchema: OUT_REPORT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
+    binding: { status: "bound-read", module: "app/lib/parts/missing-facts.ts", symbol: "deriveMissingFacts", notes: "PR-F: the ONE missing-facts derivation the editor's missing-parts list renders (app/lib/parts/missing-facts.ts), over the editor's own refusal list (listUnresolvedInstances) and the run's verified schematic snapshot; invoked only through MissingFactsReadService (app/lib/agent/missing-facts-reads.ts), which asks the chat route's injected catalog port (app/api/chat/catalog-inspection-runtime.ts, the same port as the catalog inspection) for each placed part only when the server's catalog fact is present, and otherwise reports every catalog fact unknown as catalog unavailable. No second derivation; no distributor call; bounded to 50 instances." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 8_000,
+    validationStrategy: "closed argument surface (no arguments; an authority-shaped key is refused by name) under the B05 input limits; the verified schematic snapshot and its digest are required; discovery, role and capability rechecked per call; the catalog is asked once per distinct placed part id under the call's deadline, a miss, a failure or a late answer being data per instance; the output is schema-checked and bounded (at most 50 checklists, the rest counted)",
+    verificationStrategy: "pure over the run's verified schematic snapshot (the integrity check recomputes its digest before every call; the result names that digest as its source); the catalog facts are a server catalog read at the time of the call and the result says so (schematic-snapshot-verified+catalog-read); every fact carries the source that decided it, and an absent catalog is stated, never inferred",
+    sourceEvidence: ["app/lib/parts/missing-facts.ts", "app/lib/agent/missing-facts-reads.ts", "app/lib/pcb-sync/unresolved-instances.ts", "app/api/chat/catalog-inspection-runtime.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "1.0.0 (PR-F fB): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (its input is the editor's browser-only SchematicState, as OD-244's preflight read).",
+  };
+}
+
+/**
+ * [PR-F fB, 2026-10-17] The agent's part DRAFT REQUEST proposal, declared at the END too. A sealed REQUEST for an explicitly UNVERIFIED
+ * draft of one unresolved part, in the vocabulary of the EXISTING human-only atomic publication request (AtomicPublicationSpec,
+ * app/lib/atomic/publication-review-contract.ts; the route's submit_request admits a person only, ATOMIC_PUBLICATION_HUMAN_REQUIRED),
+ * from the documented facts the request carries, each with its source label or listed as missing; the C.4 blockers of PCB
+ * assignment travel as data; no mapping certificate, approval or publication is ever claimed (CONTINUATION C.4-C.6). The agent
+ * cannot file it (OD-244 stands): a human member pastes it into the Build Library's Request evidence review.
+ */
+function draftRequestDescriptor(): ToolDescriptor {
+  const fact = (what: string): JsonSchema => obj({ value: { type: "string", description: what }, source: { type: "string", description: "The label of the document that states it (manufacturer datasheet revision and section)." } }, ["value", "source"]);
+  return {
+    ...readDefaults,
+    toolId: "sirkit.parts.draft-request", version: "1.0.0",
+    agentExposed: true, // [PR-F] sealed UNVERIFIED draft request ONLY; filing, review, approval and publication stay human-only in the publication review
+    owningCommandId: "parts.draft-request", // [PR-F lead, 2026-10-17] its own propose record: B19-E E4 keeps every tool away from the human-only publication-review record
+    title: "Propose an unverified draft request for one missing part",
+    description: "Seal a REQUEST for an explicitly UNVERIFIED draft of ONE unresolved part from the documented facts it carries (exact MPN, manufacturer, package, pin table, pitch, body dimensions, pin-1 orientation, exposed pad), each given WITH its source label or listed as missing. Example input: {\"refDes\":\"U1\",\"exactMpn\":{\"value\":\"NE555DR\",\"source\":\"TI SLFS022I, page 1\"},\"pinTable\":[{\"number\":\"1\",\"function\":\"ground\",\"source\":\"TI SLFS022I, table 5-1\"}]}. A human files it as a publication request; it lists the missing facts, states that an unknown package variant, pad numbering, pin-1 orientation, pitch, courtyard or exposed-pad mapping BLOCKS PCB assignment, and claims no mapping certificate, approval or publication. It refuses without a pin table, exact MPN and manufacturer, with a fact lacking its source, or with conflicting facts.",
+    category: "parts", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({
+      refDes: { type: "string", description: "The unresolved instance's reference designator, as the missing-facts read lists it." },
+      exactMpn: fact("The exact manufacturer part number as published (every suffix character counts)."),
+      manufacturer: obj({ name: { type: "string" }, domains: { type: "array", items: { type: "string" }, description: "Official manufacturer domains, lower case (optional)." }, source: { type: "string" } }, ["name", "source"]),
+      package: obj({ code: { type: "string", description: "The manufacturer's package code." }, mounting: { type: "string", enum: ["smd", "through_hole"] }, source: { type: "string" } }, ["code", "mounting", "source"]),
+      pinTable: { type: "array", description: "Every pin from the datasheet's pin table: number, name, function, the pads it maps to (default: the pin number) and the source.", items: obj({ number: { type: "string" }, name: { type: "string" }, function: { type: "string" }, pads: { type: "array", items: { type: "string" } }, source: { type: "string" } }, ["number", "function", "source"]) },
+      pitchMm: obj({ value: { type: "number", description: "Pitch in millimetres." }, source: { type: "string" } }, ["value", "source"]),
+      bodyMm: obj({ x: { type: "number" }, y: { type: "number" }, source: { type: "string" } }, ["x", "y", "source"]),
+      pin1Orientation: fact("Where pin 1 sits and how the package marks it."),
+      exposedPad: obj({ pads: { type: "array", items: { type: "string" }, description: "The exposed pad's pad numbers; an empty list documents that there is none." }, source: { type: "string" } }, ["pads", "source"]),
+      datasheet: obj({ locator: { type: "string", description: "The datasheet revision and section cited (a link is never carried)." }, source: { type: "string" } }, ["locator", "source"]),
+      missing: { type: "array", items: { type: "string" }, description: "Facts the documents do not state, in plain words." },
+      profile: { type: "string", enum: ["schematic_only", "pcb_assignable"], description: "The approval profile requested; pcb_assignable needs every package fact documented." },
+    }, ["refDes"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
+    // the loop's B09.1 gate holds for every schematic proposal (a canonical head mark), so discovery requires the revision and the open lineage too; the sealed scope carries the mark
+    requiresExpectedRevision: true, requiresLineage: true,
+    binding: { status: "bound-proposal", module: "app/lib/agent/draft-request-proposals.ts", symbol: "compilePartDraftRequest", notes: "PR-F: the pure compile + seal of the request in the publication path's own vocabulary (AtomicPublicationSpec: exactMpn, profile, terminals, package, datasheet, manufacturer; symbol and footprint references left to the person) against the editor's own refusal list and, through the chat route's injected catalog port when bound, the placed catalog part (identity, package and pin count cross-checked; a different part is never substituted). The server's normalizeAtomicPublicationSpec and assembleAtomicDraft run when the HUMAN submits (app/lib/atomic/publication-review.ts: submitAtomicPublicationRequest admits a person only); PartDraftRequestProposalService (app/lib/agent/draft-request-proposals.ts) seals the artifact (sirkit.part-draft-request.v1, verification unverified) or reports the blockers as proposal-blocked data. Nothing is filed, approved or published here." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 8_000,
+    validationStrategy: "closed argument surface (the request's keys only; authority-shaped keys and KiCad asset references refused by name) under the B05 input limits; the verified schematic snapshot and its digest are required; discovery, role and capability rechecked per call; the compile is all-or-nothing: the instance must be one the editor's refusal list names, the exact MPN and manufacturer and a pin table are required, every given fact carries a source label, pin numbers and pad mappings must not conflict, the placed catalog part's identity, package and pin count must not conflict when the catalog port is bound, and pcb_assignable needs every C.4 fact",
+    verificationStrategy: "the sealed body's identity digest and the request digest are recomputed by verifySealedPartDraftRequestIntegrity; the artifact's verification is the constant unverified and it names the human path (submit_request, humans only), the facts it documents with their sources, the facts missing and the PCB-assignment blockers; the server's own normalizer, the import review, the reviewer's approval, the administrator's publication and the deterministic mapping checks decide later",
+    sourceEvidence: ["app/lib/agent/draft-request-proposals.ts", "app/lib/atomic/publication-review-contract.ts", "app/api/components/atomic/publication/handler.ts", "app/lib/atomic/publication-review.ts", "app/lib/pcb-sync/unresolved-instances.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "1.0.0 (PR-F fB): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (it seals against the editor's browser-only SchematicState, as OD-82's proposals).",
+  };
+}
+
+/**
+ * [PR-F fD, 2026-10-17] The agent's MODULE CONTRACT proposal, declared at the END too (a function declaration is hoisted), so no line
+ * of this catalog moves. The owner's Astra directive (sections 6-7; CONTINUATION E): the model submits a typed, versioned module
+ * contract set (`sirkit.module-contract.v1`) for the run's PINNED schematic - modules with their responsibilities, the components
+ * they own by exact sheet identity, ports on the sheet's named nets with limits, logic levels, impedance and permitted loading,
+ * the requirement topics (bandwidth, gain, noise, timing, accuracy, power, reference, ground, startup, protection) stated with
+ * evidence or listed unknown, footprint / pin authority gaps, placement and routing obligations, tests, and the cross-module
+ * constraints over shared nets - and the ONE validator (app/lib/engineering/module-contract.ts) checks it against that sheet
+ * through the existing identity, netlist and unresolved-instance authorities. A validated set is SEALED as an engineering note
+ * the page shows in the run log (no apply path exists; the human accepts by continuing); a refused set is proposal-blocked data.
+ */
+function moduleContractsDescriptor(): ToolDescriptor {
+  const quantity: JsonSchema = obj({ name: { type: "string" }, value: { type: "number" }, unit: { type: "string", description: "The unit of the value (V, A, ohm, Hz, dB, s, pF, degC, bit); never empty." }, bound: { type: "string", enum: ["min", "max", "typical", "nominal"] } }, ["name", "value", "unit"]);
+  const quantities = (): JsonSchema => ({ type: "array", items: quantity });
+  const evidence: JsonSchema = {
+    type: "array",
+    items: obj({ sourceIdentity: { type: "string", description: "The document that states the recommendation: an exact-part datasheet, a manufacturer layout or application note, a reference design or a primary paper." }, documentRevision: { type: "string" }, section: { type: "string" }, applicability: { type: "string", description: "The component, pin, net, module or operating condition it applies to." }, assumptions: { type: "string" }, uncertainty: { type: "string" }, kind: { type: "string", enum: ["hard-requirement", "approved-policy", "optimization-goal"] } }, ["sourceIdentity", "documentRevision", "section", "applicability", "assumptions", "uncertainty", "kind"]),
+  };
+  const topics = { type: "string", enum: ["bandwidth", "gain", "noise", "timing", "accuracy", "power", "reference", "ground", "startup", "protection"] };
+  const port: JsonSchema = obj({
+    id: { type: "string" }, net: { type: "string", description: "A named net of the pinned schematic: a net label name, or GND." }, direction: { type: "string", enum: ["input", "output", "bidirectional", "power-in", "power-out", "reference", "ground"] },
+    logicLevel: { type: "string" }, voltage: quantities(), current: quantities(), impedance: quantities(), permittedLoading: quantities(),
+    unknown: { type: "array", items: { type: "string", enum: ["voltage", "current", "logicLevel", "impedance", "permittedLoading"] }, description: "The facts of this port that stay unknown; a fact neither stated nor listed here is refused." }, evidence,
+  }, ["id", "net", "direction"]);
+  const requirement: JsonSchema = obj({ topic: topics, statement: { type: "string" }, quantities: quantities(), evidence }, ["topic", "statement", "evidence"]);
+  const test: JsonSchema = obj({ id: { type: "string" }, procedure: { type: "string" }, acceptance: { type: "string" }, quantities: quantities(), evidence }, ["id", "procedure", "acceptance"]);
+  const moduleSchema: JsonSchema = obj({
+    id: { type: "string" }, name: { type: "string" }, responsibility: { type: "string" },
+    components: { type: "array", items: obj({ refDes: { type: "string", description: "The reference designator on the pinned schematic; the exact part and revision ids are read from the sheet." }, partId: { type: "string" }, revisionId: { type: "string" } }, ["refDes"]) },
+    ports: { type: "array", items: port }, requirements: { type: "array", items: requirement },
+    unknown: { type: "array", items: topics }, notApplicable: { type: "array", items: topics },
+    partAuthorityGaps: { type: "array", items: { type: "string" }, description: "Owned reference designators that lack a published exact revision or a physical package (the sheet decides; every such instance is acknowledged here)." },
+    placementRouting: { type: "array", items: { type: "string" } }, tests: { type: "array", items: test },
+  }, ["id", "name", "responsibility", "components", "ports", "requirements"]);
+  const constraint: JsonSchema = obj({
+    id: { type: "string" }, kind: { type: "string", enum: ["interface", "shared-power", "shared-ground", "shared-clock", "shared-reference", "shared-connector", "net-ownership"] }, net: { type: "string" },
+    modules: { type: "array", items: { type: "string" } }, owner: { type: "string", description: "The module that owns the shared net (required for every kind but interface)." }, statement: { type: "string" }, quantities: quantities(),
+    loading: obj({ driver: { type: "string" }, quantities: quantities(), unknown: { type: "string", description: "The reason the loading is unknown (given alone, without driver or quantities)." } }), evidence,
+  }, ["id", "kind", "net", "modules", "statement", "evidence"]);
+  return {
+    ...readDefaults,
+    toolId: "sirkit.module.propose-contracts", version: "1.0.0",
+    agentExposed: true, // [PR-F fD] a sealed engineering note ONLY: no apply path, nothing changes the sheet or a board; the human accepts it by continuing
+    owningCommandId: "cd.architecture.workbench",
+    title: "Propose module contracts for the pinned schematic",
+    description: "Submit a module contract set (sirkit.module-contract.v1) for the current schematic, sealed as an engineering note for human review. A module names its responsibility, the components it owns by reference designator (part and revision ids come from the sheet), its ports on the sheet's named nets (a net label or GND) with voltage and current limits, logic level, impedance and permitted loading, its requirements per topic with evidence, the topics left unknown or not applicable, its part-authority gaps, layout obligations and tests; the constraints state every net two modules share (an interface states its loading or declares it unknown; a shared power, ground, clock, reference or connector net names its owner). Every number carries a unit; every recommendation names its source. Refused as data: an unknown or doubly owned component, an unknown net, a value without a unit, evidence without a source, an unstated interface, over 50 physical instances. Nothing is applied or verified.",
+
+
+
+    category: "schematic", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({ system: obj({ name: { type: "string" }, statement: { type: "string" }, operatingConditions: quantities() }, ["name", "statement"]), modules: { type: "array", items: moduleSchema }, constraints: { type: "array", items: constraint } }, ["system", "modules", "constraints"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
+    // the loop's B09.1 gate holds for every schematic proposal (a canonical head mark): the set is pinned to the sheet's exact base digest and head mark
+    requiresExpectedRevision: true, requiresLineage: true,
+    binding: { status: "bound-proposal", module: "app/lib/engineering/module-contract.ts", symbol: "validateModuleContractSet", notes: "PR-F fD: the ONE validator of a module contract set against the pinned schematic - identities through the sheet's own instances (KiCad part and published exact revision ids; Theory ids and types), nets through the netlist authority's names (app/lib/pcb/netlist-bridge.ts buildNetlist: labels win, ground is GND) united with the sheet's declared labels, footprint / pin authority through the editor's own refusal list (app/lib/pcb-sync/unresolved-instances.ts listUnresolvedInstances), units and evidence shape, single ownership, and the cross-module interface statements (an output meeting an input across modules must state its loading or declare it unknown; a shared reference names its owner). ModuleContractProposalService (app/lib/agent/module-contract-proposals.ts) seals the validated set (sirkit.module-contract-proposal.v1, verification contract-structure-checked, electricalCheck not_run) or reports the blockers as proposal-blocked data. No electrical check runs; nothing is applied." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 8_000,
+    validationStrategy: "closed argument surface (exactly system, modules, constraints; authority-shaped keys refused by name) under the B05 input limits; the verified schematic snapshot, its digest and its canonical head mark are required; discovery, role and capability rechecked per call; the validation is all-or-nothing with every blocker listed: every owned component an exact identity of the sheet owned exactly once (a stated part or revision id must agree), every port and constraint net a named net of the sheet, every quantity with a unit, every stated port fact and requirement with evidence naming a source, every port fact and requirement topic stated or listed unknown (or not applicable), every owned unresolved instance acknowledged as a part-authority gap and none claimed falsely, every shared net stated by a constraint over every module carrying it (a driver-to-receiver net by an interface with its loading; a shared reference with its owner), one owner per net, at most 50 physical instances on the sheet",
+    verificationStrategy: "the sealed body's identity digest and the contract digest are recomputed by verifySealedModuleContractProposalIntegrity; the artifact's verification is the constant contract-structure-checked and its electricalCheck is not_run (no ERC, simulation or electrical check ran; the existing deterministic checks recheck the composed circuit later); the sealed set carries the exact identities read from the pinned sheet, the derived part-authority rows (the editor's refusal list), the coverage (physical instances, owned, unassigned, known and referenced nets, shared nets with their constraints) and the human review task",
+    sourceEvidence: ["app/lib/engineering/module-contract.ts", "app/lib/agent/module-contract-proposals.ts", "app/lib/pcb/netlist-bridge.ts", "app/lib/pcb-sync/unresolved-instances.ts", "app/lib/agent/gateway.ts", "app/lib/agent/loop.ts"],
+    versionNotes: "1.0.0 (PR-F fD): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (it validates against the editor's browser-only SchematicState and seals its head mark, as OD-82's proposals; MCP exposure stays read-only). The page shows the sealed note in the run log; a richer review surface is later work.",
+  };
+}
+
+/**
+ * [PR-F fE, 2026-10-17] The placement INTENT block of `sirkit.placement.propose` (`sirkit.placement-intent.v1`; directive section 8),
+ * built by a hoisted FUNCTION declared at the END (a const here would still be in its temporal dead zone when the catalog array above
+ * evaluates), so no line of this catalog moves. Every length is in millimetres in the board-world frame; every component is
+ * { ref, instanceId } and every net { name, id }, both halves bound to the SAME object of the board revision by the service
+ * (app/lib/pcb/placement/intent.ts compilePlacementIntent); the frame statement the manual prints is that module's.
+ */
+function placementIntentInputSchema(): JsonSchema {
+  const component = obj({ ref: { type: "string", description: "The reference designator exactly as the board shows it (R1, U3, J2)." }, instanceId: { type: "string", description: "The footprint instance id of the SAME component (board-inspect lists it); both must match or the whole intent is refused." } }, ["ref", "instanceId"]);
+  const net = obj({ name: { type: "string", description: "The net name exactly as the board names it." }, id: { type: "integer", description: "The board net id of the SAME net; both must match or the whole intent is refused." } }, ["name", "id"]);
+  const pointMm = obj({ x: { type: "number", description: "millimetres, board-world frame: +x right" }, y: { type: "number", description: "millimetres, board-world frame: +y down" } }, ["x", "y"]);
+  const polygonMm = { type: "array", items: pointMm, description: "3 to 32 corners in millimetres (mm) in the board-world frame (+x right, +y down; the world origin, not the outline corner)." };
+  const regionSide = { type: "string", enum: ["top", "bottom", "both"] };
+  return obj({
+    schema: { type: "string", enum: ["sirkit.placement-intent.v1"] },
+    units: { type: "string", enum: ["mm"], description: "Every length and coordinate below is in millimetres (mm); nothing else is accepted." },
+    frame: { type: "string", enum: ["board-world"], description: "The board's world frame as the PCB model stores it: +x right, +y down, origin at the world (0, 0), a component's position is its footprint origin; rotation in whole degrees, counter-clockwise as seen on screen, 0 | 90 | 180 | 270; side bottom mirrors across x." },
+    regions: { type: "array", description: "Named placement regions (rooms) a group may be assigned to.", items: obj({ id: { type: "string" }, name: { type: "string" }, polygonMm, side: regionSide }, ["id", "polygonMm"]) },
+    groups: { type: "array", description: "Functional groups of exact components; a regionId keeps the group inside that region (members without an explicit coordinate start at the region's centre).", items: obj({ id: { type: "string" }, name: { type: "string" }, members: { type: "array", items: component }, regionId: { type: "string" } }, ["id", "members"]) },
+    placements: { type: "array", description: "Explicit coordinates (and optionally rotation / side) for exact components; the engine's legalization may move them and every move is reported as a conflict.", items: obj({ component, xMm: { type: "number", description: "millimetres, +x right" }, yMm: { type: "number", description: "millimetres, +y down" }, rotationDeg: { type: "integer", enum: [0, 90, 180, 270], description: "whole degrees, counter-clockwise as seen on screen" }, side: { type: "string", enum: ["top", "bottom"] } }, ["component", "xMm", "yMm"]) },
+    proximity: { type: "array", description: "Pin-specific proximity: keep a component (or one of its pads) within a distance of another component (or pad); measured on the candidate and reported.", items: obj({ component, pad: { type: "string", description: "The pad number on component (optional; the footprint origin otherwise)." }, near: component, nearPad: { type: "string" }, maxDistanceMm: { type: "number", description: "millimetres, above 0" }, reason: { type: "string" } }, ["component", "near", "maxDistanceMm"]) },
+    separations: { type: "array", description: "Keep two components' placement envelopes at least this far apart (millimetres); measured on the candidate and reported.", items: obj({ component, from: component, minDistanceMm: { type: "number", description: "millimetres, above 0" }, reason: { type: "string" } }, ["component", "from", "minDistanceMm"]) },
+    corridors: { type: "array", description: "Routing corridors kept free of component envelopes (a polygon in millimetres, optionally for named nets); any component entering one is reported.", items: obj({ id: { type: "string" }, name: { type: "string" }, polygonMm, side: regionSide, nets: { type: "array", items: net } }, ["id", "polygonMm"]) },
+    criticalNets: { type: "array", description: "Net priorities (1 most critical) carried as data for the reviewer and the routing step; the placement engine does not enforce them.", items: obj({ net, priority: { type: "integer", enum: [1, 2, 3] }, reason: { type: "string" } }, ["net", "priority"]) },
+  }, ["schema", "units", "frame"]);
+}
+
+/**
+ * [PR-F fE, 2026-10-17] The agent's STACKUP / VIA-POLICY proposal, declared at the END too (a function declaration is hoisted), so no
+ * line of this catalog moves. A sealed RECOMMENDATION (sirkit.stackup-candidate.v1; directive section 9) of a layer count and layer
+ * roles, reference planes, power distribution and a through-via profile chosen ONLY among the tree's stackup profiles
+ * (app/lib/pcb/stackup.ts STACKUP_PROFILES), its two- and four-layer manufacturing presets (app/lib/pcb/drc/presets with their fab
+ * bundles) and its via padstacks; release qualification is stated per preset (QUALIFIED_RULE_PROFILE_IDS: jlcpcb-2l only). Blind,
+ * buried, micro, via-in-pad or stacked vias, materials, dielectrics, copper weights, thicknesses, impedance and other layer counts
+ * are refused as proposal-blocked data with the one reason "unsupported until the complete chain is proven". Nothing is applied: the
+ * human changes the stackup through the PCB editor's Stackup selector (pcb.board-geometry), and a different layer count or profile is
+ * marked as invalidating dependent approvals with the rules cited inside the candidate.
+ */
+function stackupProposalDescriptor(): ToolDescriptor {
+  const net = obj({ name: { type: "string", description: "The net name exactly as the board names it." }, id: { type: "integer", description: "The board net id of the SAME net." } }, ["name", "id"]);
+  return {
+    ...readDefaults,
+    toolId: "sirkit.stackup.propose", version: "1.0.0",
+    agentExposed: true, // [PR-F fE] sealed recommendation ONLY; the stackup is changed by the human in the PCB editor's Stackup selector
+    owningCommandId: "pcb.board-geometry",
+    title: "Propose a stackup and via policy",
+    description: "Recommend a layer count and layer roles, reference planes and a through-via profile for the CURRENT board, chosen only among the qualified stackup profiles (simple-2, signal-plane-4, all-signal-4, dense-4), the two- and four-layer manufacturing profiles (jlcpcb-2l, jlcpcb-4l, pcbway-standard, oshpark-4l) and the via padstacks this board defines, sealed into a revision-bound candidate. Example input: {\"profileId\":\"signal-plane-4\",\"manufacturingProfileId\":\"jlcpcb-4l\",\"planes\":[{\"layer\":\"in1\",\"net\":{\"name\":\"GND\",\"id\":1}}]}. The candidate states physical and routable signal layer counts apart, whether the manufacturing profile is release-qualified, which via profiles meet the manufacturer's minimum, and that a different layer count or profile invalidates dependent approvals. Blind, buried, micro, via-in-pad or stacked vias, materials, impedance and other layer counts are refused as data: unsupported until the complete chain is proven. Receiving it changes nothing.",
+    category: "pcb", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({
+      profileId: { type: "string", enum: ["simple-2", "signal-plane-4", "all-signal-4", "dense-4"], description: "The stackup profile (layer count and layer roles) as app/lib/pcb/stackup.ts defines it." },
+      manufacturingProfileId: { type: "string", enum: ["jlcpcb-2l", "jlcpcb-4l", "pcbway-standard", "oshpark-4l"], description: "The manufacturing (DRC / fab) preset; its copper layer count must match the profile's. Absent: the run's active preset." },
+      planes: { type: "array", description: "Reference planes: an inner layer that is a plane in the chosen profile and the exact board net it carries.", items: obj({ layer: { type: "string", enum: ["in1", "in2"] }, net }, ["layer", "net"]) },
+      viaPadstackIds: { type: "array", items: { type: "string" }, description: "Via profiles by padstack id among this board's padstacks and the class defaults (via-default, via-power, via-highcurrent); absent: all of them, each checked against the preset's minimum." },
+      viaTechnology: { type: "string", enum: ["through"], description: "Only through vias are qualified; any other technology is refused as data." },
+      rationale: { type: "string", description: "Why this stackup (up to 600 characters); carried as data for the reviewer." },
+    }, ["profileId"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "project_admin"],
+    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
+    binding: { status: "bound-proposal", module: "app/lib/pcb/candidates/stackup-candidate.ts", symbol: "compileStackupCandidate", notes: "PR-F fE: the ONE pure compile over the verified canonical board - the tree's STACKUP_PROFILES (physical vs routable signal layers), the DRC presets with their fab copper bundles (release qualification from QUALIFIED_RULE_PROFILE_IDS), the board's via padstacks and the seeded class defaults checked against the preset's minima, the revision / approval invalidation rules cited; StackupProposalService (app/lib/agent/stackup-proposals.ts) checks the binding, integrity, the board, discovery, role and the closed request, then seals (sirkit.stackup-candidate.v1) or reports the blockers as proposal-blocked data. Nothing is applied here: the human path is PcbEditor's Stackup selector (pcb.board-geometry)." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 8_000,
+    validationStrategy: "closed argument surface (profileId required; manufacturingProfileId, planes, viaPadstackIds, viaTechnology, rationale; authority-shaped keys refused by name; the unsupported-capability keys reach the compiler so their refusal carries the exact reason) under the B05 input limits; a verified canonical board is required; discovery, role and capability rechecked per call; the compile is all-or-nothing against the tree's own profiles, presets, layer roles, board nets and padstacks",
+    verificationStrategy: "the sealed body's content digest is recomputed by stackupCandidateIntact; the candidate is pinned to the board revision and expires; nothing is applied by the tool - the editor's own Stackup selector commits the change as one canonical transaction, after which DRC, the export preflight and the manufacturing qualification re-run from scratch (the cited invalidation rules)",
+    sourceEvidence: ["app/lib/pcb/candidates/stackup-candidate.ts", "app/lib/agent/stackup-proposals.ts", "app/lib/pcb/stackup.ts", "app/lib/pcb/drc/presets/index.ts", "app/lib/pcb/fab/rule-profile.ts", "app/lib/pcb/padstack/defaults.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "1.0.0 (PR-F fE, 2026-10-17): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (a proposal, as OD-82; MCP exposure stays read-only).",
+  };
+}
+/**
+ * [PR-M, 2026-10-17] Section M.2.1: the agent's SCHEMATIC-INSTANCE INSPECTION, declared at the END too (a function declaration is
+ * hoisted), so no line of this catalog moves. A Tier 0 read over the run's VALIDATED schematic snapshot and the server catalog
+ * facts of the placed parts (the catalog inspection's own port), board-less like the editor's Prepare PCB: the one derivation is
+ * app/lib/component-resolution/instance-facts.ts `inspectSchematicInstances`; the pins come from the catalog symbol, never a
+ * browser pin list, and without the catalog port every pin is reported unavailable.
+ */
+function instanceInspectDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.schematic.instance-inspect", version: "1.0.0",
+    agentExposed: true, // [PR-M] a Tier 0 read over the run's verified schematic and the bound catalog port; no board; nothing placed, bound or applied
+    owningCommandId: "schematic.review-advisory",
+    title: "Inspect schematic instances without a PCB",
+    description: "Inspect schematic component instances WITHOUT a PCB: for each, the stable instance id (the only durable target - a reference designator is a label), reference, value, the catalog part and exact atomic revision with its catalog status, whether Prepare PCB would refuse it and why, the published revision its own part links for its value, the symbol's pins (number, name, electrical type, function) from the server catalog symbol, each pin's net and members, and anode / cathode nets of a polar part, with the captured schematic digest and head mark. Example input: {\"componentIds\":[\"D1\",\"D2\"]}; omit componentIds for every unresolved instance. Without the catalog port every pin is unavailable (never guessed). Nothing is placed, bound or applied.",
+    category: "schematic", operationClass: "read",
+    inputSchema: obj({ componentIds: { type: "array", items: { type: "string" }, description: "Optional: up to 50 stable instance ids or reference designators to inspect; omitted, every instance Prepare PCB would refuse." } }),
+    outputSchema: OUT_REPORT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
+    binding: { status: "bound-read", module: "app/lib/component-resolution/instance-facts.ts", symbol: "inspectSchematicInstances", notes: "PR-M: the ONE schematic-instance derivation (the editor's own refusal rule listUnresolvedInstances, the production netlist union-find buildNetlist over the server catalog's pins, the published link rule valueKeyLink); invoked only through InstanceInspectionReadService (app/lib/agent/instance-inspection-reads.ts) over the run's verified schematic snapshot and the chat route's injected catalog port (app/api/chat/catalog-inspection-runtime.ts, the same port as the catalog inspection). Board-less by design: it reads what blocks the first board. No second derivation." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 8_000,
+    validationStrategy: "closed argument surface (only componentIds: 1-50 stable ids or references; authority-shaped keys such as pins, nets or partId refused by name) under the B05 input limits; the verified schematic snapshot and its digest are required; discovery, role and capability rechecked per call; the catalog is asked once per distinct placed part under the call's deadline (a miss, a failure or a late answer is data per part); the output is schema-checked and bounded",
+    verificationStrategy: "pure over the run's verified schematic snapshot (the integrity check recomputes its digest before every call; the result names it as its source and carries the head mark); pins and their functions only from the server catalog symbol (schematic-snapshot-verified+catalog-read), otherwise reported unavailable",
+    sourceEvidence: ["app/lib/component-resolution/instance-facts.ts", "app/lib/component-resolution/pin-functions.ts", "app/lib/agent/instance-inspection-reads.ts", "app/lib/pcb/netlist-bridge.ts", "app/lib/pcb-sync/unresolved-instances.ts", "app/api/chat/catalog-inspection-runtime.ts"],
+    versionNotes: "1.0.0 (PR-M, 2026-10-17): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (its input is the editor's browser-only SchematicState, as OD-244's preflight read).",
+  };
+}
+
+/**
+ * [PR-M, 2026-10-17] Section M.2.2: the agent's CANDIDATE SEARCH BY REQUIREMENTS, declared at the END too. Its recall is the Build
+ * loop's own hybrid catalog search (app/lib/parts-search.ts searchPartsForAI, embedding-backed, over the catalog's real category
+ * vocabulary) through the chat route's injected search port; every hit is re-read through the catalog port and the published
+ * revision evidence port and classified by the one compatibility evaluation. Requires the catalog authority (the server's facts).
+ */
+function candidateSearchDescriptor(): ToolDescriptor {
+  const rating: JsonSchema = obj({ property: { type: "string", description: "The published claim property, lower case (e.g. reverse_voltage, forward_current)." }, dimension: { type: "string", enum: ["dimensionless", "voltage", "current", "resistance", "capacitance", "inductance", "power", "frequency", "time", "temperature", "length", "mass"] }, min: { type: "number", description: "Minimum in SI base units." }, max: { type: "number", description: "Maximum in SI base units." } }, ["property", "dimension"]);
+  return {
+    ...readDefaults,
+    toolId: "sirkit.parts.candidate-search", version: "1.0.0",
+    agentExposed: true, // [PR-M] a Tier 0 read of the local catalog by requirements through the chat route's injected ports; no distributor; nothing placed, bound or published
+    owningCommandId: "parts.catalog-read",
+    title: "Search the local catalog for replacement candidates",
+    description: "Search Sirkit's local catalog by functional role, specifications and package text for exact published revisions that could resolve ONE instance (componentId), and sort every result into eligible (published, selectable, symbol + footprint + approved mapping, every connected pin mapped by function), draft, missing-asset, withdrawn, incompatible or unresolved, each with its reasons, warnings and the proved pin mapping. The instance's own part is considered first (binding its published revision changes no part). Example input: {\"componentId\":\"D1\",\"query\":\"small-signal fast switching diode 100 V 150 mA\",\"functionalClass\":\"diode\",\"limit\":8}. At most 3 searches per turn. A hit is a candidate, never authority; no distributor is called; compatible is not electrical equivalence.",
+    category: "parts", operationClass: "read",
+    sideEffects: "derived-cache", // the search's own embedding memo and reranker refusal memo
+    inputSchema: obj({
+      componentId: { type: "string", description: "The stable instance id (or reference) of the instance to resolve; omitted, assets are classified but suitability is not evaluated." },
+      query: { type: "string", description: "The functional role and specifications to search for (1-300 printable characters)." },
+      category: { type: "string", description: "Optional catalog category name or request (normalized onto the catalog vocabulary; an unrecognised one filters nothing)." },
+      functionalClass: { type: "string", enum: ["diode", "schottky-diode", "zener-diode", "tvs-diode", "led", "resistor", "capacitor", "inductor", "transistor", "integrated-circuit", "connector"], description: "Optional class the replacement must have; omitted, the instance's own class." },
+      mounting: { type: "string", enum: ["smd", "through_hole"], description: "Optional required mounting." },
+      packageCode: { type: "string", description: "Optional package code the footprint must be (e.g. SOD-123)." },
+      ratings: { type: "array", items: rating, description: "Optional stated rating requirements; each must be proven by a published claim." },
+      limit: { type: "integer", description: "1-10 search hits to classify (default 10)." },
+    }, ["query"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: [], requiredAuthority: ["catalog"],
+    binding: { status: "bound-read", module: "app/lib/component-resolution/candidate-search.ts", symbol: "searchResolutionCandidates", notes: "PR-M: recall through the chat route's injected search port over the Build loop's own searchPartsForAI (app/lib/parts-search.ts; embedding-backed, the catalog's category vocabulary, the reranker refusal memo); every hit re-read through the catalog inspection port (loadCatalogPartDetail) and the revision evidence port (loadSelectablePortableSnapshot + loadAtomicRevisionStatus), then classified by evaluateCompatibility (app/lib/component-resolution/compatibility.ts). Invoked only through CandidateSearchReadService (app/lib/agent/candidate-search-reads.ts); at most 3 searches per run." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 15_000, budgetClass: "batch",
+    validationStrategy: "closed argument surface (componentId, query, category, functionalClass, mounting, packageCode, ratings, limit; authority-shaped keys such as atomicPartRevisionId, pins or mapping refused by name) under the B05 input limits; the server's catalog, search and evidence facts and ports are required; discovery, role and capability rechecked per call; at most 3 searches per run, charged before the search port is asked; every port call bounded by the call's deadline",
+    verificationStrategy: "every result is re-read from the server catalog and the published revision evidence at the time of the call; eligibility needs a published, selectable revision whose catalog link names exactly its symbol, footprint and approved complete mapping, a catalog symbol drawing the published pins, the same functional class and every connected pin mapped by function to a pad; a stated rating needs a published claim; the output is schema-checked",
+    sourceEvidence: ["app/lib/component-resolution/candidate-search.ts", "app/lib/component-resolution/compatibility.ts", "app/lib/agent/candidate-search-reads.ts", "app/lib/parts-search.ts", "app/api/chat/component-resolution-runtime.ts", "app/lib/atomic/server-catalog.ts"],
+    versionNotes: "1.0.0 (PR-M, 2026-10-17): first exposure, reviewed in agent-exposure.ts; the second binding admitted by the catalog authority rule (tool-registry.ts catalogAuthorityIssues); withheld from MCP by a reviewed choice in mcp-exposure-review.ts (the MCP server binds no catalog or search port, as OD-235's catalog read).",
+  };
+}
+
+/**
+ * [PR-M, 2026-10-17] Sections M.0 (last paragraph) and M.2.4: the agent's UNRESOLVED-COMPONENT RESOLUTION proposal, declared at the
+ * END too. A sealed batch the human reviews and applies through schematic.resolve-components; separate from, and never replacing,
+ * the narrower B14 exact replacement above (which keeps its durable-binding requirement for already-qualified parts).
+ */
+function componentResolutionDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.schematic.propose-component-resolution", version: "1.0.0",
+    agentExposed: true, // [PR-M] sealed batch proposal ONLY; applying it is the human's reviewed schematic.resolve-components and never provider-callable
+    owningCommandId: "schematic.resolve-components-propose",
+    title: "Propose eligible parts for unresolved components",
+    description: "Seal ONE coherent batch that resolves unresolved KiCad instances (no published exact revision) to exact eligible revisions from the candidate search: one item per stable instance id with the candidate part and the exact revision the search reported (an assertion the server must reproduce). The server re-reads the catalog and published evidence, proves each pin mapping by function over the approved certificate (a permutation only when proved), keeps references, values, placements and every net, and seals the identities, mapping and material warnings. Example input: {\"items\":[{\"componentId\":\"kc-3a9f01\",\"candidatePartId\":\"part-1n4148w\",\"atomicPartRevisionId\":\"rev-1n4148w-1\"}]}. Receiving it changes NOTHING; a human reviews and applies it. Missing pin evidence returns the missing-facts / draft-request work item instead.",
+    category: "schematic", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({
+      items: { type: "array", description: "1-20 instances to resolve together, each naming the candidate the candidate search reported for it.", items: obj({ componentId: { type: "string", description: "The stable instance id (not the reference designator)." }, candidatePartId: { type: "string", description: "The candidate's catalog part id." }, atomicPartRevisionId: { type: "string", description: "The exact revision the candidate search reported for this instance (an assertion, never a choice)." } }, ["componentId", "candidatePartId", "atomicPartRevisionId"]) },
+      functionalClass: { type: "string", enum: ["diode", "schottky-diode", "zener-diode", "tvs-diode", "led", "resistor", "capacitor", "inductor", "transistor", "integrated-circuit", "connector"], description: "Optional class every replacement must have." },
+      mounting: { type: "string", enum: ["smd", "through_hole"], description: "Optional required mounting." },
+      packageCode: { type: "string", description: "Optional package code every footprint must be (e.g. SOD-123)." },
+      ratings: { type: "array", items: obj({ property: { type: "string" }, dimension: { type: "string", enum: ["dimensionless", "voltage", "current", "resistance", "capacitance", "inductance", "power", "frequency", "time", "temperature", "length", "mass"] }, min: { type: "number" }, max: { type: "number" } }, ["property", "dimension"]), description: "Optional stated rating requirements (SI base units), each proven by a published claim." },
+    }, ["items"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present", "catalog-available"], requiredAuthority: ["local-working-copy"], // catalog-available: the server's catalog fact (context.ts claims the state exactly with it), so without the catalog facts this proposal is withheld at discovery, as the catalog reads are
+    // the loop's B09.1 gate holds for every schematic proposal (a canonical head mark), so discovery requires the revision and the open lineage too
+    requiresExpectedRevision: true, requiresLineage: true,
+    binding: { status: "bound-proposal", module: "app/lib/component-resolution/resolution-assembler.ts", symbol: "assembleResolutionProposal", notes: "PR-M: the ONE resolution assembler over server facts read through the chat route's injected ports (the catalog inspection port for the sheet's and the candidates' parts; the revision evidence port for the published snapshot projection and status): the instance inspection, evaluateCompatibility, the catalog-sourced resolution authority (one fresh runtime grant per item, retired before the artifact leaves), the ONE planSchematicReplacement with the proved mapping, zero dropped connections, no doubly-moved wire end or label, and the sheet's net partition proved unchanged; ComponentResolutionProposalService (app/lib/agent/component-resolution-proposals.ts) seals sirkit.component-resolution-proposal.v1 or returns the blockers as proposal-blocked data. Nothing applied here." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 15_000, budgetClass: "batch",
+    validationStrategy: "closed argument surface (items with componentId, candidatePartId, atomicPartRevisionId; functionalClass, mounting, packageCode, ratings; authority-shaped keys such as pins, mapping, asset ids or grants refused by name; a reference designator refused with its stable id named); a verified schematic, its head mark and the server's catalog and evidence facts are required; discovery, role and capability rechecked per call; all-or-nothing over the batch",
+    verificationStrategy: "the sealed batch's operations, impact and identity digests are re-verified at apply (verifySealedResolutionProposal) against the live session head; the apply re-reads fresh server facts through its one-shot channel, recompiles the whole batch and byte-matches the reviewed operations and impact, then proves the postconditions (identities, kept references / values / placements, moved wire ends and labels, unaffected instances, the connectivity digest) inside the canonical transaction",
+    sourceEvidence: ["app/lib/component-resolution/resolution-assembler.ts", "app/lib/component-resolution/resolution-proposal.ts", "app/lib/component-resolution/compatibility.ts", "app/lib/component-resolution/approved-resolution-mutations.ts", "app/lib/agent/component-resolution-proposals.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "1.0.0 (PR-M, 2026-10-17): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (it seals against the editor's browser-only SchematicState and head mark, as OD-82's proposals).",
+  };
+}
+
+/**
+ * [PR-L, 2026-10-18] Runbook L.5 (task-worker-contract.md section 8): the durable generation task's INSPECTION, declared at the END too
+ * (a function declaration is hoisted), so no line of this catalog moves. A Tier 0 read of the task's PUBLIC snapshot from the durable
+ * task store through the chat route's injected port (the same service the GET routes answer from): state, phase, liveness, blocks,
+ * counts, blocker, valid actions and, once a result exists, a bounded summary of it - never the prompt, the conversation, a tool output,
+ * hidden reasoning or the netlist.
+ */
+function generationTaskInspectDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.generation.task-inspect", version: "1.0.0",
+    agentExposed: true, // [PR-L] a Tier 0 read of the durable task's public snapshot; nothing started, stopped or applied
+    owningCommandId: "schematic.generate",
+    title: "Inspect the project's design task",
+    description: "Read the PUBLIC state of the project's durable schematic design task - the one the Build composer's Generate or the generation start began: state, phase, liveness (whether a generation worker is actually running it), its blocks and their status, model-call and catalog-search counts, the remaining allowance, any blocker with its resolution, the actions valid now and, once a reviewable result exists, its completeness, omitted blocks, part and connection counts and electrical check numbers. Example input: {} (the project's running or most recent design), or {\"taskId\":\"generation-task:<32 hex>\"}. Never the prompt, the conversation, tool outputs, reasoning or the netlist; nothing is started, stopped or changed.",
+    category: "schematic", operationClass: "read",
+    inputSchema: obj({ taskId: { type: "string", description: "Optional: a design task id of this project (generation-task:<32 hex>); omitted, the project's running design, else its most recent one." } }),
+    outputSchema: OUT_REPORT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["schematic-generation"],
+    binding: { status: "bound-read", module: "app/lib/generation-task/service.ts", symbol: "GenerationTaskService", notes: "PR-L (runbook L.5): GenerationTaskService.list / .inspect over the durable task store - the same answers GET /api/generation-tasks and GET /api/generation-tasks/[id] serve - through the chat route's injected port; GenerationTaskInspectService (app/lib/agent/generation-proposals.ts) projects an allowlist of the public snapshot and a bounded result summary. Scoped by the trusted run context: a foreign or guessed id is the uniform not_found." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 10_000,
+    validationStrategy: "closed argument surface (only taskId; authority-shaped keys refused by name) under the B05 input limits; the server's generation fact and port are required; discovery, role and capability rechecked per call; the task is resolved in the trusted scope only (an unknown, malformed or foreign id is the same not_found); the output is schema-checked and bounded (GENERATION_TASK_INSPECT_MAX_CHARS)",
+    verificationStrategy: "read from the durable task store at the time of the call (generation-task-store-read): the snapshot's liveness comes from the store's leases (running only while a worker holds a live lease), never from a request being open; the result summary is computed from the task's validated result document",
+    sourceEvidence: ["app/lib/generation-task/service.ts", "app/lib/generation-task/snapshot.ts", "app/lib/agent/generation-proposals.ts", "app/api/chat/schematic-generation-runtime.ts", "app/api/generation-tasks/[id]/route.ts"],
+    versionNotes: "1.0.0 (PR-L, runbook L.5, 2026-10-18): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (the MCP server binds no generation-task port).",
+  };
+}
+
+/**
+ * [PR-L, 2026-10-18] Runbook L.5 (OD-252 item 6): the durable generation task's CONTROL REQUEST, declared at the END too. A sealed request
+ * (cancel, pause, resume, retry one block) the page shows as a confirm chip; only the human's click sends it to the task's control route,
+ * under the human's own authorization and CSRF, where the store judges the transition. Direct agent control would need a reviewed
+ * exposure change (OWNER-6).
+ */
+function generationTaskControlDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.generation.task-control", version: "1.0.0",
+    agentExposed: true, // [PR-L] a sealed confirm chip ONLY; the control itself is the human's click on the page (POST /api/generation-tasks/[id]/control)
+    owningCommandId: "schematic.generate",
+    title: "Ask to stop, pause, resume or retry the design task",
+    description: "Prepare a control request for the project's durable design task - cancel (Stop design: nothing more runs and a late result is refused), pause (saved work is kept), resume, or retry-block (one blocked block) - shown to the user as a chip they confirm or dismiss. Example input: {\"action\":\"cancel\"}; retry-block needs blockId. The action must be valid for the task's current state (the snapshot's actions); otherwise nothing is requested and the valid actions are reported. NOTHING happens to the design until the user confirms the chip; Stop answer (ending this chat reply) never stops a design.",
+    category: "schematic", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({
+      action: { type: "string", enum: ["cancel", "pause", "resume", "retry-block"], description: "cancel (Stop design), pause, resume, or retry-block." },
+      taskId: { type: "string", description: "Optional: the design task id (generation-task:<32 hex>); omitted, the project's running design." },
+      blockId: { type: "string", enum: ["main", "b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8"], description: "For retry-block only: the blocked block to retry (the snapshot's retryBlocks)." },
+    }, ["action"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["schematic-generation"],
+    // the loop's B09.1 gate holds every schematic proposal to a canonical head mark, so discovery requires the revision and the open lineage too
+    requiresExpectedRevision: true, requiresLineage: true,
+    binding: { status: "bound-proposal", module: "app/lib/generation-task/service.ts", symbol: "GenerationTaskService", notes: "PR-L (runbook L.5, OD-252 item 6): GenerationTaskService.list / .inspect resolve the task in the trusted scope and its server-computed valid actions; GenerationTaskControlProposalService (app/lib/agent/generation-proposals.ts) seals sirkit.generation-task-control-request.v1 or reports the refusal as proposal-blocked data. The control itself is GenerationTaskService.control behind POST /api/generation-tasks/[id]/control, reached only by the human's click on the chip. Nothing is changed here." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 10_000,
+    validationStrategy: "closed argument surface (action required from the closed list; taskId; blockId only for retry-block, from the block id list; authority-shaped keys refused by name) under the B05 input limits; the server's generation fact and port, a validated schematic and its head mark are required; discovery, role and capability rechecked per call; the action must be one the task's current snapshot lists (and the block one of its retryable blocks)",
+    verificationStrategy: "the sealed request's identity digest is recomputed by the page's receiver (verifySealedGenerationTaskControlRequest), which also checks the page's project and the expiry; the human's confirmation sends the action to the control route, which re-authorizes the human (role, live membership, exact-origin CSRF) and lets the store judge the transition against the task's state at that moment",
+    sourceEvidence: ["app/lib/agent/generation-proposals.ts", "app/lib/agent/generation-task-tools.ts", "app/lib/generation-task/service.ts", "app/lib/generation-task/snapshot.ts", "app/api/generation-tasks/[id]/control/route.ts", "app/lib/project/generation-proposal-events.ts"],
+    versionNotes: "1.0.0 (PR-L, runbook L.5, 2026-10-18): first exposure, reviewed in agent-exposure.ts; a confirm chip by OD-252 item 6 (direct control would be OWNER-6); withheld from MCP by a reviewed choice in mcp-exposure-review.ts (a proposal: MCP exposure stays read-only, OD-82).",
+  };
+}
+
+/**
+ * [PR-M, 2026-10-18] Section M2 (design M2.1): the agent's SCHEMATIC-SCOPED CAD acquisition, declared at the END too (a function
+ * declaration is hoisted), so no line of this catalog moves. Both work BEFORE any PCB exists - a verified schematic snapshot and the
+ * server's `cadAcquisitionAvailable` fact, never `canonical-state` - over the ONE durable component-resolution task service the page
+ * route answers from (app/lib/component-resolution/task/service.ts); the board-gated external search and evidence read keep their contract.
+ */
+function cadAcquisitionStartDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.parts.acquisition-start", version: "1.0.0",
+    agentExposed: true, // [PR-M] starts (or attaches to) a durable acquisition task; mutates no design; publishes, approves, binds and buys nothing
+    owningCommandId: "parts.cad-acquisition",
+    title: "Obtain a part's CAD assets for the library",
+    description: "Start (or attach to) the durable acquisition task for catalog instances of ONE catalog part that have no eligible local revision: a worker retrieves the part's real KiCad symbol and footprint (and a pin table where an admitted source has one) from an ADMITTED CAD source only (the pinned official KiCad library; never an arbitrary URL), stores and hashes the bytes, parses and validates pins, pads, mapping, package and pin 1, and prepares a review package. Works without a PCB. Example input: {\"componentIds\":[\"kc-3a9f01\",\"kc-3a9f02\"],\"requirement\":{\"mounting\":\"through_hole\",\"packageCode\":\"DO-35\"},\"assetKinds\":[\"symbol\",\"footprint\",\"datasheet\"]}. NOTHING in the design changes; a PERSON sends the package for review, a reviewer approves and a different administrator publishes; only then is the replacement offered for the user's review. A published revision of the same part is reused without any download.",
+    category: "parts", operationClass: "propose",
+    sideEffects: "proposal-artifact", // a durable task record (as the generation start): no design state, no publication
+    inputSchema: obj({
+      componentIds: { type: "array", items: { type: "string" }, description: "1-8 stable instance ids (not reference designators) of catalog instances of the same catalog part." },
+      requirement: obj({ exactMpn: { type: "string" }, manufacturer: { type: "string" }, packageCode: { type: "string", description: "e.g. DO-35" }, mounting: { type: "string", enum: ["smd", "through_hole"] } }),
+      assetKinds: { type: "array", items: { type: "string", enum: ["symbol", "footprint", "datasheet", "model"] }, description: "Default symbol, footprint, datasheet (3D models are not retrieved in this release)." },
+    }, ["componentIds"]),
+    outputSchema: OUT_REPORT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
+    binding: { status: "bound-proposal", module: "app/lib/component-resolution/task/service.ts", symbol: "ComponentResolutionService", notes: "PR-M M2: ComponentResolutionService.start over the durable task store (component-resolution.task.v1, topic component-resolution-slice, consumed by the existing generation worker); the instances inspected through the chat route's catalog port over the run's verified schematic; the target derived from the server catalog part; reached only through CadAcquisitionToolService (app/lib/agent/cad-acquisition-reads.ts) and the chat route's one boundary (app/api/chat/cad-acquisition-runtime.ts). The CAD sources are the worker's (cad-source-registry.ts admission), never this call's." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 15_000,
+    validationStrategy: "closed argument surface (componentIds, requirement {exactMpn, manufacturer, packageCode, mounting}, assetKinds; authority-shaped keys such as sourceId, url, bytes, pins or revisionId refused by name) under the B05 input limits; a verified schematic snapshot and the server's acquisition fact are required (no board); discovery, role and capability rechecked per call; the instances must be unresolved KiCad catalog instances of one catalog part",
+    verificationStrategy: "the task is durable and fenced (every slice commit re-checks its fence; a cancel fences a late result); its start is idempotent on (scope, principal, instance ids, requirement digest, schematic base); every stored object is re-hashed on read; the publication re-verifies every byte; the offered replacement is M1's sealed batch applied only by the human",
+    sourceEvidence: ["app/lib/component-resolution/task/service.ts", "app/lib/component-resolution/task/store.ts", "app/lib/component-resolution/task/slices.ts", "app/lib/component-resolution/acquisition/pipeline.ts", "app/lib/agent/cad-acquisition-reads.ts", "app/api/chat/cad-acquisition-runtime.ts"],
+    versionNotes: "1.0.0 (PR-M M2, 2026-10-18): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (it reads the editor's browser-only SchematicState).",
+  };
+}
+
+function cadAcquisitionStatusDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.parts.acquisition-status", version: "1.0.0",
+    agentExposed: true, // [PR-M] a Tier 0 read of the durable acquisition task's public view
+    owningCommandId: "parts.cad-acquisition",
+    title: "Read the CAD acquisition task's progress",
+    description: "Read the PUBLIC state of the project's durable CAD acquisition task(s): each stage (local search, source selection, retrieve, validate, handoff, awaiting publication, proposal, applied, preflight) with its evidence, the source attempts, the candidate's validation verdict, identity (exact or GENERIC KiCad candidate), object hashes, unresolved facts, conflicts and licence, the handoff, the publication status, the replacement offered, the receipt and the updated preflight, the blocker with its remedy and the recent progress lines. Example input: {\"taskId\":\"cr-task:0123456789abcdef0123456789abcdef\"}, or {} for the project's recent tasks. Nothing is changed.",
+    category: "parts", operationClass: "read",
+    inputSchema: obj({ taskId: { type: "string", description: "Optional: an acquisition task id of this project (cr-task:<32 hex>); omitted, the project's recent tasks." } }),
+    outputSchema: OUT_REPORT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
+    binding: { status: "bound-read", module: "app/lib/component-resolution/task/service.ts", symbol: "ComponentResolutionService", notes: "PR-M M2: ComponentResolutionService.read / .list over the durable task store in the trusted scope (a foreign or guessed id is the uniform not_found), reached only through CadAcquisitionToolService and the chat route's one boundary; the same view GET /api/parts/acquisitions answers." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 8_000,
+    validationStrategy: "closed argument surface (only taskId); a verified schematic snapshot and the server's acquisition fact are required (no board); discovery, role and capability rechecked per call; the output is a bounded projection of the public view",
+    verificationStrategy: "a pure read of the durable task head in the trusted scope; never the stored bytes; the view's stages each carry their own evidence (M.4)",
+    sourceEvidence: ["app/lib/component-resolution/task/service.ts", "app/lib/component-resolution/task/contracts.ts", "app/lib/agent/cad-acquisition-reads.ts", "app/api/chat/cad-acquisition-runtime.ts"],
+    versionNotes: "1.0.0 (PR-M M2, 2026-10-18): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts.",
+  };
+}
+
+/**
+ * [PR-J5, 2026-10-23] Runbook section J increment 5 (J.6 items 1, 4, 6 and 8; J.3 item 4; OD-259 item 4): the agent's ORGANISE
+ * proposal, declared at the END too (a function declaration is hoisted), so no line of this catalog moves. A Tier 2 SEALED proposal
+ * the human reviews on the page and applies through schematic.move-to-sheet as ONE transaction; the server plans it with J4's one
+ * organise planner over the catalog pins and proves it equivalent before sealing. Never applied by the agent; root-only in 1.0.0.
+ */
+function sheetOrganizationProposalDescriptor(): ToolDescriptor {
+  return {
+    ...readDefaults,
+    toolId: "sirkit.schematic.propose-sheet-organization", version: "1.0.0",
+    agentExposed: true, // [PR-J5] sealed organisation proposal ONLY; applying it is the human's reviewed schematic.move-to-sheet and never provider-callable
+    owningCommandId: "schematic.sheet-organize-propose",
+    title: "Propose organising the schematic into subsystem sheets",
+    description: "Seal ONE proposal that organises the overview's catalog parts into named subsystem sheets: groups of reference designators, one new child sheet each (parts not named stay on the overview). The server resolves every member by name (unknown or duplicate members are refused by name), plans the organisation as a chain of equivalence-proven moves, carries every net the groups cut through an explicit port (named after the net; SIG<n> for an unnamed net, or the name given in interfaceNames), proves the pin-to-net partition and every component identity unchanged, and seals the sheets, members, interfaces, unassigned parts, parts to check and the operations digest. Example input: {\"groups\":[{\"name\":\"Power\",\"members\":[\"J1\",\"U1\",\"C1\"]},{\"name\":\"IMU\",\"members\":[\"U3\",\"R11\",\"R12\"]}]}. Receiving it changes NOTHING; the user reviews and approves it (one undoable transaction). An ambiguous or non-equivalent split is refused with the planner's reason.",
+    category: "schematic", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({
+      groups: { type: "array", description: "1-8 groups, one new sheet each: a name (1-80 characters, no \"/\") and the reference designators it holds (each named once; parts not named stay on the overview).", items: obj({ name: { type: "string", description: "The new sheet's name." }, members: { type: "array", items: { type: "string" }, description: "Reference designators (R7, U2) of catalog parts on the overview." } }, ["name", "members"]) },
+      interfaceNames: { type: "array", description: "Optional names for the ports of UNNAMED crossing nets, as a previous proposal reported them (SIG1, SIG2 ...): [{\"port\":\"SIG1\",\"name\":\"MOTOR_SENSE\"}]. A name no net, label or port of the project uses yet.", items: obj({ port: { type: "string", description: "The SIG<n> port a proposal reported." }, name: { type: "string", description: "Its new name (1-64 letters, digits, _ + - .)." } }, ["port", "name"]) },
+    }, ["groups"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present", "catalog-available"], requiredAuthority: ["local-working-copy"], // catalog-available: the pins the planner proves over come from the server catalog (context.ts claims the state exactly with the fact), so without the catalog this proposal is withheld at discovery
+    // the loop's B09.1 gate holds for every schematic proposal (a canonical head mark), so discovery requires the revision and the open lineage too
+    requiresExpectedRevision: true, requiresLineage: true,
+    binding: { status: "bound-proposal", module: "app/lib/schematic/sheet-organization.ts", symbol: "planOrganizeIntoSheets", notes: "PR-J5: the ONE organise planner (J4's planOrganizeIntoSheets: sequential planMoveToSheet steps to new child sheets, re-applied once as one batch, the partition digest and every component identity proven unchanged) over the catalog pins read through the chat route's injected catalog port; compileSheetOrganizationProposal / sealSheetOrganizationProposal (app/lib/engineering/sheet-organization-proposal.ts) resolve the members and seal sirkit.sheet-organization-proposal.v1; SheetOrganizationProposalService (app/lib/agent/sheet-organization-proposals.ts) is the gateway's service. The page's Approve re-plans the sealed groups through the same planner and applies through schematic.move-to-sheet only when the operations and partition digests equal the sealed ones. Nothing applied here." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 10_000,
+    validationStrategy: "closed argument surface (groups of { name, members }; interfaceNames of { port, name }; authority-shaped keys such as sheetId, ports, operations, scope or headMark refused by name); a verified schematic, its head mark and the server's catalog fact are required; discovery, role and capability rechecked per call; unknown, duplicate, Theory and off-sheet members refused by name; all-or-nothing over the groups (any refused step refuses the whole proposal)",
+    verificationStrategy: "the sealed artifact's identity digest, operations digest and partition digest are re-verified at the page (verifySealedSheetOrganizationProposal: scope, lineage, head, expiry, base digest); Approve re-plans on the canonical base inside the serialized queue (replanSheetOrganization) and applies only when the re-planned operations digest and partition digest equal the sealed ones",
+    sourceEvidence: ["app/lib/schematic/sheet-organization.ts", "app/lib/schematic/sheet-operations.ts", "app/lib/engineering/sheet-organization-proposal.ts", "app/lib/agent/sheet-organization-proposals.ts", "app/lib/agent/gateway.ts", "app/lib/agent/loop.ts"],
+    versionNotes: "1.0.0 (PR-J5, 2026-10-23): first exposure, reviewed in agent-exposure.ts; withheld from MCP by a reviewed choice in mcp-exposure-review.ts (it seals against the editor's browser-only SchematicState and head mark, as OD-82's proposals, and needs the chat route's catalog port).",
   };
 }

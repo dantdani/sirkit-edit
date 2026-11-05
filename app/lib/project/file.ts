@@ -49,10 +49,24 @@ import {
 } from "@/lib/persistence";
 import { isPageSize, DEFAULT_PAGE_SIZE, type SchematicState } from "@/lib/schematic-types";
 import { canonicalJson } from "@/app/lib/pcb/revision";
+import { sheetErrors, validateSheetHierarchy } from "@/app/lib/schematic/sheets";
 import { checkpointStore, isCheckpointLike, type ProjectCheckpoint } from "./checkpoints";
 
 export const PROJECT_FILE_FORMAT = "sirkit-project";
 export const PROJECT_FILE_VERSION = 1;
+/** [PR-J, 2026-10-22] OD-255 item 1 (forward-only): a project whose schematic (or any checkpoint's) has sheets is written as file
+ *  version 2, so a Sirkit without sheet support refuses it ("newer than this app supports") instead of opening it flat; every other
+ *  project is still written as version 1, byte-identical to before. */
+export const PROJECT_FILE_VERSION_SHEETS = 2;
+/** The newest project-file version this build reads. */
+export const PROJECT_FILE_MAX_VERSION = PROJECT_FILE_VERSION_SHEETS;
+/** [PR-J, 2026-10-22] The editor cannot open a multi-sheet project until the Sheets navigator lands (section J increment 3): until
+ *  then a multi-sheet file is validated completely and then refused recoverably, never loaded into the single-sheet editor.
+ *  [PR-J3, 2026-10-22] That increment landed (OD-257 item 8): the page carries the tree through hydration, history, autosave and
+ *  checkpoints and the Sheets navigator opens it, so a valid multi-sheet file now imports; the refusal below stays as the record of
+ *  the recoverable path (unreachable while this is true). */
+export const MULTI_SHEET_EDITOR_AVAILABLE = true;
+export const SHEETS_EDITOR_PENDING = "SHEETS_EDITOR_PENDING";
 export const PROJECT_FILE_EXTENSION = ".sirkit.json";
 
 /**
@@ -176,7 +190,7 @@ export async function exportProjectFile(projectId: string): Promise<{ ok: true; 
     const canonical = canonicalJson(payload);
     const envelope: ProjectFileEnvelope = {
       format: PROJECT_FILE_FORMAT,
-      formatVersion: PROJECT_FILE_VERSION,
+      formatVersion: project.state.sheets !== undefined || payload.checkpoints.some((checkpoint) => (checkpoint.schematic as SchematicState | undefined)?.sheets !== undefined) ? PROJECT_FILE_VERSION_SHEETS : PROJECT_FILE_VERSION,
       exportedAt: new Date().toISOString(),
       integrity: `sha256:${await sha256Hex(canonical)}`,
       payload: JSON.parse(canonical) as ProjectFilePayload,
@@ -209,7 +223,8 @@ export interface ProjectImportResult {
   warnings: string[];
 }
 
-function validateSchematicState(value: unknown): { ok: true; state: SchematicState } | { ok: false; reason: string } {
+/** `sheetContract`: the state is well-formed but fails the sheet contract (sheets.ts) - the one failure a checkpoint may be left out for. */
+function validateSchematicState(value: unknown): { ok: true; state: SchematicState } | { ok: false; reason: string; sheetContract?: true } {
   if (typeof value !== "object" || value === null) return { ok: false, reason: "Missing schematic state" };
   const state = value as Record<string, unknown>;
   if (!Array.isArray(state["components"]) || !(state["components"] as unknown[]).every(isComponent)) return { ok: false, reason: "Invalid components array" };
@@ -220,16 +235,19 @@ function validateSchematicState(value: unknown): { ok: true; state: SchematicSta
   if (labels !== undefined && (!Array.isArray(labels) || !labels.every(isNetLabel))) return { ok: false, reason: "Invalid netLabels array" };
   const pageSize = state["pageSize"];
   if (pageSize !== undefined && !isPageSize(pageSize)) return { ok: false, reason: "Invalid pageSize" };
-  return {
-    ok: true,
-    state: {
-      components: state["components"],
-      wires: state["wires"],
-      kicadComponents: Array.isArray(kicad) ? kicad : [],
-      netLabels: Array.isArray(labels) ? labels : [],
-      pageSize: isPageSize(pageSize) ? pageSize : DEFAULT_PAGE_SIZE,
-    } as SchematicState,
-  };
+  const rebuilt = {
+    components: state["components"],
+    wires: state["wires"],
+    kicadComponents: Array.isArray(kicad) ? kicad : [],
+    netLabels: Array.isArray(labels) ? labels : [],
+    pageSize: isPageSize(pageSize) ? pageSize : DEFAULT_PAGE_SIZE,
+    // [PR-J, 2026-10-22] the sheet tree travels with the state (never dropped, which would leave dangling sheet references) and is
+    // validated against the sheet contract (sheets.ts); a single-sheet state keeps exactly its five fields.
+    ...(state["sheets"] !== undefined ? { sheets: state["sheets"] } : {}),
+  } as SchematicState;
+  const sheetProblems = sheetErrors(validateSheetHierarchy(rebuilt));
+  if (sheetProblems.length > 0) return { ok: false, reason: `Invalid schematic sheets (${sheetProblems[0]!.code}): ${sheetProblems[0]!.message}`, sheetContract: true };
+  return { ok: true, state: rebuilt };
 }
 
 function validateWorkingCopy(value: unknown): PcbWorkingCopy | { error: string } | undefined {
@@ -292,7 +310,7 @@ async function importProjectFileChecked(content: string): Promise<ProjectImportR
   const envelope = parsed as Record<string, unknown>;
   if (envelope["format"] !== PROJECT_FILE_FORMAT) return { ok: false, reason: "The file is not a Sirkit project (missing sirkit-project format marker)." };
   if (typeof envelope["formatVersion"] !== "number") return { ok: false, reason: "The file has no format version." };
-  if (envelope["formatVersion"] > PROJECT_FILE_VERSION) return { ok: false, reason: `This file uses project-file version ${envelope["formatVersion"]}, newer than this app supports (${PROJECT_FILE_VERSION}). Update Sirkit to open it.` };
+  if (envelope["formatVersion"] > PROJECT_FILE_MAX_VERSION) return { ok: false, reason: `This file uses project-file version ${envelope["formatVersion"]}, newer than this app supports (${PROJECT_FILE_MAX_VERSION}). Update Sirkit to open it.` };
   const payload = envelope["payload"];
   if (typeof payload !== "object" || payload === null) return { ok: false, reason: "The file has no payload." };
 
@@ -321,6 +339,8 @@ async function importProjectFileChecked(content: string): Promise<ProjectImportR
 
   const rawCheckpoints = (payload as Record<string, unknown>)["checkpoints"];
   const checkpoints: ProjectCheckpoint[] = [];
+  /** [PR-J3 integration, 2026-10-23] review J3-PAGE-1: checkpoints left out because their schematic fails the sheet contract (named in a warning). */
+  const unrestorableCheckpoints: string[] = [];
   if (rawCheckpoints !== undefined) {
     if (!Array.isArray(rawCheckpoints)) return { ok: false, reason: "Invalid checkpoints in file." };
     if (rawCheckpoints.length > PROJECT_IMPORT_LIMITS.checkpoints) return { ok: false, reason: `The file has too many checkpoints (${rawCheckpoints.length}; the limit is ${PROJECT_IMPORT_LIMITS.checkpoints}). Nothing was imported.` };
@@ -329,6 +349,11 @@ async function importProjectFileChecked(content: string): Promise<ProjectImportR
       // [B19-D I5e row 11] a checkpoint is restored into the page like a project: its schematic, chat and board get the
       // same validation (the header check alone let a checkpoint crash the restore or carry any chat markup)
       const checkpointState = validateSchematicState(checkpoint.schematic);
+      // [PR-J3 integration, 2026-10-23] review J3-PAGE-1: a checkpoint whose schematic is well-formed but fails the SHEET contract (the
+      // previous build's board checkpoint stored an organised project's entities without their tree) can never be restored - the
+      // session refuses it - but it is no reason to refuse the person's project: it is left out and named in a warning. Every other
+      // checkpoint refusal (malformed tables, over the limits, chat, board) still refuses the whole file, as B19-D I5e decided.
+      if (!checkpointState.ok && checkpointState.sheetContract) { unrestorableCheckpoints.push(`"${checkpoint.label}" (${checkpointState.reason})`); continue; }
       if (!checkpointState.ok || tableOverLimit(checkpointState.state)) return { ok: false, reason: "A checkpoint's schematic in the file is invalid. Nothing was imported." };
       const checkpointChat: unknown = checkpoint.chat;
       if (checkpointChat !== undefined && (!Array.isArray(checkpointChat) || checkpointChat.length > PROJECT_IMPORT_LIMITS.chatMessages || !checkpointChat.every(isStoredChatMessage))) {
@@ -344,7 +369,14 @@ async function importProjectFileChecked(content: string): Promise<ProjectImportR
     }
   }
 
+  // [PR-J, 2026-10-22] OD-255 item 1: schematic sheets only in a version-2 file; a valid multi-sheet project is refused recoverably
+  // (nothing imported, the file untouched) until the editor can open one (MULTI_SHEET_EDITOR_AVAILABLE).
+  const sheetCounts = [stateResult.state, ...checkpoints.map((checkpoint) => checkpoint.schematic as SchematicState)].map((state) => state.sheets?.sheets.length ?? 0);
+  if (sheetCounts.some((count) => count > 0) && (envelope["formatVersion"] as number) < PROJECT_FILE_VERSION_SHEETS) return { ok: false, reason: `A project-file version ${String(envelope["formatVersion"])} cannot carry schematic sheets; the file is inconsistent. Nothing was imported.` };
+  if (sheetCounts.some((count) => count > 0) && !MULTI_SHEET_EDITOR_AVAILABLE) return { ok: false, reason: `${SHEETS_EDITOR_PENDING}: this project has ${Math.max(...sheetCounts)} schematic sheets, and this version of the editor cannot open a multi-sheet project yet. Nothing was imported; keep the file and open it again after the Sheets update.` };
+
   const warnings: string[] = [];
+  if (unrestorableCheckpoints.length > 0) warnings.push(`${unrestorableCheckpoints.length} checkpoint(s) in the file were left out because their schematic fails the sheet contract and could not be restored: ${unrestorableCheckpoints.slice(0, 3).join("; ")}${unrestorableCheckpoints.length > 3 ? "; …" : ""}. The project and its other checkpoints imported.`); // [PR-J3 integration, 2026-10-23] review J3-PAGE-1
   const distinctParts = [...new Set((stateResult.state.kicadComponents ?? []).map((instance) => instance.partId))];
   if (distinctParts.length > PROJECT_IMPORT_LIMITS.distinctParts) {
     return { ok: false, reason: `The project references too many distinct catalog parts (${distinctParts.length}; the limit is ${PROJECT_IMPORT_LIMITS.distinctParts}). Nothing was imported.` };

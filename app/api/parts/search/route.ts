@@ -10,7 +10,7 @@
  *     query embedding (HNSW-indexed).
  *
  * Both modes support category filtering and offset/limit pagination, and return
- * pagination metadata { total, offset, limit }.
+ * pagination metadata { total, offset, limit }. [PR-L/M integration, 2026-10-18] Under the fixture runtime the committed fixture catalog answers (browse, or the lexical ranking: no embedding provider is asked) with no database read, as GET /api/parts/[id] does there; before, the Build Library's parts list answered 500 in the fixture runtime (app/lib/fixture-runtime/catalog-browse.ts).
  */
 
 import { and, cosineDistance, count, desc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
@@ -18,7 +18,7 @@ import { getDb } from "@/app/lib/db/client";
 import { parts, libraries } from "@/app/lib/db/schema";
 import { admittedEmbedQuery } from "@/app/lib/embedding-admission"; // [B24-A3] OD-197: every query embedding goes through the embedding meter (embeddings.ts unchanged) [B24-closeout, 2026-10-10] superseded: B24-C1's record, artifacts/ai-control-plane-b24/observability-and-replay.md:338.
 import type { KicadPin } from "@/app/lib/kicad/types";
-import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
+import { publicJsonRoute } from "@/app/lib/auth/route-handlers"; import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode"; import { fixtureContainer } from "@/app/lib/fixture-runtime/container"; import { fixtureCatalogSearch } from "@/app/lib/fixture-runtime/catalog-browse"; // [PR-L/M integration, 2026-10-18] the fixture catalog (on this line: no line moves)
 import { partLifecycleStatus } from "@/app/lib/distributors/lifecycle-sql"; // [B19-D I5b review] vendor lifecycle expires at read time
 
 export const runtime = "nodejs";
@@ -86,7 +86,7 @@ export const POST = publicJsonRoute({ maxBytes: 200000, deadlineMs: 10000, query
     meta.query?.includeGenerics === "true" ||
     body.includeGenerics === true;
 
-  try {
+  try { if (fixtureRuntimeEnabled()) { const found = fixtureCatalogSearch(fixtureContainer().catalog.cachedParts.values(), { query, category, offset, limit, includeGenerics }); return Response.json({ ok: true, results: found.results, pagination: { total: found.total, offset, limit } }); } // [PR-L/M integration, 2026-10-18] the fixture runtime: the committed fixture catalog, no database read (on this line: no line moves)
     const db = getDb();
     const categoryWhere: SQL | undefined = category
       ? eq(libraries.mainCategory, category)

@@ -5,11 +5,15 @@
  * file. Loads the static catalog data for every placed KiCad part through the
  * shared parts cache (never the DB directly), then hands off to the pure
  * `exportToKicadSch` serializer.
+ * [PR-J4, 2026-10-23] A project organised into sheets (`state.sheets`) is exported by the SAME POST as ONE `<title>.zip`
+ * (application/zip) holding the native KiCad hierarchy - the root `.kicad_sch` with its sheet symbols and one file per sheet - from
+ * the pure `exportToKicadHierarchy` serializer (OD-258 item 2); a project without sheets keeps its exact single-file response.
  *
  * Body: { state: SchematicState; title?: string; description?: string; company?: string }
  */
 
-import { exportToKicadSch, SchematicExportLicenseError, SchematicExportValidationError } from "@/app/lib/kicad-export";
+import { exportToKicadSch, SchematicExportHierarchyPendingError, SchematicExportLicenseError, SchematicExportValidationError } from "@/app/lib/kicad-export";
+import { exportToKicadHierarchy, refuseKicadHierarchy, SchematicExportHierarchyError, zipKicadHierarchy } from "@/app/lib/kicad-export-hierarchy"; // [PR-J4, 2026-10-23] the native hierarchical export (OD-258 item 2)
 import { validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
 import { getFullPartsByIds } from "@/app/lib/parts-search";
 import type { SchematicState } from "@/lib/schematic-types";
@@ -36,6 +40,42 @@ type ExportBody = {
 function sanitizeFilename(raw: string): string {
   const base = raw.trim().replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
   return base.length > 0 ? base : "sirkit_export";
+}
+
+/** [B19-D I5a] a pinned symbol whose license does not permit export: refuse, name the components, send nothing of the symbol. */
+function licenseRefusal(error: SchematicExportLicenseError): Response {
+  return Response.json(
+    {
+      ok: false,
+      code: "EXPORT_LICENSE_PROHIBITED",
+      error: "Some pinned parts' symbol licenses do not permit export, so nothing was exported. Replace or re-license these parts.",
+      components: [...new Set(error.violations.map((item) => item.refDes))].sort(),
+      violations: error.violations.slice(0, 50),
+    },
+    { status: 422, headers: { "Cache-Control": "no-store" } },
+  );
+}
+
+/** The serializer's own typed validation, mapped to the same structured 422 as the pre-check. */
+function validationRefusal(error: SchematicExportValidationError): Response {
+  return Response.json(
+    {
+      ok: false,
+      code: "SCHEMATIC_STATE_INVALID",
+      error: "The schematic failed canonical identity/geometry validation and was not exported. Nothing was changed.",
+      issues: error.issues.slice(0, 20).map((issue) => issue.slice(0, 300)),
+      issueCount: error.issues.length,
+    },
+    { status: 422 },
+  );
+}
+
+/** [PR-J4, 2026-10-23] A hierarchical-export refusal (connectivity error, shadowed port or name, a name spelled two ways in one scope - [PR-J4 integration, 2026-10-23] EXPORT_NAME_CASE_AMBIGUOUS -, pin placement): structured, nothing zipped. */
+function hierarchyRefusal(error: SchematicExportHierarchyError): Response {
+  return Response.json(
+    { ok: false, code: error.code, error: error.message.slice(0, 2000), refs: error.refs.slice(0, 50) },
+    { status: 422, headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 // [B16.0.12] canonical wrapper — policy -> bounded metadata/body run inside
@@ -75,7 +115,7 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
       },
       { status: 422 },
     );
-  }
+  } if (state.sheets !== undefined) { const refusal = refuseKicadHierarchy(state); if (refusal) return hierarchyRefusal(refusal); } // [PR-J4, 2026-10-23] was the J2 EXPORT_HIERARCHY_PENDING refusal (2026-10-22); a project with sheets now exports as ONE zip of its hierarchy below (OD-258 item 2); its connectivity / shadowing refusals answer here, before any catalog read
 
   // [B19-D I5c rows 15, 16] Every instance that declares an atomic revision is exported from the PUBLISHED snapshot the server
   // loads for that revision — its symbol and its licenses — and the declared symbol version must match. Selections in the
@@ -143,6 +183,33 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
     );
   }
 
+  // [PR-J4, 2026-10-23] A project WITH sheets: the native hierarchy (a root file with sheet symbols plus one file per sheet) as ONE
+  // zip from this same route - sorted entries, a fixed date, stored (byte-deterministic); `<title>.zip`. Refusals are structured 422s
+  // and nothing is zipped. A project without sheets takes the unchanged path below (its bytes and headers are pinned).
+  if (state.sheets !== undefined) {
+    let exported: ReturnType<typeof exportToKicadHierarchy>;
+    try {
+      exported = exportToKicadHierarchy({ state, parts, title: body.title, description: body.description, company: body.company, componentSelections: pinnedSelections });
+    } catch (error) {
+      if (error instanceof SchematicExportHierarchyError) return hierarchyRefusal(error);
+      if (error instanceof SchematicExportLicenseError) return licenseRefusal(error);
+      if (error instanceof SchematicExportValidationError) return validationRefusal(error);
+      throw error;
+    }
+    const bytes = await zipKicadHierarchy(exported.files);
+    const zipBody = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(zipBody).set(bytes);
+    return new Response(zipBody, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="${sanitizeFilename(body.title ?? "sirkit_export")}.zip"`,
+        "Content-Length": String(bytes.byteLength),
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
   let sch: string;
   try {
     sch = exportToKicadSch({
@@ -155,31 +222,13 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
     });
   } catch (error) {
     // [B19-D I5a] a pinned symbol whose license does not permit export: refuse, name the components, send nothing of the symbol
-    if (error instanceof SchematicExportLicenseError) {
-      return Response.json(
-        {
-          ok: false,
-          code: "EXPORT_LICENSE_PROHIBITED",
-          error: "Some pinned parts' symbol licenses do not permit export, so nothing was exported. Replace or re-license these parts.",
-          components: [...new Set(error.violations.map((item) => item.refDes))].sort(),
-          violations: error.violations.slice(0, 50),
-        },
-        { status: 422, headers: { "Cache-Control": "no-store" } },
-      );
+    if (error instanceof SchematicExportHierarchyPendingError) return Response.json({ ok: false, code: error.code, error: error.message }, { status: 422, headers: { "Cache-Control": "no-store" } }); if (error instanceof SchematicExportLicenseError) { // [PR-J J2] the hierarchy refusal: defense in depth ([PR-J4, 2026-10-23] unreachable: a project with sheets took the zip path above)
+      return licenseRefusal(error);
     }
     // Defense in depth: the serializer's own typed validation (should be
     // unreachable after the pre-check above) still maps to a structured 422.
     if (error instanceof SchematicExportValidationError) {
-      return Response.json(
-        {
-          ok: false,
-          code: "SCHEMATIC_STATE_INVALID",
-          error: "The schematic failed canonical identity/geometry validation and was not exported. Nothing was changed.",
-          issues: error.issues.slice(0, 20).map((issue) => issue.slice(0, 300)),
-          issueCount: error.issues.length,
-        },
-        { status: 422 },
-      );
+      return validationRefusal(error);
     }
     throw error;
   }

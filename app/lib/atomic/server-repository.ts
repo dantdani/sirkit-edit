@@ -19,6 +19,7 @@ import {
   atomicRawObjects,
   atomicSources,
   atomicSupplierParts,
+  libraries,
   parts,
   partsAtomicLinks,
 } from "@/app/lib/db/schema";
@@ -32,6 +33,8 @@ import type { FootprintAssetVersion, RawContentObject, SymbolAssetVersion } from
 import { catalogActorKey, createAtomicRevision, isHumanCatalogActorId, roleMayTransition, TRANSITIONS } from "./catalog";
 import { catalogStatusOf, isWithdrawalState, type AtomicCatalogStatus, type AtomicWithdrawalState } from "./revision-status";
 import { normalizeValueKey } from "./value-key";
+import { extractLibrary } from "@/app/lib/kicad/extract";
+import { categorizeLib } from "@/app/lib/kicad/categories";
 
 /** [B19-E E3] Only a publisher or an administrator publishes or withdraws a revision (checked at runtime, not only typed). */
 const PUBLISHING_ROLES: ReadonlySet<string> = new Set(["publisher", "admin"]);
@@ -219,6 +222,32 @@ function linkRowsFor(snapshot: PortableAtomicSnapshot, links: readonly AtomicPar
   });
 }
 
+/** [PR-M, 2026-10-18] M2.5: the library a discovery row is written in (one per source library, so its category is that library's). */
+export const DISCOVERY_LIBRARY_PREFIX = "Sirkit_Acquired_" as const;
+
+/**
+ * [PR-M, 2026-10-18] M2.5: the ONE catalog row a publication may write so a newly published exact part is recallable by the candidate
+ * search (lexical recall over name / MPN / keywords; `embedding` stays null - no paid call). Every column comes from the snapshot: the
+ * published symbol's own raw block (pins, properties) re-extracted from its verified bytes, the exact part's MPN and manufacturer, the
+ * footprint's full name. Pure; null when the snapshot cannot yield one.
+ */
+export function discoveryPartOf(snapshot: PortableAtomicSnapshot): { libraryName: string; sourceLibrary: string; name: string; mpn: string | null; manufacturer: string | null; description: string | null; keywords: string | null; datasheet: string | null; footprintHint: string | null; properties: Record<string, string>; pins: ReturnType<typeof extractLibrary>[number]["pins"]; symbolRaw: string } | null {
+  const blob = snapshot.assetBlobs.find((item) => item.id === snapshot.symbol.rawContentObjectId);
+  if (!blob || blob.encoding !== "utf8") return null;
+  let extracted: ReturnType<typeof extractLibrary>[number] | undefined;
+  try { extracted = extractLibrary([blob.content]).find((item) => item.name === snapshot.symbol.symbolName); } catch { return null; }
+  if (!extracted) return null;
+  const sourceLibrary = snapshot.symbol.origin.libraryNickname;
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.+-]{0,100}$/.test(sourceLibrary)) return null;
+  return {
+    libraryName: `${DISCOVERY_LIBRARY_PREFIX}${sourceLibrary}`, sourceLibrary, name: snapshot.symbol.symbolName,
+    mpn: snapshot.exactPart?.exactMpn ?? null, manufacturer: snapshot.manufacturer?.canonicalName ?? null,
+    description: extracted.description, keywords: extracted.keywords, datasheet: extracted.datasheet,
+    footprintHint: snapshot.footprint ? `${snapshot.footprint.origin.libraryNickname}:${snapshot.footprint.footprintName}` : null,
+    properties: extracted.properties, pins: extracted.pins, symbolRaw: extracted.symbolRaw,
+  };
+}
+
 /**
  * Production database publication boundary. Every dependent identity, source,
  * asset, claim, certificate, revision, link, and audit record commits together.
@@ -235,12 +264,20 @@ export async function publishPortableAtomicSnapshot(input: {
    * never repointed, and an identical re-publish only replays the links its publication wrote: it never adds one.
    */
   links?: readonly AtomicPartLinkInput[];
+  /**
+   * [PR-M, 2026-10-18] M2.5: write ONE discovery catalog row (`discoveryPartOf`, library `Sirkit_Acquired_<source library>`) and its link
+   * to this revision in the SAME transaction and audit row - a reviewed, additive option, so a part acquired outside the catalog is
+   * recallable by the candidate search. An identical re-publish reuses that row and its link and never adds one.
+   */
+  discovery?: { valueKey: string };
 }): Promise<{ revisionId: string; auditId: string }> {
   validatePortableSnapshotForPublication(input.snapshot, input.requiredProfile, { actorId: input.actorId, actorRole: input.actorRole });
   if (typeof input.reason !== "string" || !input.reason.trim()) throw new Error("Publication reason is required");
   const { snapshot } = input;
   const revision = snapshot.atomicRevision;
   const links = linkRowsFor(snapshot, input.links ?? []);
+  const discovery = input.discovery ? discoveryPartOf(snapshot) : null;
+  if (input.discovery && (!discovery || !snapshot.footprint || !snapshot.mapping || input.discovery.valueKey !== normalizeValueKey(input.discovery.valueKey))) throw new Error("A discovery row needs a published symbol, footprint and mapping certificate and a normalized value key");
   const at = new Date();
   const audit: AuditEvent = {
     id: `audit_${semanticHash({ revisionId: revision.id, actorId: input.actorId, at: at.toISOString(), reason: input.reason })}`,
@@ -257,6 +294,7 @@ export async function publishPortableAtomicSnapshot(input: {
       approverId: revision.reviewHistory.at(-2)?.actorId,
       actorRole: input.actorRole,
       links: links.map((link) => ({ partId: link.partId, valueKey: link.valueKey })),
+      ...(discovery ? { discovery: { library: discovery.libraryName, name: discovery.name, mpn: discovery.mpn, valueKey: input.discovery!.valueKey } } : {}),
     },
   };
 
@@ -418,6 +456,29 @@ export async function publishPortableAtomicSnapshot(input: {
       if (!row || row.atomicPartRevisionId !== link.atomicPartRevisionId || row.symbolAssetVersionId !== link.symbolAssetVersionId || row.footprintAssetVersionId !== link.footprintAssetVersionId || row.mappingCertificateId !== link.mappingCertificateId || row.footprintFullName !== link.footprintFullName) {
         throw new Error(`Atomic part link for value ${JSON.stringify(link.valueKey)} already points at another revision; a publication never repoints a link`);
       }
+    }
+
+    if (discovery && snapshot.footprint && snapshot.mapping) {
+      // [PR-M, 2026-10-18] M2.5: the discovery row (one per library, name and MPN) and its link; never repointed, never added by a replay
+      await tx.insert(libraries).values({ name: discovery.libraryName, mainCategory: categorizeLib(discovery.sourceLibrary) }).onConflictDoNothing({ target: libraries.name });
+      const [library] = await tx.select({ id: libraries.id }).from(libraries).where(eq(libraries.name, discovery.libraryName)).limit(1);
+      if (!library) throw new Error("The discovery library row could not be written");
+      const found = await tx.select({ id: parts.id, mpn: parts.mpn }).from(parts).where(and(eq(parts.libraryId, library.id), eq(parts.name, discovery.name))).limit(16);
+      let partId = found.find((row) => (row.mpn ?? null) === discovery.mpn)?.id ?? null;
+      if (!partId) {
+        if (replay) throw new Error("An identical re-publish cannot add a discovery row; it is written only by the publication that publishes the revision");
+        const [inserted] = await tx.insert(parts).values({ libraryId: library.id, name: discovery.name, description: discovery.description, keywords: discovery.keywords, mpn: discovery.mpn, manufacturer: discovery.manufacturer, datasheet: discovery.datasheet, footprintHint: discovery.footprintHint, properties: discovery.properties, pins: discovery.pins, symbolRaw: discovery.symbolRaw, normalizedMpn: discovery.mpn ? discovery.mpn.toUpperCase().replace(/[^A-Z0-9]/g, "") : null, isGeneric: false, lifecycleStatus: "unknown" }).returning({ id: parts.id });
+        partId = inserted!.id;
+      }
+      const row = { partId, valueKey: input.discovery!.valueKey, atomicPartRevisionId: revision.id, symbolAssetVersionId: snapshot.symbol.versionId, footprintAssetVersionId: snapshot.footprint.versionId, mappingCertificateId: snapshot.mapping.id, footprintFullName: `${snapshot.footprint.origin.libraryNickname}:${snapshot.footprint.footprintName}` };
+      const [existingLink] = await tx.select({ partId: partsAtomicLinks.partId }).from(partsAtomicLinks).where(and(eq(partsAtomicLinks.partId, partId), eq(partsAtomicLinks.valueKey, row.valueKey))).limit(1);
+      if (!existingLink && replay) throw new Error("An identical re-publish cannot add the discovery link; links are written only by the publication that publishes the revision");
+      await tx.insert(partsAtomicLinks).values(row).onConflictDoNothing();
+      const [written] = await tx.select().from(partsAtomicLinks).where(and(eq(partsAtomicLinks.partId, partId), eq(partsAtomicLinks.valueKey, row.valueKey))).limit(1);
+      if (!written || written.atomicPartRevisionId !== row.atomicPartRevisionId || written.symbolAssetVersionId !== row.symbolAssetVersionId || written.footprintAssetVersionId !== row.footprintAssetVersionId || written.mappingCertificateId !== row.mappingCertificateId) {
+        throw new Error("The discovery row's link already points at another revision; a publication never repoints a link");
+      }
+      (audit.detail as Record<string, unknown>).discovery = { library: discovery.libraryName, name: discovery.name, mpn: discovery.mpn, valueKey: row.valueKey, partId };
     }
 
     if (replay) {

@@ -33,9 +33,15 @@ const NEW_MODULES = [
   "app/api/components/atomic/publication/handler.ts",
   "app/components/parts/AtomicPublicationReviewPanel.tsx",
   "app/components/parts/hooks/useAtomicPublicationReview.ts",
+  // [PR-M, 2026-10-18] M2.4: the acquisition handoff (the publication route's acquired-asset port) and the object store it reads - both
+  // must reach acquired bytes from storage, never through egress (the ratchet grows stricter: two more modules walked)
+  "app/lib/component-resolution/acquisition/handoff.ts",
+  "app/lib/acquisition/cad-object-store.ts",
 ];
-/** distributor fetch, clients, egress, cache or the barrel that re-exports them; the outbound fetch boundary; the live search */
-const VENDOR_REACH = /^app\/lib\/distributors\/(?!types\.ts$|shared\.ts$|lifecycle-sql\.ts$)|^app\/lib\/net\/outbound-fetch\.ts$|^app\/lib\/acquisition\/(external-search|admission-control)\.ts$/;
+/** distributor fetch, clients, egress, cache or the barrel that re-exports them; the outbound fetch boundary; the live search
+ *  [PR-M, 2026-10-18] M2.2: + the CAD egress (cad-egress.ts) and every CAD source adapter (cad-adapters/): STRICTER - the
+ *  publication path reads acquired bytes from storage, through a port, never through a network source */
+const VENDOR_REACH = /^app\/lib\/distributors\/(?!types\.ts$|shared\.ts$|lifecycle-sql\.ts$)|^app\/lib\/net\/outbound-fetch\.ts$|^app\/lib\/acquisition\/(external-search|admission-control|cad-egress)\.ts$|^app\/lib\/acquisition\/cad-adapters\//;
 
 function resolveImport(from: string, spec: string): string | null {
   let base: string;

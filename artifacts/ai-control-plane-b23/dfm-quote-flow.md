@@ -266,7 +266,7 @@ first append meets on a server. The isolation level of a production server stays
 
 CI: the suite starts PostgreSQL, so it lives outside the B23 test folder (`app/lib/manufacturing-providers/database/__tests__/`; the
 folder `app/lib/manufacturing-providers/__tests__` is a prompt-to-gerber directory filter, and the job-scope guard refuses a PGlite suite
-there) and is an explicit database-delivery entry (`.github/workflows/deterministic-manufacturing.yml:376`; [B24-D1, 2026-10-09] was `:373` before B24-D1's OD-30 steps at `:32` and `:344-345`; [B24-D0, 2026-10-09] was `:335` before B24-D0's 38 prompt-to-gerber `--exclude` lines at `:293-330`; [B24-B3, 2026-10-08] was `:334` before B24-B3's prompt-to-gerber entry at `:292`; [B24-A1, 2026-10-06] was `:301` before B24-A1's filter line after `:227`; [B24-B2, 2026-10-08] was `:302` before B24-B2's 32 prompt-to-gerber entries at `:260-291`), the B19-E E6 precedent.
+there) and is an explicit database-delivery entry (`.github/workflows/deterministic-manufacturing.yml:594`; [PR-J7, 2026-11-04] was `:486` before PR-J7's 108 prompt-to-gerber lines at `:382-435` and `:496-549` (OD-261); [PR-L7, 2026-10-20] was `:415` before PR-L7's 71 prompt-to-gerber lines at `:313-381` and `:440-441` (OD-254); [PR-G, 2026-10-17] was `:376` before PR-G's 39 prompt-to-gerber lines at `:294-312`, `:316` and `:352-370` (OD-250); [B24-D1, 2026-10-09] was `:373` before B24-D1's OD-30 steps at `:32` and `:344-345`; [B24-D0, 2026-10-09] was `:335` before B24-D0's 38 prompt-to-gerber `--exclude` lines at `:293-330`; [B24-B3, 2026-10-08] was `:334` before B24-B3's prompt-to-gerber entry at `:292`; [B24-A1, 2026-10-06] was `:301` before B24-A1's filter line after `:227`; [B24-B2, 2026-10-08] was `:302` before B24-B2's 32 prompt-to-gerber entries at `:260-291`), the B19-E E6 precedent.
 The guard (`b19-e-ci-job-scope`, its `b23-` case) admits it; DB-backed tests stay opt-in (the database-delivery run: 16 files passed, 3
 skipped). CONFIRMED
 
@@ -467,7 +467,7 @@ JSON input rules; the surrogate CONFIRMED on PGlite, case 5).
 ## 14. Citations
 
 As of this working tree on `0c78e93` after the review round (2026-10-04); the anchor text is the check, the line is for the reader;
-`b23-b-dfm-quote-flow-page` case 3 checks every row. [B23-B2 lead, 2026-10-04] C65-C72 were added by the lead's round. [B24-A1, 2026-10-06] C64 re-pinned `:301` -> `:302` in place: B24-A1 inserted its filter line after `:227` (OD-222). [B24-D0, 2026-10-09] C64 re-pinned `:335` -> `:373` in place: B24-D0 inserted 38 prompt-to-gerber `--exclude` lines at `:293-330` (OD-30's split; the moves of B24-B2 and B24-B3 between are noted on the prose citation's line). [B24-D1, 2026-10-09] C64 re-pinned `:373` -> `:376` in place: B24-D1's OD-30 steps at `:32` and `:344-345`. [B24-B2, 2026-10-08] C64 re-pinned `:302` -> `:334` in place: B24-B2 inserted 32 prompt-to-gerber entries at `:260-291` (OD-204). [B24-B3, 2026-10-08] C64 re-pinned `:334` -> `:335` in place: B24-B3 inserted one prompt-to-gerber entry at `:292` (`worker-integration`, OD-222).
+`b23-b-dfm-quote-flow-page` case 3 checks every row. [B23-B2 lead, 2026-10-04] C65-C72 were added by the lead's round. [B24-A1, 2026-10-06] C64 re-pinned `:301` -> `:302` in place: B24-A1 inserted its filter line after `:227` (OD-222). [B24-D0, 2026-10-09] C64 re-pinned `:335` -> `:373` in place: B24-D0 inserted 38 prompt-to-gerber `--exclude` lines at `:293-330` (OD-30's split; the moves of B24-B2 and B24-B3 between are noted on the prose citation's line). [B24-D1, 2026-10-09] C64 re-pinned `:373` -> `:376` in place: B24-D1's OD-30 steps at `:32` and `:344-345`. [PR-G, 2026-10-17] C64 re-pinned `:376` -> `:415` in place: PR-G's 39 prompt-to-gerber lines at `:294-312`, `:316` and `:352-370` (OD-250). [B24-B2, 2026-10-08] C64 re-pinned `:302` -> `:334` in place: B24-B2 inserted 32 prompt-to-gerber entries at `:260-291` (OD-204). [B24-B3, 2026-10-08] C64 re-pinned `:334` -> `:335` in place: B24-B3 inserted one prompt-to-gerber entry at `:292` (`worker-integration`, OD-222). [PR-L7, 2026-10-20] C64 re-pinned `:415` -> `:486` in place: PR-L7's 71 prompt-to-gerber lines at `:313-381` and `:440-441` (OD-254). [PR-J7, 2026-11-04] C64 re-pinned `:486` -> `:594` in place: PR-J7's 108 prompt-to-gerber lines at `:382-435` and `:496-549` (OD-261).
 
 | # | file | line | anchor |
 |---|---|---|---|
@@ -534,7 +534,7 @@ As of this working tree on `0c78e93` after the review round (2026-10-04); the an
 | C61 | `app/lib/pcb/fab/validate-package.ts` | 14 | `const MAX_FILES = 64;` |
 | C62 | `app/lib/durable-workflow/repository.ts` | 36 | `async claimOutbox(` |
 | C63 | `app/lib/durable-workflow/server-repository.ts` | 32 | `async claimOutbox(` |
-| C64 | `.github/workflows/deterministic-manufacturing.yml` | 376 | `app/lib/manufacturing-providers/database/__tests__/b23-b-exchange-ledger-pglite.test.ts` |
+| C64 | `.github/workflows/deterministic-manufacturing.yml` | 594 | `app/lib/manufacturing-providers/database/__tests__/b23-b-exchange-ledger-pglite.test.ts` |
 | C65 | `app/lib/manufacturing-providers/exchange-ledger.ts` | 195 | `\|\| hasLoneSurrogate(value)) return false;` |
 | C66 | `app/lib/manufacturing-providers/exchange-ledger.ts` | 367 | `if (head && phase === "sent") await stillPrepared(historyOf, aggregate, attempt.idempotencyKey);` |
 | C67 | `app/lib/manufacturing-providers/exchange-ledger.ts` | 421 | `samePackage(other, attempt) && (other.state === "prepared" \|\| other.state === "sent")` |
@@ -926,7 +926,9 @@ at the read.
 
 As of this working tree on `0cd3f59` (2026-10-04); the anchor text is the check, the line is for the reader; `b23-b-dfm-quote-flow-page`
 case 8 checks every row. [B23-B3 review, 2026-10-04] Re-pointed after the review round (D1-D13, D29; D8's anchor is the new joined
-reading), and D40-D50 added.
+reading), and D40-D50 added. [PR-G, 2026-10-17] D22-D24 re-pinned `:200` -> `:211`, `:228` -> `:239` and `:252` -> `:263` in place: Product
+reliability C (`6bdd7f7`) inserted eleven lines above them in `app/api/pcb-sync/handler.ts` (an import at `:15`, the refused-apply (409)
+mapping at `:43-51` and one line in the POST handler); the anchors are unchanged.
 
 | # | file | line | anchor |
 |---|---|---|---|
@@ -951,9 +953,9 @@ reading), and D40-D50 added.
 | D19 | `app/api/pcb-sync/manufacturing-summary.ts` | 8 | `[B23-B3, 2026-10-04] D23-17: until B23-B3 only the revision was compared` |
 | D20 | `app/api/pcb-sync/manufacturing-summary.ts` | 83 | `authority.authority.boardDigest === currentBoardDigest);` |
 | D21 | `app/api/pcb-sync/manufacturing-summary.ts` | 142 | `if (read.state === "absent") return null;` |
-| D22 | `app/api/pcb-sync/handler.ts` | 200 | `board: PcbBoard; superseded?: boolean } \| null` |
-| D23 | `app/api/pcb-sync/handler.ts` | 228 | `board: record.board, superseded: lineageSummary?.state === "superseded"` |
-| D24 | `app/api/pcb-sync/handler.ts` | 252 | `export interface PcbSyncManufacturingObservations` |
+| D22 | `app/api/pcb-sync/handler.ts` | 211 | `board: PcbBoard; superseded?: boolean } \| null` |
+| D23 | `app/api/pcb-sync/handler.ts` | 239 | `board: record.board, superseded: lineageSummary?.state === "superseded"` |
+| D24 | `app/api/pcb-sync/handler.ts` | 263 | `export interface PcbSyncManufacturingObservations` |
 | D25 | `app/api/pcb-sync/route.ts` | 33 | `createManufacturingSummaryReader(workflow, { observations: createProviderObservationReader({ exchanges: createProviderExchangeLedger(workflow) }) })` |
 | D26 | `app/lib/pcb-sync/client.ts` | 167 | `function manufacturingObservations(` |
 | D27 | `app/components/pcb/ManufacturingWorkflowPanel.tsx` | 19 | `import { ProviderObservationList } from "./ProviderObservationList";` |

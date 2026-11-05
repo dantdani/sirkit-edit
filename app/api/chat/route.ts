@@ -42,9 +42,9 @@ import { resolveFreeroutingRuntime } from "@/app/lib/pcb/autoroute/runtime";
 import { resolveAgentAutonomyRepository } from "@/app/lib/agent/autonomy-store";
 import { createExecutionGrantMinter } from "@/app/lib/execution-grant/mint";
 import type { AgentExecutionGrantMinter } from "@/app/lib/agent/contracts";
-import type { AgentAutonomySetting } from "@/app/lib/engineering/permission-tiers";
+import { resolveCadAcquisitionPort } from "./cad-acquisition-runtime"; import type { AgentAutonomySetting } from "@/app/lib/engineering/permission-tiers"; // [PR-M, 2026-10-18] M2: the one approved CAD acquisition boundary FIRST on this line (the import walkers read a line's first import; the type import beside it is not a runtime edge), so route.ts keeps its 562 lines
 import { createFreeroutingPassExecutor } from "@/app/lib/pcb/autoroute/freerouting-pass-executor";
-import { resolveComputationPort } from "./computation-runtime"; // [B22-B] the one approved named-computation boundary (OD-139, OD-158), in place of a blank line: route.ts keeps its 562 lines and no cited line moves
+import { resolveComputationPort } from "./computation-runtime"; import { resolveSchematicGenerationPort } from "./schematic-generation-runtime"; import { resolveCatalogInspectionPort } from "./catalog-inspection-runtime"; import { resolveComponentResolutionPorts } from "./component-resolution-runtime"; /* [PR-M, 2026-10-17] + the one approved component resolution boundary (the published revision evidence and the local catalog search ports), on the same line for the same reason: route.ts keeps its 562 lines */ /* [PR-D d2] + the one approved catalog inspection boundary, on the same line for the same reason */ // [B22-B] the one approved named-computation boundary (OD-139, OD-158), in place of a blank line: route.ts keeps its 562 lines and no cited line moves; [PR-D] + the one approved Build-mode generation boundary (OD-243), on the same line for the same reason
 export const CHAT_PROTOCOL_VERSION = 1;
 
 /** [B10] documented board-capable request limit: the ACTUAL request-body
@@ -281,7 +281,7 @@ export const POST = agentStreamRoute(
   // the approved runtime boundary from the TRUSTED context (a human principal, the validated scope). The same resolution feeds
   // the gateway (the port) and both context assemblies (the fact); the body or the model can never claim either.
   const mcpObservation = resolveMcpObservationPort({ humanPrincipal: context.actor.actorKind === "human", tenantId: requestScope.tenantId, projectId: requestScope.projectId, principalId: context.principalId });
-  const mcpObservationAvailable = mcpObservation !== null; const computation = resolveComputationPort(); const computationAvailable = computation !== null; // [B22-B] ONE server fact for the named computations (opt-in, OD-158): the same resolution feeds the gateway (the port) and both assemblies (the fact)
+  const mcpObservationAvailable = mcpObservation !== null; const computation = resolveComputationPort(); const computationAvailable = computation !== null; const schematicGeneration = resolveSchematicGenerationPort(provider); const schematicGenerationAvailable = schematicGeneration !== null; const catalogInspection = resolveCatalogInspectionPort(); const catalogInspectionAvailable = catalogInspection !== null; const componentResolution = catalogInspection ? resolveComponentResolutionPorts() : {}; const componentResolutionAvailable = componentResolution.evidence !== undefined; const catalogSearchAvailable = componentResolutionAvailable && componentResolution.search !== undefined; const cadAcquisition = resolveCadAcquisitionPort(catalogInspection); const cadAcquisitionAvailable = cadAcquisition !== null; /* [PR-M, 2026-10-18] M2: ONE resolution of the CAD acquisition port; the context claims the fact only beside a validated schematic (no board) */ /* [PR-M, 2026-10-17] ONE resolution of the component resolution ports (the published revision evidence and the local catalog search), only beside the catalog port; the same resolution feeds the gateway (the ports) and both assemblies (the facts) */ /* [PR-D d2] ONE server fact for the catalog inspection: the port over the shared catalog part detail loader when the catalog can be read here (the fixture runtime, or a configured database), the same resolution feeding the gateway and both assemblies */ // [B22-B] ONE server fact for the named computations (opt-in, OD-158): the same resolution feeds the gateway (the port) and both assemblies (the fact); [PR-D] ONE server fact for the Build-mode generation proposal (OD-243): the port ([PR-L/M integration, 2026-10-18] since runbook L.5 over the durable generation-task service, no longer runBuildMultiGeneration) for the run's provider when that provider is configured (or the fixture runtime), the same resolution feeding the gateway and both assemblies
 
   const assembly = assembleAgentRunContext({
     ...requestScope,
@@ -297,7 +297,7 @@ export const POST = agentStreamRoute(
     autonomy,
     executionGrantsAvailable,
     externalAcquisitionAvailable, // [B19-E E6]
-    computationAvailable, mcpObservationAvailable, // [B20 A4]; [B22-B] computationAvailable
+    computationAvailable, mcpObservationAvailable, schematicGenerationAvailable, catalogInspectionAvailable, componentResolutionAvailable, catalogSearchAvailable, cadAcquisitionAvailable, // [B20 A4]; [B22-B] computationAvailable; [PR-D] schematicGenerationAvailable (OD-243); [PR-D d2] catalogInspectionAvailable; [PR-M, 2026-10-17] the two resolution facts
   });
   if (!assembly.ok) {
     return Response.json({ ok: false, error: assembly.reason }, { status: 400 });
@@ -356,7 +356,7 @@ export const POST = agentStreamRoute(
           autonomy,
           executionGrantsAvailable,
           externalAcquisitionAvailable, // [B19-E E6]
-          computationAvailable, mcpObservationAvailable, // [B20 A4]; [B22-B] computationAvailable
+          computationAvailable, mcpObservationAvailable, schematicGenerationAvailable, catalogInspectionAvailable, componentResolutionAvailable, catalogSearchAvailable, cadAcquisitionAvailable, // [B20 A4]; [B22-B] computationAvailable; [PR-D] schematicGenerationAvailable (OD-243); [PR-D d2] catalogInspectionAvailable; [PR-M, 2026-10-17] the two resolution facts
         });
         // Fail closed: a re-assembly failure keeps the authority-free context.
         if (reassembled.ok) runContext = reassembled.context;
@@ -402,7 +402,7 @@ export const POST = agentStreamRoute(
     // [B19-E E6] the external acquisition port (the same resolution as the context's availability fact)
     ...(externalAcquisition ? { externalAcquisition } : {}),
     // [B20 A4] the external tool port (the same resolution as the context's availability fact)
-    ...(mcpObservation ? { mcpObservation } : {}), ...(computation ? { computation } : {}), // [B22-B] the named computation port
+    ...(mcpObservation ? { mcpObservation } : {}), ...(computation ? { computation } : {}), ...(schematicGeneration ? { schematicGeneration } : {}), ...(catalogInspection ? { catalogInspection } : {}), ...(componentResolutionAvailable ? { componentResolution } : {}), ...(cadAcquisition ? { cadAcquisition } : {}), /* [PR-M, 2026-10-18] M2: the CAD acquisition port (the same resolution as the fact) */ /* [PR-M, 2026-10-17] the component resolution ports (the same resolution as the two facts) */ /* [PR-D d2] the catalog inspection port (the same resolution as the context's availability fact) */ // [B22-B] the named computation port; [PR-D] the Build-mode generation port (the same resolution as the context's availability fact, OD-243)
     ...(replacementFactsSource
       ? { replacementPinFacts: (atomicPartRevisionId: string, role: ReplacementPinFactsRole) => loadRunReplacementPinFacts(replacementFactsSource, atomicPartRevisionId, signal, DEFAULT_PIN_FACTS_DEADLINE_MS, role) } // [B19-E E5] current or target
       : {}),

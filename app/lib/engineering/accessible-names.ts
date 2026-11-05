@@ -62,7 +62,7 @@ const inPage = (group: ScopeGroup, region: ScopeRegion): ScopeEntry => Object.fr
 export const ACCESSIBILITY_SCOPE: readonly ScopeEntry[] = Object.freeze([
   whole("chat", "app/components/chat/AutonomyModeControl.tsx"),
   whole("chat", "app/components/chat/ChatMarkdown.tsx"),
-  whole("chat", "app/components/chat/ExecutionEntryActions.tsx"),
+  whole("chat", "app/components/chat/ExecutionEntryActions.tsx"), whole("chat", "app/components/chat/GenerationTaskStatus.tsx"), // [PR-L, 2026-10-17] reviewed scope move (runbook L.4): the durable design task's status card (Stop design, Pause / Resume design, Retry block, Start again) in its activity entry, appended in place
   inPage("chat", { kind: "element", tag: "aside", classIncludes: "sirkit-chat-panel" }),
   inPage("chat", { kind: "function", name: "MessageBubble" }),
   whole("approval dialogs", `${PCB}GrantedExecutionDialog.tsx`),

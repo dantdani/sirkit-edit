@@ -21,7 +21,7 @@
 import { createHash } from "node:crypto";
 import type { SchematicState, SchComponentType } from "@/lib/schematic-types";
 import { DEFAULT_PAGE_SIZE, schDisplayRef } from "@/lib/schematic-types";
-import { validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
+import { validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model"; import { assertWholeProject } from "@/app/lib/schematic/sheets"; // [PR-J1 integration, 2026-10-22] on this line so no line moves
 import { KICAD_SCALE_PX_PER_MM } from "@/app/lib/geometry";
 import type { CachedPart } from "./parts-cache";
 import { getPowerSymbol, buildGenericPowerSymbol } from "./kicad-power-symbols";
@@ -76,13 +76,13 @@ export type KicadExportInput = {
 // KiCad 10.0 stable schematic format version (matches a schematic freshly saved
 // by KiCad 10.0.3). KiCad reads older versions too, but writing the current one
 // avoids an on-load format upgrade prompt.
-const KICAD_VERSION = "20250610";
+export const KICAD_VERSION = "20250610"; // [PR-J4, 2026-10-23] exported in place for app/lib/kicad-export-hierarchy.ts (no output change)
 
 // ─── Theory (ideal) component mappings ──────────────────────────────────────
 // `ground` is intentionally absent: it becomes a power port, not a symbol.
-type TheoryType = Exclude<SchComponentType, "ground">;
+export type TheoryType = Exclude<SchComponentType, "ground">;
 
-const THEORY_LIB_ID: Record<TheoryType, string> = {
+export const THEORY_LIB_ID: Record<TheoryType, string> = {
   resistor: "Device:R",
   capacitor: "Device:C",
   inductor: "Device:L",
@@ -100,7 +100,7 @@ const THEORY_LIB_ID: Record<TheoryType, string> = {
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /** Convert sirkit pixels to KiCad millimetres, rounded to 1µm precision. */
-function mmFromPx(px: number): number {
+export function mmFromPx(px: number): number {
   const mm = px / KICAD_SCALE_PX_PER_MM;
   // `+ 0` collapses any negative zero so the same coordinate always prints the
   // same string (keeps the export byte-stable).
@@ -108,7 +108,7 @@ function mmFromPx(px: number): number {
 }
 
 /** Format a number for an S-expression token (no trailing-zero noise). */
-function num(n: number): string {
+export function num(n: number): string {
   return String(n);
 }
 
@@ -118,7 +118,7 @@ function num(n: number): string {
  * outside `[A-Za-z0-9_]` (hyphens, dots, colons, slashes, …) — KiCad's parser
  * only accepts those bare inside double-quoted strings.
  */
-function q(s: string): string {
+export function q(s: string): string {
   // [B19-D I5c row 17] newline, carriage return and tab escaped as KiCad writes them; other controls become spaces
   const escaped = String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u2028\u2029]/g, " ");
   return `"${escaped}"`;
@@ -134,7 +134,7 @@ function escapeRegExp(s: string): string {
  * `prefix:key`, formatted as an 8-4-4-4-12 hex string with the version-4 and
  * variant nibbles set so KiCad accepts it as a well-formed UUID.
  */
-function uuidFor(prefix: string, key: string): string {
+export function uuidFor(prefix: string, key: string): string {
   const hex = createHash("sha256").update(`${prefix}:${key}`).digest("hex");
   const h = hex.slice(0, 32).split("");
   h[12] = "4"; // version 4
@@ -161,7 +161,7 @@ function uuidFor(prefix: string, key: string): string {
  * identical, so the child rewrite is a no-op and existing exports are
  * byte-for-byte unchanged.
  */
-function rewriteSymbolName(symbolRaw: string, libId: string): string {
+export function rewriteSymbolName(symbolRaw: string, libId: string): string {
   const rootMatch = symbolRaw.match(/^\s*\(symbol\s+"((?:[^"\\]|\\.)*)"/);
   if (!rootMatch) return symbolRaw;
   const rawOriginal = rootMatch[1]; // root id exactly as written in the source
@@ -187,7 +187,7 @@ function rewriteSymbolName(symbolRaw: string, libId: string): string {
  * scheme-less `www.` link is written with its scheme; a web link and every other property stay byte-for-byte. A block that
  * does not parse is left as it is (KiCad could not read it either).
  */
-function sanitizeEmbeddedDatasheets(symbolRaw: string): string {
+export function sanitizeEmbeddedDatasheets(symbolRaw: string): string {
   let tree: SNode;
   try {
     assertBoundedSExpression(symbolRaw);
@@ -213,12 +213,12 @@ function sanitizeEmbeddedDatasheets(symbolRaw: string): string {
   return out;
 }
 
-const TODAY = new Date().toISOString().slice(0, 10);
+export const TODAY = new Date().toISOString().slice(0, 10);
 
 // ─── Main export ────────────────────────────────────────────────────────────
 
 export function exportToKicadSch(input: KicadExportInput): string {
-  const { state, parts } = input;
+  const { state, parts } = input; assertWholeProject(state, "kicad-export"); // [PR-J1 integration, 2026-10-22] review PC-3: one sheet's view is never the project
   // B07.2 — FAIL-CLOSED ingress: the COMPLETE state must satisfy the shared
   // canonical identity + geometry contract before a single byte is
   // serialized. Duplicate stable ids, duplicate case-insensitive displayed
@@ -228,7 +228,7 @@ export function exportToKicadSch(input: KicadExportInput): string {
   // cannot catch (the /api/export/kicad route validates first and returns a
   // structured 422) must not reach serialization with invalid input.
   const validationIssues = validateSchematicStateIntegrity(state);
-  if (validationIssues.length > 0) throw new SchematicExportValidationError(validationIssues);
+  if (validationIssues.length > 0) throw new SchematicExportValidationError(validationIssues); if (state.sheets !== undefined) throw new SchematicExportHierarchyPendingError(); // [PR-J, 2026-10-22] J2: never a flat file for a project with sheets
   const components = state.components ?? [];
   const kicadComponents = state.kicadComponents ?? [];
   const wires = state.wires ?? [];
@@ -441,7 +441,7 @@ export function exportToKicadSch(input: KicadExportInput): string {
 
 // ─── Block builders ─────────────────────────────────────────────────────────
 
-function buildSymbolInstance(o: {
+export function buildSymbolInstance(o: {
   libId: string;
   x: number;
   y: number;
@@ -483,7 +483,7 @@ function buildSymbolInstance(o: {
   ].join("\n");
 }
 
-function buildWire(x1: number, y1: number, x2: number, y2: number, uuid: string): string {
+export function buildWire(x1: number, y1: number, x2: number, y2: number, uuid: string): string {
   return [
     `\t(wire`,
     `\t\t(pts (xy ${num(x1)} ${num(y1)}) (xy ${num(x2)} ${num(y2)}))`,
@@ -493,7 +493,7 @@ function buildWire(x1: number, y1: number, x2: number, y2: number, uuid: string)
   ].join("\n");
 }
 
-function buildJunction(x: number, y: number, uuid: string): string {
+export function buildJunction(x: number, y: number, uuid: string): string {
   return [
     `\t(junction`,
     `\t\t(at ${num(x)} ${num(y)})`,
@@ -504,7 +504,7 @@ function buildJunction(x: number, y: number, uuid: string): string {
   ].join("\n");
 }
 
-function buildPowerPort(
+export function buildPowerPort(
   libId: string,
   value: string,
   x: number,
@@ -542,9 +542,9 @@ function buildPowerPort(
 
 // KiCad stores the intersheet-references field with this literal placeholder
 // value; it expands the cross-reference text itself when rendering.
-const INTERSHEET_REFS_VALUE = "${INTERSHEET_REFS}";
+export const INTERSHEET_REFS_VALUE = "${INTERSHEET_REFS}";
 
-function buildGlobalLabel(name: string, x: number, y: number, rotation: number, uuid: string): string {
+export function buildGlobalLabel(name: string, x: number, y: number, rotation: number, uuid: string): string {
   return [
     `\t(global_label ${q(name)}`,
     `\t\t(shape input)`,
@@ -558,12 +558,12 @@ function buildGlobalLabel(name: string, x: number, y: number, rotation: number, 
 }
 
 /** Round a millimetre value to 1µm (mirrors `mmFromPx`'s precision). */
-function round3(n: number): number {
+export function round3(n: number): number {
   return Math.round(n * 1000) / 1000 + 0;
 }
 
 /** Re-indent a multi-line raw block by `tabs` tab stops, preserving structure. */
-function indent(block: string, tabs: number): string {
+export function indent(block: string, tabs: number): string {
   // [B19-D I5c row 17] string-aware: a line that begins inside a quoted string is never padded
   const pad = "\t".repeat(tabs);
   let inString = false;
@@ -588,7 +588,7 @@ function indent(block: string, tabs: number): string {
  * [B19-D I5c row 16] A pinned part's symbol is written only when it is exactly ONE `(symbol …)` definition: bounded, balanced,
  * with nothing before or after it. Anything else could close `lib_symbols` and add structure of its own.
  */
-function assertSingleSymbolDefinition(raw: string, refDes: string): void {
+export function assertSingleSymbolDefinition(raw: string, refDes: string): void {
   try {
     assertBoundedSExpression(raw);
     const root = parseSexpr(raw);
@@ -596,5 +596,20 @@ function assertSingleSymbolDefinition(raw: string, refDes: string): void {
     if (!head || head.kind !== "symbol" || head.value !== "symbol") throw new Error("not a symbol definition");
   } catch {
     throw new SchematicExportValidationError([`${refDes}: the pinned part's symbol is not exactly one symbol definition`]);
+  }
+}
+
+/**
+ * [PR-J, 2026-10-22] Section J increment 2 (J.8 item 5; OD-255 item 2): this serializer writes ONE flat .kicad_sch whose ordinary
+ * labels become global labels, so for a project organised into sheets it would join every sheet's local labels by name and lose the
+ * hierarchy. Until the native hierarchical export (a root file with sheet symbols plus one file per sheet) exists, a document with
+ * sheets is refused: nothing is serialized. The /api/export/kicad route answers it as a structured 422 before any catalog read.
+ */
+export const EXPORT_HIERARCHY_PENDING = "KiCad export writes one flat schematic page; a project organised into sheets needs the hierarchical export, which is not available yet. Nothing was exported and nothing changed.";
+export class SchematicExportHierarchyPendingError extends Error {
+  readonly code = "EXPORT_HIERARCHY_PENDING" as const;
+  constructor() {
+    super(EXPORT_HIERARCHY_PENDING);
+    this.name = "SchematicExportHierarchyPendingError";
   }
 }

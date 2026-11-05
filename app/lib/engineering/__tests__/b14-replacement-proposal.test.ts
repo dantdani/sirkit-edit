@@ -32,9 +32,6 @@ import type { Tier1ProposalHeadMark, Tier1ProposalScope } from "../schematic-pro
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
 const SCOPE = { tenantId: "local", projectId: "p-b14", branchId: "main" } as const;
-let MARK: Tier1ProposalHeadMark;
-// eslint-disable-next-line prefer-const -- assigned once after the fixture helpers are defined
-let PROPOSAL_SCOPE: Tier1ProposalScope;
 
 function pin(number: string, name: string, xMm: number): KicadPin {
   return { number, name, type: "passive", position: { x: xMm, y: 0 }, orientation: 0, length: 2.54 };
@@ -93,8 +90,8 @@ const TARGET_FACTS = pinFacts("rev-new", "sym-new", PART_B_PINS);
 
 // The head mark's canonical digest is the SESSION-domain digest the
 // replacement binds — computed over the same reference the session uses.
-MARK = { lineageId: "lin1-a9e2470c11bd8833", headSequence: 3, canonicalStateDigest: replacementHeadDigestFor(baseState(), SCOPE) };
-PROPOSAL_SCOPE = { ...SCOPE, headMark: MARK };
+const MARK: Tier1ProposalHeadMark = { lineageId: "lin1-a9e2470c11bd8833", headSequence: 3, canonicalStateDigest: replacementHeadDigestFor(baseState(), SCOPE) };
+const PROPOSAL_SCOPE: Tier1ProposalScope = { ...SCOPE, headMark: MARK };
 
 function assemble(over: Partial<Parameters<typeof assembleReplacementProposal>[0]> = {}) {
   return assembleReplacementProposal({

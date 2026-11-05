@@ -11,14 +11,21 @@
  * partition computed deterministically from the schematic — the same
  * coordinate-coincidence union-find everything else uses — plus an explicit list
  * of genuinely floating pins. The model is told this is ground truth.
+ *
+ * [PR-J, 2026-10-22] Section J increment 2 (OD-255 items 2, 3): the partition is THE project connectivity authority's
+ * (app/lib/schematic/project-connectivity.ts): a document without sheets keeps its exact input (the authority's union IS
+ * buildNetUnionFind, the first label names a net, every ground kind reads "GND"); a document with sheets is reviewed on its scoped
+ * nets, each named once by the authority (a sheet-local net "Power/OUT"; AGND and DGND as the two ground rails they are), and a
+ * sheet-structure error refuses (SHEET_HIERARCHY_INVALID). Every sheet is reviewed; one sheet's view is refused.
  */
 
 import type { SchComponentType, SchematicState, Point } from "./schematic-types";
 import { PIN_NAMES } from "./schematic-types";
 import { boundUntrustedText, boundUntrustedTextOrNull } from "@/app/lib/untrusted-text";
 import type { CachedPart } from "@/app/lib/parts-cache";
-import { buildNetUnionFind } from "@/app/lib/connectivity";
-import { pinWorldPos, kicadPinWorldPos, pointKey } from "@/app/lib/geometry";
+import { pinWorldPos, kicadPinWorldPos } from "@/app/lib/geometry";
+import { resolveProjectConnectivity } from "@/app/lib/schematic/project-connectivity";
+import { assertWholeProject, sheetOf } from "@/app/lib/schematic/sheets";
 
 const THEORY_DESC: Record<SchComponentType, string> = {
   resistor: "Resistor",
@@ -50,10 +57,10 @@ export type ReviewInput = {
 };
 
 export function buildReviewInput(state: SchematicState, parts: Map<string, CachedPart>): ReviewInput {
+  assertWholeProject(state, "review-input");
   const components: ReviewComponent[] = [];
-  type Pin = { pinId: string; point: Point };
+  type Pin = { pinId: string; sheetId: string; point: Point };
   const pins: Pin[] = []; // real-component pins only (ground symbols excluded)
-  const kicadPinPoints: Point[] = [];
 
   // [B19-D I5e row 05 + review] every project and catalog string reaches the review model bounded and cleaned, and a pin id is
   // built from the same bounded reference and pin name the component lists (the route matches floating-pin claims against it)
@@ -62,7 +69,7 @@ export function buildReviewInput(state: SchematicState, parts: Map<string, Cache
     const names = PIN_NAMES[c.type] ?? [];
     const ref = boundUntrustedText(c.id, 64); // a theory id is a UUID (36 characters) and must stay whole
     components.push({ refDes: ref, description: THEORY_DESC[c.type], value: boundUntrustedText(c.value, 128), mpn: null, pins: names });
-    for (const n of names) pins.push({ pinId: `${ref}.${n}`, point: pinWorldPos(c, n) });
+    for (const n of names) pins.push({ pinId: `${ref}.${n}`, sheetId: sheetOf(c), point: pinWorldPos(c, n) });
   }
   for (const k of state.kicadComponents ?? []) {
     const part = parts.get(k.partId);
@@ -78,55 +85,69 @@ export function buildReviewInput(state: SchematicState, parts: Map<string, Cache
     if (part) {
       part.pins.forEach((p, index) => {
         const pt = kicadPinWorldPos(k, p);
-        pins.push({ pinId: `${ref}.${names[index]}`, point: pt });
-        kicadPinPoints.push(pt);
+        pins.push({ pinId: `${ref}.${names[index]}`, sheetId: sheetOf(k), point: pt });
       });
     }
   }
 
-  const uf = buildNetUnionFind(state.components, state.wires, kicadPinPoints, state.netLabels ?? []);
+  // THE project connectivity authority (a document without sheets: the same buildNetUnionFind union as before).
+  const connectivity = resolveProjectConnectivity(state, (partId) => parts.get(partId) ?? null);
+  if (!connectivity.ok) {
+    const error = connectivity.diagnostics.find((item) => item.severity === "error");
+    throw new Error(`SHEET_HIERARCHY_INVALID: ${error?.code ?? "SHEET_SET_INVALID"}: ${error?.message ?? "the sheet structure is invalid"}`);
+  }
+  const strict = connectivity.mode === "multi-sheet";
 
   // Name/kind per net root: ground (from ground symbols or ground labels) wins,
-  // then any net label, else an unnamed signal net.
+  // then any net label, else an unnamed signal net. (A document with sheets: the authority's one name per net.)
   const labelByRoot = new Map<string, { name: string; kind: string }>();
   for (const l of state.netLabels ?? []) {
-    const k = pointKey(l.position);
-    if (uf.has(k) && !labelByRoot.has(uf.find(k))) labelByRoot.set(uf.find(k), { name: boundUntrustedText(l.name, 128), kind: boundUntrustedText(l.kind, 16) });
+    const root = connectivity.rootAt(sheetOf(l), l.position);
+    if (root !== null && !labelByRoot.has(root)) labelByRoot.set(root, { name: boundUntrustedText(l.name, 128), kind: boundUntrustedText(l.kind, 16) });
   }
   const groundRoots = new Set<string>();
   for (const c of state.components) {
     if (c.type === "ground") {
-      const k = pointKey(pinWorldPos(c, "pin"));
-      if (uf.has(k)) groundRoots.add(uf.find(k));
+      const root = connectivity.rootAt(sheetOf(c), pinWorldPos(c, "pin"));
+      if (root !== null) groundRoots.add(root);
     }
   }
   for (const l of state.netLabels ?? []) {
     if (l.kind === "ground") {
-      const k = pointKey(l.position);
-      if (uf.has(k)) groundRoots.add(uf.find(k));
+      const root = connectivity.rootAt(sheetOf(l), l.position);
+      if (root !== null) groundRoots.add(root);
     }
   }
 
   const pinsByRoot = new Map<string, string[]>();
+  const firstPinOfRoot = new Map<string, Pin>();
   for (const pin of pins) {
-    const k = pointKey(pin.point);
-    if (!uf.has(k)) continue;
-    const root = uf.find(k);
+    const root = connectivity.rootAt(pin.sheetId, pin.point);
+    if (root === null) continue;
     const list = pinsByRoot.get(root);
     if (list) list.push(pin.pinId);
-    else pinsByRoot.set(root, [pin.pinId]);
+    else { pinsByRoot.set(root, [pin.pinId]); firstPinOfRoot.set(root, pin); }
   }
 
   const nets: ReviewNet[] = [];
   const floatingPins: string[] = [];
   for (const [root, pinIds] of pinsByRoot) {
-    const isGround = groundRoots.has(root);
-    const label = labelByRoot.get(root);
-    const name = isGround ? "GND" : label?.name ?? null;
-    const kind = isGround ? "ground" : label?.kind ?? "signal";
+    let name: string | null;
+    let kind: string;
+    if (strict) {
+      const first = firstPinOfRoot.get(root)!;
+      const net = connectivity.netAt(first.sheetId, first.point);
+      name = net?.name ? boundUntrustedText(net.name, 128) : null;
+      kind = net?.kind === "ground" ? "ground" : net?.kind === "power" ? "power" : name !== null ? "label" : "signal";
+    } else {
+      const isGround = groundRoots.has(root);
+      const label = labelByRoot.get(root);
+      name = isGround ? "GND" : label?.name ?? null;
+      kind = isGround ? "ground" : label?.kind ?? "signal";
+    }
     nets.push({ name, kind, pins: pinIds.sort() });
     // Floating = a single pin on an unnamed, non-ground net (connects to nothing).
-    if (pinIds.length === 1 && !isGround && !label) floatingPins.push(pinIds[0]);
+    if (pinIds.length === 1 && name === null) floatingPins.push(pinIds[0]);
   }
   nets.sort((a, b) => (a.name ?? "~").localeCompare(b.name ?? "~"));
 

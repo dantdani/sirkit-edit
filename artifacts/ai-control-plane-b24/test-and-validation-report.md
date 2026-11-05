@@ -248,3 +248,7 @@ outside the repository (`b24/logs/close2-*`). **CONFIRMED** (executed).
 | `close2fix-readers`, `close2fix-ast-gates` | the four reader suites; `b14-4-ast-import-gates` alone | 4 files, 49 passed; 22 passed (45.3 s); exit 0 each |
 | `close2fix-final-qualification`, `-2` | `app/lib/qualification/__tests__` and the B21, B22 and B23 closeout tripwires, after the last edit of every page | the first red on case 2 alone: three every-job claims quoted in this section's own rows, rephrased; the second 53 files passed, 3 skipped (56); 552 tests passed, 15 skipped; exit 0 (no case added; no onTaskUpdate timeout) |
 | `close2fix-final-pages` | the nine page suites of `close2-final-pages`, after the last edit of this page | 9 files, 81 passed; exit 0 |
+
+## Post-B24 census addendum — 2026-10-11
+
+The 878/302 and 73/64 census statements above remain measurements at `26dc8b8`. Later regression tests change the current checkout's census, not the earlier Git tree. `ci-census-26dc8b8.json` now preserves that tree's test listing and exact CI-reader inputs, and the verdict suite recomputes the dated counts from that snapshot. See `../astra-guided-pcb/qualification-census-addendum.md` for provenance and the separately labelled current-checkout measurement.

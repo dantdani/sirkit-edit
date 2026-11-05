@@ -17,6 +17,10 @@
  *    through the B06.1/B06.2 grant-gated path.
  *  - Theory stable ids and types are immutable; only x/y/rotation, value,
  *    and the display refDes may change.
+ *  - [PR-J, 2026-10-22] Sheet membership (`sheetId`) of an existing entity and a label's connection fields (`scope`, `portId`,
+ *    `childSheetId`) are immutable here — moves go through schematic.move-to-sheet (schematic_assign_sheet) and scope changes through
+ *    schematic.sheet-structure, so no gesture can silently move circuitry between sheets or re-scope a net. New entities may carry
+ *    them (the canonical validator checks every reference).
  *
  * Junction contract (B07, pinned by tests): junctions are DERIVED from wire
  * geometry — the junction tool and wire drawing SPLIT wires at shared
@@ -63,6 +67,7 @@ export function diffSchematicGraphOps(before: CanonicalSchematic, after: Schemat
         return;
       }
       if (prev.type !== next.type) throw new Error(`GRAPH_DIFF_IMMUTABLE:${next.id}: theory component type cannot change`);
+      refuseSheetChange(prev, next);
       if (prev.x !== next.x || prev.y !== next.y || prev.rotation !== next.rotation) {
         operations.push({ ...base, operationId: opId("xform", next.id), kind: "schematic_transform_component", family: "theory", componentId: next.id, x: next.x, y: next.y, rotation: next.rotation });
       }
@@ -93,6 +98,7 @@ export function diffSchematicGraphOps(before: CanonicalSchematic, after: Schemat
       if (prev.partId !== next.partId || prev.atomicPartRevisionId !== next.atomicPartRevisionId || prev.symbolAssetVersionId !== next.symbolAssetVersionId || prev.footprintAssetVersionId !== next.footprintAssetVersionId || prev.mappingCertificateId !== next.mappingCertificateId || prev.selectionRecordId !== next.selectionRecordId) {
         throw new Error(`GRAPH_DIFF_IMMUTABLE:${next.id}: part identity/authority changes must use the grant-gated replacement path`);
       }
+      refuseSheetChange(prev, next);
       if (prev.x !== next.x || prev.y !== next.y || prev.rotation !== next.rotation) {
         operations.push({ ...base, operationId: opId("xform", next.id), kind: "schematic_transform_component", family: "kicad", componentId: next.id, x: next.x, y: next.y, rotation: next.rotation });
       }
@@ -114,6 +120,7 @@ export function diffSchematicGraphOps(before: CanonicalSchematic, after: Schemat
     }
     for (const item of before.wires) {
       const next = afterById.get(item.id);
+      if (next) refuseSheetChange(item, next);
       if (next && !sameVertices(item.vertices, next.vertices)) {
         operations.push({ ...base, operationId: opId("updw", item.id), kind: "schematic_update_wire_geometry", wireId: item.id, vertices: next.vertices.map((v) => ({ ...v })) });
       }
@@ -132,6 +139,7 @@ export function diffSchematicGraphOps(before: CanonicalSchematic, after: Schemat
     const reAdd: Array<{ label: NetLabel; index: number }> = [];
     for (const item of before.netLabels) {
       const next = afterById.get(item.id);
+      if (next) refuseSheetChange(item, next);
       if (!next) {
         operations.push({ ...base, operationId: opId("dell", item.id), kind: "schematic_delete_net_label", labelId: item.id });
       } else if (next.kind !== item.kind) {
@@ -160,6 +168,16 @@ export function diffSchematicGraphOps(before: CanonicalSchematic, after: Schemat
   // ── Simulation guard: applying the batch must reproduce `after` exactly ────
   if (operations.length > 0) verifyDiffReproducesAfter(before, after, operations);
   return operations;
+}
+
+/** [PR-J, 2026-10-22] An existing entity keeps its sheet, and an existing label its connection fields (see the module header). */
+function refuseSheetChange(prev: { id: string; sheetId?: string; scope?: string; portId?: string; childSheetId?: string }, next: { sheetId?: string; scope?: string; portId?: string; childSheetId?: string }): void {
+  if ((prev.sheetId ?? null) !== (next.sheetId ?? null)) {
+    throw new Error(`GRAPH_DIFF_IMMUTABLE:${prev.id}: sheet membership changes must use the move-to-sheet operation (schematic_assign_sheet)`);
+  }
+  if ((prev.scope ?? null) !== (next.scope ?? null) || (prev.portId ?? null) !== (next.portId ?? null) || (prev.childSheetId ?? null) !== (next.childSheetId ?? null)) {
+    throw new Error(`GRAPH_DIFF_IMMUTABLE:${prev.id}: a label's connection scope / port binding changes only through schematic.sheet-structure (schematic_set_label_scope)`);
+  }
 }
 
 /** Sequentially simulate the batch over a clone of `before` and require exact

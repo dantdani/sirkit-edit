@@ -24,10 +24,12 @@ import {
   requiredResolutionProperties,
   withdrawRevisionBlockers,
   resolvableFact,
+  type AtomicPublicationLink, // [PR-M, 2026-10-18]
   type AtomicPublicationRequestView,
   type AtomicPublicationSpec,
   type ImportReviewFact,
   type ImportReviewLink,
+  type ImportReviewProfile, // [PR-G]
   type ReviewDraftChoices,
   type WithdrawRevisionDraft,
 } from "@/app/lib/atomic/publication-review-contract";
@@ -44,6 +46,19 @@ export interface AtomicPublicationPrefill {
    * [B19-E E4 review follow-up] a default link whose revision was withdrawn (or is missing) counts: it is still the part's link.
    */
   alreadyLinked?: boolean;
+  /** [PR-G, 2026-10-17] the request's remaining fields, prefilled from a sealed agent draft request (app/lib/project/draft-request-events.ts
+   *  `draftRequestPublicationPrefill`): the publication spec in the form's own fields; absent on every other caller (the form starts empty). */
+  profile?: ImportReviewProfile;
+  /** the terminal table as the textarea holds it: one `number function [pads]` line per pin */
+  terminals?: string;
+  packageCode?: string;
+  mounting?: "smd" | "through_hole";
+  datasheetUrl?: string;
+  datasheetLocator?: string;
+  /** [PR-M, 2026-10-18] Section M2: an ACQUIRED review package (a component review inbox handoff): the spec names the stored symbol and
+   *  footprint objects (`acquired`), the links (or the one discovery row) the handoff decided, and what the person must still confirm.
+   *  The symbol and footprint stay the acquired objects; every other field stays editable; nothing is requested until the person submits. */
+  acquisition?: { handoffId: string; spec: AtomicPublicationSpec; links: AtomicPublicationLink[]; discovery: boolean; notes: string[]; missing: string[]; conflicts: string[] }; // [PR-L/M integration, 2026-10-18] M2-SEC-5: discovery is a flag (was { valueKey }, a shape the server always refused)
 }
 
 const STATE_CLASS: Record<string, string> = {
@@ -57,6 +72,11 @@ const STATE_CLASS: Record<string, string> = {
 
 type SubmitDraft = { exactMpn: string; profile: "schematic_only" | "pcb_assignable"; symbolLibrary: string; symbolName: string; footprintLibrary: string; footprintName: string; terminals: string; packageCode: string; mounting: "smd" | "through_hole"; datasheetUrl: string; datasheetLocator: string; manufacturer: string; linkPart: boolean; reason: string };
 
+/** [PR-M, 2026-10-18] The terminal table of a spec as the textarea holds it (`number function pads`, the parser's own format). */
+function terminalText(terminals: AtomicPublicationSpec["terminals"]): string {
+  return terminals.map((terminal) => `${terminal.number} ${terminal.function || terminal.number} ${terminal.pads.join(",")}`).join("\n");
+}
+
 const EMPTY_CHOICES: ReviewDraftChoices = { resolutions: {}, dispositions: {}, reason: "" };
 const EMPTY_WITHDRAWAL: WithdrawRevisionDraft = { to: "deprecated", successorRevisionId: "", reason: "" };
 const inputClass = "rounded border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-[10px] text-zinc-100";
@@ -64,8 +84,12 @@ const inputClass = "rounded border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-
 /** "1 GND" or "1 GND 1,1A" per line: terminal number, function, optional pads (defaults to the terminal number). */
 function parseTerminalTable(text: string): AtomicPublicationSpec["terminals"] {
   return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
-    const [number = "", fn = "", pads = ""] = line.split(/\s+/);
-    return { number, function: fn, pads: pads ? pads.split(",").filter(Boolean) : [number] };
+    // [PR-G, 2026-10-17] `number function [pads]`: the first token is the number, the LAST token the pads when three or more tokens are
+    // given, and everything between is the function (a sealed draft request's "GND: ground" keeps its space; a two-token line is
+    // number + function as before, its pads the number).
+    const [number = "", ...rest] = line.split(/\s+/);
+    const pads = rest.length >= 2 ? rest.pop()! : "";
+    return { number, function: rest.join(" "), pads: pads ? pads.split(",").filter(Boolean) : [number] };
   });
 }
 
@@ -173,11 +197,18 @@ export function AtomicPublicationReviewPanel({ review, prefill }: AtomicPublicat
   const [choices, setChoices] = useState<Record<string, ReviewDraftChoices>>({});
   const [publishReasons, setPublishReasons] = useState<Record<string, string>>({});
   const [withdrawals, setWithdrawals] = useState<Record<string, WithdrawRevisionDraft>>({}); // [B19-E E5] by request id
-  const [draft, setDraft] = useState<SubmitDraft>(() => ({
-    exactMpn: prefill?.exactMpn ?? "", profile: "pcb_assignable",
+  const acquired = prefill?.acquisition ?? null; // [PR-M, 2026-10-18] M2: an acquired package prefills the form from its spec
+  const [draft, setDraft] = useState<SubmitDraft>(() => acquired ? {
+    exactMpn: acquired.spec.exactMpn, profile: acquired.spec.profile,
+    symbolLibrary: acquired.spec.symbol?.library ?? "", symbolName: acquired.spec.symbol?.name ?? "",
+    footprintLibrary: acquired.spec.footprint?.library ?? "", footprintName: acquired.spec.footprint?.name ?? "",
+    terminals: terminalText(acquired.spec.terminals), packageCode: acquired.spec.package?.code ?? "", mounting: acquired.spec.package?.mounting ?? "through_hole",
+    datasheetUrl: acquired.spec.datasheet?.url ?? "", datasheetLocator: acquired.spec.datasheet?.locator ?? "", manufacturer: acquired.spec.manufacturer?.canonicalName ?? "", linkPart: false, reason: "",
+  } : ({
+    exactMpn: prefill?.exactMpn ?? "", profile: prefill?.profile ?? "pcb_assignable", // [PR-G] a sealed draft request names its profile (schematic_only until every C.4 fact is documented)
     symbolLibrary: prefill?.symbol?.library ?? "", symbolName: prefill?.symbol?.name ?? "",
     footprintLibrary: prefill?.footprint?.library ?? "", footprintName: prefill?.footprint?.name ?? "",
-    terminals: "", packageCode: "", mounting: "smd", datasheetUrl: "", datasheetLocator: "", manufacturer: prefill?.manufacturer ?? "", linkPart: false, reason: "",
+    terminals: prefill?.terminals ?? "", packageCode: prefill?.packageCode ?? "", mounting: prefill?.mounting ?? "smd", datasheetUrl: prefill?.datasheetUrl ?? "", datasheetLocator: prefill?.datasheetLocator ?? "", manufacturer: prefill?.manufacturer ?? "", linkPart: false, reason: "", // [PR-G] the sealed spec's fields, or empty
   }));
 
   const choiceOf = (requestId: string): ReviewDraftChoices => choices[requestId] ?? EMPTY_CHOICES;
@@ -189,6 +220,14 @@ export function AtomicPublicationReviewPanel({ review, prefill }: AtomicPublicat
   const setDraftField = <K extends keyof SubmitDraft>(field: K, value: SubmitDraft[K]) => setDraft((current) => ({ ...current, [field]: value }));
 
   async function submitRequest() {
+    if (acquired) {
+      // [PR-M, 2026-10-18] the acquired symbol and footprint objects stay the package's (the server re-verifies every byte); the links or the one
+      // discovery row are the handoff's; the person's edits of the other fields are kept
+      const spec = specFrom(draft);
+      const withObjects: AtomicPublicationSpec = { ...spec, symbol: acquired.spec.symbol, footprint: draft.profile === "pcb_assignable" ? acquired.spec.footprint : spec.footprint };
+      await review.submit({ spec: withObjects, links: draft.profile === "pcb_assignable" ? acquired.links : [], reason: draft.reason.trim() || `Component review of the acquired ${draft.exactMpn.trim()} (handoff ${acquired.handoffId.slice(0, 28)})`, ...(acquired.discovery && draft.profile === "pcb_assignable" ? { discovery: true as const } : {}) }); // [PR-L/M integration, 2026-10-18] M2-SEC-5: `true`, the one shape submit_request accepts (publication-review.ts; the server sets the value key)
+      return;
+    }
     const links = draft.linkPart && prefill?.partId && !prefill.alreadyLinked && draft.profile === "pcb_assignable" ? [{ partId: prefill.partId, valueKey: "" }] : [];
     await review.submit({ spec: specFrom(draft), links, reason: draft.reason.trim() || `Evidence review requested for ${draft.exactMpn.trim()}` });
   }
@@ -247,6 +286,15 @@ export function AtomicPublicationReviewPanel({ review, prefill }: AtomicPublicat
       {viewer?.canSubmit && (
         <div className="mt-2 grid gap-1 rounded border border-zinc-800 p-2" data-testid="atomic-submit-form">
           <div className="text-zinc-400">Request evidence review of an exact part</div>
+          {acquired && (
+            <div className="grid gap-0.5 rounded border border-sky-900/60 bg-sky-950/20 p-1 text-[10px] text-zinc-300" data-testid="atomic-submit-acquired" data-handoff={acquired.handoffId}>
+              <div className="text-sky-200">Acquired CAD assets (handoff {acquired.handoffId.slice(0, 28)}…): symbol {acquired.spec.symbol ? `${acquired.spec.symbol.library}:${acquired.spec.symbol.name} sha256:${acquired.spec.symbol.acquired?.objectHash.slice(0, 12) ?? ""}…` : "none"} · footprint {acquired.spec.footprint ? `${acquired.spec.footprint.library}:${acquired.spec.footprint.name} sha256:${acquired.spec.footprint.acquired?.objectHash.slice(0, 12) ?? ""}…` : "none"}</div>
+              <div>{acquired.links.length > 0 ? `Publishing links catalog part ${acquired.links.map((link) => link.partId).join(", ")}` : acquired.discovery ? "Publishing writes one discovery catalog part for the revision" : "Publishing writes no catalog part link"}</div>
+              {acquired.notes.map((note) => <div key={note} className="text-zinc-400">{note}</div>)}
+              {acquired.missing.length > 0 && <div className="text-amber-300">Still to confirm: {acquired.missing.join("; ")}</div>}
+              {acquired.conflicts.length > 0 && <div className="text-amber-300">Conflicts: {acquired.conflicts.join("; ")}</div>}
+            </div>
+          )}
           <div className="flex flex-wrap gap-1">
             <input className={inputClass} aria-label="Exact MPN" placeholder="Exact MPN" data-testid="atomic-submit-exact-mpn" value={draft.exactMpn} onChange={(event) => setDraftField("exactMpn", event.target.value)} />
             <select className={inputClass} aria-label="Approval profile" value={draft.profile} onChange={(event) => setDraftField("profile", event.target.value as SubmitDraft["profile"])}>
@@ -256,10 +304,10 @@ export function AtomicPublicationReviewPanel({ review, prefill }: AtomicPublicat
             <input className={inputClass} aria-label="Manufacturer" placeholder="Manufacturer (from the datasheet)" value={draft.manufacturer} onChange={(event) => setDraftField("manufacturer", event.target.value)} />
           </div>
           <div className="flex flex-wrap gap-1">
-            <input className={inputClass} aria-label="Symbol library" placeholder="KiCad symbol library" value={draft.symbolLibrary} onChange={(event) => setDraftField("symbolLibrary", event.target.value)} />
-            <input className={inputClass} aria-label="Symbol name" placeholder="Symbol" value={draft.symbolName} onChange={(event) => setDraftField("symbolName", event.target.value)} />
-            <input className={inputClass} aria-label="Footprint library" placeholder="KiCad footprint library" value={draft.footprintLibrary} onChange={(event) => setDraftField("footprintLibrary", event.target.value)} />
-            <input className={inputClass} aria-label="Footprint name" placeholder="Footprint" value={draft.footprintName} onChange={(event) => setDraftField("footprintName", event.target.value)} />
+            <input className={inputClass} aria-label="Symbol library" readOnly={acquired !== null} placeholder="KiCad symbol library" value={draft.symbolLibrary} onChange={(event) => setDraftField("symbolLibrary", event.target.value)} />
+            <input className={inputClass} aria-label="Symbol name" readOnly={acquired !== null} placeholder="Symbol" value={draft.symbolName} onChange={(event) => setDraftField("symbolName", event.target.value)} />
+            <input className={inputClass} aria-label="Footprint library" readOnly={acquired !== null} placeholder="KiCad footprint library" value={draft.footprintLibrary} onChange={(event) => setDraftField("footprintLibrary", event.target.value)} />
+            <input className={inputClass} aria-label="Footprint name" readOnly={acquired !== null} placeholder="Footprint" value={draft.footprintName} onChange={(event) => setDraftField("footprintName", event.target.value)} />
           </div>
           <textarea className={`${inputClass} min-h-[3rem]`} aria-label="Terminal table" placeholder={"Terminal table, one per line: number function [pads]"} value={draft.terminals} onChange={(event) => setDraftField("terminals", event.target.value)} />
           <div className="flex flex-wrap gap-1">

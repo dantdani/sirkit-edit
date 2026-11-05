@@ -23,7 +23,7 @@ export function SyncPlacementDialog({
 
   return (
     <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/65 p-4" role="dialog" aria-modal="true" aria-label="Schematic import placement">
-      <div className="w-full max-w-md overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
+      <div className="w-full max-w-md overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-sm">
         <div className="flex items-start justify-between border-b border-zinc-800 px-4 py-3">
           <div>
             <h2 className="text-sm font-semibold text-zinc-100">Place imported footprints</h2>

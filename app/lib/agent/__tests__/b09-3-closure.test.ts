@@ -50,7 +50,7 @@ describe("B09.3 §A — lineage is part of context integrity (R1)", () => {
     const issues = verifyAgentContextIntegrity(diverged);
     expect(issues.some((issue) => issue.includes("lineage"))).toBe(true);
     const gateway = createAgentToolGateway(sirkitToolRegistry());
-    for (const [toolId, version] of [["sirkit.project.canonical-revision-inspect", "1.0.0"], ["sirkit.schematic.inspect", "1.1.0"], [PROPOSAL_ID, AGENT_PROPOSAL_TOOL_VERSION]] as const) {
+    for (const [toolId, version] of [["sirkit.project.canonical-revision-inspect", "1.0.0"], ["sirkit.schematic.inspect", "1.2.0"], [PROPOSAL_ID, AGENT_PROPOSAL_TOOL_VERSION]] as const) { // [PR-J5, 2026-10-23] pin move: sirkit.schematic.inspect 1.1.0 -> 1.2.0 (the optional sheetId / neighbours; a read without options is 1.1.0's bytes)
       const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId, version, args: toolId === PROPOSAL_ID ? { ops: [{ op: "set-value", target: "r1", value: "1k" }] } : {}, context: diverged, timeoutMs: 3000 });
       expect(outcome, toolId).toMatchObject({ kind: "refused", status: "context_integrity" });
     }
@@ -116,10 +116,10 @@ describe("B09.3 §B — the registered resource path is the ONLY read path (R3)"
   it("boardless toolset contains ONLY the proposal tool when its schematic/head prerequisites exist; ZERO tools when they are absent", () => {
     const withMark = assemble({ board: undefined });
     const toolset = buildRunToolset(sirkitToolRegistry(), withMark.context, () => undefined);
-    expect(toolset.declarations.map((declaration) => declaration.toolId)).toEqual([PROPOSAL_ID]);
+    expect(toolset.declarations.map((declaration) => declaration.toolId)).toEqual(["sirkit.module.propose-contracts", "sirkit.parts.draft-request", "sirkit.parts.missing-facts", "sirkit.pcb-sync.preflight", "sirkit.schematic.instance-inspect", PROPOSAL_ID]); /* [PR-M, 2026-10-17] pin move: + the schematic-instance inspection (a Tier 0 read over the verified schematic, no board; by tool id before the tier-1 proposal) */ /* [PR-F fD, 2026-10-17] pin move: + the module contract proposal (a Tier 2 sealed engineering note that needs the head mark like every schematic proposal) */ /* [PR-F fB, 2026-10-17] pin move: + the part draft request (the toolset lists declarations by tool id; a Tier 2 sealed review task that needs the head mark like every schematic proposal) and the missing-facts read (validation category, beside the preflight read) */ // [PR-D, 2026-10-17] pin move: + the Schematic to PCB preflight read, a Tier 0 read over the run's verified schematic snapshot (no board; its own binding, not a B05 canonical read)
 
     const noMark = assemble({ board: undefined, mark: undefined });
-    expect(buildRunToolset(sirkitToolRegistry(), noMark.context, () => undefined).declarations).toEqual([]);
+    expect(buildRunToolset(sirkitToolRegistry(), noMark.context, () => undefined).declarations.map((declaration) => declaration.toolId)).toEqual(["sirkit.parts.missing-facts", "sirkit.pcb-sync.preflight", "sirkit.schematic.instance-inspect"]); /* [PR-M, 2026-10-17] pin move: + the schematic-instance inspection (no head mark needed: a Tier 0 read seals nothing) */ /* [PR-F fB, 2026-10-17] pin move: + the missing-facts read (no head mark needed; the draft request needs one, so it is absent here) */ // [PR-D, 2026-10-17] pin move: was [] - the preflight read needs the verified schematic snapshot only (no head mark: a Tier 0 read seals nothing, so it carries no lineage requirement); the proposal still needs the mark
     const nothing = assemble({ board: undefined, schematic: undefined, mark: undefined });
     expect(buildRunToolset(sirkitToolRegistry(), nothing.context, () => undefined).declarations).toEqual([]);
   });
@@ -127,7 +127,7 @@ describe("B09.3 §B — the registered resource path is the ONLY read path (R3)"
   it("R3: boardless schematic inspection refuses through the gateway with structured authority_unavailable", async () => {
     const assembly = assemble({ board: undefined });
     const gateway = createAgentToolGateway(sirkitToolRegistry());
-    const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.schematic.inspect", version: "1.1.0", args: {}, context: assembly.context, timeoutMs: 3000 });
+    const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.schematic.inspect", version: "1.2.0", args: {}, context: assembly.context, timeoutMs: 3000 }); // [PR-J5, 2026-10-23] pin move: sirkit.schematic.inspect 1.1.0 -> 1.2.0 (the optional sheetId / neighbours; a read without options is 1.1.0's bytes)
     expect(outcome).toMatchObject({ kind: "refused", ok: false, status: "authority_unavailable" });
   });
 
@@ -153,7 +153,7 @@ describe("B09.3 §B — the registered resource path is the ONLY read path (R3)"
   it("a complete valid canonical context serves schematic inspection through the REGISTERED ReadToolInvocationService path", async () => {
     const assembly = assemble();
     const gateway = createAgentToolGateway(sirkitToolRegistry());
-    const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.schematic.inspect", version: "1.1.0", args: {}, context: assembly.context, timeoutMs: 3000 });
+    const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.schematic.inspect", version: "1.2.0", args: {}, context: assembly.context, timeoutMs: 3000 }); // [PR-J5, 2026-10-23] pin move: sirkit.schematic.inspect 1.1.0 -> 1.2.0 (the optional sheetId / neighbours; a read without options is 1.1.0's bytes)
     if (outcome.kind !== "read" || !outcome.ok) throw new Error(`expected read, got ${JSON.stringify(outcome).slice(0, 200)}`);
     expect(outcome.verification).not.toContain("snapshot");
     expect(outcome.sourceRevisionDigest).toBe(assembly.context.canonicalRevisionDigest);
@@ -281,7 +281,7 @@ describe("B09.3 §D — catalog and generated runtime truth (R4)", () => {
       // validated working-copy resources — never unconditional, never
       // withheld when the board is genuinely present and valid.
       expect(tool.browserRuntimeAvailability, tool.toolId).toBe("conditional");
-      if (tool.toolId.startsWith("sirkit.computation.")) expect(tool.requiredRuntimeResources, tool.toolId).toBe("computation-port"); else expect(tool.requiredRuntimeResources, tool.toolId).toContain("canonical-state"); // [B22-B, 2026-10-01] reviewed pin move (OD-139): a named computation read is conditional on the computation port the chat route binds alone (an equation needs no board; a board parse refuses without the run's canonical state)
+      if (tool.toolId.startsWith("sirkit.computation.")) expect(tool.requiredRuntimeResources, tool.toolId).toBe("computation-port"); else if (tool.toolId === "sirkit.pcb-sync.preflight") expect(tool.requiredRuntimeResources, tool.toolId).toBe("validated-schematic"); else if (tool.toolId === "sirkit.parts.catalog-inspect") expect(tool.requiredRuntimeResources, tool.toolId).toBe("catalog-port"); else if (tool.toolId === "sirkit.parts.missing-facts") expect(tool.requiredRuntimeResources, tool.toolId).toBe("validated-schematic"); else if (tool.toolId === "sirkit.schematic.instance-inspect") expect(tool.requiredRuntimeResources, tool.toolId).toBe("validated-schematic"); else if (tool.toolId === "sirkit.parts.candidate-search") expect(tool.requiredRuntimeResources, tool.toolId).toBe("catalog-port;catalog-search-port;revision-evidence-port"); else if (tool.toolId === "sirkit.generation.task-inspect") expect(tool.requiredRuntimeResources, tool.toolId).toBe("validated-schematic;generation-task-port"); else if (tool.toolId === "sirkit.parts.acquisition-status") expect(tool.requiredRuntimeResources, tool.toolId).toBe("validated-schematic;cad-acquisition-port"); /* [PR-M, 2026-10-18] reviewed branch (section M2): the acquisition status needs the chat route's acquisition port and the validated schematic (no board) */ /* [PR-L, 2026-10-18] reviewed branch (runbook L.5): the durable task's inspection needs the chat route's generation-task port and the validated schematic (no board) */ /* [PR-M, 2026-10-17] reviewed branches: the instance inspection needs the validated schematic only (its catalog port optional); the candidate search needs the chat route's catalog, search and revision evidence ports (no board) */ else expect(tool.requiredRuntimeResources, tool.toolId).toContain("canonical-state"); /* [PR-F fB, 2026-10-17] the missing-facts read needs the validated schematic only; its catalog port is optional */ // [PR-D, 2026-10-17] reviewed branches (OD-244): the preflight read needs the validated schematic only (no board); the catalog read needs the chat route's catalog port; // [B22-B, 2026-10-01] reviewed pin move (OD-139): a named computation read is conditional on the computation port the chat route binds alone (an equation needs no board; a board parse refuses without the run's canonical state)
       expect(tool.bindingResolved, tool.toolId).toBe(true);
     }
     const selection = exposed.find((entry) => entry.toolId === "sirkit.selection.inspect")!;
@@ -295,9 +295,9 @@ describe("B09.3 §D — catalog and generated runtime truth (R4)", () => {
   it("the manifest truth matches RUNTIME behavior for the boardless browser request shape (scope + schematic + mark, NO board)", () => {
     const browserShaped = assemble({ board: undefined });
     const withMark = buildRunToolset(sirkitToolRegistry(), browserShaped.context, () => undefined);
-    expect(withMark.declarations.map((declaration) => declaration.toolId)).toEqual([PROPOSAL_ID]);
+    expect(withMark.declarations.map((declaration) => declaration.toolId)).toEqual(["sirkit.module.propose-contracts", "sirkit.parts.draft-request", "sirkit.parts.missing-facts", "sirkit.pcb-sync.preflight", "sirkit.schematic.instance-inspect", PROPOSAL_ID]); /* [PR-M, 2026-10-17] pin move: + the schematic-instance inspection (a Tier 0 read over the verified schematic, no board; by tool id before the tier-1 proposal) */ /* [PR-F fD, 2026-10-17] pin move: + the module contract proposal (a Tier 2 sealed engineering note that needs the head mark like every schematic proposal) */ /* [PR-F fB, 2026-10-17] pin move: + the part draft request (the toolset lists declarations by tool id; a Tier 2 sealed review task that needs the head mark like every schematic proposal) and the missing-facts read (validation category, beside the preflight read) */ // [PR-D, 2026-10-17] pin move: + the preflight read (as section B above)
     const noMark = assemble({ board: undefined, mark: undefined });
-    expect(buildRunToolset(sirkitToolRegistry(), noMark.context, () => undefined).declarations).toEqual([]);
+    expect(buildRunToolset(sirkitToolRegistry(), noMark.context, () => undefined).declarations.map((declaration) => declaration.toolId)).toEqual(["sirkit.parts.missing-facts", "sirkit.pcb-sync.preflight", "sirkit.schematic.instance-inspect"]); /* [PR-M, 2026-10-17] pin move: + the schematic-instance inspection (no head mark needed: a Tier 0 read seals nothing) */ /* [PR-F fB, 2026-10-17] pin move: + the missing-facts read (no head mark needed; the draft request needs one, so it is absent here) */ // [PR-D, 2026-10-17] pin move: was [] - the preflight read needs the verified schematic snapshot only (no head mark: a Tier 0 read seals nothing, so it carries no lineage requirement); the proposal still needs the mark
   });
 
   it("every catalog sourceEvidence path still exists (preserved gate)", () => {

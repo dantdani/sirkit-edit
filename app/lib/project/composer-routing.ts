@@ -5,6 +5,14 @@
  *
  * The first matching rule wins (artifacts/ai-control-plane-b18/chat-execution-ux.md §3):
  *  1. empty → ask;
+ *  1b. [PR-C, 2026-10-14] no schematic yet AND a pure question → ask (PROMPT_TO_PCB_RELIABILITY_AND_SIMPLE_UI.md §C: "pure
+ *     questions must not unexpectedly replace a schematic"; rule 2 sent "What is a 555 timer?" to generation). A pure question
+ *     ends with "?" and opens with a question word (what / why / how / when / where / which / who / whose / is / are / does /
+ *     do / should / would / could / can / will) - except "can / could / will you (please) make / build / create / design /
+ *     generate / draw …", which asks for the circuit and stays a request - or opens with explain / define / compare / tell me
+ *     / describe how / what / why ("describe a circuit" is a request). With a schematic a question already reaches the
+ *     assistant through rule 9, whose reason B21-E4's corpus pins (b21-e4-composer-routing cases 2-3), so the rule is gated to
+ *     the empty project it corrects;
  *  2. no schematic yet → generate (the design prompt of an empty project, unchanged);
  *  3. begins with generate / design → generate;
  *  4. begins with (please) move / shift / nudge / rotate / turn / flip / put / undo / redo → ask (the explicit grammars);
@@ -19,10 +27,12 @@
  *  8. begins with an edit verb (word-bounded) → edit;
  *  9. anything else → ask.
  * A release / publish / order / purchase / qualify / upload / ship word adds the display-only "tier3-release" hint: the
- * assistant never does those, whatever the route.
+ * assistant never does those, whatever the route. [PR-C] A "generate" route whose text names the PCB (pcb / board layout /
+ * layout the board / gerber / manufactur… / fabricat…, word-bounded) adds the display-only "prepare-pcb" hint: the page shows
+ * that the request carries the PCB intent across the schematic approval (§C) - the hint grants nothing and changes no route.
  */
 export type ComposerRoute = "ask" | "edit" | "generate";
-export type ComposerHint = "tier3-release";
+export type ComposerHint = "tier3-release" | "prepare-pcb";
 export interface ComposerRouting { route: ComposerRoute; reason: string; hints: ComposerHint[] }
 
 export const COMPOSER_ROUTE_LABELS: Readonly<Record<ComposerRoute, string>> = Object.freeze({
@@ -40,12 +50,29 @@ const MAKE_PART = /^make\s+(?:r|c|u|d|led|j|sw)\d+\b/;
 // recognised by the pairing — a replace/swap verb anywhere with a word naming the thing being swapped IN. [B21 B] exported: the router's replacement rule IS this grammar; [B21 E4] with the kind swap `partKindSwap` (appended below) the router imports.
 export const REPLACE_PART = /\b(?:replace|replacing|swap|swapping|substitute)\b[^.!?]*\b(?:parts?|components?|mpns?|alternates?|alternatives?|chips?)\b/;
 const TIER3_WORD = /\b(?:release|publish|order|purchase|buy|qualify|upload|ship)\b/;
+// [PR-C] rule 1b's grammar (every scan anchored at the start or a constant-time tail check: linear on any text, as b21-e4 case 6 requires)
+const QUESTION_HEAD = /^(?:what|why|how|when|where|which|who|whose|is|are|does|do|should|would|could|can|will)\b/;
+/** "can / could / will you (please) make / build / create / design / generate / draw …" asks FOR the circuit: a request, even with "?" */
+const QUESTION_FORM_REQUEST = /^(?:can|could|will)\s+you\s+(?:please\s+)?(?:make|build|create|design|generate|draw)\b/;
+/** an explanation ask, with or without "?" ("describe a circuit" is not one: only describe how / what / why) */
+const EXPLANATION_HEAD = /^(?:explain|define|compare|tell\s+me|describe\s+(?:how|what|why))\b/;
+const QUESTION_REASON = "a question: the assistant answers it (nothing is generated)";
+// [PR-C] the "prepare-pcb" hint's words (word-bounded; a stem for manufacturing / manufacturer / fabrication / fabricate)
+const PCB_INTENT_WORD = /\b(?:pcbs?|board layout|layout the board|gerbers?|manufactur[a-z]*|fabricat[a-z]*)\b/;
+
+/** [PR-C] rule 1b: a pure question (see the module comment) */
+function pureQuestion(t: string): boolean {
+  if (EXPLANATION_HEAD.test(t)) return true;
+  return t.endsWith("?") && QUESTION_HEAD.test(t) && !QUESTION_FORM_REQUEST.test(t);
+}
 
 export function routeComposerMessage(text: string, hasSchematic: boolean): ComposerRouting {
   const t = text.trim().toLowerCase();
   const hints: ComposerHint[] = TIER3_WORD.test(t) ? ["tier3-release"] : [];
-  const routed = (route: ComposerRoute, reason: string): ComposerRouting => ({ route, reason, hints });
+  // [PR-C] the display-only "prepare-pcb" hint rides on the generate route only (a PCB word in an edit or an ask names no intent to carry)
+  const routed = (route: ComposerRoute, reason: string): ComposerRouting => ({ route, reason, hints: route === "generate" && PCB_INTENT_WORD.test(t) ? [...hints, "prepare-pcb"] : hints });
   if (!t) return routed("ask", "nothing to send yet");
+  if (!hasSchematic && pureQuestion(t)) return routed("ask", QUESTION_REASON); // [PR-C] rule 1b
   if (!hasSchematic) return routed("generate", "the project has no schematic yet: the message describes a circuit to generate");
   if (/^(?:generate|design)\b/.test(t)) return routed("generate", "asks to generate or design a circuit");
   if (EXECUTION_VERB.test(t)) return routed("ask", "a move, rotate, flip, undo or redo request: the assistant handles it");

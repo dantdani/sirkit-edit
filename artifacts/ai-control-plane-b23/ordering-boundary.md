@@ -566,8 +566,8 @@ added for the low fixes.
 | C48 | `app/components/pcb/ProviderExchangePanel.tsx` | 129 | `data-testid="p2g-ordering-notice">Ordering through Sirkit is turned off.` |
 | C49 | `app/components/pcb/ProviderExchangePanel.tsx` | 122 | `export function ProviderExchangePanel(props: ProviderExchangePanelProps) {` |
 | C50 | `app/components/pcb/ProviderExchangePanel.tsx` | 157 | `data-testid="p2g-provider-carried"` |
-| C51 | `artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv` | 107 | `manufacturing.provider-order,1,manufacturing,` |
-| C52 | `app/lib/manufacturing-providers/__tests__/b23-a-tier3-vocabulary.test.ts` | 272 | `expect(actionIds).toHaveLength(107); // [B24-A1, 2026-10-06] reviewed pin move (D9), was 106` |
+| C51 | `artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv` | 114 | `manufacturing.provider-order,1,manufacturing,` |
+| C52 | `app/lib/manufacturing-providers/__tests__/b23-a-tier3-vocabulary.test.ts` | 272 | `expect(actionIds).toHaveLength(114); // [PR-J5, 2026-10-23] reviewed pin move (D9), was 113` |
 | C53 | `app/lib/engineering/__tests__/b17-a-control-inventory.test.ts` | 63 | `if (record.status === "missing") expect(reached.has(record.id) \|\| routed.has(record.id)` |
 | C54 | `app/lib/engineering/__tests__/b19-e-no-purchase-tripwire.test.ts` | 26 | `const PURCHASE_WORDING = /add to cart` |
 | C55 | `app/lib/project/__tests__/b18-b-import-gates.test.ts` | 34 | `const MINT_APPROVED = new Set(["app/lib/execution-grant/mint.ts", "app/api/chat/route.ts"]);` |
@@ -584,6 +584,12 @@ added for the low fixes.
 | C66 | `app/lib/manufacturing-providers/order-contract.ts` | 249 | `const claimed = claim !== null; // [B23-C lead, 2026-10-04] every submit of the claiming authorization holds the claim` |
 | C67 | `app/lib/manufacturing-providers/purchase-authorization.ts` | 203 | `const read: unknown = JSON.parse(durableWorkflowJson(binding));` |
 | C68 | `app/lib/manufacturing-providers/order-contract.ts` | 336 | `binding.providerId.normalize("NFC") : undefined;` |
+
+[PR-G, 2026-10-17] C51 re-pinned `:107` -> `:108` in place: Product reliability F (`6042488`) added the `parts.draft-request` record,
+whose generated matrix row sits just above `manufacturing.provider-order`'s; the anchor is unchanged. C52 re-anchored in place on `:272`:
+F's lead moved the `actionIds` length pin 107 -> 108 with its own dated note, so the anchor now quotes that line's current text
+(`toHaveLength(108); // [PR-F lead, 2026-10-17] reviewed pin move (D9), was 107`); the line is unchanged. This note stands below the
+table so that no row moves (`environments-and-deployment.md:326` cites C52 at `:570`). [PR-M, 2026-10-17] C51 re-pinned `:108` -> `:110` in place: section M added the `schematic.resolve-components-propose` and `schematic.resolve-components` records just above the two-record tail, so `manufacturing.provider-order`'s matrix row moved down two; the anchor is unchanged. C52 re-anchored in place on `:272` to the line's current text (`toHaveLength(110); // [PR-M, 2026-10-17] reviewed pin move (D9), was 108`); the line is unchanged. This note is appended to the paragraph's last line, so no line of the page moves. [PR-M, 2026-10-18] C51 re-pinned `:110` -> `:111` in place: section M2 added the `parts.cad-acquisition` record just above the two-record tail, so `manufacturing.provider-order`'s matrix row moved down one; the anchor is unchanged. C52 re-anchored in place on `:272` to the line's current text (`toHaveLength(111); // [PR-M, 2026-10-18] reviewed pin move (D9), was 110`); the line is unchanged; this note too is appended in place. [PR-J1 integration, 2026-10-22] C51 re-pinned `:111` -> `:113` in place (by section J round 1): the `schematic.sheet-structure` and `schematic.move-to-sheet` records were added on `action-registry.ts:186` just above the two-record tail, so `manufacturing.provider-order`'s matrix row moved down two; the anchor is unchanged. C52 re-anchored in place on `:272` to the line's current text (`toHaveLength(113); // [PR-J, 2026-10-22] reviewed pin move (D9), was 111`); the line is unchanged; this note too is appended in place. [PR-J5, 2026-10-23] C51 re-pinned `:113` -> `:114` in place: section J5 added the `schematic.sheet-organize-propose` record just above the two-record tail, so `manufacturing.provider-order`'s matrix row moved down one; the anchor is unchanged. C52 re-anchored in place on `:272` to the line's current text (`toHaveLength(114); // [PR-J5, 2026-10-23] reviewed pin move (D9), was 113`); the line is unchanged. Appended to this paragraph's last line, so no line of the table moves.
 
 ## 14. The B23 closeout's export record
 

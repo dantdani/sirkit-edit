@@ -53,6 +53,7 @@ line number. B23's ordering-disabled notice (`ProviderExchangePanel.tsx:129`) is
 - chat: `app/components/chat/AutonomyModeControl.tsx` (the whole file)
 - chat: `app/components/chat/ChatMarkdown.tsx` (the whole file)
 - chat: `app/components/chat/ExecutionEntryActions.tsx` (the whole file)
+- chat: `app/components/chat/GenerationTaskStatus.tsx` (the whole file)
 - chat: `app/page.tsx`, inside the `<aside>` whose class names `sirkit-chat-panel`
 - chat: `app/page.tsx`, inside `function MessageBubble`
 - approval dialogs: `app/components/pcb/GrantedExecutionDialog.tsx` (the whole file)
@@ -79,8 +80,7 @@ line number. B23's ordering-disabled notice (`ProviderExchangePanel.tsx:129`) is
 - B23: `app/components/pcb/ProviderExchangePanel.tsx` (the whole file)
 - B23: `app/components/pcb/ProviderObservationList.tsx` (the whole file)
 
-In scope: 168 control sites on 22 surfaces (the scope's 28 entries cover 24 files; `ChatMarkdown.tsx` and `ProviderObservationList.tsx`
-hold no handler site), at `3773c6a` and after D3. CONFIRMED (the census summary).
+In scope: 168 control sites on 22 surfaces (the scope's 28 entries cover 24 files; `ChatMarkdown.tsx` and `ProviderObservationList.tsx` hold no handler site), at `3773c6a` and after D3. CONFIRMED (the census summary). [PR-L, 2026-10-17] Reviewed scope move (runbook L.4, increment 4): + `app/components/chat/GenerationTaskStatus.tsx`, the durable design task's status card in its activity entry (Stop design, Pause design, Resume design, Continue with another allowance, Review the saved blocks, Retry block <name>, Start again; each named by its text); in scope now 173 control sites on 23 surfaces (29 entries, 25 files), unnamed 0, structural problems 0 (the census summary); the D3 numbers before this note stay its record, and this paragraph is one line so that the page's later line citations (`accessibility.md:535`) stand.
 
 ## 2. The accessible-name rule and its census
 
@@ -296,7 +296,7 @@ then the strengthened suite was run on the same breakage, then the source was re
 - **correctness-3 (the drawers' "✕").** Breakage: a "✕" close re-added to `HistoryPanel` and to `AlternatesDrawer` (with
   `title="Close"`). The old suite: 16 of 16 green (`d3fix-c3-repro-old-suite`): a "✕" is named by its content, so the count of
   buttons named "Close" stayed 1. The strengthened `b24-d3-bom-dialogs` 4 and `b24-d3-accessible-names` 5 on the same breakage:
-  `HistoryPanel` 4 and `AlternatesDrawer` 4 red ("a button named by a glyph alone"), case 5 red (`BomView.tsx:1535 <button> "✕"`,
+  `HistoryPanel` 4 and `AlternatesDrawer` 4 red ("a button named by a glyph alone"), case 5 red (`BomView.tsx:1545 <button> "✕"` ([PR-J4, 2026-10-23] was `:1535`),
   `:1709`) (`d3fix-c3-red-new-suites`). `BomView.tsx` restored byte-identical (`946ae534…`).
 - **correctness-2 (the focus return took focus from a pointer person).** New `b24-d3-accessible-names` 11 runs the page's own code
   (send's busy line, the root element's pointer capture, the run end's block) over a focus model, five runs. Red on the D3 code
@@ -593,6 +593,8 @@ every increment's list into one table):
 
 Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on that line).
 
+[Post-B24, 2026-10-11] C36-C39 and C58-C60 below were refreshed to their current source lines after the UI state and citation-test changes. [Product reliability B, 2026-10-14] C36-C39 refreshed again after the BOM view's request-settlement change (`bom-refresh-lifecycle`): citation maintenance only; the cited code is unchanged. [Product reliability C, 2026-10-14] C14-C21 and C62-C65 (app/page.tsx) re-pointed after the composer submission, the journey strip and the proposal persistence moved the page's lines (8459 -> 8556); citation maintenance only. This refresh keeps the executable citation table current; the dated B24 observations and test-run records above retain their original scope and meaning.
+
 | id | file | line | within | anchor | note |
 |---|---|---|---|---|---|
 | C1 | `app/lib/engineering/accessible-names.ts` | 35 | — | `export const NAME_SOURCES = Object.freeze(["aria-labelledby", "aria-label", "label-wrap", "label-for", "text", "title", "palette-title",` | the closed name sources |
@@ -607,17 +609,17 @@ Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on 
 | C10 | `scripts/generate-b24-accessible-names.ts` | 35 | — | `Refused: nothing written. New unnamed controls` | the ratchet (line moved from 26 in the review round) |
 | C11 | `app/lib/accessibility/statements.ts` | 11 | — | `export const EDITOR_MIN_WIDTH_PX = 1280;` | the minimum width |
 | C12 | `app/lib/accessibility/statements.ts` | 14 | — | `export const MIN_WIDTH_NOTICE =` | the notice |
-| C13 | `app/page.tsx` | 2088 | — | `<svg role="img" aria-label="Schematic drawing: pointer-only` | the schematic canvas declared, in place |
-| C14 | `app/page.tsx` | 4809 | — | `setLoading(false); const returnFocus = (frames: number): void =>` | focus back to the prompt, in place |
-| C15 | `app/page.tsx` | 6832 | — | `role="log" aria-live="polite" aria-relevant="additions text" aria-busy={loading} aria-label="Conversation with the assistant"` | the transcript, in place |
-| C16 | `app/page.tsx` | 6846 | — | `<div role="alert" className="px-3 py-1.5 text-xs text-red-400` | the chat error, in place |
-| C17 | `app/page.tsx` | 6953 | — | `data-testid="prompt-input" aria-label="Message to the assistant"` | the prompt, in place |
-| C18 | `app/page.tsx` | 6963 | — | `disabled={loading \|\| isGenerating \|\| isEditing}` | the prompt is disabled while a run streams |
-| C19 | `app/page.tsx` | 6166 | — | `<Button size="sm" variant="ghost" className="text-zinc-300">` | the handler-less, unnamed Settings button |
-| C20 | `app/page.tsx` | 6288 | — | `onMouseDown={(e) => startDrag("left", e)}` | a pointer-only resizer (2.5.7) |
-| C21 | `app/page.tsx` | 6471 | — | `onMouseDown={(e) => startDrag("right", e)}` | the other resizer |
-| C22 | `app/page.tsx` | 1987 | — | `aria-label="Go to component"` | the schematic Go to field |
-| C23 | `app/page.tsx` | 2559 | — | `const [chatOpen, setChatOpen]` | the chat starts closed |
+| C13 | `app/page.tsx` | 2089 | — | `<svg role="img" aria-label="Schematic drawing: pointer-only` | the schematic canvas declared, in place |
+| C14 | `app/page.tsx` | 5043 | — | `setLoading(false); const returnFocus = (frames: number): void =>` | focus back to the prompt, in place |
+| C15 | `app/page.tsx` | 7493 | — | `role="log" aria-live="polite" aria-relevant="additions text" aria-busy={loading} aria-label="Conversation with the assistant"` | the transcript, in place |
+| C16 | `app/page.tsx` | 7507 | — | `<div role="alert" className="px-3 py-1.5 text-xs text-red-400` | the chat error, in place |
+| C17 | `app/page.tsx` | 7614 | — | `data-testid="prompt-input" aria-label="Message to the assistant"` | the prompt, in place |
+| C18 | `app/page.tsx` | 7624 | — | `disabled={loading \|\| isGenerating \|\| isEditing}` | the prompt is disabled while a run streams |
+| C19 | `app/page.tsx` | 6764 | — | `aria-label="Workspace settings" data-testid="workspace-settings"` | the Settings button, named and wired to the workspace settings dialog [Product reliability E, 2026-10-16: the handler-less, unnamed button this row recorded is gone; the citation now anchors the labelled control] |
+| C20 | `app/page.tsx` | 6887 | — | `onMouseDown={(e) => startDrag("left", e)}` | a pointer-only resizer (2.5.7) |
+| C21 | `app/page.tsx` | 7082 | — | `onMouseDown={(e) => startDrag("right", e)}` | the other resizer |
+| C22 | `app/page.tsx` | 1988 | — | `aria-label="Go to component"` | the schematic Go to field |
+| C23 | `app/page.tsx` | 2560 | — | `const [chatOpen, setChatOpen]` | the chat starts closed |
 | C24 | `app/components/pcb/PcbCanvas.tsx` | 40 | — | `role="img" aria-label={PCB_CANVAS_STATEMENT}` | the PCB host declared |
 | C25 | `app/components/pcb/PcbToolbar.tsx` | 375 | — | `aria-label="Go to component"` | the PCB Go to field |
 | C26 | `app/components/pcb/ProviderExchangePanel.tsx` | 171 | — | `<div role="alert" className="mt-1 rounded border border-red-500/40` | the refusal, in place |
@@ -630,10 +632,10 @@ Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on 
 | C33 | `app/layout.tsx` | 20 | — | `title: "Create Next App",` | 2.4.2 |
 | C34 | `app/layout.tsx` | 31 | — | `lang="en"` | 3.1.1 |
 | C35 | `app/components/bom/BomView.tsx` | 42 | — | `import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";` | the BOM dialogs on the shared dialog |
-| C36 | `app/components/bom/BomView.tsx` | 886 | — | `ref={exportTriggerRef}` | the worksheet's return target |
-| C37 | `app/components/bom/BomView.tsx` | 1400 | — | `<DialogContent finalFocus={finalFocus}` | passed as `finalFocus` |
-| C38 | `app/components/bom/BomView.tsx` | 1403 | — | `Priced from cached offers, each with its source and when it was observed.` | the worksheet sentence, verbatim |
-| C39 | `app/components/bom/BomView.tsx` | 1517 | — | `const BOM_DRAWER_CLASS =` | the drawers, by className only |
+| C36 | `app/components/bom/BomView.tsx` | 926 | — | `ref={exportTriggerRef}` | the worksheet's return target |
+| C37 | `app/components/bom/BomView.tsx` | 1453 | — | `<DialogContent finalFocus={finalFocus}` | passed as `finalFocus` |
+| C38 | `app/components/bom/BomView.tsx` | 1456 | — | `Priced from cached offers, each with its source and when it was observed.` | the worksheet sentence, verbatim |
+| C39 | `app/components/bom/BomView.tsx` | 1570 | — | `const BOM_DRAWER_CLASS =` | the drawers, by className only |
 | C40 | `components/ui/dialog.tsx` | 45 | — | `showCloseButton = true,` | the default Close |
 | C41 | `components/ui/dialog.tsx` | 75 | — | `<span className="sr-only">Close</span>` | its name |
 | C42 | `app/components/pcb/GrantedExecutionDialog.tsx` | 54 | — | `onOpenChange={(open) => { if (!open && !busy) onCancel(); }}` | Escape reaches onCancel |
@@ -646,22 +648,24 @@ Each anchor stands on the line given (`b24-d3-accessible-names` 10 checks it on 
 | C49 | `app/lib/engineering/control-surface.ts` | 56 | — | `Human-recognisable label: data-testid > aria-label > title > text > placeholder > name > (none).` | B17-A's label order |
 | C50 | `playwright.config.ts` | 39 | — | `devices["Desktop Chrome"]` | the one project |
 | C51 | `.github/workflows/deterministic-manufacturing.yml` | 229 | — | `app/lib/qualification/__tests__` | A1's directory filter admits both unit suites |
-| C52 | `.github/workflows/deterministic-manufacturing.yml` | 417 | — | `- run: pnpm exec playwright test` | the browser step admits both specs; [B24-D4, 2026-10-10] superseded: since OD-30's split this step leaves both out (`SIRKIT_E2E_SKIP`, `:418-419`) and the appended `page-browser-e2e-b24` runs them (C70; [B24-D4 lead, 2026-10-10] with B24-D2's two specs, by the lead's option (b)) |
-| C53 | `.github/workflows/deterministic-manufacturing.yml` | 402 | — | `timeout-minutes: 30` | page-browser-e2e's limit (OD-30) |
+| C52 | `.github/workflows/deterministic-manufacturing.yml` | 648 | — | `- run: pnpm exec playwright test` | the browser step admits both specs; [B24-D4, 2026-10-10] superseded: since OD-30's split this step leaves both out (`SIRKIT_E2E_SKIP`, `:418-419`) and the appended `page-browser-e2e-b24` runs them (C70; [B24-D4 lead, 2026-10-10] with B24-D2's two specs, by the lead's option (b)) [PR-G, 2026-10-17] re-pinned +39: PR-G's 39 prompt-to-gerber lines at `:294-312`, `:316` and `:352-370` (OD-250) [PR-L7, 2026-10-20] re-pinned +84: PR-L7's 71 prompt-to-gerber lines at `:313-381` and `:440-441` and its 13 database-delivery entries at `:495-507` (OD-254) [PR-J7, 2026-11-04] re-pinned +108: PR-J7's 108 prompt-to-gerber lines at `:382-435` and `:496-549` (OD-261) |
+| C53 | `.github/workflows/deterministic-manufacturing.yml` | 633 | — | `timeout-minutes: 30` | page-browser-e2e's limit (OD-30) [PR-G, 2026-10-17] re-pinned +39: PR-G's 39 prompt-to-gerber lines at `:294-312`, `:316` and `:352-370` (OD-250) [PR-L7, 2026-10-20] re-pinned +84: PR-L7's 71 prompt-to-gerber lines at `:313-381` and `:440-441` and its 13 database-delivery entries at `:495-507` (OD-254); the anchor also stands at `:815` since then, page-browser-e2e-agent's own 30 minutes - this row names page-browser-e2e's [PR-J7, 2026-11-04] re-pinned +108: PR-J7's 108 prompt-to-gerber lines at `:382-435` and `:496-549` (OD-261); page-browser-e2e-agent's own 30 minutes now at `:977` and page-browser-e2e-b24's at `:942` (OD-256) - this row names page-browser-e2e's |
 | C54 | `.github/workflows/deterministic-manufacturing.yml` | 26 | — | `timeout-minutes: 25` | prompt-to-gerber's limit (OD-30) |
 | C55 | `scripts/generate-b24-accessible-names.ts` | 22 | — | `const CENSUS_PATH = "artifacts/ai-control-plane-b24/accessible-name-census.csv";` | the ratchet's baseline, never read from outDir (review round) |
 | C56 | `scripts/generate-b24-accessible-names.ts` | 37 | — | `pass --bootstrap for a tree that has none` | a missing baseline refuses (review round) |
 | C57 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 76 | — | `const OUT_OF_SCOPE_UNNAMED_AT_3773C6A = 111;` | the `3773c6a` record |
-| C58 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 378 | — | `const OUT_OF_SCOPE_UNNAMED_AFTER_D3 = 102;` | the post-D3 pin (review round) |
-| C59 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 382 | — | `const UNNAMED_KEYS_AFTER_D3: readonly string[] = [` | the frozen key list (review round) |
-| C60 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 491 | — | `const BROWSER_SPECS_EXECUTED = true;` | flipped by the lead after the green browser runs (section 5) |
-| C61 | `app/page.tsx` | 2627 | — | `const chatFocusReturnRef = useRef(false);` | the focus-return flag, declared in place (review round) |
-| C62 | `app/page.tsx` | 4466 | — | `setLoading(true); chatFocusReturnRef.current = document.activeElement !== null && document.activeElement === document.querySelector('[data-testid="prompt-input"]');` | set when the run is sent from the prompt, in place (review round) |
-| C63 | `app/page.tsx` | 4809 | — | `if (!chatFocusReturnRef.current \|\| !prompt` | the return checks the flag every frame, in place (review round) |
-| C64 | `app/page.tsx` | 6046 | — | `onPointerDownCapture={() => { chatFocusReturnRef.current = false;` | any pointer press clears it, in place (review round) |
-| C65 | `app/page.tsx` | 7022 | — | `title="More checks" aria-label="More checks"` | the More checks button named, in place (review round) |
+| C58 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 404 | — | `const OUT_OF_SCOPE_UNNAMED_AFTER_D3 = 102;` | the post-D3 pin (review round) |
+| C59 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 408 | — | `const UNNAMED_KEYS_AFTER_D3: readonly string[] = [` | the frozen key list (review round) |
+| C60 | `app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts` | 517 | — | `const BROWSER_SPECS_EXECUTED = true;` | flipped by the lead after the green browser runs (section 5) |
+| C61 | `app/page.tsx` | 2635 | — | `const chatFocusReturnRef = useRef(false);` | the focus-return flag, declared in place (review round) |
+| C62 | `app/page.tsx` | 4614 | — | `setLoading(true); chatFocusReturnRef.current = document.activeElement !== null && document.activeElement === document.querySelector('[data-testid="prompt-input"]');` | set when the run is sent from the prompt, in place (review round) |
+| C63 | `app/page.tsx` | 5043 | — | `if (!chatFocusReturnRef.current \|\| !prompt` | the return checks the flag every frame, in place (review round) |
+| C64 | `app/page.tsx` | 6644 | — | `onPointerDownCapture={() => { chatFocusReturnRef.current = false;` | any pointer press clears it, in place (review round) |
+| C65 | `app/page.tsx` | 7689 | — | `title="More checks" aria-label="More checks"` | the More checks button named, in place (review round) |
 | C66 | `app/lib/engineering/accessible-names.ts` | 779 | — | `const name = nameOf({ surface: rows[0]!.surface, kind: "click"` | a backdrop's closer found by its accessible name (review round) |
 | C67 | `app/components/pcb/GrantedExecutionDialog.tsx` | 55 | — | `<DialogContent className="max-w-xl" finalFocus={promptFocus}>` | [B24-D4, 2026-10-10] the card's return target, in place |
 | C68 | `app/components/pcb/GrantedExecutionDialog.tsx` | 125 | — | `return prompt && !prompt.disabled ? prompt : false;` | [B24-D4, 2026-10-10] the prompt when enabled; [B24-D4 review, 2026-10-10] else no focus move (was: Base UI's default, `: true`) |
 | C69 | `e2e/keyboard-and-focus.spec.ts` | 235 | — | `await expect(prompt, "focus returns to the prompt after Escape").toBeFocused({ timeout: 10_000 });` | [B24-D4, 2026-10-10] case 4, stricter, in place |
-| C70 | `.github/workflows/deterministic-manufacturing.yml` | 651 | — | `run: pnpm exec playwright test e2e/multi-tab.spec.ts e2e/crash-recovery.spec.ts e2e/keyboard-and-focus.spec.ts e2e/minimum-width.spec.ts` | [B24-D4, 2026-10-10] the two specs' job since OD-30's split (`ci-split.md` section 11); [B24-D4 lead, 2026-10-10] `page-browser-e2e-b24`, which also runs B24-D2's two specs (the lead's option (b); Playwright runs the four files in name order, `multi-tab` last) |
+| C70 | `.github/workflows/deterministic-manufacturing.yml` | 958 | — | `run: pnpm exec playwright test e2e/multi-tab.spec.ts e2e/crash-recovery.spec.ts e2e/keyboard-and-focus.spec.ts e2e/minimum-width.spec.ts` | [B24-D4, 2026-10-10] the two specs' job since OD-30's split (`ci-split.md` section 11); [B24-D4 lead, 2026-10-10] `page-browser-e2e-b24`, which also runs B24-D2's two specs (the lead's option (b); Playwright runs the four files in name order, `multi-tab` last) [PR-G, 2026-10-17] re-pinned +59: PR-G's 39 prompt-to-gerber lines at `:294-312`, `:316` and `:352-370` and 20 agent-boundary-suites lines at `:622` and `:658-676` (OD-250) [PR-L7, 2026-10-20] re-pinned +86: PR-L7's 71 prompt-to-gerber lines at `:313-381` and `:440-441`, its 13 database-delivery entries at `:495-507` and agent-boundary-suites' two lines at `:761-762` (OD-254) [PR-J7, 2026-11-04] re-pinned +162: PR-J7's 108 prompt-to-gerber lines at `:382-435` and `:496-549` and agent-boundary-suites' 54 lines at `:871-924` (OD-261) |
+[PR-J4, 2026-10-23] C37 `:1443` -> `:1453`, C38 `:1446` -> `:1456`, C39 `:1560` -> `:1570` (section J4-B's BOM Sheet column - the header, the per-line cell and the per-sheet group line - was inserted above them in `BomView.tsx`; all three anchors are unchanged). The census row of the BOM table's `tr` click control is re-rendered for the same reason (its text now includes the Sheet cell); the other builders' rows and the summary are regenerated at the J4 integration.
+

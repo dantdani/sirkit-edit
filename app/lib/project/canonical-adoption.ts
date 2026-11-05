@@ -62,7 +62,8 @@ export interface CanonicalAdoptionHost<S> {
 export type CanonicalAdoptionOutcome = { ok: true } | { ok: false; detail: string };
 
 /** Normalize exactly as the page's applier always has: arrays present and
- *  owned; pageSize carried iff present. */
+ *  owned; pageSize carried iff present; [PR-J3, 2026-10-22] the sheet tree carried
+ *  iff present (a single-sheet result stays byte-identical). */
 function normalizeAuthoritative(state: SchematicState): SchematicState {
   return {
     components: state.components,
@@ -70,6 +71,7 @@ function normalizeAuthoritative(state: SchematicState): SchematicState {
     kicadComponents: state.kicadComponents ?? [],
     netLabels: state.netLabels ?? [],
     ...(state.pageSize ? { pageSize: state.pageSize } : {}),
+    ...(state.sheets !== undefined ? { sheets: state.sheets } : {}), // [PR-J3, 2026-10-22]
   };
 }
 

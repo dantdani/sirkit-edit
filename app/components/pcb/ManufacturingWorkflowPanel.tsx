@@ -39,17 +39,17 @@ export interface ManufacturingWorkflowPanelProps {
   qualifying: boolean;
   canQualify: boolean;
   onQualify(): void;
-  routeStaleNotice?: string | null;
+  routeStaleNotice?: string | null; /** [PR-L6, 2026-10-19] runbook M.4 / M.5-7 (OD-253 item 8): the board is behind the schematic (schematic-drift.ts, derived from facts) - Request release and Authorize release stay disabled with this reason */ boardBehindNotice?: string | null;
 }
 
-export function ManufacturingWorkflowPanel({ workflow, qualifying, canQualify, onQualify, routeStaleNotice = null }: ManufacturingWorkflowPanelProps) {
+export function ManufacturingWorkflowPanel({ workflow, qualifying, canQualify, onQualify, routeStaleNotice = null, boardBehindNotice = null }: ManufacturingWorkflowPanelProps) {
   const { hydration, truth, releasing, releaseConfirmation, releaseResult, error, canRequestRelease, releaseCapability } = workflow;
   // [B16-A F13] a failed hydration is its own state; "idle" is reserved for a truthful "no durable board yet".
   const state = qualifying ? "qualifying" : releasing ? "releasing" : releaseConfirmation ? "awaiting_release_authorization" : error?.operation === "release" ? "release_failed" : workflow.workflow?.state ?? (hydration.status === "loading" ? "hydrating_project" : hydration.status === "failed" ? "hydration_failed" : "idle");
   const identity = workflow.workflow?.identity;
   const pending = qualifying || releasing || hydration.status === "loading";
   const unreadable = hydration.status === "failed";
-  const releaseTitle = routeStaleNotice ? `Release blocked — ${routeStaleNotice}` : !releaseCapability.allowed ? releaseCapability.reason ?? "This viewer may not authorize a manufacturing release" : !canRequestRelease ? "Release needs a CURRENT qualification authority for this exact board" : "Request a verified manufacturing release (administrator confirmation follows)";
+  const releaseTitle = boardBehindNotice ? `Release blocked — ${boardBehindNotice}` : routeStaleNotice ? `Release blocked — ${routeStaleNotice}` : !releaseCapability.allowed ? releaseCapability.reason ?? "This viewer may not authorize a manufacturing release" : !canRequestRelease ? "Release needs a CURRENT qualification authority for this exact board" : "Request a verified manufacturing release (administrator confirmation follows)";
   return (
     <div className="rounded border border-zinc-700 bg-zinc-900/90 px-3 py-2 text-[11px] text-zinc-200 shadow" data-testid="p2g-panel">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -68,7 +68,7 @@ export function ManufacturingWorkflowPanel({ workflow, qualifying, canQualify, o
         <button type="button" data-testid="p2g-qualify" onClick={onQualify} disabled={pending || !canQualify} title={!canQualify ? "Needs an applied durable board — run Schematic → PCB and apply the plan first" : "Server-side autonomous placement + real routing + RC01–RC03 verification"} className="rounded border border-zinc-600 px-2 py-1 hover:border-teal-500 disabled:opacity-50">
           {qualifying ? "Qualifying…" : "Qualify & route"}
         </button>
-        <button type="button" data-testid="p2g-request-release" onClick={workflow.requestRelease} disabled={pending || !canRequestRelease || !releaseCapability.allowed || routeStaleNotice !== null} title={releaseTitle} className="rounded border border-zinc-600 px-2 py-1 hover:border-teal-500 disabled:opacity-50">
+        <button type="button" data-testid="p2g-request-release" onClick={workflow.requestRelease} disabled={pending || !canRequestRelease || !releaseCapability.allowed || routeStaleNotice !== null || boardBehindNotice !== null} title={releaseTitle} className="rounded border border-zinc-600 px-2 py-1 hover:border-teal-500 disabled:opacity-50">
           {releasing ? "Releasing…" : "Request release"}
         </button>
         {error && (
@@ -111,9 +111,9 @@ export function ManufacturingWorkflowPanel({ workflow, qualifying, canQualify, o
               <dt>Qualified at</dt><dd>{releaseConfirmation.qualifiedAt}</dd>
             </dl>
           )}
-          <DialogFooter>
+          <DialogFooter>{boardBehindNotice && <p className="mr-auto self-center text-[11px] text-amber-300" data-testid="p2g-release-board-behind">Release blocked — {boardBehindNotice}</p>}{/* [PR-L6, 2026-10-19] plain text, no control */}
             <Button variant="ghost" onClick={workflow.cancelRelease} disabled={releasing}>Cancel</Button>
-            <Button data-testid="p2g-authorize-release" onClick={() => void workflow.authorizeRelease()} disabled={releasing}>{releasing ? "Releasing…" : "Authorize release"}</Button>
+            <Button data-testid="p2g-authorize-release" onClick={() => void workflow.authorizeRelease()} disabled={releasing || boardBehindNotice !== null}>{releasing ? "Releasing…" : "Authorize release"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

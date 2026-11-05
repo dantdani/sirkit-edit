@@ -67,7 +67,7 @@ forged object is never the registered instance and
 table fields). Pin definitions live in the parts catalog / atomic symbol
 payloads (`SymbolAssetVersion.pins`, atomic/types.ts:224) — never in
 `AgentRunContext`, never in the schematic state
-(`KicadComponentInstance`, lib/schematic-types.ts:97–115, carries no pins).
+(`KicadComponentInstance`, lib/schematic-types.ts:111–132, carries no pins).
 
 ## R8 — a B13 inspection result alone cannot authorize a replacement
 

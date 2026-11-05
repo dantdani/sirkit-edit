@@ -10,7 +10,7 @@ import type {
   ToolChoiceOptions,
 } from "openai/resources/responses/responses";
 import { composeInstructions } from "./context";
-import { toProviderError } from "./errors";
+import { LLMProviderError, toProviderError } from "./errors";
 import {
   configuredOpenAIModel,
   configuredOpenAIReasoningEffort, OPENAI_NO_TEMPERATURE_MODEL_FAMILY, // [B21 E1] the rule, named once in openai-config
@@ -117,7 +117,7 @@ function normalizeResponse(response: Response): LLMResponse {
     model: response.model,
     text: response.output_text,
     toolCalls,
-    stopReason: response.status,
+    stopReason: openAIStopReason(response), // [PR-L, 2026-10-17] an `incomplete` response reports why (openAIStopReason, after the last line)
     usage: response.usage
       ? {
           inputTokens: response.usage.input_tokens,
@@ -133,7 +133,7 @@ export class OpenAIProvider implements LLMProvider {
 
   constructor(
     client?: OpenAIClient,
-    private readonly model = configuredOpenAIModel(),
+    readonly model = configuredOpenAIModel(), // [PR-L6 spend, 2026-10-19] SPEND-3-A3: readable (LLMProvider.model), so the router names the model it serves; still fixed at construction
     private readonly reasoningEffort: OpenAIReasoningEffort | undefined =
       configuredOpenAIReasoningEffort(model),
   ) {
@@ -178,9 +178,12 @@ export class OpenAIProvider implements LLMProvider {
         ...this.baseParams(request),
         stream: false,
       };
-      const response = await this.getClient().responses.create(params);
+      const response = await (sdkRequestOptions(request) // [PR-L6 integration, 2026-10-19] SPEND-1: the signal and the per-call retries
+        ? this.getClient().responses.create(params, sdkRequestOptions(request))
+        : this.getClient().responses.create(params));
       return normalizeResponse(response);
     } catch (error) {
+      if (request.signal?.aborted) throw new LLMProviderError(this.id, "cancelled");
       throw toProviderError(this.id, error);
     }
   }
@@ -191,7 +194,9 @@ export class OpenAIProvider implements LLMProvider {
         ...this.baseParams(request),
         stream: true,
       };
-      const stream = await this.getClient().responses.create(params);
+      const stream = await (sdkRequestOptions(request) // [PR-L6 integration, 2026-10-19] SPEND-1: as generate
+        ? this.getClient().responses.create(params, sdkRequestOptions(request))
+        : this.getClient().responses.create(params));
       let completed: Response | undefined;
       for await (const event of stream) {
         if (event.type === "response.output_text.delta") {
@@ -214,7 +219,33 @@ export class OpenAIProvider implements LLMProvider {
       if (!completed) throw new Error("OpenAI stream ended before a completed response.");
       yield { type: "done", response: normalizeResponse(completed) };
     } catch (error) {
+      if (request.signal?.aborted) throw new LLMProviderError(this.id, "cancelled");
       throw toProviderError(this.id, error);
     }
   }
+}
+
+// [PR-L, 2026-10-17] Runbook L.6; limit-and-stall-map.md section 4 (block Y: one turn stopped at the 8,192-token output cap). Appended
+// after the last line on purpose (a function declaration is hoisted), so no cited line moves (configuration.ts cites :152-156).
+/**
+ * The response's stop as the router reports it. Every status passes through unchanged except `incomplete`: cut by
+ * `max_output_tokens` it reports `max_tokens` - the value Anthropic's `stop_reason` uses for the same stop (and STEP_STOPS' name for
+ * it, app/lib/agent/contracts.ts), so one consumer check covers both providers - and any other `incomplete` (e.g. `content_filter`)
+ * stays `incomplete`. A function call cut off inside such a response still arrives as `{ _raw }` (its arguments do not parse); the
+ * Build loop refuses a submission from a turn that stopped this way (build-loop.ts `unreadableSubmission`).
+ */
+function openAIStopReason(response: Response): LLMResponse["stopReason"] {
+  if (response.status !== "incomplete") return response.status;
+  return response.incomplete_details?.reason === "max_output_tokens" ? "max_tokens" : "incomplete";
+}
+
+// [PR-L6 integration, 2026-10-19] SPEND-1: appended after the last line (a function declaration is hoisted), so no cited line moves.
+/** The SDK's per-call request options: the transport signal and the caller's `maxProviderRetries` (0 for every metered generation slice
+ *  call, so the SDK never resends an attempt the provider may already have billed - the client keeps its default of 5 for every other
+ *  caller). Undefined when the request carries neither, so a plain call stays a one-argument call. */
+function sdkRequestOptions(request: LLMRequest): { signal?: AbortSignal; maxRetries?: number } | undefined {
+  const retries = request.maxProviderRetries;
+  const maxRetries = typeof retries === "number" && Number.isSafeInteger(retries) && retries >= 0 ? retries : undefined;
+  if (!request.signal && maxRetries === undefined) return undefined;
+  return { ...(request.signal ? { signal: request.signal } : {}), ...(maxRetries !== undefined ? { maxRetries } : {}) };
 }

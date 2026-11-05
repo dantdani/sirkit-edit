@@ -194,9 +194,9 @@ describe("B10 §B — server-side context assembly over the editor context", () 
     const assembly = assemble({ board });
     expect(assembly.context.canonicalRevisionDigest).not.toBeNull();
     expect(assembly.context.canonicalState!.pcb).toEqual(board);
-    // Missing board: reads all gone.
+    // Missing board: canonical reads all gone. [PR-D, 2026-10-17] pin move: the Schematic to PCB preflight read stays (a Tier 0 read over the verified schematic snapshot, no board needed; its own binding, not B05's)
     const boardless = assemble({ board: undefined });
-    expect(toolsetIds(boardless.context)).toEqual([PROPOSAL_ID]);
+    expect(toolsetIds(boardless.context)).toEqual(["sirkit.module.propose-contracts", "sirkit.parts.draft-request", "sirkit.parts.missing-facts", "sirkit.pcb-sync.preflight", "sirkit.schematic.instance-inspect", PROPOSAL_ID]); // [PR-M, 2026-10-17] pin move: + the schematic-instance inspection (over the verified schematic, no board; the catalog optional); // [PR-F fD, 2026-10-17] pin move: + the module contract proposal (over the verified schematic and its head mark, no board); // [PR-F fB, 2026-10-17] pin move: + the part draft request and the missing-facts read (both over the verified schematic, no board)
     // Malformed board: no canonical resource, no reads.
     const malformed = assemble({ board: { stackup: 2, nets: [], footprints: [], tracks: [{ id: "" }], vias: [], zones: [] } });
     expect(malformed.context.canonicalState).toBeNull();

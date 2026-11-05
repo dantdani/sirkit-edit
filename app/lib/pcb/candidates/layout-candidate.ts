@@ -24,7 +24,8 @@ import type { AutoroutePassReport, AutorouteUnresolvedConnection } from "../auto
 import type { PcbHistory, PcbHistoryMetadata } from "../history";
 import { runEngineeringPlacement } from "../placement/engine";
 import { applyPlacementCandidate } from "../placement/transaction";
-import type { EngineeringPlacementOptions, PlacementCandidate, PlacementProblem, PlacementRunResult, PlacementTermination } from "../placement/types";
+import type { EngineeringPlacementOptions, PlacementCandidate, PlacementIntentSeed, PlacementProblem, PlacementRunResult, PlacementTermination } from "../placement/types";
+import { evaluatePlacementIntent, unappliedPlacementIntent, type CompiledPlacementIntent, type PlacementIntentOutcome, type PlacementScope } from "../placement/intent"; // [PR-F, 2026-10-17] the structured placement intent (conflicts, scope)
 import type { ReadinessReport } from "../readiness/types";
 import { pcbRevisionId } from "../revision";
 import { applyRouteCommand, buildRipupNetCommand } from "../route-tool.commands";
@@ -66,6 +67,10 @@ export interface PlacementLayoutCandidate extends LayoutCandidateCommon {
   run: { runId: string; termination: PlacementTermination; searchComplete: boolean; elapsedMs: number; frontierCandidateIds: string[]; candidateCount: number };
   /** Hard-legal per the candidate's own report (re-validated at apply). */
   legal: boolean;
+  /** [PR-F, 2026-10-17] Present only when the producer carried a `sirkit.placement-intent.v1` (the agent's proposal): the bound
+   *  identities, the scope classification, what was seeded and the CONFLICT list (component, what the intent asked, what the
+   *  engine or a lock / keepout / clearance did instead). Absent for the editor's own candidates, whose bytes are unchanged. */
+  intent?: PlacementIntentOutcome;
 }
 
 export interface RoutingLayoutCandidate extends LayoutCandidateCommon {
@@ -121,6 +126,8 @@ export interface PlacementRunRequest {
   localRefinementPasses?: number;
   gridNm?: number;
   timeoutMs?: number;
+  /** [PR-F] the compiled intent's engine seed (app/lib/pcb/placement/intent.ts); absent for every other producer. */
+  intentSeed?: PlacementIntentSeed;
 }
 
 /**
@@ -141,6 +148,7 @@ export function placementRunOptions(board: PcbBoard, request: PlacementRunReques
     ...(request.localRefinementPasses !== undefined ? { localRefinementPasses: request.localRefinementPasses } : {}),
     ...(request.gridNm !== undefined ? { gridNm: request.gridNm } : {}),
     ...(request.timeoutMs !== undefined ? { timeoutMs: request.timeoutMs } : {}),
+    ...(request.intentSeed !== undefined ? { intentSeed: request.intentSeed } : {}), // [PR-F] the intent seed travels the ONE options builder too
   };
 }
 
@@ -154,6 +162,8 @@ export function producePlacementCandidate(input: {
   historyHead?: LayoutCandidateBase["historyHead"];
   clock?: () => string;
   ttlMs?: number;
+  /** [PR-F] the evaluated intent block; included in the sealed content only when given. */
+  intent?: PlacementIntentOutcome;
 }): PlacementLayoutCandidate | null {
   const selected = input.run.candidates.find((candidate) => candidate.candidateId === input.run.selectedCandidateId) ?? input.run.candidates[0];
   if (!selected) return null;
@@ -172,13 +182,23 @@ export function producePlacementCandidate(input: {
     candidate: selected,
     run: { runId: input.run.runId, termination: input.run.termination, searchComplete: input.run.searchComplete, elapsedMs: input.run.elapsedMs, frontierCandidateIds: [...input.run.frontierCandidateIds], candidateCount: input.run.candidates.length },
     legal: selected.hardReport.legal,
+    ...(input.intent ? { intent: input.intent } : {}),
   });
 }
 
+/** [PR-F] A compiled intent for the run: seeded into the engine when the scope is qualified, recorded unapplied otherwise. */
+export interface PlacementIntentRun { intent: CompiledPlacementIntent; seed: PlacementIntentSeed; scope: PlacementScope }
+
 /** Run the engine synchronously (route / agent / tests) and produce the shared candidate. */
-export function runPlacementCandidate(input: { board: PcbBoard; request: PlacementRunRequest; generation?: number; clock?: () => string; ttlMs?: number }): { candidate: PlacementLayoutCandidate | null; run: PlacementRunResult } {
-  const run = runEngineeringPlacement({ board: input.board, options: placementRunOptions(input.board, input.request) });
-  return { run, candidate: producePlacementCandidate({ board: input.board, run, producer: input.request.producer, instanceIds: input.request.instanceIds, generation: input.generation, clock: input.clock, ttlMs: input.ttlMs }) };
+export function runPlacementCandidate(input: { board: PcbBoard; request: PlacementRunRequest; generation?: number; clock?: () => string; ttlMs?: number; intent?: PlacementIntentRun }): { candidate: PlacementLayoutCandidate | null; run: PlacementRunResult } {
+  // [PR-F, 2026-10-17] a qualified-scope intent seeds the engine through the one options builder; an unsupported scope runs the
+  // engine exactly as B17-F does and the intent block says so (never silently dropped, never a fabricated success)
+  const applied = input.intent !== undefined && input.intent.scope.classification === "qualified";
+  const request = applied ? { ...input.request, intentSeed: input.intent!.seed } : input.request;
+  const options = placementRunOptions(input.board, request);
+  const run = runEngineeringPlacement({ board: input.board, options });
+  const intent = input.intent ? applied ? evaluatePlacementIntent({ problem: run.problem, run, intent: input.intent.intent, seed: input.intent.seed, scope: input.intent.scope, gridNm: options.gridNm }) : unappliedPlacementIntent(input.intent.intent, input.intent.scope, run) : undefined;
+  return { run, candidate: producePlacementCandidate({ board: input.board, run, producer: input.request.producer, instanceIds: input.request.instanceIds, generation: input.generation, clock: input.clock, ttlMs: input.ttlMs, ...(intent ? { intent } : {}) }) };
 }
 
 // ── Routing ──────────────────────────────────────────────────────────────────

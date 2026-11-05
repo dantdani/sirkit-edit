@@ -21,6 +21,7 @@ import {
   SCH_COMPONENT_OPTIONAL_KEYS, SCH_COMPONENT_REQUIRED_KEYS,
   SCHEMATIC_STATE_OPTIONAL_KEYS, SCHEMATIC_STATE_REQUIRED_KEYS,
   WIRE_REQUIRED_KEYS, projectReplayContext, validateReplayContext,
+  NET_LABEL_OPTIONAL_KEYS, WIRE_OPTIONAL_KEYS, SHEET_SET_REQUIRED_KEYS, SHEET_REQUIRED_KEYS, SHEET_OPTIONAL_KEYS, SHEET_BLOCK_REQUIRED_KEYS, SHEET_PORT_REQUIRED_KEYS, // [PR-J1 integration, 2026-10-22] + the sheet tree's key lists (J1-PERS-6)
 } from "../replay-context";
 import {
   AGENT_REPLAY_CAPSULE_SCHEMA, replayCapsule, ReplayCapsuleInvalidError,
@@ -216,9 +217,11 @@ describe("B11.2 §A — versioned replay context (R1)", () => {
     const expectations: Array<[string, readonly string[], readonly string[]]> = [
       ["export type SchematicState = {", SCHEMATIC_STATE_REQUIRED_KEYS, SCHEMATIC_STATE_OPTIONAL_KEYS],
       ["export type SchComponent = {", SCH_COMPONENT_REQUIRED_KEYS, SCH_COMPONENT_OPTIONAL_KEYS],
-      ["export type Wire = {", WIRE_REQUIRED_KEYS, []],
+      // [PR-J, 2026-10-22] pin moved: Wire and NetLabel gained optional sheet fields (sheetId; scope, portId, childSheetId) and the
+      // replay key lists carry them, so the expectation is the lists' optional halves instead of [] (OD-255 item 1).
+      ["export type Wire = {", WIRE_REQUIRED_KEYS, WIRE_OPTIONAL_KEYS],
       ["export type Point = {", POINT_REQUIRED_KEYS, []],
-      ["export type NetLabel = {", NET_LABEL_REQUIRED_KEYS, []],
+      ["export type NetLabel = {", NET_LABEL_REQUIRED_KEYS, NET_LABEL_OPTIONAL_KEYS],
       ["export type KicadComponentInstance = {", KICAD_COMPONENT_REQUIRED_KEYS, KICAD_COMPONENT_OPTIONAL_KEYS],
     ];
     for (const [declaration, required, optional] of expectations) {
@@ -489,5 +492,64 @@ describe("B11.2 §F — invariants preserved", () => {
       const source = readFileSync(join(process.cwd(), "app/lib/agent", file), "utf8");
       expect(source, file).not.toMatch(/modelcontextprotocol|mcpServer|spawnAgent|multiAgent/i);
     }
+  });
+});
+
+// ─── [PR-J1 integration, 2026-10-22] review J1-PERS-6: the sheet tree is key-exhaustive like every other subtree ──
+
+describe("[PR-J1 integration, 2026-10-22] the optional sheet tree is exact at every depth (J1-PERS-6)", () => {
+  const sheetTree = () => ({
+    version: 1,
+    sheets: [
+      { id: "root", name: "Overview", parentId: null },
+      { id: "s1", name: "Power", parentId: "root", block: { x: 600, y: 0, width: 200, height: 100 }, ports: [{ id: "p1", name: "OUT", direction: "output" }] },
+    ],
+  });
+  const withSheets = (sheets: unknown): unknown => {
+    const context = richCapsule().context;
+    return { ...context, schematic: { ...context.schematic!, sheets } };
+  };
+
+  it("a well-formed tree is carried (and its semantic validity stays a verdict, never a refusal)", () => {
+    const result = validateReplayContext(withSheets(sheetTree()));
+    expect(result.ok, result.ok ? "" : result.issues.join("; ")).toBe(true);
+    if (result.ok) expect((result.context.schematic as { sheets?: unknown }).sheets).toEqual(sheetTree());
+  });
+
+  it("an unknown key on the tree, a sheet, a block or a port, or a tree that is not an object, is REFUSED with its path", () => {
+    const probes: Array<[string, (tree: ReturnType<typeof sheetTree>) => unknown, RegExp]> = [
+      ["tree", (tree) => ({ ...tree, extra: { note: "x" } }), /^context\.schematic\.sheets\.extra: unknown key/],
+      ["sheet", (tree) => ({ ...tree, sheets: [tree.sheets[0], { ...tree.sheets[1], note: "x" }] }), /^context\.schematic\.sheets\.sheets\[1\]\.note: unknown key/],
+      ["block", (tree) => ({ ...tree, sheets: [tree.sheets[0], { ...tree.sheets[1], block: { ...tree.sheets[1]!.block, depth: 3 } }] }), /^context\.schematic\.sheets\.sheets\[1\]\.block\.depth: unknown key/],
+      ["port", (tree) => ({ ...tree, sheets: [tree.sheets[0], { ...tree.sheets[1], ports: [{ ...tree.sheets[1]!.ports![0], width: 8 }] }] }), /^context\.schematic\.sheets\.sheets\[1\]\.ports\[0\]\.width: unknown key/],
+      ["missing version", (tree) => ({ sheets: tree.sheets }), /^context\.schematic\.sheets\.version: missing required key/],
+      ["not an object", () => "root", /^context\.schematic\.sheets: must be a plain object/],
+    ];
+    for (const [label, mutate, issue] of probes) {
+      const result = validateReplayContext(withSheets(mutate(sheetTree())));
+      expect(result.ok, label).toBe(false);
+      if (!result.ok) expect(result.issues.some((item) => issue.test(item)), `${label}: ${result.issues.join("; ")}`).toBe(true);
+    }
+  });
+
+  it("DRIFT GATE: the sheet key lists equal lib/schematic-types.ts (SchematicSheetSet, SchematicSheet, its block, SheetPort)", () => {
+    const source = readFileSync(join(process.cwd(), "lib", "schematic-types.ts"), "utf8");
+    const declared = (declaration: string): { required: string[]; optional: string[] } => {
+      const start = source.indexOf(declaration);
+      expect(start, declaration).toBeGreaterThanOrEqual(0);
+      const body = source.slice(source.indexOf("{", start) + 1, source.indexOf("\n};", start)).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+      const required: string[] = [];
+      const optional: string[] = [];
+      for (const line of body.split("\n")) {
+        const match = /^\s*([A-Za-z_$][\w$]*)(\??)\s*:/.exec(line);
+        if (match) (match[2] === "?" ? optional : required).push(match[1]!);
+      }
+      return { required, optional };
+    };
+    expect(declared("export type SchematicSheetSet = {")).toEqual({ required: [...SHEET_SET_REQUIRED_KEYS], optional: [] });
+    expect(declared("export type SchematicSheet = {")).toEqual({ required: [...SHEET_REQUIRED_KEYS], optional: [...SHEET_OPTIONAL_KEYS] });
+    expect(declared("export type SheetPort = {")).toEqual({ required: [...SHEET_PORT_REQUIRED_KEYS], optional: [] });
+    const block = /\n\s*block\?: \{([^}]*)\};/.exec(source.slice(source.indexOf("export type SchematicSheet = {")))![1]!;
+    expect(block.split(";").map((member) => member.trim().split(":")[0]!.trim()).filter(Boolean)).toEqual([...SHEET_BLOCK_REQUIRED_KEYS]);
   });
 });

@@ -172,14 +172,14 @@ export function dagOutputTokenCeiling(specialists: number, maxModelSteps: number
  *  the external authorities withdrawn, no grant field, risk ceiling `propose`, no approval tier - so the gateway's integrity check
  *  still holds. The follow-up coordinator turn runs over this (it keeps the head mark, basis and view: its registry is read-only). */
 export function withdrawAuthority(context: AgentRunContext): AgentRunContext {
-  const { externalAcquisitionAvailable: _external, mcpObservationAvailable: _mcp, computationAvailable: _computation, ...rest } = context; // [B22-B] the computation fact is withdrawn too
+  const { externalAcquisitionAvailable: _external, mcpObservationAvailable: _mcp, computationAvailable: _computation, schematicGenerationAvailable: _generation, catalogInspectionAvailable: _catalog, componentResolutionAvailable: _resolution, catalogSearchAvailable: _search, ...rest } = context; /* [PR-M, 2026-10-18] and the two component resolution facts that ride the catalog fact (the gateway refuses either without it) */ // [B22-B] the computation fact is withdrawn too; [PR-D] and the Build-mode generation port's fact (OD-243: a port fact, kept from every specialist and the follow-up turn as OD-109 keeps the others)
   const { grantableCapabilities: _grantable, grantLineageId: _lineage, ...discovery } = context.discovery;
-  void _external; void _mcp; void _computation; void _grantable; void _lineage;
+  void _external; void _mcp; void _computation; void _generation; void _catalog; void _resolution; void _search; void _grantable; void _lineage; // [PR-D d2] the catalog inspection port's fact is withdrawn too (a chat-route port, never a specialist's)
   return {
     ...rest,
     executionGrantsAvailable: false,
     discovery: {
-      ...discovery,
+      ...discovery, projectState: discovery.projectState.filter((state) => !isWithdrawnProjectState(state)), /* [PR-M, 2026-10-18] the state a withdrawn port fact implies is withdrawn with it (catalog-available: context.ts claims it exactly with the catalog fact, the gateway refuses it without): one predicate, at the end of this file */
       availableAuthority: discovery.availableAuthority.filter((authority) => !isWithdrawnAuthority(authority)), // [B22-B] and the computation port's authority; [B23-A2] every external-* authority (OD-173): one predicate, at the end of this file
       riskCeiling: "propose",
       approvalsAvailable: [],
@@ -216,7 +216,7 @@ export function deriveSpecialistContext(context: AgentRunContext): AgentRunConte
       lineageId: "",
       currentEditor: discovery.currentEditor,
       selectedKinds: discovery.selectedKinds,
-      projectState: discovery.projectState.filter((state) => !state.endsWith("-surface")),
+      projectState: discovery.projectState.filter((state) => !state.endsWith("-surface") && !isWithdrawnProjectState(state)), // [PR-M, 2026-10-18] and the state the withdrawn catalog fact implies (catalog-available), as withdrawAuthority drops it
       availableAuthority: discovery.availableAuthority.filter((authority) => !isWithdrawnAuthority(authority)), // [B22-B] and the computation port's authority; [B23-A2] every external-* authority (OD-173): one predicate, at the end of this file
       providerCapabilities: discovery.providerCapabilities,
       riskCeiling: "propose",
@@ -851,5 +851,12 @@ function sealExpiresAt(payload: unknown): number {
  *  before anyone remembers to name it. The claims check (`specialistContextClaims`) still names the two external facts: the
  *  authority vocabulary holds exactly those two, which b23-a-tier3-vocabulary case 6 pins. */
 export function isWithdrawnAuthority(authority: string): boolean {
-  return authority.startsWith("external-") || authority === "computation-engine";
+  return authority.startsWith("external-") || authority === "computation-engine" || authority === "schematic-generation" || authority === "catalog"; // [PR-D d2] and the catalog inspection port's authority (a chat-route port, never a specialist's); [PR-D] and the Build-mode generation port's authority (OD-243): a chat-route port, never a specialist's
+}
+/** [PR-M, 2026-10-18] The project states a WITHDRAWN port fact implies, withdrawn with it by both withdrawals above: `catalog-available`
+ *  is claimed by the context assembler exactly with the server's catalog inspection fact (app/lib/agent/context.ts), and the gateway's
+ *  integrity check refuses the state without the fact - so a context whose catalog fact is withdrawn (every specialist and the
+ *  follow-up turn) that kept the state failed `context_integrity` on every call (the orchestration browser proof's F6). */
+export function isWithdrawnProjectState(state: string): boolean {
+  return state === "catalog-available";
 }

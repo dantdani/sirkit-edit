@@ -17,7 +17,7 @@
  *     holds no button named by a glyph alone inside a DialogContent; the hand-rolled dialogs outside BomView are exactly four;
  *  6. the literals: the transcript is a polite log with aria-busy and its label, the prompt carries its label, the two errors are
  *     alerts, both canvas hosts are images named by their statements, the minimum-width notice is CSS only; each literal once;
- *  7. app/page.tsx has exactly its 3773c6a line count (8459; B21's page suites resolve its line citations);
+ *  7. app/page.tsx has exactly its pinned line count (8459 at 3773c6a; 8556 after product reliability C; 8618 after E; B21's page suites resolve its line citations);
  *  8. package.json's dependency names are 3773c6a's (no axe, jest-axe, lighthouse or user-event, OD-215); no statement, notice or
  *     in-scope name matches B19-E's purchase wording;
  *  9. the rule module is imported only by this suite and its generator (importClosure);
@@ -74,8 +74,30 @@ const SELF = "app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts";
 /** [B24-D3, 2026-10-10] The out-of-scope `unnamed` count measured by the rule at 3773c6a, before any D3 fix (accessibility.md
  *  section 5). It may only fall; a new unnamed site anywhere fails, even after regeneration (the generator refuses one too). */
 const OUT_OF_SCOPE_UNNAMED_AT_3773C6A = 111;
-/** [B24-D3, 2026-10-10] app/page.tsx's line count at 3773c6a (8459 at f663d71; unchanged since). */
-const PAGE_LINES_AT_3773C6A = 8459;
+/** [B24-D3, 2026-10-10] app/page.tsx's line count at 3773c6a (8459 at f663d71; unchanged since). [Product reliability C, 2026-10-14] 8556:
+ *  the composer submission for every route, the journey strip and its facts, the proposal notes and the proposal persistence; the citation
+ *  tables that name page lines (accessibility.md, B21's composer-and-first-turn.md) were refreshed in the same change, which is what this
+ *  pin exists to force. [Product reliability E, 2026-10-16] 8618: the empty sheet's circuit-entry action, the workspace settings dialog
+ *  (sheet size, AI brain, autonomy, runtime), the chat header's one-line summary, the computed design checks and the 3D tab's
+ *  presentation; the citation tables were refreshed again in the same change. [Product reliability D, 2026-10-16] 8690: the intake of the
+ *  agent's Build-mode generation proposal (`generation_proposal_ready` -> the SAFE receiver -> `offerGenerationProposal`, the same review
+ *  dialog, pin and pending-proposal store as the composer's Generate; no new control); the citation tables were refreshed in the same change.
+ *  [PR-F, 2026-10-17] 8705: the Build sidebar's "Missing parts (N)" line beside the design checks (`missing-parts-open`, named by its
+ *  text; opens the PCB tab's Missing parts list through `missingPartsRequestToken`) and the journey's Resolve parts through the same
+ *  path; the citation tables were refreshed in the same change. [PR-G, 2026-10-17] 8842: the page's intakes of the agent's three new sealed
+ *  artifacts (`stackup_candidate_ready` -> the PCB editor's preview; `draft_request_ready` -> a review-task card whose one action
+ *  `draft-request-open` opens the existing publication request prefilled; `module_contracts_ready` -> a collapsible engineering-note card,
+ *  `module-note-toggle`), the draft-request publication dialog and the answer's model footer; the citation tables were refreshed in the
+ *  same change. [PR-L, 2026-10-17] 9040: the composer's Generate as a durable design task (runbook L.4, increment 4: start or
+ *  attach, the task's milestones and its status card in the activity entry - `GenerationTaskStatus`, whose buttons are named by their text -,
+ *  reattach after a reload or a project switch, the result through the extracted `offerBuildResult` / `offerSchematicProposal` intake, the
+ *  review recorded on the task); the citation tables were refreshed in the same change. [PR-M, 2026-10-18] 9132: the component resolution's
+ *  page intake (runbook M.2.5-M.2.6: `component_resolution_ready` -> the SAFE receiver app/lib/project/component-resolution-events.ts ->
+ *  the review dialog `ComponentResolutionReviewDialog` - Approve / Discard, named by their text - and its receipt notice; the apply through
+ *  the trusted controller; the Prepare PCB preflight and design checks recomputed after a commit; the resolution tools' public progress
+ *  lines; the Missing parts list's "Find a replacement in the library" sending the chat request); the citation tables were refreshed in
+ *  the same change. [PR-L, 2026-10-18] 9156: runbook L.5's chat parity - the v1 in-turn generation intake (offerGenerationProposal and its `generation_proposal_ready` case) removed; the durable task's two cases (`generation_task_ready` -> followChatGenerationTask, the same status card and review intake as a Build start; `generation_task_control_ready` -> a confirm chip with Confirm / Dismiss, named by their text), the base digest by the task's recipe, the task's own busy state (the chat stays usable while a design works) and the chat's stop labelled Stop answer; the citation tables were refreshed in the same change. */
+const PAGE_LINES_AT_3773C6A = 9156;
 /** [B24-D3, 2026-10-10] package.json's dependency names at 3773c6a (OD-215: no new dependency; an axe devDependency needs the owner). */
 const DEPENDENCIES_AT_3773C6A = ["@anthropic-ai/sdk", "@base-ui/react", "@react-three/drei", "@react-three/fiber", "@supabase/ssr", "@supabase/supabase-js", "@xyflow/react", "class-variance-authority", "clsx", "drizzle-orm", "flatbush", "highlight.js", "immer", "jszip", "katex", "lucide-react", "next", "openai", "pixi-viewport", "pixi.js", "polygon-clipping", "postgres", "radix-ui", "react", "react-dom", "react-markdown", "rehype-highlight", "rehype-katex", "remark-gfm", "remark-math", "tailwind-merge", "three", "tw-animate-css"];
 const DEV_DEPENDENCIES_AT_3773C6A = ["@electric-sql/pglite", "@playwright/test", "@tailwindcss/postcss", "@testing-library/dom", "@testing-library/react", "@types/node", "@types/react", "@types/react-dom", "@types/three", "drizzle-kit", "eslint", "eslint-config-next", "fake-indexeddb", "jsdom", "tailwindcss", "tsx", "typescript", "vitest"];
@@ -163,8 +185,12 @@ describe("[B24-D3] the accessible-name rule and its census (D24-32, OD-215)", ()
     expect(census.scopeProblems).toEqual([]);
     // The join is on the key, never on (surface, line, kind, element): B17-A records the attribute's line only, and these lines
     // each hold two buttons of the same kind and element.
-    for (const line of [27, 30]) {
-      const pair = sites.filter((site) => site.surface === "app/components/pcb/AssignmentQueuePanel.tsx" && site.line === line && site.kind === "click" && site.element === "button");
+    const assignmentButtons = sites.filter((site) => site.surface === "app/components/pcb/AssignmentQueuePanel.tsx" && site.kind === "click" && site.element === "button");
+    const byLine = new Map<number, ControlSite[]>();
+    for (const site of assignmentButtons) byLine.set(site.line, [...byLine.get(site.line) ?? [], site]);
+    const sameLinePairs = [...byLine].filter(([, pair]) => pair.length > 1);
+    expect(sameLinePairs, "the AST scan still finds both same-line button pairs").toHaveLength(2);
+    for (const [line, pair] of sameLinePairs) {
       expect(pair, `AssignmentQueuePanel.tsx:${line}`).toHaveLength(2);
       expect(new Set(pair.map((site) => site.key)).size).toBe(2);
       for (const site of pair) expect(census.rows.filter((row) => row.key === site.key), site.key).toHaveLength(1);

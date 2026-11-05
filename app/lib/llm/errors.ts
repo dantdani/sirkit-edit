@@ -162,7 +162,7 @@ export class LLMProviderError extends Error {
     readonly providerStatus?: number,
     readonly providerCode?: string,
     options?: ErrorOptions,
-    readonly providerMessage?: string,
+    readonly providerMessage?: string, readonly retryAfterMs?: number, // [PR-L, 2026-10-17] the provider's Retry-After in ms when it sent one (retryAfterMsOf, after the last line)
   ) {
     super(friendlyMessage(provider, reason), options);
     this.name = "LLMProviderError";
@@ -174,7 +174,7 @@ export function toProviderError(provider: LLMProviderId, error: unknown): LLMPro
   const detail = describeProviderFailure(error);
   return new LLMProviderError(provider, detail.reason, detail.status, detail.providerCode, {
     cause: error instanceof Error ? error : undefined,
-  }, detail.providerMessage);
+  }, detail.providerMessage, retryAfterMsOf(error)); // [PR-L, 2026-10-17] both adapters reach this with the SDK error, whose headers carry Retry-After
 }
 
 /** Truncated provider-authored diagnostic, safe to surface (never contains the key). */
@@ -205,4 +205,40 @@ export function providerErrorResponse(error: unknown, provider: LLMProviderId): 
     },
     { status: 503 },
   );
+}
+
+// [PR-L, 2026-10-17] Runbook L.3 (task-worker-contract.md section 3.4, the provider half of S1): a transient failure is retried after
+// the provider's own Retry-After when it sent one. Appended after the last line on purpose (a function declaration is hoisted), and the
+// two edits above are in place, so no cited line of this file moves (task-complexity-router.md C32 cites :152).
+/** The longest wait a Retry-After may ask for that is believed (a larger or unreadable value is not the provider's schedule). */
+export const RETRY_AFTER_MAX_MS = 24 * 3_600_000;
+/**
+ * The provider's requested wait, in ms, from an SDK error's response headers: `retry-after-ms` (milliseconds, OpenAI) first, then
+ * `retry-after` (delta-seconds or an HTTP date, RFC 9110 section 10.2.3). Both SDKs expose `headers` as a fetch `Headers`; a plain
+ * record is read too. Absent, unreadable, negative or beyond RETRY_AFTER_MAX_MS: undefined (the caller's own backoff applies).
+ */
+export function retryAfterMsOf(error: unknown, now: number = Date.now()): number | undefined {
+  const headers = (error as { headers?: unknown } | null | undefined)?.headers;
+  if (headers === null || typeof headers !== "object") return undefined;
+  const read = (name: string): string | undefined => {
+    try {
+      if (typeof (headers as { get?: unknown }).get === "function") {
+        const value = (headers as { get(key: string): unknown }).get(name);
+        return typeof value === "string" ? value : undefined;
+      }
+      const value = (headers as Record<string, unknown>)[name] ?? (headers as Record<string, unknown>)[name.toUpperCase()];
+      return typeof value === "string" ? value : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const bounded = (ms: number): number | undefined => (Number.isFinite(ms) && ms >= 0 && ms <= RETRY_AFTER_MAX_MS ? Math.ceil(ms) : undefined);
+  const millis = read("retry-after-ms")?.trim();
+  if (millis && /^\d+(?:\.\d+)?$/.test(millis)) return bounded(Number(millis));
+  const after = read("retry-after")?.trim();
+  if (!after) return undefined;
+  if (/^\d+(?:\.\d+)?$/.test(after)) return bounded(Number(after) * 1_000);
+  if (!/^[A-Za-z]{3,9}, /.test(after)) return undefined; // an HTTP date names its day first (IMF-fixdate or the obsolete forms); nothing else is a date
+  const at = Date.parse(after);
+  return Number.isFinite(at) ? bounded(Math.max(0, at - now)) : undefined;
 }

@@ -35,7 +35,7 @@ describe("B17-D — schematic view commands", () => {
   it("fit, zoom and pan/focus by reference designator (case-insensitive), id or sheet point; bounded refusals without a sheet", async () => {
     let current: SchematicProbeSources | null = null;
     const bus = makeBus(() => current);
-    expect(bus.describeCommands().map((c) => c.commandId)).toEqual(["schematic.clear-highlight", "schematic.clear-selection", "schematic.fit-page", "schematic.focus", "schematic.highlight-net", "schematic.observe", "schematic.pan-to", "schematic.read-state", "schematic.reveal-finding", "schematic.select", "schematic.zoom", "schematic.zoom-to"]);
+    expect(bus.describeCommands().map((c) => c.commandId)).toEqual(["schematic.clear-highlight", "schematic.clear-selection", "schematic.fit-page", "schematic.focus", "schematic.highlight-net", "schematic.observe", "schematic.open-sheet", "schematic.pan-to", "schematic.read-state", "schematic.reveal-finding", "schematic.select", "schematic.zoom", "schematic.zoom-to"]); // [PR-J5, 2026-10-23] reviewed pin move: + schematic.open-sheet (runbook J.6.5; its own suite j5-open-sheet)
     expect(await bus.dispatch(e("schematic.fit-page", null, 0, "f-0"))).toMatchObject({ status: "refused", refusal: { code: "VS_UNAVAILABLE", message: "sheet unavailable: no sheet is open" } });
     current = SHEET;
     expect(await bus.dispatch(e("schematic.fit-page", null, 0, "f-1"))).toMatchObject({ status: "settled", state: { camera: { kind: "page", seq: 1 } } });

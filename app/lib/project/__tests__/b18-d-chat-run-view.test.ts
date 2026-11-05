@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { PublicExecutionGrant } from "../../engineering/execution-grant";
-import { LABEL_BEFORE_CHANGE, LABEL_BEFORE_REVIEW, NOTE_PREFIX, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entrySuperseded, initialRunView, isTerminalEntry, projectRunView, reduceRunView, toolLineLabel } from "../chat-run-view";
+import { ANSWER_FOOTER_MODEL_UNRECORDED, ANSWER_FOOTER_PREFIX, LABEL_BEFORE_CHANGE, LABEL_BEFORE_REVIEW, NOTE_PREFIX, answerFooter, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entrySuperseded, initialRunView, isTerminalEntry, projectRunView, reduceRunView, toolLineLabel } from "../chat-run-view"; // [PR-G, 2026-10-17] + the answer footer
 
 const run = (events: Array<Record<string, unknown>>) => projectRunView(events.reduce(reduceRunView, initialRunView()));
 const text = (value: string, phase?: "interim" | "final") => ({ type: "text_delta", text: value, ...(phase ? { phase } : {}) });
@@ -124,5 +124,60 @@ describe("B18-D I3 — one execution entry per grant", () => {
     expect(entryCancelled(committed).state).toBe("committed");
     expect(isTerminalEntry(committed)).toBe(true);
     expect(entryRecovery(entry, "adopted-and-settled").recovery).toMatch(/^Recovered: /);
+  });
+});
+
+// [PR-G, 2026-10-17] the answer's model label (directive 4: never describe a fallback as Astra-generated) - appended so the cases above keep their lines
+describe("[PR-G] the answer footer: answered by <provider> · <model>, from the run's own events, with the fallback disclosure", () => {
+  const started = (provider = "openai") => ({ type: "run_started", runId: "run-1", provider });
+  const completed = (model: string) => ({ type: "run_completed", runId: "run-1", finalText: "x", steps: 1, toolCalls: 0, usage: { inputTokens: 1, outputTokens: 1 }, model });
+  const CONFIGURED = { provider: "openai", model: "gpt-5" };
+  const fold = (events: Array<Record<string, unknown>>) => events.reduce(reduceRunView, initialRunView());
+
+  it("names the run's own provider and model once the run ended with an answer; nothing is claimed while the run is open or without an answer; the label never enters the history", () => {
+    const open = fold([started(), text("The board has two layers.", "final")]);
+    expect(projectRunView(open).footer).toBeNull();
+    expect(answerFooter(open, CONFIGURED)).toBeNull();
+    const ended = fold([started(), text("The board has two layers.", "final"), completed("gpt-5")]);
+    expect(projectRunView(ended).footer).toBe(`${ANSWER_FOOTER_PREFIX}openai · gpt-5`);
+    expect(answerFooter(ended, CONFIGURED)).toBe(`${ANSWER_FOOTER_PREFIX}openai · gpt-5`); // the configured source agrees: no disclosure
+    expect(projectRunView(ended).answer).toBe("The board has two layers.");
+    expect(projectRunView(ended).historyText).toBe("The board has two layers.");
+    expect(projectRunView(fold([started(), completed("gpt-5")])).footer).toBeNull(); // no answer, no claim
+    expect(run([text("Done.", "final"), { type: "run_completed" }]).footer).toBe(`${ANSWER_FOOTER_PREFIX}an unrecorded provider · ${ANSWER_FOOTER_MODEL_UNRECORDED}`); // a stream without the events says so, never a configured name
+    expect(initialRunView()).toMatchObject({ provider: null, model: null, fallbackNotices: 0 });
+  });
+
+  it("a replayed or refused run records no model and the footer says so; forged or oversized values are bounded, never trusted as a name", () => {
+    expect(projectRunView(fold([started(), text("Replayed answer.", "final"), completed("")])).footer).toBe(`${ANSWER_FOOTER_PREFIX}openai · ${ANSWER_FOOTER_MODEL_UNRECORDED}`);
+    const forged = fold([{ type: "run_started", provider: 7 }, text("a", "final"), { type: "run_completed", model: { name: "x" } }]);
+    expect(forged).toMatchObject({ provider: null, model: null });
+    const oversized = fold([{ type: "run_started", provider: "p".repeat(100) }, text("a", "final"), completed("m".repeat(500))]);
+    expect(oversized.provider).toHaveLength(40);
+    expect(oversized.model).toHaveLength(120);
+    // an unknown event still changes nothing (the reducer's default is unchanged for everything but run_started)
+    expect(reduceRunView(initialRunView(), { type: "specialist_spawned", provider: "anthropic" })).toEqual(initialRunView());
+  });
+
+  it("discloses a fallback: the run's provider or model differs from the configured one, and each specialist a compatible_fallback notice reported; without the configured source only the run's own facts are stated", () => {
+    const otherModel = fold([started(), text("Answer.", "final"), completed("gpt-5-mini")]);
+    expect(answerFooter(otherModel, CONFIGURED)).toBe(`${ANSWER_FOOTER_PREFIX}openai · gpt-5-mini — a fallback answered, not the configured openai · gpt-5`);
+    expect(projectRunView(otherModel).footer).toBe(`${ANSWER_FOOTER_PREFIX}openai · gpt-5-mini`); // no configured source: no comparison, no invention
+    expect(answerFooter(otherModel, null)).toBe(`${ANSWER_FOOTER_PREFIX}openai · gpt-5-mini`);
+    const otherProvider = fold([started("anthropic"), text("Answer.", "final"), completed("claude-x")]);
+    expect(answerFooter(otherProvider, CONFIGURED)).toBe(`${ANSWER_FOOTER_PREFIX}anthropic · claude-x — a fallback answered, not the configured openai · gpt-5`);
+    expect(answerFooter(otherProvider, { provider: "openai", model: null })).toBe(`${ANSWER_FOOTER_PREFIX}anthropic · claude-x — a fallback answered, not the configured openai`);
+    // the configured model is unknown (the runtime did not load): the model is not compared, the provider still is
+    expect(answerFooter(otherModel, { provider: "openai", model: null })).toBe(`${ANSWER_FOOTER_PREFIX}openai · gpt-5-mini`);
+    const degraded = (reason: string) => ({ type: "degraded", runId: "run-1", reason, taskId: "t1", role: "schematic", provider: "anthropic", model: "claude-x", message: "Orchestration: specialist schematic runs on anthropic (claude-x) instead of openai (gpt-5) - a compatible fallback, degraded and never silent." });
+    const withFallbacks = fold([started(), degraded("compatible_fallback"), degraded("provider_paused"), degraded("compatible_fallback"), text("Answer.", "final"), completed("gpt-5")]);
+    expect(withFallbacks.fallbackNotices).toBe(2);
+    expect(withFallbacks.specialistsDegraded).toBe(3);
+    expect(answerFooter(withFallbacks, CONFIGURED)).toBe(`${ANSWER_FOOTER_PREFIX}openai · gpt-5 — 2 specialist results came from a compatible fallback, not the configured model (the run log above names each)`);
+    expect(projectRunView(withFallbacks).footer).toBe(`${ANSWER_FOOTER_PREFIX}openai · gpt-5 — 2 specialist results came from a compatible fallback, not the configured model (the run log above names each)`); // the run's own notices need no configured source
+    expect(answerFooter(fold([started(), degraded("compatible_fallback"), text("Answer.", "final"), completed("gpt-5-mini")]), CONFIGURED)).toBe(`${ANSWER_FOOTER_PREFIX}openai · gpt-5-mini — a fallback answered, not the configured openai · gpt-5; 1 specialist result came from a compatible fallback, not the configured model (the run log above names each)`);
+    // a failed run that answered still names what answered; the label and the failure stay separate
+    const failed = fold([started(), text("Partial.", "final"), { type: "run_failed", reason: "x", message: "The provider stopped." }]);
+    expect(projectRunView(failed)).toMatchObject({ footer: `${ANSWER_FOOTER_PREFIX}openai · ${ANSWER_FOOTER_MODEL_UNRECORDED}`, failure: "The provider stopped." });
   });
 });

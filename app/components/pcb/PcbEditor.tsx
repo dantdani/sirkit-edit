@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
-import { CircuitBoard, Loader2, ShieldCheck, X } from "lucide-react";
+import { Box, CircuitBoard, Loader2, ShieldCheck, X } from "lucide-react";
 import type { SchematicState } from "@/lib/schematic-types";
 import type { PcbBoard, BoardOutline, RoutingPreferences } from "@/app/lib/pcb/types";
 import { LAYERS, type LayerId } from "@/app/lib/pcb/layers";
@@ -140,8 +140,11 @@ import { useManufacturingWorkflow } from "./hooks/useManufacturingWorkflow"; // 
 import { atomicBindRequestBody, reviewableComponentOf, useComponentReview, type ReviewableComponent } from "./hooks/useComponentReview"; // [B16-C.2]; [B19-E E5 review] the shared request bodies
 import { ComponentReviewPanel } from "./ComponentReviewPanel"; // [B16-C.2]
 import { usePcb3dViewSession } from "./hooks/usePcb3dViewSession"; // [B17-C]
-import { usePcbViewSession } from "./hooks/usePcbViewSession"; // [B17-D]
+import { usePcbViewSession } from "./hooks/usePcbViewSession"; import { firstToast, showToast, useToastDismissal } from "./hooks/useToastDismissal"; // [B17-D]; [PR-B24 multitab, 2026-10-22] the toast's import rides this line, so no cited line below it moves
 import { clearNets, LayoutCandidateStore, netsOfSelection, verifyLayoutCandidate, type LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-E]
+import type { StackupCandidate } from "@/app/lib/pcb/candidates/stackup-candidate"; // [PR-G, 2026-10-17]
+import { verifyStackupCandidateAgainstBoard } from "@/app/lib/project/stackup-candidate-events"; // [PR-G, 2026-10-17] the one check: intact, this board's revision, unexpired
+import { StackupCandidatePanel } from "./StackupCandidatePanel"; // [PR-G, 2026-10-17]
 import type { ViewSessionBridge } from "@/app/lib/agent/view-session-bridge"; // [B17-F]
 import { useViewSessionBridge } from "@/app/components/view-session/useViewSessionBridge"; // [B17-F]
 import { pcbHistoryMark, pcbHistoryStep, type ProjectOperationTimeline, type ProjectStoreHead } from "@/app/lib/project/operation-timeline"; // [B17-E]; [B18-D review 2] the recording step
@@ -154,8 +157,14 @@ import { RoutingRulesPanel } from "./RoutingRulesPanel";
 import { AutorouteSetup } from "./AutorouteSetup";
 import { PlacementSetup } from "./PlacementSetup";
 import { useDimensionTool } from "./hooks/useDimensionTool"; // B08
-import { stackupProfile } from "@/app/lib/pcb/stackup";
+import { stackupProfile, type StackupProfileId } from "@/app/lib/pcb/stackup"; // [PR-G] + the profile id type for applyStackupProfile
 import { AssignmentQueuePanel } from "./AssignmentQueuePanel";
+import { PcbSyncReadinessPanel } from "./PcbSyncReadinessPanel"; // [PR-C F-08] a blocked preflight shown per blocker (message + refs), not as one 6 s toast
+import type { JourneyPcbFacts } from "@/app/lib/workflow/journey"; // [PR-C] the PCB facts reported to the page's journey model
+import { BOARD_REBIND_REFUSAL, boardBehindSchematicNotice, boardSchematicDrift, manufacturingGateRefusal } from "@/app/lib/pcb-sync/schematic-drift"; /* [PR-L6, 2026-10-19] M.4 / M.5-7: the board behind the schematic, derived from facts (in place: no line moves) */ import { listUnresolvedInstances, unresolvedInstancesRefusal, type UnresolvedInstance } from "@/app/lib/pcb-sync/unresolved-instances"; // [PR-C F-08] the instances named BEFORE any server call
+import { MissingPartsList, type ReplacementRequestInstance } from "./MissingPartsList"; // [PR-F fA] the refusal rows as a workflow item: checklist + next actions over the existing routes; [PR-M, 2026-10-18] + the replacement entry point's instances
+import type { ProjectSelectorScope } from "@/app/lib/project/project-selector"; // [PR-F fA] the scope the list's distributor search and publication request act in
+import { missingPartsWords } from "@/app/lib/parts/missing-facts"; // [PR-F fA]
 
 // Stage 15: 3D preview is client-only and heavy (three.js) — lazy chunk.
 const PcbPreview3D = dynamic(
@@ -189,6 +198,13 @@ type EditorAction =
   // [B17-D] explicit-value forms the view-session bus applies (rebase-safe: the target value is in the action).
   | { type: "set-layer-visible"; layer: LayerId; visible: boolean }
   | { type: "set-grid"; visible: boolean };
+
+// [PR-C F-08] the workflow-stopping refusal of a Schematic → PCB run that must outlive the 6 s toast: either the instances the
+// run refused BEFORE any server call (each with the missing fact and its review path) or the blocked preflight (every blocker
+// with its message and refs). Persists until the user dismisses it or the next Schematic → PCB starts.
+type SyncBlockers =
+  | { kind: "unresolved_instances"; items: UnresolvedInstance[] }
+  | { kind: "preflight"; result: PcbSyncPreflightResult };
 
 const DEFAULT_VISIBLE: Record<LayerId, boolean> = Object.fromEntries(
   LAYERS.map((l) => [l.id, l.defaultVisible]),
@@ -315,11 +331,13 @@ export default function PcbEditor({
   viewSessionBridge,
   layoutCandidateIntake,
   onLayoutCandidateSettled,
+  stackupCandidateIntake, onStackupCandidateSettled, // [PR-G, 2026-10-17]
   executionGrantIntake,
   onExecutionGrantSettled,
   onExecutionGrantProgress,
   onExecutionGrantAttemptRefused,
   onExecutionRecovery, restoredExecutionGrants, pageProject,
+  onJourneyFacts, syncRequestToken = 0, presentation = "editor", onOpenPcbTab, missingPartsRequestToken = 0, onFindReplacement, // [PR-M, 2026-10-18]
 }: {
   schematic: SchematicState;
   /** R06: false while the editor is mounted but hidden (another workspace
@@ -356,6 +374,12 @@ export default function PcbEditor({
    *  a stale candidate is refused with a visible reason. Apply stays the human's explicit action. */
   layoutCandidateIntake?: { candidate: LayoutCandidate; originRunId: string | null } | null;
   onLayoutCandidateSettled?: () => void;
+  /** [PR-G, 2026-10-17] the agent's stackup / via-policy recommendation (sirkit.stackup-candidate.v1) after the page's SAFE receiver and
+   *  live-revision check. This editor re-verifies it (digest, base revision, expiry) and shows it as a PREVIEW; Accept runs the SAME
+   *  stackup change as the toolbar's Stackup selector (`applyStackupProfile`, one canonical pcb.board-geometry transaction) after
+   *  re-checking the revision; Discard drops it. The candidate never writes the board. */
+  stackupCandidateIntake?: { candidate: StackupCandidate; originRunId: string | null } | null;
+  onStackupCandidateSettled?: () => void;
   /** [B18-B] a server-minted execution grant narrowed by the page's SAFE receiver. Display grants nothing; the
    *  granted-execution ritual (tender = one-shot server burn, then ONE canonical transaction) lives behind this
    *  editor's controller — never the chat page or the agent layer. */
@@ -374,6 +398,21 @@ export default function PcbEditor({
   currentInterlock?: () => ProjectCommitInterlock | null;
   /** [B17-E] the page-owned project operation timeline this editor records its canonical history operations on. */
   operationTimeline?: ProjectOperationTimeline;
+  /** [PR-C] the facts the page's journey model derives the PCB stages from (display only; never authority). */
+  onJourneyFacts?: (facts: JourneyPcbFacts) => void;
+  /** [PR-C] bumped by the page's "Prepare PCB" action after a schematic approval: starts the SAME Schematic → PCB
+   *  preparation the button starts (bindings → publication → preflight) while no board exists; applying stays explicit. */
+  syncRequestToken?: number;
+  /** [PR-E] "3d": the workspace's 3D tab — this editor renders its ONE three.js preview full-size from its own board and
+   *  pcb3d controller (the side sheet is not shown at the same time); without a board, an accurate unavailable state. */
+  presentation?: "editor" | "3d";
+  /** [PR-E] the 3D tab's way to the PCB tab when there is no board yet. */
+  onOpenPcbTab?: () => void;
+  /** [PR-F fA] bumped by the page's "Missing parts (N)" line and the journey's "Resolve parts": shows the missing-parts list
+   *  (the SAME rows a Schematic → PCB run would refuse, computed from the schematic alone - no server call, nothing bound). */
+  missingPartsRequestToken?: number;
+  /** [PR-M, 2026-10-18] the Missing parts list's "Find a replacement in the library": the page sends the agent request (absent: not offered). */
+  onFindReplacement?: (instances: ReplacementRequestInstance[]) => void;
 }) {
   // Lint note (B08.3): this editor is an imperative orchestrator — canvas
   // scene, gesture tool, and history/session refs are deliberately mutated
@@ -429,9 +468,15 @@ export default function PcbEditor({
   // repair/verification context, or KiCad export. `liveNetlist` (derived from
   // the current schematic) is the only netlist source; when the schematic
   // cannot produce one, the truthful value is null ("unavailable").
-  const [toast, setToast] = useState<string | null>(() => init.diagnostics[0]?.summary ?? null);
+  const [shownToast, setToast] = useReducer(showToast, init.diagnostics[0]?.summary ?? null, firstToast); const toast = shownToast.text; // [PR-B24 multitab, 2026-10-22] numbered shows: an earlier show's dismissal never clears a later one (CI 39795211563)
   const [pendingPreflight, setPendingPreflight] = useState<PcbSyncPreflightResult | null>(null);
-  const [authoritativeRecord, setAuthoritativeRecord] = useState<PcbSyncBoardRecord | null>(null);
+  // [PR-C F-08] the persistent trace of a refused/blocked sync (see SyncBlockers); the toast is never its only trace.
+  const [syncBlockers, setSyncBlockers] = useState<SyncBlockers | null>(null);
+  // [PR-M, 2026-10-18] the Missing parts list follows the schematic: the shown refusal rows are recomputed by the same pure listing on
+  // every schematic change (a reviewed component resolution, an undo) - a resolved instance leaves the list and an empty list is not
+  // shown. Only the unresolved-instances list is derived; a blocked preflight's blockers are a later stage's facts and stay as reported.
+  const shownSyncBlockers = useMemo(() => syncBlockersForSchematic(syncBlockers, schematic), [syncBlockers, schematic]);
+  const [authoritativeRecord, setAuthoritativeRecord] = useState<PcbSyncBoardRecord | null>(null); const schematicDrift = useMemo(() => (init.demo ? null : boardSchematicDrift(schematic, authoritativeRecord?.board ?? null)), [init.demo, schematic, authoritativeRecord]); const boardBehindNotice = boardBehindSchematicNotice(schematicDrift); // [PR-L6, 2026-10-19] OD-253 item 8: the DURABLE board vs the schematic as they stand - recomputed on every Undo / Redo / reload / Prepare PCB, never a sticky flag
   const authorityRef = useRef<PcbSyncBoardRecord | null>(null);
   // [B16-C.1] the board this session works on: the lineage ROOT (`board:<project>`) until the server's lineage says a
   // derived revision is current — then the editor follows it (a fresh browser learns this from the board load).
@@ -707,11 +752,11 @@ export default function PcbEditor({
   const handleSceneReady = useCallback((s: PcbScene | null) => setScene(s), []);
 
   // ── Toast auto-dismiss ─────────────────────────────────────────────────────
-  useEffect(() => {
-    if (toast === null) return;
-    const t = setTimeout(() => setToast(null), 6000);
-    return () => clearTimeout(t);
-  }, [toast]);
+  useToastDismissal(shownToast, setToast); // [PR-B24 multitab, 2026-10-22] 6 s per show, cleared only for the show it was armed for
+  // The effect that stood here armed one 6 s timer per text and cleared it only in React's passive effects, so an earlier toast's
+  // timer that came due between a newer toast's commit and that cleanup erased the newer one (CI 39795211563: the stale tab's
+  // "Apply failed: PS_PLAN_DIGEST_OR_LIFECYCLE_MISMATCH" was on screen under 0.4 s). These lines replace that effect line for
+  // line, so no cited line below moves.
 
   // ── Dirty badge: netlist hash vs last synced hash ──────────────────────────
   // Re-hash when async part data lands (getCachedPart triggers loads).
@@ -814,7 +859,7 @@ export default function PcbEditor({
     const s = schematicRef.current;
     void checkpointStore().add({
       projectId: scope.projectId, label, at: Date.now(),
-      schematic: { components: s.components, wires: s.wires, kicadComponents: s.kicadComponents ?? [], netLabels: s.netLabels ?? [] },
+      schematic: { components: s.components, wires: s.wires, kicadComponents: s.kicadComponents ?? [], netLabels: s.netLabels ?? [], ...(s.pageSize ? { pageSize: s.pageSize } : {}), ...(s.sheets !== undefined ? { sheets: s.sheets } : {}) }, // [PR-J3 integration, 2026-10-23] review J3-PAGE-1: the twelfth site that rebuilds the schematic fields carries the sheet tree (and the page size) iff present - a flat copy of an organised project stored sheet-stamped entities without their tree, could never be restored (the session refuses it) and made the project file exported afterwards un-importable
       board,
       boardBase: { revision: authorityRef.current?.revision ?? null, digest: authorityRef.current?.digest ?? null },
       workflowView: "pcb",
@@ -836,8 +881,26 @@ export default function PcbEditor({
     }
     placementChoiceRef.current = { centerNewParts: placement?.centerNewParts !== false && placement?.preserveAbsoluteCoordinates !== true };
     lastSyncPlacementRef.current = placement; // [B16-C.3] a rebase re-runs exactly this request
-    if (!client || !syncIdentity) return;
+    // [PR-C F-08] never a silent return: the client is null exactly when the durable scope is (a `?pcbdemo=` board, or the
+    // project scope could not be established at mount) — say which, scoped to what the user can do about it.
+    if (!client || !syncIdentity) {
+      setToast(init.demo
+        ? "Schematic → PCB needs a saved project: demo boards have no durable scope."
+        : "Schematic → PCB could not start: the project scope is not available — reload the page or open the project again.");
+      return;
+    }
     const s = schematicRef.current;
+    // [PR-C F-08] a later sync retires the previous refusal; the run below replaces it with its own outcome when it has one.
+    setSyncBlockers(null);
+    // [PR-C F-08] fail closed BEFORE any server call: an instance without a published exact revision (or without its installed
+    // symbol asset, or a Theory symbol with no physical package) cannot reach the board, so nothing is bound and nothing is
+    // published for it — each one is named with the missing fact and its review path, and the list outlives the toast.
+    const unresolved = listUnresolvedInstances(s);
+    if (unresolved.length > 0) {
+      setSyncBlockers({ kind: "unresolved_instances", items: unresolved });
+      setToast(unresolvedInstancesRefusal(unresolved));
+      return;
+    }
     // Every instance carrying published atomic authority gets its Stage 1
     // physical binding ensured through the ordinary lifecycle
     // (create → select → revalidate → approve) under this user's identity
@@ -901,7 +964,7 @@ export default function PcbEditor({
           if (detail?.code === "PB_ATOMIC_SYMBOL_MISMATCH_CONFLICT") {
             return { ok: false, failure: `${k.refDes} (the placed symbol differs from the revision's symbol — replace the component before binding)` };
           }
-          return { ok: false, failure: `${k.refDes} (${detail?.code ?? res.status})` };
+          return { ok: false, failure: detail?.code === "PB_ACTIVE_SELECTION_CONFLICT" ? `${k.refDes} (${BOARD_REBIND_REFUSAL})` : `${k.refDes} (${detail?.code ?? res.status})` }; // [PR-L6 integration, 2026-10-19] BI-2: the earlier binding still holds - name the way out, never the bare code
         } catch {
           return { ok: false, failure: k.refDes };
         }
@@ -937,6 +1000,8 @@ export default function PcbEditor({
         setLastSyncHash(syncHash);
         setPendingPreflight(preflighted.plan ? preflighted : null);
         setPlacementWarning(null);
+        // [PR-C F-08] a blocked preflight stays visible per blocker (code, message, refs) after the toast is gone.
+        setSyncBlockers(preflighted.blockers.length > 0 ? { kind: "preflight", result: preflighted } : null);
         setToast(preflighted.status === "ready_to_apply" && preflighted.plan ? "Preflight ready. Review and explicitly apply the durable plan." : preflighted.status === "ready_no_changes" ? "PCB is already synchronized." : `Sync blocked: ${preflighted.blockers.map((item) => `${item.code} ${item.displayRefs.join(",")}`).join("; ") || preflighted.status}`);
         setSyncDialogOpen(false);
       },
@@ -955,21 +1020,42 @@ export default function PcbEditor({
     // stale-before-any-server-call run says so; every other outcome already spoke.
     if (run.status === "refused-busy") setToast("Schematic → PCB is already running — wait for it to finish.");
     else if (run.status === "stale" && run.stage === "none") setToast("Schematic → PCB was not started: the board changed while it was starting. Try again.");
-  }, [client, syncIdentity, gateSchematicSync, settleStaleServerCommit, ownedOps, pcbLifecycle, componentReview]);
+  }, [client, syncIdentity, init.demo, gateSchematicSync, settleStaleServerCommit, ownedOps, pcbLifecycle, componentReview]);
 
   const handleApplySync = useCallback(async () => {
-    const plan = pendingPreflight?.plan; if (!client || !syncIdentity || !plan) return;
+    const plan = pendingPreflight?.plan;
+    // [PR-C F-08] never a silent return: the Apply buttons render only with a plan, so the reachable case is the absent durable
+    // scope (a `?pcbdemo=` board, or a project scope that could not be established at mount) — the same sentences as Sync.
+    if (!client || !syncIdentity) {
+      setToast(init.demo
+        ? "Schematic → PCB needs a saved project: demo boards have no durable scope."
+        : "Schematic → PCB could not start: the project scope is not available — reload the page or open the project again.");
+      return;
+    }
+    if (!plan) { setToast("Apply could not start: no preflighted plan is pending — run Schematic → PCB first."); return; }
+    // [PR-C F-08 (e)] set by `commit` when the server refused the plan as stale; consumed by the owned-gated `commitFailed`.
+    let stalePlan = false;
     // B08.3 — request-owned apply: the workflow captures the lifecycle
     // scope at submission, settles a stale server commit truthfully (the
     // server may have committed irreversibly — never called canceled or
     // unchanged), verifies the reloaded authority against the EXACT
     // committed revision+digest+identity, and releases only its own busy
     // record (a zombie finalizer cannot clear a newer request's state).
-    await runVerifiedServerAdoption(ownedOps, "sync-apply", pcbLifecycle, {
+    const run = await runVerifiedServerAdoption(ownedOps, "sync-apply", pcbLifecycle, {
       commit: async () => {
         const result = await client.apply({ requestSchemaVersion: PCB_SYNC_APPLY_REQUEST_VERSION, requestId: `apply:${plan.planId}`, designId: syncIdentity.designId, boardId: syncIdentity.boardId, planId: plan.planId, planDigest: plan.planDigest, expectedPlanLifecycle: "applicable", confirmation: "apply_exact_plan", idempotencyKey: `apply:${plan.planId}`, warningAcknowledgements: plan.prerequisites.filter((item) => !item.blocking).map((item) => item.code), requestedAt: new Date().toISOString() });
-        if (!result.ok || !["applied", "idempotent_replay"].includes(result.value.status)) {
-          return { committed: false, message: `Apply failed: ${result.ok ? result.value.status : `${result.code}${result.detail ? ` — ${result.detail}` : ""}`}` };
+        if (!result.ok) {
+          // [PR-C F-08 (e)] the handler names a stale plan (`code: PS_PLAN_STALE`, or `PS_APPLY_<STATUS>` for a `blocked_stale`
+          // answered 409): the real reason reaches the user and the plan is retired (commitFailed) instead of a bare
+          // PS_API_INVALID_RESPONSE beside a still-live Apply button. Every other failure keeps its code and detail.
+          if (result.code === "PS_PLAN_STALE" || result.kind === "stale") {
+            stalePlan = true;
+            return { committed: false, message: "Apply refused: the plan is stale — the board or schematic changed since preflight. Run Schematic → PCB again." };
+          }
+          return { committed: false, message: `Apply failed: ${result.code}${result.detail ? ` — ${result.detail}` : ""}` };
+        }
+        if (!["applied", "idempotent_replay"].includes(result.value.status)) {
+          return { committed: false, message: `Apply failed: ${result.value.status}` };
         }
         return { committed: true, value: result.value, expected: { revision: result.value.committedBoardRevision ?? "", digest: result.value.committedBoardDigest ?? "" } };
       },
@@ -981,7 +1067,12 @@ export default function PcbEditor({
       recordIdentity: (record) => ({ tenantId: record.tenantId, projectId: record.projectId, branchId: record.branchId, boardId: record.boardId }),
       staleDescription: "The durable PCB plan WAS applied on the server, but this board was replaced locally while it ran. The local board was kept — re-open sync to reconcile with the server authority.",
       verifyFailedDescription: "The durable PCB plan WAS applied on the server, but the authoritative board could not be verified locally. The local board was kept — reload the server authority to reconcile",
-      commitFailed: setToast,
+      // [PR-C F-08 (e)] owned-gated: a stale plan is retired here so the Apply buttons disappear (a Schematic → PCB re-run makes a
+      // fresh plan); every other refusal keeps the plan and shows its text.
+      commitFailed: (message) => {
+        if (stalePlan) setPendingPreflight(null);
+        setToast(message);
+      },
       adopt: (record) => {
         if (!saveAuthoritativeBoardCache(record)) { setToast("Authoritative board committed, but its matching browser cache could not be stored."); }
         setAuthoritativeRecord(record);
@@ -1001,7 +1092,9 @@ export default function PcbEditor({
       },
       settle: settleStaleServerCommit,
     });
-  }, [client, pendingPreflight, syncIdentity, boardCheckpoint, adoptBoardLifecycle, settleStaleServerCommit, ownedOps, pcbLifecycle, bumpManufacturingTruth]);
+    // [PR-C F-08] a click must never do nothing silently: the registry's single-flight refusal says so (every other outcome spoke).
+    if (run.status === "refused-busy") setToast("Apply is already running — wait for it to finish.");
+  }, [client, pendingPreflight, syncIdentity, init.demo, boardCheckpoint, adoptBoardLifecycle, settleStaleServerCommit, ownedOps, pcbLifecycle, bumpManufacturingTruth]);
 
   // ── History + move tool lifecycle ──────────────────────────────────────────
   // Boards arriving from OUTSIDE the history stack (initial load, demo, sync)
@@ -1248,7 +1341,7 @@ export default function PcbEditor({
 
   const handleQualify = useCallback(async () => {
     if (!syncIdentity || !client) return;
-    if (!authorityRef.current) { setToast("Qualification needs an applied durable board — run Schematic → PCB and apply the sync plan first."); return; }
+    if (!authorityRef.current) { setToast("Qualification needs an applied durable board — run Schematic → PCB and apply the sync plan first."); return; } const driftRefusal = manufacturingGateRefusal("qualify", schematicDrift); if (driftRefusal) { setToast(driftRefusal); return; } // [PR-L6, 2026-10-19] refused in the page while the board is behind the schematic
     // B08.3 — VERIFIED qualification adoption: the server's response must
     // carry a non-empty boardRevision AND boardDigest, and the reloaded
     // authoritative record must match BOTH (plus the captured tenant/
@@ -1292,7 +1385,7 @@ export default function PcbEditor({
       },
       settle: settleStaleServerCommit,
     });
-  }, [syncIdentity, client, scopeHeaders, boardCheckpoint, adoptBoardLifecycle, settleStaleServerCommit, ownedOps, pcbLifecycle, bumpManufacturingTruth]);
+  }, [syncIdentity, client, scopeHeaders, boardCheckpoint, adoptBoardLifecycle, settleStaleServerCommit, ownedOps, pcbLifecycle, bumpManufacturingTruth, schematicDrift]);
 
   /**
    * MFG01 verified release: the server reloads its OWN durable authority,
@@ -1312,10 +1405,10 @@ export default function PcbEditor({
     if (manufacturing.hydration.status !== "loaded") return { ok: false, message: "Release is unavailable until the durable manufacturing truth has been read for this board." };
     if (!manufacturing.canRequestRelease) {
       return { ok: false, message: manufacturing.truth?.authority ? "Release blocked: the qualification authority is not current for this board. Run “Qualify & route” again first." : "Release blocked: no manufacturing authority exists yet. Run “Qualify & route” first." };
-    }
+    } const driftRefusal = manufacturingGateRefusal("release", schematicDrift); if (driftRefusal) return { ok: false, message: driftRefusal }; // [PR-L6, 2026-10-19] refused in the page while the board is behind the schematic
     manufacturing.requestRelease();
     return { ok: false, message: "Release requires a separate administrator authorization — review the sealed authority in the manufacturing panel and authorize it there." };
-  }, [syncIdentity, releasing, manufacturing]);
+  }, [syncIdentity, releasing, manufacturing, schematicDrift]);
 
   const handleRelease = useCallback(async () => {
     const result = await performVerifiedRelease();
@@ -1392,15 +1485,16 @@ export default function PcbEditor({
   // ── [B15.3 §I] the PCB proposal review + human-gated apply ─────────────────
   const pendingPcbProposal = pcbProposalIntake?.proposal ?? null;
   const [pcbProposalBusy, setPcbProposalBusy] = useState(false);
-  const [pcbProposalTick, setPcbProposalTick] = useState(0);
+  const [pcbProposalNow, setPcbProposalNow] = useState(() => Date.now());
   const pcbJournalStoreRef = useRef<IndexedDbApprovedPcbMutationJournalStore | null>(null);
   if (pcbJournalStoreRef.current === null) pcbJournalStoreRef.current = new IndexedDbApprovedPcbMutationJournalStore();
   // Expiry is time-based: tick while a proposal is open so the disable
   // reason stays current without a manual refresh.
   useEffect(() => {
     if (!pendingPcbProposal) return;
-    const timer = setInterval(() => setPcbProposalTick((tick) => tick + 1), 5_000);
-    return () => clearInterval(timer);
+    const firstTick = setTimeout(() => setPcbProposalNow(Date.now()), 0);
+    const timer = setInterval(() => setPcbProposalNow(Date.now()), 5_000);
+    return () => { clearTimeout(firstTick); clearInterval(timer); };
   }, [pendingPcbProposal]);
   // Board lifecycle adoption / retirement while a proposal is pending
   // RETIRES it (and any unused capability dies with its controller call).
@@ -1415,11 +1509,10 @@ export default function PcbEditor({
    *  condition re-verifies against the LIVE editor state — and the apply
    *  boundary re-verifies all of it AGAIN at the serialized position. */
   const pcbProposalDisableReason = useMemo((): string | null => {
-    void pcbProposalTick; // expiry re-evaluation tick
     if (!pendingPcbProposal) return null;
     const verification = verifySealedPcbEditProposalIntegrity(pendingPcbProposal);
     if (!verification.ok) return `the proposal failed integrity verification (${verification.code}).`;
-    if (isPcbEditProposalExpired(pendingPcbProposal, Date.now())) return "the proposal has expired — request a fresh proposal.";
+    if (isPcbEditProposalExpired(pendingPcbProposal, pcbProposalNow)) return "the proposal has expired — request a fresh proposal.";
     if (init.demo || !syncIdentity) return "demo boards have no durable project scope; proposals cannot be applied here.";
     if (pendingPcbProposal.scope.tenantId !== syncIdentity.tenantId
       || pendingPcbProposal.scope.projectId !== syncIdentity.projectId
@@ -1447,7 +1540,7 @@ export default function PcbEditor({
     }
     if (pcbProposalBusy) return "an apply is already in progress.";
     return null;
-  }, [pendingPcbProposal, pcbProposalTick, init.demo, syncIdentity, currentInterlock, editorRuntime, state.board, drc.activePresetId, pcbProposalBusy]);
+  }, [pendingPcbProposal, pcbProposalNow, init.demo, syncIdentity, currentInterlock, editorRuntime, state.board, drc.activePresetId, pcbProposalBusy]);
 
   const applyPcbProposal = useCallback(async () => {
     const proposal = pendingPcbProposal;
@@ -1859,6 +1952,73 @@ export default function PcbEditor({
     onLayoutCandidateSettled?.();
   }, [layoutCandidateIntake, layoutCandidates, lifecycleGeneration, onLayoutCandidateSettled]);
   useEffect(() => { if (state.board) layoutCandidates.retireStale(state.board, lifecycleGeneration); }, [layoutCandidates, state.board, lifecycleGeneration]);
+
+  // [PR-G, 2026-10-17] The ONE stackup change path (OD-249): the toolbar's Stackup selector and the agent recommendation's Accept both
+  // commit through it - one canonical pcb.board-geometry transaction (board.stackup, board.stackupConfig = stackupProfile(...), the
+  // recommendation's plane nets on the profile's plane layers, reconcileStackupPlaneZones in the SAME transaction; one undo entry).
+  // B08 - no history means no canonical session: refuse truthfully (the former set-stackup dispatch was a silent, non-undoable write).
+  function applyStackupProfile(profileId: StackupProfileId, planes: ReadonlyArray<{ layer: string; net: { id: number } }> = [], label = "Set stackup"): Promise<{ ok: boolean }> {
+    const h = editorRuntime.getHistory();
+    if (!h) { setToast("The board is still loading — the stackup was not changed. Retry in a moment."); return Promise.resolve({ ok: false }); }
+    return commitPcbCandidate(h, {
+      commandId: "pcb.board-geometry",
+      label,
+      buildCandidate: (board) => produce(board, (d) => {
+        const config = stackupProfile(profileId);
+        for (const layer of config.copperLayers) { const plane = planes.find((entry) => entry.layer === layer.id); if (plane && layer.role === "plane") layer.planeNetId = plane.net.id; }
+        d.stackup = config.copperLayers.length === 4 ? 4 : 2;
+        d.stackupConfig = config;
+        reconcileStackupPlaneZones(d);
+      }),
+    }).then((result) => { if (!result.ok) setToast(result.message); return { ok: result.ok }; });
+  }
+  // [PR-G, 2026-10-17] the agent's stackup recommendation enters as a PREVIEW after the re-check against the LIVE board (digest intact, base
+  // revision = this board's pcbRevisionId, unexpired); a stale or altered one is refused visibly and nothing is shown. Nothing is written
+  // on receipt; the page's intake is settled at once (handed over), as the layout intake is.
+  const stackupIntakeRef = useRef<string | null>(null);
+  const [pendingStackupCandidate, setPendingStackupCandidate] = useState<StackupCandidate | null>(null);
+  const [stackupCandidateBusy, setStackupCandidateBusy] = useState(false);
+  useEffect(() => {
+    const intake = stackupCandidateIntake;
+    if (!intake || stackupIntakeRef.current === intake.candidate.candidateId) return;
+    stackupIntakeRef.current = intake.candidate.candidateId;
+    const board = boardRef.current;
+    const verdict = verifyStackupCandidateAgainstBoard(intake.candidate, board ? pcbRevisionId(board) : null, Date.now());
+    if (!verdict.ok) { setToast(`Agent stackup recommendation refused: ${verdict.detail}`); onStackupCandidateSettled?.(); return; }
+    setPendingStackupCandidate(intake.candidate);
+    setToast("Agent stackup recommendation ready — review the preview; the board is unchanged until you accept it.");
+    onStackupCandidateSettled?.();
+  }, [stackupCandidateIntake, onStackupCandidateSettled]);
+  const pendingStackupLiveRevision = useMemo(() => (pendingStackupCandidate && state.board ? pcbRevisionId(state.board) : null), [pendingStackupCandidate, state.board]);
+  // the preview's expiry is time-based: tick while a preview is open so its disable reason stays current (the PCB proposal's pattern)
+  const [stackupPreviewNow, setStackupPreviewNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!pendingStackupCandidate) return;
+    const firstTick = setTimeout(() => setStackupPreviewNow(Date.now()), 0);
+    const timer = setInterval(() => setStackupPreviewNow(Date.now()), 5_000);
+    return () => { clearTimeout(firstTick); clearInterval(timer); };
+  }, [pendingStackupCandidate]);
+  // Accept: the human control. The revision is re-checked against the live board at the click (a stale one is refused and the preview
+  // dropped), then the SAME commit as the toolbar's selector runs with the recommendation's profile and plane nets; the recommended
+  // DRC preset becomes the panel's active preset (a view preference) only when the commit landed and it differs.
+  async function acceptStackupCandidate(): Promise<void> {
+    const candidate = pendingStackupCandidate;
+    if (!candidate || stackupCandidateBusy) return;
+    const board = boardRef.current;
+    const verdict = verifyStackupCandidateAgainstBoard(candidate, board ? pcbRevisionId(board) : null, Date.now());
+    if (!verdict.ok) { setToast(`Stackup recommendation not applied: ${verdict.detail}`); setPendingStackupCandidate(null); return; }
+    setStackupCandidateBusy(true);
+    try {
+      const result = await applyStackupProfile(candidate.recommendation.profileId, candidate.recommendation.planes, `Set stackup ${candidate.recommendation.profileId} (agent recommendation accepted)`);
+      if (result.ok) {
+        if (candidate.recommendation.manufacturing.presetId !== drc.activePresetId) drc.setActivePresetId(candidate.recommendation.manufacturing.presetId);
+        setToast(`Stackup set to ${candidate.recommendation.profileId} (${candidate.recommendation.physicalLayerCount} layers) — one undo entry. ${candidate.invalidation.dependentApprovalsInvalidated ? "Dependent approvals are invalidated: placement / routing candidates retired, qualification and release re-run from scratch." : ""}`);
+      }
+    } finally {
+      setStackupCandidateBusy(false);
+      setPendingStackupCandidate(null);
+    }
+  }
 
   // B08.2 — lifecycle replacement IMMEDIATELY releases the new generation:
   // the adoption already aborted every captured scope's signal (fetches,
@@ -2425,11 +2585,74 @@ export default function PcbEditor({
     return actions;
   };
 
+  // [PR-C] The PCB facts the page's journey strip derives its stages from. Reported, never authority: a missing fact is
+  // reported as unknown (the DRC hook does not record which board revision it ran against, so DRC currency is null).
+  const journeyPreflight: JourneyPcbFacts["preflight"] = pendingPreflight === null ? "none" : pendingPreflight.status === "ready_to_apply" ? "ready_to_apply" : pendingPreflight.status === "ready_no_changes" ? "ready_no_changes" : "blocked";
+  const journeyUnresolved = shownSyncBlockers?.kind === "unresolved_instances" ? shownSyncBlockers.items.length : 0; // [PR-M, 2026-10-18] the list as the schematic stands
+  const journeyWorkflowState = manufacturing.workflow?.state ?? null;
+  const journeyReleased = Boolean(manufacturing.truth?.latestRelease?.current);
+  const journeyBoardExists = state.board !== null;
+  const journeyRoutingStale = routeStaleNotice !== null; const journeyBoardBehind = schematicDrift?.items.length ?? 0; const journeyBoardRebind = schematicDrift?.counts.changed ?? 0; // [PR-L6, 2026-10-19]; [PR-L6 integration, 2026-10-19] BI-2: + the replaced parts a bound board carries
+  const journeyBindingReviewPending = componentReview.pendingCount;
+  useEffect(() => {
+    onJourneyFacts?.({ boardExists: journeyBoardExists, syncing: ownedBusy.syncing, unresolvedCount: journeyUnresolved, bindingReviewPending: journeyBindingReviewPending, preflight: journeyPreflight, applying: ownedBusy.applying, workflowState: journeyWorkflowState, routingStale: journeyRoutingStale, drcCurrent: null, released: journeyReleased, boardBehindSchematic: journeyBoardBehind, boardBehindRebind: journeyBoardRebind });
+  }, [onJourneyFacts, journeyBoardExists, ownedBusy.syncing, ownedBusy.applying, journeyUnresolved, journeyBindingReviewPending, journeyPreflight, journeyWorkflowState, journeyRoutingStale, journeyReleased, journeyBoardBehind, journeyBoardRebind]);
+  // [PR-C] "Prepare PCB" from the page: the same preparation the button starts, only while no board exists (or, [PR-L6, 2026-10-19], the board is behind the schematic) and nothing
+  // runs; each token starts at most one run, and applying the verified plan stays the human's explicit click.
+  const syncRequestSeenRef = useRef(0);
+  useEffect(() => {
+    if (syncRequestToken === 0 || syncRequestSeenRef.current === syncRequestToken) return;
+    syncRequestSeenRef.current = syncRequestToken;
+    if ((state.board !== null && (schematicDrift?.items.length ?? 0) === 0) || ownedBusy.syncing) return; // [PR-L6, 2026-10-19] the journey's Prepare PCB for a board behind the schematic is the button's run (never a silent no-op)
+    queueMicrotask(() => { void handleSync({ centerNewParts: true, spreadOverlaps: true }); }); // the run starts after this commit, like a click would
+  }, [syncRequestToken, state.board, ownedBusy.syncing, handleSync, schematicDrift]);
+  // [PR-F fA] "Missing parts" from the page (the sidebar line, the journey's Resolve parts): the list a Schematic → PCB run would
+  // refuse at, computed from the schematic alone (the same `listUnresolvedInstances`), shown without a run - no server call,
+  // nothing bound or published. A blocked preflight already on screen is left alone (its blockers are a later stage's facts).
+  const missingPartsSeenRef = useRef(0);
+  useEffect(() => {
+    if (missingPartsRequestToken === 0 || missingPartsSeenRef.current === missingPartsRequestToken) return;
+    missingPartsSeenRef.current = missingPartsRequestToken;
+    const items = listUnresolvedInstances(schematicRef.current);
+    if (items.length === 0) { setToast("Every physical instance carries a published exact revision and its installed symbol asset: no missing part."); return; }
+    setSyncBlockers((current) => (current === null || current.kind === "unresolved_instances" ? { kind: "unresolved_instances", items } : current));
+    setToast(`${missingPartsWords(items.length)}: see the list below.`);
+  }, [missingPartsRequestToken]);
+
+  // ── [PR-E] 3D presentation: the workspace's 3D tab ──────────────────────────
+  // The same PcbPreview3D the side sheet mounts, driven by the same pcb3d controller (view state, camera, focus, layers,
+  // finish) — never a second renderer. The side sheet is suppressed while this presentation is on, so three.js mounts once.
+  if (presentation === "3d") {
+    if (!state.board) {
+      return (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950" data-testid="pcb-3d-unavailable">
+          <Box className="size-10 text-zinc-700" />
+          <p className="mt-3 text-sm font-medium text-zinc-300">No board to show in 3D yet</p>
+          <p className="mt-1 max-w-sm text-center text-xs text-zinc-500">The 3D view renders the durable board. Prepare the PCB from the schematic first; the view appears here once a board exists.</p>
+          <button type="button" onClick={() => onOpenPcbTab?.()} data-testid="pcb-3d-open-pcb" className="mt-4 rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800">Open the PCB tab</button>
+        </div>
+      );
+    }
+    return (
+      <div className="absolute inset-0 flex flex-col bg-zinc-950" data-testid="pcb-3d-pane">
+        <div className="flex h-9 shrink-0 items-center justify-between border-b border-zinc-800 px-3 text-xs">
+          <span className="font-medium text-zinc-200">3D preview</span>
+          <span className="text-zinc-500">the same scene as the PCB editor&apos;s preview sheet (one renderer)</span>
+        </div>
+        <div className="min-h-0 flex-1">
+          <PcbPreview3D board={state.board} view={pcb3d.view} command={pcb3d.command} />
+        </div>
+      </div>
+    );
+  }
+
   // ── Empty state: no board yet ─────────────────────────────────────────────
   if (!state.board) {
     return (
       <>
-        <div className="absolute inset-0 flex flex-col items-center justify-center overflow-auto bg-zinc-950" data-testid="pcb-empty-state">
+        {/* [PR-F fA] `justify-center-safe`: with the Missing parts list expanded the column overflows the viewport, and plain centering
+            clips its top (the Dismiss control) beyond reach; safe centering starts an overflowing column at the top, so it scrolls. */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center-safe overflow-auto bg-zinc-950" data-testid="pcb-empty-state">
           <div className="flex flex-col items-center text-center max-w-sm">
           <CircuitBoard className="size-10 text-zinc-700" />
           <p className="mt-3 text-sm font-medium text-zinc-300">No board yet</p>
@@ -2442,6 +2665,8 @@ export default function PcbEditor({
             onClick={() => void handleSync({ centerNewParts: true, spreadOverlaps: true })}
             disabled={syncing}
             data-testid="sync-schematic-to-pcb"
+            aria-label={`Schematic → PCB: synchronise the whole project (${schematic.sheets?.sheets.length ?? 1} sheet${(schematic.sheets?.sheets.length ?? 1) === 1 ? "" : "s"}) to the board`} // [PR-J4, 2026-10-23] runbook J.5 / OD-258 item 6: the sync states that it synchronises the COMPLETE project, every sheet, whatever sheet is open
+            title={`Synchronises the whole project (${schematic.sheets?.sheets.length ?? 1} sheet${(schematic.sheets?.sheets.length ?? 1) === 1 ? "" : "s"}) to the board, whatever sheet is open`}
             className="mt-4 flex items-center gap-2 px-3 py-1.5 rounded bg-teal-600 text-sm text-white hover:bg-teal-500 transition-colors disabled:opacity-50"
           >
             {syncing && <Loader2 className="size-3.5 animate-spin" />}
@@ -2459,6 +2684,13 @@ export default function PcbEditor({
           {pendingPreflight?.plan && <button type="button" data-testid="apply-sync-plan" onClick={() => void handleApplySync()} disabled={applying} className="mt-3 rounded border border-teal-500 px-3 py-1.5 text-xs text-teal-200 disabled:opacity-50">{applying ? "Applying…" : "Apply verified plan"}</button>}
           {toast && <p className="mt-3 text-xs text-zinc-400">{toast}</p>}
           </div>
+          {/* [PR-C F-08] the refusal that outlives the toast, under the call to action: the instances named before any server
+              call (missing fact + review path each) or the blocked preflight, per blocker. Dismiss or the next sync clears it. */}
+          {shownSyncBlockers && (
+            <div className="mt-4 w-full max-w-2xl px-4">
+              <SyncBlockersPanel blockers={shownSyncBlockers} busy={syncing || applying} onDismiss={() => setSyncBlockers(null)} schematic={schematic} projectScope={publisherScope} onFindReplacement={onFindReplacement} />
+            </div>
+          )}
           {/* [B16-C.2/C.5] the review handoff is reachable BEFORE any board exists: an editor's first
               Schematic → PCB stops at binding here, and the reviewer decides here too. It sits in the
               flow below the call to action (an overlay covered the button on a small viewport). */}
@@ -2492,21 +2724,7 @@ export default function PcbEditor({
           gridOn={state.gridOn}
           onToggleGrid={() => pcbView.toggleGrid()}
           stackup={state.board.stackup}
-          onStackupChange={(stackup) => {
-            const h = editorRuntime.getHistory();
-            // B08 — no history means no canonical session: refuse truthfully
-            // (the former set-stackup dispatch was a silent, non-undoable write).
-            if (!h) { setToast("The board is still loading — the stackup was not changed. Retry in a moment."); return; }
-            void commitPcbCandidate(h, {
-              commandId: "pcb.board-geometry",
-              label: "Set stackup",
-              buildCandidate: (board) => produce(board, (d) => {
-                d.stackup = stackup;
-                d.stackupConfig = stackupProfile(stackup === 4 ? "all-signal-4" : "simple-2");
-                reconcileStackupPlaneZones(d);
-              }),
-            }).then((result) => { if (!result.ok) setToast(result.message); });
-          }}
+          onStackupChange={(stackup) => { void applyStackupProfile(stackup === 4 ? "all-signal-4" : "simple-2"); }} // [PR-G, 2026-10-17] the selector's commit, extracted to applyStackupProfile (the same path the agent recommendation's Accept runs)
           outline={state.board.outline}
           onOutlineChange={(outline) => {
             // R06 Section 10: outline edits must be VISIBLE history entries.
@@ -2560,6 +2778,7 @@ export default function PcbEditor({
             progress={syncProgress}
             onSync={() => void handleSync({ centerNewParts: true, spreadOverlaps: true })}
             onOptions={() => setSyncDialogOpen(true)}
+            sheetCount={schematic.sheets?.sheets.length ?? 1} // [PR-J4, 2026-10-23] OD-258 item 6: the control states that it synchronises the whole project
           />
           {syncBlockedByProtectedCopper && <button type="button" onClick={() => void handlePreviewBoardRevision()} disabled={syncing || applying || boardRevisionBusy} data-testid="derive-board-revision" className="ml-2 rounded border border-amber-500 px-2 py-1 text-[11px] text-amber-200 disabled:opacity-50">Derive new board revision…</button>}
           {pendingPreflight?.plan && <button type="button" data-testid="apply-sync-plan-toolbar" onClick={() => void handleApplySync()} disabled={applying} className="ml-2 rounded border border-teal-500 px-2 py-1 text-[11px] text-teal-200 disabled:opacity-50">{applying ? "Applying…" : "Apply sync plan"}</button>}
@@ -2599,6 +2818,20 @@ export default function PcbEditor({
             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-40 max-w-xl rounded border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-200" data-testid="route-stale-banner">
               Routing evidence is stale: {routeStaleNotice}
             </div>
+          )}{boardBehindNotice && (<div role="status" className={`pointer-events-none absolute ${routeStaleNotice ? "top-12" : "top-2"} left-1/2 -translate-x-1/2 z-20 max-w-xl rounded border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-200`} data-testid="board-behind-schematic-banner" data-count={schematicDrift?.items.length ?? 0}>{boardBehindNotice}</div>)} {/* [PR-L6, 2026-10-19] beside the route-stale notice: plain text, no control; it never intercepts a click and sits BELOW the z-30 action panels (measured: at 1366 px it covered the Missing parts list's "Find a replacement") */}
+          {/* [PR-C F-08] the refusal that outlives the toast, a compact panel under the sync toolbar: the instances named before
+              any server call or the blocked preflight, per blocker. Dismiss or the next sync clears it. */}
+          {shownSyncBlockers && (
+            <div className="absolute top-2 right-2 z-30 w-[24rem] max-w-[calc(100%-1rem)] max-h-[70%] overflow-auto">
+              <SyncBlockersPanel blockers={shownSyncBlockers} busy={syncing || applying} onDismiss={() => setSyncBlockers(null)} schematic={schematic} projectScope={publisherScope} onFindReplacement={onFindReplacement} />
+            </div>
+          )}
+          {/* [PR-G, 2026-10-17] the agent's stackup recommendation as a PREVIEW (OD-249): Accept runs the toolbar selector's own commit path
+              after re-checking the live revision; Discard drops it; the board is unchanged until then. Below the sync blockers when both show. */}
+          {pendingStackupCandidate && (
+            <div className={`absolute right-2 z-30 w-[28rem] max-w-[calc(100%-1rem)] max-h-[70%] overflow-auto ${shownSyncBlockers ? "top-[40%]" : "top-2"}`}>
+              <StackupCandidatePanel candidate={pendingStackupCandidate} liveRevision={pendingStackupLiveRevision} now={stackupPreviewNow} busy={stackupCandidateBusy} onAccept={() => void acceptStackupCandidate()} onDiscard={() => setPendingStackupCandidate(null)} />
+            </div>
           )}
           {/* [B16.1C §F] the visible manufacturing workflow: durable truth,
               explicit state, qualification/release actions (disabled while
@@ -2614,7 +2847,7 @@ export default function PcbEditor({
                 qualifying={qualifying}
                 canQualify={Boolean(authoritativeRecord)}
                 onQualify={() => void handleQualify()}
-                routeStaleNotice={routeStaleNotice}
+                routeStaleNotice={routeStaleNotice} boardBehindNotice={boardBehindNotice} /* [PR-L6, 2026-10-19] the panel's own Request release / Authorize release are refused too while the board is behind the schematic */
               />
             </div>
           )}
@@ -2659,7 +2892,7 @@ export default function PcbEditor({
           />
           {/* Stage 15: 3D preview side sheet (three.js mounts only while open) */}
           {preview3dOpen && (
-            <div className="absolute inset-y-0 right-0 z-40 w-[min(560px,85%)] flex flex-col border-l border-zinc-800 bg-zinc-950 shadow-2xl">
+            <div className="absolute inset-y-0 right-0 z-40 w-[min(560px,85%)] flex flex-col border-l border-zinc-800 bg-zinc-950 shadow-sm">
               <div className="flex items-center justify-between h-9 px-3 shrink-0 border-b border-zinc-800 text-xs">
                 <span className="font-medium text-zinc-200">3D preview</span>
                 <button
@@ -2678,7 +2911,7 @@ export default function PcbEditor({
           )}
           {assignmentsOpen && assignmentScope && <AssignmentQueuePanel scope={{ ...assignmentScope, assemblyVariantId: "default" }} onClose={() => setAssignmentsOpen(false)} />}
           {placementWarning && (
-            <div className="absolute bottom-12 left-3 z-50 max-w-md rounded-lg border border-amber-500/35 bg-zinc-900/95 p-3 text-xs text-zinc-200 shadow-xl">
+            <div className="absolute bottom-12 left-3 z-50 max-w-md rounded-lg border border-amber-500/35 bg-zinc-900/95 p-3 text-xs text-zinc-200 shadow-sm">
               <p className="text-amber-200">{placementWarning}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <button type="button" onClick={() => void autoPlace.run()} disabled={autoPlace.state === "running"} className="rounded bg-teal-600 px-2 py-1 text-[11px] text-white hover:bg-teal-500 disabled:opacity-40">Auto-arrange parts</button>
@@ -2688,7 +2921,7 @@ export default function PcbEditor({
             </div>
           )}
           {toast && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 px-3 py-1.5 rounded border border-zinc-700 bg-zinc-900/95 text-xs text-zinc-200 shadow-lg">
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 px-3 py-1.5 rounded border border-zinc-700 bg-zinc-900/95 text-xs text-zinc-200 shadow-sm">
               {toast}
             </div>
           )}
@@ -2710,7 +2943,7 @@ export default function PcbEditor({
           {/* Stage 17 Phase D: floating AI assist (palette-launched; works
               without a selection — the inspector footer has its own box) */}
           {assistOpen && (
-            <div className="absolute bottom-3 right-3 z-40 w-72 rounded-lg border border-zinc-700 bg-zinc-900/95 shadow-xl">
+            <div className="absolute bottom-3 right-3 z-40 w-72 rounded-lg border border-zinc-700 bg-zinc-900/95 shadow-sm">
               <div className="flex items-center justify-between px-3 pt-2">
                 <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
                   AI assist
@@ -2864,5 +3097,48 @@ export default function PcbEditor({
         onConfirm={(placement) => void handleSync(placement)}
       />
     </div>
+  );
+}
+
+/** [PR-M, 2026-10-18] The refusal as the CURRENT schematic stands: an unresolved-instances list recomputed by the editor's own listing
+ *  (null when nothing is unresolved any more); any other blocker kind unchanged. Pure. */
+function syncBlockersForSchematic(blockers: SyncBlockers | null, schematic: SchematicState): SyncBlockers | null {
+  if (blockers === null || blockers.kind !== "unresolved_instances") return blockers;
+  const items = listUnresolvedInstances(schematic);
+  if (items.length === 0) return null;
+  const same = items.length === blockers.items.length && items.every((item, index) => item.refDes === blockers.items[index]!.refDes && item.missing === blockers.items[index]!.missing && item.family === blockers.items[index]!.family);
+  return same ? blockers : { kind: "unresolved_instances", items };
+}
+
+// ─── [PR-C F-08] the sync refusal panel ──────────────────────────────────────
+
+/**
+ * The refusal that outlives the 6 s toast. `unresolved_instances`: one row per refused instance — its reference, the missing
+ * fact and the review path (nothing was bound or published for it), [PR-F fA] grown into the Missing parts list (MissingPartsList:
+ * the checklist and the next actions over the existing routes; the page's sidebar line and the journey's Resolve parts reach it
+ * through `missingPartsRequestToken`). `preflight`: the existing readiness panel, every blocker
+ * with its code, message and refs; it gets no apply control of its own (`onApply` undefined — the editor's Apply buttons stay
+ * where they are) and no derive control (the editor's `derive-board-revision` button already covers protected copper).
+ */
+function SyncBlockersPanel({ blockers, busy, onDismiss, schematic, projectScope, onFindReplacement }: { blockers: SyncBlockers; busy: boolean; onDismiss: () => void; /** [PR-F fA] the rows' own facts (value, part id, installed assets) */ schematic: SchematicState; /** [PR-F fA] the project the distributor search and the publication request act in; null in demo or without a scope */ projectScope: ProjectSelectorScope | null; /** [PR-M, 2026-10-18] the page's agent entry point */ onFindReplacement?: (instances: ReplacementRequestInstance[]) => void }) {
+  const title = blockers.kind === "unresolved_instances"
+    ? `Schematic → PCB refused: ${blockers.items.length} part(s) cannot reach the board — nothing was bound or published`
+    : `Schematic → PCB blocked: ${blockers.result.blockers.length} blocker(s) in the preflight — nothing was applied`;
+  return (
+    <section aria-label="Schematic → PCB refusal" data-testid="sync-blockers" data-kind={blockers.kind} className="rounded-lg border border-red-900/60 bg-zinc-950/95 p-3 text-left text-xs text-zinc-300 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <p className="font-semibold text-red-300">{title}</p>
+        <button type="button" onClick={onDismiss} data-testid="sync-blockers-dismiss" className="shrink-0 rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-300 hover:border-zinc-500">Dismiss</button>
+      </div>
+      {blockers.kind === "unresolved_instances" ? (
+        // [PR-F fA] each row keeps its missing fact and review path and expands into the missing-facts checklist with the next
+        // actions over the existing routes (catalog search, distributor search, publication review request / unverified draft)
+        <MissingPartsList items={blockers.items} schematic={schematic} projectScope={projectScope} onFindReplacement={onFindReplacement} />
+      ) : (
+        <div className="mt-2" data-testid="sync-readiness-panel">
+          <PcbSyncReadinessPanel result={blockers.result} busy={busy} />
+        </div>
+      )}
+    </section>
   );
 }

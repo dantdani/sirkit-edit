@@ -65,9 +65,9 @@ again only once the child's close is observed, and on win32 Node adds eight serv
 | T33-5 | `app/lib/agent/orchestration/__tests__/b21-c-role-tools.test.ts:140` | D22-16, OD-139 | outside the exposure list, 36 since B22-B |
 | T33-6 | `app/lib/agent/orchestration/__tests__/b21-a-contracts.test.ts:6` | D22-16, OD-139 | the exposure list, 36 since B22-B |
 | T33-9 | `app/lib/engineering/__tests__/b20-b3-mcp-subset-move.test.ts:27` | D22-16, OD-139 | with B22-B's five named computations, left out of the base the same way |
-| X-2 | `app/lib/engineering/__tests__/b20-b1-mcp-exposure.test.ts:521` | D22-16, OD-139 | and by B22-B's five named computations: the three reads offered on assistant-agent only, the two requests ... |
-| A-2 | `app/lib/mcp/server/__tests__/b20-b4-withhold-proposals.test.ts:53` | D22-16, OD-139 | with B22-B's five named computations, left out the same way |
-| X-7 | `app/lib/mcp/server/__tests__/b20-b4-withhold-proposals.test.ts:142` | D22-16, OD-139 | with B22-B's five named computations too (OD-139), each excluded from MCP with the reason `computation` |
+| X-2 | `app/lib/engineering/__tests__/b20-b1-mcp-exposure.test.ts:526` | D22-16, OD-139 | and by B22-B's five named computations: the three reads offered on assistant-agent only, the two requests ... |
+| A-2 | `app/lib/mcp/server/__tests__/b20-b4-withhold-proposals.test.ts:55` | D22-16, OD-139 | with B22-B's five named computations, left out the same way |
+| X-7 | `app/lib/mcp/server/__tests__/b20-b4-withhold-proposals.test.ts:144` | D22-16, OD-139 | with B22-B's five named computations too (OD-139), each excluded from MCP with the reason `computation` |
 | X-7 | `app/lib/mcp/server/__tests__/b20-b4-process-gate.test.ts:14` | D22-16, OD-139 | the gate's list is now three process spawners and two thread starters - the diagnostic runner, ... |
 | A-1 | `app/api/mcp/__tests__/b20-d2-never-reachable-sweep.test.ts:397` | D22-16, OD-139 | 47 x 5 since B22-B's five named computations - the count below is derived |
 | S-tests | `app/lib/spice/__tests__/worker-integration.test.ts:21` | D22-14, OD-144 | no isolation boundary - the worker's points run on the diagnostic runner, a diagnostic local process (B22-A3) |

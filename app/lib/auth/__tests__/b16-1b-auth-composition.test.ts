@@ -239,20 +239,20 @@ describe("B16.1B §G — no unrestricted signup surface", () => {
 
 // ═════════════════════════════════════════════════════════════════════════════
 describe("B16.1B §G — exact invariants", () => {
-  it("exactly 168 route methods: 165 canonical wrappers, 3 approved factories, 0 raw handlers ([B24-A1, 2026-10-06] + GET /api/health, GET /api/ready; [B23-B1, 2026-10-03] + POST /api/pcb/provider-exchange; B18-A: + GET/POST /api/agent/autonomy; B19-E E2: + POST /api/parts/external-search; B19-E E4: + GET/POST /api/components/atomic/publication; B19-E E5: + POST /api/components/revision-status; B20-B2: + POST /api/mcp, POST /api/mcp/token, GET /.well-known/oauth-protected-resource/api/mcp); exactly the intentional agent-exposed tools", () => {
+  it("exactly 177 route methods: 174 canonical wrappers, 3 approved factories, 0 raw handlers ([PR-M, 2026-10-18] + GET/POST /api/parts/acquisitions; [PR-M, 2026-10-18] + POST /api/component-resolution-authority; [PR-L, 2026-10-17] + the six generation-task methods; [B24-A1, 2026-10-06] + GET /api/health, GET /api/ready; [B23-B1, 2026-10-03] + POST /api/pcb/provider-exchange; B18-A: + GET/POST /api/agent/autonomy; B19-E E2: + POST /api/parts/external-search; B19-E E4: + GET/POST /api/components/atomic/publication; B19-E E5: + POST /api/components/revision-status; B20-B2: + POST /api/mcp, POST /api/mcp/token, GET /.well-known/oauth-protected-resource/api/mcp); exactly the intentional agent-exposed tools", () => {
     let total = 0, canonical = 0, factories = 0, raw = 0;
-    // [B20 B2] the census walks app/api AND app/.well-known through the one route-tree helper (OD-66)
-    for (const file of listRouteFiles(ROOT)) {
-      const src = readFileSync(file, "utf8");
-      for (const method of exportedHttpMethods(src, file)) {
+    // [B20 B2] the census walks app/api AND app/.well-known through the one route-tree helper (OD-66). [PR-J7, 2026-11-04] reviewed move: the
+    // walk and each method's classification run once at module load (ROUTE_METHOD_FORMS, after the describe blocks): inside this case they
+    // outran vitest's 5 s default in a four-worker full run (about 1-3.5 s alone). No timeout raised; the same files, methods and forms count
+    for (const [, forms] of ROUTE_METHOD_FORMS) {
+      for (const form of forms) {
         total += 1;
-        const form = classifyRouteMethodForm(src, method, file, ROOT).form;
         if (form === "canonical-wrapper") canonical += 1;
         else if (form === "factory") factories += 1;
         else raw += 1;
       }
     }
-    expect({ total, canonical, factories, raw }).toEqual({ total: 168, canonical: 165, factories: 3, raw: 0 }); // [B24-A1, 2026-10-06] reviewed ratchet move (OD-198): + GET /api/health (publicRoute) and GET /api/ready (workerRoute), two new canonical wrappers, 0 raw stays 0; [B23-B1, 2026-10-03] reviewed ratchet move (OD-174): + POST /api/pcb/provider-exchange (authenticatedJsonRoute), one new canonical wrapper, 0 raw stays 0; B18-A: + GET/POST /api/agent/autonomy; B18-B: + GET/POST /api/agent/execution-grant, POST /api/agent/execution-grant/settle; B19-E E2: + POST /api/parts/external-search; B19-E E4: + GET/POST /api/components/atomic/publication; B19-E E5: + POST /api/components/revision-status (reviewed ratchet move: one new canonical wrapper, a member's catalog status read; 0 raw stays 0); B20-B2: + POST /api/mcp (mcpBearerJsonRoute), POST /api/mcp/token (authenticatedJsonRoute), GET /.well-known/oauth-protected-resource/api/mcp (publicRoute): three new canonical wrappers, 0 raw stays 0
+    expect({ total, canonical, factories, raw }).toEqual({ total: 177, canonical: 174, factories: 3, raw: 0 }); // [PR-M, 2026-10-18] reviewed census move (runbook M.3, section M2), was 175 / 172: + GET and POST /api/parts/acquisitions (the durable CAD acquisition task; authenticatedRoute and authenticatedJsonRoute), two canonical wrappers, 0 raw stays 0; [PR-M, 2026-10-18] reviewed ratchet move (runbook M.2.5): + POST /api/component-resolution-authority, one new canonical wrapper method, 0 raw stays 0; [PR-L, 2026-10-17] reviewed ratchet move (runbook L.4, increment 4): + POST/GET /api/generation-tasks, GET /api/generation-tasks/[id], GET /api/generation-tasks/[id]/events, POST /api/generation-tasks/[id]/control and POST /api/generation-worker: six new canonical wrapper methods, 0 raw stays 0; [B24-A1, 2026-10-06] reviewed ratchet move (OD-198): + GET /api/health (publicRoute) and GET /api/ready (workerRoute), two new canonical wrappers, 0 raw stays 0; [B23-B1, 2026-10-03] reviewed ratchet move (OD-174): + POST /api/pcb/provider-exchange (authenticatedJsonRoute), one new canonical wrapper, 0 raw stays 0; B18-A: + GET/POST /api/agent/autonomy; B18-B: + GET/POST /api/agent/execution-grant, POST /api/agent/execution-grant/settle; B19-E E2: + POST /api/parts/external-search; B19-E E4: + GET/POST /api/components/atomic/publication; B19-E E5: + POST /api/components/revision-status (reviewed ratchet move: one new canonical wrapper, a member's catalog status read; 0 raw stays 0); B20-B2: + POST /api/mcp (mcpBearerJsonRoute), POST /api/mcp/token (authenticatedJsonRoute), GET /.well-known/oauth-protected-resource/api/mcp (publicRoute): three new canonical wrappers, 0 raw stays 0
     const exposed = sirkitToolRegistry().list().filter((d) => d.agentExposed);
     expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     expect(new Set(exposed.map((d) => d.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
@@ -260,4 +260,12 @@ describe("B16.1B §G — exact invariants", () => {
     for (const d of exposed) expect(d.toolId).not.toMatch(/^sirkit\.auth\.|sign-?in|sign-?out|callback|session/i);
     void relative;
   });
+});
+
+/** [PR-J7, 2026-11-04] The census of "exactly 177 route methods", walked once at module load (no case's time): every route file the
+ *  one route-tree helper lists (app/api and app/.well-known, OD-66), read, and the form of each HTTP method it exports - the walk the
+ *  case ran in its body, unchanged. Declared after the describe blocks, so no case line moves. */
+const ROUTE_METHOD_FORMS: ReadonlyArray<readonly [string, readonly string[]]> = listRouteFiles(ROOT).map((file) => {
+  const src = readFileSync(file, "utf8");
+  return [file, exportedHttpMethods(src, file).map((method) => classifyRouteMethodForm(src, method, file, ROOT).form)] as const;
 });

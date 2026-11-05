@@ -1,0 +1,3584 @@
+{
+  "schemaVersion": "sirkit.historical-ci-census.v1",
+  "sourceCommit": "26dc8b8a71a2471cc0f542da9ecc05c37c1abc51",
+  "sourceTree": "1078a16a306b22fc558d420bc93c752884398140",
+  "provenance": "Captured on 2026-10-11 from git ls-tree -r and git show of this immutable commit. Config text and blob ids are historical Git objects; this snapshot records the dated B24 claim, not current CI coverage.",
+  "files": [
+    {
+      "path": "app/api/__tests__/b16-0-10-tranche-parity.test.ts",
+      "blob": "1f20d10a6a6f357bba38293bf748cfac156d4cad"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-11-tranche-parity.test.ts",
+      "blob": "4c2fc6a37839f621fb5b4d02fbeeaf77f92e35fb"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-12-tranche-parity.test.ts",
+      "blob": "d5ed6c56c961076005c605970f644aaa7511040d"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-13-tranche-parity.test.ts",
+      "blob": "53ef18d8f8a83eacf03ec9ac3e121c5436ebcfbf"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-14-tranche-parity.test.ts",
+      "blob": "f16ada1b3ae8527bb09c5569f764c50bd8c35931"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-15-tranche-parity.test.ts",
+      "blob": "1f38e19abb341fab46f61468400f1904fc296932"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-16-tranche-parity.test.ts",
+      "blob": "9ca1693ac57571b3e06dec9828ea5b717b4bf23f"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-17-1-proposal-validation.test.ts",
+      "blob": "0f78fca4980a2eed946f1e253d4d7d0aedadf950"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-17-tranche-parity.test.ts",
+      "blob": "be053ce3b0f157a41b7e7549801eefa83ee97ad1"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-18-proposal-validation.test.ts",
+      "blob": "9edef42ca97b80e31dd1b5f930f2ba18a85e0292"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-18-tranche-parity.test.ts",
+      "blob": "8a2585d49197ce6116b6d23f1774cf2380278f61"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-19-proposal-validation.test.ts",
+      "blob": "ec2f5a73af1fd6dedba2b48515ec3f05a904660c"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-19-tranche-parity.test.ts",
+      "blob": "2426efa135f41fe0c06aa8857d2249846fb2e96a"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-20-tranche-parity.test.ts",
+      "blob": "7b60ba06b7af59a4b8b3802c98f383bfcb770559"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-21-tranche-parity.test.ts",
+      "blob": "42d33b45147127058e906b11ca5892f4e2d970c2"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-22-tranche-parity.test.ts",
+      "blob": "9bc529ef9c53cb1a54f2093fff964d6f92168b6c"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-23-tranche-parity.test.ts",
+      "blob": "d6708ddafadad4e5dab81c1f33304ade947f5ff8"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-24-1-security-correction.test.ts",
+      "blob": "c178e6eed37e6a5d4937923b4ba9b87ef6cf1083"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-24-tranche-parity.test.ts",
+      "blob": "da32b8d4af90d665f40c012f4d66431e41e8d9a3"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-4-bounded-body-behavior.test.ts",
+      "blob": "c9ac4031644a088545c66f6ed390d170d378ebe5"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-5-media-type-and-wrapper.test.ts",
+      "blob": "8ca5393bf086ee49deebf609bb9ed5aafb331794"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-8-tranche-parity.test.ts",
+      "blob": "7afb70e66cd26ff37a793fc07bc2e89706a5f943"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-9-tranche-parity.test.ts",
+      "blob": "5c6fc514d101a60a21c3e329d361322d243d1035"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-auth-route-coverage.test.ts",
+      "blob": "032f81d544d3d75514178c41c0bcefc99b5e2adc"
+    },
+    {
+      "path": "app/api/__tests__/b16-0-identity-header-gate.test.ts",
+      "blob": "a2ec7b3b93051d44d8fa9bc9f4134e373f65b741"
+    },
+    {
+      "path": "app/api/__tests__/b16-1c-invariant-tripwires.test.ts",
+      "blob": "937f4e6c626bdfcef2d89b971875dcce25502661"
+    },
+    {
+      "path": "app/api/__tests__/b16-a-review-corrections-tripwires.test.ts",
+      "blob": "1e9ac123e4a1e6c0afb7bfc0eaed95cdb8cf8897"
+    },
+    {
+      "path": "app/api/agent/__tests__/b18-a-autonomy-route.test.ts",
+      "blob": "d9126bce6a7f4f9573d6895aefe3d7d911442ca4"
+    },
+    {
+      "path": "app/api/agent/__tests__/b18-b-execution-grant-route.test.ts",
+      "blob": "cc762ee8b427b6e635e90ca337a323f307b8c287"
+    },
+    {
+      "path": "app/api/architecture/__tests__/routes.test.ts",
+      "blob": "aca6da50a8633a55c5a82fa82e92ff5b9eefc12c"
+    },
+    {
+      "path": "app/api/assignment-queue/__tests__/_scope.test.ts",
+      "blob": "c3f0e3c2ef89c6d7e0115edfa0e1487a2aaebc28"
+    },
+    {
+      "path": "app/api/auth/__tests__/b16-0-1-signin.test.ts",
+      "blob": "ee5704ee37933e4ba63d6e67b470fdb8113f7080"
+    },
+    {
+      "path": "app/api/bom/__tests__/b16-0-2-bom-ownership.test.ts",
+      "blob": "cb092e5bd659ba8cc4db773971734b14880d230b"
+    },
+    {
+      "path": "app/api/bom/__tests__/b19-bom-quota.test.ts",
+      "blob": "6768a7dca3b96ee509143953ccf31dbfbb2e4f25"
+    },
+    {
+      "path": "app/api/bom/__tests__/b19-d-bom-table-bounds.test.ts",
+      "blob": "12a4ffcd82acf51d857c72e99d87fa71fb80b853"
+    },
+    {
+      "path": "app/api/bom/__tests__/b19-e-bom-catalog-status-scope.test.ts",
+      "blob": "4b02d7952ffd3cbcbc3d4631ea3c5696463043e5"
+    },
+    {
+      "path": "app/api/chat/__tests__/b10-1-request-boundary.test.ts",
+      "blob": "7455f1ce6be4d47ed879b6a55a57c3d0729271df"
+    },
+    {
+      "path": "app/api/chat/__tests__/b10-2-closure.test.ts",
+      "blob": "ac7dd43dd94b93669291e4a8a7e9754054ffe020"
+    },
+    {
+      "path": "app/api/chat/__tests__/b10-chat-boundary.test.ts",
+      "blob": "0e6cb119a8dbc5686eafb18a84a37d9af8a3f31d"
+    },
+    {
+      "path": "app/api/chat/__tests__/b11-1-route-finalization.test.ts",
+      "blob": "3905a5f6ae316b1a94a5d6115e277d3911ed88f7"
+    },
+    {
+      "path": "app/api/chat/__tests__/b13-2-route-authority.test.ts",
+      "blob": "353eba60011b2b2cc9ea3ab1f206cf2d944ffb53"
+    },
+    {
+      "path": "app/api/chat/__tests__/b14-route-replacement.test.ts",
+      "blob": "da835c44734e0321f36e1a081a4ee79e6919f996"
+    },
+    {
+      "path": "app/api/chat/__tests__/b16-0-1-chat-authorization.test.ts",
+      "blob": "5cca28a12a7087fa3c372a80182db9510d6f3a64"
+    },
+    {
+      "path": "app/api/chat/__tests__/b18-b-chat-authority-keys.test.ts",
+      "blob": "3babbeb44de5b65bf50bca05cca65befe05fa988"
+    },
+    {
+      "path": "app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts",
+      "blob": "a2a7d5e8bf931f9a014e891d3945574e3fa15ff7"
+    },
+    {
+      "path": "app/api/chat/__tests__/b18-d-chat-stop.test.ts",
+      "blob": "4dd47ccc662733943c3f17824249fa06ae2259c0"
+    },
+    {
+      "path": "app/api/chat/__tests__/b18-e-scenario-4-route.test.ts",
+      "blob": "b513f43b21ff72982713d67db0c8a7e8687debca"
+    },
+    {
+      "path": "app/api/chat/__tests__/b19-d-external-text-injection-route.test.ts",
+      "blob": "7a8488de931cc81077ca7918c50fc301e5b2038b"
+    },
+    {
+      "path": "app/api/chat/__tests__/b19-e-chat-external-acquisition.test.ts",
+      "blob": "f64ba8471a44fd1acc523b37eea85da9db0e8df1"
+    },
+    {
+      "path": "app/api/chat/__tests__/b20-a4-chat-mcp-runtime.test.ts",
+      "blob": "458b1fd6ea375897e08e448400e6fb75d90a20e9"
+    },
+    {
+      "path": "app/api/chat/__tests__/b21-b-chat-router.test.ts",
+      "blob": "62525ba179f7209b6ce6923da3bdb4e6f8db970f"
+    },
+    {
+      "path": "app/api/chat/__tests__/b21-d-chat-merge.test.ts",
+      "blob": "e65969975509ada4769c0a2984a08e0bb2c4c94d"
+    },
+    {
+      "path": "app/api/chat/__tests__/b21-d2-chat-proposals.test.ts",
+      "blob": "bd718b87554ef230b6acdfd337bdd22c6fe3c36a"
+    },
+    {
+      "path": "app/api/chat/__tests__/b21-d3-chat-replacement.test.ts",
+      "blob": "abcb880f0d4139c51abdd10d6e4944ad5a336b28"
+    },
+    {
+      "path": "app/api/chat/__tests__/b21-e1-chat-provider.test.ts",
+      "blob": "969d854f0191cc587060c2921ac4f265b0bbaf97"
+    },
+    {
+      "path": "app/api/chat/__tests__/b21-e2-chat-events.test.ts",
+      "blob": "094cbfe4beb90c3322972f5d9b9e6ab01600f7fe"
+    },
+    {
+      "path": "app/api/chat/__tests__/b21-e3-chat-resume.test.ts",
+      "blob": "d5d0d047efd33fe42ca7cfca242a739ad0e6c143"
+    },
+    {
+      "path": "app/api/chat/__tests__/b21-e4-chat-first-turn.test.ts",
+      "blob": "4339e16260babab7cb52b3b8273fbd299583330b"
+    },
+    {
+      "path": "app/api/circuit-knowledge/__tests__/b19-d-excerpt-injection.test.ts",
+      "blob": "a150ab9d67cfd164d59e91df50fd93adf65fd0c7"
+    },
+    {
+      "path": "app/api/circuit-knowledge/__tests__/routes.test.ts",
+      "blob": "78da7a683951aff705b149deb97baf665bf2cc7a"
+    },
+    {
+      "path": "app/api/circuit-verification/__tests__/route.test.ts",
+      "blob": "a00d64cab1bda86885c2ae190762c199d968ea68"
+    },
+    {
+      "path": "app/api/component-selection/__tests__/routes.test.ts",
+      "blob": "4ff0a0f020625d556b81df7c8b0d20a663899bfb"
+    },
+    {
+      "path": "app/api/components/__tests__/b19-e-atomic-publication-route.test.ts",
+      "blob": "b3d88889273f3f5448900e47ee8c601de8308cfd"
+    },
+    {
+      "path": "app/api/components/__tests__/b19-e-revision-status-route.test.ts",
+      "blob": "f0e6651ca28ad12e89774f1e5ae269e278bf56b1"
+    },
+    {
+      "path": "app/api/components/__tests__/b19-e-withdraw-revision-route.test.ts",
+      "blob": "9d516447461a16f3509b0a4d7be397ef7d897d40"
+    },
+    {
+      "path": "app/api/export/kicad/__tests__/route-fail-closed.test.ts",
+      "blob": "582ec9a0e3fc60e57fd9637708bd9148d8b67742"
+    },
+    {
+      "path": "app/api/firmware-bringup/__tests__/route.test.ts",
+      "blob": "5bba4a3f6c4f65e45f8a507639cf7afeec9465ca"
+    },
+    {
+      "path": "app/api/full-flow/__tests__/routes.test.ts",
+      "blob": "a3294fdf00e1f812b6fb7cc1805643e3984beaea"
+    },
+    {
+      "path": "app/api/interfaces/__tests__/routes.test.ts",
+      "blob": "24e76ad02cfd7d95fcfafd9213e7db744991787f"
+    },
+    {
+      "path": "app/api/mapping-verification/__tests__/handler.test.ts",
+      "blob": "81575b8df68051385a9c0423af2a3b8497762351"
+    },
+    {
+      "path": "app/api/mcp/__tests__/b20-b2-mcp-endpoint.test.ts",
+      "blob": "f94b1210c9f2c767ff4b07ac9030a0b4c96cf9bc"
+    },
+    {
+      "path": "app/api/mcp/__tests__/b20-b2-mcp-token-route.test.ts",
+      "blob": "24f86b6de70cd4b483f3d1b9fc8e7ab12150f22a"
+    },
+    {
+      "path": "app/api/mcp/__tests__/b20-b2-own-client-interop.test.ts",
+      "blob": "8f9c234639dfa70db2d1d1c779fbdd62612bf98b"
+    },
+    {
+      "path": "app/api/mcp/__tests__/b20-b2-protected-resource-metadata.test.ts",
+      "blob": "60a085275bf1ba2f25856fbbecd6ecb67113883e"
+    },
+    {
+      "path": "app/api/mcp/__tests__/b20-b3-mcp-tools-call-reads.test.ts",
+      "blob": "5536d0e0313c2590ade54db77ba38bdf73ed0e30"
+    },
+    {
+      "path": "app/api/mcp/__tests__/b20-c2-tools-list-interop.test.ts",
+      "blob": "fe726594143ffb8be94e535a69e5d1d3467ad58a"
+    },
+    {
+      "path": "app/api/mcp/__tests__/b20-d2-never-reachable-sweep.test.ts",
+      "blob": "25d55925d9c4881b0dff2c5ae12ae5c8adba2845"
+    },
+    {
+      "path": "app/api/model-simulation/__tests__/route.test.ts",
+      "blob": "a30759f56202c91eed1f03ff5ff2d0217000d8f2"
+    },
+    {
+      "path": "app/api/parts/__tests__/b19-e-external-search-route.test.ts",
+      "blob": "894c3de69e12f45cf99ec4e38a328c36d5ee5625"
+    },
+    {
+      "path": "app/api/passive-policy/__tests__/route-security.test.ts",
+      "blob": "0cefeb818b45891712dfd178da83fdc5216e1f6a"
+    },
+    {
+      "path": "app/api/pcb-sync/__tests__/b16-a-manufacturing-summary.test.ts",
+      "blob": "20bbf9b5f91a0e158d076656b1da47fca45aa972"
+    },
+    {
+      "path": "app/api/pcb-sync/__tests__/b16-c-board-revision-route.test.ts",
+      "blob": "b9be821927ffddb7ae4f677d44c25e3791ec58d8"
+    },
+    {
+      "path": "app/api/pcb-sync/__tests__/route.test.ts",
+      "blob": "f2d88561d0c1dd8d7602af1424c3a0c0c2bd9ddc"
+    },
+    {
+      "path": "app/api/pcb/ai-rules/__tests__/from-brief.test.ts",
+      "blob": "8d628a611f67da97e88af49b1af6166126233a1a"
+    },
+    {
+      "path": "app/api/pcb/autoroute/__tests__/route.test.ts",
+      "blob": "e9fda6cae39a77989c4e00d10bd88c9fa8e82752"
+    },
+    {
+      "path": "app/api/pcb/edit/__tests__/assist-live.test.ts",
+      "blob": "83a86e40613eb6ab08a5039414d357b3a1d84ae4"
+    },
+    {
+      "path": "app/api/pcb/edit/__tests__/assist-validation.test.ts",
+      "blob": "1e4d7cea5cdaef9ff330fc91b423bfa8140467db"
+    },
+    {
+      "path": "app/api/pcb/export/gerbers/__tests__/b16-0-2-engineering-export.test.ts",
+      "blob": "d73d3de1899aeb7f81317b96be554cf91688b928"
+    },
+    {
+      "path": "app/api/pcb/export/gerbers/__tests__/route.test.ts",
+      "blob": "9a2ab93f82c4b71d1a697f5bbe27b76503740e77"
+    },
+    {
+      "path": "app/api/pcb/qualify/__tests__/qualify-human-only.test.ts",
+      "blob": "c4896131e5c61427bfd5c6f5d896650c1e675bab"
+    },
+    {
+      "path": "app/api/pcb/release/__tests__/b16-a-release-confirmation.test.ts",
+      "blob": "4fbc4aa830769804909e3b9fb063eb316a7c21fc"
+    },
+    {
+      "path": "app/api/pcb/release/__tests__/release-human-only.test.ts",
+      "blob": "38d85865adfb146813a895bad04c0265b4521f5c"
+    },
+    {
+      "path": "app/api/physical-bindings/__tests__/b16-c-review-handoff.test.ts",
+      "blob": "9ee1ed4a71652d1ee62da98c485f666e13db8502"
+    },
+    {
+      "path": "app/api/physical-bindings/__tests__/b19-e-successor-rebind.test.ts",
+      "blob": "409b0e02a3fb1b3fd7f4f63d5dd9f534dfa23fec"
+    },
+    {
+      "path": "app/api/power/__tests__/routes.test.ts",
+      "blob": "1b39bcfec9ce5ba39328690ff1d0708b5e0d8b2d"
+    },
+    {
+      "path": "app/api/release-engineering/__tests__/routes.test.ts",
+      "blob": "809539203b2d6a4cc91a3591a24dff779574e867"
+    },
+    {
+      "path": "app/api/replacement-authority/__tests__/b16-0-3-route-auth.test.ts",
+      "blob": "76b0180ca5e0df054c11afc6f08d105fb742c94e"
+    },
+    {
+      "path": "app/api/schematic-compiler/__tests__/routes.test.ts",
+      "blob": "7c577f275a83314acadb3d6a4fa051163f371261"
+    },
+    {
+      "path": "app/api/schematic/__tests__/b19-cross-verify-egress.test.ts",
+      "blob": "b7c21a86dece447edec46d7cdbde77ff05ec8fac"
+    },
+    {
+      "path": "app/api/schematic/__tests__/b19-d-schgen-netname-injection.test.ts",
+      "blob": "6faf926274750b45032dbf2388e6167c36f56f65"
+    },
+    {
+      "path": "app/api/simulate/__tests__/b19-d-deck-injection.test.ts",
+      "blob": "dbe8bf8d4969479ef70cd849df6fdfdc287e35af"
+    },
+    {
+      "path": "app/components/architecture/__tests__/ArchitectureWorkspace.test.tsx",
+      "blob": "1a44a7dbb8b7c0e8ad9c8615f737d08a8fe1b105"
+    },
+    {
+      "path": "app/components/bom/__tests__/b19-e-bom-catalog-status.test.tsx",
+      "blob": "e9fe86d08b7ad1accfe567f814da00136ec4f079"
+    },
+    {
+      "path": "app/components/bom/__tests__/b19-e-bom-workbench.test.tsx",
+      "blob": "f81f37070b3aeccfa8b4e39850140eedeb820d7a"
+    },
+    {
+      "path": "app/components/chat/__tests__/b18-d-autonomy-mode-control.test.tsx",
+      "blob": "ccedcaaf244f7e3588cccd703524abc0270a6a8a"
+    },
+    {
+      "path": "app/components/chat/__tests__/b18-d-execution-entry-actions.test.tsx",
+      "blob": "c5b4d35a9c98b551a01017a714a916ecafd5ae34"
+    },
+    {
+      "path": "app/components/chat/__tests__/b19-d-chat-markdown.test.tsx",
+      "blob": "98689e4dfadf8fc0636539e5111e73ad28fe03c5"
+    },
+    {
+      "path": "app/components/editor/__tests__/b19-e-build-library-exact-revision.test.tsx",
+      "blob": "e822bf5f43e0d1c05d87efa8d8b395ba5f0a8f90"
+    },
+    {
+      "path": "app/components/editor/__tests__/b19-e-build-library-external-search.test.tsx",
+      "blob": "4c9a2827f05dc69246850dedbff2c487c0057d0e"
+    },
+    {
+      "path": "app/components/interfaces/__tests__/InterfacePlanningWorkspace.test.tsx",
+      "blob": "9646ffc274b1dc3efb3f6198f4f0b22c3b40cfbf"
+    },
+    {
+      "path": "app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx",
+      "blob": "b2759bf5e285fcfa9f10c82644f5b69a27154097"
+    },
+    {
+      "path": "app/components/parts/__tests__/b19-e-publication-withdraw-revision.test.tsx",
+      "blob": "f4543eaf756c194e004b12153e42d03e66907766"
+    },
+    {
+      "path": "app/components/pcb/__tests__/assignment-queue-panel.test.tsx",
+      "blob": "09762fbde7561abb8ee73a91d542853066a8e220"
+    },
+    {
+      "path": "app/components/pcb/__tests__/b18-c-granted-execution-dialog.test.tsx",
+      "blob": "36b6bbeef0df35bab97194d4faadfcc102f528e2"
+    },
+    {
+      "path": "app/components/pcb/__tests__/b18-d-granted-execution-card.test.tsx",
+      "blob": "4c454a84df9ba16a126d7a8144a5afe9898f749e"
+    },
+    {
+      "path": "app/components/pcb/__tests__/b19-e-component-review-successor.test.tsx",
+      "blob": "81bc94d4946dc86d9defc4f265b642b0b8cf7c88"
+    },
+    {
+      "path": "app/components/pcb/__tests__/board-revision-dialog.test.tsx",
+      "blob": "1323f31fd83d31c81a8610fc586c50ea98e2b3ae"
+    },
+    {
+      "path": "app/components/pcb/__tests__/component-review-panel.test.tsx",
+      "blob": "56ecd883c881fb3398cc7b8f4bd6405978e4f6ba"
+    },
+    {
+      "path": "app/components/pcb/__tests__/fields-multivalue.test.tsx",
+      "blob": "618ea3395a1aea0202e0bde4687349a0cac0f020"
+    },
+    {
+      "path": "app/components/pcb/__tests__/inspector-commands.test.tsx",
+      "blob": "9b8dcae07a6b0ea141f5df64c37176476ab9e4d4"
+    },
+    {
+      "path": "app/components/pcb/__tests__/manufacturing-workflow-panel.test.tsx",
+      "blob": "df05fcb3a7d4a0210dda61486d4af58bba0cd209"
+    },
+    {
+      "path": "app/components/pcb/__tests__/mapping-verification-panel.test.tsx",
+      "blob": "2792442dbf09d69af9cd441d2d52fee19ea9a914"
+    },
+    {
+      "path": "app/components/pcb/__tests__/netlist-freshness.test.ts",
+      "blob": "c9f23008adbb5c94cc6d12f399098640d1e07984"
+    },
+    {
+      "path": "app/components/pcb/__tests__/passive-package-policy-panel.test.tsx",
+      "blob": "281b239d110b67201bcceec71e20cfac9a2f5f4c"
+    },
+    {
+      "path": "app/components/pcb/__tests__/pcb-sync-authority.test.tsx",
+      "blob": "c1f58db05bd131b7b9e40689db8a0637c87dada3"
+    },
+    {
+      "path": "app/components/pcb/__tests__/pcb-sync-readiness-panel.test.tsx",
+      "blob": "6681973e0f9180070c1502932b4dce898f7f18aa"
+    },
+    {
+      "path": "app/components/pcb/__tests__/pcb3d-view-session.test.tsx",
+      "blob": "ad4121abcc736d9f2988b39e1a887b2107de0224"
+    },
+    {
+      "path": "app/components/pcb/__tests__/routing-controls.test.tsx",
+      "blob": "6378d8a6da11efe9583aaac6b8d62b2d57dae3de"
+    },
+    {
+      "path": "app/components/pcb/__tests__/routing-rules-panel.test.tsx",
+      "blob": "5e5b28ba2d2d055e8864bbdc7be4c16a695a0736"
+    },
+    {
+      "path": "app/components/pcb/__tests__/snapshot-conflict-dialog.test.tsx",
+      "blob": "b76a3a6cbd41fc8b10d9c20bfe36d935ab64c2b8"
+    },
+    {
+      "path": "app/components/pcb/__tests__/sync-button.test.tsx",
+      "blob": "e46abfa4bdfa659faeea248a37f5c226bf74e861"
+    },
+    {
+      "path": "app/components/power/__tests__/PowerWorkspace.test.tsx",
+      "blob": "807b086ce073d8e02cb47548f1b94c54615b39e9"
+    },
+    {
+      "path": "app/components/requirements/__tests__/RequirementsWorkspace.test.tsx",
+      "blob": "782f3144f1ef60142e52e51ec1e9deacdb4e2cc6"
+    },
+    {
+      "path": "app/components/schematic/__tests__/b14-replacement-review.test.tsx",
+      "blob": "c8e5238785907ef11dcce214032808a636a2c799"
+    },
+    {
+      "path": "app/components/view-session/__tests__/use-view-session.test.tsx",
+      "blob": "45113a951c7a2b54e215da0e98c5ccab1cd117f5"
+    },
+    {
+      "path": "app/lib/__tests__/ai-preferences.test.ts",
+      "blob": "daaac5a2421bfdf589c6a87079f0ecd02789a197"
+    },
+    {
+      "path": "app/lib/__tests__/b19-d-build-loop-injection.test.ts",
+      "blob": "7e4180c0cec0191f324ed342cf1678bb3ef88590"
+    },
+    {
+      "path": "app/lib/__tests__/b19-d-href-and-csv-output.test.ts",
+      "blob": "e81a99e83dab8c2528bdf92d8c5da605e69704e7"
+    },
+    {
+      "path": "app/lib/__tests__/b19-d-review-input-bounds.test.ts",
+      "blob": "7de91fbdc8fb22086cf45b77ed1290917899dba7"
+    },
+    {
+      "path": "app/lib/__tests__/b19-e-packet-provenance.test.ts",
+      "blob": "5b3f8b4a8f8736aad901ddf175320008856af56d"
+    },
+    {
+      "path": "app/lib/acquisition/__tests__/b19-admission-control.test.ts",
+      "blob": "ff087d0449a2fdd9be2bef4a37aea25ec58958c6"
+    },
+    {
+      "path": "app/lib/acquisition/__tests__/b19-d-quarantine-hardening.test.ts",
+      "blob": "8e8bd0f76a8bda3e0657685006a353bdadd4bf7d"
+    },
+    {
+      "path": "app/lib/acquisition/__tests__/b19-e-admission-purpose-share.test.ts",
+      "blob": "4739919e74865f59265e7d6ddeebc3877f52d539"
+    },
+    {
+      "path": "app/lib/acquisition/__tests__/b19-e-agent-read-port.test.ts",
+      "blob": "79d4ec8b4089646300722656d457b34157957729"
+    },
+    {
+      "path": "app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts",
+      "blob": "3d7727914808ea285d9da3a30a5357560f6607d6"
+    },
+    {
+      "path": "app/lib/acquisition/__tests__/b19-e-external-search-sources.test.ts",
+      "blob": "b7ab3dc96a545f462ab107fe01b5fb41a8a4d6a5"
+    },
+    {
+      "path": "app/lib/acquisition/__tests__/b19-e-external-search.test.ts",
+      "blob": "d2cf162c09b9ea7c9547991d96d2e9bd5469fb7d"
+    },
+    {
+      "path": "app/lib/acquisition/__tests__/b19-e-import-review.test.ts",
+      "blob": "6e5971e46f035313c7d5a316ed14aa0c2e284f36"
+    },
+    {
+      "path": "app/lib/acquisition/__tests__/b19-e-live-contract.test.ts",
+      "blob": "8889d2ec7c5f5a11857b665fd3988d2c34c92886"
+    },
+    {
+      "path": "app/lib/acquisition/__tests__/b19-e-quarantine-review-fixes.test.ts",
+      "blob": "795be51dfa83654f892b13fd93aa710344cb524a"
+    },
+    {
+      "path": "app/lib/acquisition/__tests__/b19-e-source-labels.test.ts",
+      "blob": "4393327550f725cb9567c84863fbd70f062b4d76"
+    },
+    {
+      "path": "app/lib/acquisition/__tests__/b19-e-source-registry-search.test.ts",
+      "blob": "fc86192efdfc723100e965dc8c9a6df16c180a31"
+    },
+    {
+      "path": "app/lib/acquisition/__tests__/b19-quarantine-pipeline.test.ts",
+      "blob": "b328d048d08f9952aea5b8e9b2c8a4e0bccd4457"
+    },
+    {
+      "path": "app/lib/acquisition/__tests__/b19-source-registry.test.ts",
+      "blob": "52a99e78ae64c15e4de358fc13ed4e784306fb0b"
+    },
+    {
+      "path": "app/lib/acquisition/__tests__/b20-a4-mcp-quarantine.test.ts",
+      "blob": "b8e2189ac8a6eb3508800fdf2420c26c36d6361a"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b09-1-boundary.test.ts",
+      "blob": "7585d72dd11456e6243788340cadf3df26084d78"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b09-1-recovery.test.tsx",
+      "blob": "bef68f754b2d6b21284842c240795d4bc1553f28"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b09-2-closure.test.ts",
+      "blob": "d6b6e4941c302351a1ba3dbf682be14c02f1e1c3"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b09-2-recovery.test.tsx",
+      "blob": "992ea199cf83fcc9544028ed4ee7c8ab21cac31b"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b09-3-closure.test.ts",
+      "blob": "9f1f55e8acd63be122343d2ece81ba78d0a32f61"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b09-loop-safety.test.ts",
+      "blob": "45c282109fa59e4ed66b1d84777aa209f935ce93"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b09-proposals.test.ts",
+      "blob": "32c5364b3162ee587c68d744796d43afe8dc62ca"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b09-provider-contracts.test.ts",
+      "blob": "12f5390f01e4f5b793230a314b53371830f0c821"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b10-1-strict-mode-publisher.test.tsx",
+      "blob": "206fe8ed29b12964cccda7cbec0bac8e0f312990"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b10-editor-context.test.ts",
+      "blob": "f45fc5d3571e03800e2d7841454058eaaab7c011"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b11-1-trace-integrity.test.ts",
+      "blob": "f7be76a437419577b6555c4d343a7889493bd913"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b11-2-replay-context.test.ts",
+      "blob": "a854f4bce2d77dc11135672ba022a5bc20410c67"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts",
+      "blob": "643259c6033add37fa9135211b75ec027d239a77"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b11-4-capture-ownership.test.ts",
+      "blob": "b9e5b5d3231c65e53c30c6254697bb574797cab9"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b11-4-no-execution.test.ts",
+      "blob": "31209c3e9198e33ae03daf7c7f20965663c4fa53"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b11-5-capture-exactness.test.ts",
+      "blob": "45a1d09683ee386eaa8f3fbf7e8bc079f62c360f"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b11-6-projection-ownership.test.ts",
+      "blob": "c6e3bd3b1c92325fff0335d9427da4d3786aabd4"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b11-7-primitive-discipline.test.ts",
+      "blob": "d50df235f171853b289ffa77fe63057a41789e64"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b11-trace-replay-evaluation.test.ts",
+      "blob": "c0b5179cd5561662c3634ce2a0346ba5fde00a13"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b15-3-pcb-proposal-exposure.test.ts",
+      "blob": "efef1475664249a7be61b8ac6ba5b3981c61cbf2"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b16-0-1-verified-actor.test.ts",
+      "blob": "5f36b701c1e6dc97edf09c440cb82ebb99fd64b2"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b17-f-view-session-bridge.test.ts",
+      "blob": "5a169212c8e188c4c91e3dd29001714b22d35823"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b17-f-view-tools.test.ts",
+      "blob": "6ceca660dca15be7750246e6c0f199fc9a61974e"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b18-a-autonomy-settings.test.ts",
+      "blob": "d575945b6671ad8b3a464cd2922e2e4a9a16433e"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b18-a-autonomy-store.test.ts",
+      "blob": "85ba2289d0c380fe3e6a2fac2e466fb7ffabe174"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b18-b-loop-execution.test.ts",
+      "blob": "5fd20e96a10dbdb8043f9c2dd9f3125e488412b4"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b18-c-gateway-dispatch.test.ts",
+      "blob": "e8b46567516745e21c877768f03ef1904845b4f7"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b18-c-gateway-execution.test.ts",
+      "blob": "05ce19d67e63e820eb093dd697be2fcecda38e09"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b18-c-never-execution-sweep.test.ts",
+      "blob": "b4c8459a7ad9ff0b87ccff3515d1f26eb60b9413"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b18-d-loop-text-phase.test.ts",
+      "blob": "9bc9b6ff12c62d0d275bc217b652c4f17b5025d6"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b18-d-tool-refused.test.ts",
+      "blob": "eaaa19b45748bbd4a998807325b6310bb32f5c86"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b18-e-board-inspect-budget.test.ts",
+      "blob": "46edd477527c3a375e25ce55b4f62fb5b7135e26"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b19-d-tool-result-hygiene.test.ts",
+      "blob": "e07dfb5574925ee2db3b59daf6dfe5ea8521c67b"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b19-e-external-read-service.test.ts",
+      "blob": "c03576fec181b9b3a162e488d415718a7202e1d9"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b20-a4-observation-read-service.test.ts",
+      "blob": "79e91e80c2b8c9f4ad9f1bea0be3529ec22889a0"
+    },
+    {
+      "path": "app/lib/agent/__tests__/b20-a4-trace-attribution.test.ts",
+      "blob": "924b85ee20fea4409f1a408d18dd63e914c8bd3f"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-a-contracts.test.ts",
+      "blob": "2bdfcc3d1abe3882de9929389791a866a1d42831"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts",
+      "blob": "d4f5abfd51bc074c83f12454d76cf667ead1be9d"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-a-page.test.ts",
+      "blob": "b331dfabfffbedbb31569c1665a31f5d5170f67f"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-a-store.test.ts",
+      "blob": "d7ab48aa2a8b4a65d9a872415c364dac17ef13a2"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-b-page.test.ts",
+      "blob": "9473a96d101e18768116ed17e7cef88479e2181a"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-b-router.test.ts",
+      "blob": "fe8803c074f5e3c5bd559c57f6783a0decc08ef3"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-b-scheduler.test.ts",
+      "blob": "9b7c087f95c07791138609ce7e705bafea57fe92"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-c-least-privilege.test.ts",
+      "blob": "90959e17d549669a2d4a874f8fa7903d983ab91f"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-c-no-elevation.test.ts",
+      "blob": "eb260549795ed6f9266dab24608fbd72d704accf"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-c-page.test.ts",
+      "blob": "c918f0d84c31dc144b485e2133b764a6f4f968de"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-c-role-tools.test.ts",
+      "blob": "388490ed5c7343f06c0e0a8ef64a7ffba912680e"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-closeout-statements.test.ts",
+      "blob": "1d5f69673996baeb455b1bf171e773caaec779a1"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-d-merge.test.ts",
+      "blob": "677b20d2184ece21c9b6e5b692bce6ace2256ed4"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-d-page.test.ts",
+      "blob": "811760823394125b2508ae404f57cba3f18747a5"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-d-verification-requests.test.ts",
+      "blob": "a67116684dcad6652547d41cb7594b383f5e2af8"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-d2-approval.test.ts",
+      "blob": "ef134a9dd478c38296be18423b4fb4c47df02704"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-d2-page.test.ts",
+      "blob": "f2fc3d14ffcc3c2316987bd52bc450789dc45a65"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-d2-proposing-roles.test.ts",
+      "blob": "d8f2b84de529bba2fdfa3201e40a97d835ca38cf"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-d2-provenance.test.ts",
+      "blob": "ec5fb027b10b8d104f20621a8ef236c0a303bf01"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-d3-page.test.ts",
+      "blob": "b08b1929a8cf0eda06e88a9a7027cbb122d1afbb"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-d3-pin-facts.test.ts",
+      "blob": "5d8523ebc5bfd655ef10517f89cc7195ef2d9583"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-d3-replacement-roles.test.ts",
+      "blob": "6e0a32065fffe8232e853e198ceee149dbab99a2"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-d3-scenario17.test.ts",
+      "blob": "2a2ec07297c8684d7e367a761db08acad2b9bfc3"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-d4-merge-records.test.ts",
+      "blob": "44812ba4d6199eb758abe4f717f5f68956697cd5"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e1-fallback.test.ts",
+      "blob": "2a8ec401ed64a4fe54ca02ff8fa7ae7a443c36d2"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e1-page.test.ts",
+      "blob": "79436434bb77de92c223282b34e00e51ddf3b929"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e1-provider-breaker.test.ts",
+      "blob": "9f0603ef2312d236c1ddd614ca260c3b65151192"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e1-provider-policy.test.ts",
+      "blob": "e7286a5a42bd6b0f1fcab17356995b103440e53e"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e1-result-tool.test.ts",
+      "blob": "d417526d41fa9dee8a13bcf1f4b3492ffb4620ca"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e1-retry-card.test.ts",
+      "blob": "3f2cef2a9fbd90ef89e9e701c65f8e6e9bacb63b"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e1-stop-reasons.test.ts",
+      "blob": "1d2044f9fbfc35832727cf6e7b7b05261d8c0b0d"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e2-page.test.ts",
+      "blob": "f873b8419746fa903451b55b7f5e6916041b34b7"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e2-run-events.test.ts",
+      "blob": "6d11a4838601a6cae0b0340863f59cc1e387fe0c"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e2-run-view.test.ts",
+      "blob": "28c0e34a0bfbb23fc833f7b1f5cdd867622ebee2"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e2b-page.test.ts",
+      "blob": "a4ba0d613c8397494b72cc81bb2828a27b306b9b"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e2b-task-identity.test.ts",
+      "blob": "e7695a91c68053f18ee69a250c5a88419ae8ba9e"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e2b-trace-attribution.test.ts",
+      "blob": "9a2bce478a90d81e77780bb32c8fb5d75bd89a6a"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e3-page.test.ts",
+      "blob": "71aaf72156f855a2bcdc04752cd1092b9397a019"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e3-resume-offer.test.ts",
+      "blob": "5f048c5556842666cd8ac22ca9278e414be68431"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e3-resume-record.test.ts",
+      "blob": "fa23b344142dbbfa0352da3df1a6cde97673d2a4"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e3-resume-runtime.test.ts",
+      "blob": "78729459bf6cf7c0c64dced0f5401290c4826a2b"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e4-first-turn.test.ts",
+      "blob": "390ed7c2bce72c696b0774a6acfb1e23d8d2ab74"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e4-page.test.ts",
+      "blob": "8420ae73baae9b07929c6743b6fd3b201674e34f"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-e4-replacement-grammar.test.ts",
+      "blob": "1d1ea6f5298049df6d0c60504e0b57b9ccc43de8"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-f-evaluation.test.ts",
+      "blob": "87e753c2f64b4867bb46cc3188f033388c2ab204"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-f-page.test.ts",
+      "blob": "f52982face5512f70a2689dd0f63947ed1b901cf"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-f-replay-capsule.test.ts",
+      "blob": "680b2e4a43d78a9304d6539cf367da295cb70825"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-f2b-follow-up-failure.test.ts",
+      "blob": "fa873c8f7e847e8c46c21217681a21eebe701435"
+    },
+    {
+      "path": "app/lib/agent/orchestration/__tests__/b21-f3-evidence-gap.test.ts",
+      "blob": "4e51a540ce7e67f8a62dc9de090d630add32f50c"
+    },
+    {
+      "path": "app/lib/architecture/__tests__/alternatives-scoring.test.ts",
+      "blob": "87f02c178c783a418b8c667bf880b56e986fcf25"
+    },
+    {
+      "path": "app/lib/architecture/__tests__/compiler.test.ts",
+      "blob": "2e044d9ffeb802c9b4359f037c19a9f87c2ee054"
+    },
+    {
+      "path": "app/lib/architecture/__tests__/corpus.test.ts",
+      "blob": "373dfb210dfcf382ec0169abd5955792bf32550b"
+    },
+    {
+      "path": "app/lib/architecture/__tests__/problem.test.ts",
+      "blob": "ce4311e133469b50c0a4778be3a90e1583140863"
+    },
+    {
+      "path": "app/lib/architecture/__tests__/transactions.test.ts",
+      "blob": "35cb4be449d6f7ef0e2eb030ebed9af6377b856e"
+    },
+    {
+      "path": "app/lib/architecture/__tests__/validation.test.ts",
+      "blob": "222f6a438d822f2b935a337b93a09fa49ceaa903"
+    },
+    {
+      "path": "app/lib/assignment-queue/__tests__/materializer-repository.test.ts",
+      "blob": "fc45a3a5eb597b562414c5d21ab69bbad4e210b5"
+    },
+    {
+      "path": "app/lib/assignment-queue/__tests__/revalidation.test.ts",
+      "blob": "a1ce46dd9e5ba3e1c5780bff6653f5f7c9e6dd5c"
+    },
+    {
+      "path": "app/lib/assignment-queue/__tests__/service.test.ts",
+      "blob": "811ef522d5aa475c7d934215356ac6b85bba25e5"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-approval-evidence-authority.test.ts",
+      "blob": "edcf4345e6e8b1ef9fba4833d8107a9b840c932f"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-d-atomic-integrity.test.ts",
+      "blob": "bc25373afdf7b4a416c589601144f96be0a9d768"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-d-claims-values.test.ts",
+      "blob": "1c67ac2c2604044403136b3e13e9c85c24bfe40b"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-d-i5d-review.test.ts",
+      "blob": "0bf4504cce562349e52acea54a969e28d7022338"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-d-ingestion-bounds.test.ts",
+      "blob": "81e9d31110283591b110349eb48ae90f4ba4223b"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-d-kicad-export-fixture-runtime.test.ts",
+      "blob": "1beefadbbc81d1c1ad63ae21dc8dff04ccedee5c"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-d-kicad-export-selections.test.ts",
+      "blob": "fbbc5cff8bbe2f295b2ce81a4614c4f1210b310a"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-d-kicad-hostile.test.ts",
+      "blob": "3f27cb6ee5600b24bbe600cef71529ae70ce55d8"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-e-adopt-exact-revision.test.ts",
+      "blob": "33bb6f37d7711726cd4003f5f84dd4aa1fdad042"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-e-atomic-publication-durable.test.ts",
+      "blob": "7c237df2ecfef1f71a788c89c4c3d9b57aacc0c8"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-e-atomic-revision-loaders.test.ts",
+      "blob": "92acb8eed77b6f5318f53fd83a2be88fd686f586"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-e-publication-boundaries.test.ts",
+      "blob": "b1efe3fe05132b7b6c1f17729cd6f0ada6ba6ced"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-e-publication-fake-vendors.test.ts",
+      "blob": "8fc6025b06f00c71ee86749bc919dc01c8f19bbe"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-e-publication-integrity.test.ts",
+      "blob": "aa35e4a8dfdc767637d96cd4eefb3958fc17c521"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-e-publication-review-durable.test.ts",
+      "blob": "f7e6442c9db1608dadd9d76460e5b62fa2adaf08"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-e-publication-review.test.ts",
+      "blob": "7743f4451de4d8f74e880dd4981e69ee7526c39b"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-e-upgrade-diff-status.test.ts",
+      "blob": "6456234c09fb4e8ad78f6e168e81ce09d592f103"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/b19-export-license.test.ts",
+      "blob": "df93f95ccb0d9049f58d421f5df0485a2f410cc6"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/corpus-performance.test.ts",
+      "blob": "25b4fb098fea598b1474fe7d48243c07b5db6cf4"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/cross-consumer.test.ts",
+      "blob": "cfa5e11a0e5755153c2217f752dfb7ab083cc04a"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/governance-security.test.ts",
+      "blob": "3a3787b9f360609b86f2b80f720f91ac3a3226de"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/kicad-compatibility.test.ts",
+      "blob": "c648190d1ca12bc16b8cebfc3f5d369d36ac7e2c"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/kicad-http-route.test.ts",
+      "blob": "8d891f8e4dd321010d526c923d6eb130c42bddb2"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/mapping-claims.test.ts",
+      "blob": "d9b16f8c411b9a2bc648788a1d76c1640b3731a9"
+    },
+    {
+      "path": "app/lib/atomic/__tests__/search-project-adapters.test.ts",
+      "blob": "68440fdd7f0459d18762f5af28777fead3df076f"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts",
+      "blob": "ea076ea7732e07c5858c03f9476f2a8b0c8cc7f0"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-1-route-authorization.test.ts",
+      "blob": "ce457bee927524da9b0927bafce4831f4c1a3a2d"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-11-bom-confinement-gate.test.ts",
+      "blob": "dac3c59ea02c83d4ca25eb219b14210e0501c5db"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-14-selector-envelope-gate.test.ts",
+      "blob": "a9aefceb981081ad50e5e9a4ad361f0dc3f346b9"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-15-manufacturing-boundary-gate.test.ts",
+      "blob": "3f5f2d3f509cf00896e9a4c3d3dfbafc1a3f714a"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-16-calculation-confinement-gate.test.ts",
+      "blob": "3571bc7c3f9c83cd9120bdc9e3ea3499f6c59cfc"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-17-schematic-compiler-confinement-gate.test.ts",
+      "blob": "6253eb9a08e10b1298edf4d974237c47123631d5"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-18-component-selection-confinement-gate.test.ts",
+      "blob": "24322f799cbc7dc3e5017375833dded9aa0db7ad"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-19-circuit-confinement-gate.test.ts",
+      "blob": "df70cf1521cb963772650ece5db84639bb4e19ba"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-2-csrf-exact-origin.test.ts",
+      "blob": "9438299fe0632251ccf43f585b27d28f7682a628"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-2-gates.test.ts",
+      "blob": "311d57f94f158ffc5dfe6261e71b2338bb4a1656"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-2-mode-diagnostics.test.tsx",
+      "blob": "a3071ea0774c74c3b6eff85fa32d28c733a5f645"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-20-simulation-confinement-gate.test.ts",
+      "blob": "ce99cc3c7e3db8349e00fcf801d6d184eee33b51"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-21-tranche14-confinement-gate.test.ts",
+      "blob": "e3a90cb34d881cc4b249ae902fb9f215e3ef6afe"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-22-tranche15-confinement-gate.test.ts",
+      "blob": "32feaaa2b3b11a335f6b6a9ed4d5a8fb0003a679"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-23-tranche16-confinement-gate.test.ts",
+      "blob": "0cb87b45f0122c530cafeaf8d4fc03e5256563a7"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-24-tranche17-confinement-gate.test.ts",
+      "blob": "adbfd68454cd3c83af326a69efc06db93409dcd7"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-3-boundary-gate.test.ts",
+      "blob": "f4fe1dafd1462b7ca6194d0fe3ea269f75167a64"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-3-effective-classification.test.ts",
+      "blob": "d0b0784817553b9d776e834c36f3ec022c72e2ba"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-4-authorization-and-body-gates.test.ts",
+      "blob": "b72535ec9da414af9acb4be174885fde5d80847a"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-5-analyzer-hardening.test.ts",
+      "blob": "e9fd52e6eab1144e4312de0ef444e62055811382"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-6-analyzer-hardening.test.ts",
+      "blob": "a78dfb0a88292644b5b77806bd32c956b108a1e5"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-7-analyzer-hardening.test.ts",
+      "blob": "de49ee91335c0c76e22f7b19e88e6c34202e27b0"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-7-wrapper-adoption-gate.test.ts",
+      "blob": "1383534f0fa039b0be8924a8d056ca887ee6d853"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts",
+      "blob": "e26ba74591933bc76c4ecfdadcdc84c715c777ea"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-8-wrapper-capabilities.test.ts",
+      "blob": "a0ab9612b4bc923c17072732d13885490d0437ab"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-ai-approval-lifecycle.test.ts",
+      "blob": "4e3b724fc0752ac1a0e29392404eec393c7e84f2"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-local-dev-and-csrf.test.tsx",
+      "blob": "cd9fe93a97dedfbd32b967ce18c108b27788e6ed"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-0-trusted-request-context.test.ts",
+      "blob": "4164a7c3b4edc39df0b95900a67c61eab682a6d0"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-1b-auth-composition.test.ts",
+      "blob": "83436db7bb3afb0b5e7a62ee4256de84c4969fd4"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-1b-cookie-semantics.test.ts",
+      "blob": "aebe1b816fd4deaf52b65fcbf722fe41824d0ec8"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-1b-live-qualification.test.ts",
+      "blob": "66230b1837fe45b531079acda9432728c929b184"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-1b-membership-schema-parity.test.ts",
+      "blob": "37d5dc6b99737f1b840f1476ce536c6ce2214c97"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-1b-proxy-and-route-cookies.test.ts",
+      "blob": "8b1723b070f2be2bb730838d0d4cb8fba77f14ba"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-1b-real-sdk-identity.test.ts",
+      "blob": "20b871195215e9986b851f2e5ba7f14613d6c93a"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-1b-session-liveness.test.ts",
+      "blob": "6db25edcbdcb07e1114136e6a740a3065c07b783"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b16-a-correlation-id.test.ts",
+      "blob": "8a7176806eb5fb0d1c01b095d1d9d63b29ef621a"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b20-b2-mcp-access-token.test.ts",
+      "blob": "37d610ec2760c541857ee385201d806d0c465bec"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts",
+      "blob": "53c7ebaf81215454059489f0792149b871f44c4b"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts",
+      "blob": "fdca341378a15f13ae38416c5b783077bce45ca7"
+    },
+    {
+      "path": "app/lib/auth/__tests__/b20-b2-route-tree.test.ts",
+      "blob": "8e9c5bbe5aa64fe07e23e09d2172f612b508622e"
+    },
+    {
+      "path": "app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts",
+      "blob": "a3a09d0a92c49d69519fb3968f66f6444221c941"
+    },
+    {
+      "path": "app/lib/bom/__tests__/b19-d-pricing-mpn-binding.test.ts",
+      "blob": "59d71960f3433c0a8bcd9c84ae1a9b6fda4517c0"
+    },
+    {
+      "path": "app/lib/bom/__tests__/b19-d-review-price-consistency.test.ts",
+      "blob": "1ad718edb92c80566c379d9c9f924250bdb320e5"
+    },
+    {
+      "path": "app/lib/bom/__tests__/b19-e-bom-catalog-status.test.ts",
+      "blob": "9bb2f19ff6e7588cdadbe1302e419385060239e0"
+    },
+    {
+      "path": "app/lib/bom/__tests__/b19-e-bom-sources.test.ts",
+      "blob": "66ce555a7d8a649da24d84daf8e8452e3e6853ff"
+    },
+    {
+      "path": "app/lib/calculation/__tests__/calculation.test.ts",
+      "blob": "9c28ac3a57d03905fb9110422e0daafe8efc4815"
+    },
+    {
+      "path": "app/lib/circuit-knowledge/__tests__/core.test.ts",
+      "blob": "19e074cf193e914339a217f4066e655f2b6ff7ef"
+    },
+    {
+      "path": "app/lib/circuit-knowledge/__tests__/matching-transactions.test.ts",
+      "blob": "7994eb0d2f43442fd6941a956af0c549e513ce28"
+    },
+    {
+      "path": "app/lib/circuit-verification/__tests__/corpus-project-waiver.test.ts",
+      "blob": "d0e5c74bf5b8dd0c6dca2982705f19a1dae74a33"
+    },
+    {
+      "path": "app/lib/circuit-verification/__tests__/gate-registry-denominator.test.ts",
+      "blob": "6c2f35df34f0d39c28d5d62313a3122916d10716"
+    },
+    {
+      "path": "app/lib/circuit-verification/__tests__/oracle-readiness.test.ts",
+      "blob": "1f76d8a38354672dac70afa7a885c8dff56e290f"
+    },
+    {
+      "path": "app/lib/component-selection/__tests__/component-selection.test.ts",
+      "blob": "cda6445460d9802ae01bbaf78c3ca1837307a48b"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-a1-diagnostic-bounds.test.ts",
+      "blob": "91b0884095e4099003cd8447acab58d6048a5bac"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-a1-model-screen.test.ts",
+      "blob": "df6beb3521b31b761eb03d8ba40ccdf3f9b47b07"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-a1-page.test.ts",
+      "blob": "9ee9c3dfb32945a8e53bd30c8b6bef8db0f30c47"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-a1-secret-env.test.ts",
+      "blob": "91f2cd64968d335522064ff0aec182e42dc5ee3f"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-a1-spice-ai-approval.test.ts",
+      "blob": "689db3d21f47148cff3c5a4fd87573823527fba3"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-a1-tool-output-bounds.test.ts",
+      "blob": "cc2ac40ebbe9bcd7ff57bf3d9be50f8412a30eee"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-a2-blocked-runner.test.ts",
+      "blob": "7530ff9e868c711115463f947aef05ca8e4e3e14"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-a2-process-census.test.ts",
+      "blob": "b06e7492abace57add908c445e322e3ff2b71aa3"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-a2-runtime-profile.test.ts",
+      "blob": "1acb52ac6157b3c755734b75fa5a47c3409b336f"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-a3-diagnostic-runner.test.ts",
+      "blob": "60a37fd29e3d5c606e8f9ae78b062180a2365bab"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-a3-runner-live.test.ts",
+      "blob": "d5fead35bf0d1015ba50ec18edd4781117e4bb8d"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-a3-single-spawner.test.ts",
+      "blob": "07560f4a2d3d2704e201f4e05933f1505afc8244"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-b-approval.test.ts",
+      "blob": "e4f045e8cd79aad3dde62776e9b835c3ef0df92b"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-b-bounded-host.test.ts",
+      "blob": "acf44e00ba4d733fe2c9e70f3c10a00088c1e43e"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-b-catalog.test.ts",
+      "blob": "7763ff5098f06732e9be66eec42f3b69c35402a8"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-b-chat-runtime.test.ts",
+      "blob": "406772509f491fed7c80cd0473f3c0c420cfb3de"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-b-exposure.test.ts",
+      "blob": "731ee1a431c0c3c0b9abdd6e1faa37fa2e865408"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-b-no-generic-exec.test.ts",
+      "blob": "1c41ab04b65b77c4a8266728242e935ce01a1c0a"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-c-ai-evidence.test.ts",
+      "blob": "f3c1e50f3ca1206447ba3e7fa98b9982a95531a9"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-c-authority.test.ts",
+      "blob": "e378022444d20bd85d7f5a48160e469e279c39e3"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-c-deck-validator.test.ts",
+      "blob": "efd4ab19b91310ace0c0dde924da39542498441b"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-c-evidence-store.test.ts",
+      "blob": "1a24703b8a9d5aff7d339835bafb054db31beec3"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-c-job-store-terminal.test.ts",
+      "blob": "6ecb2b51d8730c1a1792059397ebc2702615cf5e"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-c-output-validator.test.ts",
+      "blob": "548b0683538b7aceee2efe635e1924db13873c05"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-c-wording.test.ts",
+      "blob": "5f02607eaf56cb7bbc98f534a33e1e2be119a27a"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-closeout-statements.test.ts",
+      "blob": "e3859d59650c304e0afc221e8b1d2fb40dc839df"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-d-adversarial-live.test.ts",
+      "blob": "5acfcc5624f219dd0853b4fd909236f41c00d440"
+    },
+    {
+      "path": "app/lib/computation/__tests__/b22-d-adversarial.test.ts",
+      "blob": "330db9bbb5d093a69d0a95567f93c2ba0c0ee076"
+    },
+    {
+      "path": "app/lib/constraints/__tests__/atomic-application.test.ts",
+      "blob": "580112eace3f6d167285c467b85502d0a6c5a2ab"
+    },
+    {
+      "path": "app/lib/constraints/__tests__/b19-d-dru-structure.test.ts",
+      "blob": "c3a78bd379dac93b6f096cae5011fc180605f0c1"
+    },
+    {
+      "path": "app/lib/constraints/__tests__/corpus-performance.test.ts",
+      "blob": "1a1b7edfce6de871b02bde30fa6e2c58c1de7b24"
+    },
+    {
+      "path": "app/lib/constraints/__tests__/drc-evidence-mapping.test.ts",
+      "blob": "825b792fbf72df7b4c03b3c6a767591297f044dc"
+    },
+    {
+      "path": "app/lib/constraints/__tests__/kicad-api-agent.test.ts",
+      "blob": "f754563e256cbb643fcb20cde68a27ae50e97be2"
+    },
+    {
+      "path": "app/lib/constraints/__tests__/legacy-consumer-integration.test.ts",
+      "blob": "d609dbf2468c53b8e655c236c3c38ada63ef5844"
+    },
+    {
+      "path": "app/lib/constraints/__tests__/parser-quantity.test.ts",
+      "blob": "2be1b825e222f65075588a04e9ae7a6885727dfb"
+    },
+    {
+      "path": "app/lib/constraints/__tests__/physical-routing-placement.test.ts",
+      "blob": "80c10189de0238f14b5b8d225ff850a2dd54de0e"
+    },
+    {
+      "path": "app/lib/constraints/__tests__/selector-merge-compiler.test.ts",
+      "blob": "38a4180dad0c64d6f612e206ca8a06d17b2c748c"
+    },
+    {
+      "path": "app/lib/constraints/__tests__/transactions-evaluation.test.ts",
+      "blob": "0f62337befe07ee6c816226538ee4fc053228724"
+    },
+    {
+      "path": "app/lib/db/__tests__/b16-0-3-bom-ownership-check.test.ts",
+      "blob": "7d44dfd2631d1f41b9f243b701d7db2b7a2b07d7"
+    },
+    {
+      "path": "app/lib/db/__tests__/b16-b-database-qualification.test.ts",
+      "blob": "b5f19e565d6531611d04e854334b860c0688fe6f"
+    },
+    {
+      "path": "app/lib/db/__tests__/b16-b-migrations.test.ts",
+      "blob": "4ec0e3f33f8b409a21ec26370c30b974d6ce4f88"
+    },
+    {
+      "path": "app/lib/db/__tests__/b16-b-postgres-qualification.test.ts",
+      "blob": "9625d3d5bf7e09721f43637a4f0bbd2e080f50fa"
+    },
+    {
+      "path": "app/lib/db/__tests__/b16-b-rls-membership.test.ts",
+      "blob": "1342c81d0bf4a31b895f6ff8f797bf3d3d54bb31"
+    },
+    {
+      "path": "app/lib/db/__tests__/b16-b-schema-parity.test.ts",
+      "blob": "27cca17cd0746cd308711ff5e5c0ce7c50f862ac"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-connector-policy.test.ts",
+      "blob": "44b7a67f896851afd241f3b9524f38a28ef19222"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-d-exact-mpn-binding.test.ts",
+      "blob": "d4c29078f70f1ca5953807806abd12e400f44b99"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-d-exact-mpn-connectors.test.ts",
+      "blob": "a9a1b2b04ee925b6ccc23d2e098288b763168966"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-d-lifecycle-retention.test.ts",
+      "blob": "ab051ded915f26ba558a80f5a8e724547c7cbce9"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-d-review-connectors.test.ts",
+      "blob": "d48c6965caa0d6af9241af9269d36144113c38fc"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-d-review-lifecycle.test.ts",
+      "blob": "7bd9e7e6bd4845cd746ce344aafd3db532840df1"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-d-review-values.test.ts",
+      "blob": "75fdd02aa40c4c8b150a8eae347a39cf8425763a"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-d-vendor-values.test.ts",
+      "blob": "5bb961bb1cf1e6cec6493ee4778f38e2c3a30f98"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-distributor-egress.test.ts",
+      "blob": "83bc627890c6e6f8a5dfa49960e17d6cf209899e"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-e-exact-mpn-offer-cache.test.ts",
+      "blob": "52c90a881f017c5990fd1343ec9604125e3aac87"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-e-external-search-retention.test.ts",
+      "blob": "38f41ad6942fbd349bd89b8e5d644816f4277604"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-e-pricing-provenance-cache.test.ts",
+      "blob": "8d8b241cd9f305c3c763a3af8f98e9056203bac1"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-e-pricing-provenance-counts.test.ts",
+      "blob": "7982d233ec73d7ffb65003aa187dbb0b32d23fdc"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-offer-retention.test.ts",
+      "blob": "536cbbf143daf86bd217e234e39bd0715e0a6073"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-pricing-live-gate.test.ts",
+      "blob": "c59be171602258f1b24518f9330494329d09ec28"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-quota-breaker-coalescing.test.ts",
+      "blob": "47f7f3db11226586e9905501503beec34bba324a"
+    },
+    {
+      "path": "app/lib/distributors/__tests__/b19-source-admission.test.ts",
+      "blob": "34b19909b4323609db93586c06ec9bdf0477e2b2"
+    },
+    {
+      "path": "app/lib/durable-workflow/__tests__/repository-outbox.test.ts",
+      "blob": "8a7a357b88f645eea508f410e5be18401f8eb0f8"
+    },
+    {
+      "path": "app/lib/durable-workflow/__tests__/stage3-stage5-owners.test.ts",
+      "blob": "131bf014a3aa1822d8718191c4b7e5032d14f059"
+    },
+    {
+      "path": "app/lib/durable-workflow/__tests__/tenant-scope.test.ts",
+      "blob": "e70ea7b82ade91304e361208d5b01427c6c12795"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/action-registry.test.ts",
+      "blob": "7ee7dc8ca6d29db914eb6d21d5d0671f986db46c"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b03-1-hardening.test.ts",
+      "blob": "41c85a8f3945ec6012c62676d427c4e707d226dd"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b03-2-boundary.test.ts",
+      "blob": "98203ef46cd047e2a15aad369c0f774c7371fb88"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b04-tool-registry.test.ts",
+      "blob": "f1138f5ecdb39aa494a1c33c8bf366fcdd846ed7"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b05-1-resource-pinning.test.ts",
+      "blob": "0c75c0109c08f972cdf0960100d414fbefd8f1f5"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b05-read-invocation.test.ts",
+      "blob": "a596cce63ba3348fc9a0e993bf90d4661257800d"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b06-1-proposal-authority-durability.test.ts",
+      "blob": "b4618408628275df1a0f05824048d77c92b2878f"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b06-2-authority-hydration.test.ts",
+      "blob": "fa2f72aa9b79f631302b6127ef5ebdec931c3e3f"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b06-3-lineage-quarantine.test.ts",
+      "blob": "bb75f59c78428754aa1caefd5507013b26d52780"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b06-schematic-mutations.test.ts",
+      "blob": "4799b03cef138463a8aafb2ac0472f7b764db99d"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b07-1-identity-geometry-gestures.test.ts",
+      "blob": "b49cc029804815a18bf4c6c7cca28ce691cc2773"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b07-2-interaction-interlock.test.ts",
+      "blob": "057a867ed65981c32e15229142ee2b9a07c5d8e2"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b07-3-serialization.test.ts",
+      "blob": "fb3841a0ae297870c610153a398d4c90e27d4570"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b07-4-project-async-scope.test.ts",
+      "blob": "758a90803f9cfa03185a671b423358354656225e"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b07-5-async-ownership-closure.test.ts",
+      "blob": "0eefbbbbd4329cd0cb33272661da19f7ea73e7c9"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b07-graph-gestures.test.ts",
+      "blob": "bb51702e7db1c310d36912051b04e8a7a410fb15"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b08-1-lifecycle-hardening.test.ts",
+      "blob": "523dde0b55a1f1ad8fbed59e3303ecefea129c6d"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b08-2-authority-boundary.test.ts",
+      "blob": "7d87647128c7217a738f2cc17e71eb184d59a2df"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b08-canonical-pcb.test.ts",
+      "blob": "f5929f4e20c2d32bd2190ff0b5b251b58cfcd1e4"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b08-pcb-mutation-gate.test.ts",
+      "blob": "59473e7bb504faf47f50b814c5e399d9f3ab4e75"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-1-adoption-identity-receipt.test.ts",
+      "blob": "15474299ed704aea9b4fb76c8b31245012fc8b40"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-1-lifecycle-interlock.test.ts",
+      "blob": "b62dfcbada2f753cfc0239dfcdd7fe4fe6070387"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-1-production-integration.test.ts",
+      "blob": "e32aba224775d92bea75843a001a05d8fa50a0ff"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-2-consumed-replay-scope.test.ts",
+      "blob": "04c37747a56448f14e0a32f502ecff113713e199"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-2-synchronous-adoption.test.ts",
+      "blob": "df2850fb8bc8107864400ed6a66e9ce76d47490f"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-2-transition-serialization.test.ts",
+      "blob": "2d6d88e4d2e0f9e24265b153229e5b5b132db87d"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-3-durable-replay.test.ts",
+      "blob": "676a2f0549b8f48b77d46bc4ddb2b2fb61085b81"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-3-reentrant-transition.test.ts",
+      "blob": "bc1ebf22cf498adfe0f2947b0cb440a199a7641e"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-4-concurrency.test.ts",
+      "blob": "1e7f4f2643316f3353659a0c75cc17bebfb02ab2"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-4-journal-strictness.test.ts",
+      "blob": "07faee6ab9911b5113ae3fa53d698f4132e3baf3"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-4-receipt-linkage.test.ts",
+      "blob": "1dd53bd4e7d80d016dc2e9a5594295c9adaaa90d"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-4-transition-pointer.test.ts",
+      "blob": "4001f3675cc1d2a9a6ad086a66436670698ce03f"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-5-journal-atomicity.test.ts",
+      "blob": "b1f093819f33bd49ba0b7489f62d325025053ec6"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-5-reentrant-settlement.test.ts",
+      "blob": "68955f85834a9bc5aa1fd01d43fda2eea71b4354"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-5-scope-identity.test.ts",
+      "blob": "ff928d970b75ed914db3c12f4285f9cfaac90c5e"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-5-transactional-activation.test.ts",
+      "blob": "8e62d009613bfec440bb8889bcf8f7761648c2a5"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-6-autosave-settlement.test.ts",
+      "blob": "9a4bde6c66fe1a6b9dc4b7cb8ba3a4f7cbd4ee3e"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-7-total-settlement.test.ts",
+      "blob": "c3a223e219d6792b2ca4c5e814e975a977b0e3bf"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-8-observer-isolation.test.ts",
+      "blob": "f69f78736911148f47925b9cec529eab5d503d36"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-approved-mutation.test.ts",
+      "blob": "c160c4903fb7ef1ea5dab6ff9ad418edcb4e34d5"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b12-boundary-and-e2e.test.ts",
+      "blob": "882b31b27fc1d51a3a34659cc52948505ae203d0"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b13-1-authority-integrity.test.ts",
+      "blob": "4df9772ffc81142f063194006a48d17495aa1046"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b13-2-authority-scope-and-cancellation.test.ts",
+      "blob": "90650b516c6e46976993ca19ee0af3185250cb7c"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b13-component-authority-bridge.test.ts",
+      "blob": "44baaa28083ed8274076d3b86e569dcd05946cea"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b14-1-approval-and-reauthorization.test.ts",
+      "blob": "50279bfe74226814ac7650516193af92cce06fea"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b14-replacement-apply.test.ts",
+      "blob": "840ab95e5e21cb84d1d2028748a471c58bf08db1"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b14-replacement-proposal.test.ts",
+      "blob": "e40a92e5a440f46b0a9d1d6cabbfad95378e1a99"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b15-3-approved-pcb-apply.test.ts",
+      "blob": "2a27eb8e25e8bfad42e4b9c611a282dff14639fa"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b16-0-1-replacement-authorization.test.ts",
+      "blob": "e8ec9a0116b5a5dfc9babed45bbbbc79f362ae13"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b16-0-1-tier1-authorization.test.ts",
+      "blob": "7724526f40d1a70e868d6eb043a6461d3f8156a8"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b17-a-control-inventory.test.ts",
+      "blob": "2a3db3cb3a354042936276a1ee20ac879556ca63"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b17-f-agent-exposure.test.ts",
+      "blob": "5e03105a35c4949daae508e8db1ab2fc9b362918"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-a-permission-tiers.test.ts",
+      "blob": "ade8690ba8addfb93c1d31930b297c1ebae47aad"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-b-execution-grant.test.ts",
+      "blob": "137ccf206481e1419d8bbe2a581b83a0c00b8b94"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-b-explicit-request.test.ts",
+      "blob": "4beae34341108d6c4ee1393c6ab772d4b80c3fde"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-b-granted-executions.test.ts",
+      "blob": "5e9a1b82cc1348877d21d55860f80c03e7fc640c"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-adversarial.test.ts",
+      "blob": "d226c11480c25c3384c4e909cee11d8c6e45b706"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-builders.test.ts",
+      "blob": "b29be0ea97e5f7f89d3bd3bb42f7848b6f263c0b"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-dimension.test.ts",
+      "blob": "caf0a67d1bc24ddf09808a2d663a44e217876960"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-explicit-grammars.test.ts",
+      "blob": "f931eb166110ea01dea336eba0ef1947c14ce0d0"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-exposure-lift.test.ts",
+      "blob": "8ad232a0e5f1d16407e8a60b2a60acadbd7a443f"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-fixture-agent.test.ts",
+      "blob": "66f0eab273d09d2afaf22e9818b349961e620d8e"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-granted-execution-gates.test.ts",
+      "blob": "1801f255cfab4bd91a8bb123927424cbb984b10b"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-loop-real-gateway.test.ts",
+      "blob": "9c42c653331b3d2dd45d876542169d4b4e794873"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-recovery-inflight.test.ts",
+      "blob": "2c3676c7ef81a20b6ebb09e0a75533c2437fd43c"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-replay-grants.test.ts",
+      "blob": "0188f88b812e70c4fe99f62c791f2cc6a2023221"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-result-contract.test.ts",
+      "blob": "b1b8af94303750482c6dbd371c65c7fe08a6ed62"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-review-2.test.ts",
+      "blob": "4fa0387b200a0a9853d6eb1f54fb92d641bd0999"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-review-3.test.ts",
+      "blob": "fcd7dcedbd6a26bb1d0925c9803e0f150af8f9c1"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-review-fixes.test.ts",
+      "blob": "bfc1f16f32b292672eb0043ae71c6dad1bb6dd94"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-rotate-arrange-e2e.test.ts",
+      "blob": "8e460c985be69ac92a0389cd7f8c57d5d5ed6fe5"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-silk-text.test.ts",
+      "blob": "f40a95d90d37ffe926a36c33119ec71a223d1952"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-tier2-truth.test.ts",
+      "blob": "32f420fec41048a506d9e8f940ce1bc110affaf4"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-c-undo-redo.test.ts",
+      "blob": "e734e77f7b7a5b6de4124d3887cc4816e5dfe27d"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-d-repair-undo-bound.test.ts",
+      "blob": "2a24f586143f369ab6e0657f332d0f18b8c584de"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-d-repair-undo-held.test.ts",
+      "blob": "6255e394c68f2b3676efc28b5ceea1e17192e449"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-d-ritual-outcome-report.test.ts",
+      "blob": "20ae189d02be0fa76fd7e8574fcb943ecbd7e47d"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-d-undo-during-commit.test.ts",
+      "blob": "b14e71e5c883a7eb5955c9591926096006fe9f5d"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts",
+      "blob": "110d3f51a4ed53dec28166150a540b6bf583e786"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-e-replacement-apply-breadth.test.ts",
+      "blob": "d6b5b39fdb5409b1a6158614d649cfcb5978bd7d"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-e-scenario-2.test.tsx",
+      "blob": "07024295fc98f767c3cf782a3f64f8d82dd746af"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-e-scenario-3.test.ts",
+      "blob": "8e9c1cf222748663ffd1a88cfe29dc1c83438c5d"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-e-scenario-5.test.ts",
+      "blob": "b34730e1f4a8143dff29fa81a58983dab64e05f1"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-e-scenario-7.test.ts",
+      "blob": "ae9577117159596f8b275474be42e968b6262d66"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-e-scenario-8.test.ts",
+      "blob": "430040738722ff56790fe01fc72bfc7a2010cbc8"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b18-e-via-facts.test.ts",
+      "blob": "7655d7f8308a3b029b307c1da6439fbcef1f6c86"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b19-e-authority-catalog-status.test.ts",
+      "blob": "a55a99039ec70f32daaab73e78d150493d8c4fe2"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b19-e-external-read-descriptors.test.ts",
+      "blob": "e523c17bb2fdeefe47ce6bc731beb632546e44f2"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b19-e-no-purchase-tripwire.test.ts",
+      "blob": "61fe21d128a5abbe407a87b82202b1b45dbc21cd"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b20-a4-observation-descriptor.test.ts",
+      "blob": "803d75aa941936ee565d334d7c352c58b5e63834"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b20-b1-mcp-exposure.test.ts",
+      "blob": "9ff7293088b14c2e086ff02dc5b60437df852109"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b20-b3-durable-read-bundle.test.ts",
+      "blob": "4a3360315e93679be853c5706cb6e82cb3723844"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/b20-b3-mcp-subset-move.test.ts",
+      "blob": "a5930a564cc40b4a1530be6f827da6c2195e56fb"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/collaboration-scheduler-shadow.test.ts",
+      "blob": "48a151febe06763ed1e1d2c3c62adc79529d808f"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/editor-adapter.test.ts",
+      "blob": "a32c92ec3822f89708388e996e5e430d8fcf56da"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/executor-kernel.test.ts",
+      "blob": "379aec27fc6c34118cc69a4b4d8ecfa3db129513"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/migration-security-rollout.test.ts",
+      "blob": "8a2e180050b0085d337a92318d8bb2957544e886"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/persistence-recovery.test.ts",
+      "blob": "7f677f05dc9782ba7737b31d6c555c837efaedb3"
+    },
+    {
+      "path": "app/lib/engineering/__tests__/transaction-foundation.test.ts",
+      "blob": "20824719a5a7ecd3bb8a5e1f22dc2919b5b4ddfa"
+    },
+    {
+      "path": "app/lib/execution-grant/__tests__/b18-b-mint-consume-decisions.test.ts",
+      "blob": "52ea222ff5c0ae42618c87d34653362a4d0cd5d2"
+    },
+    {
+      "path": "app/lib/execution-grant/__tests__/b18-b-store.test.ts",
+      "blob": "fa65d757ad7c671efb86bd3b4935a966ad9bd99c"
+    },
+    {
+      "path": "app/lib/firmware-bringup/__tests__/foundation.test.ts",
+      "blob": "05861c2d240723ef2e6608d90a4bdbb727a92f96"
+    },
+    {
+      "path": "app/lib/fixture-runtime/__tests__/b18-e-fixture-authority.test.ts",
+      "blob": "8055e44efb091fa06fa764f888ec81440c99ae32"
+    },
+    {
+      "path": "app/lib/fixture-runtime/__tests__/fixture-runtime.test.ts",
+      "blob": "71efd45f48294ee5ae5825661c213557f8b2ac42"
+    },
+    {
+      "path": "app/lib/footprint-resolver/__tests__/normalization-conflict.test.ts",
+      "blob": "1361ccdd226949eccb79aaa6937ac462b9ce2d26"
+    },
+    {
+      "path": "app/lib/footprint-resolver/__tests__/policy-request.test.ts",
+      "blob": "5653577b8d24e16c22b28bf32a1f813be726123b"
+    },
+    {
+      "path": "app/lib/footprint-resolver/__tests__/resolution-e2e.test.ts",
+      "blob": "5cf485c16ec26e3c75deff8c1a7be58f32e84327"
+    },
+    {
+      "path": "app/lib/footprint-resolver/__tests__/safety-status-property.test.ts",
+      "blob": "80f963aba083a332095df233f3bcde582f5235ae"
+    },
+    {
+      "path": "app/lib/footprint-resolver/__tests__/service-shadow-api-security.test.ts",
+      "blob": "bb1c4c274f74b50367db7146eeb6460c54981f21"
+    },
+    {
+      "path": "app/lib/full-flow/__tests__/foundation.test.ts",
+      "blob": "d75bf1b61a5c48409cda28ef86ed973cd8cff606"
+    },
+    {
+      "path": "app/lib/http/__tests__/b16-0-2-bounded-json.test.ts",
+      "blob": "f169ff7b8b0e2bdeab435abc88fbf078b28f4cf9"
+    },
+    {
+      "path": "app/lib/interfaces/__tests__/allocation.test.ts",
+      "blob": "ec1e12aeb2e4c6ff25a844bd0cf61dd101a69880"
+    },
+    {
+      "path": "app/lib/interfaces/__tests__/dependencies-corpus.test.ts",
+      "blob": "02b9350a48c964bb4adda99c384ef331208a311e"
+    },
+    {
+      "path": "app/lib/interfaces/__tests__/graph-electrical.test.ts",
+      "blob": "3592b97ead751930ab3c6cfc9703d85428e5492f"
+    },
+    {
+      "path": "app/lib/interfaces/__tests__/pin-facts-proposal.test.ts",
+      "blob": "2c99c7461c9e65c28f797e7f6d16099188f0cc00"
+    },
+    {
+      "path": "app/lib/interfaces/__tests__/problem-candidate.test.ts",
+      "blob": "76f1be7f6b96d8a84b06768aed445cedfc72202b"
+    },
+    {
+      "path": "app/lib/interfaces/__tests__/transactions-selection.test.ts",
+      "blob": "b4604518b060d0ac6f3988f825c9aaba637e635d"
+    },
+    {
+      "path": "app/lib/kicad/__tests__/b19-d-ingest-issues.test.ts",
+      "blob": "6804ff2bcb5f85da0c70bd6754b31e8290bf884b"
+    },
+    {
+      "path": "app/lib/kicad/__tests__/b19-d-pinned-checkout.test.ts",
+      "blob": "324846c4d2a5c4ea117151c1151ef7eeec80cb06"
+    },
+    {
+      "path": "app/lib/kicad/__tests__/b19-d-sexp-hostile.test.ts",
+      "blob": "cde9b89ca2340b186a8dedf58747cd89e4e645d4"
+    },
+    {
+      "path": "app/lib/llm/__tests__/b16-0-17-2-adapter-schema-parity.test.ts",
+      "blob": "1a0ea9980140069f1762db60705f55aea039d465"
+    },
+    {
+      "path": "app/lib/llm/__tests__/b16-0-18-adapter-schema-parity.test.ts",
+      "blob": "41596503f91c71ad15471605fd9df9c6d4d13974"
+    },
+    {
+      "path": "app/lib/llm/__tests__/b16-0-19-adapter-schema-parity.test.ts",
+      "blob": "56fdfe2e852bcb72476b3355e60fd84fa332d035"
+    },
+    {
+      "path": "app/lib/llm/__tests__/b16-0-23-adapter-schema-parity.test.ts",
+      "blob": "d761c618a22c17a394bfcecc2130f1e7fd37cb74"
+    },
+    {
+      "path": "app/lib/llm/__tests__/b19-d-compose-instructions-escaping.test.ts",
+      "blob": "8011d5b8a626f69ee3b3ba802c64ccb3bffceb65"
+    },
+    {
+      "path": "app/lib/llm/__tests__/errors.test.ts",
+      "blob": "88324d55ba836c1e9b532224f0841ffe7ae4a37d"
+    },
+    {
+      "path": "app/lib/llm/__tests__/providers.test.ts",
+      "blob": "2e451381c82f5dc85824504d54ef312e3ebba166"
+    },
+    {
+      "path": "app/lib/llm/__tests__/router.test.ts",
+      "blob": "104ca8a248789550c661c1851f4d613ba59985f7"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-a-cd12-stubs.test.ts",
+      "blob": "8ab55be9cce6183da1fbb0094b05526824cd1ef2"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-a-no-order-structural.test.ts",
+      "blob": "580e37b4583532d8f7eb3be942a319718b4cf634"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-a-provider-admission.test.ts",
+      "blob": "ad98a7f0b44cab2e4649b7daa959735590a1bd75"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-a-provider-registry.test.ts",
+      "blob": "bf938171639f519410af4f6c294a8f7f16b64511"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-a-route-vocabulary.test.ts",
+      "blob": "c9c4e64725f7a4d1724776b74a94b9105a4bdf12"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-a-tier3-vocabulary.test.ts",
+      "blob": "96e7331429b9a368e622fc42987561e99f215e40"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-b-approval-plan.test.ts",
+      "blob": "e9bd4a8aa62d6a029fc5e603e6b00890dd939b84"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-b-bounded-upload.test.ts",
+      "blob": "f316234f8e1ba288d90fab90f70f290017b949f3"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-b-dfm-quote-flow-page.test.ts",
+      "blob": "9000cac400e4fc78cfc478b3ba832fb00e22bc36"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-b-egress-import-gate.test.ts",
+      "blob": "e45aee5efcf317e04d26463a058e56372e2d9975"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-b-exchange-ledger.test.ts",
+      "blob": "cfc35ed86d1ecf1715d468112467164a3118b97c"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-b-exchange-route.test.ts",
+      "blob": "7088509af9d17547d4dda838a8cd1bcc766f16ba"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-b-no-auto-accept.test.ts",
+      "blob": "88f3e598fa00ff5788e7de06a9632ab3451347bf"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-b-observation.test.ts",
+      "blob": "016cc6453c85be77478331d13769cfd4476f90f2"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-b-outbound-package.test.ts",
+      "blob": "577e7c6861c5b931c48bd18df905472d3dcac483"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-b-page.test.ts",
+      "blob": "03de6e2306cddbee5ea611e4d7351350c5362b3c"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-b-provider-meter.test.ts",
+      "blob": "b700ef5cc6008c5ef25cbc616d8d742740c23627"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-b-provider-panel.test.tsx",
+      "blob": "041f5eeff2cd1807cdb0db9678970f4489a785ad"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-b-revalidation.test.ts",
+      "blob": "ae11948730f350fe3cf17dd41b7371123541f307"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-b-stale-quote.test.ts",
+      "blob": "12f2a1c372b091d139fe0360852ecb9b3b9bd3a0"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-c-order-contract.test.ts",
+      "blob": "a2d5f3f99a96dbe6a11cfb9cb139151826ebe3d7"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-c-ordering-disabled.test.tsx",
+      "blob": "fcc5a3b745b47229d8d647c231ec96d33cddf862"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-c-purchase-authorization.test.ts",
+      "blob": "dec86f8516d002f6f20fb056f065c7e095e1dca4"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-c-webhook-verification.test.ts",
+      "blob": "0df096d61811510b63884f16d901e43d4a151afc"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-closeout-statements.test.ts",
+      "blob": "c705a79991f9c08798a9e60e02e540f764ab5f5e"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-d-assembled-release-blocked.test.ts",
+      "blob": "eee2f72c7543143c35c76aac7a306cf4bb64af6a"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-d-latent-claim-paths.test.ts",
+      "blob": "9de8d1eaef80a48aa39907145b8277e21692b2fb"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-d-physical-evidence-contract.test.ts",
+      "blob": "7a2f76daed4db6fe6314069979e9ddadab93548b"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/__tests__/b23-lead-wrapper-signal-retention.test.ts",
+      "blob": "f62d1d0bc717e325b389786a17332d11d85c590b"
+    },
+    {
+      "path": "app/lib/manufacturing-providers/database/__tests__/b23-b-exchange-ledger-pglite.test.ts",
+      "blob": "ab8c33ac04ee8118a5ec2eaf19428ef97bda4045"
+    },
+    {
+      "path": "app/lib/mapping-verification/__tests__/durable-result-cache.test.ts",
+      "blob": "d2f45ad5ad1f27449ba0563400c3f6b41dcaee56"
+    },
+    {
+      "path": "app/lib/mapping-verification/__tests__/lifecycle-invalidation.test.ts",
+      "blob": "d7d0069d63d3ae738cae939c23ce81aee04b39d4"
+    },
+    {
+      "path": "app/lib/mapping-verification/__tests__/security-performance.test.ts",
+      "blob": "3d0aa7dfd172927a5c84eef1d4dcf3c3812c7af3"
+    },
+    {
+      "path": "app/lib/mapping-verification/__tests__/verification-corpus.test.ts",
+      "blob": "3b370ebded04cd1ef7ef7b50c34f486dba1f77d4"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a0-admission-by-server-and-tool.test.ts",
+      "blob": "0e55dfa4d50539960b6a672ede7f2d4ff6e8ab9e"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a0-feature-flag.test.ts",
+      "blob": "4bbaa476d2484884996435bbdbcf803b28ab12fd"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a0-server-registry.test.ts",
+      "blob": "5013096d368594b187474519590d6626ca111f7a"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a1-http-transport.test.ts",
+      "blob": "c6433ff27b12ce08033eada54967a0700b8ffb06"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a1-redaction-linear.test.ts",
+      "blob": "38441b708b73e6df9a1f62a4a5e9ed54d81dd037"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a2-foreign-tools.test.ts",
+      "blob": "b89452c64cb4ae47c2fa25cfa4ff0162869ed3fc"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a2-negotiation.test.ts",
+      "blob": "9ff6015e8732ac27e5b1898948a7d0bab42f55d3"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a2-tool-call.test.ts",
+      "blob": "b29e994f569c3a5ef6f9c0c11d3ad0093f11143d"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a2-tool-discovery.test.ts",
+      "blob": "8c553aab7d61d55f59936be93c0cad7e0fcc7b03"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a3-as-metadata.test.ts",
+      "blob": "eb24a9ca4d43ec442d8ac7925970f82d9f88dd72"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a3-authorized-post.test.ts",
+      "blob": "da695b47eb44073db9293b7320dc790b25ee6695"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a3-live-reread.test.ts",
+      "blob": "ab1fb8b2f6266bb0c15f2463d37fb3c6c24c86a3"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a3-prm-discovery.test.ts",
+      "blob": "762cdad6e8c22d7559455cf1176602e9813fb198"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a3-registry-authorization-pin.test.ts",
+      "blob": "462f07437475a3d1aa10f2a14bf3429e8b1ebf66"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a3-secret-hygiene.test.ts",
+      "blob": "a8a5bab31dcfc28729cd4b77e63809512b44775e"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a3-token-audience.test.ts",
+      "blob": "eb47fdc3dfe34b7aadeab9036f86a91a75cef721"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a3-token-cache.test.ts",
+      "blob": "9cc0455f617ea098da30fa7290ed9245009dc74e"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a3-token-request.test.ts",
+      "blob": "1f50528aa52785bf0209326663d0e97b7bd93c1a"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a4-agent-read-port.test.ts",
+      "blob": "5a109aa7f2eb04f7f2f6e9e1a04b9778fecc05ae"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a4-observation-normalizer.test.ts",
+      "blob": "0bb726154dcd83abe5f6b645525280c9c589cd86"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a5-connector-tripwires.test.ts",
+      "blob": "2e141a85dfd72e493c91e5f85db0634e6c1f1fb1"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a5-provider-connector-policy.test.ts",
+      "blob": "8a2219017800fc5d1c4fa154434f4640d60a9a1d"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a5-provider-output-guard.test.ts",
+      "blob": "668db5a7360816e0346cb745973e1be7d990e968"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-a5-provider-request-shape.test.ts",
+      "blob": "889c232aaac05c103388669eed59893d5bf52b21"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-d1-malicious-server.test.ts",
+      "blob": "b0d9ba088c5f4dd85f40a0dcb86029e2d89dd63b"
+    },
+    {
+      "path": "app/lib/mcp/__tests__/b20-d1-rebinding-window.test.ts",
+      "blob": "ea45c41932c6d9a8302ec4809b638d8a876c784a"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-b1-tool-definitions.test.ts",
+      "blob": "71e447a441a1152f08dc36362d7e6a883026f442"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-b2-import-gates.test.ts",
+      "blob": "8bbbeafb5ce7a4f94ee5014c0aa037037cecf902"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-b2-server-protocol.test.ts",
+      "blob": "f0795ed25268e858a150c3762c0c2e9458faa020"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-b3-import-gates.test.ts",
+      "blob": "3599146fef7dc994b636b1835d083a13fb50ad14"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-b3-read-arguments.test.ts",
+      "blob": "d28b6b74795c9bc1bb9c9d5630d0605a3b814eb0"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-b3-read-call.test.ts",
+      "blob": "76e2bdfdcd7a3aaf687f0165c7f7c74167f801cf"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-b3-read-trace.test.ts",
+      "blob": "ebb3f0124e882c0c38fbd39bb48bc763a62c1eb1"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-b3-replay-cache.test.ts",
+      "blob": "1a043cc2a225c7715dfbd2929accf9a1861a3515"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-b4-process-gate.test.ts",
+      "blob": "0a926dc579337d819611fdcb3e3b4592e56e5b06"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-b4-stop-evidence.test.ts",
+      "blob": "6b993c0b783dd408fcb288f7e0b4d169d698f4a6"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-b4-withhold-proposals.test.ts",
+      "blob": "517cd319999fa298b22bbb065a7c6ef0c2b2eb69"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-c1-structured-content.test.ts",
+      "blob": "5d77ec52ac14a995ee3a1c85c40a9fdeb5dcea50"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-c1-three-way-parity.test.ts",
+      "blob": "9cd734d0a528370b1a16875ce6eaf51da8d1da3a"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-c2-tools-list-pages.test.ts",
+      "blob": "803e09d8cf62681392e8fa08d56a62a01982b639"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-c3-a2-cross-check.test.ts",
+      "blob": "60f25f08e9bd3681c8fb2898eb6a10718acf223f"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-c3-descriptor-text-gate.test.ts",
+      "blob": "ba03e920e760def4beb809087586a112cc80bc8f"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-c3-negative-tripwires.test.ts",
+      "blob": "bd2405590775ee484f0383fa5d7cdeb184ea8b6d"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-d2-name-spellings.test.ts",
+      "blob": "1eb7865b04eca952c5983e239adb0f41f8989522"
+    },
+    {
+      "path": "app/lib/mcp/server/__tests__/b20-d3-authority-import-gates.test.ts",
+      "blob": "83d3a846cd19c48c6df951b56dde35c39cc3f11d"
+    },
+    {
+      "path": "app/lib/model-simulation/__tests__/foundation.test.ts",
+      "blob": "4fae93e4d7ee459043a96fca4170035685705099"
+    },
+    {
+      "path": "app/lib/net/__tests__/b19-outbound-fetch.test.ts",
+      "blob": "179159c0a3b9ba2d788dcc8caf5abd497be709ea"
+    },
+    {
+      "path": "app/lib/net/__tests__/b20-a1-outbound-headers.test.ts",
+      "blob": "09e2f98ccc18164c63e3a331744c1b6da62f0830"
+    },
+    {
+      "path": "app/lib/net/__tests__/b20-a1-sse-reader.test.ts",
+      "blob": "617bbb4aec9a8619489992675811d32a6e9ec7ef"
+    },
+    {
+      "path": "app/lib/passive-policy/__tests__/identity-value-evaluator.test.ts",
+      "blob": "55207e5dbf875bbe6a609af276e75306604579b4"
+    },
+    {
+      "path": "app/lib/passive-policy/__tests__/lifecycle-preview-invalidation.test.ts",
+      "blob": "e2817c50532fdf8cd83f051c9d43868f2a1219d5"
+    },
+    {
+      "path": "app/lib/passive-policy/__tests__/performance-property.test.ts",
+      "blob": "1c5f9925f4a07715fc1a9ed7eebdea9c6b66f5cb"
+    },
+    {
+      "path": "app/lib/passive-policy/__tests__/stage2-integration.test.ts",
+      "blob": "59f47f7e25dc8e13a9e09bfc5e9d49f337f52808"
+    },
+    {
+      "path": "app/lib/pcb-sync/__tests__/atomicity-recovery.test.ts",
+      "blob": "9eba1da82f95143f96519dbe77cfd983a3f3abaf"
+    },
+    {
+      "path": "app/lib/pcb-sync/__tests__/b16-a-durable-heads.test.ts",
+      "blob": "6d98d13217276ed7c10195a81f189e3769134ea0"
+    },
+    {
+      "path": "app/lib/pcb-sync/__tests__/b16-c-board-revision.test.ts",
+      "blob": "8eb97722d4292f5c80d9b08934571f7e0cd22f38"
+    },
+    {
+      "path": "app/lib/pcb-sync/__tests__/board-risk.test.ts",
+      "blob": "e9f884856818fa8282f8b0f4ae6b0ddfa73a80d5"
+    },
+    {
+      "path": "app/lib/pcb-sync/__tests__/contracts-security-property.test.ts",
+      "blob": "17b2fc0a11b745ca44eb142fd3db5bba9b301785"
+    },
+    {
+      "path": "app/lib/pcb-sync/__tests__/performance-resilience.test.ts",
+      "blob": "7884d237a6b18e6360068d0957aed13be3de642f"
+    },
+    {
+      "path": "app/lib/pcb-sync/__tests__/preflight-apply.test.ts",
+      "blob": "51cdbbacfb5454ba27d5115b3807aef82897f7e9"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/3d-build-scene.test.ts",
+      "blob": "6a7018248a28cb6dc5ad846ceb57d1b1ac4805a9"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/3d-track-shape.test.ts",
+      "blob": "e52e16d13f7e93fc8d8e54ec46ea1be6a3262261"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/3d-zone-shape.test.ts",
+      "blob": "e3315bc0536f97edbed2e76138e3fff9c7c29c00"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/arrange-staged.test.ts",
+      "blob": "f8f8e1c1d7b3fada17517fbed3e78104065514b4"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/arrange.test.ts",
+      "blob": "8d1fc33e6b63129c9a651b43884f902f7ce97a2e"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/auto-place.test.ts",
+      "blob": "198053808e12258309660e4772a2ba55377e6870"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/autonomous-layout-qualification.test.ts",
+      "blob": "e28800633e4b844e81bb089b8e78d95224c85ff7"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/autoplace-command.test.ts",
+      "blob": "3daa222da76cab0c76b1935e9052968c14a91ef4"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/autoroute-boundary-integrity.test.ts",
+      "blob": "5d542339694ad91b9429c9a6d3d8d2de80f4398d"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/autoroute-command.test.ts",
+      "blob": "e61cace8269fbb0bf408156752a8f850b0b58b27"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/autoroute-completion.test.ts",
+      "blob": "5b810b31bab18de0169d1cf9e234b7eb4626f46b"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/autoroute-integration.test.ts",
+      "blob": "155293b5fd2e535cb0a92879979e89334dac15c9"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/autoroute-verification.test.ts",
+      "blob": "e08bd984c8b2651ce892ea2d5be0671f661f5433"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/b16-a-locale-independent-identities.test.ts",
+      "blob": "921529ff7279be96e3b93da93c3dc03fe5324f48"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/b16-c-fabrication-rule-authority.test.ts",
+      "blob": "a3a213c02d6ea6cd010fc915b013e7cca8c4a0c9"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/b19-d-dsn-tokens.test.ts",
+      "blob": "91e997a8ac3c68dab4e6ab3b8f6f45acacbd46f5"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/b19-d-kicad-emit-injection.test.ts",
+      "blob": "b16bbc77607b5a451f2a800e6767331c726b507f"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/build-bundle.test.ts",
+      "blob": "89323c246317e6d400c21eca03404c47ce8c6ad7"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/collision-resolver.test.ts",
+      "blob": "dde7b108d78893cd802ed3cc238d1b9cc429dab9"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/compute-fill.test.ts",
+      "blob": "1b0bc27af47920b835fcf92eeaab6da0bb924c77"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/connectivity-board.test.ts",
+      "blob": "28d7be2cdd656da1e121841e559bb4205580d6d1"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/copper-policy.test.ts",
+      "blob": "2a97ad35eaed22be691104a408189ea9bf3901fd"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/data-integrity.test.ts",
+      "blob": "fac9601eebac8d777844d01dde26c9f654d338bb"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/demo-story.test.ts",
+      "blob": "580646d98405a61df7cefb8d632737f2e9128cd1"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/digest.test.ts",
+      "blob": "2e7ea3a792cb7f61d6965f6d3581c6c2d357ebc3"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/drc-clearance.test.ts",
+      "blob": "5ec5371a41e371964ac2a3e84fbb6a708cc45c49"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/drc-connectivity.test.ts",
+      "blob": "0fd33f4d6ac2c010f58bed40549e5f564d859be2"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/drc-geometry.test.ts",
+      "blob": "9e15964b265ee71fc028f912d4485db5cbc64a24"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/drc-presets.test.ts",
+      "blob": "3814ba94c824c7db4e5871819848e234e6065293"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/drc-readiness.test.ts",
+      "blob": "0ed9d94cc81d4812d94c6769901aa444b3b95ed3"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/dsn-integrity.test.ts",
+      "blob": "8f6863da8a3646875c72faef42ffa71a74554e5a"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/edit-commands.test.ts",
+      "blob": "de88cc3a8b2b6327ed0b6f3ddd226ba714a98052"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/electrical-consistency.test.ts",
+      "blob": "547ed53d998f2717c048863d299f52f0b3443988"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/electrical-identity-boundary.test.ts",
+      "blob": "1f090bd5792a5d344ff6cee8c8bdc5b1f4f5beb1"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/electrical-truth.test.ts",
+      "blob": "ec7fbbece3251e6aa89224746b8292f3dae3150b"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/emit-bom.test.ts",
+      "blob": "765ab95b7040ee4d8afcabc01cc333a6cadc6825"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/emit-position.test.ts",
+      "blob": "5b2b80a14202f337434f71eb86d73bba0c28f567"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/fab-presets.test.ts",
+      "blob": "7f38b8882be19fe63c7043a8f5cd6473b60ff7e0"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/force-directed.test.ts",
+      "blob": "04df960b66d6b19e2568355f05d6f1cf86cef161"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/geometry-copper.test.ts",
+      "blob": "ab2aeb5702c1b61303a99fc8e455fc2f7483df2d"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/geometry.test.ts",
+      "blob": "872585da42dfcdd36721082c360102437128481c"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/history.test.ts",
+      "blob": "f6ddff303209d002c35b59274c5058e321e40dc8"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/ingest-integrity.test.ts",
+      "blob": "dd8a201aba04fdf4732934de7bc1ea9a34593072"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/ipc2152.test.ts",
+      "blob": "2b4a8656c3e92e37a3743e60cac347a53617baf5"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/islands.test.ts",
+      "blob": "0ae840dbc71aacaff5ca7a5da3dca8a88ffe625d"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/kicad-cli-oracle.test.ts",
+      "blob": "0a8f993b48cb4e8f26bf15726852951b4e7c0ead"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/kicad-cli-runner.test.ts",
+      "blob": "00b7913cd9cabbb278a7a184d2ab97fc730bcbb1"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/kicad-emit-footprint.test.ts",
+      "blob": "9093cb6128df9bfabc90d2f420449db45105c606"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/kicad-emit-track-via.test.ts",
+      "blob": "395116dee672b1e49140fa6fe886fa84391f98f4"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/kicad-layer-map.test.ts",
+      "blob": "39d8edb6d45540dc683dbfd471991986bfa97e4f"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/kicad-mod.test.ts",
+      "blob": "7a3915b537df5968e84d68350149f5b368dee8bf"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/kicad-units.test.ts",
+      "blob": "306c2103e8f2652d95ed34ed4c1777bfbd6a78e8"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/kicad-write-pcb.test.ts",
+      "blob": "741e8903064cd666768e4d3040c6abd2c07b38cc"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/locked-copper-integrity.test.ts",
+      "blob": "30553b7b4a4c218bdefa8ae24394d0a068242bb4"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/manufacturing-release-gate.test.ts",
+      "blob": "945cefd3bfda6016469a1be70ad9d704c9242239"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/multilayer-dsn.test.ts",
+      "blob": "b547f7b14696969ba3d7fcd4a2d4ed5c8550379d"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/native-fab.test.ts",
+      "blob": "69fc50b4ddf2b92a208f83891e3a9891e624206c"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/net-reconciliation.test.ts",
+      "blob": "4cd9a379297c50b1ab0f546d6a8dce3eab580868"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/netclass.test.ts",
+      "blob": "47eb025548dfcc88e0d560867f8ce785e19d9d7e"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/netlist-bridge.test.ts",
+      "blob": "6883cf086c507d38e5eb5e8d3bd44c4c0b4ce59a"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/padstack-migrate.test.ts",
+      "blob": "71dc82c00a1faaf9e9daf03ee56c672f3e73afc8"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/padstack-registry.test.ts",
+      "blob": "55332ffbbd6a765d4edc7c39a93f7de1c755b1ce"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/padstack-usage.test.ts",
+      "blob": "441de2ea6e8b5339c206e9d7da25396707866841"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/pcb-repair-agent.test.ts",
+      "blob": "3f25c0b7c5d4ba1d658302301b1ce1ba658e2094"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/pin-pad-mapping.test.ts",
+      "blob": "74742b42f9fe4ec486ff125657eba54bebf9626f"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/placement-envelope.test.ts",
+      "blob": "a3bbb9faf85fb2eeff6b0210b62d83c5431f8cd8"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/placement-expansion.test.ts",
+      "blob": "2e3bb1633209baaba3974bd58b761ea98e730e13"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/plane.test.ts",
+      "blob": "0d876b94f1fd6695fb238123f8a3d1282ed36e4f"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/preview.test.ts",
+      "blob": "18cc626ed0c796caf178844d4dc80100338c15d2"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/r05-e2e01-boundaries.test.ts",
+      "blob": "64d5fa83de300a464216ca390e484f47ac7bfea7"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/ratsnest.test.ts",
+      "blob": "7fc6e03e20319b5e70b4472b6c3853de68610348"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/read-ses.test.ts",
+      "blob": "6da17a907c05696c6fc7d0892790443bb96b12aa"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/readiness-policy.test.ts",
+      "blob": "40804da876835ac663733e834c209a48ca852220"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/release-persistence.test.ts",
+      "blob": "6841b38e7a8548310c3a01dc090ca200a41f4ef7"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/render-contrast.test.ts",
+      "blob": "52e104c754d036dc79e41d1d16979ca8e7a37b9d"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/rotation.test.ts",
+      "blob": "5ce8f1f136276712a745c536bbe6570426bd4655"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/roundtrip.test.ts",
+      "blob": "0c9c0ec7d151dd22cfb09e6ab5711052545876c5"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/route-tool.commands.test.ts",
+      "blob": "0f06d0478961ce6f24417ff3d174ef1548c21649"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/route-tool.test.ts",
+      "blob": "24b62be1f1ae163f696751a0148edd3790343212"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/routing-profile.test.ts",
+      "blob": "2bf6c7a83c9d24a46d796de7b52db0a68f92bae2"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/run-drc.test.ts",
+      "blob": "45f1836529176842ea12c2ae89d654860b220e5a"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/schematic-parity.test.ts",
+      "blob": "77856a46c17fd338299d3ee30bfa186aa38b7f71"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/selection.test.ts",
+      "blob": "bd667a0c7b5be494cde0ec5c139d50cc2f6f8032"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/sexpr.test.ts",
+      "blob": "e1bd3094f0a518bac1aaabd2e8d326bb20f867e3"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/side.test.ts",
+      "blob": "1b1dbc77433b95390e5dd9881948a1952a4f3453"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/silk-command.test.ts",
+      "blob": "62296c5254b2bc81076fb198613edf540344147e"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/silk-drc.test.ts",
+      "blob": "2af73c74b838101a27d4be2633e2827880430ce9"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/silk-kicad-emit.test.ts",
+      "blob": "9077663123d3498f553db91b0d0806c386152955"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/silk-text-polylines.test.ts",
+      "blob": "dd0016ac4aec0abffa32f3732ff398599cea2d07"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/smart-routing.test.ts",
+      "blob": "e5c7e4d526178d86c24e1fb357518a0f9a6526f6"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/stage-04-native-planes.test.ts",
+      "blob": "b2b10c7d0ddb935d322692beac841f0aaafaffe2"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/stage-08-professional-routing.test.ts",
+      "blob": "8df13925890d9a09891e4d538d5e0e6bfadc8ed5"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/thermals.test.ts",
+      "blob": "4c02c41223bf072930eb730b580e535272b9cf20"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/write-dsn.test.ts",
+      "blob": "3fe843c52c8b2d3ee2aac22398bbed9010549933"
+    },
+    {
+      "path": "app/lib/pcb/__tests__/zone-command.test.ts",
+      "blob": "f23f84ca9d58448d8f032ef0e979af1297b1da56"
+    },
+    {
+      "path": "app/lib/pcb/autoroute/__tests__/runner-security.test.ts",
+      "blob": "80da02feb3d836bcbaa9b2d7842ab0dba6a8cdba"
+    },
+    {
+      "path": "app/lib/pcb/autoroute/__tests__/runtime.test.ts",
+      "blob": "09e2183d3200bf85d45c286d370b6d7266666c25"
+    },
+    {
+      "path": "app/lib/pcb/candidates/__tests__/b17-e-layout-candidates.test.ts",
+      "blob": "308eccd887cc13133a62eb69167c04da5d16d824"
+    },
+    {
+      "path": "app/lib/pcb/fab/__tests__/b16-a-authority-store.test.ts",
+      "blob": "c91fa208d1f5fda61aa777f6e1ba471e42ac04cd"
+    },
+    {
+      "path": "app/lib/pcb/fab/__tests__/b16-a-qualification-commit.test.ts",
+      "blob": "102cb1172ec18a01a1e850cd1f0282c221892fda"
+    },
+    {
+      "path": "app/lib/pcb/fab/__tests__/b16-a-snapshot-netlist-parity.test.ts",
+      "blob": "ae1b2c94986c9e2cf4e0dd6835deb1a07ad210b3"
+    },
+    {
+      "path": "app/lib/pcb/fab/__tests__/b16-c-gerber-aperture-key.test.ts",
+      "blob": "559904f76029ab0bf0759cca2e312d6689d33d41"
+    },
+    {
+      "path": "app/lib/pcb/fab/__tests__/b19-d-fab-csv-formula.test.ts",
+      "blob": "cca8155ebac02036eb5b061c2f0ea60f5e08e32e"
+    },
+    {
+      "path": "app/lib/pcb/fab/__tests__/manufacturing-errors.test.ts",
+      "blob": "5f3296206d975ba71e67066ecba1edd355a7ccc9"
+    },
+    {
+      "path": "app/lib/pcb/fab/__tests__/qualification-authority.test.ts",
+      "blob": "9469e89fee87f514793b86ef08e1a097cda6eedf"
+    },
+    {
+      "path": "app/lib/pcb/lifecycle/__tests__/b08-2-async-ownership.test.tsx",
+      "blob": "8d42cc495af7da8d388e61273cf63d7b7941d321"
+    },
+    {
+      "path": "app/lib/pcb/lifecycle/__tests__/b08-3-owned-sync.test.ts",
+      "blob": "2972d3b9d853be0537452d50379c8cfe969928e4"
+    },
+    {
+      "path": "app/lib/pcb/lifecycle/__tests__/b16-a-owned-release.test.ts",
+      "blob": "f9a89dda3b755e5906699cc4dfd6ab2756626c5b"
+    },
+    {
+      "path": "app/lib/pcb/lifecycle/__tests__/b16-c-strict-mode-remount.test.tsx",
+      "blob": "0db480c6651bd651b081d9f5220d8dc48faaea36"
+    },
+    {
+      "path": "app/lib/pcb/placement/__tests__/capacity-escape-via.test.ts",
+      "blob": "fbf17b776be32bdc916c05ad298c82dfc6fcabee"
+    },
+    {
+      "path": "app/lib/pcb/placement/__tests__/corpus.test.ts",
+      "blob": "2ebc4c59b13f6773a943245fb4c965159e1da1d3"
+    },
+    {
+      "path": "app/lib/pcb/placement/__tests__/feasibility-validator.test.ts",
+      "blob": "71ca732983e9098a5bb380c669838ab5d5e1208a"
+    },
+    {
+      "path": "app/lib/pcb/placement/__tests__/objectives-transaction-api.test.ts",
+      "blob": "a3627a9229199fb1bf8fb3ddc0ef5951bf723fc9"
+    },
+    {
+      "path": "app/lib/pcb/placement/__tests__/problem-hypergraph.test.ts",
+      "blob": "4c96475819698c4b442ff5c9fef4e0858ce8f707"
+    },
+    {
+      "path": "app/lib/pcb/proposal/__tests__/b15-1-corrective-closures.test.ts",
+      "blob": "3c8193df70c72c32d32c495e95b0e1326643950a"
+    },
+    {
+      "path": "app/lib/pcb/proposal/__tests__/b15-2-1-residual-closure.test.ts",
+      "blob": "bd3094afe2be4f0a896b2e12ce1c658520f050cf"
+    },
+    {
+      "path": "app/lib/pcb/proposal/__tests__/b15-2-2-exact-outline-and-shape.test.ts",
+      "blob": "a4fb6853716ab3d1a44322b8835255754ccc2d77"
+    },
+    {
+      "path": "app/lib/pcb/proposal/__tests__/b15-2-3-impact-certificate.test.ts",
+      "blob": "ccd63201046bfc81a27297aeccfff3b7bb61ca34"
+    },
+    {
+      "path": "app/lib/pcb/proposal/__tests__/b15-2-core-closure.test.ts",
+      "blob": "5ef7ae91116ad91df3a31ceafd518bd60a5d6890"
+    },
+    {
+      "path": "app/lib/pcb/proposal/__tests__/b15-3-validation-policy.test.ts",
+      "blob": "c035d7c9eed560726e6c12781d620de3f930f3c7"
+    },
+    {
+      "path": "app/lib/pcb/proposal/__tests__/b15-bounded-edit-core.test.ts",
+      "blob": "77b1afa422296a0f0d67a250103a866e66c64966"
+    },
+    {
+      "path": "app/lib/pcb/render/__tests__/footprint-geometry.test.ts",
+      "blob": "1b72c17c8948730c7b2aeca71cab315f2cc9e9a1"
+    },
+    {
+      "path": "app/lib/pcb/render/__tests__/pick-copper.test.ts",
+      "blob": "223bdbdbe7614976c76f02901fc5b97b56d6bdaf"
+    },
+    {
+      "path": "app/lib/pcb/render/__tests__/pick.test.ts",
+      "blob": "96e25b09fa7cf18e45c7c796151661bc9d37259e"
+    },
+    {
+      "path": "app/lib/physical-binding/__tests__/b19-e-successor-b14-durable.test.ts",
+      "blob": "8fbb6504f6cc9f069ab73532c2e457b857d0086f"
+    },
+    {
+      "path": "app/lib/physical-binding/__tests__/canonical-identity-validation.test.ts",
+      "blob": "cd1cdba0deb06a60c2284bce8ca3641cbe3df081"
+    },
+    {
+      "path": "app/lib/physical-binding/__tests__/migration-shadow-security-performance.test.ts",
+      "blob": "895ad2c3250172caa1b5ecd3b3b88391e8572753"
+    },
+    {
+      "path": "app/lib/physical-binding/__tests__/readiness-transitions.test.ts",
+      "blob": "77ab518e7690a794b1766bebef00714ac3c1ee08"
+    },
+    {
+      "path": "app/lib/physical-binding/__tests__/schema-integrity.test.ts",
+      "blob": "3a2cf75eddb21e3fd649e572750fe5f09ae11938"
+    },
+    {
+      "path": "app/lib/physical-binding/__tests__/server-repository-contract.test.ts",
+      "blob": "ee8459e3c17fc5816125cc8205190d9ff6517aa6"
+    },
+    {
+      "path": "app/lib/physical-binding/__tests__/shadow-sync-api-migration.test.ts",
+      "blob": "f804a1c7865c4070eef231f50cc31fdaa0828b9d"
+    },
+    {
+      "path": "app/lib/physical-binding/__tests__/state-conflict-contract.test.ts",
+      "blob": "efb14ab5b1666a01cf49da06e5e47d5ffa5f213b"
+    },
+    {
+      "path": "app/lib/power/__tests__/candidate.test.ts",
+      "blob": "cb15dd7f783b49a13bcca89e4b668126b8b6e6cc"
+    },
+    {
+      "path": "app/lib/power/__tests__/local-persistence.test.ts",
+      "blob": "ff420da1b6231a99a7cf17b9ca1d1f942a6ef63e"
+    },
+    {
+      "path": "app/lib/power/__tests__/problem.test.ts",
+      "blob": "22e1ce0cd54857c6f454eb87613367c03f0d7d34"
+    },
+    {
+      "path": "app/lib/power/__tests__/quantity-concurrency.test.ts",
+      "blob": "f79ce7cf7a1245ff001f8846424fa33e01b2717d"
+    },
+    {
+      "path": "app/lib/power/__tests__/reconciliation-corpus.test.ts",
+      "blob": "915c9764abf861af925f6e1b7ba261cb68f39d92"
+    },
+    {
+      "path": "app/lib/power/__tests__/selection-transactions.test.ts",
+      "blob": "00e3b9cc28adf37148ff23da8d1bc9766579ab3d"
+    },
+    {
+      "path": "app/lib/project/__tests__/autosave.test.ts",
+      "blob": "8ce95c1f2fc7213a053c6201aaaa551118a01538"
+    },
+    {
+      "path": "app/lib/project/__tests__/b06-3-mark-sanitization.test.tsx",
+      "blob": "e1fc8f9a1b447f2ada36dc9c094deb81dc3cbeb6"
+    },
+    {
+      "path": "app/lib/project/__tests__/b14-1-production-integration.test.tsx",
+      "blob": "463c3ed423d60355b584942f4122535ab8cae968"
+    },
+    {
+      "path": "app/lib/project/__tests__/b14-2-settlement-and-boundaries.test.ts",
+      "blob": "1c7e301e287495b150b14a721077ad6f359e16b2"
+    },
+    {
+      "path": "app/lib/project/__tests__/b14-3-stream-lifecycle-and-gates.test.ts",
+      "blob": "821fe302d0fb688425f523d8e304739612f17fc6"
+    },
+    {
+      "path": "app/lib/project/__tests__/b14-4-ast-import-gates.test.ts",
+      "blob": "e15b45975fca4af5398739a42877bc8be58f380f"
+    },
+    {
+      "path": "app/lib/project/__tests__/b14-5-lexical-require-and-diagnostics.test.ts",
+      "blob": "773f6c662b4bcb967032a776f4d769e2be4ab647"
+    },
+    {
+      "path": "app/lib/project/__tests__/b15-3-import-gates.test.ts",
+      "blob": "e88518ac6b72888acd72836e16649357e4446610"
+    },
+    {
+      "path": "app/lib/project/__tests__/b15-3-production-integration.test.tsx",
+      "blob": "cc8bdefad963deb2fff0320d523ebc6827429ea0"
+    },
+    {
+      "path": "app/lib/project/__tests__/b16-0-1-apply-reauthorization.test.ts",
+      "blob": "2d6951a464c658394e6ca94f6ace8755e038fd27"
+    },
+    {
+      "path": "app/lib/project/__tests__/b16-0-2-required-apply-role.test.ts",
+      "blob": "0322da3a4b8cef38e5e62990e0761506a60ecf5d"
+    },
+    {
+      "path": "app/lib/project/__tests__/b16-0-2-session-identity.test.ts",
+      "blob": "f7a628a616cfe205ca64236f5dab32650c1e996a"
+    },
+    {
+      "path": "app/lib/project/__tests__/b17-e-io-outcomes.test.ts",
+      "blob": "13c25f0eff271c7c9011d35a406e4de565f250d3"
+    },
+    {
+      "path": "app/lib/project/__tests__/b17-e-operation-timeline.test.ts",
+      "blob": "ae1ff8fbb74d1ff0da28f7fdf885dc2929f72a20"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-b-import-gates.test.ts",
+      "blob": "cf672d598c6e9c7a3f004d0eb660c2c01b88ef83"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-d-chat-run-view.test.ts",
+      "blob": "856062e9fbe94da9ec93af4d5970b19b137a2e36"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-d-chat-undo-timeline.test.ts",
+      "blob": "01a476ddbda68fe8ef3092e2059a7a19592d6d53"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-d-composer-routing.test.ts",
+      "blob": "1d68a85470ff0ce2aeb92d070bf12da51808c56e"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-d-execution-display.test.ts",
+      "blob": "ca07a75d8c18dbf1c8fb35323c958140408daa85"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-d-execution-entry-log.test.ts",
+      "blob": "2dd520258b7b7f9451eeb430fce70486a9d07e02"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-d-refused-line.test.ts",
+      "blob": "80db0184480deab117d24f15ab18029ab9497fc9"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-d-review-entry-lifecycle.test.ts",
+      "blob": "b81df78529c9c5062a0a4bd4a005aa3b895a30ba"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-d-review-part3.test.ts",
+      "blob": "4e74ba1f960ffd7b3ca17d320f06e9eeadc3f0a6"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-d-review-part4.test.ts",
+      "blob": "7fb73a09235ebd1664f9327e5e6644d25fb1ba95"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-d-review2-timeline.test.ts",
+      "blob": "873833a66da2705795f36395a15c7ce914ba450b"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-d-review2.test.ts",
+      "blob": "ac6498e1c7998eb9252400fe7168d9b4f1337a49"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-d-timeline-store-busy.test.ts",
+      "blob": "649f5725c17d27da79f2b2abb5c50e938ea75f24"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-d-ui-gates.test.ts",
+      "blob": "f829a4733af7c1a6a1615a887a89071ee04eba68"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-e-claimed-nothing.test.ts",
+      "blob": "fce1f713297815a1e9c62c9099c9465e56e897eb"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-e-refusal-causes.test.ts",
+      "blob": "c58447d12aab20818cc19fa30a5ceae2a5dcaec0"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-e-scenario-4-chat.test.ts",
+      "blob": "76058e875c240f5a5bac9df721ee59af1fb880ae"
+    },
+    {
+      "path": "app/lib/project/__tests__/b18-e-scenario-6-truth.test.ts",
+      "blob": "3be08ffec6f1ee2734fe52a835fea297d2d14678"
+    },
+    {
+      "path": "app/lib/project/__tests__/b19-d-project-import-bounds.test.tsx",
+      "blob": "533b4da82ddf26f47bff4900d312e93b3d4c9eeb"
+    },
+    {
+      "path": "app/lib/project/__tests__/b21-e4-composer-routing.test.ts",
+      "blob": "20239876ebd6514334696de62eb5e0ce64fc6fee"
+    },
+    {
+      "path": "app/lib/project/__tests__/checkpoints.test.ts",
+      "blob": "f5c4cd773f99027c1988252f379d602b071299af"
+    },
+    {
+      "path": "app/lib/project/__tests__/project-state.test.tsx",
+      "blob": "8e9f6c89254da54df8e88ada3da2e4461eaf9e1b"
+    },
+    {
+      "path": "app/lib/project/__tests__/schematic-history.test.ts",
+      "blob": "f25456871dd37980f9ae95f8cd5d57252ad407aa"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a1-configuration.test.ts",
+      "blob": "cf7aeee22f308586c6af240d3e0315b1f453da98"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a1-environment-profile.test.ts",
+      "blob": "f70c002402f18055596d5620a5761215bf0fb55e"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a1-flags.test.ts",
+      "blob": "81a61ef19446c3813faf2fcd8c1f1252c9316ab7"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a1-readiness.test.ts",
+      "blob": "f1bf0a69e05bcda274e89ba84f94791d75e15c47"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a2-env-names.test.ts",
+      "blob": "0a187fd1085b31e178afb69bb0ebbc9c0ec9b69a"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a2-headers.test.ts",
+      "blob": "f962ab787cd05197fe80cc260b698f44facbc380"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a2-origin-allowlist.test.ts",
+      "blob": "6a8c7082c4c88fc85e314b9cb2805ac8dc07b9ee"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a2-secret-rotation.test.ts",
+      "blob": "8817107f7c106545a720dc04a1b859c8fc8f4906"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a2-secret-scan.test.ts",
+      "blob": "541ba63fc85a3d211d46f6371e6334e4164383b8"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a3-abuse-controls-page.test.ts",
+      "blob": "5376a02eee085ad33eff9b6c8cfc79349fcd7d6a"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a3-abuse-limits.test.ts",
+      "blob": "e87aee4e000289651b1f2eee33a6f5e3c063aeb8"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a3-credit-census.test.ts",
+      "blob": "2f90e9e6b53bfd0e77be3aca285905d54d0cffdc"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a3-embedding-admission.test.ts",
+      "blob": "35f261af42b97117cce19d933799a24a7c8507f0"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a3-placement-bound.test.ts",
+      "blob": "1e1d6654e8fa59b1377eda810ed5f6f71de6f842"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a3-principal-limits.test.ts",
+      "blob": "75484b477f22e93228fadb8557d2fe1d168a1cde"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a3-signin-message.test.ts",
+      "blob": "7c63a0cd2e3235de55263f479ec14231e43de2a2"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-a4-database-tls.test.ts",
+      "blob": "ea3da7345b5b9f42a70156eddab97b0d39700d47"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-b1-catalog.test.ts",
+      "blob": "121d8df7d9fa615e5f554db1986291683842f87e"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-b1-score-separation.test.ts",
+      "blob": "d368de93fec8c6e805a89613921d16aa5756515d"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-b2-ci-admission.test.ts",
+      "blob": "5b4c357e4b622270f7c3095b0d600f09529e2869"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-b2-corpus-nightly.test.ts",
+      "blob": "56dd0ae2bfcc24bd94fc58eb1cef5bdbf782199c"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-b2-power-ground.test.ts",
+      "blob": "387bb8e3d283e7c774d79db438a98b079d287159"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-b3-live-suite-honesty.test.ts",
+      "blob": "0b9e95044acf22974d46ef7958f472d0d388c64f"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-b3-model-in-loop.test.ts",
+      "blob": "3cc43f99c4de633ade09225f9d4129c7110636bc"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-b3-scenario-map.test.ts",
+      "blob": "bd494267c6bd634ca1319731fc66ff07147308a0"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-c1-durable-trace.test.ts",
+      "blob": "35079fbc8c6b613c9c50b3e7b11af56338a3bb0b"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-c1-llm-call-record.test.ts",
+      "blob": "9e05753959225b833a91b490520d05efe49377d8"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-c2-attribution.test.ts",
+      "blob": "8965b0d178f18f06cf685dac79933f694b9c26c2"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-c2-cost.test.ts",
+      "blob": "b4f21b21c8709f9e133d90e1c096a2f0b3663292"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-c2-redaction.test.ts",
+      "blob": "9c5a640229221b2436b69f4f27839e53e63bd696"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-c2-retention.test.ts",
+      "blob": "80e1aab300f39d8aa0dbcca0477c1b1dba66d581"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-c3-recorded-limits.test.ts",
+      "blob": "d5a714aa264f38c81f010e3dede06f401d93facf"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-c3-trace-read.test.ts",
+      "blob": "f770ac76980e58f848415c792c576880d398b6a9"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-d0-ci-split.test.ts",
+      "blob": "dc7ec5186589899a0631fbd3af82358517443f9c"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-d1-latency-policy.test.ts",
+      "blob": "b047445d87d767127067750157ee89d50420a1ca"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-d1-latency-workflow.test.ts",
+      "blob": "068296411af57a0875828f1effdbb4adb39fba7b"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-d1-latency.test.ts",
+      "blob": "02731cad23ab73aa228c25b667476caa442045b1"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-d1-threshold-census.test.ts",
+      "blob": "d1c19d12dfebe8b4ceb59a7dfd90439a5138932f"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-d2-board-read.test.ts",
+      "blob": "a95653852d5c4a59830277e7d3911b7a4e3454b4"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-d2-crash-recovery.test.ts",
+      "blob": "b8cc6103861d5dd2c02b98225f8684c61e643471"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-d2-memory.test.ts",
+      "blob": "dd463f1f3101ebd6acfd0e872e0a63e222f4ee67"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-d2-process-cleanup.test.ts",
+      "blob": "8b4992d0b2281f0cd529ae945eb51b3ec612b434"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-d2-working-copy.test.ts",
+      "blob": "fde514f670c5cac27dd286561bb366ace7bc614b"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-d3-accessible-names.test.ts",
+      "blob": "8a0eb12e1d174518e2895a1ec971c3f974e481f4"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-d3-bom-dialogs.test.tsx",
+      "blob": "39c5eef22793600e0cb1dcbc09c910296aa2fa08"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-d4-browser-split.test.ts",
+      "blob": "13e4108f09ec4727762c0cec5cb32b89a7d99f30"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-e-production-auth-config.test.ts",
+      "blob": "966dbcf6ee2d373770136966db5e7691779c9f49"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-e-register.test.ts",
+      "blob": "d5cb3c71cca7cb4292d431383d4c233ebb0f0023"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-e-statements.test.ts",
+      "blob": "6d335c8f3fa4e843431a695e5f030af4385d8391"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-f-generator-inventory.test.ts",
+      "blob": "1268853d6f8b6602acdc4467701d3d18701594a1"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-f-maps.test.ts",
+      "blob": "832cf80aaf642f10d9a9b0dd5873d4ac4fc79347"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-f-registers.test.ts",
+      "blob": "11d8cf8964d0fbfac33d3917fe02ee9ec14ff3c6"
+    },
+    {
+      "path": "app/lib/qualification/__tests__/b24-f-verdict-lines.test.ts",
+      "blob": "3ca1810fda6ac0f26f57c7a662e283b147d2c71c"
+    },
+    {
+      "path": "app/lib/qualification/database/__tests__/b24-a4-restore.test.ts",
+      "blob": "eeb99adbf43d1478c58953318743543055910441"
+    },
+    {
+      "path": "app/lib/qualification/database/__tests__/b24-a4-rls-default-deny.test.ts",
+      "blob": "d18113aaaa2aa010377a8d6fd34b3c9ddadd9d08"
+    },
+    {
+      "path": "app/lib/qualification/database/__tests__/b24-a4-rollback.test.ts",
+      "blob": "6eb1ceb59918ae9129ee2a849ec3635d1c582f85"
+    },
+    {
+      "path": "app/lib/qualification/database/__tests__/b24-a4-test-isolation.test.ts",
+      "blob": "26417782e6482271b4812a6b5786c809052602ef"
+    },
+    {
+      "path": "app/lib/qualification/database/__tests__/b24-c1-durable-records-pglite.test.ts",
+      "blob": "9e0a6cb155189dcd51adda787a55ebbfe1c7beab"
+    },
+    {
+      "path": "app/lib/qualification/database/__tests__/b24-c2-retention-pglite.test.ts",
+      "blob": "72f6bdbb95b7843c445f92801df4fa43d60fe27e"
+    },
+    {
+      "path": "app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts",
+      "blob": "a5f7ee0a065a138a7bcbbeea64e06cf6a9cee52e"
+    },
+    {
+      "path": "app/lib/qualification/database/__tests__/b24-d2-restart-pglite.test.ts",
+      "blob": "1709d10b1052747c6f25258ad72b55bf5399b2b7"
+    },
+    {
+      "path": "app/lib/release-engineering/__tests__/foundation.test.ts",
+      "blob": "601a9408867d8dc39c3f5bf15ebaff4f2533bcb1"
+    },
+    {
+      "path": "app/lib/requirements/__tests__/api-persistence.test.ts",
+      "blob": "12c1da648cc1e9fa0c9d9f33ffc15abe8b64516f"
+    },
+    {
+      "path": "app/lib/requirements/__tests__/assumptions-transactions.test.ts",
+      "blob": "0ff95e054faff809ebcbf2957bc141ab6fb081cc"
+    },
+    {
+      "path": "app/lib/requirements/__tests__/b19-d-source-unions.test.ts",
+      "blob": "acbc970ecf3f81f9bda3cbcc8afdcb5e593c7b6c"
+    },
+    {
+      "path": "app/lib/requirements/__tests__/compiler.test.ts",
+      "blob": "450da2ebc158b7ce29542a469062dae12a4c4ea6"
+    },
+    {
+      "path": "app/lib/requirements/__tests__/contracts.test.ts",
+      "blob": "aee15c93fff5933e141aa91301e101a781f2d7d8"
+    },
+    {
+      "path": "app/lib/requirements/__tests__/source-validation.test.ts",
+      "blob": "72713f4507bbf6e0991b5228f265206c2687e85d"
+    },
+    {
+      "path": "app/lib/schematic-compiler/__tests__/adapter-equivalence.test.ts",
+      "blob": "8bb3654674c82ca6e2232a55ed0e0415b2d96343"
+    },
+    {
+      "path": "app/lib/schematic-compiler/__tests__/b16-0-17-2-schema-parity.test.ts",
+      "blob": "dd61b2758b83e3b431c00ab96e996de08dad5e22"
+    },
+    {
+      "path": "app/lib/schematic-compiler/__tests__/graph-authority.test.ts",
+      "blob": "4d655b02068fc1f54aa04e64cc4bc96a14f449b7"
+    },
+    {
+      "path": "app/lib/schematic-compiler/__tests__/lifecycle.test.ts",
+      "blob": "57018224435ca879d9eafe2b71e2762463d927e7"
+    },
+    {
+      "path": "app/lib/schgen/__tests__/b19-schgen-endpoint-client.test.ts",
+      "blob": "efaee792ef8b666828cb766cccff055ca69e895e"
+    },
+    {
+      "path": "app/lib/spice/__tests__/b16-0-2-spice-scope-isolation.test.ts",
+      "blob": "f18ba178e884c397272c58035880d3e531a33d0a"
+    },
+    {
+      "path": "app/lib/spice/__tests__/b19-d-report-escaping.test.ts",
+      "blob": "fb7f93764d81bacc3d4894af1fb291ce675c1a1e"
+    },
+    {
+      "path": "app/lib/spice/__tests__/models-run-plan.test.ts",
+      "blob": "ecbdabfbc3ac2f7237fca85ae8f269700d2ec06b"
+    },
+    {
+      "path": "app/lib/spice/__tests__/project-ir-netlist.test.ts",
+      "blob": "e1c050bbae7a227001ea0b85de163a89a1e2bc6a"
+    },
+    {
+      "path": "app/lib/spice/__tests__/sec-1-deck-injection.test.ts",
+      "blob": "4fdfa5e9eb90a23c518fdc0951c8efceecf02e13"
+    },
+    {
+      "path": "app/lib/spice/__tests__/waveforms-measurements-diagnostics.test.ts",
+      "blob": "0b57e81d66c072b38cc26b90e9c201646ebb2ddb"
+    },
+    {
+      "path": "app/lib/spice/__tests__/worker-integration.test.ts",
+      "blob": "3574634c87706b117de2e7ef33b46a126a2a1766"
+    },
+    {
+      "path": "app/lib/view-session/__tests__/b17-b-view-session-bus.test.ts",
+      "blob": "a730829eab2e9d38ba723267616bda5dd4e4ab2f"
+    },
+    {
+      "path": "app/lib/view-session/__tests__/b17-c-pcb3d-commands.test.ts",
+      "blob": "3a1cbedae58105367273df4e3e393dcd1458bc12"
+    },
+    {
+      "path": "app/lib/view-session/__tests__/b17-d-pcb-view-commands.test.ts",
+      "blob": "ebe75fb15ae95e52d77dfeb302c5ce5b414e64f8"
+    },
+    {
+      "path": "app/lib/view-session/__tests__/b17-d-schematic-workspace-commands.test.ts",
+      "blob": "a1f92f1bba94939963b8919cb55b367abff12064"
+    },
+    {
+      "path": "app/lib/view-session/__tests__/b17-negative-tripwires.test.ts",
+      "blob": "811852b71d5e09fc511cfbb2ed987efed44dbcb8"
+    },
+    {
+      "path": "app/lib/workflow/prompt-to-gerber/__tests__/acceptance-pipeline.test.ts",
+      "blob": "5ba84bf44bd7477c73267574e7cc0a124dd6ee06"
+    },
+    {
+      "path": "app/lib/workflow/prompt-to-gerber/__tests__/blinker-catalog.test.ts",
+      "blob": "cf2fa624e79e0c86db9ce4bcf66426e3da3234df"
+    },
+    {
+      "path": "app/lib/workflow/prompt-to-gerber/__tests__/machine.test.ts",
+      "blob": "a669cc73d505eb19adde4c761afe2cffd8f9c28f"
+    },
+    {
+      "path": "app/lib/workflow/prompt-to-gerber/__tests__/recovery-pipeline.test.ts",
+      "blob": "052b86d4e00a42a007b62da3af15e0304f5ff157"
+    },
+    {
+      "path": "app/lib/workflow/prompt-to-gerber/__tests__/review-summary.test.ts",
+      "blob": "f8cdcf13bbd2d187f1a748d3f01db4793d6af17c"
+    }
+  ],
+  "policyInputs": {
+    ".github/workflows/deterministic-manufacturing.yml": {
+      "blob": "7e06ecca1563f250bc0ebd3b4868dec70f5b92c0",
+      "text": "# [B16-A F9] The deterministic prompt-to-Gerber manufacturing path runs in CI on\n# every pull request and on main: fake provider adapter, committed KiCad\n# fixtures, committed router recordings replayed by placed-board revision (the\n# bundled FreeRouting runtime is local-only), frozen clock, deterministic UUIDs,\n# pinned release identities (archive sha256, release id, board revision).\n# No credentials, no database, no network. A drift in ANY identity fails here.\n#\n# [B16-B] The `database-delivery` job proves the migration mechanism on a\n# disposable in-process PostgreSQL (PGlite): clean / upgrade / replay / drift /\n# interruption, executable RLS and CHECK behaviour, schema-first parity, and\n# that every DB-backed test is opt-in (no marker → skipped, never failed).\nname: deterministic-manufacturing\n\non:\n  pull_request:\n  push:\n    branches: [main]\n  workflow_dispatch:\n\npermissions:\n  contents: read\n\njobs:\n  prompt-to-gerber:\n    runs-on: ubuntu-latest\n    timeout-minutes: 25\n    env:\n      # The acceptance suite writes its evidence (ZIP, manifest, check tables) here — never under the repository.\n      # (a literal path: the `runner` context is not available in job-level env)\n      SIRKIT_B16_1C_EVIDENCE_DIR: /tmp/sirkit-b16-1c-evidence\n    steps:\n      - run: echo \"SIRKIT_JOB_STARTED_AT=$(date +%s)\" >> \"$GITHUB_ENV\" # [B24-D1] OD-30: prompt-to-gerber's start\n      - uses: actions/checkout@v4\n      - uses: pnpm/action-setup@v4\n        with:\n          version: 11.2.2\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 24\n          cache: pnpm\n      - run: pnpm install --frozen-lockfile\n      # [B19-E E2 CI] a full, non-incremental type check needs about 2.2 GB (measured locally: 2.12 GB at 2dee62c, 2.19 GB at\n      # 5c8de9d), past Node's default heap on the runner, where tsc was killed out of memory. Resources only; no check changed.\n      - run: pnpm exec tsc --noEmit\n        env:\n          NODE_OPTIONS: --max-old-space-size=4096\n      # Narrow, deterministic suites only (never the whole suite here): the\n      # acceptance + recovery pipelines, the manufacturing routes and their\n      # hardening tests, the fabrication gate, the browser workflow panel, the\n      # invariant tripwires and the locale-independence proof.\n      - run: >-\n          pnpm exec vitest run\n          app/lib/workflow/prompt-to-gerber/__tests__\n          app/api/pcb/qualify app/api/pcb/release\n          app/api/__tests__/b16-0-15-tranche-parity.test.ts\n          app/api/__tests__/b16-1c-invariant-tripwires.test.ts\n          app/api/__tests__/b16-a-review-corrections-tripwires.test.ts\n          app/api/pcb-sync/__tests__\n          app/lib/pcb/fab/__tests__\n          app/lib/pcb-sync/__tests__\n          app/lib/pcb/__tests__/b16-a-locale-independent-identities.test.ts\n          app/lib/auth/__tests__/b16-a-correlation-id.test.ts\n          app/components/pcb/__tests__/manufacturing-workflow-panel.test.tsx\n          app/api/physical-bindings/__tests__\n          app/lib/pcb/__tests__/b16-c-fabrication-rule-authority.test.ts\n          app/lib/fixture-runtime\n          app/components/pcb/__tests__/component-review-panel.test.tsx\n          app/components/pcb/__tests__/snapshot-conflict-dialog.test.tsx\n          app/components/pcb/__tests__/board-revision-dialog.test.tsx\n          app/components/pcb/__tests__/b18-c-granted-execution-dialog.test.tsx\n          app/components/pcb/__tests__/b18-d-granted-execution-card.test.tsx\n          app/components/chat/__tests__/b18-d-execution-entry-actions.test.tsx\n          app/components/chat/__tests__/b18-d-autonomy-mode-control.test.tsx\n          app/lib/pcb/lifecycle/__tests__/b16-c-strict-mode-remount.test.tsx\n          app/components/pcb/__tests__/pcb3d-view-session.test.tsx\n          app/components/view-session\n          app/lib/pcb/candidates\n          app/lib/project/__tests__/b17-e-operation-timeline.test.ts\n          app/lib/project/__tests__/b17-e-io-outcomes.test.ts\n          app/api/__tests__/b16-0-12-tranche-parity.test.ts\n          app/lib/engineering/__tests__/action-registry.test.ts\n          app/lib/engineering/__tests__/b17-a-control-inventory.test.ts\n          app/lib/view-session\n          app/lib/engineering/__tests__/b17-f-agent-exposure.test.ts\n          app/lib/agent/__tests__/b17-f-view-tools.test.ts\n          app/lib/agent/__tests__/b17-f-view-session-bridge.test.ts\n          app/lib/engineering/__tests__/b18-a-permission-tiers.test.ts\n          app/lib/agent/__tests__/b18-a-autonomy-settings.test.ts\n          app/lib/agent/__tests__/b18-a-autonomy-store.test.ts\n          app/api/agent/__tests__/b18-a-autonomy-route.test.ts\n          app/lib/engineering/__tests__/b18-b-execution-grant.test.ts\n          app/lib/engineering/__tests__/b18-b-explicit-request.test.ts\n          app/lib/execution-grant/__tests__/b18-b-store.test.ts\n          app/lib/execution-grant/__tests__/b18-b-mint-consume-decisions.test.ts\n          app/api/agent/__tests__/b18-b-execution-grant-route.test.ts\n          app/lib/agent/__tests__/b18-b-loop-execution.test.ts\n          app/api/chat/__tests__/b18-b-chat-authority-keys.test.ts\n          app/lib/engineering/__tests__/b18-b-granted-executions.test.ts\n          app/lib/project/__tests__/b18-b-import-gates.test.ts\n          app/lib/project/__tests__/b18-d-composer-routing.test.ts\n          app/lib/project/__tests__/b18-d-execution-display.test.ts\n          app/lib/project/__tests__/b18-d-chat-run-view.test.ts\n          app/lib/project/__tests__/b18-d-execution-entry-log.test.ts\n          app/lib/project/__tests__/b18-d-timeline-store-busy.test.ts\n          app/lib/project/__tests__/b18-d-chat-undo-timeline.test.ts\n          app/lib/project/__tests__/b18-d-refused-line.test.ts\n          app/lib/project/__tests__/b18-d-ui-gates.test.ts\n          app/lib/project/__tests__/b18-d-review-entry-lifecycle.test.ts\n          app/lib/project/__tests__/b18-d-review-part3.test.ts\n          app/lib/project/__tests__/b18-d-review-part4.test.ts\n          app/lib/project/__tests__/b18-d-review2.test.ts\n          app/lib/project/__tests__/b18-d-review2-timeline.test.ts\n          app/lib/project/__tests__/b18-e-scenario-6-truth.test.ts\n          app/lib/project/__tests__/b18-e-refusal-causes.test.ts\n          app/lib/agent/__tests__/b18-e-board-inspect-budget.test.ts\n          app/lib/engineering/__tests__/b18-e-scenario-7.test.ts\n          app/api/pcb/qualify/__tests__/qualify-human-only.test.ts\n          app/lib/engineering/__tests__/b18-e-scenario-8.test.ts\n          app/lib/engineering/__tests__/b18-e-scenario-3.test.ts\n          app/lib/engineering/__tests__/b18-e-scenario-2.test.tsx\n          app/lib/engineering/__tests__/b18-e-via-facts.test.ts\n          app/api/chat/__tests__/b18-e-scenario-4-route.test.ts\n          app/lib/project/__tests__/b18-e-scenario-4-chat.test.ts\n          app/lib/engineering/__tests__/b18-e-scenario-5.test.ts\n          app/lib/net\n          app/lib/distributors/__tests__/b19-distributor-egress.test.ts\n          app/lib/distributors/__tests__/b19-pricing-live-gate.test.ts\n          app/api/bom/__tests__/b19-bom-quota.test.ts\n          app/lib/schgen\n          app/api/schematic/__tests__/b19-cross-verify-egress.test.ts\n          app/lib/acquisition\n          app/lib/mcp\n          app/lib/agent/orchestration/__tests__\n          app/lib/engineering/__tests__/b20-b1-mcp-exposure.test.ts\n          app/api/mcp/__tests__\n          app/lib/auth/__tests__/b20-b2-mcp-access-token.test.ts\n          app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts\n          app/lib/auth/__tests__/b20-b2-route-tree.test.ts\n          app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts\n          app/lib/engineering/__tests__/b20-b3-durable-read-bundle.test.ts\n          app/lib/engineering/__tests__/b20-b3-mcp-subset-move.test.ts\n          app/lib/agent/__tests__/b20-a4-observation-read-service.test.ts\n          app/lib/agent/__tests__/b20-a4-trace-attribution.test.ts\n          app/lib/engineering/__tests__/b20-a4-observation-descriptor.test.ts\n          app/api/chat/__tests__/b20-a4-chat-mcp-runtime.test.ts\n          app/api/chat/__tests__/b21-b-chat-router.test.ts\n          app/api/chat/__tests__/b21-d-chat-merge.test.ts\n          app/api/chat/__tests__/b21-d2-chat-proposals.test.ts\n          app/api/chat/__tests__/b21-d3-chat-replacement.test.ts\n          app/api/chat/__tests__/b21-e1-chat-provider.test.ts\n          app/api/chat/__tests__/b21-e2-chat-events.test.ts\n          app/api/chat/__tests__/b21-e3-chat-resume.test.ts\n          app/api/chat/__tests__/b21-e4-chat-first-turn.test.ts\n          app/lib/project/__tests__/b21-e4-composer-routing.test.ts\n          app/lib/distributors/__tests__/b19-connector-policy.test.ts\n          app/lib/distributors/__tests__/b19-source-admission.test.ts\n          app/lib/distributors/__tests__/b19-quota-breaker-coalescing.test.ts\n          app/lib/atomic/__tests__/b19-approval-evidence-authority.test.ts\n          app/lib/atomic/__tests__/governance-security.test.ts\n          app/lib/atomic/__tests__/b19-export-license.test.ts\n          app/lib/atomic/__tests__/b19-d-ingestion-bounds.test.ts\n          app/lib/distributors/__tests__/b19-d-exact-mpn-connectors.test.ts\n          app/lib/distributors/__tests__/b19-d-exact-mpn-binding.test.ts\n          app/lib/distributors/__tests__/b19-d-vendor-values.test.ts\n          app/lib/distributors/__tests__/b19-d-lifecycle-retention.test.ts\n          app/lib/bom/__tests__/b19-d-pricing-mpn-binding.test.ts\n          app/lib/distributors/__tests__/b19-d-review-connectors.test.ts\n          app/lib/distributors/__tests__/b19-d-review-values.test.ts\n          app/lib/distributors/__tests__/b19-d-review-lifecycle.test.ts\n          app/lib/bom/__tests__/b19-d-review-price-consistency.test.ts\n          app/components/chat/__tests__/b19-d-chat-markdown.test.tsx\n          app/lib/__tests__/b19-d-href-and-csv-output.test.ts\n          app/lib/atomic/__tests__/b19-d-kicad-export-selections.test.ts\n          app/lib/atomic/__tests__/b19-d-kicad-export-fixture-runtime.test.ts\n          app/lib/atomic/__tests__/b19-d-claims-values.test.ts\n          app/lib/atomic/__tests__/b19-d-kicad-hostile.test.ts\n          app/lib/atomic/__tests__/b19-d-atomic-integrity.test.ts\n          app/lib/atomic/__tests__/kicad-compatibility.test.ts\n          app/lib/kicad/__tests__/b19-d-sexp-hostile.test.ts\n          app/lib/project/__tests__/b19-d-project-import-bounds.test.tsx\n          app/api/bom/__tests__/b19-d-bom-table-bounds.test.ts\n          app/lib/requirements/__tests__/b19-d-source-unions.test.ts\n          app/lib/pcb/__tests__/b19-d-dsn-tokens.test.ts\n          app/lib/atomic/__tests__/b19-d-i5d-review.test.ts\n          app/lib/constraints/__tests__/b19-d-dru-structure.test.ts\n          app/lib/kicad/__tests__/b19-d-ingest-issues.test.ts\n          app/lib/__tests__/b19-d-build-loop-injection.test.ts\n          app/lib/llm/__tests__/b19-d-compose-instructions-escaping.test.ts\n          app/lib/agent/__tests__/b19-d-tool-result-hygiene.test.ts\n          app/api/circuit-knowledge/__tests__/b19-d-excerpt-injection.test.ts\n          app/api/schematic/__tests__/b19-d-schgen-netname-injection.test.ts\n          app/api/chat/__tests__/b19-d-external-text-injection-route.test.ts\n          app/api/simulate/__tests__/b19-d-deck-injection.test.ts\n          app/lib/__tests__/b19-d-review-input-bounds.test.ts\n          app/lib/kicad/__tests__/b19-d-pinned-checkout.test.ts\n          app/api/pcb/autoroute/__tests__/route.test.ts\n          app/lib/distributors/__tests__/b19-e-pricing-provenance-counts.test.ts\n          app/lib/bom/__tests__/b19-e-bom-sources.test.ts\n          app/lib/__tests__/b19-e-packet-provenance.test.ts\n          app/components/bom/__tests__/b19-e-bom-workbench.test.tsx\n          app/lib/engineering/__tests__/b19-e-no-purchase-tripwire.test.ts\n          app/api/parts/__tests__/b19-e-external-search-route.test.ts\n          app/components/editor/__tests__/b19-e-build-library-external-search.test.tsx\n          app/lib/atomic/__tests__/b19-e-publication-integrity.test.ts\n          app/lib/atomic/__tests__/b19-e-publication-review.test.ts\n          app/lib/atomic/__tests__/b19-e-publication-boundaries.test.ts\n          app/api/components/__tests__/b19-e-atomic-publication-route.test.ts\n          app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx\n          app/api/components/__tests__/b19-e-revision-status-route.test.ts\n          app/api/components/__tests__/b19-e-withdraw-revision-route.test.ts\n          app/lib/engineering/__tests__/b19-e-authority-catalog-status.test.ts\n          app/lib/atomic/__tests__/b19-e-upgrade-diff-status.test.ts\n          app/lib/atomic/__tests__/b19-e-adopt-exact-revision.test.ts\n          app/lib/bom/__tests__/b19-e-bom-catalog-status.test.ts\n          app/components/bom/__tests__/b19-e-bom-catalog-status.test.tsx\n          app/components/pcb/__tests__/b19-e-component-review-successor.test.tsx\n          app/components/parts/__tests__/b19-e-publication-withdraw-revision.test.tsx\n          app/components/editor/__tests__/b19-e-build-library-exact-revision.test.tsx\n          app/api/bom/__tests__/b19-e-bom-catalog-status-scope.test.ts\n          app/lib/engineering/__tests__/b19-e-external-read-descriptors.test.ts\n          app/lib/agent/__tests__/b19-e-external-read-service.test.ts\n          app/api/chat/__tests__/b19-e-chat-external-acquisition.test.ts\n          app/api/chat/__tests__/b14-route-replacement.test.ts\n          app/lib/pcb/__tests__/b19-d-kicad-emit-injection.test.ts\n          app/lib/spice/__tests__/b19-d-report-escaping.test.ts\n          app/lib/spice/__tests__/sec-1-deck-injection.test.ts\n          app/lib/computation/__tests__\n          app/lib/manufacturing-providers/__tests__\n          app/lib/qualification/__tests__\n          app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts\n          app/lib/project/__tests__/b18-e-claimed-nothing.test.ts\n          app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts\n          app/api/chat/__tests__/b18-d-chat-stop.test.ts\n          app/lib/agent/__tests__/b18-c-gateway-dispatch.test.ts\n          app/lib/agent/__tests__/b18-c-gateway-execution.test.ts\n          app/lib/agent/__tests__/b18-c-never-execution-sweep.test.ts\n          app/lib/agent/__tests__/b18-d-loop-text-phase.test.ts\n          app/lib/agent/__tests__/b18-d-tool-refused.test.ts\n          app/lib/engineering/__tests__/b18-c-adversarial.test.ts\n          app/lib/engineering/__tests__/b18-c-builders.test.ts\n          app/lib/engineering/__tests__/b18-c-dimension.test.ts\n          app/lib/engineering/__tests__/b18-c-explicit-grammars.test.ts\n          app/lib/engineering/__tests__/b18-c-exposure-lift.test.ts\n          app/lib/engineering/__tests__/b18-c-fixture-agent.test.ts\n          app/lib/engineering/__tests__/b18-c-granted-execution-gates.test.ts\n          app/lib/engineering/__tests__/b18-c-recovery-inflight.test.ts\n          app/lib/engineering/__tests__/b18-d-ritual-outcome-report.test.ts\n          app/lib/engineering/__tests__/b18-d-undo-during-commit.test.ts\n          app/lib/engineering/__tests__/b18-d-repair-undo-held.test.ts\n          app/lib/engineering/__tests__/b18-d-repair-undo-bound.test.ts\n          app/lib/engineering/__tests__/b18-c-loop-real-gateway.test.ts\n          app/lib/engineering/__tests__/b18-c-replay-grants.test.ts\n          app/lib/engineering/__tests__/b18-c-result-contract.test.ts\n          app/lib/engineering/__tests__/b18-c-review-2.test.ts\n          app/lib/engineering/__tests__/b18-c-review-3.test.ts\n          app/lib/engineering/__tests__/b18-c-review-fixes.test.ts\n          app/lib/engineering/__tests__/b18-c-rotate-arrange-e2e.test.ts\n          app/lib/engineering/__tests__/b18-c-silk-text.test.ts\n          app/lib/engineering/__tests__/b18-c-tier2-truth.test.ts\n          app/lib/engineering/__tests__/b18-c-undo-redo.test.ts\n          app/lib/agent/__tests__/b09-1-boundary.test.ts\n          app/lib/agent/__tests__/b09-1-recovery.test.tsx\n          app/lib/agent/__tests__/b09-2-closure.test.ts\n          app/lib/agent/__tests__/b09-2-recovery.test.tsx\n          app/lib/agent/__tests__/b09-3-closure.test.ts\n          app/lib/agent/__tests__/b09-loop-safety.test.ts\n          app/lib/agent/__tests__/b09-proposals.test.ts\n          app/lib/agent/__tests__/b09-provider-contracts.test.ts\n          app/lib/agent/__tests__/b10-1-strict-mode-publisher.test.tsx\n          app/lib/agent/__tests__/b10-editor-context.test.ts\n          app/lib/agent/__tests__/b11-1-trace-integrity.test.ts\n          app/lib/agent/__tests__/b11-2-replay-context.test.ts\n          app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts\n          app/lib/agent/__tests__/b11-4-capture-ownership.test.ts\n          app/lib/agent/__tests__/b11-4-no-execution.test.ts\n          app/lib/agent/__tests__/b11-5-capture-exactness.test.ts\n          app/lib/agent/__tests__/b11-6-projection-ownership.test.ts\n          app/lib/agent/__tests__/b11-7-primitive-discipline.test.ts\n          app/lib/agent/__tests__/b11-trace-replay-evaluation.test.ts\n          app/api/chat/__tests__/b10-1-request-boundary.test.ts\n          app/api/chat/__tests__/b10-2-closure.test.ts\n          app/api/chat/__tests__/b10-chat-boundary.test.ts\n          app/api/chat/__tests__/b11-1-route-finalization.test.ts\n          app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts\n          app/lib/auth/__tests__/b16-0-2-gates.test.ts\n          app/api/__tests__/b16-0-auth-route-coverage.test.ts\n          app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts\n          app/lib/pcb/__tests__/pin-pad-mapping.test.ts\n          app/lib/footprint-resolver/__tests__\n          app/api/pcb/edit/__tests__/assist-live.test.ts\n          app/lib/auth/__tests__/b16-1b-live-qualification.test.ts\n          app/lib/pcb/__tests__/kicad-cli-oracle.test.ts\n          app/lib/spice/__tests__/worker-integration.test.ts\n          --exclude 'app/lib/project/__tests__/b18-b-import-gates.test.ts'\n          --exclude 'app/lib/distributors/__tests__/b19-distributor-egress.test.ts'\n          --exclude 'app/lib/mcp/**'\n          --exclude 'app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts'\n          --exclude 'app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts'\n          --exclude 'app/lib/distributors/__tests__/b19-connector-policy.test.ts'\n          --exclude 'app/lib/distributors/__tests__/b19-d-exact-mpn-connectors.test.ts'\n          --exclude 'app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx'\n          --exclude 'app/lib/computation/__tests__/**'\n          --exclude 'app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts'\n          --exclude 'app/lib/engineering/__tests__/b18-c-result-contract.test.ts'\n          --exclude 'app/lib/engineering/__tests__/b18-c-review-3.test.ts'\n          --exclude 'app/lib/engineering/__tests__/b18-c-review-fixes.test.ts'\n          --exclude 'app/lib/agent/__tests__/b09-1-boundary.test.ts'\n          --exclude 'app/lib/agent/__tests__/b09-1-recovery.test.tsx'\n          --exclude 'app/lib/agent/__tests__/b09-2-closure.test.ts'\n          --exclude 'app/lib/agent/__tests__/b09-2-recovery.test.tsx'\n          --exclude 'app/lib/agent/__tests__/b09-3-closure.test.ts'\n          --exclude 'app/lib/agent/__tests__/b09-proposals.test.ts'\n          --exclude 'app/lib/agent/__tests__/b09-provider-contracts.test.ts'\n          --exclude 'app/lib/agent/__tests__/b10-1-strict-mode-publisher.test.tsx'\n          --exclude 'app/lib/agent/__tests__/b10-editor-context.test.ts'\n          --exclude 'app/lib/agent/__tests__/b11-1-trace-integrity.test.ts'\n          --exclude 'app/lib/agent/__tests__/b11-2-replay-context.test.ts'\n          --exclude 'app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts'\n          --exclude 'app/lib/agent/__tests__/b11-4-capture-ownership.test.ts'\n          --exclude 'app/lib/agent/__tests__/b11-4-no-execution.test.ts'\n          --exclude 'app/lib/agent/__tests__/b11-5-capture-exactness.test.ts'\n          --exclude 'app/lib/agent/__tests__/b11-6-projection-ownership.test.ts'\n          --exclude 'app/lib/agent/__tests__/b11-7-primitive-discipline.test.ts'\n          --exclude 'app/api/chat/__tests__/b10-1-request-boundary.test.ts'\n          --exclude 'app/api/chat/__tests__/b10-2-closure.test.ts'\n          --exclude 'app/api/chat/__tests__/b10-chat-boundary.test.ts'\n          --exclude 'app/api/chat/__tests__/b11-1-route-finalization.test.ts'\n          --exclude 'app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts'\n          --exclude 'app/lib/auth/__tests__/b16-0-2-gates.test.ts'\n          --exclude 'app/api/__tests__/b16-0-auth-route-coverage.test.ts'\n          --exclude 'app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts'\n          --reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml\n      - name: Upload evidence and diagnostics\n        if: always()\n        uses: actions/upload-artifact@v4\n        with:\n          name: deterministic-manufacturing-evidence\n          path: |\n            vitest-deterministic-manufacturing.xml\n            /tmp/sirkit-b16-1c-evidence/b16-1c-acceptance-evidence.json\n            /tmp/sirkit-b16-1c-evidence/b16-1c-acceptance-release.zip\n          if-no-files-found: ignore\n          retention-days: 14\n      - if: always() # [B24-D1] OD-30: prompt-to-gerber's headroom\n        run: pnpm exec tsx scripts/ci-job-headroom.ts .github/workflows/deterministic-manufacturing.yml prompt-to-gerber\n\n  database-delivery:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n      - uses: actions/checkout@v4\n      - uses: pnpm/action-setup@v4\n        with:\n          version: 11.2.2\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 24\n          cache: pnpm\n      - run: pnpm install --frozen-lockfile\n      # No DATABASE_URL, no qualification marker: the DB-backed suites must report SKIPPED, the disposable-PostgreSQL proofs must PASS.\n      - run: >-\n          pnpm exec vitest run\n          app/lib/db\n          app/lib/pcb/__tests__/ingest-integrity.test.ts\n          app/lib/physical-binding/__tests__/schema-integrity.test.ts\n          app/lib/durable-workflow/__tests__/tenant-scope.test.ts\n          app/lib/distributors/__tests__/b19-offer-retention.test.ts\n          app/lib/distributors/__tests__/b19-e-pricing-provenance-cache.test.ts\n          app/lib/distributors/__tests__/b19-e-external-search-retention.test.ts\n          app/lib/distributors/__tests__/b19-e-exact-mpn-offer-cache.test.ts\n          app/lib/atomic/__tests__/b19-e-atomic-publication-durable.test.ts\n          app/lib/atomic/__tests__/b19-e-atomic-revision-loaders.test.ts\n          app/lib/atomic/__tests__/b19-e-publication-review-durable.test.ts\n          app/lib/atomic/__tests__/b19-e-publication-fake-vendors.test.ts\n          app/lib/physical-binding/__tests__/b19-e-successor-b14-durable.test.ts\n          app/lib/manufacturing-providers/database/__tests__/b23-b-exchange-ledger-pglite.test.ts\n          app/lib/qualification/database/__tests__/b24-a4-rls-default-deny.test.ts\n          app/lib/qualification/database/__tests__/b24-a4-test-isolation.test.ts\n          app/lib/qualification/database/__tests__/b24-a4-rollback.test.ts\n          app/lib/qualification/database/__tests__/b24-a4-restore.test.ts\n          app/lib/qualification/database/__tests__/b24-c1-durable-records-pglite.test.ts\n          app/lib/qualification/database/__tests__/b24-c2-retention-pglite.test.ts\n          app/lib/qualification/database/__tests__/b24-c3-trace-read-pglite.test.ts\n          app/lib/qualification/database/__tests__/b24-d2-restart-pglite.test.ts\n          --reporter=dot --reporter=junit --outputFile=vitest-database-delivery.xml\n      - name: Upload diagnostics\n        if: failure()\n        uses: actions/upload-artifact@v4\n        with:\n          name: database-delivery-diagnostics\n          path: vitest-database-delivery.xml\n          if-no-files-found: ignore\n          retention-days: 14\n\n  # [B16-C.5] The page-level browser proof: a real Chromium drives the real\n  # Next.js application under the env-gated fixture runtime (in-memory stores,\n  # recorded provider design, recorded router replay, dev-only role cookie).\n  # No database, no credits, no live router; live provider/auth variations stay\n  # opt-in elsewhere.\n  page-browser-e2e:\n    runs-on: ubuntu-latest\n    timeout-minutes: 30\n    env:\n      CI: \"true\"\n    steps:\n      - run: echo \"SIRKIT_JOB_STARTED_AT=$(date +%s)\" >> \"$GITHUB_ENV\" # [B24-D1] OD-30: page-browser-e2e's start\n      - uses: actions/checkout@v4\n      - uses: pnpm/action-setup@v4\n        with:\n          version: 11.2.2\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 24\n          cache: pnpm\n      - run: pnpm install --frozen-lockfile\n      - run: pnpm exec playwright install --with-deps chromium\n      - run: pnpm exec playwright test\n        env:\n          SIRKIT_E2E_SKIP: \"**/multi-tab.spec.ts,**/crash-recovery.spec.ts,**/keyboard-and-focus.spec.ts,**/minimum-width.spec.ts\" # [B24-D4] OD-30: all four run in page-browser-e2e-b24\n      # [B21 F2] D21-43: the orchestration spec on its own config and flag-on server, AFTER the step above - one next dev at a time\n      - name: Orchestration browser proof (B21 F2)\n        run: pnpm exec playwright test -c playwright.orchestration.config.ts\n      - name: Upload browser evidence\n        if: always()\n        uses: actions/upload-artifact@v4\n        with:\n          name: page-browser-e2e-report\n          path: |\n            playwright-report\n            test-results\n            playwright-report-orchestration\n            test-results-orchestration\n          if-no-files-found: ignore\n          retention-days: 14\n      - if: always() # [B24-D1] OD-30: page-browser-e2e's headroom\n        run: pnpm exec tsx scripts/ci-job-headroom.ts .github/workflows/deterministic-manufacturing.yml page-browser-e2e\n\n  # [B24-A1] D24-1 (offline), OD-190: production mode in CI - `next build`, then `next start`, then fail-closed probes. This is the\n  # first `next build` in CI, and the first since B22 added engine-worker.mjs (B22 final-verdict.md:110): whether it is emitted is\n  # printed, and named computations stay off. The server declares the ci profile, the expected origin and a worker secret generated\n  # for this run (masked); no Supabase, database, provider or fixture variable is set, so sensitive routes refuse and readiness\n  # answers 503. Nothing is deployed and no live resource is used: staging and production stay BLOCKED-LIVE-QUALIFICATION (LB-13).\n  production-smoke:\n    runs-on: ubuntu-latest\n    timeout-minutes: 20\n    env:\n      SMOKE_PORT: \"3200\"\n      SMOKE_ORIGIN: http://localhost:3200\n    steps:\n      - uses: actions/checkout@v4\n      - uses: pnpm/action-setup@v4\n        with:\n          version: 11.2.2\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 24\n          cache: pnpm\n      - run: pnpm install --frozen-lockfile\n      - name: next build (production)\n        env:\n          NODE_OPTIONS: --max-old-space-size=4096\n        run: |\n          set -euo pipefail\n          started=$(date +%s)\n          pnpm exec next build 2>&1 | tee next-build.log\n          echo \"next build took $(( $(date +%s) - started )) s\"\n          emitted=\"$(find .next -name 'engine-worker*' -print)\"\n          if [ -n \"$emitted\" ]; then echo \"engine-worker.mjs: emitted\"; echo \"$emitted\"; else echo \"engine-worker.mjs: not emitted\"; fi\n      - name: next start (production, in the background)\n        env:\n          SIRKIT_DEPLOYMENT_ENV: ci\n          SIRKIT_EXPECTED_ORIGIN: http://localhost:3200\n        run: |\n          set -euo pipefail\n          secret=\"$(openssl rand -hex 32)\"\n          echo \"::add-mask::${secret}\"\n          echo \"SMOKE_WORKER_SECRET=${secret}\" >> \"$GITHUB_ENV\"\n          started=$(date +%s)\n          SIRKIT_WORKFLOW_WORKER_SECRET=\"${secret}\" nohup pnpm exec next start --port \"$SMOKE_PORT\" > next-start.log 2>&1 &\n          echo $! > next-start.pid\n          for attempt in $(seq 1 90); do\n            if curl -fsS -o /dev/null \"$SMOKE_ORIGIN/api/health\"; then echo \"next start answered after $(( $(date +%s) - started )) s\"; exit 0; fi\n            sleep 1\n          done\n          echo \"next start did not answer /api/health within 90 s\"\n          exit 1\n      - name: Probe the production server (fail-closed answers)\n        run: |\n          set -euo pipefail\n          status() { curl -s -o \"$1\" -w '%{http_code}' \"${@:2}\"; }\n          test \"$(status health.json \"$SMOKE_ORIGIN/api/health\")\" = 200\n          grep -qF '{\"ok\":true}' health.json\n          test \"$(status ready.json -H \"Authorization: Bearer ${SMOKE_WORKER_SECRET}\" \"$SMOKE_ORIGIN/api/ready\")\" = 503\n          grep -qF '{\"name\":\"deployment_profile\",\"state\":\"not_serving\"}' ready.json\n          grep -qF '{\"name\":\"supabase_auth_configuration\",\"state\":\"not_configured\"}' ready.json\n          grep -qF '{\"name\":\"database\",\"state\":\"not_configured\"}' ready.json\n          if grep -qF \"${SMOKE_WORKER_SECRET}\" ready.json; then echo \"the readiness answer carries the worker secret\"; exit 1; fi\n          test \"$(status ready-anonymous.json \"$SMOKE_ORIGIN/api/ready\")\" = 401\n          test \"$(status autonomy.json -H 'x-sirkit-project-id: smoke-project' \"$SMOKE_ORIGIN/api/agent/autonomy\")\" = 403\n          grep -qF '\"code\":\"AUTH_PRODUCTION_NOT_CONFIGURED\"' autonomy.json\n          test \"$(status signout-cross.json -X POST -H 'Origin: http://evil.example' \"$SMOKE_ORIGIN/api/auth/signout\")\" = 403\n          grep -qF '\"code\":\"AUTH_CROSS_ORIGIN_DENIED\"' signout-cross.json\n          test \"$(status signout.json -X POST -H \"Origin: $SMOKE_ORIGIN\" \"$SMOKE_ORIGIN/api/auth/signout\")\" = 503\n          grep -qF '\"code\":\"AUTH_SIGNOUT_UNAVAILABLE\"' signout.json\n          test \"$(curl -s -D ai-runtime.headers -o ai-runtime.json -w '%{http_code}' \"$SMOKE_ORIGIN/api/ai/runtime\")\" = 200\n          grep -qi '^content-security-policy:' ai-runtime.headers\n          # [B24-A2] D24-5, OD-196: every security header with its exact value, and no X-Powered-By, on the page, an API route, the\n          # liveness route and a file outside the proxy's matcher; no HSTS (this build had no SIRKIT_EXPECTED_ORIGIN: not https)\n          for path in / /api/ai/runtime /api/health /favicon.ico; do\n            curl -s -o /dev/null -D headers.txt \"$SMOKE_ORIGIN$path\"\n            tr -d '\\r' < headers.txt | sed -E 's/^([A-Za-z-]+):/\\L\\1:/' > headers.lf\n            for expected in \"content-security-policy: img-src 'self' data: blob:; frame-ancestors 'none'\" \"x-frame-options: DENY\" \"x-content-type-options: nosniff\" \"referrer-policy: strict-origin-when-cross-origin\" \"permissions-policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()\" \"content-security-policy-report-only: default-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'\"; do\n              grep -qxF \"$expected\" headers.lf || { echo \"$path: a security header is missing or different: ${expected%%:*}\"; exit 1; }\n            done\n            if grep -qi '^x-powered-by:' headers.lf; then echo \"$path sends x-powered-by\"; exit 1; fi\n            if grep -qi '^strict-transport-security:' headers.lf; then echo \"$path sends strict-transport-security on an http origin\"; exit 1; fi\n          done\n          echo \"every probe answered as pinned\"\n      - name: Stop the production server\n        if: always()\n        run: |\n          if [ -f next-start.pid ]; then kill \"$(cat next-start.pid)\" 2>/dev/null || true; fi\n          pkill -f \"next start --port\" 2>/dev/null || true\n      - name: Upload the production-smoke logs\n        if: failure()\n        uses: actions/upload-artifact@v4\n        with:\n          name: production-smoke-logs\n          path: |\n            next-build.log\n            next-start.log\n          if-no-files-found: ignore\n          retention-days: 14\n\n  # [B24-A2] D24-4, OD-195, runbook :168: the secret scan in tree mode - the closed rules and the reviewed allowlist of\n  # app/lib/deployment/secret-scan.ts over every listed file - and, on a pull request, over every commit of it ([B24-A2 review]\n  # security-3); a hit prints path:line rule only, never the text. Read-only git calls, no write; the workflow's read-only token.\n  secret-scan:\n    runs-on: ubuntu-latest\n    timeout-minutes: 10\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          fetch-depth: 0\n      - uses: pnpm/action-setup@v4\n        with:\n          version: 11.2.2\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 24\n          cache: pnpm\n      - run: pnpm install --frozen-lockfile\n      - run: pnpm exec tsx scripts/scan-secrets.ts\n      - name: Scan every commit of the pull request (a secret added, then deleted, stays in the history a merge keeps)\n        if: github.event_name == 'pull_request'\n        env:\n          BASE_SHA: ${{ github.event.pull_request.base.sha }}\n          HEAD_SHA: ${{ github.event.pull_request.head.sha }}\n        run: pnpm exec tsx scripts/scan-secrets.ts --history \"$BASE_SHA..$HEAD_SHA\"\n\n  # [B24-D0] OD-30: prompt-to-gerber came within five minutes of its limit (20 min 37 s of 25 at B24-C2's run, 21 min 33 s at\n  # B24-C3's), so its heaviest database-free suites - option 2 of ci-split.md section 3, 42.8 % of the measured local testcase time -\n  # run here instead, excluded above by `--exclude` lines. The same setup steps; no environment variable, secret, database or browser.\n  agent-boundary-suites:\n    runs-on: ubuntu-latest\n    timeout-minutes: 20\n    steps:\n      - run: echo \"SIRKIT_JOB_STARTED_AT=$(date +%s)\" >> \"$GITHUB_ENV\" # [B24-D1] OD-30: agent-boundary-suites's start\n      - uses: actions/checkout@v4\n      - uses: pnpm/action-setup@v4\n        with:\n          version: 11.2.2\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 24\n          cache: pnpm\n      - run: pnpm install --frozen-lockfile\n      - run: >-\n          pnpm exec vitest run\n          app/lib/project/__tests__/b18-b-import-gates.test.ts\n          app/lib/distributors/__tests__/b19-distributor-egress.test.ts\n          app/lib/mcp\n          app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts\n          app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts\n          app/lib/distributors/__tests__/b19-connector-policy.test.ts\n          app/lib/distributors/__tests__/b19-d-exact-mpn-connectors.test.ts\n          app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx\n          app/lib/computation/__tests__\n          app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts\n          app/lib/engineering/__tests__/b18-c-result-contract.test.ts\n          app/lib/engineering/__tests__/b18-c-review-3.test.ts\n          app/lib/engineering/__tests__/b18-c-review-fixes.test.ts\n          app/lib/agent/__tests__/b09-1-boundary.test.ts\n          app/lib/agent/__tests__/b09-1-recovery.test.tsx\n          app/lib/agent/__tests__/b09-2-closure.test.ts\n          app/lib/agent/__tests__/b09-2-recovery.test.tsx\n          app/lib/agent/__tests__/b09-3-closure.test.ts\n          app/lib/agent/__tests__/b09-proposals.test.ts\n          app/lib/agent/__tests__/b09-provider-contracts.test.ts\n          app/lib/agent/__tests__/b10-1-strict-mode-publisher.test.tsx\n          app/lib/agent/__tests__/b10-editor-context.test.ts\n          app/lib/agent/__tests__/b11-1-trace-integrity.test.ts\n          app/lib/agent/__tests__/b11-2-replay-context.test.ts\n          app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts\n          app/lib/agent/__tests__/b11-4-capture-ownership.test.ts\n          app/lib/agent/__tests__/b11-4-no-execution.test.ts\n          app/lib/agent/__tests__/b11-5-capture-exactness.test.ts\n          app/lib/agent/__tests__/b11-6-projection-ownership.test.ts\n          app/lib/agent/__tests__/b11-7-primitive-discipline.test.ts\n          app/api/chat/__tests__/b10-1-request-boundary.test.ts\n          app/api/chat/__tests__/b10-2-closure.test.ts\n          app/api/chat/__tests__/b10-chat-boundary.test.ts\n          app/api/chat/__tests__/b11-1-route-finalization.test.ts\n          app/lib/auth/__tests__/b16-0-1-ci-gates.test.ts\n          app/lib/auth/__tests__/b16-0-2-gates.test.ts\n          app/api/__tests__/b16-0-auth-route-coverage.test.ts\n          app/lib/auth/__tests__/b16-0-8-migration-ratchet.test.ts\n          --reporter=dot --reporter=junit --outputFile=vitest-agent-boundary-suites.xml\n      - name: Upload diagnostics\n        if: always()\n        uses: actions/upload-artifact@v4\n        with:\n          name: agent-boundary-suites-diagnostics\n          path: vitest-agent-boundary-suites.xml\n          if-no-files-found: ignore\n          retention-days: 14\n      - if: always() # [B24-D1] OD-30: agent-boundary-suites's headroom\n        run: pnpm exec tsx scripts/ci-job-headroom.ts .github/workflows/deterministic-manufacturing.yml agent-boundary-suites\n\n  # [B24-D4] OD-30: page-browser-e2e came within five minutes of its limit at B24-D3's run (27 min 40 s of 30, headroom 2 min 20 s),\n  # so B24's own browser specs run here instead - B24-D2's multi-tab and crash-recovery, B24-D3's keyboard-and-focus and minimum-width;\n  # page-browser-e2e's first browser step leaves them out through SIRKIT_E2E_SKIP. The same setup steps; no secret, database or live resource.\n  page-browser-e2e-b24:\n    runs-on: ubuntu-latest\n    timeout-minutes: 20\n    env:\n      CI: \"true\"\n    steps:\n      - run: echo \"SIRKIT_JOB_STARTED_AT=$(date +%s)\" >> \"$GITHUB_ENV\" # [B24-D1] OD-30: page-browser-e2e-b24's start\n      - uses: actions/checkout@v4\n      - uses: pnpm/action-setup@v4\n        with:\n          version: 11.2.2\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 24\n          cache: pnpm\n      - run: pnpm install --frozen-lockfile\n      - run: pnpm exec playwright install --with-deps chromium\n      - name: B24's browser specs (B24-D2's two, B24-D3's two; OD-30's split)\n        run: pnpm exec playwright test e2e/multi-tab.spec.ts e2e/crash-recovery.spec.ts e2e/keyboard-and-focus.spec.ts e2e/minimum-width.spec.ts\n      - name: Upload browser evidence (B24's specs)\n        if: always()\n        uses: actions/upload-artifact@v4\n        with:\n          name: page-browser-e2e-b24-report\n          path: |\n            playwright-report\n            test-results\n          if-no-files-found: ignore\n          retention-days: 14\n      - if: always() # [B24-D1] OD-30: page-browser-e2e-b24's headroom\n        run: pnpm exec tsx scripts/ci-job-headroom.ts .github/workflows/deterministic-manufacturing.yml page-browser-e2e-b24\n"
+    },
+    ".github/workflows/benchmark.yml": {
+      "blob": "309b8a9ebe5ef76e596572b3f5af4988a869d8f2",
+      "text": "name: benchmark-quality\n\non:\n  pull_request:\n  workflow_dispatch:\n  schedule:\n    - cron: \"23 4 * * *\"\n\npermissions:\n  contents: read\n\njobs:\n  benchmark-core:\n    runs-on: ubuntu-latest\n    timeout-minutes: 20\n    steps:\n      - uses: actions/checkout@v4\n      - uses: pnpm/action-setup@v4\n        with:\n          version: 11.2.2\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 24\n          cache: pnpm\n      - run: pnpm install --frozen-lockfile\n      # Output redirection captures the diagnostics for the failure artifact\n      # WITHOUT masking the exit code (no pipes, no continue-on-error).\n      - run: pnpm run benchmark:validate > benchmark-validate.json\n      # [B19-E E2 CI] a full, non-incremental type check needs about 2.2 GB (measured locally: 2.12 GB at 2dee62c, 2.19 GB at\n      # 5c8de9d), past Node's default heap on the runner, where tsc was killed out of memory. Resources only; no check changed.\n      - run: pnpm exec tsc --noEmit\n        env:\n          NODE_OPTIONS: --max-old-space-size=4096\n      - run: pnpm exec vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts --reporter=dot --reporter=junit --outputFile=vitest-benchmark-core.xml\n      - run: pnpm run stage10:test -- --reporter=dot --reporter=junit --outputFile=vitest-stage10.xml\n      - name: Upload failure diagnostics\n        if: failure()\n        uses: actions/upload-artifact@v4\n        with:\n          name: benchmark-core-failure-diagnostics\n          path: |\n            benchmark-validate.json\n            vitest-*.xml\n          if-no-files-found: ignore\n          retention-days: 14\n\n  benchmark-nightly:\n    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'\n    runs-on: ubuntu-latest\n    timeout-minutes: 90\n    steps:\n      - uses: actions/checkout@v4\n      - uses: pnpm/action-setup@v4\n        with:\n          version: 11.2.2\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 24\n          cache: pnpm\n      - run: pnpm install --frozen-lockfile\n      - run: pnpm run benchmark:validate > benchmark-validate.json\n      # [B24-B2] D24-15, OD-204: the stage-09 corpus (every package outside the hidden holdout, below) runs only here, on schedule and\n      # dispatch, through b24-b2-corpus-nightly and this step's flag; every pull-request job skips that suite's corpus cases.\n      - run: pnpm exec vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts app/lib/pcb/__tests__/stage-08-professional-routing.test.ts app/lib/qualification/__tests__/b24-b2-corpus-nightly.test.ts --reporter=dot --reporter=junit --outputFile=vitest-nightly.xml\n        env:\n          SIRKIT_B24_CORPUS_NIGHTLY: \"1\"\n      - run: pnpm run stage10:test -- --reporter=dot --reporter=junit --outputFile=vitest-stage10.xml\n        if: ${{ !cancelled() }} # [B24-B2 review, 2026-10-08] a red corpus run above never skips this step\n      - name: Upload failure diagnostics\n        if: failure()\n        uses: actions/upload-artifact@v4\n        with:\n          name: benchmark-nightly-failure-diagnostics\n          path: |\n            benchmark-validate.json\n            vitest-*.xml\n          if-no-files-found: ignore\n          retention-days: 14\n      - name: Declare unavailable protected suites\n        if: ${{ !cancelled() }} # [B24-B2 review, 2026-10-08] the holdout stays declared when a step above fails\n        run: |\n          echo \"Hidden holdout requires holdout-admin credentials and is not exposed to CI candidates.\"\n          echo \"Licensed competitor runs require approved tools/operators and remain manual.\"\n\n  # [B24-D1] D24-27, D24-28, OD-212: the latency benchmark - the four runbook measurement families (view/read commands, a granted\n  # reversible edit, one verified workflow on recordings, the first stream event) and the moved performance bounds, each a\n  # correctness-checked workload with fixed warm-ups and samples on this runner, gated only on regression against the recorded\n  # baseline (artifacts/ai-control-plane-b24/latency-baseline.json). While its latest version is the declared-without-values v1,\n  # baseline_missing is written BLOCKED (OD-212/OD-30: the owner has not accepted this job's minutes) and does not fail the gate (lead\n  # decision D3); unmeasured, sample_shortfall and a regression always do. Every trigger of the workflow runs it (no if:). The results\n  # go outside the repository; route-bench runs unchanged as its own step (its two absolute budgets stay, OD-234's question). The\n  # gate, route-bench and headroom steps each run after an earlier red step and fail on their own; nothing is retried.\n  # [B24-D2] D24-29, OD-212's memory half: b24-d2-memory rides the same vitest step and flag. --expose-gc goes to this step's workers\n  # only, named twice on purpose: vitest's CLI hands ONE value to the forks pool as a string, which it spreads into characters (the\n  # worker hangs; measured locally 2026-10-09), and two make the array the pool expects. No vitest.config.ts change.\n  benchmark-latency:\n    runs-on: ubuntu-latest\n    timeout-minutes: 30\n    env:\n      # outside the repository, as prompt-to-gerber's SIRKIT_B16_1C_EVIDENCE_DIR is (a literal path: the `runner` context is not available in job-level env)\n      SIRKIT_B24_BENCHMARK_DIR: /tmp/sirkit-b24-benchmark\n    steps:\n      - run: mkdir -p \"$SIRKIT_B24_BENCHMARK_DIR\" && echo \"SIRKIT_JOB_STARTED_AT=$(date +%s)\" >> \"$GITHUB_ENV\" # [B24-D1] OD-30: benchmark-latency's start\n      - uses: actions/checkout@v4\n      - uses: pnpm/action-setup@v4\n        with:\n          version: 11.2.2\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 24\n          cache: pnpm\n      - run: pnpm install --frozen-lockfile\n      - run: pnpm exec vitest run app/lib/qualification/__tests__/b24-d1-latency.test.ts app/lib/qualification/__tests__/b24-d1-latency-workflow.test.ts app/lib/qualification/__tests__/b24-d2-memory.test.ts --no-file-parallelism --poolOptions.forks.execArgv=--expose-gc --poolOptions.forks.execArgv=--expose-gc --reporter=dot --reporter=junit --outputFile=vitest-benchmark-latency.xml\n        env:\n          SIRKIT_B24_BENCHMARK: \"1\"\n      - if: success() || failure()\n        run: pnpm exec tsx scripts/b24-latency-gate.ts\n      - if: success() || failure()\n        run: pnpm exec tsx scripts/route-bench.ts > \"$SIRKIT_B24_BENCHMARK_DIR/route-bench.json\"\n      - if: success() || failure() # [B24-D1] OD-30: benchmark-latency's headroom (reports only)\n        run: pnpm exec tsx scripts/ci-job-headroom.ts .github/workflows/benchmark.yml benchmark-latency --report-only\n      - name: Upload the latency results\n        if: always()\n        uses: actions/upload-artifact@v4\n        with:\n          name: benchmark-latency-results\n          path: |\n            vitest-benchmark-latency.xml\n            /tmp/sirkit-b24-benchmark\n          if-no-files-found: ignore\n          retention-days: 14\n"
+    },
+    "playwright.config.ts": {
+      "blob": "a6b95b9ef7badb9e4bec1372822299f076d9424b",
+      "text": "/**\n * [B16-C §5] Page-level browser proof of the prompt-to-Gerber flow against the\n * REAL Next.js application — not route handlers, not jsdom.\n *\n * The web server runs under the env-gated FIXTURE RUNTIME (see\n * app/lib/fixture-runtime/mode.ts): in-memory durable/binding stores, the\n * committed blinker catalog, the recorded provider design, the recorded\n * FreeRouting run replayed by placed-board revision, local-development\n * identity with a dev-only role cookie. No database, no credits, no live\n * router. Live provider/auth variations stay explicitly opt-in elsewhere.\n *\n *   pnpm exec playwright test            (starts `next dev` on port 3100)\n *   SIRKIT_FIXTURE_ROUTER=record …       (re-records e2e/fixtures/blinker-route-fixture.json with the bundled runtime)\n */\nimport { defineConfig, devices } from \"@playwright/test\";\n\nconst PORT = Number(process.env.SIRKIT_E2E_PORT ?? 3100);\n\nexport default defineConfig({\n  testDir: \"./e2e\",\n  testMatch: /.*\\.spec\\.ts/, testIgnore: (process.env.SIRKIT_E2E_SKIP ?? \"\").split(\",\").map((glob) => glob.trim()).filter(Boolean), // [B24-D4, 2026-10-10] OD-30's split: SIRKIT_E2E_SKIP, a comma-separated list of spec globs, leaves those specs out of a run (page-browser-e2e skips the four page-browser-e2e-b24 runs); unset or empty ignores nothing\n  fullyParallel: false,\n  workers: 1,\n  retries: 0,\n  timeout: 180_000,\n  expect: { timeout: 20_000 },\n  reporter: process.env.CI ? [[\"list\"], [\"junit\", { outputFile: \"playwright-report/junit.xml\" }], [\"html\", { open: \"never\" }]] : [[\"list\"], [\"html\", { open: \"never\" }]],\n  // Failure artifacts (screenshots, traces, error context) live OUTSIDE the HTML reporter's folder:\n  // the HTML reporter clears its own output directory, so a shared folder loses the evidence.\n  outputDir: \"test-results\",\n  use: {\n    baseURL: `http://localhost:${PORT}`,\n    trace: \"retain-on-failure\",\n    screenshot: \"only-on-failure\",\n    video: \"off\",\n    // A FRESH browser: no storage, no cookies (each test creates its own context).\n    storageState: { cookies: [], origins: [] },\n  },\n  projects: [{ name: \"chromium\", use: { ...devices[\"Desktop Chrome\"] } }],\n  webServer: {\n    command: `pnpm exec next dev --port ${PORT}`,\n    url: `http://localhost:${PORT}/api/ai/runtime`,\n    reuseExistingServer: !process.env.CI,\n    timeout: 240_000,\n    stdout: \"pipe\",\n    stderr: \"pipe\",\n    env: {\n      ...process.env,\n      NODE_ENV: \"development\",\n      SIRKIT_AUTH_MODE: \"local_dev\",\n      SIRKIT_FIXTURE_RUNTIME: \"blinker\",\n      SIRKIT_FIXTURE_ROUTER: process.env.SIRKIT_FIXTURE_ROUTER ?? \"replay\",\n      // The Stage 3 synchronization rollout is OFF unless declared (the first CI run answered\n      // PS_STAGE3_DISABLED 503 where the local .env.local had set it): the fixture runtime declares\n      // the same state the deterministic pipelines use.\n      SIRKIT_PCB_SYNC_STAGE3: \"opt_in\",\n      // [B18-C I10] the chat route answers with the SCRIPTED agent (never a model): honoured only under the fixture runtime.\n      SIRKIT_FIXTURE_AGENT: \"scripted\",\n      // [B20 D3] the MCP endpoint, for the wire-level proof (e2e/mcp-endpoint.spec.ts). The flag must be exactly \"1\".\n      // SIRKIT_EXPECTED_ORIGIN moves CSRF resolution from request-url-local-dev to `configured`; the value is exactly the\n      // origin `baseURL` produces, so every existing spec's Origin still matches (the four pre-existing specs staying\n      // green in the same run is the proof, not the argument). The secret is assembled from parts at run time, exceeds\n      // the minimum byte length, and is an obvious fake that no real deployment would use.\n      SIRKIT_MCP_ENABLED: \"1\",\n      SIRKIT_EXPECTED_ORIGIN: `http://localhost:${PORT}`,\n      SIRKIT_MCP_TOKEN_SECRET: [\"e2e\", \"mcp\", \"token\", \"secret\", \"0123456789abcdef0123456789abcdef\"].join(\"-\"),\n      // Never let a developer's .env.local database leak into the proof.\n      DATABASE_URL: \"\",\n    },\n  },\n});\n"
+    },
+    "playwright.orchestration.config.ts": {
+      "blob": "32dae1150ae365ee1a9d4f03219e2b3826b6de38",
+      "text": "/**\n * [B21 F2] The ORCHESTRATION browser proof's own Playwright config (D21-43, the lead's decision): the SAME fixture web server as\n * `playwright.config.ts` - its command and its whole environment, imported, never copied - PLUS `SIRKIT_ORCHESTRATION_ENABLED=1` and the circuit specialist routed to anthropic (F6's second source), on\n * its own port, with its own test dir (`./e2e-orchestration`, outside `./e2e`: the existing suite and B18-E's browser proofs never\n * see the flag), its own report and output folders, workers 1, retries 0 and the same per-test timeout.\n *\n * The flag is read from the server's environment at REQUEST time (`orchestrationEnabled(process.env)`), so this server needs no\n * second dist dir as long as it never runs BESIDE the flag-off one: the two configs run ONE AFTER THE OTHER (locally through the\n * lead's lock script, in CI as one extra step after `pnpm exec playwright test`) - one `next dev` at a time, no `next.config.ts`\n * change. `reuseExistingServer: false`: this config never attaches to a running (flag-off) server; a busy port fails the run.\n *\n *   pnpm exec playwright test -c playwright.orchestration.config.ts        (starts the base's `next dev` on port 3101)\n */\nimport { defineConfig, devices } from \"@playwright/test\";\nimport base from \"./playwright.config\";\n\nconst PORT = Number(process.env.SIRKIT_E2E_ORCHESTRATION_PORT ?? 3101);\nconst ORIGIN = `http://localhost:${PORT}`;\nconst baseServer = base.webServer;\nif (!baseServer || Array.isArray(baseServer)) throw new Error(\"playwright.config.ts must define ONE web server: the orchestration config runs the same one with the flag on\");\n// [B21 F2 fix: tests-05] the base's command and readiness url with ONLY their port moved to this config's (a base change reaches this server)\nconst BASE_URL = new URL(String(baseServer.url)); const BASE_PORT = BASE_URL.port || (BASE_URL.protocol === \"https:\" ? \"443\" : \"80\"); const BASE_PORT_FLAG = new RegExp(`--port ${BASE_PORT}(?![0-9])`); // [B21 F2 lead] a default port (the URL omits it) is still the flag's, and never a prefix of a longer port\nif (typeof baseServer.command !== \"string\" || !BASE_PORT_FLAG.test(baseServer.command)) throw new Error(`playwright.config.ts's web server command must carry \"--port ${BASE_PORT}\": the orchestration config runs that command on its own port`);\n\nexport default defineConfig({\n  testDir: \"./e2e-orchestration\",\n  testMatch: /.*\\.spec\\.ts/,\n  fullyParallel: false,\n  workers: 1,\n  retries: 0,\n  timeout: base.timeout,\n  expect: base.expect,\n  reporter: process.env.CI ? [[\"list\"], [\"junit\", { outputFile: \"playwright-report-orchestration/junit.xml\" }], [\"html\", { open: \"never\", outputFolder: \"playwright-report-orchestration\" }]] : [[\"list\"], [\"html\", { open: \"never\", outputFolder: \"playwright-report-orchestration\" }]],\n  // Failure artifacts live outside the HTML reporter's folder (it clears its own output directory), as in the base config.\n  outputDir: \"test-results-orchestration\",\n  use: { ...base.use, baseURL: ORIGIN },\n  projects: [{ name: \"chromium\", use: { ...devices[\"Desktop Chrome\"] } }],\n  webServer: {\n    ...baseServer,\n    command: baseServer.command.replace(BASE_PORT_FLAG, `--port ${PORT}`),\n    url: `${ORIGIN}${BASE_URL.pathname}${BASE_URL.search}`,\n    reuseExistingServer: false,\n    env: {\n      ...baseServer.env,\n      // the base config's origin is its own port's: CSRF resolves against THIS server's origin\n      SIRKIT_EXPECTED_ORIGIN: ORIGIN,\n      // the flag: the chat route's DAG path (exactly \"1\")\n      SIRKIT_ORCHESTRATION_ENABLED: \"1\",\n      // [B21 F2 fix: security-1] F6's two parties on TWO providers, as b21-f-evaluation case 6 routes them: the circuit specialist on anthropic, every other role on the page's openai (the scripted agent serves both offline); set here, a developer's .env.local never re-routes a role\n      SIRKIT_ORCHESTRATION_ROLE_MODELS: JSON.stringify({ \"circuit-topology\": { provider: \"anthropic\", model: \"inherit\" } }),\n    },\n  },\n});\n"
+    },
+    "package.json": {
+      "blob": "2d8ac78da7919f971829d59b1dfc9a9b60182b42",
+      "text": "{\n  \"name\": \"sirkit\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"scripts\": {\n    \"dev\": \"next dev\",\n    \"dev:fixture\": \"node scripts/dev-fixture.mjs\",\n    \"e2e\": \"playwright test\",\n    \"build\": \"next build\",\n    \"start\": \"next start\",\n    \"lint\": \"eslint\",\n    \"db:generate\": \"drizzle-kit generate\",\n    \"db:push\": \"node -e \\\"console.error('db:push is NOT a supported delivery path: schema.ts lacks 16 constraints that exist only in the SQL migrations (durable-workflow CHECK/FK integrity, deferrable binding FKs). Use `pnpm run db:migrate` (see artifacts/ai-control-plane-b16-closeout/migration-delivery-contract.md).'); process.exit(1)\\\"\",\n    \"db:migrate\": \"tsx scripts/db-migrate.ts\",\n    \"db:migrate:status\": \"tsx scripts/db-migrate.ts --status\",\n    \"ingest:kicad\": \"tsx scripts/ingest-kicad.ts\",\n    \"backfill:parts\": \"tsx scripts/backfill-parts.ts\",\n    \"refresh:bom-pricing\": \"tsx scripts/refresh-bom-pricing.ts\",\n    \"refresh:bom-notify\": \"tsx scripts/refresh-bom-pricing.ts --notify\",\n    \"compute:alternates\": \"tsx scripts/compute-alternates.ts\",\n    \"backfill:mpn-generics\": \"tsx scripts/backfill-mpn-and-generics.ts\",\n    \"test\": \"vitest run\",\n    \"test:netlist\": \"tsx scripts/netlist-validation.test.ts\",\n    \"spice:ci\": \"tsx scripts/spice-ci.ts\",\n    \"fab:compile\": \"tsx scripts/fab-compile.ts\",\n    \"pcb:routebench\": \"tsx scripts/route-bench.ts\",\n    \"benchmark\": \"tsx scripts/benchmark.ts\",\n    \"benchmark:validate\": \"tsx scripts/benchmark.ts validate\",\n    \"benchmark:list\": \"tsx scripts/benchmark.ts list\",\n    \"benchmark:baseline\": \"tsx scripts/benchmark.ts baseline\",\n    \"benchmark:report\": \"tsx scripts/benchmark.ts report\",\n    \"benchmark:audit-baseline\": \"tsx scripts/benchmark.ts audit-baseline\",\n    \"benchmark:metadata\": \"tsx scripts/benchmark.ts metadata\",\n    \"benchmark:placement-experiment\": \"tsx scripts/stage9-placement-experiment.ts\",\n    \"stage10:evidence\": \"tsx scripts/stage10-evidence.ts\",\n    \"stage10:evidence:audit\": \"tsx scripts/stage10-evidence.ts --audit-v2\",\n    \"pcb-sync:stage3-evidence\": \"tsx scripts/pcb-sync-stage3-evidence.ts\",\n    \"mapping:stage4-evidence\": \"tsx scripts/mapping-stage4-evidence.ts\",\n    \"passive-policy:stage5-evidence\": \"tsx scripts/passive-policy-stage5-evidence.ts\",\n    \"cd1:evidence\": \"tsx scripts/cd1-evidence.ts\",\n    \"stage10:test\": \"vitest run app/lib/engineering/__tests__\",\n    \"pcb:verify-multilayer\": \"tsx scripts/verify-multilayer-freerouting.ts\",\n    \"pcb:verify-two-layer-vias\": \"tsx scripts/verify-two-layer-via-routing.ts\",\n    \"setup:freerouting\": \"powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-freerouting.ps1\"\n  },\n  \"dependencies\": {\n    \"@anthropic-ai/sdk\": \"^0.98.0\",\n    \"@base-ui/react\": \"^1.5.0\",\n    \"@react-three/drei\": \"^10.7.7\",\n    \"@react-three/fiber\": \"^9.6.1\",\n    \"@supabase/ssr\": \"0.12.4\",\n    \"@supabase/supabase-js\": \"2.112.3\",\n    \"@xyflow/react\": \"^12.10.2\",\n    \"class-variance-authority\": \"^0.7.1\",\n    \"clsx\": \"^2.1.1\",\n    \"drizzle-orm\": \"^0.45.2\",\n    \"flatbush\": \"^4.6.2\",\n    \"highlight.js\": \"^11.11.1\",\n    \"immer\": \"^10.2.0\",\n    \"jszip\": \"^3.10.1\",\n    \"katex\": \"^0.17.0\",\n    \"lucide-react\": \"^1.16.0\",\n    \"next\": \"16.2.6\",\n    \"openai\": \"^6.48.0\",\n    \"pixi-viewport\": \"^6.0.3\",\n    \"pixi.js\": \"^8.19.0\",\n    \"polygon-clipping\": \"^0.15.7\",\n    \"postgres\": \"^3.4.9\",\n    \"radix-ui\": \"^1.4.3\",\n    \"react\": \"19.2.4\",\n    \"react-dom\": \"19.2.4\",\n    \"react-markdown\": \"^10.1.0\",\n    \"rehype-highlight\": \"^7.0.2\",\n    \"rehype-katex\": \"^7.0.1\",\n    \"remark-gfm\": \"^4.0.1\",\n    \"remark-math\": \"^6.0.0\",\n    \"tailwind-merge\": \"^3.6.0\",\n    \"three\": \"^0.185.1\",\n    \"tw-animate-css\": \"^1.4.0\"\n  },\n  \"devDependencies\": {\n    \"@electric-sql/pglite\": \"0.4.6\",\n    \"@playwright/test\": \"1.63.0\",\n    \"@tailwindcss/postcss\": \"^4\",\n    \"@testing-library/dom\": \"^10.4.1\",\n    \"@testing-library/react\": \"^16.3.2\",\n    \"@types/node\": \"^20.19.41\",\n    \"@types/react\": \"^19\",\n    \"@types/react-dom\": \"^19\",\n    \"@types/three\": \"^0.185.0\",\n    \"drizzle-kit\": \"^0.31.10\",\n    \"eslint\": \"^9\",\n    \"eslint-config-next\": \"16.2.6\",\n    \"fake-indexeddb\": \"^6.2.5\",\n    \"jsdom\": \"^29.1.1\",\n    \"tailwindcss\": \"^4\",\n    \"tsx\": \"^4.22.4\",\n    \"typescript\": \"^5\",\n    \"vitest\": \"^3.2.6\"\n  }\n}\n"
+    },
+    "vitest.config.ts": {
+      "blob": "3c483db795c46b7c89e50453720d38b6d9bad694",
+      "text": "import { fileURLToPath } from \"node:url\";\nimport { defineConfig } from \"vitest/config\";\n\nexport default defineConfig({\n  // tsconfig says jsx: \"preserve\" (Next's compiler owns it); vitest's esbuild\n  // must transform JSX itself for .test.tsx files.\n  esbuild: { jsx: \"automatic\" },\n  resolve: {\n    // Mirror tsconfig's \"@/*\" → \"./*\" so tests can exercise modules that use\n    // the app-wide import alias.\n    alias: { \"@\": fileURLToPath(new URL(\".\", import.meta.url)).replace(/[\\\\/]$/, \"\") },\n  },\n  test: {\n    environment: \"node\",\n    // Stage 17: .test.tsx files run component tests — they opt into jsdom\n    // with a `// @vitest-environment jsdom` docblock; .test.ts stays node.\n    include: [\"app/**/__tests__/**/*.test.{ts,tsx}\"],\n    setupFiles: [\"./app/lib/qualification/__tests__/_database-env-guard.ts\"], // [B24-C1 review, 2026-10-08] no suite reaches a database the shell names: an ambient DATABASE_URL is removed before every test file\n  },\n});\n"
+    }
+  },
+  "existenceInputs": [
+    {
+      "path": "e2e/agent-execution.spec.ts",
+      "blob": "bc5b03beb5578e9f87fe5fadfb4c234f9177e7f4"
+    },
+    {
+      "path": "e2e/crash-recovery.spec.ts",
+      "blob": "8a55b37448c5f09b35dd75618520052e5e3cb021"
+    },
+    {
+      "path": "e2e/keyboard-and-focus.spec.ts",
+      "blob": "4ecfebcd28ac5354edcf078e081d2f61fc5a6929"
+    },
+    {
+      "path": "e2e/mcp-endpoint.spec.ts",
+      "blob": "67e029f47c48b5d7c3cdac83340f92b105098fb1"
+    },
+    {
+      "path": "e2e/minimum-width.spec.ts",
+      "blob": "c293072d85c9a643c65899284de1c18e2a768dee"
+    },
+    {
+      "path": "e2e/multi-tab.spec.ts",
+      "blob": "ad5b3bc629685969e924cce5fe26ebdd41985a20"
+    },
+    {
+      "path": "e2e/prompt-to-gerber.spec.ts",
+      "blob": "f61e8313aa03b222aa2af155371604bf1be5f7ce"
+    },
+    {
+      "path": "e2e/security-headers.spec.ts",
+      "blob": "0ba9b7a1f014e7346dbfa8068b2f550e9fdac1f8"
+    },
+    {
+      "path": "e2e/semantic-editor.spec.ts",
+      "blob": "f7b7e852d3e049a5ae62bb8b6ea08039c64feeea"
+    }
+  ]
+}

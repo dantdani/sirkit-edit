@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "sirkit.ui-agent-command-coverage-summary.v1",
+  "dispositions": [
+    "callable-now",
+    "proposal-only",
+    "grant-required",
+    "human-admin-only",
+    "view-session-only",
+    "intentionally-ui-only",
+    "unavailable",
+    "legacy",
+    "missing"
+  ],
+  "rows": 1028,
+  "byKind": {
+    "action": 114,
+    "control": 850,
+    "tool": 64
+  },
+  "byDisposition": {
+    "callable-now": 54,
+    "proposal-only": 278,
+    "grant-required": 68,
+    "human-admin-only": 95,
+    "view-session-only": 92,
+    "intentionally-ui-only": 376,
+    "unavailable": 11,
+    "legacy": 0,
+    "missing": 54
+  },
+  "byKindAndDisposition": {
+    "action": {
+      "callable-now": 6,
+      "proposal-only": 46,
+      "grant-required": 7,
+      "human-admin-only": 18,
+      "view-session-only": 6,
+      "intentionally-ui-only": 10,
+      "unavailable": 7,
+      "legacy": 0,
+      "missing": 14
+    },
+    "control": {
+      "callable-now": 21,
+      "proposal-only": 219,
+      "grant-required": 55,
+      "human-admin-only": 73,
+      "view-session-only": 80,
+      "intentionally-ui-only": 366,
+      "unavailable": 0,
+      "legacy": 0,
+      "missing": 36
+    },
+    "tool": {
+      "callable-now": 27,
+      "proposal-only": 13,
+      "grant-required": 6,
+      "human-admin-only": 4,
+      "view-session-only": 6,
+      "intentionally-ui-only": 0,
+      "unavailable": 4,
+      "legacy": 0,
+      "missing": 4
+    }
+  },
+  "unexplained": 0,
+  "missing": {
+    "rows": 54,
+    "withoutGap": 0,
+    "gaps": 176
+  },
+  "rowsWithoutTest": {
+    "action": 39,
+    "control": 470,
+    "tool": 0
+  },
+  "actions": {
+    "records": 114,
+    "rows": 114
+  },
+  "controls": {
+    "sites": 719,
+    "rows": 850,
+    "surfaces": 75,
+    "recordsReached": 85
+  },
+  "tools": {
+    "descriptors": 64,
+    "rows": 64,
+    "agentExposed": 52,
+    "grantedExecutions": 6
+  }
+}

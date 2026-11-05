@@ -44,6 +44,8 @@ export type LLMToolChoice = "auto" | "required" | "none" | { name: string };
 export interface LLMRequest {
   provider: LLMProviderId;
   messages: LLMMessage[];
+  /** Transport cancellation only; never serialized into provider input. */
+  signal?: AbortSignal;
   system?: string;
   tools?: LLMTool[];
   toolChoice?: LLMToolChoice;
@@ -124,4 +126,21 @@ export function assistantResponseMessage(response: LLMResponse): LLMMessage {
 
 export function toolResultsMessage(results: LLMToolResultPart[]): LLMMessage {
   return { role: "user", content: results };
+}
+
+// [PR-L6 integration, 2026-10-19] SPEND-1 (the spend-bound review of increment 6): a per-call transport option, merged into
+// `LLMRequest` here, after the last line, so no line cited in this file moves (an interface declaration merges with the one above).
+export interface LLMRequest {
+  /** The provider SDK's own automatic retries for THIS call (transport only, like `signal`; never serialized into provider input).
+   *  Absent: the client's default. 0: one attempt, so one call the caller meters is at most one billed attempt - every durable
+   *  generation slice call (`MeteredLlmPort`) and the post-approval Tidy and Review calls send 0, and the caller's own wait retries. */
+  maxProviderRetries?: number;
+}
+
+// [PR-L6 spend, 2026-10-19] SPEND-3-A3 (the spend-bound review): the model an adapter sends every request to, merged into `LLMProvider`
+// here, after the last line, so no line cited in this file moves (an interface declaration merges with the one above). Optional: a provider
+// that names none leaves the post-apply admission unable to charge an OpenAI image, which it then refuses.
+export interface LLMProvider {
+  /** fixed when the adapter is built (`OpenAIProvider`, `AnthropicProvider`); `LLMRouter.servingModel` reads it */
+  readonly model?: string;
 }

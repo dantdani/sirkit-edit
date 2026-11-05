@@ -457,7 +457,7 @@ describe("[B20 B1] the byte-gated MCP tool manifest", () => {
     expect(rows.map((row) => row.split(",")[0])).toEqual(registry.list().map((item) => item.toolId).sort(byCodePoint));
     expect(rows).toContain("sirkit.pcb.board-inspect,1.1.0,read,0,bound-read,yes,,true,true,declared");
     // [B20 B4] pin move (OD-87): placement is withheld, so its row carries the reason and no hints
-    expect(rows).toContain("sirkit.placement.propose,1.1.0,propose,2,bound-proposal,no,withheld,,,");
+    expect(rows).toContain("sirkit.placement.propose,1.2.0,propose,2,bound-proposal,no,withheld,,,"); // [PR-F fE, 2026-10-17] reviewed pin move: 1.1.0 -> 1.2.0, the optional structured intent block (sirkit.placement-intent.v1); exposure, tier, binding and the withheld reason unchanged
     expect(rows).toContain("sirkit.pcb.move-footprint,1.1.1,mutate,1,bound-mutation-editor-session,no,granted_execution,,,");
     expect(rows).toContain("sirkit.manufacturing.release,1.0.0,release,3,unbound,no,tier3,,,");
     expect(rows.filter((row) => row.split(",")[5] === "yes")).toHaveLength(9); // [B20 B3] pin move: 16 -> 14 (OD-69); [B20 B4] pin move: 14 -> 9 (OD-82, OD-87)

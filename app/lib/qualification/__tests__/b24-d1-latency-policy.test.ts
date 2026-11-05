@@ -421,9 +421,9 @@ describe("[B24-D1] the latency policy, the writer's confinement, the headroom co
     expect(read("app/lib/qualification/__tests__/b24-b3-live-suite-honesty.test.ts")).toMatch(/^  it\("10\. NON_LIVE_GATES \(lead decision D2\) holds exactly b24-b2-corpus-nightly:[^\n]*\(\) => \{ \/\/ \[B24-D1, 2026-10-09\] [^\n]*b24-d1-latency[^\n]*$/m);
   });
 
-  it("9. the OD-30 steps (lead decisions D8, D19): prompt-to-gerber, page-browser-e2e, agent-boundary-suites and ([B24-D4, 2026-10-10]) page-browser-e2e-b24 each start with the one-line start step naming its own job and end, after their upload step, with the two-line headroom step; exactly three playwright test lines ([B24-D4, 2026-10-10] was two); no new line ends in pnpm exec vitest run; the helper still derives the three jobs", () => {
+  it("9. the OD-30 steps (lead decisions D8, D19): prompt-to-gerber, page-browser-e2e, agent-boundary-suites, ([B24-D4, 2026-10-10]) page-browser-e2e-b24 and ([PR-L7, 2026-10-20], OD-254) page-browser-e2e-agent each start with the one-line start step naming its own job and end, after their upload step, with the two-line headroom step; exactly four playwright test lines ([PR-L7, 2026-10-20] was three; [B24-D4, 2026-10-10] was two); no new line ends in pnpm exec vitest run; the helper still derives the three jobs", () => {
     const workflow = lines(DETERMINISTIC);
-    for (const [job, upload] of [["prompt-to-gerber", "      - name: Upload evidence and diagnostics"], ["page-browser-e2e", "      - name: Upload browser evidence"], ["agent-boundary-suites", "      - name: Upload diagnostics"], ["page-browser-e2e-b24", "      - name: Upload browser evidence (B24's specs)"]] as const) { // [B24-D4, 2026-10-10] reviewed pin move: + the job B24-D4 appended (OD-30's split of page-browser-e2e), with B24-D1's two steps; [B24-D4 lead, 2026-10-10] its name and upload label name B24's own browser specs (option (b))
+    for (const [job, upload] of [["prompt-to-gerber", "      - name: Upload evidence and diagnostics"], ["page-browser-e2e", "      - name: Upload browser evidence"], ["agent-boundary-suites", "      - name: Upload diagnostics"], ["page-browser-e2e-b24", "      - name: Upload browser evidence (B24's specs)"], ["page-browser-e2e-agent", "      - name: Upload browser evidence (the agent-execution spec)"]] as const) { // [PR-L7, 2026-10-20] reviewed pin move: + the job PR-L7 appended (OD-254); // [B24-D4, 2026-10-10] reviewed pin move: + the job B24-D4 appended (OD-30's split of page-browser-e2e), with B24-D1's two steps; [B24-D4 lead, 2026-10-10] its name and upload label name B24's own browser specs (option (b))
       const block = jobBlock(workflow, job);
       const jobSteps = steps(block.lines);
       expect(jobSteps[0], job).toEqual([startLine(job)]);
@@ -435,9 +435,9 @@ describe("[B24-D1] the latency policy, the writer's confinement, the headroom co
       expect(block.lines.some((line) => line.includes("continue-on-error")), job).toBe(false);
     }
     for (const job of ["database-delivery", "production-smoke", "secret-scan"]) expect(jobBlock(workflow, job).lines.some((line) => line.includes(STARTED_AT) || line.includes(HEADROOM_SCRIPT)), job).toBe(false);
-    expect(workflow.filter((line) => line.includes("playwright test"))).toHaveLength(3); // [B24-D4, 2026-10-10] reviewed pin move: 2 -> 3, page-browser-e2e-b24's run line
+    expect(workflow.filter((line) => line.includes("playwright test"))).toHaveLength(4); // [PR-L7, 2026-10-20] reviewed pin move: 3 -> 4, page-browser-e2e-agent's run line (OD-254); [B24-D4, 2026-10-10] reviewed pin move: 2 -> 3, page-browser-e2e-b24's run line
     expect(workflow.filter((line) => /pnpm exec vitest run\s*$/.test(line))).toHaveLength(3);
-    expect(workflow.filter((line) => /^ {4}timeout-minutes: /.test(line)).map((line) => line.trim())).toEqual(["timeout-minutes: 25", "timeout-minutes: 15", "timeout-minutes: 30", "timeout-minutes: 20", "timeout-minutes: 10", "timeout-minutes: 20", "timeout-minutes: 20"]); // [B24-D4, 2026-10-10] reviewed pin move: + page-browser-e2e-b24's 20; no limit raised
+    expect(workflow.filter((line) => /^ {4}timeout-minutes: /.test(line)).map((line) => line.trim())).toEqual(["timeout-minutes: 25", "timeout-minutes: 15", "timeout-minutes: 30", "timeout-minutes: 20", "timeout-minutes: 10", "timeout-minutes: 20", "timeout-minutes: 30", "timeout-minutes: 30"] /* [PR-J1 integration, 2026-10-22] reviewed pin move, OD-256: page-browser-e2e-b24 20 -> 30 (the seventh; OD-30's browser limit, the one the other two browser jobs carry) */); // [PR-L7, 2026-10-20] reviewed pin move: + page-browser-e2e-agent's 30 (OD-254: OD-30's browser limit); no limit raised; [B24-D4, 2026-10-10] reviewed pin move: + page-browser-e2e-b24's 20; no limit raised
     expect(read(DETERMINISTIC)).toContain(`permissions:${NEWLINE}  contents: read${NEWLINE}`);
     const admission = ciAdmission();
     expect(admission.filters["prompt-to-gerber"]).toContain("app/lib/qualification/__tests__");
@@ -452,7 +452,7 @@ describe("[B24-D1] the latency policy, the writer's confinement, the headroom co
     expect(script).not.toMatch(/writeFileSync|spawn|exec(?:File)?Sync|child_process/);
   });
 
-  it("10. the three names (lead decisions D15, D16): the inventory's kinds (live-test-gate, tooling, tooling), the census's classes (qualification-opt-in, platform, platform) with a reason each, the flag's owner the writer, the start name set by exactly the five start steps ([B24-D4, 2026-10-10] was four: + page-browser-e2e-b24's) and read only by the headroom script", async () => {
+  it("10. the three names (lead decisions D15, D16): the inventory's kinds (live-test-gate, tooling, tooling), the census's classes (qualification-opt-in, platform, platform) with a reason each, the flag's owner the writer, the start name set by exactly the six start steps ([PR-L7, 2026-10-20] was five: + page-browser-e2e-agent's, OD-254; [B24-D4, 2026-10-10] was four: + page-browser-e2e-b24's) and read only by the headroom script", async () => {
     const inventory = (name: string) => FLAG_INVENTORY.find((entry) => entry.name === name);
     expect(inventory(BENCHMARK_FLAG_ENV)).toMatchObject({ kind: "live-test-gate", default: "off", direction: "enables", constant: "BENCHMARK_FLAG_ENV", rule: { parse: "exact", value: "1" } });
     expect(inventory(BENCHMARK_FLAG_ENV)!.owner).toMatch(/^app\/lib\/qualification\/latency-results-writer\.ts:\d+$/);
@@ -466,7 +466,7 @@ describe("[B24-D1] the latency policy, the writer's confinement, the headroom co
     for (const name of [BENCHMARK_FLAG_ENV, BENCHMARK_DIR_ENV, STARTED_AT]) expect(census(name)!.reason?.length ?? 0, name).toBeGreaterThan(20);
     expect(read(".env.example")).not.toMatch(new RegExp(`${BENCHMARK_FLAG_ENV}|${STARTED_AT}`));
     // the start name in code: set by the workflows' four start steps, read by the headroom script alone (tests and pages aside)
-    expect([...lines(DETERMINISTIC), ...lines(BENCHMARK)].filter((line) => line.includes(`${STARTED_AT}=$(date +%s)`))).toHaveLength(5); // [B24-D4, 2026-10-10] reviewed pin move: 4 -> 5, page-browser-e2e-b24's start step (OD-30's split)
+    expect([...lines(DETERMINISTIC), ...lines(BENCHMARK)].filter((line) => line.includes(`${STARTED_AT}=$(date +%s)`))).toHaveLength(6); // [PR-L7, 2026-10-20] reviewed pin move: 5 -> 6, page-browser-e2e-agent's start step (OD-254); [B24-D4, 2026-10-10] reviewed pin move: 4 -> 5, page-browser-e2e-b24's start step (OD-30's split)
     const holders: string[] = [];
     const walk = async (dir: string): Promise<void> => {
       for (const entry of readdirSync(join(ROOT, dir))) {

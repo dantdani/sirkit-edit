@@ -248,7 +248,7 @@ describe("[B21 A] the canonical orchestration contracts", () => {
       expect(NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(toolId)), toolId).toBe(true);
       expect(EXPOSED).not.toContain(toolId);
     }
-    expect(EXPOSED).toHaveLength(37); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read
+    expect(EXPOSED).toHaveLength(52); // [PR-J5, 2026-10-23] pin move: 51 -> 52 (the organise proposal sirkit.schematic.propose-sheet-organization, runbook J.6 / OD-259 item 4); [PR-M, 2026-10-18] pin move: 49 -> 51 (the schematic-scoped CAD acquisition start and status (runbook M.3, section M2)); [PR-L, 2026-10-18] pin move: 47 -> 49 (the durable generation task's inspection and control request, runbook L.5); [PR-M, 2026-10-17] pin move: 44 -> 47 (the three PR-M descriptors); [PR-F lead, 2026-10-17] pin move: 40 -> 44 (the four PR-F descriptors); [PR-D d2, 2026-10-16] pin move: 38 -> 40, + the Schematic to PCB preflight read and the catalog part inspection (two Tier 0 reads); [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; [PR-D, 2026-10-16] pin move (OD-243): + the Build-mode generation proposal
     for (const toolId of EXPOSED) {
       expect(NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(toolId)), toolId).toBe(false);
       expect(validateSpecialistResult(validResult({ requiredTools: [{ toolId, version: "1.0.0", reason: "needed" }] })).ok, toolId).toBe(true);
@@ -284,7 +284,7 @@ describe("[B21 A] the canonical orchestration contracts", () => {
     ]) {
       refused(validateSpecialistRequest(validRequest({ allowedToolIds: list })), "allowed_tool_ids_invalid", "$.allowedToolIds");
     }
-    expect(EXPOSED.length).toBe(37); // [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read
+    expect(EXPOSED.length).toBe(52); // [PR-J5, 2026-10-23] pin move: 51 -> 52 (the organise proposal, runbook J.6 / OD-259 item 4); [PR-M, 2026-10-18] pin move: 49 -> 51 (the schematic-scoped CAD acquisition start and status (runbook M.3, section M2)); [PR-L, 2026-10-18] pin move: 47 -> 49 (the durable generation task's inspection and control request, runbook L.5); [PR-M, 2026-10-17] pin move: 44 -> 47 (the three PR-M descriptors); [PR-F lead, 2026-10-17] pin move: 40 -> 44 (the four PR-F descriptors); [PR-D d2, 2026-10-16] pin move: 38 -> 40, + the Schematic to PCB preflight read and the catalog part inspection (two Tier 0 reads); [B22-B, 2026-10-01] pin move (OD-139): + the three named computation reads; [B24-D2, 2026-10-09] pin move (OD-213): + the paged board read; [PR-D, 2026-10-16] pin move (OD-243): + the Build-mode generation proposal
     const missing = validRequest();
     delete (missing as { allowedToolIds?: unknown }).allowedToolIds;
     refused(validateSpecialistRequest(missing), "missing_key", "$.allowedToolIds");

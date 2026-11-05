@@ -15,6 +15,11 @@
  * Canonical wrappers: authorization (membership, the policy row's roles, exact-origin CSRF) -> media -> bounded body (64 KB,
  * 10 s) -> forbidden authority keys (a snapshot, assets, facts, values, evidence, a source class or a reviewer stamp). The
  * review is cache-only: no request, approval or publication calls a vendor. A failure answers one fixed sentence.
+ *
+ * [PR-M, 2026-10-18] Section M2 (design M2.4): composes the acquisition handoff's ports - `acquired` (the stored objects a spec's
+ * acquired references name, read from the governance scope's object store, never through egress) and `registeredCandidates` (the
+ * handoff's pin table as its own source class). Under the FIXTURE runtime the governance ids are the fixture container's (never the
+ * environment's) and the catalog reads and the publication write go to the container's catalog (app/lib/fixture-runtime/atomic-publication.ts).
  */
 import { authenticatedJsonRoute, authenticatedRoute } from "@/app/lib/auth/route-handlers";
 import { resolveMembershipRepository } from "@/app/lib/auth/identity-runtime";
@@ -26,26 +31,41 @@ import { loadAtomicAuthoringIdentity, loadAtomicLinkTargets, loadAtomicRevisionS
 import { atomicCatalogGovernanceProjectId, atomicCatalogGovernanceTenantId, DurableAtomicPublicationStore, type AtomicPublicationDeps } from "@/app/lib/atomic/publication-review";
 import { ATOMIC_PUBLICATION_DEADLINE_MS, ATOMIC_PUBLICATION_FORBIDDEN_BODY_KEYS, ATOMIC_PUBLICATION_MAX_BYTES } from "@/app/lib/atomic/publication-review-contract";
 import { handleAtomicPublicationGet, handleAtomicPublicationPost, type AtomicPublicationRouteDeps } from "./handler";
+import { acquiredAssetsLoader, handoffRegisteredCandidates, type HandoffDeps } from "@/app/lib/component-resolution/acquisition/handoff"; // [PR-M, 2026-10-18] M2.4
+import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode";
+import { fixtureContainer } from "@/app/lib/fixture-runtime/container";
+import { fixturePublicationCatalogDeps } from "@/app/lib/fixture-runtime/atomic-publication";
+import { ATOMIC_CATALOG_PROJECT_ENV, ATOMIC_CATALOG_TENANT_ENV } from "@/app/lib/atomic/publication-review";
 
 export const runtime = "nodejs";
 
 /** [B19-E E4] composed per request, only after the handler has authorized the caller for the operation */
 function routeDeps(): AtomicPublicationRouteDeps {
+  // [PR-M, 2026-10-18] the fixture runtime's governance ids come from its container, never from the environment
+  const fixture = fixtureRuntimeEnabled();
+  const env: Readonly<Record<string, string | undefined>> = fixture ? { ...process.env, [ATOMIC_CATALOG_TENANT_ENV]: fixtureContainer().governance.tenantId, [ATOMIC_CATALOG_PROJECT_ENV]: fixtureContainer().governance.projectId } : process.env;
   return {
-    env: process.env,
-    review: (): AtomicPublicationDeps => ({
-      store: new DurableAtomicPublicationStore(getDurableWorkflowRepository()),
-      membership: resolveMembershipRepository(),
-      governanceProjectId: atomicCatalogGovernanceProjectId(process.env),
-      governanceTenantId: atomicCatalogGovernanceTenantId(process.env), // [B19-E E4 review] gates-1
-      library: bundledKicadLibrary(),
-      loadObservations: loadCachedExternalObservations,
-      loadIdentity: loadAtomicAuthoringIdentity,
-      loadLinkTargets: loadAtomicLinkTargets, // [B19-E E4 review] security-unreviewed-links
-      loadRevisionStatus: loadAtomicRevisionStatus,
-      publish: publishPortableAtomicSnapshot,
-      withdraw: withdrawPublishedAtomicRevision, // [B19-E E5] withdraw_revision
-    }),
+    env,
+    review: (): AtomicPublicationDeps => {
+      const repository = getDurableWorkflowRepository();
+      const handoff: HandoffDeps = { repository, governance: { tenantId: atomicCatalogGovernanceTenantId(env), projectId: atomicCatalogGovernanceProjectId(env) } };
+      const catalog = fixture ? fixturePublicationCatalogDeps() : { loadObservations: loadCachedExternalObservations, loadIdentity: loadAtomicAuthoringIdentity, loadLinkTargets: loadAtomicLinkTargets, publish: publishPortableAtomicSnapshot, withdraw: withdrawPublishedAtomicRevision };
+      return {
+        store: new DurableAtomicPublicationStore(repository),
+        membership: resolveMembershipRepository(),
+        governanceProjectId: atomicCatalogGovernanceProjectId(env),
+        governanceTenantId: atomicCatalogGovernanceTenantId(env), // [B19-E E4 review] gates-1
+        library: bundledKicadLibrary(),
+        loadObservations: catalog.loadObservations,
+        loadIdentity: catalog.loadIdentity,
+        loadLinkTargets: catalog.loadLinkTargets, // [B19-E E4 review] security-unreviewed-links
+        loadRevisionStatus: loadAtomicRevisionStatus,
+        publish: catalog.publish,
+        withdraw: catalog.withdraw, // [B19-E E5] withdraw_revision
+        acquired: acquiredAssetsLoader(handoff), // [PR-M, 2026-10-18] M2.4: stored objects, never egress
+        registeredCandidates: handoffRegisteredCandidates(handoff), // [PR-M, 2026-10-18] M2.4: composed here (was "none in production")
+      };
+    },
   };
 }
 

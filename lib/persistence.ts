@@ -8,6 +8,7 @@ import type { ProjectComponentPin } from "@/app/lib/atomic/types";
 import { portableSnapshotIntegrityErrors } from "@/app/lib/atomic/portable";
 import { migrateBoardConstraintState } from "@/app/lib/constraints/legacy";
 import type { DesignRequirementsPackage } from "@/app/lib/requirements/types";
+import { clearSheetView } from "@/app/lib/project/sheet-navigation-store"; // [PR-J3, 2026-10-22] the Sheets navigator's presentation store (sirkit:sheet-view:<id>) goes with the project
 import { validateDesignRequirementsPackage } from "@/app/lib/requirements/validation";
 import type { ArchitectureProjectState } from "@/app/lib/architecture/types";
 import { validateArchitectureProjectState } from "@/app/lib/architecture/project";
@@ -36,8 +37,8 @@ import { validateFullFlowProject } from "@/app/lib/full-flow/project";
 
 /** Persisted, user-visible AI interaction — never keys, never hidden reasoning. */
 export type StoredChatMessage =
-  | { id: string; role: "user" | "assistant"; content: string; /** [B19-D I5e row 32] another model's output, shown but not resent */ advisory?: boolean }
-  | { id: string; role: "log"; title: string; status: "running" | "done" | "error"; entries: { id: string; text: string; status: "running" | "done" | "error" }[] };
+  | { id: string; role: "user" | "assistant"; content: string; /** [B19-D I5e row 32] another model's output, shown but not resent */ advisory?: boolean; /** [PR-G, 2026-10-17] the answer's model label ("answered by <provider> · <model>"), shown under the answer, never resent */ footer?: string }
+  | { id: string; role: "log"; title: string; status: "running" | "done" | "error"; entries: { id: string; text: string; status: "running" | "done" | "error" }[]; /** [K2, 2026-11-04] the entry's Work log (runbook K.2, OD-260 item 6): typed rows of the run's and the tasks' own events, bounded and cleaned - never model text, reasoning or a URL other than a CAD source's registry documentation */ work?: WorkLogState };
 
 /**
  * Local working PCB copy. The durable server board (pcb-sync) stays the
@@ -701,6 +702,7 @@ export function deleteProject(id: string): boolean {
     const index = getIndex();
     if (!index.includes(id)) return false;
     localStorage.removeItem(STORAGE_PREFIX + id);
+    clearSheetView(id); // [PR-J3, 2026-10-22] the active sheet, cameras and history stored for this project (never the document) are removed with it
     setIndex(index.filter((i) => i !== id));
     return true;
   } catch {
@@ -726,7 +728,7 @@ export function isStoredChatMessage(v: unknown): v is StoredChatMessage {
   if (typeof v !== "object" || v === null) return false;
   const m = v as Record<string, unknown>;
   if (typeof m["id"] !== "string") return false;
-  if (m["role"] === "user" || m["role"] === "assistant") return typeof m["content"] === "string" && (m["advisory"] === undefined || typeof m["advisory"] === "boolean");
+  if (m["role"] === "user" || m["role"] === "assistant") return typeof m["content"] === "string" && (m["advisory"] === undefined || typeof m["advisory"] === "boolean") && (m["footer"] === undefined || (typeof m["footer"] === "string" && m["footer"].length <= 1_000)); // [PR-G, 2026-10-17] the optional model label, bounded
   if (m["role"] !== "log") return false;
   return typeof m["title"] === "string"
     && (m["status"] === "running" || m["status"] === "done" || m["status"] === "error")
@@ -735,7 +737,7 @@ export function isStoredChatMessage(v: unknown): v is StoredChatMessage {
       if (typeof entry !== "object" || entry === null) return false;
       const e = entry as Record<string, unknown>;
       return typeof e["id"] === "string" && typeof e["text"] === "string" && (e["status"] === "running" || e["status"] === "done" || e["status"] === "error");
-    });
+    }) && (m["work"] === undefined || isStoredWorkLog(m["work"])); // [K2, 2026-11-04] a stored Work log must read back exactly (closed phases, bounds, registry links only)
 }
 
 function isPoint(v: unknown): boolean {
@@ -1002,3 +1004,5 @@ export function importProjectJSON(json: string): SavedProject | { error: string 
     ...(componentSelections ? { componentSelections } : {}),
   });
 }
+// [K2, 2026-11-04] the stored Work log's type and reader, imported at the END (imports are hoisted): no cited line of this file moves
+import { isStoredWorkLog, type WorkLogState } from "@/app/lib/project/work-log-contract";

@@ -274,7 +274,7 @@ describe("[B24-B1] the golden catalog (D24-14, OD-203)", () => {
     expect(admission.jobsOf("app/lib/pcb/__tests__/stage-08-professional-routing.test.ts")).toEqual(["benchmark-nightly"]);
     expect(admission.jobsOf("app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts")).toEqual(["benchmark-core", "benchmark-nightly"]);
     expect(admission.jobsOf("app/lib/manufacturing-providers/database/__tests__/b23-b-exchange-ledger-pglite.test.ts")).toEqual(["database-delivery"]);
-    expect(admission.jobsOf("e2e/agent-execution.spec.ts")).toEqual(["page-browser-e2e"]);
+    expect(admission.jobsOf("e2e/agent-execution.spec.ts")).toEqual(["page-browser-e2e-agent"]); // [PR-L7, 2026-10-20] reviewed pin move (OD-254): was ["page-browser-e2e"] - the spec runs in its own appended browser job, page-browser-e2e skips it
     expect(admission.jobsOf(ORCHESTRATION_SPEC)).toEqual(["page-browser-e2e"]);
     expect(admission.jobsOf("app/lib/agent/__tests__/b11-trace-replay-evaluation.test.ts")).toEqual(["prompt-to-gerber"]); // [B24-B2, 2026-10-08] reviewed pin move, was []: B24-B2 admitted the B11 suites to prompt-to-gerber by explicit entries (D24-15, OD-204)
     expect(admission.jobsOf("app/lib/qualification/__tests__/b24-b1-catalog.test.ts")).toEqual(["prompt-to-gerber"]);
@@ -282,7 +282,7 @@ describe("[B24-B1] the golden catalog (D24-14, OD-203)", () => {
     const files = new Map<string, string>();
     for (const path of [".github/workflows/deterministic-manufacturing.yml", ".github/workflows/benchmark.yml", "playwright.config.ts", "playwright.orchestration.config.ts", "package.json", "vitest.config.ts"]) files.set(path, read(path));
     const reader = (edits: Readonly<Record<string, (text: string) => string>>): RepoReader => (path) => (edits[path] ?? ((text: string) => text))(files.get(path) ?? read(path));
-    expect(ciAdmission(reader({})).jobsOf(B21F_SUITE)).toEqual(["prompt-to-gerber"]);
+    expect(ciAdmission(reader({})).jobsOf(B21F_SUITE)).toEqual(["agent-boundary-suites"]); // [PR-G, 2026-10-17] reviewed pin move (OD-250): was ["prompt-to-gerber"] - the orchestration filter stays a prompt-to-gerber positional entry, excluded there and run in agent-boundary-suites (ci-split.md section 4)
     const lineEdit = (path: string, anchor: string, how: "drop" | "double"): Record<string, (text: string) => string> => ({
       [path]: (text) => text.split(NEWLINE).flatMap((line) => (line.trim() === anchor.trim() || line === anchor || line.trim().startsWith(anchor.trim()) ? (how === "drop" ? [] : [line, line]) : [line])).join(NEWLINE),
     });
@@ -580,7 +580,7 @@ describe("[B24-B1] the golden catalog (D24-14, OD-203)", () => {
     expect(cells.map((row) => row[2])).toEqual(GOLDEN_EVAL_CATALOG.map((row) => String(EVAL_AREAS.find((area) => area.id === row.area)!.runbookLine)));
     // an empty cell is (none); a link's jobs join with + and the links with ;
     expect(cells.find((row) => row[1] === "power-ground" && row[3] === "browser_e2e")!.slice(5, 8)).toEqual(["(none)", "(none)", "(none)"]); // [B24-B2, 2026-10-08] reviewed pin move: the empty-cell example moves from power-ground x deterministic_offline (B24-B2 linked its suite) to power-ground x browser_e2e, still missing; the rendering rule probed is unchanged
-    expect(cells.find((row) => row[1] === "vias-tracks-geometry" && row[3] === "deterministic_offline")![6]).toBe("prompt-to-gerber+benchmark-core+benchmark-nightly;prompt-to-gerber+benchmark-core+benchmark-nightly;prompt-to-gerber+benchmark-core+benchmark-nightly;prompt-to-gerber");
+    expect(cells.find((row) => row[1] === "vias-tracks-geometry" && row[3] === "deterministic_offline")![6]).toBe("prompt-to-gerber+benchmark-core+benchmark-nightly;prompt-to-gerber+benchmark-core+benchmark-nightly;prompt-to-gerber+benchmark-core+benchmark-nightly;agent-boundary-suites"); // [PR-G, 2026-10-17] reviewed pin move (OD-250): the last link (an orchestration suite) was prompt-to-gerber
     const parsed = JSON.parse(json) as { schema: string; version: string; runbook: string; rows: unknown[]; scores: Record<string, unknown>; catalogDigest: string; classes: unknown[]; areas: unknown[]; unmappedB11Cases: unknown[] };
     expect([parsed.schema, parsed.version, parsed.runbook]).toEqual([GOLDEN_EVAL_CATALOG_SCHEMA, GOLDEN_EVAL_CATALOG_VERSION, "Sirkit_Remaining_Builder_Master_Runbook.md :1046-1070"]);
     expect([parsed.rows.length, parsed.classes.length, parsed.areas.length, parsed.unmappedB11Cases.length]).toEqual([114, 6, 19, 3]);

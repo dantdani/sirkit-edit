@@ -18,7 +18,7 @@
 
 import { lineCurrency, lineUnitPrice } from "@/app/lib/bom/line-price"; // [B19-D I5b review]
 import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react"; import { firstToast, showToast, useToastDismissal } from "@/app/components/pcb/hooks/useToastDismissal"; // [PR-J1 integration, 2026-10-22] the banner's numbered shows, on this line so no line moves
 import type {
   SchematicState,
   SchComponent,
@@ -103,7 +103,7 @@ const SEVERITY_STYLE: Record<NotificationSeverity, { glyph: string; className: s
   critical: { glyph: "⛔", className: "text-red-400" },
 };
 
-const STORAGE_KEY = "sirkit:bom:pricingChoice";
+const STORAGE_KEY = "sirkit:bom:pricingChoice"; /** [PR-J1 integration, 2026-10-22] how long a post-action banner stays after its show */ const BANNER_DISMISS_MS = 8000;
 
 type ChoiceOption = { value: string; label: string; selectable: boolean };
 
@@ -218,7 +218,7 @@ type SortKey =
   | "risk"
   | "stock"
   | "unit"
-  | "ext";
+  | "ext" | "sheet"; // [PR-J4, 2026-10-23] the Sheet column of a project with sheets (in place: lines 448 / 488 are pinned)
 
 // ─── Lifecycle presentation ────────────────────────────────────────────────────
 const LIFECYCLE_BADGE: Record<LifecycleStatus, { label: string; className: string; tip: string }> = {
@@ -291,7 +291,7 @@ function compareRows(a: BomRow, b: BomRow, key: SortKey, bestWithheld: (row: Bom
   // [B19-E E1-C review] a withheld best offer sorts as no price and no stock, so the order does not reveal them
   const stock = (row: BomRow): number | null => (bestWithheld(row) ? null : stockOf(row));
   const unit = (row: BomRow): number | null => (bestWithheld(row) ? null : bestUnit(row));
-  switch (key) {
+  switch (key) { case "sheet": return compareSheets(a, b); /* [PR-J4, 2026-10-23] sheet names, then the reference (in place) */
     case "refDes":
       return refDesSort(a.refDesList[0] ?? a.name, b.refDesList[0] ?? b.name);
     case "qty":
@@ -355,6 +355,16 @@ function loadChoice(): DistributorChoice {
   return stored !== null && SELECTABLE_CHOICES.has(stored) ? (stored as DistributorChoice) : "none";
 }
 
+function subscribePricingChoice(onChange: () => void): () => void {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === STORAGE_KEY || event.key === null) onChange();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => window.removeEventListener("storage", onStorage);
+}
+
+const serverPricingChoice = (): DistributorChoice => "none";
+
 // ─── Distributor import file helpers ─────────────────────────────────────────--
 
 /** [B19-E E1] Each distributor's import file: the tool it is uploaded to, and the vendor. */
@@ -395,6 +405,16 @@ function downloadBlob(blob: Blob, filename: string): void {
 const BOM_NEEDS_PROJECT = "Open or save a project to build its BOM. Live distributor pricing is a project read.";
 
 export function BomView(props: Props) {
+  const scope = props.projectScope;
+  const scopeKey = JSON.stringify(scope ? [scope.tenantId, scope.projectId, scope.branchId] : null);
+  const components = "state" in props ? props.state.components : props.components;
+  const kicadComponents = "state" in props ? props.state.kicadComponents : props.kicadComponents;
+  const isEmpty = !components?.some((part) => part.type !== "ground") && !kicadComponents?.length;
+  // Each project owns its results, dialogs and pending reads. A scope change retires the previous view.
+  return <ProjectBomView key={`${scopeKey}:${isEmpty}`} {...props} />;
+}
+
+function ProjectBomView(props: Props) {
   const state: SchematicState = useMemo(() => {
     if ("state" in props) return props.state;
     return { components: props.components, wires: [], kicadComponents: props.kicadComponents };
@@ -403,10 +423,12 @@ export function BomView(props: Props) {
   const components = state.components ?? [];
   const kicadComponents = state.kicadComponents ?? [];
 
-  const [pricingChoice, setPricingChoice] = useState<DistributorChoice>("none");
+  const persistedPricingChoice = useSyncExternalStore(subscribePricingChoice, loadChoice, serverPricingChoice);
+  const [selectedPricingChoice, setPricingChoice] = useState<DistributorChoice | null>(null);
+  const pricingChoice = selectedPricingChoice ?? persistedPricingChoice;
   const [result, setResult] = useState<BomResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [settledRequest, setSettledRequest] = useState<string | null>(null);
+  const [requestError, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "refDes", dir: 1 });
@@ -414,12 +436,16 @@ export function BomView(props: Props) {
   const [onlyAtRisk, setOnlyAtRisk] = useState(false);
   // The BOM row whose alternates drawer is open, or null when closed.
   const [drawerRow, setDrawerRow] = useState<BomRow | null>(null);
-  // Set just before a "Refresh prices" click so the next fetch bypasses the cache.
-  const forceRef = useRef(false);
+  const [drawerFor, setDrawerFor] = useState<string | null>(null);
+  // "Refresh prices" bypasses the cache for exactly the request its click starts: the nonce the click minted. The intent is
+  // read, never consumed, by the effect (React's development double-invocation aborts the first run and starts another; a
+  // consumed flag would send the surviving request as a cached read) and is cleared only by the request that was answered.
+  const refreshNonceRef = useRef(0);
+  const forceNonceRef = useRef(-1);
   // Export-for-distributor menu + sourcing worksheet modal + post-action banners.
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [fileExporting, setFileExporting] = useState(false);
-  const [banner, setBanner] = useState<string | null>(null);
+  const [shownBanner, setBanner] = useReducer(showToast, null, firstToast); const banner = shownBanner.text; // [PR-J1 integration, 2026-10-22] numbered shows: an earlier banner's dismissal never clears a later one
   // [B19-E E1] after a distributor import file downloads: stays until dismissed, so the upload link stays reachable
   const [exportNotice, setExportNotice] = useState<{ dist: CartDistributor; mpnOnly: number } | null>(null);
   const [worksheetOpen, setWorksheetOpen] = useState(false);
@@ -451,15 +477,19 @@ export function BomView(props: Props) {
   // surfaces use, and it travels as a selector — never a content hash.
   const projectScope = props.projectScope ?? null;
   const projectKey = projectScope ? projectScope.projectId : null;
-  const selectorHeaders = useMemo(() => projectSelectorHeaders(projectScope), [projectScope]);
+  const tenantId = projectScope?.tenantId ?? null;
+  const branchId = projectScope?.branchId ?? null;
+  const selectorHeaders = useMemo(() => projectKey !== null && tenantId !== null && branchId !== null
+    ? projectSelectorHeaders({ tenantId, projectId: projectKey, branchId })
+    : {}, [tenantId, projectKey, branchId]);
   const unreadCount = notifications.filter((n) => !n.readAt).length;
 
   // Auto-dismiss the post-action banner after 8s.
-  useEffect(() => {
-    if (!banner) return;
-    const t = setTimeout(() => setBanner(null), 8000);
-    return () => clearTimeout(t);
-  }, [banner]);
+  useToastDismissal(shownBanner, setBanner, BANNER_DISMISS_MS); // [PR-J1 integration, 2026-10-22] 8 s per show, cleared only for the show it was armed for
+  // [PR-J1 integration, 2026-10-22] was an effect keyed on the banner TEXT (an 8 s setTimeout that set null): the same text shown again
+  // re-armed nothing, so the first show's timer erased the second banner early, and an earlier timer that came due between a newer
+  // banner's commit and React's passive effects erased the newer one - the PCB editor toast's race (e1830cfc). Every show is numbered
+  // now (app/components/pcb/hooks/useToastDismissal.ts); this block replaces the former effect line for line.
 
   // [B19-E E1-C review] whenever a result is shown, online or offline, the clock advances every 30 s, so an offer that expires
   // meanwhile reads expired and is blanked instead of kept on screen
@@ -469,11 +499,6 @@ export function BomView(props: Props) {
     const t = setInterval(() => setClock(Date.now()), 30_000);
     return () => clearInterval(t);
   }, [showingResult]);
-
-  // Hydrate the persisted choice on mount (client-only).
-  useEffect(() => {
-    setPricingChoice(loadChoice());
-  }, []);
 
   const onChoiceChange = (choice: DistributorChoice) => {
     setPricingChoice(choice);
@@ -487,15 +512,19 @@ export function BomView(props: Props) {
   // A signature that changes only when the orderable BOM content changes — keeps
   // the fetch effect from looping on every parent re-render (new state object).
   const signature = useMemo(() => {
-    const k = (state.kicadComponents ?? []).map((c) => `${c.partId}:${c.value}:${c.refDes}`).join("|");
+    const k = (state.kicadComponents ?? []).map((c) => [c.id, c.partId, c.atomicPartRevisionId ?? null, c.value, c.refDes]);
     const t = (state.components ?? [])
       .filter((c) => c.type !== "ground")
-      .map((c) => `${c.type}:${c.value}:${c.id}`)
-      .join("|");
-    return `${k}#${t}`;
+      .map((c) => [c.id, c.type, c.value, c.refDes ?? c.id]);
+    return JSON.stringify([k, t]);
   }, [state]);
 
+  // Retire an alternate proposal with its source design, even if a read ignores abort.
+  if (drawerRow && drawerFor !== signature) setDrawerRow(null);
   const isEmpty = components.filter((c) => c.type !== "ground").length === 0 && kicadComponents.length === 0;
+  const requestKey = JSON.stringify([pricingChoice, signature, refreshNonce, isEmpty]);
+  const loading = !isEmpty && projectKey !== null && settledRequest !== requestKey;
+  const error = !isEmpty && !projectKey ? BOM_NEEDS_PROJECT : loading ? null : requestError;
 
   // Carry the live state into fetch requests without making it a fetch dep
   // (the parent passes a fresh state object every render).
@@ -504,105 +533,109 @@ export function BomView(props: Props) {
     stateRef.current = state;
   });
 
-  const fetchBom = useCallback(async () => {
-    if (isEmpty) {
-      setResult(null);
-      setResultFor(null);
-      setOffline(false);
-      return;
-    }
+  const fetchBom = useCallback(async (signal: AbortSignal, forceRefresh: boolean) => {
     // [B19-B I2] live pricing spends a metered vendor quota, so /api/bom is an authenticated project read: it needs the
     // project scope. Until the scope is known there is nothing to authorize the request with, so nothing is sent, and
     // the view says why instead of showing an empty table.
-    if (!projectKey) {
-      setResult(null);
-      setResultFor(null);
-      setOffline(false);
-      setError(BOM_NEEDS_PROJECT);
-      return;
-    }
-    setLoading(true);
-    setError(null);
+    if (isEmpty || !projectKey) return null;
+    let res: Response;
     try {
-      const forceRefresh = forceRef.current;
-      let res: Response;
-      try {
-        res = await fetch("/api/bom", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...selectorHeaders },
-          body: JSON.stringify({ state: stateRef.current, pricingChoice, forceRefresh }),
-        });
-      } catch {
-        // [B19-E E1-C review] only a request that got no answer is offline: the last result stays and says so; Retry refetches
-        setOffline(true);
-        setClock(Date.now());
-        return;
+      res = await fetch("/api/bom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...selectorHeaders },
+        body: JSON.stringify({ state: stateRef.current, pricingChoice, forceRefresh }),
+        signal,
+      });
+    } catch {
+      // [B19-E E1-C review] only a request that got no answer is offline: the last result stays and says so; Retry refetches
+      return { kind: "offline" as const, receivedAt: Date.now() };
+    }
+    // [B19-E E1-C review] an answer that is not a BOM (an error status, or a body that is not JSON) is an error with its
+    // HTTP status, and the last result is not kept as if it were current
+    let data: BomResult | { ok: false; error?: unknown } | null;
+    try {
+      data = (await res.json()) as BomResult | { ok: false; error?: unknown } | null;
+    } catch (bodyError) {
+      if (!(bodyError instanceof SyntaxError)) {
+        // [B19-E E1-C review follow-up] the connection dropped while the answer downloaded: no answer arrived, so offline
+        return { kind: "offline" as const, receivedAt: Date.now() };
       }
-      // [B19-E E1-C review] an answer that is not a BOM (an error status, or a body that is not JSON) is an error with its
-      // HTTP status, and the last result is not kept as if it were current
-      let data: BomResult | { ok: false; error?: unknown } | null;
-      try {
-        data = (await res.json()) as BomResult | { ok: false; error?: unknown } | null;
-      } catch (bodyError) {
-        if (!(bodyError instanceof SyntaxError)) {
-          // [B19-E E1-C review follow-up] the connection dropped while the answer downloaded: no answer arrived, so offline
-          setOffline(true);
-          setClock(Date.now());
-          return;
-        }
-        data = null;
-      }
-      setOffline(false);
-      if (res.ok && data !== null && data.ok === true) {
-        const receivedAt = Date.now();
-        const serverOffsetMs = Number.isFinite(data.generatedAt) ? data.generatedAt - receivedAt : 0;
-        setResult(data);
-        setResultFor({ pricingChoice, signature, receivedAt, serverOffsetMs });
-        setClock(receivedAt);
-      } else {
-        const message = data !== null && data.ok === false && typeof data.error === "string" ? data.error : "The BOM could not be built";
-        setError(`${message} (HTTP ${res.status})`);
+      data = null;
+    }
+    if (res.ok && data !== null && data.ok === true) {
+      const receivedAt = Date.now();
+      const serverOffsetMs = Number.isFinite(data.generatedAt) ? data.generatedAt - receivedAt : 0;
+      return { kind: "result" as const, data, receivedAt, serverOffsetMs };
+    } else {
+      const message = data !== null && data.ok === false && typeof data.error === "string" ? data.error : "The BOM could not be built";
+      return { kind: "error" as const, message: `${message} (HTTP ${res.status})` };
+    }
+  }, [pricingChoice, isEmpty, projectKey, selectorHeaders]);
+
+  useEffect(() => {
+    if (isEmpty || !projectKey) return;
+    const controller = new AbortController();
+    const forceRefresh = forceNonceRef.current === refreshNonce;
+    void fetchBom(controller.signal, forceRefresh).then((answer) => {
+      if (controller.signal.aborted || answer === null) return;
+      if (forceRefresh && forceNonceRef.current === refreshNonce) forceNonceRef.current = -1; // the answered request consumed the click
+      setError(answer.kind === "error" ? answer.message : null);
+      setOffline(answer.kind === "offline");
+      if (answer.kind === "result") {
+        setResult(answer.data);
+        setResultFor({ pricingChoice, signature, receivedAt: answer.receivedAt, serverOffsetMs: answer.serverOffsetMs });
+        setClock(answer.receivedAt);
+      } else if (answer.kind === "error") {
         setResult(null);
         setResultFor(null);
+      } else {
+        setClock(answer.receivedAt);
       }
-    } finally {
-      forceRef.current = false; // one-shot — clear after the request settles
-      setLoading(false);
-    }
-    // signature is included so a content change refetches; stateRef carries the
-    // live state into the request without retriggering on object identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pricingChoice, signature, refreshNonce, isEmpty, projectKey, selectorHeaders]);
+      setSettledRequest(requestKey);
+    }).catch((cause: unknown) => {
+      // A failure outside fetchBom's own handling (nothing retryable about it) still settles THIS request: "Loading…" must
+      // never stick with Refresh disabled.
+      if (controller.signal.aborted) return;
+      setError(`The BOM could not be built (${cause instanceof Error && cause.message ? cause.message : "unexpected failure"})`);
+      setOffline(false);
+      setResult(null);
+      setResultFor(null);
+      setSettledRequest(requestKey);
+    });
+    return () => controller.abort();
+  }, [fetchBom, isEmpty, projectKey, pricingChoice, signature, requestKey, refreshNonce]);
 
-  useEffect(() => {
-    void fetchBom();
-  }, [fetchBom]);
-
-  const loadSnapshots = useCallback(async () => {
-    if (!projectKey) return;
+  const loadSnapshots = useCallback(async (signal?: AbortSignal) => {
+    if (!projectKey) return null;
     try {
-      const res = await fetch("/api/bom/snapshot", { headers: selectorHeaders });
+      const res = await fetch("/api/bom/snapshot", { headers: selectorHeaders, signal });
       const data = (await res.json()) as { ok: boolean; snapshots?: SnapshotMeta[] };
-      if (data.ok && data.snapshots) setSnapshots(data.snapshots);
+      return data.ok && data.snapshots ? data.snapshots : null;
     } catch {
-      /* non-fatal */
+      return null;
     }
   }, [projectKey, selectorHeaders]);
 
-  const loadNotifications = useCallback(async () => {
-    if (!projectKey) return;
+  const loadNotifications = useCallback(async (signal?: AbortSignal) => {
+    if (!projectKey) return null;
     try {
-      const res = await fetch("/api/bom/notifications", { headers: selectorHeaders });
+      const res = await fetch("/api/bom/notifications", { headers: selectorHeaders, signal });
       const data = (await res.json()) as { ok: boolean; notifications?: NotifItem[] };
-      if (data.ok && data.notifications) setNotifications(data.notifications);
+      return data.ok && data.notifications ? data.notifications : null;
     } catch {
-      /* non-fatal */
+      return null;
     }
   }, [projectKey, selectorHeaders]);
 
   useEffect(() => {
-    void loadSnapshots();
-    void loadNotifications();
+    const controller = new AbortController();
+    void loadSnapshots(controller.signal).then((loaded) => {
+      if (!controller.signal.aborted && loaded !== null) setSnapshots(loaded);
+    });
+    void loadNotifications(controller.signal).then((loaded) => {
+      if (!controller.signal.aborted && loaded !== null) setNotifications(loaded);
+    });
+    return () => controller.abort();
   }, [loadSnapshots, loadNotifications]);
 
   const takeSnapshot = async () => {
@@ -625,7 +658,7 @@ export function BomView(props: Props) {
       setSnapPopoverOpen(false);
       setSnapLabel("");
       setBanner("Snapshot saved.");
-      void loadSnapshots();
+      void loadSnapshots().then((loaded) => { if (loaded !== null) setSnapshots(loaded); });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Snapshot failed");
     } finally {
@@ -755,7 +788,7 @@ export function BomView(props: Props) {
   // [B19-E E1-C review] Judged in server time (the client clock plus the offset at receipt), online or offline; offline, a
   // kept result that was for another pricing choice or design shows no cost, sources or offer prices at all.
   const now = clock + (resultFor?.serverOffsetMs ?? 0);
-  const staleRequest = offline && result !== null && (resultFor === null || resultFor.pricingChoice !== pricingChoice || resultFor.signature !== signature);
+  const staleRequest = result !== null && (resultFor === null || resultFor.pricingChoice !== pricingChoice || resultFor.signature !== signature);
   const isWithheld = useCallback((offer: PartPricing): boolean => staleRequest || offerWithheld(offer, now, offline), [staleRequest, now, offline]);
 
   const rows = useMemo(() => {
@@ -785,9 +818,16 @@ export function BomView(props: Props) {
   };
 
   // Re-fetch with the cache bypassed.
+  /** Request the BOM again (a cached read is fine): every nonce bump goes through the ref so a forced refresh can name its own request. */
+  const requestAgain = (): number => {
+    const nonce = refreshNonceRef.current + 1;
+    refreshNonceRef.current = nonce;
+    setRefreshNonce(nonce);
+    return nonce;
+  };
   const refreshPrices = () => {
-    forceRef.current = true;
-    setRefreshNonce((n) => n + 1);
+    forceNonceRef.current = refreshNonceRef.current + 1;
+    requestAgain();
   };
 
   if (isEmpty) {
@@ -856,7 +896,7 @@ export function BomView(props: Props) {
         </label>
 
         <button
-          onClick={() => setRefreshNonce((n) => n + 1)}
+          onClick={requestAgain}
           disabled={loading}
           className="text-xs px-2 h-7 rounded border border-zinc-800 text-zinc-300 hover:bg-zinc-800 transition disabled:opacity-50"
         >
@@ -893,7 +933,7 @@ export function BomView(props: Props) {
           {exportMenuOpen && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => setExportMenuOpen(false)} />
-              <div className="absolute z-40 left-0 top-full mt-1 w-60 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl py-1 text-xs">
+              <div className="absolute z-40 left-0 top-full mt-1 w-60 rounded-md border border-zinc-700 bg-zinc-900 shadow-sm py-1 text-xs">
                 {(["digikey", "mouser", "lcsc"] as CartDistributor[]).map((d) => (
                   <button
                     key={d}
@@ -932,7 +972,7 @@ export function BomView(props: Props) {
           {snapPopoverOpen && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => setSnapPopoverOpen(false)} />
-              <div className="absolute z-40 left-0 top-full mt-1 w-60 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl p-2.5">
+              <div className="absolute z-40 left-0 top-full mt-1 w-60 rounded-md border border-zinc-700 bg-zinc-900 shadow-sm p-2.5">
                 <label className="block text-[11px] text-zinc-400 mb-2">
                   Label (optional)
                   <input
@@ -1032,7 +1072,7 @@ export function BomView(props: Props) {
             {staleRequest && " That result was for a different pricing choice or design, so its cost, sources and offer prices are not shown."}
           </span>
           <button
-            onClick={() => setRefreshNonce((n) => n + 1)}
+            onClick={requestAgain}
             disabled={loading}
             className="text-[11px] px-2 h-6 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-900/40 transition disabled:opacity-50 shrink-0"
           >
@@ -1046,7 +1086,7 @@ export function BomView(props: Props) {
         <div data-testid="bom-expired" role="status" className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-amber-200 bg-amber-950/30 border-b border-amber-900/40 shrink-0">
           <span className="flex-1">Some offers have expired since this result was received; their price, stock and link are hidden.</span>
           <button
-            onClick={() => setRefreshNonce((n) => n + 1)}
+            onClick={requestAgain}
             disabled={loading}
             className="text-[11px] px-2 h-6 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-900/40 transition disabled:opacity-50 shrink-0"
           >
@@ -1143,6 +1183,8 @@ export function BomView(props: Props) {
             <tr>
               <Th className="w-10">#</Th>
               <Th sortKey="refDes" sort={sort} onSort={toggleSort}>RefDes</Th>
+              {/* [PR-J4, 2026-10-23] J.5: the sheets a line's parts are drawn on - only for a project with sheets; sorting by it groups the lines per sheet */}
+              {state.sheets !== undefined && <Th sortKey="sheet" sort={sort} onSort={toggleSort}>Sheet</Th>}
               <Th sortKey="qty" sort={sort} onSort={toggleSort} className="text-right">Qty</Th>
               <Th sortKey="name" sort={sort} onSort={toggleSort}>Name</Th>
               <Th sortKey="mpn" sort={sort} onSort={toggleSort}>MPN</Th>
@@ -1174,8 +1216,15 @@ export function BomView(props: Props) {
               const rowKey = `${row.partId ?? row.name}|${row.value ?? ""}|${row.refDesList.join(",")}`;
               const isExpandable = hasPricing && offers.length > 0; // [B19-E E1-C review] pricing None opens no offers
               const isOpen = isExpandable && expanded.has(rowKey);
+              // [PR-J4, 2026-10-23] sorted by Sheet, a project with sheets gets a group line before each new sheet set (text only, no control)
+              const sheetGroup = state.sheets !== undefined && sort.key === "sheet" && (i === 0 || sheetsText(rows[i - 1]!) !== sheetsText(row)) ? sheetsText(row) : null;
               return (
                 <Fragment key={rowKey}>
+                  {sheetGroup !== null && (
+                    <tr data-testid="bom-sheet-group" data-sheets={sheetGroup}>
+                      <td colSpan={17} className="px-3 py-1 text-[10px] uppercase tracking-wide text-teal-300/80 bg-zinc-900/40 border-b border-zinc-800/70">Sheet: {sheetGroup}</td>
+                    </tr>
+                  )}
                   <tr
                     className={`hover:bg-zinc-900/50 ${isExpandable ? "cursor-pointer" : ""} ${
                       row.partId && row.partId === highlightPartId ? "ring-1 ring-inset ring-teal-400/70 bg-teal-500/10" : ""
@@ -1191,6 +1240,7 @@ export function BomView(props: Props) {
                       </span>
                     </Td>
                     <Td className="font-mono text-[11px] text-zinc-200">{row.refDes}</Td>
+                    {state.sheets !== undefined && <Td className="text-[11px] text-zinc-400"><span data-testid="bom-row-sheets">{sheetsText(row)}</span></Td>}
                     <Td className="text-right tabular-nums">{row.qty}</Td>
                     <Td>
                       <div className="font-medium text-zinc-100">{row.name}</div>
@@ -1235,9 +1285,11 @@ export function BomView(props: Props) {
                     <Td>
                       {row.alternatesCount > 0 ? (
                         <button
+                          disabled={staleRequest || loading}
                           onClick={(e) => {
                             e.stopPropagation();
-                            setDrawerRow(row);
+                            if (staleRequest || loading || resultFor?.signature !== signature) return;
+                            setDrawerFor(signature); setDrawerRow(row);
                           }}
                           className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-teal-500/15 text-teal-300 border border-teal-500/40 hover:bg-teal-500/25 transition"
                           title="View alternate parts"
@@ -1325,8 +1377,9 @@ export function BomView(props: Props) {
           : "—"}
       </div>
 
-      {drawerRow && drawerRow.partId && (
+      {drawerRow && drawerFor === signature && drawerRow.partId && (
         <AlternatesDrawer
+          key={drawerRow.partId}
           sourcePartId={drawerRow.partId}
           sourceLabel={alternatesDrawerLabel(drawerRow)}
           onSwapPart={onSwapPart}
@@ -1397,7 +1450,7 @@ function SourcingWorksheetModal({
     // [B24-D3] OD-215: the shared dialog (Base UI) names it by its heading, moves focus inside, closes on Escape and returns
     // focus to the "Export for distributor ▾" trigger; its default Close joins the form's Cancel.
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent finalFocus={finalFocus} className="block w-[380px] max-w-[calc(100%-2rem)] sm:max-w-[380px] rounded-lg border border-zinc-700 bg-zinc-950 p-4 text-zinc-100 shadow-2xl ring-0">
+      <DialogContent finalFocus={finalFocus} className="block w-[380px] max-w-[calc(100%-2rem)] sm:max-w-[380px] rounded-lg border border-zinc-700 bg-zinc-950 p-4 text-zinc-100 shadow-sm ring-0">
         <DialogTitle className="text-sm font-medium text-zinc-100 mb-1 pr-8">Sourcing worksheet (CSV, unverified)</DialogTitle>
         <div className="text-[11px] text-zinc-500 mb-3">
           Priced from cached offers, each with its source and when it was observed. Not verified procurement; no order is placed.
@@ -1514,7 +1567,7 @@ function DiffView({
 
 /** [B24-D3] The BOM drawers on the shared dialog: a right-hand sheet over the viewport (DialogContent's centring overridden by
  *  className only; its width is added per drawer). */
-const BOM_DRAWER_CLASS = "top-0 right-0 left-auto h-full max-h-full max-w-full translate-x-0 translate-y-0 rounded-none border-l border-zinc-800 bg-zinc-950 p-0 text-zinc-100 ring-0 shadow-2xl flex flex-col gap-0";
+const BOM_DRAWER_CLASS = "top-0 right-0 left-auto h-full max-h-full max-w-full translate-x-0 translate-y-0 rounded-none border-l border-zinc-800 bg-zinc-950 p-0 text-zinc-100 ring-0 shadow-sm flex flex-col gap-0";
 
 function HistoryPanel({
   snapshots,
@@ -1672,25 +1725,21 @@ function AlternatesDrawer({
   const [showFff, setShowFff] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    fetch(`/api/parts/${sourcePartId}/alternates?kind=all&limit=50`)
+    const controller = new AbortController();
+    fetch(`/api/parts/${sourcePartId}/alternates?kind=all&limit=50`, { signal: controller.signal })
       .then((res) => res.json() as Promise<AlternatesResponse>)
       .then((data) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         if (data.ok) setItems(data.alternates);
         else setError(data.error);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load alternates");
+        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Failed to load alternates");
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [sourcePartId]);
 
   const visible = (items ?? []).filter(
@@ -1851,6 +1900,16 @@ function Td({ children, className = "" }: { children?: ReactNode; className?: st
   return <td className={`${TD_BASE} ${className}`}>{children}</td>;
 }
 
+/** [PR-J4, 2026-10-23] The Sheet cell: a line's sheet names joined ("IMU, Overview"); "" for a row without the field. */
+function sheetsText(row: BomRow): string {
+  return (row.sheets ?? []).join(", ");
+}
+
+/** [PR-J4, 2026-10-23] Sort by sheet set, then by the first reference (stable: equal sheet sets keep the reference order). */
+function compareSheets(a: BomRow, b: BomRow): number {
+  return sheetsText(a).localeCompare(sheetsText(b)) || refDesSort(a.refDesList[0] ?? a.name, b.refDesList[0] ?? b.name);
+}
+
 function Muted({ children }: { children: ReactNode }) {
   return <span className="text-zinc-600">{children}</span>;
 }
@@ -1955,7 +2014,7 @@ function RiskBadge({ row, isWithheld, withheldWord }: { row: BomRow; isWithheld:
         {risk.total}
       </span>
       {/* Hover breakdown */}
-      <div className="hidden group-hover:block absolute z-30 left-0 top-full mt-1 w-60 p-2.5 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl text-left">
+      <div className="hidden group-hover:block absolute z-30 left-0 top-full mt-1 w-60 p-2.5 rounded-md border border-zinc-700 bg-zinc-900 shadow-sm text-left">
         <div className="text-[11px] font-medium text-zinc-200 mb-1.5">
           Risk: {risk.total} / 100 <span className={g.text}>({g.label})</span>
         </div>

@@ -22,26 +22,26 @@ app/components/bom/BomView.tsx|click|button|Dismiss|setExportNotice,app/componen
 app/components/bom/BomView.tsx|click|button|Exporting…|Export CSV|exportCsv,app/components/bom/BomView.tsx,click,button,no,named:text,Exporting… Export CSV
 app/components/bom/BomView.tsx|click|button|Exporting…|Export for distributor ▾|setExportMenuOpen,app/components/bom/BomView.tsx,click,button,no,named:text,Exporting… Export for distributor ▾
 "app/components/bom/BomView.tsx|click|button|Generating…|Generate worksheet|onGenerate,title.trim",app/components/bom/BomView.tsx,click,button,no,named:text,Generating… Generate worksheet
-app/components/bom/BomView.tsx|click|button|Get current offers|setRefreshNonce,app/components/bom/BomView.tsx,click,button,no,named:text,Get current offers
+app/components/bom/BomView.tsx|click|button|Get current offers|requestAgain,app/components/bom/BomView.tsx,click,button,no,named:text,Get current offers
 app/components/bom/BomView.tsx|click|button|History ( )|setHistoryOpen,app/components/bom/BomView.tsx,click,button,no,named:text,History ( * )
 app/components/bom/BomView.tsx|click|button|Jump to part|onJump,app/components/bom/BomView.tsx,click,button,no,named:text,Jump to part
-app/components/bom/BomView.tsx|click|button|Loading…|Refresh|setRefreshNonce,app/components/bom/BomView.tsx,click,button,no,named:text,Loading… Refresh
+app/components/bom/BomView.tsx|click|button|Loading…|Refresh|requestAgain,app/components/bom/BomView.tsx,click,button,no,named:text,Loading… Refresh
 app/components/bom/BomView.tsx|click|button|Mark all as read|onMarkAllRead,app/components/bom/BomView.tsx,click,button,no,named:text,Mark all as read
 "app/components/bom/BomView.tsx|click|button|Open the component review to preview the successor and rebind (a reviewer's act)|e.stopPropagation,openSuccessorReview",app/components/bom/BomView.tsx,click,button,no,named:text,Review successor
 app/components/bom/BomView.tsx|click|button|Replace the source part with this alternate|Swap wiring pending — see roadmap|onSwap,app/components/bom/BomView.tsx,click,button,no,named:text,Swap
-app/components/bom/BomView.tsx|click|button|Retry|setRefreshNonce,app/components/bom/BomView.tsx,click,button,no,named:text,Retry
+app/components/bom/BomView.tsx|click|button|Retry|requestAgain,app/components/bom/BomView.tsx,click,button,no,named:text,Retry
 app/components/bom/BomView.tsx|click|button|Saving…|Save|takeSnapshot,app/components/bom/BomView.tsx,click,button,no,named:text,Saving… Save
 app/components/bom/BomView.tsx|click|button|Showing at-risk|View at-risk parts|onToggleAtRisk,app/components/bom/BomView.tsx,click,button,no,named:text,Showing at-risk View at-risk parts
 app/components/bom/BomView.tsx|click|button|Supply-chain notifications|setNotifOpen,app/components/bom/BomView.tsx,click,button,no,named:text,🔔 *
 app/components/bom/BomView.tsx|click|button|Take snapshot|setSnapPopoverOpen,app/components/bom/BomView.tsx,click,button,no,named:text,Take snapshot
-"app/components/bom/BomView.tsx|click|button|View alternate parts|e.stopPropagation,setDrawerRow",app/components/bom/BomView.tsx,click,button,no,named:text,* alt s
+"app/components/bom/BomView.tsx|click|button|View alternate parts|e.stopPropagation,setDrawerFor,setDrawerRow",app/components/bom/BomView.tsx,click,button,no,named:text,* alt s
 app/components/bom/BomView.tsx|click|button|View diff|onViewDiff,app/components/bom/BomView.tsx,click,button,no,named:text,View diff
 app/components/bom/BomView.tsx|click|div|(none)|setExportMenuOpen,app/components/bom/BomView.tsx,click,div,no,unnamed,none
 app/components/bom/BomView.tsx|click|div|(none)|setSnapPopoverOpen,app/components/bom/BomView.tsx,click,div,no,unnamed,none
 app/components/bom/BomView.tsx|click|KindToggle|(none)|setShowDropIn,app/components/bom/BomView.tsx,click,KindToggle,no,named:forwarded,label to text: Drop-in
 app/components/bom/BomView.tsx|click|KindToggle|(none)|setShowFff,app/components/bom/BomView.tsx,click,KindToggle,no,named:forwarded,label to text: FFF
 app/components/bom/BomView.tsx|click|th|(none)|onSort,app/components/bom/BomView.tsx,click,th,no,named:text,* *
-app/components/bom/BomView.tsx|click|tr|(none)|noop|undefined,app/components/bom/BomView.tsx,click,tr,no,named:text,▾ ▸ * * * * * Review successor * * * — * * alt s — * · * …
+app/components/bom/BomView.tsx|click|tr|(none)|noop|undefined,app/components/bom/BomView.tsx,click,tr,no,named:text,▾ ▸ * * * * * * Review successor * * * — * * alt s — * · …
 app/components/bom/BomView.tsx|dialog|Dialog|(none)|onClose,app/components/bom/BomView.tsx,dialog,Dialog,no,exempt:dialog-titled,"Sourcing worksheet (CSV, unverified)"
 app/components/bom/BomView.tsx|dialog|Dialog|(none)|onClose#2,app/components/bom/BomView.tsx,dialog,Dialog,no,exempt:dialog-titled,Snapshot history
 app/components/bom/BomView.tsx|dialog|Dialog|(none)|onClose#3,app/components/bom/BomView.tsx,dialog,Dialog,no,exempt:dialog-titled,Notifications
@@ -49,6 +49,10 @@ app/components/bom/BomView.tsx|dialog|Dialog|(none)|onClose#4,app/components/bom
 app/components/chat/AutonomyModeControl.tsx|change|select|autonomy-mode|setTarget,app/components/chat/AutonomyModeControl.tsx,change,select,yes,named:aria-label,Agent autonomy
 app/components/chat/AutonomyModeControl.tsx|click|Button|autonomy-change|change,app/components/chat/AutonomyModeControl.tsx,click,Button,yes,named:text,Change
 app/components/chat/ExecutionEntryActions.tsx|click|Button|execution-undo|onUndo,app/components/chat/ExecutionEntryActions.tsx,click,Button,yes,named:text,Undo this change
+app/components/chat/GenerationTaskStatus.tsx|click|Button|generation-task-*|onAction,app/components/chat/GenerationTaskStatus.tsx,click,Button,yes,named:text,*
+app/components/chat/GenerationTaskStatus.tsx|click|Button|generation-task-retry-*|onAction,app/components/chat/GenerationTaskStatus.tsx,click,Button,yes,named:text,Retry block *
+app/components/chat/GenerationTaskStatus.tsx|click|Button|generation-task-start-again|onStartAgain,app/components/chat/GenerationTaskStatus.tsx,click,Button,yes,named:text,Start again
+app/components/chat/WorkLog.tsx|click|button|work-log-toggle|setExpanded,app/components/chat/WorkLog.tsx,click,button,no,named:text,Hide details Show details
 app/components/circuit-verification/CircuitVerificationWorkspace.tsx|change|select|(none)|setCategory,app/components/circuit-verification/CircuitVerificationWorkspace.tsx,change,select,no,unnamed,none
 app/components/circuit-verification/CircuitVerificationWorkspace.tsx|change|select|(none)|setResult,app/components/circuit-verification/CircuitVerificationWorkspace.tsx,change,select,no,unnamed,none
 app/components/editor/BuildLibraryPanel.tsx|change|Input|Distributor search query|setExternalQuery,app/components/editor/BuildLibraryPanel.tsx,change,Input,yes,named:aria-label,Distributor search query
@@ -103,6 +107,13 @@ app/components/parts/AtomicPublicationReviewPanel.tsx|click|Button|atomic-submit
 app/components/parts/AtomicPublicationReviewPanel.tsx|click|Button|atomic-withdraw-*|withdrawRequest,app/components/parts/AtomicPublicationReviewPanel.tsx,click,Button,yes,named:text,Withdraw
 app/components/parts/AtomicPublicationReviewPanel.tsx|click|Button|atomic-withdraw-revision-*|withdrawRevision,app/components/parts/AtomicPublicationReviewPanel.tsx,click,Button,yes,named:text,Withdraw revision
 app/components/parts/AtomicPublicationReviewPanel.tsx|click|Button|Refresh|review.refresh,app/components/parts/AtomicPublicationReviewPanel.tsx,click,Button,yes,named:text,Refresh
+"app/components/parts/CadAcquisitionPanel.tsx|click|button|missing-acquire-start-*|run,startCadAcquisition,group.instances.map",app/components/parts/CadAcquisitionPanel.tsx,click,button,no,named:aria-label,* for *
+"app/components/parts/CadAcquisitionPanel.tsx|click|button|missing-acquisition-cancel-*|run,controlCadAcquisition",app/components/parts/CadAcquisitionPanel.tsx,click,button,no,named:text,Cancel
+"app/components/parts/CadAcquisitionPanel.tsx|click|button|missing-acquisition-handoff-send-*|run,sendCadAcquisitionForReview",app/components/parts/CadAcquisitionPanel.tsx,click,button,no,named:text,Send for component review
+"app/components/parts/CadAcquisitionPanel.tsx|click|button|missing-acquisition-offer-*|onOfferReplacement,group.instances.map",app/components/parts/CadAcquisitionPanel.tsx,click,button,no,named:text,Offer the replacement
+"app/components/parts/CadAcquisitionPanel.tsx|click|button|missing-acquisition-recheck-*|run,controlCadAcquisition",app/components/parts/CadAcquisitionPanel.tsx,click,button,no,named:text,Check again
+app/components/parts/ComponentReviewInbox.tsx|click|button|component-review-inbox-refresh|load,app/components/parts/ComponentReviewInbox.tsx,click,button,no,named:text,Refresh
+"app/components/parts/ComponentReviewInbox.tsx|click|button|component-review-open-*|onOpen,handoffPrefill",app/components/parts/ComponentReviewInbox.tsx,click,button,no,named:aria-label,Open the publication review for *
 app/components/pcb/AssignmentQueuePanel.tsx|change|input|(none)|setConfirmed,app/components/pcb/AssignmentQueuePanel.tsx,change,input,yes,named:label-wrap,Commit this exact plan. Chat and AI suggestions are not a…
 app/components/pcb/AssignmentQueuePanel.tsx|change|input|assignment-candidate|setCandidateId,app/components/pcb/AssignmentQueuePanel.tsx,change,input,yes,named:label-wrap,* * * selectable approval ready suggestion only * package…
 app/components/pcb/AssignmentQueuePanel.tsx|change|input|e.g. pcb-reviewers|setAssigneeId,app/components/pcb/AssignmentQueuePanel.tsx,change,input,yes,named:label-wrap,Reviewer or group ID
@@ -142,7 +153,7 @@ app/components/pcb/BoardRevisionDialog.tsx|change|input|board-revision-carry-*|o
 app/components/pcb/BoardRevisionDialog.tsx|click|Button|board-revision-derive|onDerive,app/components/pcb/BoardRevisionDialog.tsx,click,Button,yes,named:text,Deriving… Derive new revision
 app/components/pcb/BoardRevisionDialog.tsx|click|Button|board-revision-dismiss|onDismiss,app/components/pcb/BoardRevisionDialog.tsx,click,Button,yes,named:text,Cancel
 app/components/pcb/BoardRevisionDialog.tsx|dialog|Dialog|(none)|onDismiss,app/components/pcb/BoardRevisionDialog.tsx,dialog,Dialog,yes,exempt:dialog-titled,Derive a new board revision
-app/components/pcb/CommandPalette.tsx|change|input|Search actions|setQuery,app/components/pcb/CommandPalette.tsx,change,input,no,named:aria-label,Search actions
+"app/components/pcb/CommandPalette.tsx|change|input|Search actions|setQuery,setIndex",app/components/pcb/CommandPalette.tsx,change,input,no,named:aria-label,Search actions
 app/components/pcb/CommandPalette.tsx|click|button|(none)|runAction,app/components/pcb/CommandPalette.tsx,click,button,no,named:text,* * *
 app/components/pcb/CommandPalette.tsx|key|input|Search actions|onKeyDown,app/components/pcb/CommandPalette.tsx,key,input,no,named:aria-label,Search actions
 app/components/pcb/CommandPalette.tsx|pointer|div|(none)|onClose,app/components/pcb/CommandPalette.tsx,pointer,div,no,unnamed,none
@@ -208,7 +219,7 @@ app/components/pcb/inspectors/fields/BooleanField.tsx|change|input|(none)|onComm
 app/components/pcb/inspectors/fields/SelectField.tsx|change|select|(none)|onCommit,app/components/pcb/inspectors/fields/SelectField.tsx,change,select,no,named:aria-label,*
 app/components/pcb/inspectors/TextInspector.tsx|change|input|Text|setDraft,app/components/pcb/inspectors/TextInspector.tsx,change,input,no,named:aria-label,Text
 "app/components/pcb/inspectors/TextInspector.tsx|key|input|Text|e.preventDefault,commitText,inputRef.current.blur,e.stopPropagation",app/components/pcb/inspectors/TextInspector.tsx,key,input,no,named:aria-label,Text
-app/components/pcb/inspectors/ViaInspector.tsx|change|input|Also update other vias|setUpdateOthers,app/components/pcb/inspectors/ViaInspector.tsx,change,input,no,named:aria-label,Also update other vias
+app/components/pcb/inspectors/ViaInspector.tsx|change|input|Also update other vias|setGlobalEdit,app/components/pcb/inspectors/ViaInspector.tsx,change,input,no,named:aria-label,Also update other vias
 app/components/pcb/inspectors/ZoneInspector.tsx|click|button|Refill|onRefill,app/components/pcb/inspectors/ZoneInspector.tsx,click,button,no,named:text,Refill
 app/components/pcb/LayerPanel.tsx|click|button|Activate *|onActivate,app/components/pcb/LayerPanel.tsx,click,button,yes,named:aria-label,Activate *
 app/components/pcb/LayerPanel.tsx|click|button|Isolate|onIsolate,app/components/pcb/LayerPanel.tsx,click,button,yes,named:text,Isolate
@@ -222,6 +233,10 @@ app/components/pcb/ManufacturingWorkflowPanel.tsx|click|button|p2g-request-relea
 app/components/pcb/ManufacturingWorkflowPanel.tsx|click|button|p2g-retry|workflow.retry,app/components/pcb/ManufacturingWorkflowPanel.tsx,click,button,yes,named:text,Retry hydration release
 app/components/pcb/ManufacturingWorkflowPanel.tsx|dialog|Dialog|(none)|workflow.cancelRelease,app/components/pcb/ManufacturingWorkflowPanel.tsx,dialog,Dialog,yes,exempt:dialog-titled,Authorize manufacturing release?
 app/components/pcb/MappingVerificationPanel.tsx|click|button|Verifying…|Verify mapping (read only)|onVerify,app/components/pcb/MappingVerificationPanel.tsx,click,button,yes,named:text,Verifying… Verify mapping (read only)
+app/components/pcb/MissingPartsList.tsx|click|button|missing-action-*-*|run,app/components/pcb/MissingPartsList.tsx,click,button,no,named:text,*… *
+app/components/pcb/MissingPartsList.tsx|click|button|missing-checklist-toggle-*|setExpanded,app/components/pcb/MissingPartsList.tsx,click,button,no,named:aria-label,* the missing-facts checklist for *
+app/components/pcb/MissingPartsList.tsx|click|button|missing-parts-find-replacement|onFindReplacement,app/components/pcb/MissingPartsList.tsx,click,button,no,named:text,*
+app/components/pcb/MissingPartsList.tsx|click|button|missing-review-close-*|setPublication,app/components/pcb/MissingPartsList.tsx,click,button,no,named:aria-label,Close the publication request for *
 app/components/pcb/padstack/PadstackEditor.tsx|change|input|Drill diameter|stageDim,app/components/pcb/padstack/PadstackEditor.tsx,change,input,no,named:aria-label,Drill diameter
 app/components/pcb/padstack/PadstackEditor.tsx|change|input|Outer diameter|stageDim,app/components/pcb/padstack/PadstackEditor.tsx,change,input,no,named:aria-label,Outer diameter
 app/components/pcb/padstack/PadstackEditor.tsx|change|input|Padstack name|stage,app/components/pcb/padstack/PadstackEditor.tsx,change,input,no,named:aria-label,Padstack name
@@ -246,9 +261,11 @@ app/components/pcb/PcbEditor.tsx|click|button|derive-board-revision|handlePrevie
 app/components/pcb/PcbEditor.tsx|click|button|Dismiss|setPlacementWarning,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,Dismiss
 app/components/pcb/PcbEditor.tsx|click|button|Enlarge board to fit|enlargeBoardToFit,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,Enlarge board to fit
 app/components/pcb/PcbEditor.tsx|click|button|Needs an applied durable board — run Schematic → PCB and apply the plan first|Server-side autonomous placement + real FreeRouting + RC01–RC03 verification|handleQualify,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,Qualifying… (runs the real router) Qualify & route
+app/components/pcb/PcbEditor.tsx|click|button|pcb-3d-open-pcb|onOpenPcbTab,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,Open the PCB tab
 app/components/pcb/PcbEditor.tsx|click|button|pcb-release-button|handleRelease,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,Releasing… Request release
 app/components/pcb/PcbEditor.tsx|click|button|Placement options|setSyncDialogOpen,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,Placement options
-app/components/pcb/PcbEditor.tsx|click|button|sync-schematic-to-pcb|handleSync,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,* Schematic → PCB
+app/components/pcb/PcbEditor.tsx|click|button|sync-blockers-dismiss|onDismiss,app/components/pcb/PcbEditor.tsx,click,button,no,named:text,Dismiss
+app/components/pcb/PcbEditor.tsx|click|button|sync-schematic-to-pcb|handleSync,app/components/pcb/PcbEditor.tsx,click,button,no,named:aria-label,Schematic → PCB: synchronise the whole project (* sheet*)…
 app/components/pcb/PcbEditor.tsx|palette|palette|3d|pcb3d.toggle,app/components/pcb/PcbEditor.tsx,palette,palette,no,named:palette-title,Toggle 3D preview
 app/components/pcb/PcbEditor.tsx|palette|palette|align-*|commit,app/components/pcb/PcbEditor.tsx,palette,palette,no,unnamed,untitled-palette-action
 app/components/pcb/PcbEditor.tsx|palette|palette|assist|setAssistOpen,app/components/pcb/PcbEditor.tsx,palette,palette,no,named:palette-title,Ask AI to edit the board…
@@ -345,7 +362,7 @@ app/components/pcb/ShortcutsHelp.tsx|click|button|Esc|onClose,app/components/pcb
 app/components/pcb/ShortcutsHelp.tsx|click|div|(none)|onClose,app/components/pcb/ShortcutsHelp.tsx,click,div,no,unnamed,none
 app/components/pcb/ShortcutsHelp.tsx|click|div|Keyboard shortcuts|e.stopPropagation,app/components/pcb/ShortcutsHelp.tsx,click,div,no,exempt:click-shield,
 "app/components/pcb/ShortcutsHelp.tsx|key|div|Keyboard shortcuts|e.stopPropagation,onClose",app/components/pcb/ShortcutsHelp.tsx,key,div,no,named:aria-label,Keyboard shortcuts
-app/components/pcb/SilkTool.tsx|change|input|Silk text|setDraft,app/components/pcb/SilkTool.tsx,change,input,no,named:aria-label,Silk text
+app/components/pcb/SilkTool.tsx|change|input|Silk text|setTextSession,app/components/pcb/SilkTool.tsx,change,input,no,named:aria-label,Silk text
 "app/components/pcb/SilkTool.tsx|change|input|Stroke width (mm)|silk.setStrokeMm,Math.max,Number",app/components/pcb/SilkTool.tsx,change,input,no,named:aria-label,Stroke width (mm)
 "app/components/pcb/SilkTool.tsx|change|input|Text height (mm)|silk.setHeightMm,Math.max,Number",app/components/pcb/SilkTool.tsx,change,input,no,named:aria-label,Text height (mm)
 app/components/pcb/SilkTool.tsx|change|select|Silk layer|silk.setLayer,app/components/pcb/SilkTool.tsx,change,select,no,named:aria-label,Silk layer
@@ -355,8 +372,10 @@ app/components/pcb/SnapshotConflictDialog.tsx|click|Button|snapshot-conflict-dis
 app/components/pcb/SnapshotConflictDialog.tsx|click|Button|snapshot-conflict-rebase|onRebase,app/components/pcb/SnapshotConflictDialog.tsx,click,Button,yes,named:text,Rebase &amp; publish
 app/components/pcb/SnapshotConflictDialog.tsx|click|Button|snapshot-conflict-refresh|onRefresh,app/components/pcb/SnapshotConflictDialog.tsx,click,Button,yes,named:text,Refresh
 app/components/pcb/SnapshotConflictDialog.tsx|dialog|Dialog|(none)|onDismiss,app/components/pcb/SnapshotConflictDialog.tsx,dialog,Dialog,yes,exempt:dialog-titled,Another session published a newer schematic revision
+app/components/pcb/StackupCandidatePanel.tsx|click|button|stackup-candidate-accept|onAccept,app/components/pcb/StackupCandidatePanel.tsx,click,button,no,named:text,Applying… Accept — set this stackup
+app/components/pcb/StackupCandidatePanel.tsx|click|button|stackup-candidate-discard|onDiscard,app/components/pcb/StackupCandidatePanel.tsx,click,button,no,named:aria-label,Discard the stackup recommendation
 app/components/pcb/SyncButton.tsx|click|button|Schematic to PCB placement options|onOptions,app/components/pcb/SyncButton.tsx,click,button,no,named:aria-label,Schematic to PCB placement options
-app/components/pcb/SyncButton.tsx|click|button|Schematic to PCB|onSync,app/components/pcb/SyncButton.tsx,click,button,no,named:aria-label,Schematic to PCB
+app/components/pcb/SyncButton.tsx|click|button|Schematic to PCB: *|onSync,app/components/pcb/SyncButton.tsx,click,button,no,named:aria-label,Schematic to PCB: *
 app/components/pcb/SyncPlacementDialog.tsx|change|input|(none)|setSpread,app/components/pcb/SyncPlacementDialog.tsx,change,input,no,named:label-wrap,Spread overlapping or unplaced parts Uses courtyard bound…
 app/components/pcb/SyncPlacementDialog.tsx|change|input|sync-placement|setMode,app/components/pcb/SyncPlacementDialog.tsx,change,input,no,named:label-wrap,Place new parts near board center Recommended for schemat…
 app/components/pcb/SyncPlacementDialog.tsx|change|input|sync-placement|setMode#2,app/components/pcb/SyncPlacementDialog.tsx,change,input,no,named:label-wrap,Preserve import coordinates Use for trusted PCB coordinat…
@@ -382,9 +401,67 @@ app/components/schematic-compiler/SchematicCompilerWorkspace.tsx|change|select|(
 app/components/schematic-compiler/SchematicCompilerWorkspace.tsx|click|button|(none)|setSelectedObject,app/components/schematic-compiler/SchematicCompilerWorkspace.tsx,click,button,no,named:text,* *
 app/components/schematic-compiler/SchematicCompilerWorkspace.tsx|click|button|(none)|setSelectedObject#2,app/components/schematic-compiler/SchematicCompilerWorkspace.tsx,click,button,no,named:text,* ? · * * exact pins * · * unresolved
 app/components/schematic-compiler/SchematicCompilerWorkspace.tsx|click|g|(none)|setSelectedObject,app/components/schematic-compiler/SchematicCompilerWorkspace.tsx,click,g,no,named:text,* *
+app/components/schematic/ComponentResolutionReviewDialog.tsx|click|Button|component-resolution-approve|onApprove,app/components/schematic/ComponentResolutionReviewDialog.tsx,click,Button,no,named:text,Applying… Approve batch
+app/components/schematic/ComponentResolutionReviewDialog.tsx|click|Button|component-resolution-discard|onDiscard,app/components/schematic/ComponentResolutionReviewDialog.tsx,click,Button,no,named:text,Discard — change nothing
+app/components/schematic/ComponentResolutionReviewDialog.tsx|click|button|Dismiss the component resolution receipt|onDismiss,app/components/schematic/ComponentResolutionReviewDialog.tsx,click,button,no,named:aria-label,Dismiss the component resolution receipt
+app/components/schematic/ComponentResolutionReviewDialog.tsx|dialog|Dialog|(none)|onDiscard,app/components/schematic/ComponentResolutionReviewDialog.tsx,dialog,Dialog,no,exempt:dialog-titled,Resolve * 0 unresolved part s — review before applying
 app/components/schematic/ReplacementReviewDialog.tsx|click|Button|Applying…|Apply exact replacement|onApply,app/components/schematic/ReplacementReviewDialog.tsx,click,Button,yes,named:text,Applying… Apply exact replacement
 app/components/schematic/ReplacementReviewDialog.tsx|click|Button|Cancel — change nothing|onCancel,app/components/schematic/ReplacementReviewDialog.tsx,click,Button,yes,named:text,Cancel — change nothing
 app/components/schematic/ReplacementReviewDialog.tsx|dialog|Dialog|(none)|onCancel,app/components/schematic/ReplacementReviewDialog.tsx,dialog,Dialog,yes,exempt:dialog-titled,Exact component replacement — review before applying
+app/components/schematic/ScopedNetLabelGlyph.tsx|pointer|g|scoped-label-*|onMouseDown,app/components/schematic/ScopedNetLabelGlyph.tsx,pointer,g,no,named:aria-label,* *
+app/components/schematic/SheetBlocksLayer.tsx|double-click|g|sheet-block-*|openSheet,app/components/schematic/SheetBlocksLayer.tsx,double-click,g,no,named:aria-label,Open sheet *
+app/components/schematic/SheetBlocksLayer.tsx|key|g|sheet-block-*|onBlockKeyDown,app/components/schematic/SheetBlocksLayer.tsx,key,g,no,named:aria-label,Open sheet *
+app/components/schematic/SheetNavigator.tsx|change|input|sheets-move-mode|setDrafts,app/components/schematic/SheetNavigator.tsx,change,input,no,named:label-wrap,the part with its attached wires and local labels
+app/components/schematic/SheetNavigator.tsx|change|input|sheets-move-mode|setDrafts#2,app/components/schematic/SheetNavigator.tsx,change,input,no,named:label-wrap,its connected group on this sheet
+app/components/schematic/SheetNavigator.tsx|change|input|sheets-move-new-name|setDrafts,app/components/schematic/SheetNavigator.tsx,change,input,no,named:label-wrap,New sheet name
+app/components/schematic/SheetNavigator.tsx|change|input|sheets-new-name|setDrafts,app/components/schematic/SheetNavigator.tsx,change,input,no,named:label-wrap,Sheet name
+app/components/schematic/SheetNavigator.tsx|change|input|sheets-port-name|setDrafts,app/components/schematic/SheetNavigator.tsx,change,input,no,named:label-wrap,Port name
+app/components/schematic/SheetNavigator.tsx|change|input|sheets-rename-name|setDrafts,app/components/schematic/SheetNavigator.tsx,change,input,no,named:label-wrap,New name
+app/components/schematic/SheetNavigator.tsx|change|select|sheets-move-target|setDrafts,app/components/schematic/SheetNavigator.tsx,change,select,no,named:label-wrap,Target sheet
+app/components/schematic/SheetNavigator.tsx|change|select|sheets-port-direction|setDrafts,app/components/schematic/SheetNavigator.tsx,change,select,no,named:label-wrap,Direction
+app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Cancel
+app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog#2,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Cancel
+app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog#3,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Cancel
+app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog#4,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Cancel
+app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog#5,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Cancel
+app/components/schematic/SheetNavigator.tsx|click|button|Cancel|closeDialog#6,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Cancel
+app/components/schematic/SheetNavigator.tsx|click|button|Close|closeDialog,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Close
+app/components/schematic/SheetNavigator.tsx|click|button|Dismiss the sheets notice|dismissNotice,app/components/schematic/SheetNavigator.tsx,click,button,no,named:aria-label,Dismiss the sheets notice
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-add-port|openDialog:port,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Add port
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-back|goBack,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Back
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-chip|setOpen,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,*
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-delete-confirm|run,deleteSheet",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Delete sheet
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-delete-move-contents|run,applyMove",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Move contents to parent
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-delete|openDialog:delete,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Delete
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-follow-destination-*|closeDialog,followDestination",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Overview * › * (port) (sheet pin) (global) (label)
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-follow|openDialog:follow,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Follow signal…
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-move-apply|run,applyMove",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Apply move
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-move|openDialog:move,mintId",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Move to sheet…
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-new|openDialog:new,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,New sheet
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-new|openDialog:new#2,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,New sheet
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-normalise-apply|onApply,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Normalise * rail-named label s
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-organize-apply|run,applyOrganize",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Apply organisation
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-organize|openDialog:organize,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Organize into sheets…
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-organize|openDialog:organize#2,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Organize…
+app/components/schematic/SheetNavigator.tsx|click|button|sheets-rename|openDialog:rename,app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Rename
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-reorder-down|run,reorderSheet",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Down
+"app/components/schematic/SheetNavigator.tsx|click|button|sheets-reorder-up|run,reorderSheet",app/components/schematic/SheetNavigator.tsx,click,button,no,named:text,Up
+"app/components/schematic/SheetNavigator.tsx|click|div|sheets-tree-item-*|setFocusedId,openSheet",app/components/schematic/SheetNavigator.tsx,click,div,no,named:text,Overview * * port s
+app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,New sheet
+app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#2,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,Rename sheet
+app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#3,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,Add a port
+app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#4,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,Delete sheet
+app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#5,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,Move to sheet
+app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#6,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,Follow a signal
+app/components/schematic/SheetNavigator.tsx|dialog|Dialog|(none)|closeDialog#7,app/components/schematic/SheetNavigator.tsx,dialog,Dialog,no,exempt:dialog-titled,Organize into sheets
+app/components/schematic/SheetNavigator.tsx|key|div|sheets-panel|onPanelKeyDown,app/components/schematic/SheetNavigator.tsx,key,div,no,named:aria-label,Sheets
+app/components/schematic/SheetNavigator.tsx|key|div|sheets-tree|onTreeKeyDown,app/components/schematic/SheetNavigator.tsx,key,div,no,named:aria-label,Sheets
+app/components/schematic/SheetNavigator.tsx|submit|form|(none)|submitNew,app/components/schematic/SheetNavigator.tsx,submit,form,no,exempt:form-submit,Create sheet
+app/components/schematic/SheetNavigator.tsx|submit|form|(none)|submitPort,app/components/schematic/SheetNavigator.tsx,submit,form,no,exempt:form-submit,Add port
+app/components/schematic/SheetNavigator.tsx|submit|form|(none)|submitRename,app/components/schematic/SheetNavigator.tsx,submit,form,no,exempt:form-submit,Rename
+app/components/schematic/SheetOrganizationReviewCard.tsx|click|Button|sheet-organization-approve|onApprove,app/components/schematic/SheetOrganizationReviewCard.tsx,click,Button,no,named:text,Applying… Approve — organize into * sheet*
+app/components/schematic/SheetOrganizationReviewCard.tsx|click|Button|sheet-organization-discard|onDiscard,app/components/schematic/SheetOrganizationReviewCard.tsx,click,Button,no,named:text,Discard — change nothing
+app/components/schematic/SheetOrganizationReviewCard.tsx|dialog|Dialog|(none)|onDiscard,app/components/schematic/SheetOrganizationReviewCard.tsx,dialog,Dialog,no,exempt:dialog-titled,Organize * part s into * 0 sheet s — review before applying
 app/components/spice/SpiceStudio.tsx|change|input|(none)|mutate,app/components/spice/SpiceStudio.tsx,change,input,no,named:label-wrap,Enable statistical study
 "app/components/spice/SpiceStudio.tsx|change|input|(none)|mutate,?.find,draft.cornerSets.find",app/components/spice/SpiceStudio.tsx,change,input,no,unnamed,none
 "app/components/spice/SpiceStudio.tsx|change|input|(none)|mutate,draft.measurements.find",app/components/spice/SpiceStudio.tsx,change,input,no,unnamed,none
@@ -486,6 +563,7 @@ app/components/spice/SpiceStudio.tsx|shortcut|window|keydown:onKey|onKey,app/com
 app/components/spice/SpiceWaveformPlot.tsx|click|button|(none)|onSignalFocus,app/components/spice/SpiceWaveformPlot.tsx,click,button,no,named:text,*
 app/components/spice/SpiceWaveformPlot.tsx|click|button|Reset zoom|setView,app/components/spice/SpiceWaveformPlot.tsx,click,button,no,named:title,Reset zoom
 app/components/spice/SpiceWaveformPlot.tsx|pointer|canvas|(none)|onPointerDown,app/components/spice/SpiceWaveformPlot.tsx,pointer,canvas,no,unnamed,none
+app/components/workflow/JourneyStrip.tsx|click|button|journey-next-action|onAction,app/components/workflow/JourneyStrip.tsx,click,button,no,named:text,*
 app/lib/pcb/render/scene.ts|gesture|canvas|pointerdown:onDown|onDown,app/lib/pcb/render/scene.ts,gesture,canvas,no,exempt:listener,pointerdown:onDown
 app/lib/pcb/render/scene.ts|gesture|canvas|pointermove:onMove|onMove,app/lib/pcb/render/scene.ts,gesture,canvas,no,exempt:listener,pointermove:onMove
 app/lib/pcb/render/scene.ts|gesture|canvas|pointerup:onUp|onUp,app/lib/pcb/render/scene.ts,gesture,canvas,no,exempt:listener,pointerup:onUp
@@ -506,8 +584,8 @@ app/page.tsx|change|PickerField|(none)|onChange#7,app/page.tsx,change,PickerFiel
 app/page.tsx|change|PickerField|(none)|onChange#8,app/page.tsx,change,PickerField,no,unnamed,none
 "app/page.tsx|change|PickerField|(none)|parseInt,isNaN,onChange",app/page.tsx,change,PickerField,no,unnamed,none
 "app/page.tsx|change|PropertiesPanel|(none)|setComponentPropertiesCanonical,schDisplayRef",app/page.tsx,change,PropertiesPanel,no,unnamed,none
-app/page.tsx|change|select|AI Brain|selectAiBrain,app/page.tsx,change,select,yes,named:aria-label,AI Brain
-app/page.tsx|change|select|Sheet size — also sets the KiCad export page|setPageSize,app/page.tsx,change,select,no,named:title,Sheet size — also sets the KiCad export page
+app/page.tsx|change|select|AI Brain|selectAiBrain,app/page.tsx,change,select,no,named:aria-label,AI Brain
+app/page.tsx|change|select|Sheet size|changeSheetSize,app/page.tsx,change,select,no,named:aria-label,Sheet size
 app/page.tsx|change|Textarea|prompt-input|setInput,app/page.tsx,change,Textarea,yes,named:aria-label,Message to the assistant
 app/page.tsx|click|ActivityBarButton|(none)|setChatOpen,app/page.tsx,click,ActivityBarButton,no,named:forwarded,label to aria-label: AI Chat
 app/page.tsx|click|ActivityBarButton|(none)|toggleLeftPanel,app/page.tsx,click,ActivityBarButton,no,named:forwarded,label to aria-label: Projects
@@ -524,10 +602,14 @@ app/page.tsx|click|Button|Apply bounded support-part fixes via a validated edit|
 app/page.tsx|click|Button|Applying…|Apply exact proposal|applyTier1Proposal,app/page.tsx,click,Button,yes,named:text,Applying… Apply exact proposal
 app/page.tsx|click|button|Build|setMode,app/page.tsx,click,button,no,named:text,Build
 app/page.tsx|click|Button|Cancel — change nothing|cancelTier1Proposal,app/page.tsx,click,Button,yes,named:text,Cancel — change nothing
-"app/page.tsx|click|Button|Cancel|finishActivityLog,setPendingReplace",app/page.tsx,click,Button,yes,named:text,Cancel
-app/page.tsx|click|Button|chat-stop|stopChatRun,app/page.tsx,click,Button,yes,named:text,Stop
+"app/page.tsx|click|Button|Cancel|finishActivityLog,reportGenerationReview,setPendingReplace",app/page.tsx,click,Button,yes,named:text,Cancel
+app/page.tsx|click|button|change in Settings|setSettingsOpen,app/page.tsx,click,button,yes,named:text,change in Settings
+app/page.tsx|click|Button|chat-stop|stopChatRun,app/page.tsx,click,Button,yes,named:text,Stop answer
 "app/page.tsx|click|button|Close pane|e.stopPropagation,onRemove",app/page.tsx,click,button,no,named:title,Close pane
+app/page.tsx|click|Button|Close|setDraftRequestOpen,app/page.tsx,click,Button,no,named:text,Close
+app/page.tsx|click|Button|Close|setSettingsOpen,app/page.tsx,click,Button,no,named:text,Close
 app/page.tsx|click|button|composer-route-override|overrideComposerRoute,app/page.tsx,click,button,yes,named:text,* instead Ask the assistant instead
+app/page.tsx|click|Button|composer-submit|handleComposerSubmit,app/page.tsx,click,Button,yes,named:text,*
 "app/page.tsx|click|button|Delete project *|window.confirm,deleteProject,checkpointStore().removeProject().catch,checkpointStore().removeProject",app/page.tsx,click,button,yes,named:aria-label,Delete project *
 app/page.tsx|click|Button|Delete|onDelete,app/page.tsx,click,Button,no,named:text,Delete
 app/page.tsx|click|Button|Delete|onDelete#2,app/page.tsx,click,Button,no,named:text,Delete
@@ -537,14 +619,19 @@ app/page.tsx|click|button|Dismiss|setTier1Receipt,app/page.tsx,click,button,no,n
 app/page.tsx|click|button|Dismiss|setToast,app/page.tsx,click,button,no,named:title,Dismiss
 app/page.tsx|click|Button|Download local copy (JSON)|downloadRecoveryBackup,app/page.tsx,click,Button,no,named:text,Download local copy (JSON)
 app/page.tsx|click|Button|Download raw backup (JSON)|downloadRecoveryBackup,app/page.tsx,click,Button,no,named:text,Download raw backup (JSON)
+app/page.tsx|click|Button|draft-request-open|onOpenDraftRequest,app/page.tsx,click,Button,yes,named:text,*
+app/page.tsx|click|button|empty-sheet-describe-circuit|handleJourneyAction,app/page.tsx,click,button,no,named:text,Describe a circuit
 app/page.tsx|click|button|Expand suggestions|Minimise suggestions|setSuggestionsMinimized,app/page.tsx,click,button,yes,named:text,* suggestion s ready
 app/page.tsx|click|Button|Export as KiCad (.kicad_sch)|handleExportKicad,app/page.tsx,click,Button,no,named:text,Export
 app/page.tsx|click|button|Fit page to view|schematicView.fitPage,app/page.tsx,click,button,no,named:text,Fit
-app/page.tsx|click|Button|Generate a schematic from this prompt|Apply this as an edit to the current schematic|handleComposerSubmit,app/page.tsx,click,Button,yes,named:text,*
+app/page.tsx|click|Button|generation-task-control-confirm|onConfirmGenerationControl,app/page.tsx,click,Button,yes,named:text,Confirm: *
+app/page.tsx|click|Button|generation-task-control-dismiss|onDismissGenerationControl,app/page.tsx,click,Button,yes,named:text,Dismiss
 "app/page.tsx|click|Button|Ignore these suggestions|setPendingSuggestions,setSuggestionsMinimized",app/page.tsx,click,Button,yes,named:text,Ignore
 "app/page.tsx|click|button|Independent domain model designs the same request and diffs it (slow, ~1–2 min)|setMoreMenuOpen,handleSecondOpinion",app/page.tsx,click,button,yes,named:text,Second opinion (SchGen)
 "app/page.tsx|click|button|Junction — mark a wire crossing as connected|setTool,setWireDraftStart",app/page.tsx,click,button,no,named:text,J
 app/page.tsx|click|Button|Keep my local schematic|resolveRecoveryKeepLocal,app/page.tsx,click,Button,no,named:text,Keep my local schematic
+app/page.tsx|click|button|missing-parts-open|openMissingParts,app/page.tsx,click,button,no,named:text,Missing parts: none Missing parts (*) PCB tab →
+app/page.tsx|click|button|module-note-toggle|setNoteExpanded,app/page.tsx,click,button,yes,named:text,Hide details Show details (* rows)
 app/page.tsx|click|Button|More checks|setMoreMenuOpen,app/page.tsx,click,Button,yes,named:aria-label,More checks
 app/page.tsx|click|button|Move mode (M)|setSimMode,app/page.tsx,click,button,no,named:text,Move M
 "app/page.tsx|click|button|Net label — name a net; same-name labels connect electrically|setTool,setWireDraftStart,setPendingNetLabel",app/page.tsx,click,button,no,named:text,T
@@ -579,6 +666,7 @@ app/page.tsx|click|Button|Use OpenAI|Anthropic instead|performProviderSwitch,app
 app/page.tsx|click|button|view-tab-*|onClick,app/page.tsx,click,button,no,named:text,*
 app/page.tsx|click|button|Waveforms|setChartPanelOpen,app/page.tsx,click,button,no,named:text,Waveforms
 app/page.tsx|click|button|Wire|setTool,app/page.tsx,click,button,no,named:text,W
+app/page.tsx|click|Button|workspace-settings|setSettingsOpen,app/page.tsx,click,Button,no,named:aria-label,Workspace settings
 app/page.tsx|click|div|(none)|setMoreMenuOpen,app/page.tsx,click,div,yes,exempt:backdrop,closed by More checks
 app/page.tsx|click|div|Pane **|onSelect,app/page.tsx,click,div,no,named:title,Pane **
 app/page.tsx|click|ViewTab|(none)|workspaceView.open:3d,app/page.tsx,click,ViewTab,no,named:forwarded,label to text: 3D
@@ -587,9 +675,11 @@ app/page.tsx|click|ViewTab|(none)|workspaceView.open:pcb,app/page.tsx,click,View
 app/page.tsx|click|ViewTab|(none)|workspaceView.open:schematic,app/page.tsx,click,ViewTab,no,named:forwarded,label to text: Schematic
 app/page.tsx|click|ViewTab|(none)|workspaceView.open:sim,app/page.tsx,click,ViewTab,no,named:forwarded,label to text: SPICE
 app/page.tsx|dialog|Dialog|(none)|cancelTier1Proposal,app/page.tsx,dialog,Dialog,yes,exempt:dialog-titled,AI edit proposal — review before applying
-"app/page.tsx|dialog|Dialog|(none)|finishActivityLog,setPendingReplace",app/page.tsx,dialog,Dialog,yes,exempt:dialog-titled,* Apply the generated schematic?
+"app/page.tsx|dialog|Dialog|(none)|finishActivityLog,reportGenerationReview,setPendingReplace",app/page.tsx,dialog,Dialog,yes,exempt:dialog-titled,* Apply the generated schematic?
 app/page.tsx|dialog|Dialog|(none)|noop,app/page.tsx,dialog,Dialog,no,exempt:dialog-titled,Project activation needs recovery
+app/page.tsx|dialog|Dialog|(none)|setDraftRequestOpen,app/page.tsx,dialog,Dialog,no,exempt:dialog-titled,Publication request from the assistant&apos;s draft request
 app/page.tsx|dialog|Dialog|(none)|setHistoryOpen,app/page.tsx,dialog,Dialog,no,exempt:dialog-titled,Revision history
+app/page.tsx|dialog|Dialog|(none)|setSettingsOpen,app/page.tsx,dialog,Dialog,no,exempt:dialog-titled,Workspace settings
 "app/page.tsx|dialog|Dialog|(none)|showToast,setSchematicRecovery",app/page.tsx,dialog,Dialog,no,exempt:dialog-titled,Schematic history needs recovery Schematic failed validat…
 app/page.tsx|gesture|document|mousedown:onDocDown|onDocDown,app/page.tsx,gesture,document,no,exempt:listener,mousedown:onDocDown
 app/page.tsx|gesture|svg|wheel:handler|handler,app/page.tsx,gesture,svg,no,exempt:listener,wheel:handler
@@ -620,6 +710,7 @@ app/page.tsx|pointer|NetLabelGlyph|(none)|onLabelMouseDown,app/page.tsx,pointer,
 app/page.tsx|pointer|polyline|(none)|handleWireClick,app/page.tsx,pointer,polyline,no,unnamed,none
 app/page.tsx|pointer|polyline|(none)|onWireMouseDown,app/page.tsx,pointer,polyline,no,exempt:canvas-gesture,go to: Go to component (schematic-goto-input)
 app/page.tsx|pointer|rect|(none)|onMouseDown,app/page.tsx,pointer,rect,no,unnamed,none
+app/page.tsx|pointer|ScopedNetLabelGlyph|(none)|onLabelMouseDown,app/page.tsx,pointer,ScopedNetLabelGlyph,no,exempt:canvas-gesture,go to: Go to component (schematic-goto-input)
 app/page.tsx|pointer|svg|(none)|onSvgDown,app/page.tsx,pointer,svg,no,unnamed,none
 app/page.tsx|pointer|svg|schematic-canvas|onSvgMouseDown,app/page.tsx,pointer,svg,no,exempt:canvas-gesture,go to: Go to component (schematic-goto-input)
 app/page.tsx|shortcut|window|keydown:onKey|onKey,app/page.tsx,shortcut,window,no,exempt:listener,keydown:onKey
