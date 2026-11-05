@@ -418,7 +418,7 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
   }
 
   async start(input: Parameters<ProviderAgentAdapter["start"]>[0]): Promise<AgentStep> {
-    const roleStep = await scriptedRoleStart(this, input); if (roleStep) return roleStep; this.planned = planFixtureInstruction(input.userMessage); const resolutionStep = scriptedResolutionStart(this, input); if (resolutionStep) return resolutionStep; const generationStep = scriptedGenerationTaskStart(this, input); if (generationStep) return generationStep; const organizeStep = scriptedOrganizeStart(this, input); if (organizeStep) return organizeStep; /* [PR-J5, 2026-10-23] the organise proposal's script (appended below), in place on this line */ /* [PR-L, 2026-10-18] the durable generation task's scripts (appended below), in place on this line */ // [B21 F] a specialist run or the follow-up turn answers from the per-role script (D21-40), appended below; [PR-M, 2026-10-18] the resolution script (appended below), in place on this line
+    const roleStep = await scriptedRoleStart(this, input); if (roleStep) return roleStep; this.planned = planFixtureInstruction(input.userMessage); const resolutionStep = scriptedResolutionStart(this, input); if (resolutionStep) return resolutionStep; const generationStep = scriptedGenerationTaskStart(this, input); if (generationStep) return generationStep; const organizeStep = scriptedOrganizeStart(this, input); if (organizeStep) return organizeStep; const acquisitionStep = scriptedAcquisitionStart(this, input); if (acquisitionStep) return acquisitionStep; /* [K2, 2026-11-04] the acquisition script (appended below), in place on this line */ /* [PR-J5, 2026-10-23] the organise proposal's script (appended below), in place on this line */ /* [PR-L, 2026-10-18] the durable generation task's scripts (appended below), in place on this line */ // [B21 F] a specialist run or the follow-up turn answers from the per-role script (D21-40), appended below; [PR-M, 2026-10-18] the resolution script (appended below), in place on this line
     if (this.planned.kind === "reply") return this.step({ text: this.planned.text });
     if (this.planned.kind === "select-then") {
       this.awaitingSelection = true;
@@ -459,7 +459,7 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
   }
 
   async continueWith(input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): Promise<AgentStep> {
-    const roleStep = scriptedRoleContinue(this, input); if (roleStep) return roleStep; const planned = this.planned; const resolutionNext = scriptedResolutionContinue(this, input); if (resolutionNext) return resolutionNext; const generationNext = await scriptedGenerationTaskContinue(this, input); if (generationNext) return generationNext; const organizeNext = scriptedOrganizeContinue(this, input); if (organizeNext) return organizeNext; /* [PR-J5, 2026-10-23] the organise script's continue, in place on this line */ /* [PR-L, 2026-10-18] the durable generation task's scripts, in place on this line */ // [B21 F] a specialist run continues on its per-role script; [PR-M, 2026-10-18] a resolution run continues on its script (appended below)
+    const roleStep = scriptedRoleContinue(this, input); if (roleStep) return roleStep; const planned = this.planned; const resolutionNext = scriptedResolutionContinue(this, input); if (resolutionNext) return resolutionNext; const generationNext = await scriptedGenerationTaskContinue(this, input); if (generationNext) return generationNext; const organizeNext = scriptedOrganizeContinue(this, input); if (organizeNext) return organizeNext; const acquisitionNext = await scriptedAcquisitionContinue(this, input); if (acquisitionNext) return acquisitionNext; /* [K2, 2026-11-04] the acquisition script's continue, in place on this line */ /* [PR-J5, 2026-10-23] the organise script's continue, in place on this line */ /* [PR-L, 2026-10-18] the durable generation task's scripts, in place on this line */ // [B21 F] a specialist run continues on its per-role script; [PR-M, 2026-10-18] a resolution run continues on its script (appended below)
     const outputText = input.results[0]?.outputText;
     if (this.awaitingBoard && planned.kind === "board-then") {
       this.awaitingBoard = false;
@@ -1045,4 +1045,85 @@ function scriptedOrganizeContinue(adapter: FixtureAgentAdapter, input: Parameter
   ORGANIZE_RUNS.delete(adapter);
   if (facts.status !== "proposal_sealed") return roleStep(adapter, { text: `(fixture agent) the organisation was refused (${facts.status})${facts.blockers.length > 0 ? `: ${facts.blockers[0]!.replace(/\s*Nothing was changed\.?\s*$/, "").replace(/[.\s]+$/, "")}` : ""}. Nothing was changed.` }); // [PR-J5 integration, 2026-10-26] review J5R-AI-6: the blocker's own closing sentence is not repeated
   return roleStep(adapter, { text: `(fixture agent) the organisation is sealed for your review: ${facts.sheets.length} subsystem sheet(s) - ${facts.sheets.map((sheet) => `${sheet.name} (${sheet.members} part${sheet.members === 1 ? "" : "s"})`).join(", ")}; ${facts.interfaces.length} interface port(s)${facts.interfaces.length > 0 ? ` (${[...new Set(facts.interfaces)].join(", ")})` : ""}; ${facts.unassigned.length === 0 ? "every part is assigned" : `${facts.unassigned.join(", ")} stay on the overview`}${facts.checks > 0 ? `; ${facts.checks} placement(s) to check` : ""}. Nothing has been changed: approve it on the review card to create the sheets as one undoable step.` });
+}
+
+// ─── [K2, 2026-11-04] The acquisition turn (runbook K.2, K.8 item 1; OD-260 item 6) ──────────────────────────────────────────────────
+// Appended on purpose (as PR-L and PR-J5 were): constants read only when a run starts and hoisted function declarations, so no line cited
+// above moves - the two in-place hooks sit on the start and continue lines after the organise hooks. Still never a model: one whole
+// sentence becomes the calls a model would make, through the REAL loop, gateway and injected acquisition port -
+//   "Obtain the assets for D1 and D2." -> sirkit.schematic.instance-inspect { componentIds: [the named references] }, then
+//     sirkit.parts.acquisition-start { componentIds: [the unresolved instances' stable ids the inspection returned] }, then the turn
+//     HOLDS (up to ACQUISITION_HOLD_MS, or until the run is aborted) - a model still writing while the durable task runs in its worker,
+//     so the page's Work log shows the task's recorded steps before the answer - then sirkit.parts.acquisition-status { taskId } and a
+//     closing reply that says only what that read answered.
+
+/** How long the turn holds after the start before it reads the task (well under the run's deadline). */
+export const ACQUISITION_HOLD_MS = 12_000;
+const OBTAIN_ASSETS = new RegExp(`^(?:please\\s+)?obtain\\s+the\\s+(?:parts?'?\\s+)?assets\\s+for\\s+${RESOLVE_REFS}$`, "i");
+interface AcquisitionRun { stage: "inspect" | "start" | "status"; refs: string[]; taskId: string | null; seq: number }
+const ACQUISITION_RUNS = new WeakMap<FixtureAgentAdapter, AcquisitionRun>();
+
+/** [K2] The references an acquisition sentence names, or null (the scripts above answer). */
+export function planFixtureAcquisition(message: string): { refs: string[] } | null {
+  const text = message.replace(/\s+/g, " ").trim().replace(/[.!]+$/, "").trim();
+  const named = OBTAIN_ASSETS.exec(text);
+  if (!named) return null;
+  const refs = [...new Set((named[1] ?? "").split(/\s*(?:,|\band\b)\s*/i).map((ref) => ref.trim().toUpperCase()).filter((ref) => /^[A-Z]+\d+$/.test(ref)))];
+  return refs.length > 0 ? { refs } : null;
+}
+
+/** [K2] What the scripted agent reads out of an acquisition report: the first task's id, state, stage and next action. */
+export function acquisitionReportFacts(outputText: string | undefined): { taskId: string | null; state: string | null; stage: string | null; nextAction: string | null } {
+  try {
+    const parsed = JSON.parse(outputText ?? "") as { output?: { report?: { tasks?: Array<Record<string, unknown>> } } };
+    const task = parsed.output?.report?.tasks?.[0];
+    const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
+    return { taskId: text(task?.taskId), state: text(task?.state), stage: text(task?.stage), nextAction: text(task?.nextAction) };
+  } catch {
+    return { taskId: null, state: null, stage: null, nextAction: null };
+  }
+}
+
+function acquisitionCall(adapter: FixtureAgentAdapter, run: AcquisitionRun, tools: readonly ProviderToolDeclaration[], toolId: string, args: Record<string, unknown>): AgentStep {
+  const declaration = tools.find((tool) => tool.toolId === toolId);
+  if (!declaration) { ACQUISITION_RUNS.delete(adapter); return roleStep(adapter, { text: `(fixture agent) ${toolId} is not available to this run; nothing was done.` }); }
+  run.seq += 1;
+  return roleStep(adapter, { toolCalls: [{ callId: `fx-acquire-${run.seq}`, providerName: declaration.providerName, argumentsText: JSON.stringify(args) }] });
+}
+
+/** [K2] The start hook: an acquisition sentence reads the named instances first; anything else is null. */
+function scriptedAcquisitionStart(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["start"]>[0]): AgentStep | null {
+  ACQUISITION_RUNS.delete(adapter);
+  const plan = planFixtureAcquisition(input.userMessage);
+  if (!plan) return null;
+  const run: AcquisitionRun = { stage: "inspect", refs: plan.refs, taskId: null, seq: 0 };
+  ACQUISITION_RUNS.set(adapter, run);
+  return acquisitionCall(adapter, run, input.tools, "sirkit.schematic.instance-inspect", { componentIds: plan.refs });
+}
+
+/** [K2] The continue hook: inspect -> start -> (held) status -> a closing reply from what the status read answered; null outside the run. */
+async function scriptedAcquisitionContinue(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): Promise<AgentStep | null> {
+  const run = ACQUISITION_RUNS.get(adapter);
+  if (!run) return null;
+  const outputText = input.results[0]?.outputText;
+  if (run.stage === "inspect") {
+    const instances = unresolvedInstanceFacts(outputText).filter((instance) => run.refs.includes(instance.refDes.toUpperCase()));
+    if (instances.length === 0) { ACQUISITION_RUNS.delete(adapter); return roleStep(adapter, { text: `(fixture agent) the inspection reported no unresolved catalog instance among ${run.refs.join(", ")}; nothing was started and nothing was changed.` }); }
+    run.stage = "start";
+    return acquisitionCall(adapter, run, input.tools, "sirkit.parts.acquisition-start", { componentIds: instances.map((instance) => instance.componentId) });
+  }
+  if (run.stage === "start") {
+    const facts = acquisitionReportFacts(outputText);
+    if (!facts.taskId) { ACQUISITION_RUNS.delete(adapter); return roleStep(adapter, { text: "(fixture agent) the acquisition start did not answer a task; nothing was changed." }); }
+    run.taskId = facts.taskId;
+    run.stage = "status";
+    const elapsed = await heldReply(input.signal, ACQUISITION_HOLD_MS);
+    if (!elapsed) throw Object.assign(new Error("The run was stopped while the scripted agent was still answering."), { name: "AbortError" });
+    return acquisitionCall(adapter, run, input.tools, "sirkit.parts.acquisition-status", { taskId: facts.taskId });
+  }
+  ACQUISITION_RUNS.delete(adapter);
+  const facts = acquisitionReportFacts(outputText);
+  return roleStep(adapter, { text: facts.state
+    ? `(fixture agent) acquisition task ${run.taskId}: ${facts.state}, stage ${facts.stage}, next ${facts.nextAction}. Nothing in the design changed; the task keeps its own state and its recorded steps are in the work log.`
+    : "(fixture agent) the acquisition status could not be read; nothing was changed." });
 }

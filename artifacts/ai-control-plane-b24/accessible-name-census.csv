@@ -52,6 +52,7 @@ app/components/chat/ExecutionEntryActions.tsx|click|Button|execution-undo|onUndo
 app/components/chat/GenerationTaskStatus.tsx|click|Button|generation-task-*|onAction,app/components/chat/GenerationTaskStatus.tsx,click,Button,yes,named:text,*
 app/components/chat/GenerationTaskStatus.tsx|click|Button|generation-task-retry-*|onAction,app/components/chat/GenerationTaskStatus.tsx,click,Button,yes,named:text,Retry block *
 app/components/chat/GenerationTaskStatus.tsx|click|Button|generation-task-start-again|onStartAgain,app/components/chat/GenerationTaskStatus.tsx,click,Button,yes,named:text,Start again
+app/components/chat/WorkLog.tsx|click|button|work-log-toggle|setExpanded,app/components/chat/WorkLog.tsx,click,button,no,named:text,Hide details Show details
 app/components/circuit-verification/CircuitVerificationWorkspace.tsx|change|select|(none)|setCategory,app/components/circuit-verification/CircuitVerificationWorkspace.tsx,change,select,no,unnamed,none
 app/components/circuit-verification/CircuitVerificationWorkspace.tsx|change|select|(none)|setResult,app/components/circuit-verification/CircuitVerificationWorkspace.tsx,change,select,no,unnamed,none
 app/components/editor/BuildLibraryPanel.tsx|change|Input|Distributor search query|setExternalQuery,app/components/editor/BuildLibraryPanel.tsx,change,Input,yes,named:aria-label,Distributor search query

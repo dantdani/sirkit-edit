@@ -78,7 +78,7 @@ import { sealTier1Proposal, TIER1_PROPOSAL_SCHEMA, type SealedTier1Proposal } fr
 import { loadSessionIdentity, sessionAuthorizationBindingFrom, SESSION_IDENTITY_UNAVAILABLE_MESSAGE } from "@/app/lib/project/session-identity";
 import { projectSelectorHeaders } from "@/app/lib/project/project-selector";
 import { completenessNote, electricalCheckNote, type ElectricalCheckStatus } from "@/app/lib/schematic/build-result"; // [PR-C] [PR-L, 2026-10-17] the Build result now arrives from a durable generation task (generation-task-client), not a build-multi response
-import { controlGenerationTask, fetchActiveGenerationTask, fetchGenerationTask, generationTaskBusy, generationTaskRestartable, generationTaskStatusText, generationActivityLineId, newGenerationClientActionId, randomGenerationUuid, newGenerationClientRequestId, reduceGenerationTaskView, startGenerationTask, subscribeGenerationTask, type GenerationTaskClientAction, type GenerationTaskSnapshotView, type GenerationTaskUpdate, type GenerationTaskView } from "@/app/lib/project/generation-task-client"; // [PR-L, 2026-10-17] runbook L.4: the durable design task (start or attach, progress, control, result)
+import { controlGenerationTask, fetchActiveGenerationTask, fetchGenerationTask, generationTaskBusy, generationTaskRestartable, generationTaskStatusText, generationActivityLineId, newGenerationClientActionId, randomGenerationUuid, newGenerationClientRequestId, reduceGenerationTaskView, startGenerationTask, subscribeGenerationTask, type GenerationTaskClientAction, type GenerationTaskSnapshotView, type GenerationTaskUpdate, type GenerationTaskView } from "@/app/lib/project/generation-task-client"; import { WorkLog } from "@/app/components/chat/WorkLog"; import { useChatWorkLog } from "@/app/components/chat/hooks/useChatWorkLog"; import { workOfStored, type WorkLogState } from "@/app/lib/project/work-log"; /* [K2, 2026-11-04] runbook K.2 (OD-260 items 6, 8): the Work log on the activity entry - component, hook and the stored log's reader (in place: no line moves) */ // [PR-L, 2026-10-17] runbook L.4: the durable design task (start or attach, progress, control, result)
 import { GenerationTaskStatus } from "@/app/components/chat/GenerationTaskStatus"; // [PR-L, 2026-10-17] the task's live status card in its activity entry
 import { clearPendingProposal, loadPendingProposal, savePendingProposal } from "@/app/lib/project/pending-proposal-store"; // [PR-C]
 import { computeDesignChecks, type DesignCheck } from "@/app/lib/schematic/design-checks"; // [PR-E]
@@ -153,7 +153,7 @@ type ActivityLogMessage = {
   role: "log";
   title: string;
   status: "running" | "done" | "error";
-  entries: ActivityLogEntry[];
+  entries: ActivityLogEntry[]; work?: WorkLogState; // [K2, 2026-11-04] the entry's typed Work log (OD-260 item 6), collapsed under "Show details"
 };
 type Message = ChatMessage | ActivityLogMessage;
 /** [PR-L, 2026-10-17] the durable design task the page follows (runbook L.4): bound to the project generation that attached it. */
@@ -3005,7 +3005,7 @@ export default function Home() {
   /** User prompts + user-visible responses only — no secrets, no hidden reasoning. */
   function toStoredChat(all: Message[]): StoredChatMessage[] {
     return all.slice(-200).map((message) => message.role === "log"
-      ? { id: message.id, role: "log" as const, title: message.title, status: message.status, entries: message.entries.map((entry) => ({ id: entry.id, text: entry.text, status: entry.status })) }
+      ? { id: message.id, role: "log" as const, title: message.title, status: message.status, entries: message.entries.map((entry) => ({ id: entry.id, text: entry.text, status: entry.status })), ...(message.work ? { work: message.work } : {}) } /* [K2, 2026-11-04] the Work log is kept with its entry (bounded, already cleaned) */
       : { id: message.id, role: message.role, content: message.content, ...(message.advisory ? { advisory: true } : {}), ...(message.footer ? { footer: message.footer } : {}) }); // [PR-G, 2026-10-17] the answer's model label is kept with the answer
   }
 
@@ -3013,7 +3013,7 @@ export default function Home() {
   function fromStoredChat(stored: StoredChatMessage[]): Message[] {
     return stored.map((message) => message.role === "log"
       ? {
-          id: message.id, role: "log" as const, title: message.title,
+          id: message.id, role: "log" as const, title: message.title, ...workOfStored(message.work), // [K2, 2026-11-04] the stored Work log recovered (nothing replayed; a turn cut by the reload says so)
           status: message.status === "running" ? ("error" as const) : message.status,
           // [B18-E E1] a committed AI-change entry's undo hint is replaced by one that stays true after a reload
           entries: restoredEntryLog(message).entries.map((entry) => entry.status === "running" ? { ...entry, status: "error" as const, text: `${entry.text} (interrupted by reload)` } : entry),
@@ -4689,7 +4689,7 @@ export default function Home() {
       const refOf = (objectId: string): string | null => boardForRefs?.footprints.find((footprint) => footprint.id === objectId)?.ref ?? null;
       const applyAgentEvent = (event: Record<string, unknown>): void => {
         if (!scope.isCurrent()) return;
-        runView = reduceRunView(runView, event); resumeObservation = observeChatResume(resumeObservation, event); // [B21 E3]
+        runView = reduceRunView(runView, event); resumeObservation = observeChatResume(resumeObservation, event); chatWorkLog.foldRunEvent(logId, scope, event); // [B21 E3]; [K2, 2026-11-04] every event also folds into this entry's Work log (typed rows; an acquisition_task_ready starts following the task)
         switch (event.type) {
           case "text_delta": {
             const answer = projectRunView(runView).answer;
@@ -5050,7 +5050,7 @@ export default function Home() {
   // generation's fetches and canceling its timers); handlers capture scopes
   // at invocation and check them after every await.
   const projectScopeRegistryRef = useRef<ProjectAsyncScopeRegistry | null>(null);
-  if (projectScopeRegistryRef.current === null) projectScopeRegistryRef.current = new ProjectAsyncScopeRegistry();
+  if (projectScopeRegistryRef.current === null) projectScopeRegistryRef.current = new ProjectAsyncScopeRegistry(); const chatWorkLog = useChatWorkLog({ messages, setMessages, captureScope: () => projectScopeRegistryRef.current?.capture() ?? null }); // [K2, 2026-11-04] the Work log glue (logic in the hook; OD-260 item 8)
   // [B16-C.5] mount re-arms (StrictMode runs this cleanup once and mounts again), unmount disposes.
   useEffect(() => { projectScopeRegistryRef.current?.resume(); return () => projectScopeRegistryRef.current?.dispose(); }, []);
 
@@ -5473,7 +5473,7 @@ export default function Home() {
     if (!entry.scope.isCurrent() || generationTaskRef.current !== entry || entry.settled) return;
     const { view, added } = reduceGenerationTaskView(entry.view, update);
     entry.view = view;
-    for (const event of added) appendActivityStep(entry.logId, event.message, event.type === "failed" ? "error" : "done", generationActivityLineId());
+    for (const event of added) appendActivityStep(entry.logId, event.message, event.type === "failed" ? "error" : "done", generationActivityLineId()); chatWorkLog.foldGeneration(entry.logId, entry.scope, view, added, update.gap); // [K2, 2026-11-04] the milestones and the remaining allowance join the entry's Work log
     setGenerationTask({ logId: entry.logId, view });
     const owner = generationTaskOwner(view.taskId);
     if (generationTaskBusy(view)) {
@@ -9088,7 +9088,7 @@ function MessageBubble({ message, undoStates, onUndoExecution, draftRequests, on
               </div>
             ))}
           </div>
-          {generationTask && generationTask.logId === message.id && onGenerationTaskAction && onGenerationTaskStartAgain ? <GenerationTaskStatus view={generationTask.view} onAction={onGenerationTaskAction} onStartAgain={onGenerationTaskStartAgain} busy={generationTaskControlBusy ?? false} /> : null} {/* [PR-L, 2026-10-17] the design task's live state, counts, blocks and its valid actions */}
+          {generationTask && generationTask.logId === message.id && onGenerationTaskAction && onGenerationTaskStartAgain ? <GenerationTaskStatus view={generationTask.view} onAction={onGenerationTaskAction} onStartAgain={onGenerationTaskStartAgain} busy={generationTaskControlBusy ?? false} /> : null} {message.work ? <WorkLog work={message.work} entryId={message.id} /> : null} {/* [PR-L, 2026-10-17] the design task's live state, counts, blocks and its valid actions */}
         </div>
       </div>
     );

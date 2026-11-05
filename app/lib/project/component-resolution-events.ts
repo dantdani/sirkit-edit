@@ -38,7 +38,7 @@ export interface ResolutionReceiptView {
 export const RESOLUTION_PROGRESS: Readonly<Record<string, string>> = Object.freeze({
   "sirkit.schematic.instance-inspect": "Inspecting the unresolved instances on the sheet (stable ids, catalog pins, nets, polarity; no PCB needed)",
   "sirkit.parts.candidate-search": "Searching the local library for eligible published revisions",
-  "sirkit.schematic.propose-component-resolution": "Checking candidate pin mappings, polarity and packages, and sealing one batch for your review",
+  "sirkit.schematic.propose-component-resolution": "Checking candidate pin mappings, polarity and packages, and sealing one batch for your review", "sirkit.parts.acquisition-start": "Starting (or finding) the durable acquisition task for the part's KiCad assets — no design change", "sirkit.parts.acquisition-status": "Reading the acquisition task's stored state", // [K2, 2026-11-04] K1 case 5: the two acquisition tools' started lines (a dispatch, never a result)
 });
 
 /** At most this many instances one "Find a replacement in the library" request names (a resolution batch holds at most 20). */

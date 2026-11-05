@@ -47,7 +47,7 @@ export interface GenerationTaskSnapshotView {
   plan: { planner: string; rationale: string; assumptions: string[]; coverage?: string[]; blocks: Array<{ blockId: string; name: string; status: string; strategy: string; turnsUsed: number; blocker: string | null; missing?: Array<{ role: string; query: string; category: string | null }>; /** [PR-J, 2026-11-04] J7-2: queued again while running blocks hold the allowance it needs */ waiting?: "allowance" }> } | null;
   blocker: { code: string; message: string; resolution: string; blockId: string | null } | null;
   failure: { reason: string; at: string } | null;
-  usage: { slices: number; attempts: number; modelCalls: number; uncertainModelCalls: number; inputTokens: number; outputTokens: number; catalogSearches: number; cacheHits: number };
+  usage: { slices: number; attempts: number; modelCalls: number; uncertainModelCalls: number; inputTokens: number; outputTokens: number; catalogSearches: number; cacheHits: number }; /** [K2, 2026-11-04] K1 case 6 (OD-260 item 5): what is LEFT of the task's allowance in units (calls, tokens, searches - never money), as the server snapshot says; absent when the snapshot has none or it is malformed */ allowance?: GenerationTaskAllowanceView;
   base: { schematicDigest: string; recipe: string; moved: boolean };
   result: { status: "complete" | "partial"; omittedBlocks: string[]; resultDigest: string } | null;
   review: { outcome: string; at: string } | null;
@@ -107,7 +107,7 @@ export function readGenerationTaskSnapshot(value: unknown): GenerationTaskSnapsh
       : null,
     blocker: isRecord(value.blocker) && str(value.blocker.code, 40) && str(value.blocker.message, 600) && str(value.blocker.resolution, 600) ? { code: value.blocker.code, message: value.blocker.message, resolution: value.blocker.resolution, blockId: strOrNull(value.blocker.blockId) } : null,
     failure: isRecord(value.failure) && str(value.failure.reason, 40) ? { reason: value.failure.reason, at: str(value.failure.at, 40) ? value.failure.at : "" } : null,
-    usage: { slices: num(usage.slices) ? usage.slices : 0, attempts: num(usage.attempts) ? usage.attempts : 0, modelCalls: num(usage.modelCalls) ? usage.modelCalls : 0, uncertainModelCalls: num(usage.uncertainModelCalls) ? usage.uncertainModelCalls : 0, inputTokens: num(usage.inputTokens) ? usage.inputTokens : 0, outputTokens: num(usage.outputTokens) ? usage.outputTokens : 0, catalogSearches: num(usage.catalogSearches) ? usage.catalogSearches : 0, cacheHits: num(usage.cacheHits) ? usage.cacheHits : 0 },
+    ...allowanceOf(value.allowance), /* [K2, 2026-11-04] K1 case 6: the remaining allowance is kept (read defensively; on this line so no cited line moves) */ usage: { slices: num(usage.slices) ? usage.slices : 0, attempts: num(usage.attempts) ? usage.attempts : 0, modelCalls: num(usage.modelCalls) ? usage.modelCalls : 0, uncertainModelCalls: num(usage.uncertainModelCalls) ? usage.uncertainModelCalls : 0, inputTokens: num(usage.inputTokens) ? usage.inputTokens : 0, outputTokens: num(usage.outputTokens) ? usage.outputTokens : 0, catalogSearches: num(usage.catalogSearches) ? usage.catalogSearches : 0, cacheHits: num(usage.cacheHits) ? usage.cacheHits : 0 },
     base: { schematicDigest: str(value.base.schematicDigest, 200) ? value.base.schematicDigest : "", recipe: str(value.base.recipe, 40) ? value.base.recipe : "", moved: value.base.moved === true },
     result: isRecord(value.result) && (value.result.status === "complete" || value.result.status === "partial") && str(value.result.resultDigest, 100) ? { status: value.result.status, omittedBlocks: Array.isArray(value.result.omittedBlocks) ? value.result.omittedBlocks.filter((entry): entry is string => str(entry, 200)) : [], resultDigest: value.result.resultDigest } : null,
     review: isRecord(value.review) && str(value.review.outcome, 40) ? { outcome: value.review.outcome, at: str(value.review.at, 40) ? value.review.at : "" } : null,
@@ -472,4 +472,27 @@ function sheetsOf(value: unknown): { sheets?: GeneratedSheets } {
   if (value === undefined) return {};
   const sheets = readGeneratedSheets(value);
   return sheets ? { sheets } : {};
+}
+
+// [K2, 2026-11-04] K1 case 6 (runbook K.4, OD-260 item 5), appended after the last line (a declaration is hoisted), so no cited line moves:
+// the server snapshot's remaining allowance, kept by the reader, and the one line the Work log shows for it - units of the task's own
+// allowance (model calls, output and input tokens, catalog searches), never a price: the product has no USD table (F18), and the US$5
+// builder ledger is not the product's.
+export interface GenerationTaskAllowanceView { units: number; extensions: number; maxExtensions: number; remaining: { modelCalls: number; outputTokens: number; catalogSearches: number; inputTokens?: number }; windowEndsAt: string }
+function allowanceOf(value: unknown): { allowance?: GenerationTaskAllowanceView } {
+  if (!isRecord(value) || !isRecord(value.remaining)) return {};
+  const remaining = value.remaining;
+  if (!num(value.units) || !num(value.extensions) || !num(value.maxExtensions) || !str(value.windowEndsAt, 40)) return {};
+  if (!num(remaining.modelCalls) || !num(remaining.outputTokens) || !num(remaining.catalogSearches) || (remaining.inputTokens !== undefined && !num(remaining.inputTokens))) return {};
+  return { allowance: { units: value.units, extensions: value.extensions, maxExtensions: value.maxExtensions, remaining: { modelCalls: remaining.modelCalls, outputTokens: remaining.outputTokens, catalogSearches: remaining.catalogSearches, ...(remaining.inputTokens !== undefined ? { inputTokens: remaining.inputTokens as number } : {}) }, windowEndsAt: value.windowEndsAt } };
+}
+const plural = (count: number, one: string, many: string): string => `${count.toLocaleString("en-US")} ${count === 1 ? one : many}`;
+/** The allowance line ("Allowance left: 58 model calls · 470,000 output tokens · 298 catalog searches (task units, not money)"), or null. */
+export function generationTaskAllowanceText(view: Pick<GenerationTaskSnapshotView, "allowance">): string | null {
+  const allowance = view.allowance;
+  if (!allowance) return null;
+  const left = allowance.remaining;
+  const parts = [plural(left.modelCalls, "model call", "model calls"), plural(left.outputTokens, "output token", "output tokens"), ...(left.inputTokens !== undefined ? [plural(left.inputTokens, "input token", "input tokens")] : []), plural(left.catalogSearches, "catalog search", "catalog searches")];
+  const extensions = allowance.maxExtensions > 0 ? `; ${allowance.extensions} of ${allowance.maxExtensions} extensions used` : "";
+  return `Allowance left: ${parts.join(" · ")} (task units, not money${extensions})`;
 }

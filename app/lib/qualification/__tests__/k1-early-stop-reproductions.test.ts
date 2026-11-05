@@ -13,11 +13,12 @@
  *
  *  1. the acquisition task's 3 failed claims end the WHOLE task in a `source_unavailable` wait with no schedule (K3);
  *  2. one pass over the admitted CAD sources ends `no_matching_asset` with no next strategy and no schedule (K3);
- *  3. the chat run's third identical acquisition-status read is refused `repeated_call` ("its result has not changed") although the
- *     durable task changed between the reads (K2 / K3 route the follow-up to the durable task; the guard itself stays);
+ *  3. the chat run's third identical acquisition-status read was refused `repeated_call` ("its result has not changed") although the
+ *     durable task changed between the reads - [K2, 2026-11-04] rewritten: the guard keys a live task's status read on its stored revision;
  *  4. a Retry-After above one hour is clipped to one hour in the CAD egress path (K3);
- *  5. starting an acquisition from the chat answers a plain read: no typed event reaches the activity entry (K2);
- *  6. the browser's task view drops `allowance.remaining` and the counts line shows calls and searches only (K2);
+ *  5. starting an acquisition from the chat answered a plain read: no typed event reached the activity entry - [K2, 2026-11-04]
+ *     rewritten: the typed acquisition_task_ready event;
+ *  6. the browser's task view dropped `allowance.remaining` - [K2, 2026-11-04] rewritten: kept, and the Work log's allowance line;
  *  7. `createModelAsset` turns a caller's `inspected: true` into `safe` without reading the bytes, which then satisfies the mechanical
  *     profile; no production module calls it (K5);
  *  8. the 3D footprints are courtyard boxes with no placeholder label, shown under a "Parts" toggle (K6);
@@ -61,7 +62,7 @@ import { durableWorkflowDigest } from "@/app/lib/durable-workflow/stable";
 import { GenerationTaskStore } from "@/app/lib/generation-task/store";
 import { GENERATION_TASK_ALLOWANCE_UNIT } from "@/app/lib/generation-task/contracts";
 import { buildGenerationTaskSnapshot } from "@/app/lib/generation-task/snapshot";
-import { generationTaskCountsText, readGenerationTaskSnapshot, reduceGenerationTaskView } from "@/app/lib/project/generation-task-client";
+import { generationTaskAllowanceText, generationTaskCountsText, readGenerationTaskSnapshot, reduceGenerationTaskView } from "@/app/lib/project/generation-task-client";
 import { createModelAsset } from "@/app/lib/atomic/kicad-assets";
 import { ATOMIC_VALIDATOR_VERSION, evaluateApproval, type ValidationContext } from "@/app/lib/atomic/validation";
 import type { AtomicPartRevision, ModelAssetVersion } from "@/app/lib/atomic/types";
@@ -205,26 +206,33 @@ describe("[K1] section K's early stops and gaps, reproduced against the current 
     expect(await liveSlices(runtime)).toEqual([]);
   });
 
-  it("[K1 3] CURRENT agent/loop.ts:445-450 (budget agent/contracts.ts:186): the chat run's THIRD identical acquisition-status read is refused repeated_call - 'its result has not changed' - although a worker claimed the task between the reads and its stored state changed - flipped by K2/K3 (the follow-up goes to the durable task; the guard stays)", async () => {
+  it("[K1 3] [K2, 2026-11-04] REWRITTEN to K2's contract (was CURRENT agent/loop.ts:445-450: the 3rd identical status read refused 'its result has not changed' while the task moved): agent/loop.ts:445-449 keys a status read of a live task on the stored revision the gateway's probe observes (gateway.ts:499, cad-acquisition-reads.ts observedRevision) - after a worker claimed the task between the reads the THIRD identical read runs and reports the real state; with the task unchanged it is still refused, now saying what was proved (the guard stays)", async () => {
     const run = await chatAcquisitionRun({ workerClaimsBeforeThirdRead: true });
     expect(run.result.status).toBe("completed");
     expect(DEFAULT_AGENT_BUDGET.maxIdenticalCalls).toBe(2);
-    const status = (callId: string) => run.events.filter((event) => "callId" in event && event.callId === callId).map((event) => event.type);
+    const status = (callId: string) => run.events.filter((event) => "callId" in event && event.callId === callId && event.type !== "acquisition_task_ready").map((event) => event.type);
     expect(status("c2")).toEqual(["tool_started", "tool_finished"]);
     expect(status("c3")).toEqual(["tool_started", "tool_finished"]);
-    expect(status("c4")).toEqual(["tool_refused"]); // the third identical read never ran
-    const refused = run.events.find((event): event is Extract<AgentRunEvent, { type: "tool_refused" }> => event.type === "tool_refused")!;
-    expect(refused).toMatchObject({ callId: "c4", toolId: CAD_ACQUISITION_STATUS_TOOL_ID, status: "repeated_call" });
-    const c4 = run.results.flat().find((result) => result.callId === "c4")!;
-    expect(c4.isError).toBe(true);
-    expect(JSON.parse(c4.outputText)).toEqual({ ok: false, status: "repeated_call", detail: "This exact call already ran in this run; its result has not changed." });
-    expect(refusedLineLabel(refused)).toMatch(/refused before running \(repeated_call\) — nothing ran$/);
-    // what the second read returned, and what the durable task says now: it DID change
+    expect(status("c4")).toEqual(["tool_started", "tool_finished"]); // the task moved: the third identical read is a new observation
+    expect(run.events.filter((event) => event.type === "tool_refused")).toEqual([]);
     const c3 = run.results.flat().find((result) => result.callId === "c3")!;
+    const c4 = run.results.flat().find((result) => result.callId === "c4")!;
     expect(reportOf(c3).tasks[0]!.state).toBe("queued");
+    expect(reportOf(c4).tasks[0]!.state).toBe("running"); // the read the old guard refused reports what the store really holds
     const stored = (await componentResolutionStoreOf(run.runtime).get(SCOPE, run.taskId))!.task;
     expect(stored.state).toBe("running");
     expect(stored.events.at(-1)).toMatchObject({ kind: "worker_claimed" });
+
+    // the guard itself stays: with the stored task unchanged the third identical read is refused before it runs, truthfully
+    const unchanged = await chatAcquisitionRun({ workerClaimsBeforeThirdRead: false });
+    const refused = unchanged.events.find((event): event is Extract<AgentRunEvent, { type: "tool_refused" }> => event.type === "tool_refused")!;
+    expect(refused).toMatchObject({ callId: "c4", toolId: CAD_ACQUISITION_STATUS_TOOL_ID, status: "repeated_call" });
+    const unchangedC4 = unchanged.results.flat().find((result) => result.callId === "c4")!;
+    expect(unchangedC4.isError).toBe(true);
+    expect(JSON.parse(unchangedC4.outputText)).toEqual({ ok: false, status: "repeated_call", detail: "This exact status read already ran twice in this run and the task it reads is stored unchanged since (the same stored revision); report the state you have, or read it again in a later turn." });
+    expect(refusedLineLabel(refused)).toMatch(/refused before running \(repeated_call\) — nothing ran$/);
+    expect(unchanged.taskId).toBe(run.taskId); // the second run attached to the SAME task (the start is idempotent), which no worker moved during its reads
+    expect((await componentResolutionStoreOf(unchanged.runtime).get(SCOPE, unchanged.taskId))!.task.state).toBe("running");
   });
 
   it("[K1 4] CURRENT acquisition/cad-egress.ts:60-61 and :80-87: a 429 whose real Retry-After is two hours schedules the next attempt ONE hour out - clipped, as delta-seconds and as an HTTP date - flipped by K3", async () => {
@@ -243,31 +251,32 @@ describe("[K1] section K's early stops and gaps, reproduced against the current 
     expect(retryAfterAt("7200", NOW)).toBe(NOW + HOUR_MS);
   });
 
-  it("[K1 5] CURRENT agent/cad-acquisition-reads.ts:135 and agent/loop.ts:512-514: starting an acquisition from the chat answers a plain read - the run emits tool_started and tool_finished 'succeeded' and no typed acquisition event (agent/contracts.ts:398-447 names none), so the activity entry says only '— done' - flipped by K2", async () => {
+  it("[K1 5] [K2, 2026-11-04] REWRITTEN to K2's contract (was CURRENT agent/cad-acquisition-reads.ts:135: a chat start answered a plain read, no typed event, the activity line '— done'): the start answers its own outcome kind (cad-acquisition-reads.ts:135) and the loop emits tool_finished 'acquisition_task_started' and the typed acquisition_task_ready (agent/contracts.ts AgentRunEvent) carrying the task's reference; the model's result text is the read it always got; the activity line says a worker runs it", async () => {
     const run = await chatAcquisitionRun({ workerClaimsBeforeThirdRead: false });
     expect(run.result.status).toBe("completed");
     const forStart = run.events.filter((event) => "callId" in event && event.callId === "c1");
-    expect(forStart.map((event) => event.type)).toEqual(["tool_started", "tool_finished"]);
-    expect(forStart[1]).toMatchObject({ toolId: CAD_ACQUISITION_START_TOOL_ID, ok: true, status: "succeeded" });
+    expect(forStart.map((event) => event.type)).toEqual(["tool_started", "tool_finished", "acquisition_task_ready"]);
+    expect(forStart[1]).toMatchObject({ toolId: CAD_ACQUISITION_START_TOOL_ID, ok: true, status: "acquisition_task_started" });
+    const ready = forStart[2] as Extract<AgentRunEvent, { type: "acquisition_task_ready" }>;
+    expect(ready).toMatchObject({ runId: "run-k1", toolId: CAD_ACQUISITION_START_TOOL_ID, callId: "c1", task: { schema: "sirkit.cad-acquisition-task-ref.v1", taskId: run.taskId, disposition: "started", scope: { projectId: SCOPE.projectId, branchId: SCOPE.branchId }, state: "queued", refDes: ["D1", "D2"] } });
+    expect(Object.keys(ready.task).sort()).toEqual(["disposition", "durability", "nextAction", "refDes", "schema", "scope", "stage", "state", "taskId"]); // identities and public state only
+    // the model is told exactly what it was told before (the report of a read): no contract change, no version bump
     expect(reportOf(run.results.flat().find((result) => result.callId === "c1")!)).toMatchObject({ mode: "start", attached: false });
-    // every event of the run is one of the generic kinds (the warnings are the toolset's availability lines for OTHER tools): none
-    // carries the task, its id or its stage
-    expect([...new Set(run.events.map((event) => event.type))].sort()).toEqual(["run_completed", "run_started", "text_delta", "tool_finished", "tool_refused", "tool_started", "warning"]);
-    expect(run.events.filter((event): event is Extract<AgentRunEvent, { type: "warning" }> => event.type === "warning").filter((event) => /acquisition/i.test(event.message))).toEqual([]);
-    expect(JSON.stringify(run.events)).not.toContain(run.taskId);
-    // the event union has no acquisition member (a generation task has its own: generation_task_ready)
+    expect([...new Set(run.events.map((event) => event.type))].sort()).toEqual(["acquisition_task_ready", "run_completed", "run_started", "text_delta", "tool_finished", "tool_refused", "tool_started", "warning"]);
+    // the union names the event (a generation task has its own: generation_task_ready)
     const contracts = read("app/lib/agent/contracts.ts");
     const union = contracts.slice(contracts.indexOf("export type AgentRunEvent ="), contracts.indexOf("export interface AgentRunResult"));
     expect(union).toContain('type: "generation_task_ready"');
-    expect(union).not.toMatch(/type: "[a-z_]*acquisition[a-z_]*"/);
-    // the lines the page's activity entry shows for it (app/page.tsx:4699-4706): the generic running line and '— done'
-    expect(resolutionProgressLine(forStart[0]!)).toBeNull();
-    expect(toolLineLabel(forStart[1] as Extract<AgentRunEvent, { type: "tool_finished" }>)).toMatch(/ — done$/);
-    // yet a durable task now exists that the conversation never names
+    expect(union).toContain('type: "acquisition_task_ready"');
+    // the lines the page's activity entry shows for it: a started line that is a dispatch, and a finished line that is not "done"
+    expect(resolutionProgressLine(forStart[0]!)).toBe("Starting (or finding) the durable acquisition task for the part's KiCad assets — no design change");
+    const finished = toolLineLabel(forStart[1] as Extract<AgentRunEvent, { type: "tool_finished" }>);
+    expect(finished).toMatch(/ — acquisition task started — a worker runs it in saved steps; nothing in the design changed$/);
+    expect(finished).not.toMatch(/ — done$/);
     expect((await componentResolutionStoreOf(run.runtime).get(SCOPE, run.taskId))!.task.state).toBe("queued");
   });
 
-  it("[K1 6] CURRENT project/generation-task-client.ts:32-61, :87-121 and :435-438: the server snapshot carries allowance.remaining (generation-task/snapshot.ts:75, :170) but the browser's reader drops it, and the counts line shows calls and searches only - flipped by K2", async () => {
+  it("[K1 6] [K2, 2026-11-04] REWRITTEN to K2's contract (was CURRENT project/generation-task-client.ts:87-121: the browser's reader dropped allowance.remaining): the reader keeps the server snapshot's allowance (generation-task/snapshot.ts:75, :170; client :110) and generationTaskAllowanceText is the Work log's allowance line - task units, never money; the counts line is unchanged", async () => {
     const T0 = Date.parse("2026-11-04T12:00:00.000Z");
     const store = new GenerationTaskStore({ repository: new InMemoryDurableWorkflowRepository(), clock: () => T0 });
     const started = await store.createOrAttach({
@@ -282,10 +291,11 @@ describe("[K1] section K's early stops and gaps, reproduced against the current 
     expect(server.allowance.remaining).toMatchObject({ modelCalls: GENERATION_TASK_ALLOWANCE_UNIT.modelCalls, outputTokens: GENERATION_TASK_ALLOWANCE_UNIT.outputTokens, catalogSearches: GENERATION_TASK_ALLOWANCE_UNIT.catalogSearches });
     const view = readGenerationTaskSnapshot(server);
     if (!view) throw new Error("the browser's reader refused the server's own snapshot");
-    expect(view).not.toHaveProperty("allowance");
-    expect(JSON.stringify(view)).not.toContain("remaining");
+    expect(view.allowance?.remaining).toEqual(server.allowance.remaining);
     const reduced = reduceGenerationTaskView(null, { task: view, events: [], gap: false }).view;
     expect(generationTaskCountsText(reduced)).toMatch(/ elapsed · 0 model calls · 0 catalog searches$/);
+    expect(generationTaskAllowanceText(reduced)).toBe("Allowance left: 60 model calls · 480,000 output tokens · 300 catalog searches (task units, not money; 0 of 4 extensions used)");
+    expect(generationTaskAllowanceText(reduced)).not.toMatch(/\$|USD|dollar|cent/i);
   });
 
   it("[K1 7] CURRENT atomic/kicad-assets.ts:286-310 (:306): createModelAsset turns the caller's inspected: true into inspectionState 'safe' without reading the bytes (not even VRML here), which satisfies the mechanical profile (atomic/validation.ts:140-145); no production module calls it - flipped by K5", () => {

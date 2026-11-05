@@ -71,12 +71,12 @@
     {
       "toolId": "sirkit.parts.acquisition-start",
       "version": "1.0.0",
-      "sha256": "e1859bb2dfa60e741a4baeded8af3f70aa3a272f8c2200ab28265e180dcad7ee"
+      "sha256": "694ea7cb0f5eb50cb5240a09c9d6a9e2ea13d00a14e7e1018a220fe62faaf1dd"
     },
     {
       "toolId": "sirkit.parts.acquisition-status",
       "version": "1.0.0",
-      "sha256": "5214a5268aaf2cb532e8306addc3c5422ca20868c02c389d30549bfbf258e358"
+      "sha256": "de728083e5edc9d44b5104a3e5fade65d5b4da27b4b2fe5c21ddad12d1f5d61c"
     },
     {
       "toolId": "sirkit.parts.candidate-search",

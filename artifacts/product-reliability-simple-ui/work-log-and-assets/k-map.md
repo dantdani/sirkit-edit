@@ -290,3 +290,20 @@ real; none was dropped. What K1 corrects or adds, CONFIRMED by the suite unless 
 9. **CI.** K1's suite is admitted to prompt-to-gerber by its existing `app/lib/qualification/__tests__` directory filter (OD-254's
    default); it is set aside from `b24-d0-ci-split`'s measurement until K7's one re-measurement, as the J4/J5 suites were (section 7's
    "CI admission" row stays K7's).
+
+## 10. K2 corrections (2026-11-04)
+
+What K2 found while building the Work log (CONFIRMED by its suites unless marked):
+
+1. **Which increment shows the remaining allowance.** K2 (the lead's decision: `progress.md` over section 8 above; section 9 item 8).
+2. **The acquisition start's outcome (section 7, "acquisition tool outcome").** No tool version bump was needed: the model's result
+   text is the read's unchanged report; the start rides a new gateway outcome kind `acquisition-task` beside it. The registry, its
+   digests and the MCP exposure are unchanged; the PR-D manuals (generated) state the new outcome kind.
+3. **The repeated-call guard (section 2.1, the "identical calls" row).** K2 keys only the acquisition status read of one task on its
+   stored revision (the gateway's probe); every other tool keeps the args-only key. `sirkit.generation.task-inspect` has the same false
+   sentence risk and keeps the args-only key until K3.
+4. **"Show details" (section 1.2, the activity-entry renderer).** There are now two toggles: the module-contract note's (page) and the
+   Work log's (`app/components/chat/WorkLog.tsx`, rule `view.work-log-toggle`).
+5. **The missing-role library link (gap 1.3-5).** Moved to K4 with the library view; K2 adds no control on the generation card.
+6. **Gap 1.3-6 (the Missing parts panel's late poll).** Unchanged by K2 (INFERRED risk kept for K4); the Work log's own follow checks
+   the project generation before and after each read and folds only into its own project's and branch's log.

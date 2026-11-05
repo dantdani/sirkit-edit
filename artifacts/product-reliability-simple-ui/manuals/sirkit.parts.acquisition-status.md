@@ -128,4 +128,5 @@ Per call, the handler additionally requires:
 - engineering state is unchanged
 - a validated candidate waits for a PERSON to send it for review (the agent cannot); two other humans publish it; the replacement is then offered through the existing review dialog and applied only by the user
 - the verification is `schematic-snapshot-verified+durable-task`
+- [K2, 2026-11-04] an identical status read of ONE task is keyed on the stored revision it observes: it is refused as `repeated_call` only while the stored task is unchanged since the earlier identical reads
 - verification (registry): a pure read of the durable task head in the trusted scope; never the stored bytes; the view's stages each carry their own evidence (M.4)

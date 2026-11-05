@@ -74,7 +74,7 @@ const declared = (context: AgentRunContext): { ids: string[]; warnings: string[]
 };
 type Report = { mode: string; attached?: boolean; tasks: Array<{ taskId: string; state: string; stage: string; targets: Array<{ componentId: string; refDes: string; symbol: string; footprint: string | null; exactMpn: string | null }>; attempts: unknown[]; candidate: unknown }>; note: string };
 const reportOf = (outcome: GatewayInvocationOutcome): Report => {
-  expect(outcome, JSON.stringify(outcome).slice(0, 400)).toMatchObject({ ok: true, kind: "read" });
+  expect(outcome, JSON.stringify(outcome).slice(0, 400)).toMatchObject({ ok: true, kind: (outcome as { output?: { report?: { mode?: unknown } } }).output?.report?.mode === "start" ? "acquisition-task" : "read" }); // [K2, 2026-11-04] reviewed pin move (runbook K.2, OD-260 item 6): a START now answers its own outcome kind `acquisition-task` (the SAME output - the report below - beside the typed task reference the loop emits as acquisition_task_ready); a status read stays `read`
   return (outcome as unknown as { output: { report: Report } }).output.report;
 };
 const refusedStatus = (outcome: GatewayInvocationOutcome): string => (outcome.ok ? "ok" : (outcome as unknown as { status: string }).status);

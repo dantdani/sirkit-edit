@@ -57,8 +57,8 @@ NOT READY (`eslint .` exits 1, none of its 33 errors introduced by B24), CI read
 | mcp-exposed-tools | 9 |
 | agent-only-tools | 43 |
 | agent-exposed-tier-3-tools | 0 |
-| control-sites | 718 |
-| control-surfaces | 74 |
+| control-sites | 719 |
+| control-surfaces | 75 |
 | sql-migrations | 32 |
 | generators | 32 |
 
@@ -105,6 +105,10 @@ sirkit.schematic.propose-sheet-organization (a Tier 2 sealed proposal the human 
 MCP, so mcp-exposed-tools stays 9); control-sites 715 -> 718 and control-surfaces 73 -> 74 with the B17-A inventory as J5-B left it
 (the organise proposal's review card, app/components/schematic/SheetOrganizationReviewCard.tsx: its Approve, Discard and close, one
 new surface); the lead regenerates the map once at integration.
+
+[K2, 2026-11-04] Count lines moved with the regenerated map (runbook section K increment K2, K.2 / OD-260 item 6): control-sites
+718 -> 719 and control-surfaces 74 -> 75 with the B17-A inventory as K2 left it (the Work log's Show details toggle on the chat's
+activity entry, app/components/chat/WorkLog.tsx, rule view.work-log-toggle: one new surface); no registry, tool or route count moved.
 
 ## 4. Earlier verdicts
 

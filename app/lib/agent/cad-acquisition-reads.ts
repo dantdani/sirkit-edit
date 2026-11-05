@@ -18,7 +18,7 @@ import { discoverTools } from "../engineering/tool-discovery";
 import { assertSafeJsonValue, DEFAULT_INPUT_LIMITS, DEFAULT_OUTPUT_LIMITS, validateAgainstSchema } from "../engineering/tool-io-validation";
 import type { ToolDescriptor, ToolRegistry } from "../engineering/tool-registry";
 import type { DurableWorkflowScope } from "../durable-workflow/types";
-import { CAD_ACQUISITION_AUTHORITY_KEYS, CAD_ACQUISITION_START_TOOL_ID, CAD_ACQUISITION_STATUS_TOOL_ID, type CadAcquisitionTaskView } from "../acquisition/cad-acquisition-contract";
+import { CAD_ACQUISITION_AUTHORITY_KEYS, CAD_ACQUISITION_START_TOOL_ID, CAD_ACQUISITION_STATUS_TOOL_ID, cadAcquisitionObservedRevision, cadAcquisitionTaskReferenceOf, type CadAcquisitionTaskView } from "../acquisition/cad-acquisition-contract"; // [K2, 2026-11-04] + the typed reference and the observed revision
 import type { ResolutionPrincipal, ResolutionServiceAnswer } from "../component-resolution/task/service";
 import type { AgentRunContext, GatewayInvocationOutcome } from "./contracts";
 import { sanitizeTraceText } from "./redaction";
@@ -132,6 +132,33 @@ export class CadAcquisitionToolService {
     };
     const outputErrors = [...assertSafeJsonValue(output, DEFAULT_OUTPUT_LIMITS, "output"), ...validateAgainstSchema(output, descriptor.outputSchema, "output")];
     if (outputErrors.length > 0) return refuse("invalid_output", outputErrors.slice(0, 5));
+    if (resolution.mode === "start" && tasks[0]) return { kind: "acquisition-task", ok: true, toolId: descriptor.toolId, version: descriptor.version, output, sourceRevisionDigest: context.schematicDigest, verification: CAD_ACQUISITION_VERIFICATION, task: cadAcquisitionTaskReferenceOf(tasks[0], { attached: answer.body.attached === true, scope, durability: answer.body.durability }) }; // [K2, 2026-11-04] runbook K.2 (OD-260 item 6): the start's OWN outcome - the SAME output the model got as a read, beside the task's typed reference (the loop emits acquisition_task_ready; the page follows the task)
     return { kind: "read", ok: true, toolId: descriptor.toolId, version: descriptor.version, output, sourceRevisionDigest: context.schematicDigest, verification: CAD_ACQUISITION_VERIFICATION };
+  }
+
+  /**
+   * [K2, 2026-11-04] K1 case 3: the stored revision a status read of ONE task would observe now, or null. The same gate as `invoke` (the
+   * binding, the integrity check, the port and the verified snapshot, fresh discovery, role and capability, the closed input) and the
+   * same side-effect-free read; a start, a list read (no taskId), any refusal or a failure answers null - the loop then keeps the
+   * args-only identical-call key. Never shown to the model or the user.
+   */
+  async observedRevision(input: Omit<CadAcquisitionToolInput, "timeoutMs" | "runId">): Promise<string | null> {
+    try {
+      const descriptor = this.registry.get(input.toolId, input.version);
+      if (!descriptor || resolveCadAcquisitionBinding(descriptor).state !== "resolved" || descriptor.toolId !== CAD_ACQUISITION_STATUS_TOOL_ID) return null;
+      const context = input.context;
+      const port = this.options.port;
+      if (this.options.integrity(context).length > 0 || !port || context.cadAcquisitionAvailable !== true || !context.schematic || !context.schematicDigest) return null;
+      if (!discoverTools(this.registry, context.discovery).included.some((item) => item.toolId === descriptor.toolId && item.version === descriptor.version)) return null;
+      if (!descriptor.requiredRoles.includes(context.actor.actorRole) || !context.actor.grantedCapabilities.includes(descriptor.requiredCapability)) return null;
+      const keys = Object.keys(input.args);
+      const taskId = input.args.taskId;
+      if (keys.length !== 1 || keys[0] !== "taskId" || typeof taskId !== "string" || !TASK_ID.test(taskId) || input.signal?.aborted) return null;
+      const answer = await port.read({ tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId }, taskId);
+      const task = answer.status === 200 && answer.body.task && typeof answer.body.task === "object" ? (answer.body.task as CadAcquisitionTaskView) : null;
+      return task && task.taskId === taskId && Array.isArray(task.events) ? cadAcquisitionObservedRevision(task) : null;
+    } catch {
+      return null;
+    }
   }
 }

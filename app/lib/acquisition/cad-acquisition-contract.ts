@@ -161,3 +161,68 @@ export function cadCandidateIdentityLine(identity: { kind: "exact" | "generic"; 
   if (identity.kind === "exact") return `exact MPN ${identity.exactMpn ?? ""} (${identity.basis})`;
   return GENERIC_BASIS_OPENING.test(identity.basis) ? `${GENERIC_IDENTITY_LABEL} ${identity.basis.replace(GENERIC_BASIS_OPENING, "")}` : `${GENERIC_IDENTITY_LABEL} - ${identity.basis}`;
 }
+
+// ── [K2, 2026-11-04] the chat's typed acquisition event (runbook K.2, OD-260 item 6), appended: no cited line above moves ──────────────
+
+export const CAD_ACQUISITION_TASK_REFERENCE_SCHEMA = "sirkit.cad-acquisition-task-ref.v1" as const;
+const TASK_ID_PATTERN = /^cr-task:[0-9a-f]{32}$/;
+
+/**
+ * What a chat start (or attach) of the durable acquisition task answers on its OWN event (`acquisition_task_ready`): identities and the
+ * task's public state at the moment the start answered - never bytes, sources, URLs or the conversation. Receiving it grants nothing and
+ * changes nothing: the page follows the task by re-reading its public view through its own authorized route
+ * (`GET /api/parts/acquisitions?taskId=`), and a reference from another project or branch is never followed.
+ */
+export interface CadAcquisitionTaskReference {
+  schema: typeof CAD_ACQUISITION_TASK_REFERENCE_SCHEMA;
+  taskId: string;
+  disposition: "started" | "attached";
+  scope: { projectId: string; branchId: string };
+  state: CadAcquisitionState;
+  stage: CadAcquisitionStage;
+  nextAction: CadAcquisitionTaskView["nextAction"];
+  /** the instances it acquires for, by reference designator (display only) */
+  refDes: string[];
+  durability: string | null;
+}
+
+/** The reference of a task view a start answered (the server builds it; the page reads it back with `readCadAcquisitionTaskReference`). */
+export function cadAcquisitionTaskReferenceOf(task: CadAcquisitionTaskView, input: { attached: boolean; scope: { projectId: string; branchId: string }; durability: unknown }): CadAcquisitionTaskReference {
+  return {
+    schema: CAD_ACQUISITION_TASK_REFERENCE_SCHEMA, taskId: task.taskId, disposition: input.attached ? "attached" : "started",
+    scope: { projectId: input.scope.projectId, branchId: input.scope.branchId }, state: task.state, stage: task.stage, nextAction: task.nextAction,
+    refDes: task.targets.map((target) => target.refDes).filter((ref) => typeof ref === "string" && ref.length > 0 && ref.length <= 40).slice(0, CAD_ACQUISITION_MAX_COMPONENTS),
+    durability: typeof input.durability === "string" ? input.durability.slice(0, 40) : null,
+  };
+}
+
+/** The reference, or null when the value is not exactly its shape (a page reads every event defensively; nothing half-read is trusted). */
+export function readCadAcquisitionTaskReference(value: unknown): CadAcquisitionTaskReference | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort().join(",");
+  if (keys !== "disposition,durability,nextAction,refDes,schema,scope,stage,state,taskId") return null;
+  if (record.schema !== CAD_ACQUISITION_TASK_REFERENCE_SCHEMA || typeof record.taskId !== "string" || !TASK_ID_PATTERN.test(record.taskId)) return null;
+  if (record.disposition !== "started" && record.disposition !== "attached") return null;
+  const scope = record.scope as Record<string, unknown> | null;
+  if (typeof scope !== "object" || scope === null || typeof scope.projectId !== "string" || typeof scope.branchId !== "string" || scope.projectId.length > 200 || scope.branchId.length > 200) return null;
+  if (!(CAD_ACQUISITION_STATES as readonly unknown[]).includes(record.state) || !(CAD_ACQUISITION_STAGES as readonly unknown[]).includes(record.stage)) return null;
+  if (!["wait", "send-for-review", "await-publication", "offer-replacement", "none"].includes(record.nextAction as string)) return null;
+  if (!Array.isArray(record.refDes) || record.refDes.length > CAD_ACQUISITION_MAX_COMPONENTS || record.refDes.some((ref) => typeof ref !== "string" || ref.length === 0 || ref.length > 40)) return null;
+  if (record.durability !== null && (typeof record.durability !== "string" || record.durability.length > 40)) return null;
+  return {
+    schema: CAD_ACQUISITION_TASK_REFERENCE_SCHEMA, taskId: record.taskId, disposition: record.disposition, scope: { projectId: scope.projectId, branchId: scope.branchId },
+    state: record.state as CadAcquisitionState, stage: record.stage as CadAcquisitionStage, nextAction: record.nextAction as CadAcquisitionTaskView["nextAction"],
+    refDes: [...(record.refDes as string[])], durability: record.durability as string | null,
+  };
+}
+
+/**
+ * [K2, 2026-11-04] The stored revision a status read observes (K1 case 3): the task's state, stage, last event and update time. The chat
+ * loop keys its identical-call guard on it for a status read of a live task, so a read is refused as unchanged only when the stored task
+ * really is unchanged. Pure over the public view; it carries no content.
+ */
+export function cadAcquisitionObservedRevision(task: Pick<CadAcquisitionTaskView, "taskId" | "state" | "stage" | "updatedAt" | "events">): string {
+  const last = task.events.length > 0 ? task.events[task.events.length - 1]!.seq : 0;
+  return `${task.taskId}|${task.state}|${task.stage}|${last}|${task.updatedAt}`;
+}
