@@ -4,10 +4,10 @@
  * blinker acceptance catalog uses (app/lib/fixture-runtime/blinker/catalog.ts). Nothing here claims datasheet verification of the
  * parts: the evidence records are explicit FIXTURE records (`fixture://` locators); the tests prove the resolution PIPELINE.
  *
- * The KiCad files under ./fixtures/kicad are the official KiCad library files copied verbatim (line endings normalised to LF):
- * Device.kicad_symdir/D.kicad_sym and Diode_SMD.pretty/D_SOD-123.kicad_mod (CC-BY-SA-4.0 with the KiCad libraries exception, the
- * same licence record the blinker fixtures carry). `D_AK` is the Device:D symbol with its two pin NUMBERS swapped (K is pin 2, A
- * pin 1) - a real symbol whose replacement needs a mapping proved by pin function, not by number.
+ * The KiCad files under ./fixtures/kicad are the official KiCad library files copied verbatim (byte-identical upstream blobs, LF):
+ * Device.kicad_symdir/D.kicad_sym and Diode_SMD.pretty/D_SOD-123.kicad_mod (CC-BY-SA-4.0 with the KiCad libraries exception, not
+ * MIT: see ./fixtures/kicad/LICENSES.md; the same licence record the blinker fixtures carry). `D_AK` is the Device:D symbol with its
+ * two pin NUMBERS swapped (K is pin 2, A pin 1) - a real symbol whose replacement needs a mapping proved by pin function, not by number.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

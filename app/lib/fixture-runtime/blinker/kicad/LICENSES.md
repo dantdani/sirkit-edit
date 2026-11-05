@@ -24,10 +24,12 @@ means the committed git blob id equals the upstream blob id.
 |---|---|---|---|
 | `C.kicad_sym` | `kicad-symbols/Device.kicad_symdir/C.kicad_sym` | `1cb16b43012d96bfb090dc6a47b160d75ad5574f` | byte-identical |
 | `Conn_01x02.kicad_sym` | `kicad-symbols/Connector_Generic.kicad_symdir/Conn_01x02.kicad_sym` | `cd65abe4c58c441d33ff68382e47773e699c3238` | byte-identical |
+| `D.kicad_sym` | `kicad-symbols/Device.kicad_symdir/D.kicad_sym` | `3d08ad680e4dfe1d3989b02a05afb7679b2e01ad` | byte-identical |
 | `LED.kicad_sym` | `kicad-symbols/Device.kicad_symdir/LED.kicad_sym` | `d7af0c685e07eee9e2cf5a34b2710fdb8fe6735a` | byte-identical |
 | `R.kicad_sym` | `kicad-symbols/Device.kicad_symdir/R.kicad_sym` | `7518db51e6f8580ceaae96208b4cad1e8065c66b` | byte-identical |
 | `Timer_NE555.kicad_sym` | `kicad-symbols/Timer.kicad_symdir/NE555D.kicad_sym` (`15213064fe6956dccc4f7dcfa6de64bebf728724`) and `kicad-symbols/Timer.kicad_symdir/NE555P.kicad_sym` (`bee075fdba5954802fff2cbd0619c8de16aaef2f`) | `6e0d62a6c48bf4448f3058d23db40a552dacd466` | **modified**: composed by Sirkit into one library file (see below) |
 | `C_0805_2012Metric.kicad_mod` | `kicad-footprints/Capacitor_SMD.pretty/C_0805_2012Metric.kicad_mod` | `85188009b643fd34e6df53d07bde315851236128` | byte-identical |
+| `D_SOD-123.kicad_mod` | `kicad-footprints/Diode_SMD.pretty/D_SOD-123.kicad_mod` | `0f1f9bed4db3f95f8ee9c917c6a1a2cef04d828c` | byte-identical |
 | `LED_0805_2012Metric.kicad_mod` | `kicad-footprints/LED_SMD.pretty/LED_0805_2012Metric.kicad_mod` | `99a5b8eb2f9be5ede5871b34334f2490d4e77116` | byte-identical |
 | `PinHeader_1x02_P2.54mm_Vertical.kicad_mod` | `kicad-footprints/Connector_PinHeader_2.54mm.pretty/PinHeader_1x02_P2.54mm_Vertical.kicad_mod` | `77ba5bb335392f63365e27f60ce79d305a11b134` | byte-identical |
 | `R_0805_2012Metric.kicad_mod` | `kicad-footprints/Resistor_SMD.pretty/R_0805_2012Metric.kicad_mod` | `44825545f5c9edeac2651d2b9218fa804580df99` | byte-identical |
