@@ -28,7 +28,7 @@ before committing.
 
 - **PR #3** — https://github.com/dantdani/sirkit-edit/pull/3
   (`integration/b16-1a-benchmark-ci` → `main`)
-- Pre-push re-verification: ShantanuKT permission `none`; visibility
+- Pre-push re-verification: the former collaborator's permission `none`; visibility
   `private`.
 - benchmark-quality runs on the PR head; merge only after it passes
   (recorded in the final report).

@@ -33,8 +33,8 @@ not exist for this repository.
 
 ## Subject identification
 
-"Shantanu" identified from repository history as GitHub login **`ShantanuKT`**
-(Shantanu Todmal) — 24 historical contributions on the default branch.
+The subject, a former collaborator (name and GitHub login withheld from this
+record), was identified from repository history — 24 historical contributions on the default branch.
 Historical commits are PRESERVED: no history rewrite, no authorship change,
 no credit removal.
 
@@ -42,7 +42,7 @@ no credit removal.
 
 | step | action | result |
 |---|---|---|
-| remove direct/outside collaborator access | none required | `ShantanuKT` holds NO collaborator access (collaborator check → 404) |
+| remove direct/outside collaborator access | none required | the former collaborator holds NO collaborator access (collaborator check → 404) |
 | remove team/inherited access | N/A | user-owned repo; no teams exist |
 | revoke pending invitations | none required | zero invitations exist |
 | deploy keys / machine credentials | none required | zero deploy keys exist |
@@ -50,11 +50,11 @@ no credit removal.
 ## Verification (effective-permission API, 2026-08-28T21:01:42Z)
 
 ```
-GET /repos/dantdani/sirkit-edit/collaborators/ShantanuKT/permission
-→ { "user": "ShantanuKT", "permission": "none", "role_name": "" }
+GET /repos/dantdani/sirkit-edit/collaborators/<former-collaborator>/permission
+→ { "user": "<former-collaborator>", "permission": "none", "role_name": "" }
 ```
 
-**`ShantanuKT` has NO effective access to `dantdani/sirkit-edit`.** The
+**The former collaborator has NO effective access to `dantdani/sirkit-edit`.** The
 repository is private, so no-access means no read access to current or future
 content.
 
@@ -62,9 +62,9 @@ content.
 
 - Revocation cannot erase repositories, commits, or files anyone previously
   cloned or downloaded; copies already outside GitHub are beyond its control.
-- Historical commits (including ShantanuKT's 24) remain visible to anyone who
+- Historical commits (including the former collaborator's 24) remain visible to anyone who
   can read the repository, by design — contribution credit is preserved.
 - The GitHub-Apps installation list could not be enumerated with the current
   token; the owner should glance at github.com/settings/installations to
-  confirm no app was installed on Shantanu's behalf. No repo-scoped machine
+  confirm no app was installed on the former collaborator's behalf. No repo-scoped machine
   credential exists regardless (zero deploy keys).

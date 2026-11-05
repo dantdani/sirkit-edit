@@ -1,0 +1,9 @@
+# Code owners. A pull request that touches a path below requests review from its owner.
+# The explicit lines name the security-sensitive paths: CI configuration and the secret scan
+# with its allowlist. They need maintainer review even when the default owner changes.
+
+* @dantdani
+
+/.github/ @dantdani
+/scripts/scan-secrets.ts @dantdani
+/app/lib/deployment/secret-scan* @dantdani

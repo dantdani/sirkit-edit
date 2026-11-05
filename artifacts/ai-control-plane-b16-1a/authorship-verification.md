@@ -25,6 +25,6 @@ which carries no such trailer. The PR #1 branch is retained only as a
 recoverable backup and is superseded; deleting it is an owner option (noted in
 unknowns).
 
-Shantanu Todmal's historical commits (as `ShantanuKT <shantanutodmal@gmail.com>`
-and `Shantanu Todmal <43564728+ShantanuKT@users.noreply.github.com>`) remain
+The former collaborator's historical commits (under the two author identities
+they used, withheld from this record) remain
 untouched with full credit.
