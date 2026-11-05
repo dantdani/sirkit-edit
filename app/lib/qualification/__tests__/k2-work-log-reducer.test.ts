@@ -10,7 +10,11 @@
  *  4. the bound: past 40 rows the oldest are dropped and counted; the collapsed summary counts every step and names the latest phase only;
  *  5. redaction: secret-shaped text redacted, every URL removed; the only link a row carries is a CAD source's registry documentation;
  *  6. cancellation, failure and a reload say what really happened; a stored log reads back exactly or not at all, and the project
- *     persistence validator applies the same rule.
+ *     persistence validator applies the same rule;
+ *  7. a design task's milestones and its remaining allowance;
+ *  8. a turn that ended on the page without its run's own ending (Stop answer, a dropped stream, a failed request) says how, once; a
+ *     log that has its ending, never saw its run, or follows a task only (a Build start) is unchanged - by the page and by a reload;
+ *     model text, warnings and unknown types return the SAME state (no row, no re-render).
  */
 import { describe, expect, it } from "vitest";
 import { isStoredChatMessage } from "@/lib/persistence";
@@ -18,7 +22,7 @@ import { CAD_SOURCE_REGISTRY } from "@/app/lib/acquisition/cad-source-registry";
 import { CAD_ACQUISITION_TASK_REFERENCE_SCHEMA, type CadAcquisitionEvent, type CadAcquisitionTaskView } from "@/app/lib/acquisition/cad-acquisition-contract";
 import {
   WORK_LOG_BOUNDS, WORK_LOG_PHASES, emptyWorkLog, isStoredWorkLog, liveWorkLogFollows, readStoredWorkLog, reduceWorkLogAcquisition, reduceWorkLogGeneration, reduceWorkLogRunEvent,
-  restoredWorkLog, workLogSummary, workLogText, workOfStored, type WorkLogState,
+  restoredWorkLog, workLogSummary, workLogText, workOfStored, endWorkLogRun, type WorkLogState,
 } from "@/app/lib/project/work-log";
 
 const OWNER = { projectId: "project-k2", branchId: "main" } as const;
@@ -96,7 +100,7 @@ describe("[K2] the Work log reducer", () => {
     expect(first.rows.slice(-3).map((row) => [row.phase, row.origin, row.attempt])).toEqual([["dispatched", "acquisition", null], ["dispatched", "acquisition", 1], ["dispatched", "acquisition", null]]);
     expect(first.follows[0]!.cursor).toBe(3);
     // the same view again, and an older one: nothing new
-    expect(reduceWorkLogAcquisition(first, taskView([event(1, "accepted", "The acquisition task was accepted.")]), OWNER)).toEqual(first);
+    expect(reduceWorkLogAcquisition(first, taskView([event(1, "accepted", "The acquisition task was accepted.")]), OWNER)).toBe(first); // the SAME state: a poll that saw no step re-renders nothing
     // a foreign project's answer and a task this log does not follow change nothing
     expect(reduceWorkLogAcquisition(first, taskView([event(4, "retrieved", "Retrieved 2 object(s).")]), { projectId: "another-project", branchId: "main" })).toBe(first);
     expect(reduceWorkLogAcquisition(first, taskView([event(4, "retrieved", "Retrieved 2 object(s).")], { taskId: `cr-task:${"b".repeat(32)}` }), OWNER)).toBe(first);
@@ -148,6 +152,10 @@ describe("[K2] the Work log reducer", () => {
     const tampered = JSON.parse(JSON.stringify(log)) as WorkLogState;
     tampered.rows[0]!.source = { label: "evil", href: "https://evil.example.com/download" };
     expect(readStoredWorkLog(tampered)).toBeNull();
+    // a stored row's text is cleaned again on every read: a URL or a secret-shaped string written into a stored log never shows
+    const dirty = JSON.parse(JSON.stringify(log)) as WorkLogState;
+    dirty.rows[0]!.text = `Retrieved from ${signed} with ${key}`;
+    expect(readStoredWorkLog(dirty)!.rows[0]!.text).toBe("Retrieved from [link removed] with [redacted]");
     const bounded = workLogText("x".repeat(1_000));
     expect(bounded).toHaveLength(WORK_LOG_BOUNDS.textChars);
   });
@@ -188,8 +196,37 @@ describe("[K2] the Work log reducer", () => {
     expect(log.rows.map((row) => [row.phase, row.origin])).toEqual([["dispatched", "generation"], ["stored", "generation"], ["stored", "generation"], ["committed", "generation"]]);
     expect(log.rows[2]!.subject).toBe("block b1");
     expect(log.allowance).toBe("Allowance left: 58 model calls · 470,000 output tokens · 298 catalog searches (task units, not money; 0 of 4 extensions used)");
-    expect(reduceWorkLogGeneration(log, view, milestones, false).rows).toEqual(log.rows); // each once
+    expect(reduceWorkLogGeneration(log, view, milestones, false)).toBe(log); // each once; nothing new is the SAME state
     expect(reduceWorkLogGeneration(log, { ...view, scope: { tenantId: "local", projectId: "another-project", branchId: "main" } }, [{ seq: 9, at: "t", type: "failed", phase: null, blockId: null, message: "x" }], false)).toBe(log);
     expect(reduceWorkLogGeneration(log, view, [], true).gap).toBe(true);
+  });
+  it("8. a turn that ended on the page without its run's ending says how (Stop answer, a dropped stream), once; an ended, unstarted or task-only log is unchanged; model text returns the same state", () => {
+    const live = followed();
+    const stopped = endWorkLogRun(live, "stopped");
+    expect(stopped.run).toBe("cancelled");
+    expect(stopped.rows.at(-1)).toMatchObject({ phase: "cancelled", origin: "page", text: "Answer stopped by you — the turn ended before the assistant finished; a task it started keeps its own state below" });
+    expect(liveWorkLogFollows(stopped, "acquisition").map((entry) => entry.taskId)).toEqual([TASK_ID]); // the task is still followed
+    const cut = endWorkLogRun(live, "ended");
+    expect(cut.run).toBe("interrupted");
+    expect(cut.rows.at(-1)).toMatchObject({ phase: "interrupted", origin: "page", next: "Send the message again, or ask the assistant to continue" });
+    expect(cut.rows.at(-1)!.text).toMatch(/^The answer ended without its final event \(the connection dropped or the request failed\)/);
+    // the page's own run_failed for a dropped stream reads the same way; a run that reported its ending keeps it
+    expect(reduceWorkLogRunEvent(live, { type: "run_failed", runId: "run-k2", reason: "stream_cut", message: "x" })).toEqual(cut);
+    expect(reduceWorkLogRunEvent(live, { type: "run_failed", runId: "run-k2", reason: "stopped", message: "Stopped by you." }).run).toBe("cancelled");
+    for (const ended of [stopped, cut, fold(live, [{ type: "run_completed", runId: "run-k2", seq: 3, finalText: "x", steps: 1, toolCalls: 1, usage: { inputTokens: 1, outputTokens: 1 }, model: "m" }]), fold(live, [{ type: "run_failed", runId: "run-k2", seq: 3, reason: "deadline", message: "x" }])]) {
+      expect(endWorkLogRun(ended, "ended")).toBe(ended);
+      expect(endWorkLogRun(ended, "stopped")).toBe(ended);
+      expect(restoredWorkLog(ended)).toBe(ended); // a reload adds nothing to a turn that has its ending
+    }
+    const unstarted = emptyWorkLog(OWNER);
+    expect(endWorkLogRun(unstarted, "ended")).toBe(unstarted); // never saw its run: nothing to say about it
+    // a task-only log (a Build start's design task: no chat turn) is not "interrupted" by a reload or a page ending
+    const taskOnly = reduceWorkLogGeneration(emptyWorkLog(OWNER), { taskId: "generation-task:2", scope: { tenantId: "local", ...OWNER }, state: "running", terminal: false, blocker: null }, [{ seq: 1, at: "t", type: "task_accepted", phase: null, blockId: null, message: "Accepted." }], false);
+    expect(taskOnly.owner.runId).toBeNull();
+    expect(restoredWorkLog(taskOnly)).toBe(taskOnly);
+    expect(workOfStored(JSON.parse(JSON.stringify(taskOnly))).work).toEqual(taskOnly);
+    expect(endWorkLogRun(taskOnly, "ended")).toBe(taskOnly);
+    // model text, warnings and unknown types: the SAME state (the page records nothing and re-renders nothing for them)
+    for (const event of [{ type: "text_delta", runId: "run-k2", seq: 9, text: "I imported it.", phase: "final" }, { type: "warning", runId: "run-k2", seq: 10, message: "w" }, { type: "reasoning", runId: "run-k2", seq: 11, text: "x" }]) expect(reduceWorkLogRunEvent(live, event)).toBe(live);
   });
 });

@@ -24,7 +24,7 @@ The resumable record of runbook section K's increments (K.8). Read this first af
 |---|---|---|---|---|---|
 | K0 | source map and ledger | DONE (read-only) | — | `7a47d276` ([K1, 2026-11-04] was "— (uncommitted)") | `k-map.md`, this file |
 | K1 | current behaviour and reproductions: the early stops found (acquisition 3-claim → `source_unavailable`, the single source pass, the identical status-read refusal, the 1 h Retry-After clamp, the unused 5 s clip, the acquisition start not typed, the allowance not shown, the `inspected` boolean, unlabelled placeholders) | DONE (2026-11-04) | none closed; enables 2, 3, 5, 6 | the K1 commit after `22db67c9` | `app/lib/qualification/__tests__/k1-early-stop-reproductions.test.ts` (9 cases, section "K1 record" below); `k-map.md` section 9 (corrections) |
-| K2 | typed public progress: the Work log on the existing activity entry ("Show details"), `acquisition_task_ready`, row phases, dedupe / ownership / late-event guard, reload recovery, the remaining-allowance line, the revision-keyed status-read guard (K1 3); [K2, 2026-11-04] the missing-role library link moved to K4 (it is a library-view control; see "K2 record") | DONE (2026-11-04) | 1, part of 7 (ownership / late events) | the K2 commit after `3d4e439e` | section "K2 record" below; `k2-work-log-reducer`, `k2-acquisition-task-event`, `k2-allowance-line` (`app/lib/qualification/__tests__/`); K1 3 / 5 / 6 rewritten; `e2e/k2-work-log.spec.ts`; `screenshots/k2-work-log-*.png` |
+| K2 | typed public progress: the Work log on the existing activity entry ("Show details"), `acquisition_task_ready`, row phases, dedupe / ownership / late-event guard, reload recovery, the remaining-allowance line, the revision-keyed status-read guard (K1 3); [K2, 2026-11-04] the missing-role library link moved to K4 (it is a library-view control; see "K2 record") | DONE (2026-11-04) | 1, part of 7 (ownership / late events) | WIP `bb62b797` + `43893342` (a cut-off builder's unverified edits), completed and gated by the K2 commit after `0a8d9fb5` | section "K2 record" below; `k2-work-log-reducer`, `k2-acquisition-task-event`, `k2-allowance-line` (`app/lib/qualification/__tests__/`); K1 3 / 5 / 6 rewritten; `e2e/k2-work-log.spec.ts`; `screenshots/k2-work-log-*.png` |
 | K3 | persisted recovery: the acquisition task's strategy ladder, rejected-evidence memory, honest worker-failure backoff, the real Retry-After deferral, Cancel / Resume, the draft offer when exhausted | planned | 2, 3 | — | — |
 | K4 | durable acquisition and reuse: the reusable library view ("Use in project"), the reuse freshness / withdrawal / licence checks, the precise refusal matrix, zero-call reuse in a second project; [K2, 2026-11-04] + the missing-role Build Library link (OD-260 item 4) | planned | 4, 5, part of 7 | — | — |
 | K5 | real VRML import: a bounded inspector, the model state vocabulary (no boolean `safe`), the fixture MIT VRML bytes, the model kind in the fixture CAD row (≤2 MiB), package / units / orientation validation, publication re-inspection, `modelVersionIds` | planned | 6 (import), 7 | — | — |
@@ -122,11 +122,16 @@ note.
   `seq` drops a replayed chunk; a task event at or below the follow's cursor is dropped; a task view of another project or branch, or a
   task the log does not follow, changes nothing; a malformed or foreign reference is not followed and says so. Past 40 rows the oldest
   are dropped and counted, as is a history the task's own ring no longer holds: "Earlier steps not kept".
-- **Truthful ends.** A cancelled turn says the task keeps its own state; a failed turn names the next action; a reload restores the
-  stored rows (the project's chat persistence, `lib/persistence.ts` validator, `page.tsx` toStoredChat / fromStoredChat in place), marks
-  a turn cut by the reload "interrupted", and only READS a still-live acquisition task again - nothing is replayed.
+- **Truthful ends.** A cancelled turn says the task keeps its own state; a failed turn names the next action; a turn that ended on the
+  page WITHOUT its run's terminal event says how - Stop answer ("Answer stopped by you", cancelled) or a dropped stream / failed request
+  ("ended without its final event", interrupted, with the next action) - through `endWorkLogRun` (`useChatWorkLog.endRun`, called once
+  from the chat turn's `finally` in `page.tsx`, in place); a reload restores the stored rows (the project's chat persistence,
+  `lib/persistence.ts` validator, `page.tsx` toStoredChat / fromStoredChat in place), marks a turn cut by the reload "interrupted" (never
+  a task-only log: a Build start's design task had no turn to cut), and only READS a still-live acquisition task again - nothing is
+  replayed.
 - **Links and redaction.** Every URL is removed from row text and secret-shaped text is redacted (the shared authority); the only link a
-  row carries is a CAD source's registry documentation (`provider.documentation[0]`); a stored log with any other link does not read back.
+  row carries is a CAD source's registry documentation (`provider.documentation[0]`); a stored log with any other link does not read back,
+  and a stored row's text is cleaned again on every read (a URL or a secret-shaped string written into a stored file never shows).
 - **The remaining allowance (K1 6; OD-260 item 5).** `readGenerationTaskSnapshot` keeps the snapshot's `allowance`;
   `generationTaskAllowanceText` is the Work log's line - task units (model calls, output / input tokens, catalog searches) and the
   extensions used, never money. The lead's decision for K2 holds (progress.md over k-map section 8).
@@ -164,21 +169,32 @@ a reload that recovers the same rows with no chat turn or acquisition start sent
 `screenshots/k2-work-log-live-before-answer-1366x768.png`, `screenshots/k2-work-log-task-steps-1366x768.png`,
 `screenshots/k2-work-log-after-reload-1366x768.png`.
 
-**Found and fixed during K2's own gates:** (1) the first loop edit read the run clock once more per tool call after the probe, which
+**Completed by the continuation (after the cut-off WIP `bb62b797` / `43893342`; everything above re-checked, kept as found unless
+named here):** (a) the truthful page-side ending above (`endWorkLogRun`, `endRun`, the `finally` call; the page's own `run_failed`
+`stopped` / `stream_cut` read the same way) - before it, a Stop answer or a dropped stream left the log "running" until a reload called
+it interrupted; (b) a task-only log is not called interrupted by a reload; (c) a model sentence (`text_delta`), a warning, an unknown event
+type, an acquisition poll that saw no new step and a design update with nothing new return the SAME state, and the hook then leaves the
+message list untouched (no re-render per streamed token; no empty log attached to an entry); (d) a stored row's text is cleaned again on
+read instead of the whole log (and so a whole imported project file) being refused when it differs from the cleaner's output; (e)
+`k2-work-log-reducer` gained case 8 (the page-side endings, task-only logs, the same-state returns) and stricter same-state checks in 3, 5
+and 7. The cut-off builder's gate table is superseded by the one below (its runs were not verifiable); its two reported fixes follow.
+
+**Reported by the cut-off builder (its own gate runs):** (1) the first loop edit read the run clock once more per tool call after the probe, which
 moved every B11 / B21-F replay pin (a replay clock ticks per read) - the boundary check now reads the deadline flag only, no pin moved;
 (2) the collapsed summary first repeated the latest row's text, so the existing `l5-chat-task` 2 and `pr-g-agent-generation` locators
 (`getByText(<the tool line>)`) matched two elements - the summary now names the latest phase and origin only, never a row's text.
 
-**Gates (local, sequential, provider keys unset, `--maxWorkers=4`):**
+**Gates (the continuation; local, sequential, provider keys unset, `--maxWorkers=4`; each process ended when its run did):**
 
 | gate | result | exit |
 |---|---|---|
-| `vitest run app/lib/qualification/__tests__/k2- app/lib/qualification/__tests__/k1-early-stop-reproductions.test.ts` (the three new suites and K1) | 4 files, 23 passed (K1 9, `k2-work-log-reducer` 7, `k2-acquisition-task-event` 4, `k2-allowance-line` 3) | 0 |
-| `vitest run` the new suites, K1, `app/lib/agent`, `app/lib/project`, `chat-run-view`, `l5-`, `m2-`, `pr-g-`, `b17-a`, `b04-`, `action-registry`, `b16-0-2`, `b21-a-import-gates`, `b21-closeout`, `b22-closeout`, `b23-closeout`, `b24-d0`, `b24-b2`, `b24-d1`, `b24-d3`, `b24-d4`, `pr-d-tool-manuals`, `pr-d-coverage`, `b19-d-external`, `m1-channel` (one run) | 204 files (202 passed, 2 skipped), 2084 passed, 11 skipped, 0 failed (the first run, before fix (1) above, the pin moves and the regenerations: 22 failed in 13 files - the B11 / B21-F replay pins, `m2-1` 1 and 3, `pr-d-coverage-matrix`, `b24-d0` 1 and 7, `b24-d3` 1) | 0 |
+| `vitest run app/lib/qualification/__tests__/k2- app/lib/qualification/__tests__/k1-early-stop-reproductions.test.ts` (the three new suites and K1) | 4 files, 24 passed (K1 9, `k2-work-log-reducer` 8, `k2-acquisition-task-event` 4, `k2-allowance-line` 3) | 0 |
+| `vitest run` the new suites, K1, `app/lib/agent`, `app/lib/project`, `chat-run-view`, `l5-`, `m2-`, `pr-g-`, `b17-a`, `b04-`, `action-registry`, `b16-0-2`, `b21-a-import-gates`, `b21-closeout`, `b22-closeout`, `b23-closeout`, `b24-d0`, `b24-b2`, `b24-d1`, `b24-d3`, `b24-d4`, `b24-e`, `b24-f`, `pr-a-`, `pr-d-`, `pr-f-`, `b19-d-external`, `m1-channel`, `persistence` (one run, after every source and ledger edit) | 233 files (231 passed, 2 skipped: the two benchmark-gated `b24-d1` latency files), 2381 passed, 11 skipped, 0 failed, 348 s (an earlier run of the narrower list, before (c)-(e) above: 212 files, 2139 passed, 11 skipped, 0 failed) | 0 |
+| the generators (`generate-b17-control-inventory`, `generate-b24-accessible-names`, `generate-pr-d-tool-manuals`, `generate-pr-d-coverage-matrix`, `generate-action-toolability-matrix`, `generate-b24-maps`) | zero drift: 719 controls on 75 surfaces, the census 719 / 75 with 0 unnamed in scope, 114 action records | 0 |
 | `tsc --noEmit` (4 GB heap, `.next/dev/types/validator.ts` removed first) | clean | 0 |
-| `eslint` on the 24 touched TS / TSX files | clean (one unused import removed after the first run) | 0 |
-| Playwright `e2e/k2-work-log.spec.ts e2e/l5-chat-task.spec.ts e2e/m2-acquire-missing-part.spec.ts e2e/pr-g-agent-generation.spec.ts e2e/journey-contract.spec.ts` (`SIRKIT_E2E_PORT=3157`, one run) | 7 passed (2.2 min); 0 `ROUTE_FIXTURE_MISS` (the run before fix (2) above: 5 passed, `l5-chat-task` 2 and `pr-g-agent-generation` failed on the duplicated text, `l5-chat-task` 3 not run); the four committed PNGs the m2 / pr-g specs rewrite restored (`git checkout --`) | 0 |
-| `tsx scripts/scan-secrets.ts` (tree; `--staged` again on the staged commit) | tree: 4774 entries, 0 oversized skips, 11 allowlisted lines | 0 |
+| `eslint` on the 25 TS / TSX files K2 touched (WIP and continuation) | clean | 0 |
+| Playwright `e2e/k2-work-log.spec.ts e2e/l5-chat-task.spec.ts e2e/m2-acquire-missing-part.spec.ts e2e/pr-g-agent-generation.spec.ts e2e/journey-contract.spec.ts` (`SIRKIT_E2E_PORT=3157`, one run, after every source edit) | 7 passed (1.9 min; `k2-work-log` 19.8 s); 0 `ROUTE_FIXTURE_MISS`; the two provider routes the journey touches answered `missing_credentials` (no key, no request); the four committed PNGs the m2 / pr-g specs rewrite restored (`git checkout --`); the K2 screenshots are this run's | 0 |
+| `tsx scripts/scan-secrets.ts` (tree, then `--staged` on the staged commit) | tree: 4787 entries, 0 oversized skips, 11 allowlisted lines; `--staged` on the staged commit: no finding | 0 |
 
 ## Exact next step
 

@@ -5036,7 +5036,7 @@ export default function Home() {
           };
         });
       });
-      if (activeChatRunRef.current === chatRun) activeChatRunRef.current = null; // [B18-D I9]
+      if (activeChatRunRef.current === chatRun) activeChatRunRef.current = null; chatWorkLog.endRun(logId, scope, chatRun.stopped ? "stopped" : "ended"); // [B18-D I9]; [K2, 2026-11-04] a turn that ended without its run's terminal event says how in its Work log (Stop answer, or a dropped stream / failed request); a log that has its ending is unchanged
       // Only THIS request may clear the busy flag it set.
       if (activeChatRef.current === scope.requestId) {
         activeChatRef.current = null;

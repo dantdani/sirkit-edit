@@ -307,3 +307,6 @@ What K2 found while building the Work log (CONFIRMED by its suites unless marked
 5. **The missing-role library link (gap 1.3-5).** Moved to K4 with the library view; K2 adds no control on the generation card.
 6. **Gap 1.3-6 (the Missing parts panel's late poll).** Unchanged by K2 (INFERRED risk kept for K4); the Work log's own follow checks
    the project generation before and after each read and folds only into its own project's and branch's log.
+7. **The turn's page-side endings (not in the map).** A Stop answer or a stream that closed without its terminal event is folded only
+   into the run view and the answer (`page.tsx`, the chat turn after the stream loop: `run_failed` `stopped` / `stream_cut`, CONFIRMED by
+   reading); the Work log reads it too, once, from the turn's `finally` (`endWorkLogRun`: cancelled, or interrupted with the next action).

@@ -1,10 +1,11 @@
 /**
  * [K2, 2026-11-04] Runbook K.2 (OD-260 items 6 and 8): the page's Work log glue - the logic lives here, not in app/page.tsx (which keeps
- * its line count and only calls these three functions in place).
+ * its line count and only calls these functions in place).
  *
  *  - `foldRunEvent`: every chat run event the page already applies is folded into its activity entry's Work log (the pure reducer,
  *    app/lib/project/work-log.ts); an `acquisition_task_ready` the log accepted starts following that task.
  *  - `foldGeneration`: a followed design task's new milestones and remaining allowance join its activity entry's Work log.
+ *  - `endRun`: a turn that ended on this page without its run's terminal event says how (Stop answer, or a dropped stream).
  *  - Following an acquisition task: its public view is READ through the page's own authorized route (GET /api/parts/acquisitions,
  *    readCadAcquisition) every 1.5 s while a worker can still move it, on a project-generation-owned timer (a project switch cancels it;
  *    a late answer for a retired scope writes nothing), at most 400 reads per follow. Reading is all it does: nothing is started,
@@ -18,7 +19,7 @@ import type { ProjectAsyncScope } from "@/app/lib/engineering/project-async-scop
 import { readCadAcquisitionTaskReference } from "@/app/lib/acquisition/cad-acquisition-contract";
 import { readCadAcquisition } from "@/app/lib/project/cad-acquisition-client";
 import type { GenerationTaskEventView, GenerationTaskView } from "@/app/lib/project/generation-task-client";
-import { emptyWorkLog, liveWorkLogFollows, reduceWorkLogAcquisition, reduceWorkLogGeneration, reduceWorkLogRunEvent, type WorkLogState } from "@/app/lib/project/work-log";
+import { emptyWorkLog, endWorkLogRun, liveWorkLogFollows, reduceWorkLogAcquisition, reduceWorkLogGeneration, reduceWorkLogRunEvent, type WorkLogState } from "@/app/lib/project/work-log";
 
 export const WORK_LOG_POLL_MS = 1_500;
 export const WORK_LOG_MAX_READS = 400;
@@ -31,6 +32,8 @@ type SetMessages<M> = (update: (previous: M[]) => M[]) => void;
 export interface ChatWorkLog {
   foldRunEvent(logId: string, scope: ProjectAsyncScope, event: Record<string, unknown>): void;
   foldGeneration(logId: string, scope: ProjectAsyncScope, view: GenerationTaskView, added: readonly GenerationTaskEventView[], gap: boolean): void;
+  /** the turn ended on this page without the run's own terminal event: Stop answer (`stopped`) or a dropped stream / failed request (`ended`) */
+  endRun(logId: string, scope: ProjectAsyncScope, ending: "stopped" | "ended"): void;
 }
 
 const ownerOf = (scope: Pick<ProjectAsyncScope, "projectId" | "branchId">): { projectId: string; branchId: string } => ({ projectId: scope.projectId ?? "local", branchId: scope.branchId });
@@ -44,13 +47,19 @@ export function useChatWorkLog<M extends LogMessage>(deps: { messages: readonly 
   useEffect(() => { captureRef.current = deps.captureScope; });
 
   const update = useCallback((logId: string, owner: { projectId: string; branchId: string }, fold: (work: WorkLogState) => WorkLogState): void => {
-    setMessages((previous) => previous.map((message) => {
-      if (message.role !== "log" || message.id !== logId) return message;
-      const work = message.work ?? emptyWorkLog(owner);
-      if (work.owner.projectId !== owner.projectId || work.owner.branchId !== owner.branchId) return message; // another project's entry
-      const next = fold(work);
-      return next === message.work ? message : { ...message, work: next };
-    }));
+    setMessages((previous) => {
+      let changed = false;
+      const next = previous.map((message) => {
+        if (message.role !== "log" || message.id !== logId) return message;
+        const work = message.work ?? emptyWorkLog(owner);
+        if (work.owner.projectId !== owner.projectId || work.owner.branchId !== owner.branchId) return message; // another project's entry
+        const folded = fold(work);
+        if (folded === work) return message; // nothing to record (a model sentence, a duplicate, a foreign event): no new entry, no re-render
+        changed = true;
+        return { ...message, work: folded };
+      });
+      return changed ? next : previous;
+    });
   }, [setMessages]);
 
   const followAcquisition = useCallback((logId: string, taskId: string, scope: ProjectAsyncScope): void => {
@@ -100,5 +109,10 @@ export function useChatWorkLog<M extends LogMessage>(deps: { messages: readonly 
     for (const entry of live) if (entry.owner.projectId === owner.projectId && entry.owner.branchId === owner.branchId && !settled.current.has(`${entry.logId}:${entry.taskId}`)) followAcquisition(entry.logId, entry.taskId, scope);
   }, [deps.messages, followAcquisition]);
 
-  return { foldRunEvent, foldGeneration };
+  const endRun = useCallback((logId: string, scope: ProjectAsyncScope, ending: "stopped" | "ended"): void => {
+    if (!scope.isCurrent()) return; // a project switch: that entry belongs to a retired generation
+    update(logId, ownerOf(scope), (work) => endWorkLogRun(work, ending));
+  }, [update]);
+
+  return { foldRunEvent, foldGeneration, endRun };
 }

@@ -58,13 +58,16 @@ const FINISHED_PHASES: Readonly<Record<string, WorkLogPhase>> = Object.freeze({
   task_started: "dispatched", task_attached: "received", control_requested: "waiting", acquisition_task_started: "dispatched", acquisition_task_attached: "received",
 });
 
+/** The run event types the log reads; every other type (text_delta above all) changes nothing. */
+const FOLDED_RUN_EVENTS: ReadonlySet<string> = new Set(["run_started", "tool_started", "tool_finished", "tool_refused", "acquisition_task_ready", "generation_task_ready", "execution_settled", "plan", "specialist_started", "specialist_finished", "partial_result", "degraded", "run_failed", "run_completed"]);
+
 /**
  * Fold one raw run event (as the page receives it from the stream) into the log. `run_started` pins the run; an event of any other run,
  * a replayed sequence, a model sentence or an unknown type changes nothing.
  */
 export function reduceWorkLogRunEvent(state: WorkLogState, event: Record<string, unknown>): WorkLogState {
   const runId = str(event.runId);
-  if (!runId) return state;
+  if (!runId || !FOLDED_RUN_EVENTS.has(event.type as string)) return state; // a model sentence (text_delta), a warning or an unknown type: the SAME state (no row, no re-render)
   if (state.owner.runId === null) {
     if (event.type !== "run_started") return state;
     state = { ...state, owner: { ...state.owner, runId } };
@@ -121,7 +124,8 @@ export function reduceWorkLogRunEvent(state: WorkLogState, event: Record<string,
       return addRows(state, [{ key: key(`degraded:${str(event.reason) ?? ""}:${str(event.taskId) ?? ""}`), phase: "blocked", origin: "run", text: str(event.message) ?? "Degraded" }]);
     case "run_failed": {
       const reason = str(event.reason) ?? "failed";
-      const cancelled = reason === "cancelled";
+      if (reason === "stream_cut") return endWorkLogRun(state, "ended"); // the page's own reading of a dropped stream (a disconnect, not a failure the run reported)
+      const cancelled = reason === "cancelled" || reason === "stopped";
       const next = { ...state, run: cancelled ? ("cancelled" as const) : ("failed" as const) };
       return addRows(next, [{ key: key("terminal"), phase: cancelled ? "cancelled" : "blocked", origin: "run", text: cancelled ? "Answer stopped — the turn ended; a task it started keeps its own state below" : `The answer ended early (${reason}) — nothing more runs in this turn`, ...(cancelled ? {} : { next: "Send the message again, or ask the assistant to continue" }) }]);
     }
@@ -159,6 +163,7 @@ export function reduceWorkLogAcquisition(state: WorkLogState, task: CadAcquisiti
   const terminal = CAD_ACQUISITION_TERMINAL_STATES.includes(task.state);
   const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.seq : current.cursor;
   const missing = fresh.length > 0 ? Math.max(0, fresh[0]!.seq - current.cursor - 1) : 0;
+  if (fresh.length === 0 && current.terminal === terminal && current.state === task.state) return state; // nothing new: the SAME state (a poll that saw no step re-renders nothing)
   const follows = state.follows.map((entry, at) => (at === index ? { ...entry, cursor, terminal, state: task.state } : entry));
   let next: WorkLogState = { ...state, follows, ...(missing > 0 ? { gap: true, dropped: state.dropped + missing } : {}) };
   const subject = task.targets.map((target) => target.refDes).filter(Boolean).join(", ") || null;
@@ -190,7 +195,9 @@ export function reduceWorkLogGeneration(state: WorkLogState, view: Pick<Generati
   const current = next.follows[index]!;
   const fresh = [...added].filter((event) => event.seq > current.cursor).sort((a, b) => a.seq - b.seq);
   const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.seq : current.cursor;
-  next = { ...next, follows: next.follows.map((entry, at) => (at === index ? { ...entry, cursor, terminal: view.terminal, state: view.state } : entry)), allowance: generationTaskAllowanceText(view) ?? next.allowance, ...(gap ? { gap: true } : {}) };
+  const allowance = generationTaskAllowanceText(view) ?? next.allowance;
+  if (next === state && fresh.length === 0 && current.terminal === view.terminal && current.state === view.state && allowance === state.allowance && (!gap || state.gap)) return state; // nothing new: the SAME state
+  next = { ...next, follows: next.follows.map((entry, at) => (at === index ? { ...entry, cursor, terminal: view.terminal, state: view.state } : entry)), allowance, ...(gap ? { gap: true } : {}) };
   return addRows(next, fresh.map((event) => {
     const phase = event.type === "review_recorded" ? (/\bapplied\b/i.test(event.message) ? "committed" : "discarded") : (GENERATION_PHASES[event.type] ?? "received");
     return { key: `generation:${view.taskId}:${event.seq}`, phase, origin: "generation" as const, text: event.message, subject: event.blockId ? `block ${event.blockId}` : null, next: phase === "blocked" && view.blocker ? view.blocker.resolution : null };
@@ -202,8 +209,21 @@ export function reduceWorkLogGeneration(state: WorkLogState, view: Pick<Generati
  * interrupted; followed tasks stay followed (the page re-reads their public views, never re-runs them).
  */
 export function restoredWorkLog(state: WorkLogState): WorkLogState {
-  if (state.run !== "running") return state;
-  return addRows({ ...state, run: "interrupted" }, [{ key: `page:${state.owner.runId ?? "log"}:reload`, phase: "interrupted", origin: "page", text: "The page reloaded while this turn was running — the steps above are what was recorded; nothing was run again" }]);
+  if (state.run !== "running" || state.owner.runId === null) return state; // a task-only log (a Build start's design task) had no turn to cut: its task keeps its own state
+  return addRows({ ...state, run: "interrupted" }, [{ key: `page:${state.owner.runId}:reload`, phase: "interrupted", origin: "page", text: "The page reloaded while this turn was running — the steps above are what was recorded; nothing was run again" }]);
+}
+
+/**
+ * The turn ended on this page without the run's own terminal event (K.2: cancellation and disconnect have explicit truthful states):
+ * `stopped` - the person pressed Stop answer; `ended` - the stream closed or the request failed before the run said how it ended (a
+ * dropped connection). A log that already has its run's ending, or never saw its run start, is unchanged; a task the turn started keeps
+ * its own state and stays followed.
+ */
+export function endWorkLogRun(state: WorkLogState, ending: "stopped" | "ended"): WorkLogState {
+  if (state.run !== "running" || state.owner.runId === null) return state;
+  const key = `run:${state.owner.runId}:terminal`;
+  if (ending === "stopped") return addRows({ ...state, run: "cancelled" }, [{ key, phase: "cancelled", origin: "page", text: "Answer stopped by you — the turn ended before the assistant finished; a task it started keeps its own state below" }]);
+  return addRows({ ...state, run: "interrupted" }, [{ key, phase: "interrupted", origin: "page", text: "The answer ended without its final event (the connection dropped or the request failed) — the steps above are what was recorded; nothing more runs in this turn", next: "Send the message again, or ask the assistant to continue" }]);
 }
 
 /** A stored entry's `work` as the page restores it: `{ work }` when it reads back (then marked as after a reload), `{}` otherwise. */

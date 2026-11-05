@@ -110,8 +110,8 @@ function readRow(value: unknown): WorkLogRow | null {
   if (!boundedString(value.key, WORK_LOG_BOUNDS.keyChars) || value.key.length === 0 || !count(value.seq)) return null;
   if (!(WORK_LOG_PHASES as readonly unknown[]).includes(value.phase) || !(WORK_LOG_ORIGINS as readonly unknown[]).includes(value.origin)) return null;
   if (typeof value.text !== "string" || value.text.length === 0) return null;
-  const text = workLogText(value.text);
-  if (!text || text !== value.text) return null; // stored text is already clean: anything else was not written by this log
+  const text = workLogText(value.text); // cleaned again on every read (a stored row is shown only as this cleaner leaves it: no URL, nothing secret-shaped, bounded)
+  if (!text) return null;
   if (value.source !== null && value.source !== undefined && !isWorkLogSource(value.source)) return null; // a link the registry does not document
   const subject = typeof value.subject === "string" ? workLogText(value.subject, WORK_LOG_BOUNDS.subjectChars) || null : null;
   const next = typeof value.next === "string" ? workLogText(value.next, WORK_LOG_BOUNDS.nextChars) || null : null;
