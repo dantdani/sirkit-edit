@@ -22,7 +22,7 @@ import { getDurableWorkflowRepository } from "../durable-workflow/runtime";
 import { durableAggregateIdentity, durableScopeKey, durableWorkflowDigest, durableWorkflowId } from "../durable-workflow/stable";
 import type { DurableAppendOperation, DurableOutboxEffect, DurableWorkflowRepository, DurableWorkflowScope } from "../durable-workflow/types";
 import {
-  EXECUTION_GRANT_AGGREGATE_TYPE, EXECUTION_GRANT_INDEX_AGGREGATE_TYPE, MAX_INDEX_RECENT, RETRY_GUARD_WINDOW_MS,
+  EXECUTION_GRANT_AGGREGATE_TYPE, EXECUTION_GRANT_INDEX_AGGREGATE_TYPE, MAX_INDEX_RECENT, OUTCOME_UNKNOWN_RETIREMENT_REASONS, RETRY_GUARD_WINDOW_MS,
   grantDigestFor, lazyExpiryTransition, transitionGrant,
   type ExecutionGrantConsumption, type ExecutionGrantIndex, type ExecutionGrantRecord, type ExecutionGrantRetirement, type ExecutionGrantSettlement, type ExecutionGrantState, type GrantTransition,
 } from "../engineering/execution-grant";
@@ -54,7 +54,7 @@ function outbox(record: ExecutionGrantRecord, eventType: string, extra: Record<s
 /** What a recent identical execution may have done (the minter words its note from it). */
 export type RetryGuardOutcome = "in_flight" | "committed" | "poisoned" | "unknown";
 /** Retirements AFTER a consumption whose commit outcome the server never learned. */
-const OUTCOME_UNKNOWN_RETIREMENTS: readonly string[] = Object.freeze(["recovery_required", "consumed_unsettled"]);
+const OUTCOME_UNKNOWN_RETIREMENTS: readonly string[] = OUTCOME_UNKNOWN_RETIREMENT_REASONS; // [K2 review, 2026-11-04] honesty-K2-PT-1: the ONE list (the chat's Work log reads it too), same two reasons
 
 function mayHaveChanged(entry: ExecutionGrantIndex["recent"][number]): RetryGuardOutcome | null {
   if (entry.status === "consumed") return "in_flight";

@@ -5524,7 +5524,7 @@ export default function Home() {
   async function reportGenerationBaseMoved(entry: AttachedGenerationTask, liveDigest: string, recipe: string): Promise<void> {
     const answer = await controlGenerationTask({ projectId: entry.scope.projectId, branchId: entry.scope.branchId }, entry.taskId, { action: "report-base", clientActionId: newGenerationClientActionId(), liveBase: { schematicDigest: liveDigest, recipe: recipe === "chat-sheet" ? "chat-sheet" : "build-pin" } }); // [PR-L, 2026-10-18] the task's recipe
     if (!entry.scope.isCurrent() || generationTaskRef.current !== entry) return;
-    if (answer.ok) { const { view } = reduceGenerationTaskView(entry.view, { task: answer.task, events: [], gap: false }); entry.view = view; setGenerationTask({ logId: entry.logId, view }); }
+    if (answer.ok) { const { view } = reduceGenerationTaskView(entry.view, { task: answer.task, events: [], gap: false }); entry.view = view; setGenerationTask({ logId: entry.logId, view }); chatWorkLog.foldGenerationReview(entry.logId, entry.scope, view); } // [K2 review, 2026-11-04] events-K2-EV-3: the stale milestone the report recorded joins the Work log too
     entry.settled = true;
     failActivityLog(entry.logId, "The sheet changed while this design ran, so its result was not offered (it would replace a newer sheet). Start again to design against the current sheet.", generationActivityLineId());
   }
@@ -5565,7 +5565,7 @@ export default function Home() {
       if (!answer.ok) { if (entry && entry.taskId === task.taskId && generationTaskRef.current === entry) appendActivityStep(entry.logId, `The design task did not record this review: ${answer.message}`, "error", generationActivityLineId()); return; } // [PR-L/M integration, 2026-10-18] L5-3: a refused report is said in the task's entry, never dropped silently
       if (!entry || entry.taskId !== task.taskId || generationTaskRef.current !== entry) return;
       const { view } = reduceGenerationTaskView(entry.view, { task: answer.task, events: [], gap: false });
-      entry.view = view; entry.settled = true; setGenerationTask({ logId: entry.logId, view });
+      entry.view = view; entry.settled = true; setGenerationTask({ logId: entry.logId, view }); chatWorkLog.foldGenerationReview(entry.logId, entry.scope, view); // [K2 review, 2026-11-04] events-K2-EV-3: the review the task recorded (applied / discarded, or the moved base) reaches the entry's Work log - the page stopped following the task when it offered the result
     })();
   }
 

@@ -15,13 +15,23 @@
  *  8. a turn that ended on the page without its run's own ending (Stop answer, a dropped stream, a failed request) says how, once; a
  *     log that has its ending, never saw its run, or follows a task only (a Build start) is unchanged - by the page and by a reload;
  *     model text, warnings and unknown types return the SAME state (no row, no re-render).
+ *  9. [K2 review, 2026-11-04] honesty-K2-PT-1: a POISONED settlement, a settlement with no outcome and a retirement whose outcome nobody
+ *     learned MAY have changed the board (never "nothing was changed"); not-committed and an issued grant's retirement still say it;
+ * 10. [K2 review, 2026-11-04] honesty-K2-PT-2: an acquisition start that attached says the attached task's REAL state;
+ * 11. [K2 review, 2026-11-04] honesty-K2-PT-3 / PT-4: orchestration - a withdrawn promise to run a task again is its own row; a compatible
+ *     fallback is a changed approach, not a block;
+ * 12. [K2 review, 2026-11-04] events-K2-EV-2: what happened to the page's follow of a task (a failed read, a task the server no longer has,
+ *     the read bound) is said once per position, only for a live task the log follows in its own project.
  */
 import { describe, expect, it } from "vitest";
 import { isStoredChatMessage } from "@/lib/persistence";
 import { CAD_SOURCE_REGISTRY } from "@/app/lib/acquisition/cad-source-registry";
 import { CAD_ACQUISITION_TASK_REFERENCE_SCHEMA, type CadAcquisitionEvent, type CadAcquisitionTaskView } from "@/app/lib/acquisition/cad-acquisition-contract";
+import { OUTCOME_UNKNOWN_RETIREMENT_REASONS } from "@/app/lib/engineering/execution-grant";
+import { degradedEvent, notRunAgainEvent, staleResultEvent } from "@/app/lib/agent/orchestration/run-events";
+import { toolLineLabel } from "@/app/lib/project/chat-run-view";
 import {
-  WORK_LOG_BOUNDS, WORK_LOG_PHASES, emptyWorkLog, isStoredWorkLog, liveWorkLogFollows, readStoredWorkLog, reduceWorkLogAcquisition, reduceWorkLogGeneration, reduceWorkLogRunEvent,
+  WORK_LOG_BOUNDS, WORK_LOG_PHASES, emptyWorkLog, isStoredWorkLog, liveWorkLogFollows, noteWorkLogFollow, readStoredWorkLog, reduceWorkLogAcquisition, reduceWorkLogGeneration, reduceWorkLogRunEvent,
   restoredWorkLog, workLogSummary, workLogText, workOfStored, endWorkLogRun, type WorkLogState,
 } from "@/app/lib/project/work-log";
 
@@ -210,9 +220,12 @@ describe("[K2] the Work log reducer", () => {
     expect(cut.run).toBe("interrupted");
     expect(cut.rows.at(-1)).toMatchObject({ phase: "interrupted", origin: "page", next: "Send the message again, or ask the assistant to continue" });
     expect(cut.rows.at(-1)!.text).toMatch(/^The answer ended without its final event \(the connection dropped or the request failed\)/);
-    // the page's own run_failed for a dropped stream reads the same way; a run that reported its ending keeps it
-    expect(reduceWorkLogRunEvent(live, { type: "run_failed", runId: "run-k2", reason: "stream_cut", message: "x" })).toEqual(cut);
-    expect(reduceWorkLogRunEvent(live, { type: "run_failed", runId: "run-k2", reason: "stopped", message: "Stopped by you." }).run).toBe("cancelled");
+    // [K2 review, 2026-11-04] tests-K2-R3, reviewed pin move: this case said "the page's own run_failed for a dropped stream reads the same
+    // way" over a run_failed WITH the run's id - but the page builds its synthetic run_failed (Stop answer, a dropped stream) for its run
+    // view only, without a runId, and no server emits `stream_cut` or `stopped`: those reducer branches were dead and are removed. The
+    // page's synthetic event changes nothing here; the hook's endRun says those endings (in the browser: l5-chat-task 3, k2-work-log 2).
+    expect(reduceWorkLogRunEvent(live, { type: "run_failed", reason: "stream_cut", message: "The connection ended before the assistant finished." })).toBe(live);
+    expect(reduceWorkLogRunEvent(live, { type: "run_failed", reason: "stopped", message: "Stopped by you." })).toBe(live);
     for (const ended of [stopped, cut, fold(live, [{ type: "run_completed", runId: "run-k2", seq: 3, finalText: "x", steps: 1, toolCalls: 1, usage: { inputTokens: 1, outputTokens: 1 }, model: "m" }]), fold(live, [{ type: "run_failed", runId: "run-k2", seq: 3, reason: "deadline", message: "x" }])]) {
       expect(endWorkLogRun(ended, "ended")).toBe(ended);
       expect(endWorkLogRun(ended, "stopped")).toBe(ended);
@@ -228,5 +241,95 @@ describe("[K2] the Work log reducer", () => {
     expect(endWorkLogRun(taskOnly, "ended")).toBe(taskOnly);
     // model text, warnings and unknown types: the SAME state (the page records nothing and re-renders nothing for them)
     for (const event of [{ type: "text_delta", runId: "run-k2", seq: 9, text: "I imported it.", phase: "final" }, { type: "warning", runId: "run-k2", seq: 10, message: "w" }, { type: "reasoning", runId: "run-k2", seq: 11, text: "x" }]) expect(reduceWorkLogRunEvent(live, event)).toBe(live);
+  });
+
+  it("9. [K2 review] a POISONED settlement, a settlement with no outcome and a retirement whose outcome nobody learned MAY have changed the board - never 'nothing was changed'; not-committed and an issued grant's retirement still say it", () => {
+    const settled = (seq: number, grantId: string, status: string, outcome: string | null, reason: string | null) => ({ type: "execution_settled", runId: "run-k2", seq, toolId: "x", grantId, status, outcome, reason, settlement: null });
+    const log = fold(emptyWorkLog(OWNER), [
+      started(),
+      settled(2, "g-poisoned", "settled", "poisoned", null),
+      settled(3, "g-no-outcome", "settled", null, null),
+      settled(4, "g-unsettled", "retired", null, "consumed_unsettled"),
+      settled(5, "g-recovery", "retired", null, "recovery_required"),
+      settled(6, "g-not-committed", "settled", "not-committed", null),
+      settled(7, "g-expired", "retired", null, "expired"),
+      settled(8, "g-rejected", "retired", null, "commit_rejected"),
+    ]);
+    const mayHaveChanged = log.rows.slice(0, 4);
+    expect(mayHaveChanged.map((row) => row.phase)).toEqual(["blocked", "blocked", "blocked", "blocked"]);
+    for (const row of mayHaveChanged) {
+      expect(row.text).toMatch(/the board MAY have changed$/);
+      expect(row.text).not.toMatch(/nothing was changed|Not applied/);
+      expect(row.next).toBe("Check the board and the revision history; the editor's Undo restores the previous board."); // the execution entry's own next step
+    }
+    expect(mayHaveChanged[0]!.text).toBe("The change LANDED but could not be verified (the editor reported poisoned) — the board MAY have changed");
+    expect(mayHaveChanged[1]!.text).toBe("The change LANDED but could not be verified (the editor reported no outcome) — the board MAY have changed");
+    expect(mayHaveChanged[2]!.text).toBe("Outcome unknown — the change was started but its result was never confirmed (consumed_unsettled); the board MAY have changed");
+    expect(mayHaveChanged[3]!.text).toBe("Outcome unknown — the change was started but its result was never confirmed (recovery_required); the board MAY have changed");
+    expect(log.rows.slice(4).map((row) => [row.phase, row.text])).toEqual([
+      ["refused", "Not applied — the editor reported not-committed; nothing was changed"],
+      ["cancelled", "Not applied — the change was retired (expired); nothing was changed"],
+      ["cancelled", "Not applied — the change was retired (commit_rejected); nothing was changed"],
+    ]);
+    expect(workLogSummary(log)).toBe("7 steps · latest: Stopped (this answer)");
+    // the retry guard (app/lib/execution-grant/store.ts) reads the SAME list: what it treats as "MAY have changed" the log never calls unchanged
+    expect(OUTCOME_UNKNOWN_RETIREMENT_REASONS).toEqual(["recovery_required", "consumed_unsettled"]);
+  });
+
+  it("10. [K2 review] an acquisition start that attached says the attached task's real state - waiting for a person, waiting for a source, stopping or ended is not 'already running'", () => {
+    const attach = (state: string): WorkLogState => fold(emptyWorkLog(OWNER), [started(), { type: "acquisition_task_ready", runId: "run-k2", seq: 2, callId: "c1", task: reference({ disposition: "attached", state }) }]);
+    const following = `Following acquisition task ${TASK_ID.slice(0, 16)}…`;
+    expect(attach("running").rows.at(-1)).toMatchObject({ phase: "waiting", text: `${following} (already running; nothing new started): its recorded steps appear here as the worker reports them` });
+    expect(attach("queued").rows.at(-1)!.text).toBe(`${following} (already queued for a worker; nothing new started): its recorded steps appear here as the worker reports them`);
+    expect(attach("awaiting-review").rows.at(-1)).toMatchObject({ phase: "waiting", text: `${following} (already waiting for a person's step; nothing new started): its recorded steps appear here as the worker reports them` });
+    expect(attach("waiting-for-resource").rows.at(-1)!.text).toBe(`${following} (already waiting for a source or its retry time; nothing new started): its recorded steps appear here as the worker reports them`);
+    expect(attach("cancel-requested").rows.at(-1)!.text).toBe(`${following} (already being stopped; nothing new started): its recorded steps appear here as the worker reports them`);
+    for (const state of ["succeeded", "cancelled", "failed", "stale"]) {
+      const log = attach(state);
+      expect(log.rows.at(-1), state).toMatchObject({ phase: "received", text: `${following} (it had already ended (${state}); nothing new started): its recorded steps appear here` });
+      expect(log.follows[0], state).toMatchObject({ terminal: true, state });
+    }
+    for (const state of ["queued", "awaiting-review", "waiting-for-resource", "cancel-requested", "succeeded", "cancelled", "failed", "stale"]) expect(attach(state).rows.at(-1)!.text, state).not.toContain("already running");
+    expect(followed().rows.at(-1)!.text).toBe(`${following} (queued for a worker): its recorded steps appear here as the worker reports them`); // a start is unchanged
+    // the run line names no state (the store attaches in any state); the Work log row above says the real one
+    expect(toolLineLabel({ title: "Obtain", tier: 1, ok: true, status: "acquisition_task_attached" })).toBe("T1 · Obtain — following the acquisition task that already exists for these parts — nothing new was started");
+  });
+
+  it("11. [K2 review] orchestration: a withdrawn promise to run a task again is its own row; a compatible fallback is a changed approach, not a block", () => {
+    const open = staleResultEvent("run-k2", { taskId: "task-1", role: "circuit-topology", attempt: 1, resultDigest: `sha256:${"a".repeat(64)}`, reason: "stale" }, "Orchestration: specialist circuit-topology (task task-1) committed result is stale; the task runs again.");
+    const withdrawn = notRunAgainEvent(open, "the DAG wall time ran out");
+    expect(withdrawn.runsAgain).toBe(false);
+    const log = fold(emptyWorkLog(OWNER), [started(), { ...open, seq: 2 }, { ...withdrawn, seq: 3 }, { ...withdrawn, seq: 4 }]);
+    expect(log.rows.map((row) => row.text)).toEqual([open.message, withdrawn.message]); // both steps; the replayed withdrawal once
+    expect(log.rows.at(-1)!.text).toMatch(/was not run again \(the DAG wall time ran out\)/);
+    const fallback = degradedEvent("run-k2", "compatible_fallback", "Orchestration: specialist circuit-topology (task task-1) runs on anthropic (claude) instead of openai: a compatible fallback.", { taskId: "task-1", role: "circuit-topology", provider: "anthropic", model: "claude" });
+    const paused = degradedEvent("run-k2", "provider_paused", "Orchestration: the coordinator's provider is paused; nothing more runs.");
+    const degraded = fold(emptyWorkLog(OWNER), [started(), { ...fallback, seq: 2 }, { ...paused, seq: 3 }]);
+    expect(degraded.rows.map((row) => row.phase)).toEqual(["intent", "blocked"]);
+  });
+
+  it("12. [K2 review] what happened to the page's follow of a task is said once per position, only for a live task the log follows in its own project", () => {
+    const log = followed();
+    const short = `${TASK_ID.slice(0, 16)}…`;
+    const unreadable = noteWorkLogFollow(log, OWNER, TASK_ID, { kind: "unreadable", code: "NETWORK" });
+    expect(unreadable.rows.at(-1)).toMatchObject({ phase: "interrupted", origin: "page", next: null, text: `Could not read acquisition task ${short} (NETWORK); this page keeps reading it - its next recorded steps appear here when a read succeeds` });
+    expect(noteWorkLogFollow(unreadable, OWNER, TASK_ID, { kind: "unreadable", code: "HTTP_503" })).toBe(unreadable); // the same position: once
+    const moved = reduceWorkLogAcquisition(unreadable, taskView([event(1, "accepted", "The acquisition task was accepted.")]), OWNER);
+    expect(noteWorkLogFollow(moved, OWNER, TASK_ID, { kind: "unreadable", code: "NETWORK" }).rows).toHaveLength(moved.rows.length + 1); // a new position: said again
+    const gone = noteWorkLogFollow(moved, OWNER, TASK_ID, { kind: "gone", code: "COMPONENT_RESOLUTION_TASK_NOT_FOUND" });
+    expect(gone.rows.at(-1)).toMatchObject({ phase: "interrupted", next: "If the part is still missing, start the acquisition again from the Missing parts list" });
+    expect(gone.rows.at(-1)!.text).toBe(`Acquisition task ${short} can no longer be read: the server has no such task in this project (COMPONENT_RESOLUTION_TASK_NOT_FOUND). The steps above are what was recorded; this page stopped following it`);
+    const bound = noteWorkLogFollow(moved, OWNER, TASK_ID, { kind: "bound", reads: 400 });
+    expect(bound.rows.at(-1)!.text).toBe(`Stopped following acquisition task ${short} on this page after 400 reads; the task itself goes on - reload the page or open the project again to read it again`);
+    // a code is never a channel for text: only its identifier characters stay (no URL, nothing secret-shaped)
+    const odd = noteWorkLogFollow(log, OWNER, TASK_ID, { kind: "unreadable", code: "https://evil.example.com/x?token=abc def" }).rows.at(-1)!.text;
+    expect(odd).toContain("(httpsevil.example.comxtokenabcdef)");
+    expect(odd).not.toMatch(/:\/\/|\?|=/);
+    // another project's or branch's note, a task the log does not follow and an ended task change nothing
+    expect(noteWorkLogFollow(log, { projectId: "another-project", branchId: "main" }, TASK_ID, { kind: "unreadable", code: "NETWORK" })).toBe(log);
+    expect(noteWorkLogFollow(log, OWNER, `cr-task:${"b".repeat(32)}`, { kind: "gone", code: "X" })).toBe(log);
+    const ended = reduceWorkLogAcquisition(log, taskView([event(1, "cancelled", "The acquisition was cancelled.")], { state: "cancelled" }), OWNER);
+    expect(ended.follows[0]!.terminal).toBe(true);
+    expect(noteWorkLogFollow(ended, OWNER, TASK_ID, { kind: "bound", reads: 400 })).toBe(ended);
   });
 });

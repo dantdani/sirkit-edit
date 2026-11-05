@@ -196,6 +196,96 @@ moved every B11 / B21-F replay pin (a replay clock ticks per read) - the boundar
 | Playwright `e2e/k2-work-log.spec.ts e2e/l5-chat-task.spec.ts e2e/m2-acquire-missing-part.spec.ts e2e/pr-g-agent-generation.spec.ts e2e/journey-contract.spec.ts` (`SIRKIT_E2E_PORT=3157`, one run, after every source edit) | 7 passed (1.9 min; `k2-work-log` 19.8 s); 0 `ROUTE_FIXTURE_MISS`; the two provider routes the journey touches answered `missing_credentials` (no key, no request); the four committed PNGs the m2 / pr-g specs rewrite restored (`git checkout --`); the K2 screenshots are this run's | 0 |
 | `tsx scripts/scan-secrets.ts` (tree, then `--staged` on the staged commit) | tree: 4787 entries, 0 oversized skips, 11 allowlisted lines; `--staged` on the staged commit: no finding | 0 |
 
+## K2 review fixes (2026-11-04)
+
+The K2 review's confirmed findings (verified against `3294a399`), each re-checked by the fixer, fixed, and pinned by a permanent test
+that was shown RED with the production change edited back temporarily (never `git stash`); every revert was restored byte-for-byte.
+Behaviour changed as follows.
+
+- **events-K2-EV-1 (MEDIUM; merged with tests-K2-R5) - a waiting task's follow froze.** The hook ended a follow on every state except
+  queued / running / cancel-requested, on the premise that a waiting task moves "only when someone acts". False: a
+  `waiting-for-resource` task with a retry time is claimed by the worker by itself (`slices.ts` schedule `acquire` at `retryAt`), and
+  an `awaiting-review` task moves when a person sends it for review elsewhere (the Missing parts list) and when the worker re-checks the
+  publication on its own (`store.ts` record-handoff schedules a `recheck`). Now only a TERMINAL state (or the read bound) ends a follow:
+  a task a worker is moving is read every 1.5 s (`WORK_LOG_POLL_MS`), a waiting one every 6 s (`WORK_LOG_WAITING_POLL_MS`), at most 400
+  reads per follow. Tests: `k2-work-log-follow` 1 and 2 (the production hook; red with the old rule: the reads stopped at 2 and 1);
+  browser: `k2-work-log` 1 step 5 (a person stops the waiting task through the page's own control route; the task's recorded step
+  reaches the Work log without a reload, and the ended task is read no more).
+- **honesty-K2-PT-1 (MEDIUM) - "nothing was changed" over a change that MAY have landed.** A `poisoned` settlement (the transaction
+  landed but could not be verified), a settlement with no outcome, and a retirement after consumption whose outcome nobody learned
+  (`recovery_required`, `consumed_unsettled`) were written "Not applied ... nothing was changed". They are now `blocked` rows that say
+  the board MAY have changed, with the execution entry's own next step (check the board and the revision history; Undo). The two
+  outcome-unknown reasons are ONE list, `OUTCOME_UNKNOWN_RETIREMENT_REASONS` (`app/lib/engineering/execution-grant.ts`, appended), read
+  by the retry guard (`execution-grant/store.ts:57`, in place) and the Work log. Test: `k2-work-log-reducer` 9 (red: `refused`).
+- **tests-K2-R1 (MEDIUM) - a project switch leaked the follow.** A switch cancels the follow's timer, so its key stayed "followed" and
+  the project opened again (no reload) was never read again. The follow now ends with its project generation (the scope's abort signal),
+  settled ones too; reopening the project reads the task again. Test: `k2-work-log-follow` 3 (red: no read after reopening).
+- **honesty-K2-PT-2 (MEDIUM) - an attach always said "already running".** The store attaches in any state. The follow row now says the
+  attached task's real state (queued, running, being stopped, waiting for a source or its retry time, waiting for a person's step, or
+  already ended - then phase `received`, not `waiting`); the run line `acquisition_task_attached` names no state ("following the
+  acquisition task that already exists for these parts"). Tests: `k2-work-log-reducer` 10; `k2-acquisition-task-event` 1 (pin moved,
+  dated note).
+- **events-K2-EV-2 (LOW) - a follow that could not read said nothing.** A failed read is now said once per follow position ("Could not
+  read ...; this page keeps reading it"), a 404 (the server has no such task, e.g. an in-memory store after a restart) ends the follow
+  and says so with the next action, and the read bound ends it and says so ("reload the page or open the project again to read it
+  again"). Pure reducer `noteWorkLogFollow` (`work-log.ts`, rows of origin `page`, phase `interrupted`; codes reduced to identifier
+  characters). Tests: `k2-work-log-reducer` 12; `k2-work-log-follow` 4 and 5.
+- **events-K2-EV-3 (LOW) - a design task's review never reached the Work log.** The page stops following the task when it offers the
+  result; `reportGenerationReview` (and the moved-base report) now hand the recorded view to `useChatWorkLog.foldGenerationReview`,
+  which READS the task's new milestones once (`GET /api/generation-tasks/[id]/events?after=`) so `review_recorded` (applied ->
+  `committed`, discarded -> `discarded`) or `stale` joins the entry's log. `page.tsx` edited in place on lines 5527 and 5568 (9,156
+  lines kept). Tests: `k2-work-log-follow` 6; browser: `l5-chat-task` 2 (the design task's Work log ends "Applied (design task)").
+- **honesty-K2-PT-3 (LOW, orchestration flag only) - a withdrawn re-run promise was dropped as a duplicate.** The `specialist_finished`
+  key now separates a `runsAgain` promise from its withdrawal (same attempt). Test: `k2-work-log-reducer` 11 (the real `staleResultEvent`
+  / `notRunAgainEvent` builders).
+- **honesty-K2-PT-4 (LOW, orchestration flag only) - a compatible fallback read "Blocked".** It is now `intent` (a changed approach: the
+  specialist runs on another provider); every other degraded reason stays `blocked`. The review's second consequence (the summary
+  ending on "Blocked") was already refuted by the verifier. Test: `k2-work-log-reducer` 11.
+- **tests-K2-R2 (LOW) - the reload proved no read.** `k2-work-log` 1 now requires at least one read after the reload's new document
+  commits, at most one per waiting period, never faster than the waiting cadence (the old `<= 2` pin moved with a dated note).
+- **tests-K2-R3 (LOW) - the page's own endings were untested; case 8 claimed a path that never runs.** The page's synthetic
+  `run_failed` (Stop answer, a dropped stream) carries no `runId` and never reaches the reducer; the dead `stream_cut` / `stopped`
+  branches are removed and case 8 now asserts that the synthetic event changes nothing (pin moved, dated note). The real ending, `endRun`
+  in the chat turn's `finally`, is proven in the browser: `l5-chat-task` 3 (Stop answer: the turn's Work log is `cancelled`, "Answer
+  stopped by you", once) and `k2-work-log` 2 (a canned NDJSON answer that ends after the run's first steps: `interrupted`, "ended
+  without its final event", after the two recorded steps).
+- **tests-K2-R4 (LOW) - the hung probe was untested.** `k2-acquisition-task-event` 5: a probe that never settles is released by the
+  loop's 5 s bound (fake timers: nothing answers at 4,990 ms, the run answers after 5 s, the third identical read refused on the
+  args-only count); case 3's title no longer claims a hang. Red with the bound's resolve removed.
+
+**CI (OD-254, the K2 precedent):** `k2-work-log-follow.test.tsx` rides prompt-to-gerber's `app/lib/qualification/__tests__` filter;
+`b24-d0-ci-split` sets it aside like K2's three suites (`:75`) and the prompt-to-gerber count moves 648 -> 649, both with dated
+`[K2 review, 2026-11-04]` notes, until K7's one re-measurement.
+
+**Superseded statements above (kept as history):** the continuation's (a) "the page's own `run_failed` `stopped` / `stream_cut` read
+the same way" (never true in production: the page never folded that event; see tests-K2-R3), the K2 bullet "every 1.5 s while a worker
+can move it" (now: until a terminal state, 1.5 s / 6 s), and the browser evidence's "at most two reads of the task" (now: at least one,
+at the waiting cadence).
+
+**RED without each fix (the production change edited back temporarily, then restored and compared byte for byte):**
+
+| finding | edited back | red |
+|---|---|---|
+| EV-1 | the hook's old rule (`!MOVING.has(state)` ends the follow) | `k2-work-log-follow` 1, 2 (reads stopped at 2 / 1); browser `k2-work-log` 1 step 5 (no cancelled row) |
+| R1 | the scope-abort end of the follow removed | `k2-work-log-follow` 3 (no read after reopening) |
+| EV-2 | every `noteWorkLogFollow` a no-op | `k2-work-log-follow` 4, 5 |
+| EV-3 | the review fold a no-op; `page.tsx` at HEAD | `k2-work-log-follow` 6; browser `l5-chat-task` 2 (no "Applied (design task)" log) |
+| PT-1, PT-2, PT-3, PT-4, EV-2 | `work-log.ts` and `chat-run-view.ts` at HEAD | `k2-work-log-reducer` 9, 10, 11, 12; PT-4 alone (`blocked` for the fallback): 11 |
+| R2 | the re-follow effect never follows | browser `k2-work-log` 1 ("the restored follow reads the task again": 0) |
+| R3 | `chatWorkLog.endRun(...)` removed from the turn's `finally` | browser `k2-work-log` 2 (`data-run` "running") and `l5-chat-task` 3 (no `cancelled` log) |
+| R4 | the 5 s timer resolves nothing | `k2-acquisition-task-event` 5 ("the 5 s bound released the call": false) |
+
+**Gates (local, sequential, provider keys unset, `--maxWorkers=4`; each process ended when its run did):**
+
+| gate | result | exit |
+|---|---|---|
+| `vitest run` the K2 suites and K1 (`k2-`, `k1-early-stop-reproductions`) | 5 files, 35 passed (`k2-work-log-reducer` 12, `k2-work-log-follow` 6, `k2-acquisition-task-event` 5, `k2-allowance-line` 3, K1 9) | 0 |
+| `vitest run` the K2 / K1 suites, `app/lib/agent`, `app/lib/project`, `app/lib/execution-grant`, `execution-grant`, `chat-run-view`, `l5-`, `m2-`, `pr-g-`, `b17-a`, `action-registry`, `b16-0-2`, `b21-a-import-gates`, `b21-closeout`, `b22-closeout`, `b23-closeout`, `b24-d0`, `b24-b2`, `b24-d1`, `persistence` (one run) | 203 files passed, 2 skipped; 2,025 tests passed, 11 skipped (the first run caught the follow suite's `setImmediate` as an unclassified B24-D1 yield; the suite now flushes microtasks only and the census is unchanged) | 0 |
+| `tsc --noEmit` (4 GB heap, `.next/dev/types/validator.ts` removed first) | clean | 0 |
+| `eslint` on the 12 files touched | clean | 0 |
+| Playwright `e2e/k2-work-log.spec.ts e2e/l5-chat-task.spec.ts` (`SIRKIT_E2E_PORT=3157`, after the last source edit) | 5 passed (1.4 min); 0 `ROUTE_FIXTURE_MISS`; the three committed K2 screenshots the run rewrote were restored | 0 |
+| `tsx scripts/scan-secrets.ts` (tree, then `--staged` on the staged commit) | tree: 4788 entries, 0 oversized skips, 11 allowlisted lines; `--staged` on the staged commit: no finding | 0 |
+
 ## Exact next step
 
 K3: the persisted recovery controller (the acquisition task's strategy ladder, rejected-evidence memory, honest worker-failure

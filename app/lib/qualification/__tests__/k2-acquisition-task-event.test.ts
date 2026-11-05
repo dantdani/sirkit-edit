@@ -12,8 +12,10 @@
  *     documentation link, no URL or hash path of the bytes;
  *  3. the guard keeps its strictness for everything else: an identical non-task read is refused on its third call with the old
  *     sentence, the probe answers null for it and for a list read, and a probe that throws or answers garbage is judged on the args-only
- *     count (a hang is bounded by the run's boundary and 5 s inside the loop's probe);
- *  4. a gateway without the probe (every test double) keeps the args-only key.
+ *     count;
+ *  4. a gateway without the probe (every test double) keeps the args-only key;
+ *  5. [K2 review, 2026-11-04] tests-K2-R4: a probe that never settles is bounded at 5 s inside the loop (fake timers): the call is judged
+ *     on the args-only count and the run answers - not at its deadline.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SchematicState } from "@/lib/schematic-types";
@@ -135,7 +137,8 @@ describe("[K2] the chat's typed acquisition event and the revision-keyed identic
     expect(log.follows).toEqual([{ kind: "acquisition", taskId, cursor: 0, terminal: false, state: "queued" }]);
     expect(log.rows.map((row) => row.phase)).toEqual(["dispatched", "dispatched", "waiting", "dispatched", "received", "waiting"]);
     expect(log.rows[1]!.text).toMatch(/acquisition task started — a worker runs it in saved steps; nothing in the design changed$/);
-    expect(log.rows[4]!.text).toMatch(/following the acquisition task already running for these parts — nothing new was started$/);
+    expect(log.rows[4]!.text).toMatch(/following the acquisition task that already exists for these parts — nothing new was started$/); // [K2 review, 2026-11-04] honesty-K2-PT-2, reviewed pin move: was "already running for these parts" - the store attaches to a task in ANY state (this one is queued), so the run line names none; the Work log's follow row says the real state
+    expect(log.rows[5]!.text).toMatch(/\(already queued for a worker; nothing new started\)/); // [K2 review, 2026-11-04] PT-2: the attached task's real state
     const stored = await componentResolutionStoreOf(runtimeOf()).list(SCOPE);
     expect(stored.map((head) => [head.taskId, head.state])).toEqual([[taskId, "queued"]]);
   });
@@ -178,7 +181,7 @@ describe("[K2] the chat's typed acquisition event and the revision-keyed identic
     expect(log.follows[0]).toMatchObject({ taskId, state: view.state, terminal: false });
   });
 
-  it("3. the guard keeps its strictness for everything else: an identical non-task read is refused on its third call with the old sentence; the probe answers null for it and for a list read; a probe that throws or hangs is judged on the args-only count", async () => {
+  it("3. the guard keeps its strictness for everything else: an identical non-task read is refused on its third call with the old sentence; the probe answers null for it and for a list read; a probe that throws or answers garbage is judged on the args-only count", async () => { // [K2 review, 2026-11-04] tests-K2-R4: the title said "throws or hangs" but only "throws" and "garbage" ran here; the hang is case 5
     const inspect = { toolId: INSPECT_TOOL_ID, args: { componentIds: ["D1"] } };
     const run = await scriptedRun([inspect, inspect, inspect]);
     const refused = run.events.filter((event): event is Extract<AgentRunEvent, { type: "tool_refused" }> => event.type === "tool_refused");
@@ -224,5 +227,40 @@ describe("[K2] the chat's typed acquisition event and the revision-keyed identic
     const status = { toolId: CAD_ACQUISITION_STATUS_TOOL_ID, args: { taskId } };
     const run = await scriptedRun([status, status, status], plain, "run-k2-plain");
     expect(run.events.filter((event) => event.type === "tool_refused").map((event) => (event as { callId: string }).callId)).toEqual(["c3"]);
+  });
+
+  it("5. [K2 review] a probe that never settles is bounded at 5 s inside the loop: the call is judged on the args-only count and the run answers", async () => {
+    const gateway = productionGateway();
+    const started = await scriptedRun([{ toolId: CAD_ACQUISITION_START_TOOL_ID, args: REQUEST }]);
+    const taskId = taskIdOf(started.results[0]![0]);
+    let calls = 0;
+    let hanging = 0;
+    const hung: AgentToolInvocationGateway = {
+      invoke: (input) => gateway.invoke(input),
+      observedRevision: (input) => {
+        calls += 1;
+        if (calls < 3) return gateway.observedRevision!(input);
+        hanging += 1;
+        return new Promise<string | null>(() => undefined); // a stalled store read: it never settles
+      },
+    };
+    const status = { toolId: CAD_ACQUISITION_STATUS_TOOL_ID, args: { taskId } };
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      let answered = false;
+      const pending = scriptedRun([status, status, status], hung, "run-k2-hangs").then((run) => { answered = true; return run; });
+      for (let turn = 0; turn < 200 && hanging === 0; turn += 1) await vi.advanceTimersByTimeAsync(0);
+      expect(hanging, "the third read reached the probe").toBe(1);
+      await vi.advanceTimersByTimeAsync(4_990);
+      expect(answered, "nothing answers before the probe's bound").toBe(false);
+      for (let turn = 0; turn < 200 && !answered; turn += 1) await vi.advanceTimersByTimeAsync(10);
+      expect(answered, "the 5 s bound released the call").toBe(true);
+      const run = await pending;
+      expect(run.result.status).toBe("completed");
+      expect(run.events.filter((event) => event.type === "tool_refused").map((event) => (event as { callId: string }).callId)).toEqual(["c3"]);
+      expect(JSON.parse(run.results[2]![0]!.outputText).detail).toBe("This exact call already ran in this run; its result has not changed.");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

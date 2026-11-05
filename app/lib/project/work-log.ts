@@ -16,8 +16,10 @@
  *    no longer holds.
  *  - Never model text: `text_delta` (interim or final) adds no row - the interim-text hold and the answer's own labels stay as they are.
  */
-import { CAD_ACQUISITION_TERMINAL_STATES, readCadAcquisitionTaskReference, type CadAcquisitionEventKind, type CadAcquisitionTaskView } from "../acquisition/cad-acquisition-contract";
+import { CAD_ACQUISITION_TERMINAL_STATES, readCadAcquisitionTaskReference, type CadAcquisitionEventKind, type CadAcquisitionState, type CadAcquisitionTaskView } from "../acquisition/cad-acquisition-contract";
+import { OUTCOME_UNKNOWN_RETIREMENT_REASONS } from "../engineering/execution-grant";
 import { refusedLineLabel, toolLineLabel } from "./chat-run-view";
+import { refusalSentence } from "./execution-display";
 import { resolutionProgressLine } from "./component-resolution-events";
 import { generationTaskAllowanceText, type GenerationTaskEventView, type GenerationTaskView } from "./generation-task-client";
 import { WORK_LOG_BOUNDS, WORK_LOG_PHASE_LABELS, readStoredWorkLog, workLogSourceFor, workLogText, type WorkLogFollow, type WorkLogOrigin, type WorkLogPhase, type WorkLogRow, type WorkLogState } from "./work-log-contract";
@@ -58,6 +60,16 @@ const FINISHED_PHASES: Readonly<Record<string, WorkLogPhase>> = Object.freeze({
   task_started: "dispatched", task_attached: "received", control_requested: "waiting", acquisition_task_started: "dispatched", acquisition_task_attached: "received",
 });
 
+/**
+ * [K2 review, 2026-11-04] honesty-K2-PT-2: what an acquisition start that ATTACHED to an existing task says, by that task's real state
+ * (the store attaches in any state: a task waiting for a person, a blocked one, a stopped or a finished one is not "already running").
+ */
+const ATTACHED_NOTE: Readonly<Record<CadAcquisitionState, string>> = Object.freeze({
+  queued: "already queued for a worker; nothing new started", running: "already running; nothing new started", "cancel-requested": "already being stopped; nothing new started",
+  "waiting-for-resource": "already waiting for a source or its retry time; nothing new started", "awaiting-review": "already waiting for a person's step; nothing new started",
+  cancelled: "it had already ended (cancelled); nothing new started", succeeded: "it had already ended (succeeded); nothing new started", failed: "it had already ended (failed); nothing new started", stale: "it had already ended (stale); nothing new started",
+});
+
 /** The run event types the log reads; every other type (text_delta above all) changes nothing. */
 const FOLDED_RUN_EVENTS: ReadonlySet<string> = new Set(["run_started", "tool_started", "tool_finished", "tool_refused", "acquisition_task_ready", "generation_task_ready", "execution_settled", "plan", "specialist_started", "specialist_finished", "partial_result", "degraded", "run_failed", "run_completed"]);
 
@@ -95,8 +107,10 @@ export function reduceWorkLogRunEvent(state: WorkLogState, event: Record<string,
         return addRows(state, [{ key: key(`${callId}:acquisition-dropped`), phase: "refused", origin: "page", text: "An acquisition task reference the assistant issued was not followed: it was malformed or names another project. Nothing was changed." }]);
       }
       const parts = reference.refDes.join(", ");
-      const followed = follow(state, { kind: "acquisition", taskId: reference.taskId, cursor: 0, terminal: CAD_ACQUISITION_TERMINAL_STATES.includes(reference.state), state: reference.state });
-      return addRows(followed, [{ key: key(`${callId}:acquisition`), phase: "waiting", origin: "page", subject: parts || null, text: `Following acquisition task ${reference.taskId.slice(0, 16)}… ${reference.disposition === "attached" ? "(already running; nothing new started)" : "(queued for a worker)"}: its recorded steps appear here as the worker reports them` }]);
+      const ended = CAD_ACQUISITION_TERMINAL_STATES.includes(reference.state);
+      const followed = follow(state, { kind: "acquisition", taskId: reference.taskId, cursor: 0, terminal: ended, state: reference.state });
+      const note = reference.disposition === "attached" ? ATTACHED_NOTE[reference.state] : reference.state === "queued" ? "queued for a worker" : `started; it is ${reference.state.replace(/-/g, " ")}`; // [K2 review, 2026-11-04] PT-2: an attach says the task's REAL state
+      return addRows(followed, [{ key: key(`${callId}:acquisition`), phase: ended ? "received" : "waiting", origin: "page", subject: parts || null, text: `Following acquisition task ${reference.taskId.slice(0, 16)}… (${note}): its recorded steps appear here${ended ? "" : " as the worker reports them"}` }]);
     }
     case "generation_task_ready": {
       const task = event.task as Record<string, unknown> | undefined;
@@ -107,25 +121,33 @@ export function reduceWorkLogRunEvent(state: WorkLogState, event: Record<string,
       const status = str(event.status);
       const outcome = str(event.outcome);
       const grantId = str(event.grantId) ?? callId;
+      const reason = str(event.reason);
       if (status === "settled" && outcome === "committed") return addRows(state, [{ key: key(`${grantId}:settled`), phase: "committed", origin: "run", text: "Applied in your editor — the server recorded the committed transaction" }]);
-      if (status === "settled") return addRows(state, [{ key: key(`${grantId}:settled`), phase: "refused", origin: "run", text: `Not applied — the editor reported ${outcome ?? "no outcome"}; nothing was changed` }]);
-      if (status === "retired") return addRows(state, [{ key: key(`${grantId}:settled`), phase: "cancelled", origin: "run", text: `Not applied — the change was retired (${str(event.reason) ?? "no reason recorded"}); nothing was changed` }]);
+      if (status === "settled" && outcome === "not-committed") return addRows(state, [{ key: key(`${grantId}:settled`), phase: "refused", origin: "run", text: "Not applied — the editor reported not-committed; nothing was changed" }]);
+      // [K2 review, 2026-11-04] honesty-K2-PT-1: a POISONED settlement (the transaction landed but could not be verified), a settlement with
+      // no known outcome, and a retirement after consumption whose outcome nobody learned MAY have changed the board - never "nothing was
+      // changed" (the execution entry, the retry guard and the loop's note to the model say the same)
+      const unknownRetirement = status === "retired" && reason !== null && (OUTCOME_UNKNOWN_RETIREMENT_REASONS as readonly string[]).includes(reason);
+      if (status === "settled" || unknownRetirement) {
+        const landed = refusalSentence(null, true);
+        return addRows(state, [{ key: key(`${grantId}:settled`), phase: "blocked", origin: "run", text: status === "settled" ? `The change LANDED but could not be verified (the editor reported ${outcome ?? "no outcome"}) — the board MAY have changed` : `Outcome unknown — the change was started but its result was never confirmed (${reason}); the board MAY have changed`, next: landed.next }]);
+      }
+      if (status === "retired") return addRows(state, [{ key: key(`${grantId}:settled`), phase: "cancelled", origin: "run", text: `Not applied — the change was retired (${reason ?? "no reason recorded"}); nothing was changed` }]);
       return addRows(state, [{ key: key(`${grantId}:settled`), phase: "waiting", origin: "run", text: "Outcome not confirmed yet — the editor has not settled the change; the entry below follows it" }]);
     }
     case "plan":
       return addRows(state, [{ key: key("plan"), phase: "intent", origin: "run", text: str(event.message) ?? "Orchestration planned" }]);
     case "specialist_started":
       return addRows(state, [{ key: key(`specialist:${str(event.taskId) ?? ""}:${String(event.attempt ?? "")}:started`), phase: "dispatched", origin: "run", text: str(event.message) ?? "A specialist started", attempt: typeof event.attempt === "number" ? event.attempt : null }]);
-    case "specialist_finished":
-      return addRows(state, [{ key: key(`specialist:${str(event.taskId) ?? ""}:${String(event.attempt ?? "")}:finished`), phase: event.status === "accepted" || event.status === "replayed" ? "received" : "refused", origin: "run", text: str(event.message) ?? "A specialist finished", attempt: typeof event.attempt === "number" ? event.attempt : null }]);
+    case "specialist_finished": // [K2 review, 2026-11-04] honesty-K2-PT-3: a promise to run the task again (`runsAgain`) and its withdrawal (the same attempt, runsAgain false) are two steps, two keys
+      return addRows(state, [{ key: key(`specialist:${str(event.taskId) ?? ""}:${String(event.attempt ?? "")}:finished${event.runsAgain === true ? ":runs-again" : ""}`), phase: event.status === "accepted" || event.status === "replayed" ? "received" : "refused", origin: "run", text: str(event.message) ?? "A specialist finished", attempt: typeof event.attempt === "number" ? event.attempt : null }]);
     case "partial_result":
       return addRows(state, [{ key: key("partial"), phase: "received", origin: "run", text: str(event.message) ?? "Partial result" }]);
-    case "degraded":
-      return addRows(state, [{ key: key(`degraded:${str(event.reason) ?? ""}:${str(event.taskId) ?? ""}`), phase: "blocked", origin: "run", text: str(event.message) ?? "Degraded" }]);
+    case "degraded": // [K2 review, 2026-11-04] honesty-K2-PT-4: a compatible fallback is a changed approach (the specialist runs on another provider), not a block
+      return addRows(state, [{ key: key(`degraded:${str(event.reason) ?? ""}:${str(event.taskId) ?? ""}`), phase: event.reason === "compatible_fallback" ? "intent" : "blocked", origin: "run", text: str(event.message) ?? "Degraded" }]);
     case "run_failed": {
       const reason = str(event.reason) ?? "failed";
-      if (reason === "stream_cut") return endWorkLogRun(state, "ended"); // the page's own reading of a dropped stream (a disconnect, not a failure the run reported)
-      const cancelled = reason === "cancelled" || reason === "stopped";
+      const cancelled = reason === "cancelled"; // [K2 review, 2026-11-04] tests-K2-R3: the run's own reasons only - the page's synthetic run_failed (Stop answer, a dropped stream) carries no runId and never reaches this reducer; endWorkLogRun (the hook's endRun) says those endings
       const next = { ...state, run: cancelled ? ("cancelled" as const) : ("failed" as const) };
       return addRows(next, [{ key: key("terminal"), phase: cancelled ? "cancelled" : "blocked", origin: "run", text: cancelled ? "Answer stopped — the turn ended; a task it started keeps its own state below" : `The answer ended early (${reason}) — nothing more runs in this turn`, ...(cancelled ? {} : { next: "Send the message again, or ask the assistant to continue" }) }]);
     }
@@ -231,6 +253,27 @@ export function workOfStored(value: unknown): { work?: WorkLogState } {
   if (value === undefined) return {};
   const read = readStoredWorkLog(value);
   return read ? { work: restoredWorkLog(read) } : {};
+}
+
+/**
+ * [K2 review, 2026-11-04] events-K2-EV-2: what happened to this page's FOLLOW of an acquisition task (never to the task itself): a read
+ * that failed (the page keeps reading), a task the server answers it does not have (the follow ends), or the read bound reached (the
+ * follow ends; a reload, or opening the project again, reads it again). Only for a live task this log follows, in its own project and
+ * branch; once per follow position (the cursor): the same note again with no new step between returns the SAME state.
+ */
+export type WorkLogFollowNote = { kind: "unreadable"; code: string } | { kind: "gone"; code: string } | { kind: "bound"; reads: number };
+export function noteWorkLogFollow(state: WorkLogState, scope: { projectId: string; branchId: string }, taskId: string, note: WorkLogFollowNote): WorkLogState {
+  if (scope.projectId !== state.owner.projectId || scope.branchId !== state.owner.branchId) return state;
+  const current = state.follows.find((entry) => entry.kind === "acquisition" && entry.taskId === taskId);
+  if (!current || current.terminal) return state;
+  const task = `${taskId.slice(0, 16)}…`;
+  const code = note.kind === "bound" ? "" : note.code.replace(/[^A-Za-z0-9_.-]/g, "").slice(0, 60) || "UNKNOWN";
+  const row: Pick<RowInput, "text" | "next"> = note.kind === "unreadable"
+    ? { text: `Could not read acquisition task ${task} (${code}); this page keeps reading it - its next recorded steps appear here when a read succeeds` }
+    : note.kind === "gone"
+      ? { text: `Acquisition task ${task} can no longer be read: the server has no such task in this project (${code}). The steps above are what was recorded; this page stopped following it`, next: "If the part is still missing, start the acquisition again from the Missing parts list" }
+      : { text: `Stopped following acquisition task ${task} on this page after ${note.reads} reads; the task itself goes on - reload the page or open the project again to read it again` };
+  return addRows(state, [{ key: `follow:acquisition:${taskId}:${note.kind}:${current.cursor}`, phase: "interrupted", origin: "page", ...row }]);
 }
 
 /** A followed task the page still has to read (not terminal), for the re-follow after a reload. */

@@ -10,10 +10,11 @@
  *     settles it. One start request, one task.
  *  2. The assistant starts the design: the page follows it on the SAME status card as a Build start; the composer's own start route
  *     answers 409 GENERATION_TASK_ACTIVE naming the SAME task (one active task per project, the same service); the worker's result
- *     reaches the ONE review dialog through the SAME intake, once, with the note that the assistant proposed it; approval settles it.
+ *     reaches the ONE review dialog through the SAME intake, once, with the note that the assistant proposed it; approval settles it;
+ *     [K2 review, 2026-11-04] events-K2-EV-3: the review the task recorded reaches the design task's Work log ("Applied").
  *  3. Stop answer vs Stop design: the assistant starts the design and keeps answering; Stop answer ends the streaming turn only - the
  *     task is still working, uncancelled, its status card still offers Stop design; Stop design then cancels the task durably and no
- *     result is ever offered.
+ *     result is ever offered. [K2 review, 2026-11-04] tests-K2-R3: the turn's Work log says it was stopped by you, once.
  * Fake-backed: this proves the page's, the chat tools' and the task lifecycle's contract, not a live model, catalog or authentication.
  */
 import { expect, test, type Page, type Request } from "@playwright/test";
@@ -153,6 +154,12 @@ test("2. The assistant starts the design: the page follows it on the SAME status
   await expect(review).toBeHidden();
   await expect(page.getByTestId("journey-stage-schematic_applied")).toHaveAttribute("data-status", "succeeded", { timeout: 30_000 });
   await expect.poll(async () => (await serverTask(page, pid, taskId)).state, { timeout: 30_000 }).toBe("succeeded");
+  // [K2 review, 2026-11-04] events-K2-EV-3: the page stopped following the task when it offered the result; the review it then recorded
+  // on the task reaches the design task's Work log - its latest step is "Applied", not "For your review"
+  const designLog = page.getByTestId("work-log").filter({ has: page.getByTestId("work-log-summary").filter({ hasText: /latest: Applied \(design task\)$/ }) });
+  await expect(designLog).toHaveCount(1, { timeout: 30_000 });
+  await designLog.getByTestId("work-log-toggle").click();
+  await expect(designLog.locator('[data-testid="work-log-row"][data-origin="generation"][data-phase="committed"]')).toHaveText(/The reviewed design was applied\./);
   const tasks = await serverTasks(page, pid);
   expect(tasks.recent.map((ref) => ref.taskId)).toEqual([taskId]);
   expect(tasks.recent[0]!.origin).toBe("chat");
@@ -171,6 +178,13 @@ test("3. Stop answer ends the streaming turn only - the design keeps working; St
   await stopAnswer.click();
   await expect(page.getByTestId("chat-stop")).toBeHidden({ timeout: 30_000 }); // the turn ended
   await expect(page.getByText(/Stopped by you — the assistant's answer \(Stop answer\) was cancelled\. Stop answer ends the assistant's streaming reply only/)).toBeVisible();
+  // [K2 review, 2026-11-04] tests-K2-R3: the page's own ending reaches the turn's Work log (the run never sent its own): stopped by you, once
+  const turnLog = page.locator('[data-testid="work-log"][data-run="cancelled"]');
+  await expect(turnLog).toHaveCount(1);
+  await turnLog.getByTestId("work-log-toggle").click();
+  const stoppedRow = turnLog.locator('[data-testid="work-log-row"][data-origin="page"][data-phase="cancelled"]');
+  await expect(stoppedRow).toHaveCount(1);
+  await expect(stoppedRow).toHaveText(/Answer stopped by you — the turn ended before the assistant finished; a task it started keeps its own state below/);
   const card = page.getByTestId("generation-task-status").first();
   await expect(card).toBeVisible();
   const taskId = (await card.getAttribute("data-task-id"))!;
